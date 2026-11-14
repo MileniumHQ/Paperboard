@@ -1,7 +1,7 @@
 import { createSignal } from "solid-js";
 import type { LoaderStatus } from "@mileniumhq/paperui";
 import type { InstallLoaderItem } from "../../components/InstallLoaders";
-import { installProgress, serverBridge } from "../../lib/server";
+import { installProgress, serverBridge, setInstallProgress } from "../../lib/server";
 import { ensureJavaRuntime, type DownloadedBytes } from "../../lib/ensureJava";
 import { createInstallFlow } from "../installFlow";
 import { softwareName, tmodloaderReleaseFor, type TerrariaSoftware } from "./catalog";
@@ -21,6 +21,10 @@ export function createTerrariaInstall() {
 
     const run = (software: TerrariaSoftware, version: string): Promise<boolean> =>
         flow.run(async () => {
+            // a previous install's last stage is not this one's: until the
+            // service starts this download, the rows wait instead of showing
+            // it done (a push brings only a stage that changed)
+            setInstallProgress(null);
             setRuntimeReady(false);
             setRuntimePercent(0);
             setRuntimeBytes(undefined);
