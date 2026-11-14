@@ -178,11 +178,22 @@ describe("selection items", () => {
 
 // Inventory: Menus and form controls — A controlled control shows its prop.
 describe("controlled controls the parent refuses", () => {
-    test("a text field goes back to its value after a change the parent did not take", () => {
-        render(() => <PaperInput aria-label="Name" value="Survival" onChange={() => {}} />);
+    test("a text field goes back to its value after a change the parent did not take, once the edit's handlers have read it", async () => {
+        const read: string[] = [];
+        render(() => (
+            <PaperInput
+                aria-label="Name"
+                value="Survival"
+                onChange={(e) => read.push(`change ${e.currentTarget.value}`)}
+                onBlur={(e) => read.push(`blur ${e.currentTarget.value}`)}
+            />
+        ));
         const input = screen.getByLabelText("Name") as HTMLInputElement;
         input.value = "Creative";
         fireEvent.change(input);
+        fireEvent.blur(input);
+        expect(read).toEqual(["change Creative", "blur Creative"]);
+        await new Promise((resolve) => setTimeout(resolve, 0));
         expect(input.value).toBe("Survival");
     });
 

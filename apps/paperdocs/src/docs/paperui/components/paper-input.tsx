@@ -82,7 +82,7 @@ export function Example() {
                         <td><PaperCode>value</PaperCode></td>
                         <td><PaperCode>string | number</PaperCode></td>
                         <td>No default (uncontrolled)</td>
-                        <td>The text, converted to a string. When set, the field follows it, and a <PaperCode>change</PaperCode> the parent does not take puts the field back to it.</td>
+                        <td>The text, converted to a string. When set, the field follows it. See Controlled fields for when an edit the parent does not take goes back.</td>
                     </tr>
                     <tr>
                         <td><PaperCode>defaultValue</PaperCode></td>
@@ -139,6 +139,12 @@ export function Example() {
                         <td>Receive the native event. <PaperCode>onInput</PaperCode> fires per keystroke, <PaperCode>onChange</PaperCode> on commit (blur or Enter).</td>
                     </tr>
                     <tr>
+                        <td><PaperCode>onBlur</PaperCode></td>
+                        <td>Native event handler</td>
+                        <td>No default</td>
+                        <td>Receives the native event, with the text the person left in the field. Return a promise to have a controlled field wait for it.</td>
+                    </tr>
+                    <tr>
                         <td><PaperCode>ref</PaperCode></td>
                         <td>Solid ref</td>
                         <td>No default</td>
@@ -179,6 +185,24 @@ export function Example() {
                 <li>The browser's own constraints, such as <PaperCode>required</PaperCode> and <PaperCode>pattern</PaperCode>, also draw the error styling when they fail.</li>
                 <li>In a <PaperLink href="/docs/paperui/papersettinglist/">PaperSettingList</PaperLink>, a named field without <PaperCode>value</PaperCode> takes its value from the list's record.</li>
             </PaperTextList>
+
+            <PaperText preset="subheader" as="h2" id="controlled-fields">Controlled fields</PaperText>
+            <PaperText preset="body" as="p">
+                A field with <PaperCode>value</PaperCode> shows what its parent holds. Typing is never undone: a parent that takes or reshapes each keystroke answers through <PaperCode>value</PaperCode> from <PaperCode>onInput</PaperCode>.
+                When the person commits an edit, <PaperCode>onChange</PaperCode> and then <PaperCode>onBlur</PaperCode> read what they typed. The parent then has until the next task to answer, or until a promise either handler returned settles.
+                If it still holds another value then, the field goes back to it, unless the person has typed again.
+            </PaperText>
+            <PaperCode block language="tsx">
+{`<PaperInput
+    label="Server name"
+    value={settings().name}
+    onBlur={(e) => saveName(e.currentTarget.value)}
+/>`}
+            </PaperCode>
+            <PaperText preset="body" as="p">
+                <PaperCode>saveName</PaperCode> returns its promise, so a save that takes a moment never shows the old name in between.
+                Read a controlled field's text in its handlers, not later from the element: once the edit is left, the element shows the parent's value. A field whose parent only gives a starting text takes <PaperCode>defaultValue</PaperCode>.
+            </PaperText>
 
             <PaperText preset="subheader" as="h2" id="examples">Examples</PaperText>
             <PaperText preset="subheader" as="h3" id="icon-and-compact">Icon, compact, and full width</PaperText>

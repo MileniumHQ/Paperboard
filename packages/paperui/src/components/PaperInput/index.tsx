@@ -1,7 +1,23 @@
 import styles from "./index.module.css";
-import { children, splitProps, Show, createSignal, createEffect, createUniqueId, type JSX } from "solid-js";
+import {
+    children,
+    splitProps,
+    Show,
+    createMemo,
+    createSignal,
+    createEffect,
+    createUniqueId,
+    onCleanup,
+    type JSX,
+} from "solid-js";
 import { PaperIcon } from "../PaperIcon";
 import { useSettingListText } from "../../contexts/settingList";
+import { callEventHandler } from "../../utils/events";
+
+type Field = HTMLInputElement | HTMLTextAreaElement;
+
+const isThenable = (value: unknown): value is PromiseLike<unknown> =>
+    typeof (value as PromiseLike<unknown> | null)?.then === "function";
 
 /**
  * `ref` is re-declared because the multiline form hands back a textarea, which
@@ -44,6 +60,7 @@ export function PaperInput(props: PaperInputProps) {
         "classList",
         "onInput",
         "onChange",
+        "onBlur",
         "ref",
         "multiline",
         "rows",
@@ -52,20 +69,23 @@ export function PaperInput(props: PaperInputProps) {
 
     const icon = children(() => local.icon);
 
-    const [internalValue, setInternalValue] = createSignal(
-        String(local.value ?? local.defaultValue ?? "")
-    );
+    // what the parent holds, as text; undefined when the field is its own.
+    // Handlers read this memo, never the prop: a prop written as a condition
+    // compiles to a getter that makes a computation each time it is read.
+    const controlled = createMemo(() => (local.value !== undefined ? String(local.value) : undefined));
+
+    const [internalValue, setInternalValue] = createSignal(controlled() ?? String(local.defaultValue ?? ""));
 
     createEffect(() => {
-        if (local.value !== undefined) {
-            setInternalValue(String(local.value));
-        }
+        const value = controlled();
+        if (value !== undefined) setInternalValue(value);
     });
 
     // in a PaperSettingList, the list's record holds the value
     const listValue = useSettingListText(() => rest.name, "PaperInput");
     const currentValue = () => {
-        if (local.value !== undefined) return String(local.value);
+        const value = controlled();
+        if (value !== undefined) return value;
         const fromList = listValue();
         return fromList !== undefined ? String(fromList) : internalValue();
     };
@@ -76,27 +96,72 @@ export function PaperInput(props: PaperInputProps) {
         return false;
     };
 
-    const handleInput: JSX.InputEventHandler<HTMLInputElement | HTMLTextAreaElement, InputEvent> = (e) => {
-        if (local.value === undefined) {
-            setInternalValue(e.currentTarget.value);
-        }
-        if (typeof local.onInput === "function") {
-            (local.onInput as JSX.InputEventHandler<HTMLInputElement, InputEvent>)(e as never);
-        }
+    // A controlled field shows what its parent holds. Typing is never undone:
+    // a parent that takes or reshapes each keystroke answers through `value`.
+    // Once the person commits an edit (the change event, then blur when they
+    // leave), the caller's change and blur handlers read what was typed, and
+    // the parent gets until the next task to answer, or until the promise a
+    // handler returned settles. Only then does a field whose parent kept
+    // another value go back to it, unless the person has typed again since.
+    let typed = 0;
+    let resync: { answers: unknown[]; timer: ReturnType<typeof setTimeout> } | undefined;
+    onCleanup(() => {
+        if (resync) clearTimeout(resync.timer);
+    });
+
+    const showParentValue = (field: Field, since: number) => {
+        const value = controlled();
+        if (since !== typed || value === undefined) return;
+        if (field.value !== value) field.value = value;
     };
 
-    const handleChange: JSX.EventHandler<HTMLInputElement | HTMLTextAreaElement, Event> = (e) => {
-        if (local.value === undefined) {
-            setInternalValue(e.currentTarget.value);
+    const queueResync = (field: Field, answer: unknown) => {
+        if (controlled() === undefined) return;
+        if (resync) {
+            resync.answers.push(answer);
+            return;
         }
-        if (typeof local.onChange === "function") {
-            (local.onChange as JSX.EventHandler<HTMLInputElement, Event>)(e as never);
-        }
-        // a controlled field shows its value: when the parent kept another one,
-        // the field goes back to it rather than keep text nobody holds
-        if (local.value !== undefined && e.currentTarget.value !== String(local.value)) {
-            e.currentTarget.value = String(local.value);
-        }
+        const since = typed;
+        const answers = [answer];
+        const timer = setTimeout(() => {
+            resync = undefined;
+            const waits = answers.filter(isThenable);
+            if (!waits.length) {
+                showParentValue(field, since);
+                return;
+            }
+            let left = waits.length;
+            const settled = () => {
+                left -= 1;
+                if (left === 0) showParentValue(field, since);
+            };
+            for (const wait of waits) {
+                // a rejection still reaches the page's unhandled-rejection report
+                Promise.resolve(wait).then(settled, (err: unknown) => {
+                    settled();
+                    throw err;
+                });
+            }
+        });
+        resync = { answers, timer };
+    };
+
+    const handleInput: JSX.InputEventHandler<Field, InputEvent> = (e) => {
+        typed += 1;
+        if (controlled() === undefined) setInternalValue(e.currentTarget.value);
+        callEventHandler<Field, InputEvent>(local.onInput as never, e);
+    };
+
+    const handleChange: JSX.EventHandler<Field, Event> = (e) => {
+        if (controlled() === undefined) setInternalValue(e.currentTarget.value);
+        const answer = callEventHandler<Field, Event>(local.onChange as never, e);
+        queueResync(e.currentTarget, answer);
+    };
+
+    const handleBlur: JSX.EventHandler<Field, FocusEvent> = (e) => {
+        const answer = callEventHandler<Field, FocusEvent>(local.onBlur as never, e);
+        // the blur that ends a committed edit is part of it
+        if (resync) resync.answers.push(answer);
     };
 
     const isMultiline = () => Boolean(local.multiline);
@@ -161,6 +226,7 @@ export function PaperInput(props: PaperInputProps) {
                         aria-invalid={isInvalid() ? "true" : undefined}
                         onInput={handleInput as never}
                         onChange={handleChange as never}
+                        onBlur={handleBlur as never}
                     />
                 }
             >
@@ -174,6 +240,7 @@ export function PaperInput(props: PaperInputProps) {
                     aria-invalid={isInvalid() ? "true" : undefined}
                     onInput={handleInput as never}
                     onChange={handleChange as never}
+                    onBlur={handleBlur as never}
                 />
             </Show>
         </div>
