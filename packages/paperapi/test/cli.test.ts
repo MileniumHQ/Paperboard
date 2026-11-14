@@ -77,6 +77,15 @@ describe("linking never clobbers an install or the real Paperboard, and the CLI 
         expect(existsSync(join(home, ".paperboard"))).toBe(false);
     });
 
+    test("a PAPERBOARD_DIR of \"undefined\" is refused instead of becoming a folder of that name", async () => {
+        const dir = panelFolder();
+        const result = await cli(["link"], dir, "undefined");
+        expect(result.code).toBe(1);
+        expect(result.stderr).toContain('PAPERBOARD_DIR is "undefined"');
+        expect(existsSync(join(dir, "undefined"))).toBe(false);
+        expect(existsSync(join(home, ".paperboard"))).toBe(false);
+    });
+
     test("an installed panel directory is not replaced without force, and is with it", async () => {
         const dir = panelFolder();
         const installed = join(dataDir, "panels", "dev.test.linked");
@@ -95,7 +104,8 @@ describe("linking never clobbers an install or the real Paperboard, and the CLI 
         try {
             expect(() => linkPanel({ targetDir: dir })).toThrow("Use --force to replace it");
         } finally {
-            process.env.PAPERBOARD_DIR = previous;
+            if (previous === undefined) delete process.env.PAPERBOARD_DIR;
+            else process.env.PAPERBOARD_DIR = previous;
         }
 
         const forced = await cli(["link", "--force"], dir);

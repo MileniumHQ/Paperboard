@@ -39,7 +39,13 @@ export interface Handshake {
 
 /** The data folder: PAPERBOARD_DIR, or .paperboard in the home folder. */
 export function paperboardDirIn(home: string, join: (...parts: string[]) => string): string {
-    return process.env.PAPERBOARD_DIR || join(home, ".paperboard");
+    const dir = process.env.PAPERBOARD_DIR;
+    // `process.env.X = undefined` stores the text "undefined", which would
+    // put Paperboard's data in a folder of that name wherever this runs
+    if (dir === "undefined" || dir === "null") {
+        throw new Error(`PAPERBOARD_DIR is "${dir}": a missing value was written into the environment as text. Set it to the data folder's path, or unset it.`);
+    }
+    return dir || join(home, ".paperboard");
 }
 
 /** Where a running daemon writes its handshake in a data folder. */
