@@ -15,6 +15,7 @@ import {
     createEffect,
     createMemo,
     on,
+    onCleanup,
     splitProps,
     type ParentProps,
 } from "solid-js";
@@ -55,7 +56,8 @@ export interface WizardContextType {
     setBackHidden: (hidden: boolean) => void;
     isLastStep: () => boolean;
     isFirstStep: () => boolean;
-    registerStep: (index: number) => void;
+    /** a step mounting at `index`; returns what it calls when it unmounts */
+    registerStep: (index: number) => () => void;
 }
 
 const WizardContext = createContext<WizardContextType>();
@@ -78,7 +80,14 @@ export function PaperWizard(props: ParentProps<PaperWizardProps>) {
     ]);
 
     const [currentStep, setCurrentStep] = createSignal(0);
-    const [totalSteps, setTotalSteps] = createSignal(1);
+    // how many mounted steps sit at each index: a step shown conditionally
+    // counts while it is there, and the last mounted step is the last step
+    const [stepCounts, setStepCounts] = createSignal<ReadonlyMap<number, number>>(new Map());
+    const totalSteps = createMemo(() => {
+        let highest = -1;
+        for (const index of stepCounts().keys()) highest = Math.max(highest, index);
+        return Math.max(1, highest + 1);
+    });
     const [optionsShown, setOptionsShown] = createSignal(true);
     const [canProceedCurrent, setCanProceedCurrent] = createSignal(true);
     const [backHiddenCurrent, setBackHiddenCurrent] = createSignal(false);
@@ -87,8 +96,18 @@ export function PaperWizard(props: ParentProps<PaperWizardProps>) {
         ...(local.initialData || {}),
     });
 
+    const countStep = (index: number, by: 1 | -1) =>
+        setStepCounts((prev) => {
+            const next = new Map(prev);
+            const count = (next.get(index) ?? 0) + by;
+            if (count > 0) next.set(index, count);
+            else next.delete(index);
+            return next;
+        });
+
     const registerStep = (index: number) => {
-        setTotalSteps((prev) => Math.max(prev, index + 1));
+        countStep(index, 1);
+        return () => countStep(index, -1);
     };
 
     const setStepData = (keyOrObject: string | Record<string, any>, value?: any) => {
@@ -277,9 +296,14 @@ export function PaperWizardStep(props: ParentProps<PaperWizardStepProps>) {
         "children",
     ]);
 
-    createEffect(() => {
-        wizard?.registerStep(local.index);
-    });
+    createEffect(
+        on(
+            () => local.index,
+            (index) => {
+                if (wizard) onCleanup(wizard.registerStep(index));
+            },
+        ),
+    );
 
     const isActive = createMemo(() => wizard?.currentStep() === local.index);
 

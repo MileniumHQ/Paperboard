@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 import { fireEvent, render, screen } from "@solidjs/testing-library";
-import { createEffect } from "solid-js";
+import { createEffect, createSignal, Show } from "solid-js";
 import { PaperCheckbox, PaperInput, PaperToggle, PaperWizard, PaperWizardStep, useWizard } from "../index";
 
 /** lets queued enters, exits and their microtask ends run */
@@ -115,5 +115,31 @@ describe("PaperWizard step skipped on arrival", () => {
         expect(shownSteps()).not.toContain("1");
         await settle();
         expect(shownSteps()).toEqual(["0"]);
+    });
+});
+
+// Inventory: Menus and form controls — Wizard counts the steps it shows.
+describe("PaperWizard steps", () => {
+    test("a step taken away leaves the step before it last: Next finishes there", async () => {
+        const [extra, setExtra] = createSignal(true);
+        const completed: Record<string, unknown>[] = [];
+        render(() => (
+            <PaperWizard onComplete={(data) => completed.push(data)}>
+                <PaperWizardStep index={0}>first</PaperWizardStep>
+                <PaperWizardStep index={1}>second</PaperWizardStep>
+                <Show when={extra()}>
+                    <PaperWizardStep index={2}>extra</PaperWizardStep>
+                </Show>
+            </PaperWizard>
+        ));
+        await settle();
+        expect(screen.getByRole("button", { name: /Next/ })).toBeTruthy();
+
+        setExtra(false);
+        next();
+        await settle();
+        expect(screen.getByRole("button", { name: /Finish/ })).toBeTruthy();
+        next();
+        expect(completed).toHaveLength(1);
     });
 });

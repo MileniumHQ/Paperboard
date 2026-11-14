@@ -242,7 +242,7 @@ import type { WizardContextType } from "@mileniumhq/paperui";`}
                     <tr>
                         <td><PaperCode>totalSteps</PaperCode></td>
                         <td><PaperCode>() =&gt; number</PaperCode></td>
-                        <td>The highest registered index plus one.</td>
+                        <td>The highest index of a mounted step plus one. A step shown conditionally counts only while it is mounted.</td>
                     </tr>
                     <tr>
                         <td><PaperCode>isFirstStep</PaperCode>, <PaperCode>isLastStep</PaperCode></td>
@@ -296,8 +296,8 @@ import type { WizardContextType } from "@mileniumhq/paperui";`}
                     </tr>
                     <tr>
                         <td><PaperCode>registerStep</PaperCode></td>
-                        <td><PaperCode>(index: number) =&gt; void</PaperCode></td>
-                        <td>Called by each step on mount. You do not call it.</td>
+                        <td><PaperCode>(index: number) =&gt; () =&gt; void</PaperCode></td>
+                        <td>Called by each step on mount; the step calls what it returns when it unmounts. You do not call it.</td>
                     </tr>
                 </tbody>
             </PaperTable>
