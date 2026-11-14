@@ -25,6 +25,12 @@ async function editA(options = {}) {
 async function answer(name: "Save" | "Discard" | "Cancel") {
     await page.waitFor(QUESTION, "the question about the unsaved edit");
     await page.eval(`[...${QUESTION}.querySelectorAll("button")].find((b) => b.innerText.trim().endsWith(${JSON.stringify(name)})).id = "answer"`);
+    // pressed where it rests: on a busy machine the question can still be
+    // sliding in when its button is measured
+    await page.waitFor(
+        `document.getAnimations().every((a) => a.playState !== "running" || !Number.isFinite(a.effect?.getComputedTiming().endTime))`,
+        "the question to come to rest",
+    );
     await page.click("#answer");
     await page.eval(`document.getElementById("answer")?.removeAttribute("id")`);
     await page.waitFor(`!${QUESTION}`, "the question to close");
