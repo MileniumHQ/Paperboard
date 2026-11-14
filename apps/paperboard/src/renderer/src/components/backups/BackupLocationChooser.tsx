@@ -41,7 +41,9 @@ const BackupLocationChooser: Component<{ computerId: string; computerName: strin
             setSelected(status.location?.id ?? list[0]?.id ?? "");
             for (const location of list) {
                 setUsage((prev) => ({ ...prev, [location.id]: { kind: "loading" } }));
-                void loadUsage(location.id, props.computerId).then((state) => setUsage((prev) => ({ ...prev, [location.id]: state })));
+                void loadUsage(location.id, props.computerId).then((state) => {
+                    if (openings.isCurrent(token)) setUsage((prev) => ({ ...prev, [location.id]: state }));
+                });
             }
         } catch (err) {
             if (openings.isCurrent(token)) setError(`Backup locations could not be loaded: ${errorMessage(err)}`);
