@@ -401,6 +401,7 @@ export function App(props: { onHome: () => void }) {
             <PaperText preset="subheader" as="h3" id="tab-strip">Tab strip</PaperText>
             <PaperText preset="body" as="p">
                 A horizontal menu is a row of entries with a divider under it.
+                When its entries are wider than the row, it scrolls sideways with no visible scrollbar, in either theme: a finger or a trackpad scrolls it, and the arrow keys bring the focused entry into view.
                 The Agent panel switches to one on phones with <PaperCode>horizontal={"{phone()}"}</PaperCode>.
             </PaperText>
             <PaperCard data-docs-demo padding="double" surface="front">

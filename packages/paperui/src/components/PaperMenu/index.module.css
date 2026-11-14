@@ -31,6 +31,14 @@
     gap: var(--menu-spacing, var(--paper-uigap-half));
     align-items: center;
     overflow-x: auto;
+    /* a tab strip scrolls under a finger or a trackpad, and the arrow keys
+       bring the focused tab into view; a native scrollbar would sit across
+       its tabs, so it has none */
+    scrollbar-width: none;
+}
+
+.PaperMenu.horizontal::-webkit-scrollbar {
+    display: none;
 }
 
 
