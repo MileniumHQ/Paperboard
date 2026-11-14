@@ -3,7 +3,7 @@
 // which projects exist and whether their flows run; each canvas is its own
 // file. The store runs in the service and in the tests, over any storage
 // that reads and writes JSON by path.
-import { EMPTY_FLOWS as EMPTY, type SavedFlows } from "../panel";
+import { EMPTY_FLOWS as EMPTY, PANEL_ID, type SavedFlows } from "../panel";
 import { errorMessage } from "./failure";
 import { isRecord, readFlows } from "./flows";
 import { isHat } from "./interpreter";
@@ -95,8 +95,8 @@ export function nextProjectName(names: readonly string[], base = NEW_PROJECT_NAM
     }
 }
 
-const finite = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
-const isRect = (v: unknown): v is PreviewRect => isRecord(v) && finite(v.x) && finite(v.y) && finite(v.w) && finite(v.h) && v.w >= 0 && v.h >= 0;
+const isFiniteNumber = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
+const isRect = (v: unknown): v is PreviewRect => isRecord(v) && isFiniteNumber(v.x) && isFiniteNumber(v.y) && isFiniteNumber(v.w) && isFiniteNumber(v.h) && v.w >= 0 && v.h >= 0;
 
 /** A miniature the page sent, or null when it isn't one. */
 export function readPreview(raw: unknown): CanvasPreview | null {
@@ -125,15 +125,16 @@ export function readProjectIndex(saved: unknown): ProjectMeta[] | null {
         let preview: CanvasPreview | null = null;
         try {
             preview = readPreview(p.preview);
-        } catch {
+        } catch (err) {
             // a miniature is drawn again on the next edit; the project itself is fine
+            console.error(`[${PANEL_ID}] project ${p.id}'s canvas preview was dropped: ${errorMessage(err)}`);
         }
         return {
             id: p.id,
             name: p.name,
             enabled: p.enabled !== false,
-            createdAt: finite(p.createdAt) ? p.createdAt : 0,
-            editedAt: finite(p.editedAt) ? p.editedAt : 0,
+            createdAt: isFiniteNumber(p.createdAt) ? p.createdAt : 0,
+            editedAt: isFiniteNumber(p.editedAt) ? p.editedAt : 0,
             preview,
         };
     });
