@@ -33,6 +33,7 @@ import { onMount } from "solid-js";
 import SavedCommandsModal from "./SavedCommands";
 import type { CommandRun, SavedCommand } from "./lib/savedCommands";
 import { describeRun } from "./lib/runStatus";
+import { createAgoClock } from "./lib/clock";
 import { errorMessage, type Outcome } from "./lib/failure";
 import { shortcutLabel } from "./keys";
 import SoftKeys from "./SoftKeys";
@@ -451,6 +452,7 @@ export default function App() {
     const terminalMenu = useContextMenuState();
     const tabMenu = useContextMenuState();
     const savedMenu = useContextMenuState();
+    const savedNow = createAgoClock(savedMenu.isOpen);
     const shellMenu = useContextMenuState();
     const splitMenu = useContextMenuState();
     const runSaved = async (id: string) => {
@@ -935,8 +937,8 @@ export default function App() {
                             value={cmd.id}
                             icon="play_arrow"
                             description={cmd.command}
-                            keybind={describeRun(saved.commandRuns[cmd.id], Date.now()).value}
-                            title={describeRun(saved.commandRuns[cmd.id], Date.now()).detail}
+                            keybind={describeRun(saved.commandRuns[cmd.id], savedNow()).value}
+                            title={describeRun(saved.commandRuns[cmd.id], savedNow()).detail}
                             disabled={saved.commandRuns[cmd.id]?.state === "running"}
                             onClick={() => void runSaved(cmd.id)}
                         >

@@ -17,9 +17,9 @@ import "@mileniumhq/paperui/style.css";
 import "./widget.css";
 import type { CommandRun, SavedCommand } from "./lib/savedCommands";
 import { describeRun, runErrorStands, type RunTone } from "./lib/runStatus";
+import { AGO_TICK_MS } from "./lib/clock";
 
 const PANEL_ID = "dev.paperboard.terminal";
-const AGO_TICK_MS = 15_000;
 
 interface WidgetState {
     savedCommands: SavedCommand[];

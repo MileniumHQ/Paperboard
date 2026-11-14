@@ -17,6 +17,7 @@ import { serviceApi } from "@mileniumhq/paperapi";
 import type { CommandRun, SavedCommand } from "./lib/savedCommands";
 import { MAX_LABEL_LENGTH, MAX_SAVED_COMMANDS } from "./lib/savedCommands";
 import { describeRun, type RunTone } from "./lib/runStatus";
+import { createAgoClock } from "./lib/clock";
 import { errorMessage, type Outcome } from "./lib/failure";
 
 const PANEL_ID = "dev.paperboard.terminal";
@@ -38,6 +39,7 @@ export default function SavedCommandsModal(props: {
     /** A run started from the toolbar dropdown that failed. */
     runError?: string;
 }) {
+    const now = createAgoClock(() => props.open);
     const [label, setLabel] = createSignal("");
     const [command, setCommand] = createSignal("");
     const [error, setError] = createSignal<Outcome | null>(null);
@@ -94,7 +96,7 @@ export default function SavedCommandsModal(props: {
                     <PaperFlex direction="column" gap="half" fullWidth>
                         <For each={props.commands}>
                             {(saved) => {
-                                const status = () => describeRun(props.runs[saved.id], Date.now());
+                                const status = () => describeRun(props.runs[saved.id], now());
                                 return (
                                     <PaperCard surface="element" borderless paddingX="full" paddingY="half">
                                         <PaperFlex direction="row" align="center" gap="half" fullWidth>
