@@ -5,6 +5,7 @@
 // revision, so what the agent remembers shows up live.
 
 import { For, Match, Show, Switch, createEffect, createSignal, on, onCleanup } from "solid-js";
+import { createStore, reconcile } from "solid-js/store";
 import {
     PaperButton,
     PaperCard,
@@ -26,7 +27,11 @@ import { errorText } from "../lib/failure";
 export default function Memories(props: { agent: Agent }) {
     const { agent } = props;
     const name = () => agent.state.settings?.name ?? "Your agent";
-    const [list, setList] = createSignal<MemoryList | null>(null);
+    // facts by id and notes by key, so a re-read changes what differs and every card stays the card it was
+    const [facts, setFacts] = createStore<MemoryList["facts"]>([]);
+    const [notes, setNotes] = createStore<MemoryList["notes"]>([]);
+    const [read, setRead] = createSignal(false);
+    const list = () => (read() ? { facts, notes } : null);
     const [error, setError] = createSignal<string | null>(null);
     const [open, setOpen] = createSignal<string | null>(null);
 
@@ -39,7 +44,9 @@ export default function Memories(props: { agent: Agent }) {
         try {
             const next = await agent.memory();
             if (!gone && mine === reads) {
-                setList(next);
+                setFacts(reconcile(next.facts, { key: "id" }));
+                setNotes(reconcile(next.notes, { key: "key" }));
+                setRead(true);
                 setError(null);
             }
         } catch (e) {

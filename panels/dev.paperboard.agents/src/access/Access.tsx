@@ -3,6 +3,7 @@
 // agent asks in the chat; this page follows every change as it happens.
 
 import { For, Match, Show, Switch, createSignal, onCleanup } from "solid-js";
+import { createStore, reconcile } from "solid-js/store";
 import { PaperButton, PaperEmptyState, PaperFlex, PaperIcon, PaperList, PaperListItem, PaperLoader, PaperQuote } from "@mileniumhq/paperui";
 import type { AccessGrant, AccessView } from "../contract";
 import type { Agent } from "../lib/agent";
@@ -11,10 +12,18 @@ import { errorText } from "../lib/failure";
 import { localStamp } from "../routineText";
 import { itemText } from "../chat/AccessRequest";
 
+const grantKey = (g: AccessGrant) => `${g.kind}:${itemText(g).what}:${g.kind === "command" && g.anyArguments}:${g.once}:${g.at}`;
+
 export default function Access(props: { agent: Agent }) {
     const { agent } = props;
     const name = () => agent.state.settings?.name ?? "Your agent";
-    const [view, setView] = createSignal<AccessView | null>(null);
+    // the grants are a store reconciled by what each one is, so a change pushed to the page touches only what changed
+    const [grants, setGrants] = createStore<{ key: string; grant: AccessGrant }[]>([]);
+    const [view, setViewState] = createSignal<{ error: string | null } | null>(null);
+    const setView = (next: AccessView) => {
+        setGrants(reconcile(next.grants.map((grant) => ({ key: grantKey(grant), grant })), { key: "key" }));
+        setViewState({ error: next.error });
+    };
     const [error, setError] = createSignal<string | null>(null);
     const [failed, setFailed] = createSignal<string | null>(null);
 
@@ -82,7 +91,7 @@ export default function Access(props: { agent: Agent }) {
                         </PaperFlex>
                     </Show>
                     <Show
-                        when={view()!.grants.length > 0}
+                        when={grants.length > 0}
                         fallback={
                             <PaperFlex padding="double">
                                 <PaperEmptyState
@@ -94,8 +103,9 @@ export default function Access(props: { agent: Agent }) {
                         }
                     >
                         <PaperList selectable={false} borderless fullWidth fullHeight>
-                            <For each={view()!.grants}>
-                                {(g) => {
+                            <For each={grants}>
+                                {(row) => {
+                                    const g = row.grant;
                                     const t = itemText(g);
                                     return (
                                         <PaperListItem

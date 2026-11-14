@@ -3,6 +3,7 @@
 // and can stop any of them. The list follows the service's routines revision.
 
 import { For, Match, Show, Switch, createEffect, createSignal, on, onCleanup } from "solid-js";
+import { createStore, reconcile } from "solid-js/store";
 import { PaperButton, PaperCard, PaperEmptyState, PaperFlex, PaperIcon, PaperLoader, PaperQuote, PaperText } from "@mileniumhq/paperui";
 import type { Routine } from "../contract";
 import { describeSchedule, localStamp } from "../routineText";
@@ -13,7 +14,9 @@ import { errorText } from "../lib/failure";
 export default function Routines(props: { agent: Agent }) {
     const { agent } = props;
     const name = () => agent.state.settings?.name ?? "Your agent";
-    const [list, setList] = createSignal<Routine[] | null>(null);
+    // reconciled by id, so a re-read changes what differs and every card stays the card it was
+    const [state, setState] = createStore<{ routines: Routine[] | null }>({ routines: null });
+    const list = () => state.routines;
     const [error, setError] = createSignal<string | null>(null);
     const [failed, setFailed] = createSignal<string | null>(null);
 
@@ -26,7 +29,7 @@ export default function Routines(props: { agent: Agent }) {
         try {
             const next = await agent.routines();
             if (!gone && mine === reads) {
-                setList(next);
+                setState("routines", reconcile(next, { key: "id" }));
                 setError(null);
             }
         } catch (e) {
