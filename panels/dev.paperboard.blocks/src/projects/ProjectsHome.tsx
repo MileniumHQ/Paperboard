@@ -28,7 +28,6 @@ import type { ProjectSummary } from "../lib/projects";
 const message = (err: unknown) => (err instanceof Error ? err.message : String(err));
 
 export default function ProjectsHome(props: { projects: ProjectsState; onOpen: (project: ProjectSummary) => void }) {
-    const projects = props.projects;
     const [failure, setFailure] = createSignal<{ title: string; text: string } | null>(null);
     const [working, setWorking] = createSignal(false);
     const change = async (failed: string, work: () => Promise<void>) => {
@@ -44,11 +43,11 @@ export default function ProjectsHome(props: { projects: ProjectsState; onOpen: (
         }
     };
 
-    const create = () => change("Project not made", async () => props.onOpen(await projects.create()));
-    const duplicate = (id: string) => change("Project not copied", async () => { await projects.duplicate(id); });
-    // a switch flips on its own, never waiting on another change
+    const create = () => change("Project not made", async () => props.onOpen(await props.projects.create()));
+    const duplicate = (id: string) => change("Project not copied", async () => { await props.projects.duplicate(id); });
+    // a switch flips on its own, never waiting on another change, and moves once the service says so
     const setEnabled = (id: string, enabled: boolean) =>
-        projects.setEnabled(id, enabled).catch((err) =>
+        props.projects.setEnabled(id, enabled).catch((err) =>
             setFailure({ title: enabled ? "Flows not turned on" : "Flows not turned off", text: message(err) }));
 
     const menu = useContextMenuState("below-right");
@@ -68,7 +67,7 @@ export default function ProjectsHome(props: { projects: ProjectsState; onOpen: (
 
     const newProject = () => (
         <PaperEffect variant="success">
-            <PaperButton variant="success" disabled={working() || !projects.ready()} onClick={() => void create()}>
+            <PaperButton variant="success" disabled={working() || !props.projects.ready()} onClick={() => void create()}>
                 <PaperIcon>add</PaperIcon>
                 New project
             </PaperButton>
@@ -80,7 +79,7 @@ export default function ProjectsHome(props: { projects: ProjectsState; onOpen: (
             <PaperPage width="wide">
                 <PaperPageHeader icon="extension" title="Projects">
                     {/* an empty page offers this in its empty state instead */}
-                    <Show when={projects.kept().length > 0}>{newProject()}</Show>
+                    <Show when={props.projects.kept().length > 0}>{newProject()}</Show>
                 </PaperPageHeader>
                 <Show when={failure()}>
                     {(f) => (
@@ -89,30 +88,30 @@ export default function ProjectsHome(props: { projects: ProjectsState; onOpen: (
                         </PaperQuote>
                     )}
                 </Show>
-                <Show when={projects.state().projectsError}>
+                <Show when={props.projects.state().projectsError}>
                     {(text) => (
                         <PaperQuote variant="danger" icon="warning" title="Projects could not be read" role="alert">{text()}</PaperQuote>
                     )}
                 </Show>
-                <Show when={projects.state().blocksError}>
+                <Show when={props.projects.state().blocksError}>
                     {(text) => (
                         <PaperQuote variant="danger" icon="warning" title="Flows can't drive projects" role="alert">{text()}</PaperQuote>
                     )}
                 </Show>
                 <Show
-                    when={projects.ready()}
+                    when={props.projects.ready()}
                     fallback={
-                        <Show when={projects.loadError()} fallback={<PaperLoader loaderStatus="indeterminate" label="Loading projects" />}>
+                        <Show when={props.projects.loadError()} fallback={<PaperLoader loaderStatus="indeterminate" label="Loading projects" />}>
                             {(reason) => (
                                 <PaperEmptyState icon="error" title="Projects could not be loaded" description={reason()} role="alert">
-                                    <PaperButton onClick={() => void projects.load()}>Try again</PaperButton>
+                                    <PaperButton onClick={() => void props.projects.load()}>Try again</PaperButton>
                                 </PaperEmptyState>
                             )}
                         </Show>
                     }
                 >
                     <Show
-                        when={projects.kept().length > 0}
+                        when={props.projects.kept().length > 0}
                         fallback={
                             <PaperEmptyState icon="extension" title="No projects yet" description="A project holds flows built from blocks, which run when something happens in any panel, or when you click Run.">
                                 {newProject()}
@@ -120,7 +119,7 @@ export default function ProjectsHome(props: { projects: ProjectsState; onOpen: (
                         }
                     >
                         <PaperMediaCardGroup minCardWidth="card-min">
-                            <For each={projects.kept()}>
+                            <For each={props.projects.kept()}>
                                 {(project) => (
                                     <PaperMediaCard
                                         effect={false}
@@ -140,7 +139,7 @@ export default function ProjectsHome(props: { projects: ProjectsState; onOpen: (
                                                 disabled={Boolean(project.loadError)}
                                                 aria-label={`${project.name}: flows start on their events`}
                                                 title={project.enabled ? "Flows on" : "Flows off"}
-                                                onChange={(enabled) => void setEnabled(project.id, enabled)}
+                                                onChange={(enabled) => setEnabled(project.id, enabled)}
                                             />
                                         }
                                         footerRight={
@@ -173,8 +172,8 @@ export default function ProjectsHome(props: { projects: ProjectsState; onOpen: (
                 <PaperSeparator role="separator" />
                 <PaperContextMenuItem icon="delete" danger onClick={fromMenu(setDeleting)}>Delete</PaperContextMenuItem>
             </PaperContextMenu>
-            <RenameProjectModal project={renaming()} onRename={projects.rename} onClose={() => setRenaming(null)} />
-            <DeleteProjectModal project={deleting()} onDelete={projects.remove} onClose={() => setDeleting(null)} />
+            <RenameProjectModal project={renaming()} onRename={props.projects.rename} onClose={() => setRenaming(null)} />
+            <DeleteProjectModal project={deleting()} onDelete={props.projects.remove} onClose={() => setDeleting(null)} />
         </PaperFlex>
     );
 }

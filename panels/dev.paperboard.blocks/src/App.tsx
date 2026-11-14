@@ -1,6 +1,6 @@
 // Blocks opens on its projects, like a documents app; opening one shows its
 // editor. A project deleted or gone while it is open returns here.
-import { createEffect, createSignal, Show } from "solid-js";
+import { createEffect, createSignal, on, Show } from "solid-js";
 import "@mileniumhq/paperui/style.css";
 import "@mileniumhq/paperui/panel.css";
 import Editor from "./Editor";
@@ -21,12 +21,17 @@ export default function App() {
         setOpened(project);
     };
 
-    createEffect(() => {
+    // whether the open project is in the list: null while none is open
+    const inList = () => {
         const project = opened();
-        if (!project) return;
-        if (projects.find(project.id)) listed = true;
-        else if (listed) setOpened(null);
-    });
+        return project ? Boolean(projects.find(project.id)) : null;
+    };
+    createEffect(
+        on([opened, inList], ([, present]) => {
+            if (present) listed = true;
+            else if (present === false && listed) setOpened(null);
+        }),
+    );
 
     return (
         <Show when={opened()?.id} keyed fallback={<ProjectsHome projects={projects} onOpen={open} />}>

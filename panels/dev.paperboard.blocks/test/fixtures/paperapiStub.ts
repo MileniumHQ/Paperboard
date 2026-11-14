@@ -19,6 +19,11 @@ const ENTRIES = [
     },
     {
         panelId: FIXTURE_PANEL,
+        entry: "command.count",
+        schema: { kind: "command", id: "count", name: "Count Players", text: "Count players", output: "number", outputName: "Players" },
+    },
+    {
+        panelId: FIXTURE_PANEL,
         entry: "event.joined",
         schema: { kind: "event", id: "joined", name: "Someone Joined", values: { who: { type: "text", name: "Who" } } },
     },
@@ -27,8 +32,38 @@ const ENTRIES = [
 /** Every save the editor made, oldest first. */
 export const saves: SavedFlows[] = [];
 
+let entries = structuredClone(ENTRIES);
+let panels: PanelItem[] = [{ id: FIXTURE_PANEL, name: FIXTURE_PANEL_NAME } as PanelItem];
+const registryListeners = new Set<(change: unknown) => void>();
+let held: Promise<void> | null = null;
+
+/** The registry as other panels change it. */
+export const registry = {
+    /** the next listing is of the registry as it is now, but answers only once released */
+    hold(): () => void {
+        let release!: () => void;
+        held = new Promise((resolve) => (release = resolve));
+        return release;
+    },
+    /** a panel starts offering a block */
+    offer(panel: PanelItem, entry: BlockInfo): void {
+        panels = [...panels, panel];
+        entries = [...entries, entry];
+    },
+    /** tells every listener the registry changed */
+    changed(): void {
+        for (const listener of [...registryListeners]) listener(null);
+    },
+};
+
 export const blocksApi = {
-    list: async (): Promise<BlockInfo[]> => structuredClone(ENTRIES),
+    list: async (): Promise<BlockInfo[]> => {
+        const answer = structuredClone(entries);
+        const wait = held;
+        held = null;
+        if (wait) await wait;
+        return answer;
+    },
     projects: async (): Promise<BlockProjectInfo[]> => [],
     choices: async (panelId: string, entry: string, input: string): Promise<never> => {
         throw new Error(`the fixture has no choices for ${panelId} ${entry} ${input}`);
@@ -36,11 +71,14 @@ export const blocksApi = {
     typeChoices: async (typeRef: string): Promise<never> => {
         throw new Error(`the fixture has no choices for ${typeRef}`);
     },
-    onRegistryChange: (): (() => void) => () => {},
+    onRegistryChange: (listener: (change: unknown) => void): (() => void) => {
+        registryListeners.add(listener);
+        return () => registryListeners.delete(listener);
+    },
 };
 
 export const panelsApi = {
-    list: async (): Promise<PanelItem[]> => [{ id: FIXTURE_PANEL, name: FIXTURE_PANEL_NAME } as PanelItem],
+    list: async (): Promise<PanelItem[]> => structuredClone(panels),
 };
 
 export function createPanelBridge() {

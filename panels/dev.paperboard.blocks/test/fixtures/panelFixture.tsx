@@ -12,7 +12,7 @@ import * as Blockly from "blockly";
 import { PaperProvider } from "@mileniumhq/paperui";
 import App from "../../src/App";
 import { SERVICE_CALLS, type LogEntry } from "../../src/panel";
-import { project, service, SERVICED_PROJECT } from "./serviceStub";
+import { project, registry, service, SERVICED_PROJECT } from "./serviceStub";
 
 const errors: string[] = [];
 window.addEventListener("error", (event) => errors.push(event.error instanceof Error ? event.error.message : event.message));
@@ -203,6 +203,58 @@ async function createVariableChecks() {
     };
 }
 
+/** The editor's switch moves, with its thump, once the service has switched the flows. */
+async function toggleChecks() {
+    const toggle = await until("the editor's switch", () => document.querySelector<HTMLElement>('[role="switch"][aria-label="Flows start on their events"]'));
+    let animated = false;
+    const watch = new MutationObserver(() => (animated ||= /animating/.test(toggle.className)));
+    watch.observe(toggle, { attributes: true, attributeFilter: ["class"] });
+    const before = toggle.getAttribute("aria-checked");
+    await clickAt(toggle);
+    await until("the switch to move", () => toggle.getAttribute("aria-checked") !== before);
+    await frame();
+    watch.disconnect();
+    return { before, after: toggle.getAttribute("aria-checked"), animated, saved: service.calls().filter((c) => c.name === SERVICE_CALLS.updateProject).at(-1)?.input.enabled };
+}
+
+/** Two registry changes whose answers come back in the other order: the Library shows the newer. */
+async function registryChecks() {
+    const release = registry.hold();
+    registry.changed();
+    registry.offer({ id: "dev.test.late", name: "Late Panel" } as never, { panelId: "dev.test.late", entry: "command.wave", schema: { kind: "command", id: "wave", name: "Wave", text: "Wave" } } as never);
+    registry.changed();
+    await settle();
+    release();
+    await settle();
+    await settle();
+    return { lateShown: Boolean(byText("[role=radio], button, label", "Late Panel")) };
+}
+
+/** Flows that don't load leave the canvas read-only and say so until they do; Try again loads them. */
+async function loadFailureChecks() {
+    (await until("the All projects button", () => document.querySelector<HTMLElement>('[aria-label="All projects"]'))).click();
+    const card = await until("the project's card", () => byText("*", "Renamed by hand"));
+    service.fail(SERVICE_CALLS.load, "the service is restarting");
+    card.click();
+    const alert = await until("the load failure", () => [...document.querySelectorAll<HTMLElement>('[role="alert"]')].find((el) => el.textContent?.includes("Your flows couldn't be loaded")));
+    await settle();
+    // the app switches theme meanwhile: Blockly draws its list again, which stays hidden
+    document.documentElement.setAttribute("data-theme", "dark");
+    await settle();
+    const failed = {
+        text: alert.textContent ?? "",
+        readOnly: canvas()!.isReadOnly(),
+        dismissable: Boolean(alert.querySelector('[aria-label="Dismiss"]')),
+        library: Boolean(byText("[role=radio], button, label", "Logic")) || getComputedStyle(canvas()!.getFlyout()!.getWorkspace().getParentSvg()).display !== "none",
+    };
+    document.documentElement.removeAttribute("data-theme");
+    service.fail(SERVICE_CALLS.load, null);
+    byText("button", "Try again", alert)!.click();
+    await until("the failure to go", () => !alert.isConnected);
+    await settle();
+    return { failed, retried: { readOnly: canvas()!.isReadOnly(), library: Boolean(byText("[role=radio], button, label", "Logic")) } };
+}
+
 async function run(): Promise<Record<string, unknown>> {
     render(
         () => (
@@ -220,7 +272,10 @@ async function run(): Promise<Record<string, unknown>> {
     const dialogs = await dialogChecks();
     const library = await libraryChecks();
     const createVariable = await createVariableChecks();
-    return { console: consoleResult, dialogs, library, createVariable, uncaught: [...errors] };
+    const toggle = await toggleChecks();
+    const refresh = await registryChecks();
+    const loadFailure = await loadFailureChecks();
+    return { console: consoleResult, dialogs, library, createVariable, toggle, refresh, loadFailure, uncaught: [...errors] };
 }
 
 run()

@@ -23,8 +23,17 @@ afterAll(() => {
 
 const original = globalThis.WebSocket;
 
+// The one exception: the headless Chrome a browser test started itself, on
+// the loopback DevTools port its helper registered here (browserFixture.ts).
+const ALLOWED = Symbol.for("paperboard.blocks.test.ports");
+const allowedPorts: Set<number> = ((globalThis as any)[ALLOWED] ??= new Set<number>());
+
 class NoNetworkWebSocket {
-    constructor() {
+    constructor(url: string | URL, protocols?: string | string[]) {
+        const target = new URL(String(url));
+        if (original && target.protocol === "ws:" && target.hostname === "127.0.0.1" && allowedPorts.has(Number(target.port))) {
+            return new original(target, protocols) as unknown as NoNetworkWebSocket;
+        }
         throw new Error(
             "unit tests must not open network connections (a live daemon " +
                 "would make test results environment-dependent); if a test " +

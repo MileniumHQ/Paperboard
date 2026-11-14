@@ -1,4 +1,4 @@
-// Dragging blocks in the editor (real browser).
+// Dragging and copying blocks in the editor (real browser).
 //
 // The editor is bundled with Vite and mounted in headless Chrome over an SDK
 // with no daemon behind it (fixtures/paperapiStub.ts); the fixture drags
@@ -7,20 +7,14 @@
 // draws a preview of the block where it would snap on, and a renderer that
 // can't draw the preview fails in the middle of the drag, leaving a block on
 // the canvas for every move of the pointer.
-//
-// Without Chrome the suite is skipped with a visible reason; CI must have it.
 import { describe, expect, test } from "bun:test";
 import { BUILTIN } from "../src/lib/names";
-import { findChrome, runBrowserFixture, type FixtureResults } from "./browserFixture";
-
-const chrome = findChrome();
-if (!chrome && process.env.CI) throw new Error("CI has no Chrome, so the editor's drag tests can't run: install it or set PAPERBOARD_CHROME");
-const dragTest = chrome ? test : test.skip;
-const named = (name: string) => (chrome ? `${name} (headless Chrome)` : `${name} (skipped: no Chrome)`);
+import { runHat, type SavedBlock } from "../src/lib/interpreter";
+import { runBrowserFixture, type FixtureResults } from "./browserFixture";
 
 let results: Promise<FixtureResults> | undefined;
 const fixture = async () => {
-    results ??= runBrowserFixture(chrome!, "test/fixtures/editorFixture.html", { "@mileniumhq/paperapi": "test/fixtures/paperapiStub.ts" });
+    results ??= runBrowserFixture("test/fixtures/editorFixture.html", { "@mileniumhq/paperapi": "test/fixtures/paperapiStub.ts" });
     const { checks, error } = await results;
     expect(error, "the fixture threw").toBe("");
     return checks;
@@ -33,8 +27,8 @@ const TIMEOUT = 180_000;
 describe("dragging blocks in the editor", () => {
     // the canvas changes size part way: laid out again under a block being dragged, Blockly
     // scrolls to where the block was picked up, and the block leaves the pointer
-    dragTest(
-        named("a block dragged out of the Library stays under the pointer while the canvas changes size, and lands on the canvas"),
+    test(
+        "a block dragged out of the Library stays under the pointer while the canvas changes size, and lands on the canvas",
         async () => {
             const { first, afterFirst, fitted } = await fixture();
             expect(Math.abs(first.offBy.x), "the block was not under the pointer").toBeLessThanOrEqual(HELD);
@@ -47,8 +41,8 @@ describe("dragging blocks in the editor", () => {
         TIMEOUT,
     );
 
-    dragTest(
-        named("a block dragged into another shows its drop preview and snaps in, leaving nothing else behind"),
+    test(
+        "a block dragged into another shows its drop preview and snaps in, leaving nothing else behind",
         async () => {
             const { second, afterSecond } = await fixture();
             expect(Math.abs(second.offBy.x), "the block was not under the pointer").toBeLessThanOrEqual(HELD);
@@ -64,8 +58,8 @@ describe("dragging blocks in the editor", () => {
         TIMEOUT,
     );
 
-    dragTest(
-        named("a panel's block snaps into a built-in one"),
+    test(
+        "a panel's block snaps into a built-in one",
         async () => {
             const { third, afterThird, greet } = await fixture();
             expect(third.previews).toHaveLength(1);
@@ -77,8 +71,8 @@ describe("dragging blocks in the editor", () => {
         TIMEOUT,
     );
 
-    dragTest(
-        named("nothing fails unseen: a drag throws nothing, and what nothing catches is said on the page"),
+    test(
+        "nothing fails unseen: a drag throws nothing, and what nothing catches is said on the page",
         async () => {
             const { uncaught, alerts } = await fixture();
             expect(uncaught).toEqual([]);
@@ -86,6 +80,30 @@ describe("dragging blocks in the editor", () => {
             expect(alerts).toHaveLength(1);
             expect(alerts[0].toast).toBe(true);
             expect(alerts[0].text).toContain("the fixture's own failure");
+        },
+        TIMEOUT,
+    );
+
+});
+
+describe("copying blocks in the editor", () => {
+    test(
+        "a flow duplicated from its menu reads what its own command gave back, not the original's",
+        async () => {
+            const { duplicated } = await fixture();
+            // the copy: a "When Run is clicked" that starts with Count, other than the original
+            const hats = (duplicated.saved as SavedBlock[]).filter((b) => b.type === BUILTIN.onRun && b.id !== duplicated.originalHat && b.inputs?.DO?.block?.type.endsWith("|command.count"));
+            expect(hats).toHaveLength(1);
+            const logs: string[] = [];
+            const host = {
+                signal: new AbortController().signal,
+                run: async () => 7,
+                read: async () => null,
+                property: async () => null,
+                log: (message: string) => void logs.push(message),
+            };
+            await runHat(hats[0]!, null, { blocks: { languageVersion: 0, blocks: duplicated.saved } }, host);
+            expect(logs).toEqual(["7"]);
         },
         TIMEOUT,
     );

@@ -4,7 +4,7 @@
 // delivers one (parsed from JSON: every object in it is new), and the bridge
 // hands its listeners that patch and the merged state, exactly as
 // createPanelBridge does. Calls answer from that state, and a call can be
-// told to fail.
+// told to fail. Every answer comes a task later, as one over the wire does.
 import type { ProjectSummary } from "../../src/lib/projects";
 import { DEFAULT_STATE, SERVICE_CALLS, type PanelState, type SavedFlows } from "../../src/panel";
 
@@ -61,8 +61,10 @@ export function createPanelBridge() {
             listeners.add(listener);
             return () => listeners.delete(listener);
         },
-        call: async (name: string, input: { project?: string; flows?: SavedFlows; name?: string } = {}): Promise<unknown> => {
+        call: async (name: string, input: { project?: string; flows?: SavedFlows; name?: string; enabled?: boolean } = {}): Promise<unknown> => {
             calls.push({ name, input: structuredClone(input) });
+            // the service answers over the wire, never within the call
+            await new Promise((resolve) => setTimeout(resolve, 0));
             const reason = failing.get(name);
             if (reason) throw new Error(reason);
             if (name === SERVICE_CALLS.load) return structuredClone(flows.get(input.project!) ?? { workspace: {}, schemas: {} });
@@ -71,7 +73,7 @@ export function createPanelBridge() {
                 return null;
             }
             if (name === SERVICE_CALLS.updateProject) {
-                const projects = shared.projects.map((p) => (p.id === input.project ? { ...p, ...(input.name ? { name: input.name } : {}) } : p));
+                const projects = shared.projects.map((p) => (p.id === input.project ? { ...p, ...(input.name ? { name: input.name } : {}), ...(input.enabled !== undefined ? { enabled: input.enabled } : {}) } : p));
                 service.announce({ projects });
                 return projects.find((p) => p.id === input.project);
             }

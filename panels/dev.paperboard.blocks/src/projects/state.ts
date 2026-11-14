@@ -48,7 +48,13 @@ export function createProjects() {
         find: (id: string): ProjectSummary | undefined => state.projects.find((p) => p.id === id),
         create: (name?: string) => bridge.call<ProjectSummary>(SERVICE_CALLS.createProject, name ? { name } : {}),
         rename: (project: string, name: string) => bridge.call<ProjectSummary>(SERVICE_CALLS.updateProject, { project, name }),
-        setEnabled: (project: string, enabled: boolean) => bridge.call<ProjectSummary>(SERVICE_CALLS.updateProject, { project, enabled }),
+        /** resolves once the list shows the switch where the service put it: a switch moves when its save is answered */
+        setEnabled: async (project: string, enabled: boolean) => {
+            const saved = await bridge.call<ProjectSummary>(SERVICE_CALLS.updateProject, { project, enabled });
+            const at = state.projects.findIndex((p) => p.id === saved.id);
+            if (at >= 0) setState("projects", at, reconcile(structuredClone(saved)));
+            return saved;
+        },
         duplicate: (project: string) => bridge.call<ProjectSummary>(SERVICE_CALLS.duplicateProject, { project }),
         remove: (project: string) => bridge.call<{ deleted: boolean }>(SERVICE_CALLS.deleteProject, { project }),
         /** a new project left without a block is not kept; the service checks it still is a draft */

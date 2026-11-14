@@ -30,7 +30,7 @@ export function uiGap(): number {
 export class LibraryFlyout extends Blockly.VerticalFlyout {
     constructor(options: Blockly.Options) {
         super(options);
-        // spaced as the Actions library is: a gap around and between blocks
+        // a gap around and between blocks
         const spacing = this as unknown as { MARGIN: number; GAP_Y: number };
         spacing.MARGIN = uiGap();
         spacing.GAP_Y = uiGap();
@@ -44,6 +44,14 @@ export class LibraryFlyout extends Blockly.VerticalFlyout {
         return top;
     }
 
+    /**
+     * Shown or hidden again as it should be: a new theme makes the list's own
+     * workspace show itself, whether or not the Library is shown.
+     */
+    redisplay(): void {
+        (this as unknown as { updateDisplay(): void }).updateDisplay();
+    }
+
     override position(): void {
         if (!this.isVisible() || !this.targetWorkspace.isVisible()) return;
         const view = this.targetWorkspace.getMetricsManager().getViewMetrics();
@@ -53,7 +61,7 @@ export class LibraryFlyout extends Blockly.VerticalFlyout {
         this.positionAt_(this.getWidth(), this.height_, this.getX(), top);
     }
 
-    /** As wide as the Actions library, or the widest block where one won't fit: a block is never cut off. */
+    /** As wide as the Library, or the widest block where one won't fit: a block is never cut off. */
     protected override reflowInternal_(): void {
         super.reflowInternal_();
         const least = cssPixels(this.targetWorkspace.getInjectionDiv(), "--library-width");

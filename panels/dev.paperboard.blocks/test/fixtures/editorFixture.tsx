@@ -14,6 +14,8 @@ import { FIXTURE_PANEL, FIXTURE_PANEL_NAME, FIXTURE_PROJECT, saves } from "./pap
 /** Where on a block the pointer takes hold of it, from its top left. */
 const GRIP = 8;
 const GREET = registryBlockType({ kind: "command", panelId: FIXTURE_PANEL, entry: "command.greet" });
+const COUNT = registryBlockType({ kind: "command", panelId: FIXTURE_PANEL, entry: "command.count" });
+const COUNTED = registryBlockType({ kind: "result", panelId: FIXTURE_PANEL, entry: "command.count" });
 
 const errors: string[] = [];
 window.addEventListener("error", (event) => errors.push(event.error instanceof Error ? event.error.message : event.message));
@@ -155,6 +157,21 @@ async function run(): Promise<Record<string, unknown>> {
     const third = await drag(GREET, onPage(inner.getInput("DO0")!.connection!));
     const afterThird = await savedWith(3);
 
+    // a flow that logs what its command gave back, duplicated from its menu as a person would
+    const original = Blockly.serialization.blocks.append(
+        {
+            type: BUILTIN.onRun,
+            x: 40,
+            y: 400,
+            inputs: { DO: { block: { type: COUNT, id: "count", next: { block: { type: BUILTIN.log, inputs: { TEXT: { block: { type: COUNTED, extraState: { from: "count" } } } } } } } } },
+        },
+        canvas()!,
+    ) as Blockly.BlockSvg;
+    await savedWith(7);
+    const duplicate = Blockly.ContextMenuRegistry.registry.getItem("blockDuplicate") as Blockly.ContextMenuRegistry.ActionRegistryItem;
+    duplicate.callback({ block: original, focusedNode: original } as Blockly.ContextMenuRegistry.Scope, new PointerEvent("pointerdown"), {} as never, { x: 0, y: 0 } as never);
+    const duplicated = { originalHat: original.id, ...(await savedWith(11)) };
+
     const uncaught = [...errors];
     // what nothing catches is said on the page, by PaperProvider's toast: once, however often it's thrown
     for (let i = 0; i < 3; i++) window.dispatchEvent(new ErrorEvent("error", { error: new Error("the fixture's own failure"), message: "the fixture's own failure" }));
@@ -162,7 +179,7 @@ async function run(): Promise<Record<string, unknown>> {
     await frame();
     const alerts = [...document.querySelectorAll('[role="alert"]')].map((el) => ({ toast: !!el.closest('[aria-label="Notifications"]'), text: el.textContent ?? "" }));
 
-    return { first, afterFirst, fitted, second, afterSecond, third, afterThird, uncaught, alerts, greet: GREET };
+    return { first, afterFirst, fitted, second, afterSecond, third, afterThird, duplicated, uncaught, alerts, greet: GREET };
 }
 
 run()

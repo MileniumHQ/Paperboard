@@ -1,7 +1,7 @@
-// The run log, as the Actions canvas shows its console: a glass panel in
+// The run log: a glass panel in
 // the canvas's top-right corner, there while it has lines, newest at the
 // bottom and kept in view.
-import { createEffect, For, Show } from "solid-js";
+import { createEffect, For, on, Show } from "solid-js";
 import { PaperButton, PaperIcon, PaperText } from "@mileniumhq/paperui";
 import type { LogEntry } from "./panel";
 import styles from "./Console.module.css";
@@ -15,12 +15,15 @@ export function Console(props: { entries: LogEntry[]; onClear(): void }) {
     // to read stays where they are, until they come back down.
     let following = true;
     const atBottom = (el: HTMLElement) => el.scrollHeight - el.scrollTop - el.clientHeight <= BOTTOM_SLACK;
-    createEffect(() => {
-        props.entries.length;
-        queueMicrotask(() => {
-            if (body && following) body.scrollTop = body.scrollHeight;
-        });
-    });
+    createEffect(
+        on(
+            () => props.entries.length,
+            () =>
+                queueMicrotask(() => {
+                    if (body && following) body.scrollTop = body.scrollHeight;
+                }),
+        ),
+    );
 
     return (
         <Show when={props.entries.length > 0}>
