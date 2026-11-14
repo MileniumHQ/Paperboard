@@ -2,7 +2,7 @@
 // The grid is as wide as the window fits and at least as wide as the
 // layout; a layout wider than the window is drawn smaller rather than
 // rearranged, so Home looks the same on every window. Pure functions:
-// HomeView owns the signals, this owns the rules.
+// HomeView (with homePersistence and homeDrag) owns the signals, this owns the rules.
 
 import { parseWidgetOptionValues, parseWidgetSize, WIDGET_MAX_WIDTH, isWidgetId, type WidgetOptionValues, type WidgetSize } from "@mileniumhq/paperapi";
 
@@ -322,12 +322,16 @@ export function withoutEmptyPages(items: HomeItem[]): HomeItem[] {
  * its center is over. Pages are `pageWidth` px apart, their cells start
  * `gutter` px in. null when its center is off every page.
  */
-export function snapToPhone(
-    left: number,
-    top: number,
-    size: WidgetSize,
-    phone: { cell: number; pageWidth: number; gutter: number; pages: number; rows: number },
-): Placement | null {
+/** a phone's pages, side by side: each the screen's width, PHONE_COLUMNS cells and `rows` rows inside its gutters */
+export interface PhoneGeometry {
+    cell: number;
+    pageWidth: number;
+    gutter: number;
+    pages: number;
+    rows: number;
+}
+
+export function snapToPhone(left: number, top: number, size: WidgetSize, phone: PhoneGeometry): Placement | null {
     const { cell, pageWidth, gutter, pages, rows } = phone;
     const centerX = left + (size.w * cell) / 2;
     const centerY = top + (size.h * cell) / 2;
