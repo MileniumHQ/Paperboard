@@ -84,8 +84,17 @@ export async function servePanelAsset(
             });
         }
 
-        let subpath = pathname.replace(/^\/+/, "");
-        if (!subpath) subpath = "index.html";
+        // the URL's path names files percent-encoded ("my%20image.png"),
+        // segment by segment: an encoded "/" never becomes a separator
+        let segments: string[];
+        try {
+            segments = pathname.replace(/^\/+/, "").split("/").map(decodeURIComponent);
+        } catch (err) {
+            if (!(err instanceof URIError)) throw err;
+            return new Response(`Invalid panel file path`, { status: 400 });
+        }
+        if (segments.join("") === "") segments = ["index.html"];
+        const subpath = segments.join("/");
 
         const cleanPanelId = sanitizeId(panelId);
         if (!cleanPanelId) {
@@ -126,7 +135,7 @@ export async function servePanelAsset(
         const assetToken = client.getToken();
         let res: Awaited<ReturnType<typeof client.request>>;
         try {
-            res = await client.request(`panel/${cleanPanelId}/${subpath}`, {
+            res = await client.request(`panel/${cleanPanelId}/${segments.map(encodeURIComponent).join("/")}`, {
                 ...(assetToken ? { headers: { Authorization: `Bearer ${assetToken}` } } : {}),
             });
         } catch (err) {

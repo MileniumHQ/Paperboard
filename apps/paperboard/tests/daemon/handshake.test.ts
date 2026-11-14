@@ -111,6 +111,20 @@ describe("the master token goes only to a daemon that proves itself", () => {
 		});
 	});
 
+	test("a panel file whose name has spaces or accents is served by the name its page asks for", async () => {
+		const dir = dataDir();
+		const panelDir = await installPanelFiles(dir, { id: "test.page" });
+		fs.writeFileSync(path.join(panelDir, "café menu.png"), "the picture");
+		await withDataDir(dir, async () => {
+			const { servePanelAsset } = await import("../../src/main/panelServe");
+			// a page's <img src="café menu.png"> asks for the URL's encoding of it
+			const res = await servePanelAsset("local", "test.page", new URL("panel://local.test.page/café menu.png").pathname);
+			expect(await res.text()).toBe("the picture");
+			expect(res.status).toBe(200);
+			expect((await servePanelAsset("local", "test.page", "/%E0%A4%A")).status).toBe(400);
+		});
+	});
+
 	test("a panel document whose credential is refused fails with why, never as a missing file", async () => {
 		const token = "pc_refusing_daemon";
 		const listener = await fakeListener((ws, challenge) => {
