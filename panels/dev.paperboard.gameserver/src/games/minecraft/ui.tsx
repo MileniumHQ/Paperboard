@@ -20,8 +20,9 @@ import Modpacks from "../../components/Modpacks";
 /** Existing components and props; only their ownership and lookup change. */
 export const minecraftUI: GameUI = {
     create(ctx) {
-        const [pluginUpdateRequest, setPluginUpdateRequest] = createSignal(0);
-        const requestPluginUpdate = () => { ctx.openTab("plugins"); setPluginUpdateRequest((n) => n + 1); };
+        // asked for by the Versions tab, taken by the Plugins tab when it runs it
+        const [pluginUpdateRequested, setPluginUpdateRequested] = createSignal(false);
+        const requestPluginUpdate = () => { setPluginUpdateRequested(true); ctx.openTab("plugins"); };
         return {
             setup: (props) => <Setup initialSoftware={minecraftSoftware(props.initialSoftware)} initialVersion={props.initialVersion} onComplete={props.onComplete} />,
             tab(id) {
@@ -34,7 +35,7 @@ export const minecraftUI: GameUI = {
                     case "map": return <MapView />;
                     case "versions": return <Versions onRequestPluginUpdate={requestPluginUpdate} />;
                     case "loader": return <Loader active={ctx.active() === id} />;
-                    case "plugins": return <Plugins updateRequest={pluginUpdateRequest()} onConfigure={ctx.revealFiles} />;
+                    case "plugins": return <Plugins updateRequested={pluginUpdateRequested()} onUpdateRequestTaken={() => setPluginUpdateRequested(false)} onConfigure={ctx.revealFiles} />;
                     case "datapacks": return <Datapacks active={ctx.active() === id} />;
                     case "resourcepack": return <ResourcePack active={ctx.active() === id} />;
                     case "crossplay": return <Crossplay active={ctx.active() === id} />;

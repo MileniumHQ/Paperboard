@@ -1,4 +1,4 @@
-import { createEffect, createSignal, For, on, Show } from "solid-js";
+import { createEffect, createSignal, For, on, Show, untrack } from "solid-js";
 import {
     PaperButton,
     PaperCheckbox,
@@ -162,8 +162,10 @@ function DependencyPreview(props: InstallExtrasProps) {
 // update check the Versions tab can ask for and the Configure button that
 // opens an add-on's settings in the Files tab.
 export default function Plugins(props: {
-    /** bumped by the Versions tab after switching the server jar */
-    updateRequest?: number;
+    /** the Versions tab asked, after switching the server jar, for every add-on to be updated */
+    updateRequested?: boolean;
+    /** the request was taken: it runs once, however often the tab opens */
+    onUpdateRequestTaken?: () => void;
     /** opens the Files tab at an add-on's settings */
     onConfigure?: (reveal: PaperFileReveal) => void;
 }) {
@@ -222,15 +224,15 @@ export default function Plugins(props: {
         setFailures(null);
     };
 
-    // the Versions tab hands off here after switching the server jar
-    createEffect(
-        on(
-            () => props.updateRequest,
-            (value) => {
-                if (value && value > 0) void runUpdateCheck();
-            },
-        ),
-    );
+    // the Versions tab hands off here after switching the server jar; a
+    // request made while an update runs waits for it, then runs once
+    createEffect(() => {
+        if (!props.updateRequested || updating()) return;
+        untrack(() => {
+            props.onUpdateRequestTaken?.();
+            void runUpdateCheck();
+        });
+    });
 
     // made per opened add-on, so a message about one never shows on the next
     const configure: DetailExtras = (entry, close) => {
