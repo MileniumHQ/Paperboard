@@ -7,7 +7,7 @@ import { SupervisedProcessClient, supervisorPresent } from "./supervisor";
 import { supervisorLaunch } from "./supervisorLaunch";
 import { supervisorBinary } from "./supervisorBinary";
 import { logger } from "./logger";
-import { LimitError } from "./storage";
+import { LimitError, unrefTimer } from "./storage";
 import { getLogsDir } from "./paths";
 
 // Live supervised workload budget: each client is a detached supervisor
@@ -58,7 +58,7 @@ export interface PreListeners {
     onData?: (data: string) => void;
     onStdout?: (data: string) => void;
     onStderr?: (data: string) => void;
-    onExit?: (code: number) => void;
+    onExit?: (code: number | null) => void;
     // runs on the new client before it connects, so a caller can attach
     // its own stream listeners without missing the first output
     attach?: (client: any) => void;
@@ -185,12 +185,13 @@ export async function spawnSupervisedClient(
 
 // A start failure must not leave the detached supervisor (or its child)
 // running unclaimed: it is not in the clients map, so nothing without this
-// teardown reaches it. The supervisor handles SIGTERM explicitly
-// (supervisor/supervisor.go: cleanupAndExit), which unlinks the endpoint too. Each
-// signal is a request; the exit is what is observed.
+// teardown reaches it. Where there are signals the supervisor handles SIGTERM
+// (supervisor/supervisor.go: cleanupAndExit), which stops the workload and
+// unlinks the endpoint too; on Windows kill() is TerminateProcess, so the
+// supervisor gets no say. Each signal is a request; the exit is what is observed.
 export async function stopSpawnedSupervisor(id: string, supervisorProc: ChildProcess): Promise<void> {
     if (supervisorProc.exitCode !== null || supervisorProc.signalCode !== null) return;
-    // SIGTERM → the supervisor's cleanupAndExit stops the workload too
+    // SIGTERM → on unix the supervisor's cleanupAndExit stops the workload too
     try {
         supervisorProc.kill("SIGTERM");
     } catch (err) {
@@ -224,8 +225,4 @@ async function exitsEventually(proc: ChildProcess, graceMs: number): Promise<boo
         unrefTimer(timer);
         proc.once("exit", () => { clearTimeout(timer); resolve(true); });
     });
-}
-
-function unrefTimer(timer: NodeJS.Timeout): void {
-    if (typeof timer.unref === "function") timer.unref();
 }

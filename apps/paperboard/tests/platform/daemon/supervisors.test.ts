@@ -7,7 +7,7 @@ import { supervisorLaunch } from "../../../papercrane/supervisorLaunch";
 import { PaperCraneAuth } from "../../../papercrane/auth";
 import { PanelServicesManager } from "../../../papercrane/panelServices";
 import { killWorkloads, startCrane, workloadRecords, type CraneProcess } from "../../daemon/support/crane";
-import { dataDir, tempDir } from "../../daemon/support/fs";
+import { dataDir, restoreEnv, tempDir } from "../../daemon/support/fs";
 import { installPanelFiles, serviceCall, serviceSource, stateRead } from "../../daemon/support/panels";
 import { Rpc } from "../../daemon/support/rpc";
 import { isAlive, TEST_TIMEOUT_MS, waitFor } from "../../daemon/support/wait";
@@ -166,7 +166,7 @@ describe("supervised workloads are reported faithfully", () => {
 		try {
 			socketPath = getSupervisorSocketPath("gap");
 		} finally {
-			process.env.PAPERBOARD_DIR = previous;
+			restoreEnv("PAPERBOARD_DIR", previous);
 		}
 		const frames: Array<{ type: string; data?: string }> = [];
 		let buffered = "";
@@ -295,7 +295,7 @@ describe("supervised workloads are reported faithfully", () => {
 			await waitFor("the replacement's answer", () => dataOf(adopter, "a.b").includes("again:x"));
 			expect(supervisorPresent("a.b")).toBe(true);
 		} finally {
-			process.env.PAPERBOARD_DIR = previous;
+			restoreEnv("PAPERBOARD_DIR", previous);
 		}
 		await adopter.ok("process:kill", { id: "a.b" });
 		await adopter.ok("process:kill", { id: "a_b" });
@@ -422,7 +422,7 @@ describe("a terminal says what it runs", () => {
 
 // Panel services start and hydrate.
 describe("panel services start and hydrate", () => {
-	test("a compiled crane on a network address runs services, and reading a service's state waits for onInit or rejects with its error", async () => {
+	test("a compiled crane on a network address runs services, reading a service's state waits for onInit, and a failed onInit ends the service with its error", async () => {
 		const dir = dataDir();
 		await installPanelFiles(dir, {
 			id: "test.hydrate",
@@ -440,13 +440,15 @@ describe("panel services start and hydrate", () => {
 		cranes.push(started);
 		dirs.push(dir);
 		const rpc = await started.rpc();
+		await rpc.ok("monitor:subscribe");
 		await waitFor("the hydrate service to register", async () => !(await rpc.call("blocks:call", serviceCall("test.hydrate", "ping"))).error);
 		const state = rpc.call("blocks:call", stateRead("test.hydrate"));
 		await rpc.ok("blocks:call", serviceCall("test.hydrate", "open"));
 		expect((await state).result).toEqual({ result: { phase: "ready" } });
 
-		await waitFor("the broken service to register", async () => !(await rpc.call("blocks:call", serviceCall("test.broken", "ping"))).error);
-		expect((await rpc.fail("blocks:call", stateRead("test.broken"))).error).toContain("init exploded");
+		// it exits on the failure (and restarts on a backoff), naming it
+		const exited = await rpc.next((f) => f.type === "monitor" && f.record.type === "service" && f.record.panel === "test.broken" && f.record.state === "exited", TEST_TIMEOUT_MS, "the broken service's exit");
+		expect(exited.record.error).toContain("init exploded");
 		await rpc.close();
 	});
 

@@ -53,7 +53,6 @@ export async function handleFiles(action: string, id: unknown, params: any, ctx:
                 assertStr(params?.url, "url", 8192),
                 assertStr(params?.targetPath, "targetPath", 1024),
                 effectiveAppId(params, action, ctx),
-                downloadId,
                 params?.options || {},
                 (progress) =>
                     sendEvent("progress", {

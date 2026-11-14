@@ -38,7 +38,11 @@ export function paperCraneMachineId(): string {
     try {
         const raw = JSON.parse(fs.readFileSync(file, "utf8")) as { id?: unknown };
         if (typeof raw?.id === "string" && raw.id.length >= 8) return raw.id;
-    } catch (err) { logger.debug("[discovery.ts] op failed:", err) }
+    } catch (err) {
+        if ((err as NodeJS.ErrnoException).code !== "ENOENT") {
+            logger.warn(`[Paperboard Server] the machine id in ${file} is unreadable; a new one replaces it, so paired computers see this one as new:`, err);
+        }
+    }
     const id = crypto.randomUUID();
     try {
         fs.mkdirSync(path.dirname(file), { recursive: true });
@@ -89,7 +93,7 @@ export function advertisePaperCrane(
             clearRetry();
             try {
                 current?.stop();
-            } catch (err) { logger.debug("[discovery.ts] op failed:", err) }
+            } catch (err) { logger.warn("[Paperboard Server] the mDNS advertisement did not stop cleanly:", err) }
             current = null;
         },
     };
@@ -123,7 +127,7 @@ export function advertisePaperCrane(
             logger.warn("[Paperboard Server] failed to start mDNS advertisement:", err);
             try {
                 bonjour.destroy();
-            } catch (err) { logger.debug("[discovery.ts] op failed:", err) }
+            } catch (err) { logger.warn("[Paperboard Server] the failed mDNS responder did not close:", err) }
             return;
         }
 

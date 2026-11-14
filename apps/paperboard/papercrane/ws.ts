@@ -545,9 +545,7 @@ export function setupWebSocketServer(
                 }
 
                 const msg = maybe;
-                try {
-                    failedId = (msg as any)?.id ?? null;
-                } catch (err) { logger.debug("[ws.ts] op failed:", err) }
+                failedId = (msg as any)?.id ?? null;
                 const { id, action, params } = msg;
                 if (monitor.active) {
                     const at = Date.now();

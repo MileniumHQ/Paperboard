@@ -1,7 +1,6 @@
 // small pure utilities shared by both sides
 import * as os from "os";
 import semver from "semver";
-import { logger } from "./logger";
 
 export interface NetworkInterfaceLike {
     address?: string;
@@ -115,11 +114,9 @@ export function semverGt(a: string, b: string): boolean {
         }
         return false;
     }
-    try {
-        const ca = semver.coerce(a ?? "");
-        const cb = semver.coerce(b ?? "");
-        if (ca && cb) return semver.gt(ca, cb);
-    } catch (err) { logger.debug("[util.ts] op failed:", err) }
+    const ca = semver.coerce(a ?? "");
+    const cb = semver.coerce(b ?? "");
+    if (ca && cb) return semver.gt(ca, cb);
     const parse = (v: string) =>
         (v || "")
             .replace(/^[^0-9]*/, "")

@@ -4,21 +4,14 @@ import * as path from "path";
 
 // optional branding files, callers fall back to defaults
 const brandingDirCandidates = (): string[] => {
-    const dirs: string[] = [];
-    try {
+    const dirs = [
         // standalone binary: <exedir>/branding/
-        dirs.push(path.join(path.dirname(process.execPath), "branding"));
-    } catch (err) { logger.debug("[branding.ts] op failed:", err) }
-    try {
+        path.join(path.dirname(process.execPath), "branding"),
         // dev run: ./papercrane/branding/
-        dirs.push(path.join(process.cwd(), "papercrane", "branding"));
-    } catch (err) { logger.debug("[branding.ts] op failed:", err) }
-    try {
-        // bundled CJS: <this-module-dir>/branding/
-        if (typeof __dirname === "string" && __dirname) {
-            dirs.push(path.join(__dirname, "branding"));
-        }
-    } catch (err) { logger.debug("[branding.ts] op failed:", err) }
+        path.join(process.cwd(), "papercrane", "branding"),
+    ];
+    // bundled CJS: <this-module-dir>/branding/
+    if (typeof __dirname === "string" && __dirname) dirs.push(path.join(__dirname, "branding"));
     return dirs;
 };
 
@@ -30,12 +23,10 @@ export function findBrandingFile(name: string): string | null {
     if (brandingCache.has(name)) return brandingCache.get(name) ?? null;
     for (const dir of brandingDirCandidates()) {
         const candidate = path.join(dir, name);
-        try {
-            if (fs.existsSync(candidate) && fs.statSync(candidate).isFile()) {
-                brandingCache.set(name, candidate);
-                return candidate;
-            }
-        } catch (err) { logger.debug("[branding.ts] op failed:", err) }
+        if (fs.statSync(candidate, { throwIfNoEntry: false })?.isFile()) {
+            brandingCache.set(name, candidate);
+            return candidate;
+        }
     }
     brandingCache.set(name, null);
     return null;

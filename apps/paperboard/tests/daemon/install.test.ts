@@ -234,6 +234,20 @@ describe("updates held by running processes", () => {
 
 // A failed upgrade keeps the running release, and uninstall keeps user data.
 describe("upgrades and uninstall", () => {
+	test("a panel whose manifest is broken is listed with the reason instead of vanishing, and still uninstalls", async () => {
+		const daemon = await startDaemon();
+		const broken = path.join(daemon.dataDir, "panels", "test.broken-manifest");
+		fs.mkdirSync(broken, { recursive: true });
+		fs.writeFileSync(path.join(broken, "manifest.json"), "{ not json");
+		const host = await daemon.rpc();
+		const listed = await host.ok("panel:list");
+		expect(listed.panels.map((p: { id: string }) => p.id)).not.toContain("test.broken-manifest");
+		expect(listed.invalid).toEqual([{ id: "test.broken-manifest", error: expect.stringContaining("JSON") }]);
+		await host.ok("panel:uninstall", { panelId: "test.broken-manifest" });
+		expect((await host.ok("panel:list")).invalid).toEqual([]);
+		await host.close();
+	});
+
 	test("a release whose service fails to start is rolled back to the running one; a good upgrade leaves no parked copies", async () => {
 		const daemon = await startDaemon();
 		useFixtureRegistry(daemon);

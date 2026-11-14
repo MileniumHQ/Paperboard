@@ -141,7 +141,9 @@ export class SupervisedProcessClient {
     private isManuallyClosed = false;
     private messageQueue: string[] = [];
     private hasExited = false;
-    private exitCode = 0;
+    // null until the supervisor announces an exit: a hangup without one (it
+    // crashed or was killed) is reported as an unknown code, never a clean 0
+    private exitCode: number | null = null;
     private listeners = new Map<string, Function[]>();
     private status: { error?: string } | null = null;
 
@@ -184,8 +186,16 @@ export class SupervisedProcessClient {
         if (index !== -1) list.splice(index, 1);
     }
 
+    // one listener that throws (persisting an exit, say) is reported and
+    // does not keep the others, or the rest of the frame, from running
     private emit(event: string, ...args: any[]) {
-        this.listeners.get(event)?.forEach((cb) => cb(...args));
+        for (const cb of [...(this.listeners.get(event) ?? [])]) {
+            try {
+                cb(...args);
+            } catch (err) {
+                logger.error(`[supervisor] a "${event}" listener for ${this.id} failed:`, err);
+            }
+        }
     }
 
     public connect(): Promise<boolean> {
@@ -232,10 +242,14 @@ export class SupervisedProcessClient {
 
                 for (const line of lines) {
                     if (!line.trim()) continue;
+                    let msg: unknown;
                     try {
-                        const msg = JSON.parse(line);
-                        this.handleMessage(msg);
-                    } catch (err) { logger.debug("[supervisor.ts] op failed:", err) }
+                        msg = JSON.parse(line);
+                    } catch (err) {
+                        logger.error(`[supervisor] ${this.id} sent a frame that is not JSON, dropped: ${line.slice(0, 200)}`, err);
+                        continue;
+                    }
+                    this.handleMessage(msg);
                 }
             });
 
@@ -286,7 +300,7 @@ export class SupervisedProcessClient {
                 }
                 break;
             case "exit":
-                this.exitCode = msg.code ?? 0;
+                this.exitCode = typeof msg.code === "number" ? msg.code : null;
                 if (!this.hasExited && !this.isManuallyClosed) {
                     this.hasExited = true;
                     this.emit("exit", this.exitCode);

@@ -61,19 +61,15 @@ export async function extractArchive(
 export function findBinDir(dir: string, maxDepth: number): string | null {
     if (!fs.existsSync(dir) || maxDepth < 0) return null;
     if (fs.existsSync(path.join(dir, "bin"))) return dir;
-    try {
-        const entries = fs.readdirSync(dir);
-        for (const entry of entries) {
-            if (entry.startsWith(".")) continue;
-            const sub = path.join(dir, entry);
-            try {
-                if (fs.statSync(sub).isDirectory()) {
-                    const result = findBinDir(sub, maxDepth - 1);
-                    if (result) return result;
-                }
-            } catch (err) { logger.debug("[engineArchives.ts] op failed:", err) }
+    for (const entry of fs.readdirSync(dir)) {
+        if (entry.startsWith(".")) continue;
+        const sub = path.join(dir, entry);
+        // a link to nothing is not a directory to look in
+        if (fs.statSync(sub, { throwIfNoEntry: false })?.isDirectory()) {
+            const result = findBinDir(sub, maxDepth - 1);
+            if (result) return result;
         }
-    } catch (err) { logger.debug("[engineArchives.ts] op failed:", err) }
+    }
     return null;
 }
 

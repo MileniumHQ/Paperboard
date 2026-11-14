@@ -1,5 +1,5 @@
 // Self-update resource owner. The publisher signs the archive digest, not
-// the extracted executable (scripts/publish.ts stageReleaseAssets).
+// the extracted executable (scripts/publish/binaries.ts stageReleaseAssets).
 import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";

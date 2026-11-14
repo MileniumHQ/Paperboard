@@ -15,20 +15,6 @@ export function unrefTimer(timer: ReturnType<typeof setTimeout>): void {
     (timer as unknown as { unref?: () => void }).unref?.();
 }
 
-// supervisor metadata lands on disk beside the socket: env values whose
-// names look like secrets never land with their values
-const SECRET_ENV_RE = /TOKEN|SECRET|KEY/i;
-const REDACTED = "[redacted]";
-export function redactEnvValues(
-    env: Record<string, string | undefined> | undefined,
-): Record<string, string> {
-    const out: Record<string, string> = {};
-    for (const [k, v] of Object.entries(env ?? {})) {
-        out[k] = SECRET_ENV_RE.test(k) ? REDACTED : String(v ?? "");
-    }
-    return out;
-}
-
 // size-limit refusal thrown by engine-level code (file reads, config
 // writes). Carries a wire code so the RPC layer maps it without
 // message-text matching — see rpcErrorCode in rpc/params.ts.
@@ -77,9 +63,7 @@ export function writeFileAtomic(
                 await fs.promises.writeFile(tmp, data, "utf8");
                 await fs.promises.rename(tmp, filePath);
             } catch (err) {
-                try {
-                    if (fs.existsSync(tmp)) await fs.promises.unlink(tmp);
-                } catch (err) { logger.debug("[storage.ts] op failed:", err) }
+                await fs.promises.rm(tmp, { force: true }).catch((cleanupErr) => logger.warn(`[storage] the temp file ${tmp} could not be removed and stays on disk:`, cleanupErr));
                 throw saveFailed(filePath, tmp, err);
             }
         })
@@ -117,9 +101,9 @@ export function writeFileAtomicSync(
         fs.renameSync(tmp, filePath);
     } catch (err) {
         try {
-            if (fs.existsSync(tmp)) fs.unlinkSync(tmp);
+            fs.rmSync(tmp, { force: true });
         } catch (cleanupErr) {
-            console.error(`[storage] failed to clean tmp artifact ${tmp}:`, cleanupErr);
+            logger.warn(`[storage] the temp file ${tmp} could not be removed and stays on disk:`, cleanupErr);
         }
         throw saveFailed(filePath, tmp, err);
     }
@@ -342,31 +326,6 @@ export function validatePanelManifest(
     // the index-signature type above) rather than preserved.
 
     return manifest;
-}
-
-// Lenient registry validation, bad values fall back to defaults
-export function coerceRegistryRecord(
-    raw: unknown,
-    fallbackId: string,
-): Record<string, unknown> {
-    const record =
-        raw && typeof raw === "object" && !Array.isArray(raw)
-            ? (raw as Record<string, unknown>)
-            : {};
-    const id = sanitizeId(str(record.id, 128)) ?? fallbackId;
-    return {
-        id,
-        name: str(record.name, 128) || id,
-        description: str(record.description, 2048),
-        version: str(record.version, 32),
-        publisher: str(record.publisher, 128),
-        author: str(record.author, 128),
-        icon: str(record.icon, 256),
-        iconUrl: str(record.iconUrl, 1024),
-        downloadUrl: str(record.downloadUrl, 2048),
-        sha256: str(record.sha256, 64),
-        updatedAt: str(record.updatedAt, 64),
-    };
 }
 
 // ─── Archive safety ──────────────────────────────────────────────────────────

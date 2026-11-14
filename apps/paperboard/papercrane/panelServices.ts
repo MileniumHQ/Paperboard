@@ -34,6 +34,20 @@ interface RunningService {
     afterUpdate?: boolean;
     /** the one backup, restore or update it is getting ready for now */
     backupPrepare?: { requestId: string; settle: (error: Error | null) => void };
+    /** the end of what it wrote to stderr: why it exited, when it says */
+    stderrTail: string;
+}
+
+const STDERR_TAIL_BYTES = 2000;
+
+// What a service last wrote to stderr, as one line short enough for a
+// lifecycle record: a service whose start fails exits 1 with the reason
+// there. Stack frames and the source excerpt Bun prints around a throw
+// are left out; the messages stay.
+function exitReason(stderrTail: string): string | undefined {
+    const lines = stderrTail.split("\n").map((line) => line.replace(/(^|\s)\d+ \|.*$/, "").trim())
+        .filter((line) => line && !/^at\s/.test(line) && !/^\^+$/.test(line));
+    return lines.length ? lines.join(" · ").slice(-500) : undefined;
 }
 
 // How to spawn a panel service on this host. Node, Bun and Electron-as-node
@@ -91,7 +105,7 @@ export class PanelServicesManager {
         }
     }
 
-    public init(port: number, _hostToken?: string, auth?: PaperCraneAuth): void {
+    public init(port: number, auth?: PaperCraneAuth): void {
         this.port = port;
         if (auth) this.auth = auth;
         this.startAll();
@@ -109,7 +123,10 @@ export class PanelServicesManager {
             try {
                 const manifest = this.manifest(id);
                 if (manifest?.autostart !== false) this.startService(id);
-            } catch (err) { logger.error(`[services] ${id} could not start`, err); }
+            } catch (err) {
+                logger.error(`[services] ${id} could not start`, err);
+                this.announce(id, { state: "failed", error: err instanceof Error ? err.message : String(err) });
+            }
         }
     }
     private manifest(id: string) {
@@ -145,7 +162,7 @@ export class PanelServicesManager {
         // and waitUntilReady still rejects for an installing caller.
         void ready.catch((err) => logger.error(`[services] ${id} readiness failed`, err));
         const entry: RunningService = { process: child, state: "starting", ready, rejectReady,
-            exited: new Promise<void>((resolve) => { resolveExit = resolve; }), stopped: false, crashCount, startedAt: Date.now() };
+            exited: new Promise<void>((resolve) => { resolveExit = resolve; }), stopped: false, crashCount, startedAt: Date.now(), stderrTail: "" };
         this.services.set(id, entry);
         this.announce(id, { state: "starting", ...(child.pid !== undefined ? { pid: child.pid } : {}) });
         entry.readyTimer = setTimeout(() => {
@@ -177,7 +194,11 @@ export class PanelServicesManager {
             resolveReady();
         });
         child.stdout?.on("data", (chunk: Buffer) => logger.info(`[service:${id}] ${chunk.toString("utf8").slice(0, 65536)}`));
-        child.stderr?.on("data", (chunk: Buffer) => logger.warn(`[service:${id}] ${chunk.toString("utf8").slice(0, 65536)}`));
+        child.stderr?.on("data", (chunk: Buffer) => {
+            const text = chunk.toString("utf8");
+            entry.stderrTail = (entry.stderrTail + text).slice(-STDERR_TAIL_BYTES);
+            logger.warn(`[service:${id}] ${text.slice(0, 65536)}`);
+        });
         child.on("error", (err) => {
             entry.state = "failed";
             this.announce(id, { state: "failed", error: err.message });
@@ -186,10 +207,13 @@ export class PanelServicesManager {
         });
         child.once("close", (code) => {
             clearTimeout(entry.readyTimer);
-            this.announce(id, { state: entry.stopped ? "stopped" : "exited", code });
+            // an exit nobody asked for carries the service's own last words,
+            // so the monitor and an installing caller say why, not only the code
+            const reason = entry.stopped ? undefined : exitReason(entry.stderrTail);
+            this.announce(id, entry.stopped ? { state: "stopped", code } : { state: "exited", code, ...(reason ? { error: reason } : {}) });
             entry.backupPrepare?.settle(new Error(`Service ${id} exited while getting ready`));
             resolveExit();
-            rejectReady(new Error(`Service ${id} exited before readiness (code ${code})`));
+            rejectReady(new Error(`Service ${id} exited before it was ready (code ${code})${reason ? `: ${reason}` : ""}`));
             if (entry.stopped || this.services.get(id) !== entry) return;
             entry.state = "failed";
             const crashes = Date.now() - entry.startedAt < 30_000 ? entry.crashCount + 1 : 1;

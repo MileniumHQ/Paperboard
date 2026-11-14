@@ -20,6 +20,7 @@ import {
     sanitizeId,
     panelFilesDirName,
     validatePanelManifest,
+    readStateFileSync,
     writeJsonAtomicSync,
     writeFileAtomic,
     LimitError,
@@ -45,13 +46,11 @@ import { daemonReleaseKey, releaseMessage, requireReleaseSignature } from "./rel
 
 export const REGISTRY_URL = resolveRegistryUrl();
 
-// what a caller expects to install (the release it showed the user or
-// planned an update to); the daemon's own registry lookup must agree
 type StreamListeners = Record<string, ((...args: any[]) => void) | undefined>;
 /** what a terminal tells its listeners; see SupervisedProcessClient's events */
 export interface TerminalStreams {
     data?: (data: string) => void;
-    exit?: (exitCode: number) => void;
+    exit?: (exitCode: number | null) => void;
     /** the program in front of the terminal changed */
     foreground?: (name: string) => void;
     /** a command the shell ran has ended */
@@ -61,6 +60,8 @@ export interface TerminalStreams {
 }
 type StreamClient = { on: (event: string, fn: any) => unknown; off: (event: string, fn: any) => unknown };
 
+// what a caller expects to install (the release it showed the user or
+// planned an update to); the daemon's own registry lookup must agree
 export interface ExpectedPanelRelease {
     allowDowngrade?: boolean;
     version?: string;
@@ -175,11 +176,10 @@ export class PaperCraneEngine {
         }
 
         this.credentialsStore = new CredentialStore(this.appDataDir);
-        const ownersFile = path.join(this.localDir, "process-owners.json");
-        if (fs.existsSync(ownersFile)) {
-            const owners = JSON.parse(fs.readFileSync(ownersFile, "utf8"));
-            this.clientOwners = new Map(Object.entries(owners) as [string, string | null][]);
-        }
+        // a damaged ledger is set aside like every state file: its workloads
+        // are then the host's alone, never a panel's by a guess
+        const owners = readStateFileSync<Record<string, string | null>>(path.join(this.localDir, "process-owners.json"), {}, "workload ownership ledger");
+        this.clientOwners = new Map(Object.entries(owners ?? {}));
         this.loadStagedPackages();
     }
 
@@ -360,7 +360,11 @@ export class PaperCraneEngine {
                         });
                     }
                 }
-            } catch (err) { logger.debug("[engine.ts] op failed:", err) }
+            } catch (err) {
+                if ((err as NodeJS.ErrnoException).code !== "ENOENT") {
+                    logger.warn(`[engine] interrupted downloads in ${dir} could not be cleared and stay on disk:`, err);
+                }
+            }
         }
         this.sweepPackageSwaps();
     }
@@ -616,12 +620,11 @@ export class PaperCraneEngine {
     private findManifestFile(dir: string): string | null {
         const root = path.join(dir, "manifest.json");
         if (fs.existsSync(root)) return root;
-        try {
-            for (const sub of fs.readdirSync(dir)) {
-                const candidate = path.join(dir, sub, "manifest.json");
-                if (fs.existsSync(candidate)) return candidate;
-            }
-        } catch (err) { logger.debug("[engine.ts] op failed:", err) }
+        if (!fs.statSync(dir, { throwIfNoEntry: false })?.isDirectory()) return null;
+        for (const sub of fs.readdirSync(dir)) {
+            const candidate = path.join(dir, sub, "manifest.json");
+            if (fs.existsSync(candidate)) return candidate;
+        }
         return null;
     }
 
@@ -779,7 +782,7 @@ export class PaperCraneEngine {
         onData?: (data: string) => void,
         onStdout?: (data: string) => void,
         onStderr?: (data: string) => void,
-    ): Promise<{ exitCode: number }> {
+    ): Promise<{ exitCode: number | null }> {
         return (await this.startProcess(id, command, args, cwd, env, onData, onStdout, onStderr)).completion;
     }
 
@@ -791,8 +794,8 @@ export class PaperCraneEngine {
         // listeners belong to this process alone
         // important: people rely on it while it runs (a game server), so an
         // update of what it runs from waits for it instead of stopping it
-        options: { stdin?: boolean; inputEncoding?: InputEncoding; consoleInput?: boolean; important?: boolean; subscriber?: object; onExit?: (exitCode: number) => void } = {},
-    ): Promise<{ completion: Promise<{ exitCode: number }> }> {
+        options: { stdin?: boolean; inputEncoding?: InputEncoding; consoleInput?: boolean; important?: boolean; subscriber?: object; onExit?: (exitCode: number | null) => void } = {},
+    ): Promise<{ completion: Promise<{ exitCode: number | null }> }> {
         if (!id || typeof id !== "string") {
             throw new Error("process id is required");
         }
@@ -817,8 +820,8 @@ export class PaperCraneEngine {
             });
         }
 
-        let resolveExit!: (result: { exitCode: number }) => void;
-        const completion = new Promise<{ exitCode: number }>((resolve) => { resolveExit = resolve; });
+        let resolveExit!: (result: { exitCode: number | null }) => void;
+        const completion = new Promise<{ exitCode: number | null }>((resolve) => { resolveExit = resolve; });
         // a Windows console input takes no writes: the process is inputless,
         // recorded as such so a daemon that adopts it refuses writes too
         const inputless = options.stdin === false || (options.consoleInput === true && process.platform === "win32");
@@ -843,7 +846,7 @@ export class PaperCraneEngine {
                     onData: subscriber ? undefined : onData,
                     onStdout: subscriber ? undefined : onStdout,
                     onStderr: subscriber ? undefined : onStderr,
-                    onExit: (exitCode: number) => {
+                    onExit: (exitCode: number | null) => {
                         this.clients.delete(id);
                         // a process can exit before its spawn resolves: it
                         // still started first, and nothing of it is kept
@@ -916,7 +919,7 @@ export class PaperCraneEngine {
         onData?: (data: string) => void,
         onStdout?: (data: string) => void,
         onStderr?: (data: string) => void,
-        onExit?: (exitCode: number) => void,
+        onExit?: (exitCode: number | null) => void,
     ): Promise<boolean> {
         this.subscribeStreams(id, subscriber, {
             data: onData,
@@ -998,7 +1001,6 @@ export class PaperCraneEngine {
         return true;
     }
 
-    // Recovers running supervisor clients from previous sessions
     // Reconnects supervisors that outlived the previous daemon, keyed by the
     // id their metadata records (the endpoint name is a digest of it, never
     // an id). A supervisor whose metadata does not belong to its file name is
@@ -1076,11 +1078,8 @@ export class PaperCraneEngine {
         const entries = [...this.clients.entries()];
         if (entries.length === 0) return;
 
-        for (const [, client] of entries) {
-            try {
-                client.kill("SIGTERM");
-            } catch (err) { logger.debug("[engine.ts] op failed:", err) }
-        }
+        // kill and destroy only queue or write to a socket; neither throws
+        for (const [, client] of entries) client.kill("SIGTERM");
 
         const deadline = Date.now() + graceMs;
         while (Date.now() < deadline) {
@@ -1096,9 +1095,7 @@ export class PaperCraneEngine {
     // adopts them (recoverRunningSupervisors)
     public releaseAllClients(): void {
         for (const [id, client] of [...this.clients.entries()]) {
-            try {
-                client.destroy();
-            } catch (err) { logger.debug("[engine.ts] op failed:", err) }
+            client.destroy();
             this.clients.delete(id);
         }
     }
@@ -1106,12 +1103,8 @@ export class PaperCraneEngine {
     // last-resort sync teardown for exit handlers
     public killAllClients(): void {
         for (const [id, client] of [...this.clients.entries()]) {
-            try {
-                if (client.isConnected()) client.kill("SIGKILL");
-            } catch (err) { logger.debug("[engine.ts] op failed:", err) }
-            try {
-                client.destroy();
-            } catch (err) { logger.debug("[engine.ts] op failed:", err) }
+            if (client.isConnected()) client.kill("SIGKILL");
+            client.destroy();
             this.clients.delete(id);
         }
     }
@@ -1120,7 +1113,6 @@ export class PaperCraneEngine {
         url: string,
         targetPath: string,
         appId: string | undefined,
-        _downloadId: string,
         options: {
             sha1?: string;
             sha256?: string;
@@ -1403,7 +1395,6 @@ export class PaperCraneEngine {
 
     public async downloadPackage(
         packageName: string,
-        _downloadId: string,
         onProgress?: ProgressCallback,
         expectedSha256?: string,
         options: { allowDowngrade?: boolean } = {},
@@ -1606,43 +1597,38 @@ export class PaperCraneEngine {
         return extractArchive(archivePath, destDir);
     }
 
-    public async listPanels(): Promise<PanelManifest[]> {
-        if (!fs.existsSync(this.panelsDir)) return [];
-        const entries = await fs.promises.readdir(this.panelsDir);
+    // Installed panels, and the ones whose manifest can't be read or is
+    // invalid: those are named with the reason instead of vanishing, so the
+    // shell can say why a panel is missing and still offer to remove it.
+    public async listPanels(): Promise<{ panels: PanelManifest[]; invalid: Array<{ id: string; error: string }> }> {
         const panels: PanelManifest[] = [];
-
-        for (const entry of entries) {
+        const invalid: Array<{ id: string; error: string }> = [];
+        if (!fs.existsSync(this.panelsDir)) return { panels, invalid };
+        for (const entry of await fs.promises.readdir(this.panelsDir)) {
             if (entry.startsWith(".")) continue;
             const panelPath = path.join(this.panelsDir, entry);
-            const manifestPath = this.findManifestFile(panelPath);
-
-            if (manifestPath) {
-                try {
-                    const raw = JSON.parse(
-                        await fs.promises.readFile(manifestPath, "utf-8"),
-                    );
-                    const validated = validatePanelManifest(raw, entry);
-                    let isDevLink = false;
-                    try {
-                        isDevLink = fs.lstatSync(panelPath).isSymbolicLink();
-                    } catch (err) { logger.debug("[engine.ts] op failed:", err) }
-                    panels.push({
-                        ...validated,
-                        base: validated.base || "./dist/index.html",
-                        isInstalled: true,
-                        isDevLink,
-                        isLinked: isDevLink,
-                        ...(isDevLink ? { installSource: "dev" as const } : {}),
-                    } as PanelManifest);
-                } catch (err) {
-                    logger.debug(
-                        `[Paperboard Server] panel manifest for ${entry} failed validation/read:`,
-                        err,
-                    );
-                }
+            try {
+                // a stray file beside the panel folders is not a panel
+                if (!fs.statSync(panelPath).isDirectory()) continue;
+                const manifestPath = this.findManifestFile(panelPath);
+                if (!manifestPath) throw new Error("it has no manifest.json");
+                const validated = validatePanelManifest(JSON.parse(await fs.promises.readFile(manifestPath, "utf-8")), entry);
+                const isDevLink = fs.lstatSync(panelPath).isSymbolicLink();
+                panels.push({
+                    ...validated,
+                    base: validated.base || "./dist/index.html",
+                    isInstalled: true,
+                    isDevLink,
+                    isLinked: isDevLink,
+                    ...(isDevLink ? { installSource: "dev" as const } : {}),
+                } as PanelManifest);
+            } catch (err) {
+                const error = err instanceof Error ? err.message : String(err);
+                logger.error(`[Paperboard Server] panel ${entry} is not listed: its manifest is unreadable or invalid: ${error}`);
+                invalid.push({ id: entry, error });
             }
         }
-        return panels;
+        return { panels, invalid };
     }
 
     /** Panel service children that have not exited. */
@@ -1790,16 +1776,8 @@ export class PaperCraneEngine {
         const downloadUrl = `${this.registryUrl}/panel/${encodeURIComponent(cleanId)}/download`;
         const targetDir = path.join(this.panelsDir, cleanId);
 
-        if (fs.existsSync(targetDir)) {
-            try {
-                if (fs.lstatSync(targetDir).isSymbolicLink()) {
-                    throw new Error(
-                        `Panel "${cleanId}" is currently symlinked for development. Remove the dev link before installing from registry.`,
-                    );
-                }
-            } catch (err: any) {
-                if (err?.message?.includes("symlinked for development")) throw err;
-            }
+        if (fs.lstatSync(targetDir, { throwIfNoEntry: false })?.isSymbolicLink()) {
+            throw new Error(`Panel "${cleanId}" is currently symlinked for development. Remove the dev link before installing from registry.`);
         }
         if (fs.existsSync(targetDir)) {
             const version = this.installedPanelVersion(cleanId);
@@ -2121,7 +2099,7 @@ export class PaperCraneEngine {
             .catch((err) => logger.warn("[engine] parked panel config could not be removed:", err));
     }
 
-    public async uninstallPanel(panelId: string, options?: { deleteData?: boolean }): Promise<boolean> {
+    public async uninstallPanel(panelId: string, options?: { deleteData?: boolean }): Promise<void> {
         const cleanId = requirePanelId(panelId);
         const key = `panel:${cleanId}`;
         if (this.operations.has(key)) throw new Error(`An operation on ${cleanId} is already running`);
@@ -2166,8 +2144,6 @@ export class PaperCraneEngine {
                 await listener(cleanId);
             }
         }
-
-        return true;
         } finally { this.operations.delete(key); }
     }
 
@@ -2196,21 +2172,14 @@ export class PaperCraneEngine {
     public async getConfig(id: string, configPath?: string): Promise<any> {
         // service-owned boundary: traversal ids throw before touching disk
         this.sanitizeIdOrThrow(id, "config");
-        const files = [this.configFileFor(id, configPath)];
-        for (const file of files) {
-            if (fs.existsSync(file)) {
-                try {
-                    const data = JSON.parse(await fs.promises.readFile(file, "utf-8"));
-                    const current = this.configFileFor(id, configPath);
-                    if (file !== current) await writeFileAtomic(current, JSON.stringify(data));
-                    return data;
-                } catch (err) {
-                    logger.error(`[Paperboard Server] config read failed for ${id}:`, err);
-                    throw err;
-                }
-            }
+        const file = this.configFileFor(id, configPath);
+        if (!fs.existsSync(file)) return null;
+        try {
+            return JSON.parse(await fs.promises.readFile(file, "utf-8"));
+        } catch (err) {
+            logger.error(`[Paperboard Server] config read failed for ${id}:`, err);
+            throw err;
         }
-        return null;
     }
 
     public async setConfig(id: string, data: any, configPath?: string): Promise<boolean> {

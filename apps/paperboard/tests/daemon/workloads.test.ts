@@ -1,10 +1,11 @@
 import { afterAll, beforeAll, describe, expect, setDefaultTimeout, test } from "bun:test";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { killWorkloads, startCrane, type CraneProcess } from "./support/crane";
+import { supervisorEndpointName } from "../../papercrane/supervisor";
+import { killWorkloads, startCrane, workloadRecords, type CraneProcess } from "./support/crane";
 import { dataDir } from "./support/fs";
 import { Rpc } from "./support/rpc";
-import { TEST_TIMEOUT_MS, waitFor } from "./support/wait";
+import { isAlive, TEST_TIMEOUT_MS, waitFor } from "./support/wait";
 
 setDefaultTimeout(TEST_TIMEOUT_MS);
 
@@ -89,6 +90,24 @@ describe("workloads belong to the panel that created them", () => {
 				expect((await rpc.fail("process:run", { id: `env-${key}`, command: process.execPath, args: ["-e", "1"], env: { [key]: "x" } })).code).toBe("FORBIDDEN");
 				expect((await rpc.fail("term:create", { id: `envterm-${key}`, env: { [key]: "x" } })).code).toBe("FORBIDDEN");
 			}
+		}
+	});
+});
+
+// A workload whose supervisor dies without announcing an exit never reads as a clean one.
+describe("a supervisor killed outright", () => {
+	test("its workload's exit is reported with no code, not 0", async () => {
+		const a = await panel("test.hangup");
+		await a.ok("process:run", { id: "hangup-proc", command: process.execPath, args: forever });
+		const file = path.join(crane.dataDir, "sockets", `${supervisorEndpointName("hangup-proc")}.json`);
+		const record = await waitFor("the workload's metadata", () => workloadRecords(crane.dataDir).find((r) => r.file === file));
+		const exit = a.next((f) => f.type === "event" && f.event === "process:exit" && f.payload.id === "hangup-proc", 20_000, "the exit");
+		process.kill(record.pid, "SIGKILL");
+		try {
+			expect((await exit).payload.exitCode).toBeNull();
+		} finally {
+			// the workload outlives its supervisor; it is this test's to end
+			if (isAlive(record.childPid)) process.kill(record.childPid, "SIGKILL");
 		}
 	});
 });

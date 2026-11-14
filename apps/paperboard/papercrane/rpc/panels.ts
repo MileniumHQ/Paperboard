@@ -12,7 +12,7 @@ export async function handlePanels(action: string, id: unknown, params: any, ctx
     try {
         switch (action) {
             case "panel:list": {
-                reply(id, { panels: await engine.listPanels() });
+                reply(id, await engine.listPanels());
                 return true;
             }
             case "service:count": {
@@ -35,8 +35,6 @@ export async function handlePanels(action: string, id: unknown, params: any, ctx
                     version: assertOptStr(params?.version, "version", 64),
                     sha256: assertOptStr(params?.sha256, "sha256", 128),
                 };
-                // ifUnused (the updater): a panel whose processes run is
-                // held, never stopped behind someone's back
                 const downloadId = assertOptStr(params?.downloadId, "downloadId", 128);
                 const progress = downloadId
                     ? (payload: object) => ctx.sendEvent("progress", { ...payload, downloadId })
@@ -92,13 +90,7 @@ export async function handlePanels(action: string, id: unknown, params: any, ctx
                 try {
                     // deleting data is opt-in and only an explicit true
                     // enables it; anything else keeps the user's data
-                    const success = await engine.uninstallPanel(panelId, {
-                        deleteData: params?.deleteData === true,
-                    });
-                    if (!success) {
-                        reply(id, null, `Invalid panel id: ${JSON.stringify(panelId)}`);
-                        return true;
-                    }
+                    await engine.uninstallPanel(panelId, { deleteData: params?.deleteData === true });
                     reply(id, { success: true });
                 } catch (err: any) {
                     reply(id, null, `Uninstall failed: ${err?.message}`);

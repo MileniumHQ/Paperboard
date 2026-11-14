@@ -91,7 +91,7 @@ async function queryWindowsReleaseName(build: number): Promise<string> {
             if (m) {
                 return `${build >= 22000 ? "11" : "10"} ${m[1]}`;
             }
-        } catch (err) { logger.debug("[index.ts] op failed:", err) }
+        } catch (err) { logger.debug("[Paperboard Server] the Windows display version is unreadable; reporting the major only:", err) }
     }
     return build >= 22000 ? "11" : "10";
 }
@@ -350,12 +350,7 @@ function listenPaperCraneServer(
         if (!g.__papercraneRejectionGuard) {
             g.__papercraneRejectionGuard = true;
             process.on("unhandledRejection", (reason: any) => {
-                try {
-                    logger.error(
-                        "[Paperboard Server] unhandled rejection (daemon stays up):",
-                        reason?.stack || reason?.message || reason,
-                    );
-                } catch (err) { logger.debug("[index.ts] op failed:", err) }
+                logger.error("[Paperboard Server] unhandled rejection (daemon stays up):", reason?.stack || reason?.message || reason);
             });
         }
         const initialPort = options.port ?? DEFAULT_PORT;
@@ -487,7 +482,7 @@ function listenPaperCraneServer(
                 engine.releaseAllClients();
                 try {
                     advertisement?.stop();
-                } catch (err) { logger.debug("[index.ts] advertisement stop failed:", err); }
+                } catch (err) { logger.warn("[Paperboard Server] the mDNS advertisement did not stop:", err); }
                 removePidFile();
                 process.exit(0);
             };
@@ -501,28 +496,21 @@ function listenPaperCraneServer(
                 process.off("exit", onExit);
                 process.off("SIGTERM", onSignal);
                 process.off("SIGINT", onSignal);
-                try {
-                    auth.flushTokenStore();
-                } catch (err) { logger.debug("[index.ts] op failed:", err) }
-                try {
-                    auth.dispose();
-                } catch (err) { logger.debug("[index.ts] op failed:", err) }
-                try {
-                    backupServiceFor(engine).dispose();
-                } catch (err) { logger.debug("[index.ts] op failed:", err) }
-                try {
-                    panelServices.stopAll();
-                } catch (err) { logger.debug("[index.ts] op failed:", err) }
-                try {
+                // every step runs whatever the one before did; each failure is named
+                const step = (what: string, run: () => void) => {
+                    try { run(); }
+                    catch (err) { logger.error(`[Paperboard Server] while stopping, ${what} failed:`, err); }
+                };
+                step("saving the paired tokens", () => auth.flushTokenStore());
+                step("closing the token store", () => auth.dispose());
+                step("stopping routine backups", () => backupServiceFor(engine).dispose());
+                step("stopping panel services", () => panelServices.stopAll());
+                step("stopping the mDNS advertisement", () => {
                     advertisement?.stop();
                     advertisement = null;
-                } catch (err) { logger.debug("[index.ts] op failed:", err) }
-                try {
-                    void engine.disposeClients(3000).catch((err) =>
-                        logger.debug("[index.ts] dispose clients failed:", err),
-                    );
-                } catch (err) { logger.debug("[index.ts] op failed:", err) }
-                try {
+                });
+                void engine.disposeClients(3000).catch((err) => logger.error("[Paperboard Server] while stopping, ending the workloads failed:", err));
+                step("closing the servers", () => {
                     // ws 8 leaves connected sockets open on close(); a
                     // stopped daemon must not keep serving them
                     for (const client of wss.clients) client.close(1001, "Paperboard Server stopped");
@@ -533,7 +521,7 @@ function listenPaperCraneServer(
                             process.exit(0);
                         }
                     });
-                } catch (err) { logger.debug("[index.ts] op failed:", err) }
+                });
                 if (handshakeFailure) throw handshakeFailure;
             };
 
@@ -552,7 +540,7 @@ function listenPaperCraneServer(
                     wss.close();
                     localServer?.close();
                     server.close();
-                } catch (err) { logger.debug("[index.ts] op failed:", err) }
+                } catch (closeErr) { logger.warn("[Paperboard Server] the servers that failed to listen did not close:", closeErr) }
 
                 const msg = err?.message || "";
                 const inUse =
@@ -624,9 +612,9 @@ function listenPaperCraneServer(
 
                 // Start background services for installed panels
                 try {
-                    panelServices.init(localPort, staticToken ?? undefined, auth);
-                } catch (err: any) {
-                    logger.warn("[Paperboard Server] Failed to initialize panel services:", err?.message || err);
+                    panelServices.init(localPort, auth);
+                } catch (err) {
+                    logger.error("[Paperboard Server] no panel service started: the panels folder could not be read:", err);
                 }
 
                 // routine backups run while the daemon does, app open or not

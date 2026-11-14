@@ -7,7 +7,7 @@ import { parsePackageRecipe, recipeDigest } from "../../papercrane/packageRecipe
 import { RECORD_MAX_BYTES } from "../../papercrane/registryRecord";
 import { tar, tarGz, zip, type TarMember } from "./support/archive";
 import { killWorkloads, startCrane, workloadRecords } from "./support/crane";
-import { dataDir, listTree, modeOf, tempDir } from "./support/fs";
+import { dataDir, listTree, modeOf, restoreEnv, tempDir } from "./support/fs";
 import { startDaemon, stopDaemon } from "./support/inproc";
 import { FIXTURE_PUBLIC_KEY, serve, sha256, signPackage, type LoopbackServer } from "./support/release";
 import { TEST_TIMEOUT_MS, waitFor } from "./support/wait";
@@ -109,8 +109,8 @@ describe("runtime packages install only signed bytes", () => {
 	test("refusals happen before any download, and nothing is left behind", async () => {
 		const dir = dataDir();
 		const engine = engineFor(dir);
-		await expect(engine.downloadPackage("nosha", "d", undefined, undefined)).rejects.toThrow("sha256");
-		for (const bad of ["..", "/etc"]) await expect(engine.downloadPackage(bad, "d", undefined, "a".repeat(64))).rejects.toThrow();
+		await expect(engine.downloadPackage("nosha", undefined, undefined)).rejects.toThrow("sha256");
+		for (const bad of ["..", "/etc"]) await expect(engine.downloadPackage(bad, undefined, "a".repeat(64))).rejects.toThrow();
 
 		const cases: Array<[string, Publish, string]> = [
 			["unsigned", { name: "p1", version: "1.0.0", bytes: toolArchive("true"), signature: "none" }, "not signed"],
@@ -128,13 +128,13 @@ describe("runtime packages install only signed bytes", () => {
 		];
 		for (const [kind, release, message] of cases) {
 			const sha = publish(release);
-			await expect(engine.downloadPackage(release.name, "d", undefined, sha), kind).rejects.toThrow(message);
+			await expect(engine.downloadPackage(release.name, undefined, sha), kind).rejects.toThrow(message);
 			expect(downloadsOf(release.name)).toEqual([]);
 		}
 		expect(listTree(path.join(dir, "packages"))).toEqual([]);
 
 		registry.set("/package/huge.json", { name: "huge", padding: "x".repeat(RECORD_MAX_BYTES) });
-		await expect(engine.downloadPackage("huge", "d", undefined, "a".repeat(64))).rejects.toThrow(`exceeds ${RECORD_MAX_BYTES} bytes`);
+		await expect(engine.downloadPackage("huge", undefined, "a".repeat(64))).rejects.toThrow(`exceeds ${RECORD_MAX_BYTES} bytes`);
 	});
 
 	test("layouts install as declared, zips keep their modes, and recipes keep only what they take", async () => {
@@ -142,23 +142,23 @@ describe("runtime packages install only signed bytes", () => {
 		const engine = engineFor(dir);
 		const pkg = path.join(dir, "packages");
 
-		await engine.downloadPackage("rooted", "d", undefined, publish({ name: "rooted", version: "1.0.0", layout: "root", bytes: tarGz([{ name: "bin/run", content: "x", mode: 0o755 }, { name: "lib/a", content: "a" }]) }));
+		await engine.downloadPackage("rooted", undefined, publish({ name: "rooted", version: "1.0.0", layout: "root", bytes: tarGz([{ name: "bin/run", content: "x", mode: 0o755 }, { name: "lib/a", content: "a" }]) }));
 		expect(listTree(path.join(pkg, "rooted"))).toEqual(["bin", "bin/run", "lib", "lib/a"]);
 
-		await engine.downloadPackage("flat", "d", undefined, publish({ name: "flat", version: "1.0.0", layout: "bin", bytes: tarGz([{ name: "flat-tool", content: "#!/bin/sh\n", mode: 0o755 }, { name: "lib/x.so", content: "x" }]) }));
+		await engine.downloadPackage("flat", undefined, publish({ name: "flat", version: "1.0.0", layout: "bin", bytes: tarGz([{ name: "flat-tool", content: "#!/bin/sh\n", mode: 0o755 }, { name: "lib/x.so", content: "x" }]) }));
 		expect(listTree(path.join(pkg, "flat"))).toEqual(["bin", "bin/flat-tool", "bin/lib", "bin/lib/x.so"]);
 		expect(modeOf(path.join(pkg, "flat", "bin", "flat-tool")) & 0o111).not.toBe(0);
 
-		await engine.downloadPackage("zipped", "d", undefined, publish({ name: "zipped", version: "1.0.0", ext: ".zip", layout: "root", bytes: zip([{ name: "bin/opencode", content: "#!/bin/sh\n", mode: 0o755 }]) }));
+		await engine.downloadPackage("zipped", undefined, publish({ name: "zipped", version: "1.0.0", ext: ".zip", layout: "root", bytes: zip([{ name: "bin/opencode", content: "#!/bin/sh\n", mode: 0o755 }]) }));
 		expect(modeOf(path.join(pkg, "zipped", "bin", "opencode")) & 0o111).not.toBe(0);
 
 		const recipe = { unpack: "tar", take: { "bin/tool": "vendor/app/tool" } };
-		await engine.downloadPackage("recipe", "d", undefined, publish({ name: "recipe", version: "1.0.0", ext: ".tar", recipe, bytes: tar([{ name: "vendor/app/tool", content: "t", mode: 0o755 }, { name: "vendor/app/junk", content: "j" }]) }));
+		await engine.downloadPackage("recipe", undefined, publish({ name: "recipe", version: "1.0.0", ext: ".tar", recipe, bytes: tar([{ name: "vendor/app/tool", content: "t", mode: 0o755 }, { name: "vendor/app/junk", content: "j" }]) }));
 		expect(listTree(path.join(pkg, "recipe"))).toEqual(["bin", "bin/tool"]);
 
 		const missing = { unpack: "tar", take: { "bin/tool": "vendor/nope" } };
 		const sha = publish({ name: "missing", version: "1.0.0", ext: ".tar", recipe: missing, bytes: tar([{ name: "vendor/app/tool", content: "t" }]) });
-		await expect(engine.downloadPackage("missing", "d", undefined, sha)).rejects.toThrow("not in the archive");
+		await expect(engine.downloadPackage("missing", undefined, sha)).rejects.toThrow("not in the archive");
 		expect(fs.readdirSync(pkg).filter((f) => f.includes("missing"))).toEqual([]);
 	});
 });
@@ -170,13 +170,13 @@ describe("signed runtime rollbacks are refused", () => {
 		const engine = engineFor(dir);
 		const v1 = toolArchive("echo one");
 		const v2 = toolArchive("echo two");
-		await engine.downloadPackage("roll", "d", undefined, publish({ name: "roll", version: "2.0.0", bytes: v2 }));
+		await engine.downloadPackage("roll", undefined, publish({ name: "roll", version: "2.0.0", bytes: v2 }));
 		const installed = fs.readFileSync(path.join(dir, "packages", "roll", "bin", "tool"));
-		await expect(engine.downloadPackage("roll", "d", undefined, publish({ name: "roll", version: "1.0.0", bytes: v1 }))).rejects.toThrow("rollback");
-		await expect(engine.downloadPackage("roll", "d", undefined, publish({ name: "roll", version: "2.0.0", bytes: toolArchive("echo other") }))).rejects.toThrow("rollback");
+		await expect(engine.downloadPackage("roll", undefined, publish({ name: "roll", version: "1.0.0", bytes: v1 }))).rejects.toThrow("rollback");
+		await expect(engine.downloadPackage("roll", undefined, publish({ name: "roll", version: "2.0.0", bytes: toolArchive("echo other") }))).rejects.toThrow("rollback");
 		expect(fs.readFileSync(path.join(dir, "packages", "roll", "bin", "tool")).equals(installed)).toBe(true);
 
-		await engine.downloadPackage("roll", "d", undefined, publish({ name: "roll", version: "1.0.0", bytes: v1 }), { allowDowngrade: true });
+		await engine.downloadPackage("roll", undefined, publish({ name: "roll", version: "1.0.0", bytes: v1 }), { allowDowngrade: true });
 		expect(fs.readFileSync(path.join(dir, "packages", "roll", "bin", "tool"), "utf8")).toContain("echo one");
 
 		const daemon = await startDaemon();
@@ -194,9 +194,9 @@ describe("runtime updates wait for their workloads", () => {
 		process.env.PAPERBOARD_DIR = dir;
 		try {
 			const first = engineFor(dir);
-			await first.downloadPackage("rt", "d", undefined, publish({ name: "rt", version: "1.0.0", bytes: toolArchive("echo v1") }));
+			await first.downloadPackage("rt", undefined, publish({ name: "rt", version: "1.0.0", bytes: toolArchive("echo v1") }));
 			// nothing runs from it: the next release replaces it at once
-			const idle = await first.downloadPackage("rt", "d", undefined, publish({ name: "rt", version: "1.1.0", bytes: toolArchive("while :; do sleep 1; done") }));
+			const idle = await first.downloadPackage("rt", undefined, publish({ name: "rt", version: "1.1.0", bytes: toolArchive("while :; do sleep 1; done") }));
 			expect(idle.waiting).toBeUndefined();
 			const tool = path.join(dir, "packages", "rt", "bin", "tool");
 			const v11 = fs.readFileSync(tool);
@@ -211,12 +211,12 @@ describe("runtime updates wait for their workloads", () => {
 
 			const second = engineFor(dir);
 			await second.recoverRunningSupervisors();
-			const staged = await second.downloadPackage("rt", "d", undefined, publish({ name: "rt", version: "2.0.0", bytes: toolArchive("echo v2") }));
+			const staged = await second.downloadPackage("rt", undefined, publish({ name: "rt", version: "2.0.0", bytes: toolArchive("echo v2") }));
 			expect(staged.waiting?.version).toBe("2.0.0");
 			expect(staged.waiting?.blockedBy.map((b) => b.processId)).toEqual(["uses-rt"]);
 			expect(fs.readFileSync(tool).equals(v11)).toBe(true);
 			// a staged release is a floor too
-			await expect(second.downloadPackage("rt", "d", undefined, publish({ name: "rt", version: "1.5.0", bytes: toolArchive("echo v15") }))).rejects.toThrow("rollback");
+			await expect(second.downloadPackage("rt", undefined, publish({ name: "rt", version: "1.5.0", bytes: toolArchive("echo v15") }))).rejects.toThrow("rollback");
 			second.releaseAllClients();
 
 			const third = engineFor(dir);
@@ -234,12 +234,12 @@ describe("runtime updates wait for their workloads", () => {
 			fs.writeFileSync(unrelated!.file, JSON.stringify(meta));
 			const fourth = engineFor(dir);
 			await fourth.recoverRunningSupervisors();
-			const held = await fourth.downloadPackage("rt", "d", undefined, publish({ name: "rt", version: "3.0.0", bytes: toolArchive("echo v3") }));
+			const held = await fourth.downloadPackage("rt", undefined, publish({ name: "rt", version: "3.0.0", bytes: toolArchive("echo v3") }));
 			expect(held.waiting?.blockedBy.map((b) => b.processId)).toEqual(["unrelated"]);
 			await fourth.killProcess("unrelated");
 			await waitFor("the held update to install", () => fs.readFileSync(tool, "utf8").includes("echo v3"));
 		} finally {
-			process.env.PAPERBOARD_DIR = previous;
+			restoreEnv("PAPERBOARD_DIR", previous);
 			await killWorkloads(dir);
 		}
 	});
@@ -252,7 +252,7 @@ describe("Stop and update for a runtime in use", () => {
 		process.env.PAPERBOARD_DIR = dir;
 		let engine = engineFor(dir);
 		try {
-			await engine.downloadPackage("srt", "d", undefined, publish({ name: "srt", version: "1.0.0", bytes: toolArchive("while :; do sleep 1; done") }));
+			await engine.downloadPackage("srt", undefined, publish({ name: "srt", version: "1.0.0", bytes: toolArchive("while :; do sleep 1; done") }));
 			const tool = path.join(dir, "packages", "srt", "bin", "tool");
 			const crane = await startCrane({ dataDir: dir });
 			const rpc = await crane.rpc();
@@ -262,7 +262,7 @@ describe("Stop and update for a runtime in use", () => {
 			expect((await crane.stop()).code).toBe(0);
 			engine = engineFor(dir);
 			await engine.recoverRunningSupervisors();
-			const staged = await engine.downloadPackage("srt", "d", undefined, publish({ name: "srt", version: "2.0.0", bytes: toolArchive("echo v2") }));
+			const staged = await engine.downloadPackage("srt", undefined, publish({ name: "srt", version: "2.0.0", bytes: toolArchive("echo v2") }));
 			// only the important one holds it; the other can stop for it
 			expect(staged.waiting?.blockedBy.map((b) => [b.processId, b.holds]).sort()).toEqual([["also-srt", false], ["uses-srt", true]]);
 
@@ -277,7 +277,7 @@ describe("Stop and update for a runtime in use", () => {
 			await expect(engine.updateInUse({ packages: ["srt"] })).rejects.toThrow("No update of srt is waiting");
 		} finally {
 			engine.releaseAllClients();
-			process.env.PAPERBOARD_DIR = previous;
+			restoreEnv("PAPERBOARD_DIR", previous);
 			await killWorkloads(dir);
 		}
 	});
@@ -291,8 +291,8 @@ describe("packages no installed panel uses are removed", () => {
 		const pkg = path.join(dir, "packages");
 		for (const id of ["test.a", "test.b"]) fs.mkdirSync(path.join(panels, id), { recursive: true });
 		const engine = engineFor(dir);
-		await engine.downloadPackage("solo", "d", undefined, publish({ name: "solo", version: "1.0.0", bytes: toolArchive("echo solo") }));
-		await engine.downloadPackage("shared", "d", undefined, publish({ name: "shared", version: "1.0.0", bytes: toolArchive("echo shared") }));
+		await engine.downloadPackage("solo", undefined, publish({ name: "solo", version: "1.0.0", bytes: toolArchive("echo solo") }));
+		await engine.downloadPackage("shared", undefined, publish({ name: "shared", version: "1.0.0", bytes: toolArchive("echo shared") }));
 		engine.recordPackageUse("solo", "test.a");
 		engine.recordPackageUse("shared", "test.a");
 		engine.recordPackageUse("shared", "test.b");
@@ -306,7 +306,7 @@ describe("packages no installed panel uses are removed", () => {
 		expect(engine.getPackageIndex()).toEqual({});
 
 		// installed before uses were kept: every panel installed now counts as using it
-		await engine.downloadPackage("legacy", "d", undefined, publish({ name: "legacy", version: "1.0.0", bytes: toolArchive("echo legacy") }));
+		await engine.downloadPackage("legacy", undefined, publish({ name: "legacy", version: "1.0.0", bytes: toolArchive("echo legacy") }));
 		fs.rmSync(path.join(pkg, "users.json"), { force: true });
 		fs.mkdirSync(path.join(panels, "test.c"), { recursive: true });
 		// a linked panel (one in development) counts as installed too

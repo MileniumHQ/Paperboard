@@ -36,7 +36,6 @@ export async function handlePackages(action: string, id: unknown, params: any, c
             const sha256 = assertOptStr(params?.sha256, "sha256", 128) ?? (await resolvePackageSha256(packageName));
             const outcome = await engine.downloadPackage(
                 packageName,
-                downloadId,
                 (progress) =>
                     sendEvent("progress", {
                         ...progress,
