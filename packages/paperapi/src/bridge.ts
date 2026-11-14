@@ -19,10 +19,17 @@ export function createPanelBridge<
     let localState: TState = { ...(options.defaultState || {}) } as TState;
     const listeners = new Set<(patch: Partial<TState>, full: TState) => void>();
     let status: { ready: boolean; error?: string } = { ready: false };
+    // late answers lose: each read is numbered, an answer older than one
+    // already applied is dropped, and a field a patch changed while a read
+    // was out keeps the patch's value, which is newer than the read's
+    let latestRead = 0;
+    let appliedRead = 0;
+    const patchedDuring = new Map<number, Set<string>>();
 
     // the subscription is tearable: createPanelBridge returns dispose()
     const unsubscribeSync = blocksApi.onEvent(panelId, STATE_EVENT, (payload: any) => {
         if (payload?.state) {
+            for (const keys of patchedDuring.values()) for (const key of Object.keys(payload.state)) keys.add(key);
             localState = { ...localState, ...payload.state };
             for (const cb of listeners) {
                 cb(payload.state, localState);
@@ -31,21 +38,28 @@ export function createPanelBridge<
     });
 
     const refreshState = async (): Promise<TState> => {
+        const read = ++latestRead;
+        const patched = new Set<string>();
+        patchedDuring.set(read, patched);
         try {
             const fetched = await blocksApi.read<TState>(panelId, STATE_VALUE);
-            if (fetched && typeof fetched === "object") {
+            if (fetched && typeof fetched === "object" && read > appliedRead) {
+                appliedRead = read;
                 status = { ready: true };
-                localState = { ...localState, ...fetched };
+                const fresh = Object.fromEntries(Object.entries(fetched).filter(([key]) => !patched.has(key))) as Partial<TState>;
+                localState = { ...localState, ...fresh };
                 for (const cb of listeners) {
-                    cb(fetched, localState);
+                    cb(fresh, localState);
                 }
             }
         } catch (err) {
             // service may still be booting — logged, and the bridge keeps
             // serving the last-known (possibly default) state meanwhile
             console.debug(`[bridge:${panelId}] refreshState deferred, service may be booting:`, err);
-            status = { ready: false, error: err instanceof Error ? err.message : String(err) };
+            if (read === latestRead) status = { ready: false, error: err instanceof Error ? err.message : String(err) };
             throw err;
+        } finally {
+            patchedDuring.delete(read);
         }
         return localState;
     };
@@ -71,9 +85,8 @@ export function createPanelBridge<
         },
     });
 
-    // teardown for the whole bridge: unsubscriber + listener set. bridges
-    // outliving their component previously leaked the transport
-    // subscription forever (bounded everything).
+    // teardown for the whole bridge: a bridge that outlives its component
+    // must not keep its transport subscription or listeners alive
     const dispose = (): void => {
         unregisterHydrator();
         unsubscribeSync();

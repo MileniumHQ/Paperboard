@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, jest, setDefaultTimeout, test } from "bun:test";
 import { actionsApi } from "../src/actions";
+import { createPanelBridge } from "../src/bridge";
 import { fileApi } from "../src/file";
 import { terminalApi } from "../src/index";
 import { closeTransport, getTransport, initPaperApi, invoke, on, RPC_ROUTES } from "../src/ipc";
@@ -283,6 +284,22 @@ describe("subscriptions and stream attaches survive reconnect and teardown", () 
         expect(again.msg.params.events.sort()).toEqual(["alpha", "beta"]);
     });
 
+    test("a refused announcement is sent again on the same connection until the daemon takes it", async () => {
+        const t = transport();
+        let refusals = 1;
+        server.answer = (action) => {
+            if (action === "events:subscribe" && refusals-- > 0) throw new Error("the daemon is busy");
+            return {};
+        };
+        t.subscribeEvent("alpha", () => {});
+        await t.ensureConnected();
+        await expect(t.subscriptionsSettled()).rejects.toThrow("the daemon is busy");
+        const again = await server.next("the announcement sent again", (f) => isAction("events:subscribe", 0)(f) && server.requests("events:subscribe").indexOf(f) === 1);
+        expect(again.msg.params.events).toEqual(["alpha"]);
+        await t.subscriptionsSettled();
+        expect(server.connections()).toBe(1);
+    });
+
     test("subscribers to one terminal share one attach until the last unsubscribes", async () => {
         await initPaperApi({ port: server.port, token: server.token });
         // keeps an announcement on every connection, so each replay has an end to wait for
@@ -441,6 +458,20 @@ describe("failures reach the caller", () => {
         await expect(processApi.kill("p1")).rejects.toThrow("refused process:kill");
     });
 
+    test("attaching to a process that is not there reports failure and is not replayed on reconnect", async () => {
+        await initPaperApi({ port: server.port, token: server.token });
+        getTransport().subscribeEvent("keepalive", () => {});
+        server.answer = (action, params) => (action === "process:attach" ? { success: params.id === "alive" } : {});
+        expect(await processApi.attach("gone")).toEqual({ success: false });
+        expect(await processApi.attach("alive")).toEqual({ success: true });
+        await server.dropConnections();
+        const replayed = await server.next("the attach replayed", isAction("process:attach", 1));
+        expect(replayed.msg.params.id).toBe("alive");
+        await server.next("the second connection's announcement", isAction("events:subscribe", 1));
+        await server.next("the second connection's state", (f) => f.conn === 1 && f.msg?.action === "auth:verify");
+        expect(server.frames.filter(isAction("process:attach", 1)).map((f) => f.msg.params.id)).toEqual(["alive"]);
+    });
+
     test("a process.run timeout kills the child and resolves RUN_TIMEOUT", async () => {
         await initPaperApi({ port: server.port, token: server.token });
         server.answer = (action) => (action === "process:run" ? { success: true } : {});
@@ -541,6 +572,46 @@ describe("failures reach the caller", () => {
         server.emit("sentinel", {});
         await heard.promise;
         expect(progress).toEqual([]);
+    });
+});
+
+// A panel bridge's state reads: late answers lose.
+describe("a panel bridge keeps the newest state", () => {
+    test("an older read answered last, or a field patched while a read was out, never rolls the state back", async () => {
+        await initPaperApi({ port: server.port, token: server.token });
+        const reads: ((state: unknown) => void)[] = [];
+        server.answer = (action) =>
+            action === "blocks:call" ? new Promise((resolve) => reads.push((state) => resolve({ result: state }))) : {};
+        const bridge = createPanelBridge<{ players: number; map: string }>({ panelId: "dev.test.bridge", defaultState: { players: 0, map: "" } });
+        try {
+            // the hydration read is out; a refresh overtakes it
+            await server.next("the hydration read", (f) => server.requests("blocks:call").indexOf(f) === 0);
+            const refresh = bridge.refreshState();
+            await server.next("the refresh read", (f) => server.requests("blocks:call").indexOf(f) === 1);
+            reads[1]({ players: 2, map: "forest" });
+            expect(await refresh).toEqual({ players: 2, map: "forest" });
+            reads[0]({ players: 1, map: "desert" });
+            await flushMicrotasks();
+            expect(bridge.getState()).toEqual({ players: 2, map: "forest" });
+
+            // a patch lands while a read is out: the read keeps only the fields the patch left alone
+            const announced = await server.next("the state event announcement", (f) => f.msg?.action === "events:subscribe" && f.msg.params.events.some((e: string) => e.startsWith("blocks:dev.test.bridge:")));
+            const stateEvent = announced.msg.params.events.find((e: string) => e.startsWith("blocks:dev.test.bridge:"));
+            await getTransport().subscriptionsSettled();
+            const patched = deferred();
+            const offPatch = bridge.onStateChange((patch) => {
+                if ("players" in patch && patch.players === 3) patched.resolve(null);
+            });
+            const later = bridge.refreshState();
+            await server.next("the third read", (f) => server.requests("blocks:call").indexOf(f) === 2);
+            server.emit(stateEvent, { state: { players: 3 } });
+            await patched.promise;
+            offPatch();
+            reads[2]({ players: 2, map: "tundra" });
+            expect(await later).toEqual({ players: 3, map: "tundra" });
+        } finally {
+            bridge.dispose();
+        }
     });
 });
 

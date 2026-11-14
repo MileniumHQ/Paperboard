@@ -372,9 +372,12 @@ async function invokeSpecial(
 
         case "process-attach": {
             const { id } = args[0] as any;
-            await t.call("process:attach", { id });
-            t.trackProcess(id);
-            return { success: true };
+            // the daemon answers success: false when no process has that id;
+            // only a process that is there is replayed on reconnect
+            const res: { success?: boolean } | undefined = await t.call("process:attach", { id });
+            const success = res?.success === true;
+            if (success) t.trackProcess(id);
+            return { success };
         }
 
         default:

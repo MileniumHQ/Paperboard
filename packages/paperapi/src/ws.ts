@@ -60,6 +60,9 @@ export class CraneTransport {
     // last subscription set announced to the daemon; null means not announced
     private lastSubscribedEvents: Set<string> | null = null;
     private subSyncScheduled = false;
+    // a refused announcement is sent again on the reconnect backoff
+    private subRetryTimer: ReturnType<typeof setTimeout> | null = null;
+    private subRetryAttempts = 0;
     // the newest events:subscribe call, settled once the daemon answered it
     private subscribing: Promise<unknown> = Promise.resolve();
     private connecting: Promise<void> | null = null;
@@ -119,7 +122,7 @@ export class CraneTransport {
     public async ensureConnected(): Promise<void> {
         if (this.closedByUser) throw new Error("PaperCrane transport is disposed");
         if (this.connecting) return this.connecting;
-        if (this.isConnected() && this.authenticated && this.isRoutingLive()) return;
+        if (this.isConnected()) return;
         this.connecting = this.open().finally(() => {
             this.connecting = null;
         });
@@ -270,6 +273,10 @@ export class CraneTransport {
             clearTimeout(this.reconnectTimer);
             this.reconnectTimer = null;
         }
+        if (this.subRetryTimer) {
+            clearTimeout(this.subRetryTimer);
+            this.subRetryTimer = null;
+        }
         this.ws?.close();
         this.ws = null;
         this.authenticated = false;
@@ -313,7 +320,6 @@ export class CraneTransport {
                             if (parsed.type === "tunnel-open") {
                                 resolve();
                             } else {
-                                clearTimeout(timeout);
                                 reject(
                                     new Error(
                                         `Remote tunnel failed: ${parsed.reason ?? parsed.error ?? "closed"}`,
@@ -323,6 +329,11 @@ export class CraneTransport {
                         }
                     } catch (err) { debugErr("tunnel handshake listener", err); }
                 };
+                if (!this.ws) {
+                    clearTimeout(timeout);
+                    reject(new Error("Remote tunnel failed: PaperCrane is not connected"));
+                    return;
+                }
                 this.addRawListener(listener);
                 this.rawSend({
                     type: "remote:open",
@@ -455,9 +466,9 @@ export class CraneTransport {
 
     // ── Public API used by the namespace router ─────────────────────────────
 
-    // BOUNDED: outstanding calls are capped — long-running downloads and a
-    // wedged daemon previously compounded here without limit. Past the cap
-    // the call refuses with a typed error instead of compounding.
+    // BOUNDED: outstanding calls are capped, so long-running downloads and a
+    // wedged daemon can't pile up here without limit. Past the cap the call
+    // refuses with a typed error.
     private static readonly MAX_PENDING_CALLS = 1000;
 
     public async call(action: string, params: Record<string, unknown> = {}, timeoutMs: number | null = 30_000): Promise<any> {
@@ -592,8 +603,31 @@ export class CraneTransport {
             return;
         }
         this.lastSubscribedEvents = wanted;
-        this.subscribing = this.call("events:subscribe", { events: [...wanted] });
-        this.subscribing.catch((err) => debugErr("events:subscribe sync", err));
+        const announced = this.call("events:subscribe", { events: [...wanted] });
+        this.subscribing = announced;
+        announced.then(
+            () => {
+                if (this.lastSubscribedEvents === wanted) this.subRetryAttempts = 0;
+            },
+            (err) => {
+                debugErr("events:subscribe sync", err);
+                // the daemon never took this set: forget it, or every later
+                // sync of the same listeners would skip it and leave them deaf
+                if (this.lastSubscribedEvents !== wanted) return;
+                this.lastSubscribedEvents = null;
+                this.scheduleSubRetry();
+            },
+        );
+    }
+
+    private scheduleSubRetry(): void {
+        if (this.closedByUser || this.subRetryTimer) return;
+        const delay = Math.min(RECONNECT_MAX_MS, RECONNECT_BASE_MS * Math.pow(2, this.subRetryAttempts));
+        this.subRetryAttempts++;
+        this.subRetryTimer = setTimeout(() => {
+            this.subRetryTimer = null;
+            this.syncSubscriptions();
+        }, delay);
     }
 
     /**
@@ -627,10 +661,8 @@ export class CraneTransport {
         return resolveDefaultPanelId(this.opts.panelId);
     }
 
-    // the transport's own resolved identity: private because it may be an
-    // ambient fallback (deprecated), public because panels legitimately
-    // need "my panel id" for default subscriptions — with the same
-    // loud-warning discipline the fallback carries everywhere else
+    // the transport's panel id: its explicit option, else the granted one;
+    // empty when neither exists
     public getDefaultPanelId(): string {
         return this.resolveDefaultPanelId();
     }
