@@ -42,8 +42,8 @@ import { watchKeyboardInset } from "./lib/keyboardInset";
 import { NO_MODIFIERS, type Modifiers, type NamedKey } from "./lib/softKeys";
 import { pasteLines } from "./lib/screen";
 import { shortTitle, tabSessions, tabTitle, type LiveSession, type SplitDirection, type TabLayout, type TerminalSession, type TerminalTab } from "./lib/tabs";
+import { PANEL_ID } from "./lib/panel";
 
-const TERMINAL_PANEL_ID = "dev.paperboard.terminal";
 const MAC = /Mac|iPhone|iPad/.test(navigator.platform);
 // how long a hidden tab counts as busy after it last printed
 const BUSY_MS = 1500;
@@ -61,10 +61,11 @@ interface TerminalBridgeState {
     savedCommands: SavedCommand[];
     commandRuns: Record<string, CommandRun>;
     savedCommandsError: string;
+    tabsError: string;
 }
 
 const bridge = createPanelBridge<TerminalBridgeState>({
-    panelId: TERMINAL_PANEL_ID,
+    panelId: PANEL_ID,
     defaultState: {
         tabs: [],
         activeTabId: "",
@@ -74,6 +75,7 @@ const bridge = createPanelBridge<TerminalBridgeState>({
         savedCommands: [],
         commandRuns: {},
         savedCommandsError: "",
+        tabsError: "",
     },
 });
 
@@ -94,6 +96,8 @@ export default function App() {
     const [renameValue, setRenameValue] = createSignal("");
     const [hydration, setHydration] = createSignal<"loading" | "ready" | "failed">("loading");
     const [hydrationError, setHydrationError] = createSignal("");
+    // the service answered, but could not read the saved tabs
+    const [tabsUnreadable, setTabsUnreadable] = createSignal(false);
     const [renaming, setRenaming] = createSignal(false);
     const [renameError, setRenameError] = createSignal("");
     // a tab action the service refused: shown over the terminals until
@@ -255,6 +259,9 @@ export default function App() {
         setHydration("loading");
         try {
             const state = await bridge.refreshState();
+            // unreadable is not empty either: no fresh tab opens over saved ones
+            setTabsUnreadable(Boolean(state.tabsError));
+            if (state.tabsError) throw new Error(state.tabsError);
             applyTabs(state.tabs);
             applyLive(state.live);
             setMirror("layout", state.layout ?? "horizontal");
@@ -274,11 +281,12 @@ export default function App() {
     onMount(() => void hydrate());
 
     // a tab closed in another window takes this window to a remaining one
-    createEffect(() => {
-        if (hydration() !== "ready") return;
-        const list = tabs();
-        if (!list.some((t) => t.id === activeTab())) setActiveTab(list[0]?.id ?? "");
-    });
+    createEffect(
+        on([hydration, tabs, activeTab], ([state, list, active]) => {
+            if (state !== "ready") return;
+            if (!list.some((t) => t.id === active)) setActiveTab(list[0]?.id ?? "");
+        }),
+    );
 
     // a screen takes the keyboard once it is mounted and shown
     const focusSession = (id: string) => queueMicrotask(() => activeTerminals.get(id)?.focus());
@@ -299,7 +307,7 @@ export default function App() {
         // leaves it in place, where closing it again retries
         setFailure(null);
         serviceApi
-            .call(TERMINAL_PANEL_ID, "close-tab", { id: closedId })
+            .call(PANEL_ID, "close-tab", { id: closedId })
             .catch(report("Tab not closed"));
     };
     // a new tab opens where you are: in the folder of the shell in front
@@ -308,7 +316,7 @@ export default function App() {
         try {
             const besides = currentSession();
             const id = await serviceApi.call<string>(
-                TERMINAL_PANEL_ID,
+                PANEL_ID,
                 "create-tab",
                 { ...(besides ? { besides } : {}), ...(shell ? { shell } : {}) },
             );
@@ -340,13 +348,13 @@ export default function App() {
         setActiveTab(id);
         // the last used tab is what the next window opens on
         serviceApi
-            .call(TERMINAL_PANEL_ID, "touch-tab", { id })
+            .call(PANEL_ID, "touch-tab", { id })
             .catch(report("Tab not remembered", ". The next window may open on another tab."));
     };
     const split = (tabId: string, direction: SplitDirection) => {
         setFailure(null);
         serviceApi
-            .call<string>(TERMINAL_PANEL_ID, "split-tab", { id: tabId, direction })
+            .call<string>(PANEL_ID, "split-tab", { id: tabId, direction })
             .then(async (pane) => {
                 // the new shell is listed before it is shown
                 applyTabs((await bridge.refreshState()).tabs);
@@ -357,14 +365,14 @@ export default function App() {
     };
     const unsplit = (tabId: string) => {
         setFailure(null);
-        serviceApi.call(TERMINAL_PANEL_ID, "unsplit-tab", { id: tabId }).catch(report("Split not closed"));
+        serviceApi.call(PANEL_ID, "unsplit-tab", { id: tabId }).catch(report("Split not closed"));
     };
     const toggleLayout = () => {
         setFailure(null);
         const next: TabLayout = vertical() ? "horizontal" : "vertical";
         // shown at once; the service's layout is the truth
         setMirror("layout", next);
-        serviceApi.call(TERMINAL_PANEL_ID, "set-tab-layout", { layout: next }).catch((err) => {
+        serviceApi.call(PANEL_ID, "set-tab-layout", { layout: next }).catch((err) => {
             setMirror("layout", next === "vertical" ? "horizontal" : "vertical");
             report("Layout not saved")(err);
         });
@@ -468,7 +476,7 @@ export default function App() {
     const runSaved = async (id: string) => {
         setSavedRunError("");
         try {
-            await serviceApi.call(TERMINAL_PANEL_ID, "run-saved-command", { id });
+            await serviceApi.call(PANEL_ID, "run-saved-command", { id });
         } catch (err) {
             setSavedRunError(errorMessage(err));
             setIsSavedOpen(true);
@@ -498,7 +506,7 @@ export default function App() {
         setRenaming(true);
         try {
             // the new label arrives through the service's state
-            await serviceApi.call(TERMINAL_PANEL_ID, "rename-tab", { id: tid, label: renameValue().trim() });
+            await serviceApi.call(PANEL_ID, "rename-tab", { id: tid, label: renameValue().trim() });
             closeRename();
         } catch (err) {
             setRenameError(errorMessage(err));
@@ -630,7 +638,7 @@ export default function App() {
                         setFailure(null);
                         serviceApi
                             .call(
-                                TERMINAL_PANEL_ID,
+                                PANEL_ID,
                                 "reorder-tabs",
                                 { orderedIds: reordered.map((t) => t.id) },
                             )
@@ -738,13 +746,15 @@ export default function App() {
                         <Show when={hydration() === "failed"}>
                             <PaperFlex fullWidth fullHeight align="center" justify="center">
                                 <PaperEmptyState
-                                    icon="cloud_off"
-                                    title="The terminal service is not answering"
+                                    icon={tabsUnreadable() ? "error" : "cloud_off"}
+                                    title={tabsUnreadable() ? "Your tabs couldn't be read" : "The terminal service is not answering"}
                                     description={hydrationError()}
                                 >
-                                    <PaperButton variant="primary" onClick={() => void hydrate()}>
-                                        <PaperIcon>refresh</PaperIcon> Try again
-                                    </PaperButton>
+                                    <Show when={!tabsUnreadable()}>
+                                        <PaperButton variant="primary" onClick={() => void hydrate()}>
+                                            <PaperIcon>refresh</PaperIcon> Try again
+                                        </PaperButton>
+                                    </Show>
                                 </PaperEmptyState>
                             </PaperFlex>
                         </Show>

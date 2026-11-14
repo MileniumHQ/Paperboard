@@ -14,12 +14,9 @@ export function readWholeLines(buffer: string, lineCount: number): string {
     if (!buffer) return "";
     const all = buffer.split("\n");
     let lines = buffer.endsWith("\n") ? all.slice(0, -1) : all;
-    const headSevered = buffer.length >= SCROLLBACK_CHARS;
-    let slice = lines.slice(-safeCount);
-    if (headSevered && slice.length > 0) {
-        slice = slice.slice(1);
-    }
-    return slice.join("\n");
+    // only a slice that reaches back to the head line holds the fragment
+    const headSevered = buffer.length >= SCROLLBACK_CHARS && lines.length <= safeCount;
+    return lines.slice(headSevered ? 1 : -safeCount).join("\n");
 }
 
 // A viewer subscribes to a shell's output before it asks the service for the

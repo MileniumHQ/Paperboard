@@ -11,14 +11,12 @@ import {
 import * as fs from "node:fs";
 import { SCROLLBACK_CHARS, applyScrollbackCap, readWholeLines } from "./lib/scrollback";
 import { errorMessage } from "./lib/failure";
+import { PANEL_ID } from "./lib/panel";
 import { runShellCommand } from "./lib/shellCommand";
 import { writeTerminal } from "./lib/terminalWrite";
 import { SavedCommands, type CommandRun, type SavedCommand } from "./lib/savedCommands";
 import { BlocksAnnouncer, commandPayload, exitPayload, finishedPayload, tabPayload, terminalBlocks } from "./blocks";
 import { findSession, readLayout, readSavedTabs, tabSessions, type LiveSession, type SplitDirection, type TabLayout, type TerminalSession, type TerminalTab } from "./lib/tabs";
-
-// pass PANEL_ID explicitly, ambient scope resolves to last-imported panel
-const PANEL_ID = "dev.paperboard.terminal";
 
 export type { TerminalTab } from "./lib/tabs";
 
@@ -40,11 +38,15 @@ export interface TerminalServiceState {
     savedCommands: SavedCommand[];
     commandRuns: Record<string, CommandRun>;
     savedCommandsError: string;
+    // why tabs.json could not be read; while it is set the tabs are not
+    // written, so the file stays as it was
+    tabsError: string;
 }
 
 type Ctx = ServiceContext<TerminalServiceState>;
 
 const SCROLLBACK_DIR = "terminal-scrollback";
+const TABS_FILE = "tabs.json";
 
 let tabs: TerminalTab[] = [];
 let activeTabId = "";
@@ -53,6 +55,9 @@ const live: Record<string, LiveSession> = {};
 // counts commands, so a window can tell a new one from one it has seen
 let commandSeq = 0;
 let showTabRequest = { id: "", request: "" };
+let tabsError = "";
+// tab changes are saved one at a time, so a failed save undoes only its own
+let tabsSaving: Promise<void> = Promise.resolve();
 
 const buffers = new Map<string, string>();
 const persistTimers = new Map<string, ReturnType<typeof setTimeout>>();
@@ -84,18 +89,35 @@ const blocks = blocksApi.panel(PANEL_ID);
 const announcer = new BlocksAnnouncer(blocks);
 
 function publishTabs(ctx: Ctx) {
-    ctx.setState({ tabs: structuredClone(tabs), activeTabId, showTab: { ...showTabRequest }, layout });
+    ctx.setState({ tabs: structuredClone(tabs), activeTabId, showTab: { ...showTabRequest }, layout, tabsError });
     announcer.list("tabs", tabs.map((t) => t.id));
     announcer.list("active-tab", [activeTabId]);
 }
 
-async function persistTabs(ctx: Ctx | null) {
-    try {
-        await config.set({ tabs, activeTabId, layout }, PANEL_ID, "tabs.json");
-    } catch (err) {
-        console.error("[TerminalService] tab config persist failed:", err);
-    }
-    if (ctx) publishTabs(ctx);
+/**
+ * Makes `change` to the tabs, saves them and shows the change. A save that
+ * fails undoes the change and rejects with why, so nothing is shown that a
+ * restart would lose; an unreadable tabs.json is never written over.
+ */
+function changeTabs(ctx: Ctx, change: () => void = () => {}): Promise<void> {
+    const saved = tabsSaving.then(async () => {
+        if (tabsError) throw new Error(tabsError);
+        const before = structuredClone({ tabs, activeTabId, layout, showTabRequest });
+        change();
+        try {
+            await config.set({ tabs, activeTabId, layout }, PANEL_ID, TABS_FILE);
+        } catch (err) {
+            ({ tabs, activeTabId, layout, showTabRequest } = before);
+            throw new Error(`Your tabs could not be saved: ${errorMessage(err)}`);
+        }
+        publishTabs(ctx);
+    });
+    // the next change waits for this one, whichever way it ends
+    tabsSaving = saved.then(
+        () => undefined,
+        () => undefined,
+    );
+    return saved;
 }
 
 function cancelPersistTimer(id: string) {
@@ -112,7 +134,7 @@ function publishLive() {
     serviceCtx?.setState({ live: structuredClone(live) });
 }
 
-export function subscribeSession(id: string, ctx: Ctx | null) {
+function subscribeSession(id: string) {
     if (subscribedSessions.has(id)) return;
     subscribedSessions.add(id);
     try {
@@ -144,9 +166,11 @@ export function subscribeSession(id: string, ctx: Ctx | null) {
                 liveSession(id).cwd = cwd;
                 publishLive();
                 // where the next shell for this session starts
-                if (owner.session.cwd !== cwd) {
-                    owner.session.cwd = cwd;
-                    void persistTabs(serviceCtx);
+                if (owner.session.cwd !== cwd && serviceCtx) {
+                    changeTabs(serviceCtx, () => {
+                        const now = findSession(tabs, id);
+                        if (now) now.session.cwd = cwd;
+                    }).catch((err) => console.error(`[TerminalService] ${id}'s folder was not saved:`, err));
                 }
             }),
             terminalApi.onCommand(id, (finished) => {
@@ -163,7 +187,7 @@ export function subscribeSession(id: string, ctx: Ctx | null) {
     }
 }
 
-export function unsubscribeSession(id: string) {
+function unsubscribeSession(id: string) {
     // deallocated, not just guarded: drop the id AND detach the listeners
     // so a reconnect storm or daemon echo can't wake a dead tab
     subscribedSessions.delete(id);
@@ -179,25 +203,9 @@ export function unsubscribeSession(id: string) {
     }
 }
 
-export function __terminalTestState() {
-    return {
-        subscribedCount: subscribedSessions.size,
-        isSubscribed: (id: string) => subscribedSessions.has(id),
-        // test hooks only: observe (and for targeting tests, seed) the
-        // module-level tab list; never used by the runtime paths above
-        tabIds: () => tabs.map((t) => t.id),
-        registerTabForTest: (id: string) => tabs.push({ id, label: id }),
-        clearTabsForTest: () => {
-            const prior = tabs;
-            tabs = [];
-            return prior.map((t) => t.id);
-        },
-    };
-}
-
 // a requested pty size is usable only when both dimensions are positive
 // integers; anything else means "no size given", never a resize to 0
-export function isValidTerminalSize(cols: unknown, rows: unknown): boolean {
+function isValidTerminalSize(cols: unknown, rows: unknown): boolean {
     return (
         typeof cols === "number" &&
         Number.isInteger(cols) &&
@@ -208,17 +216,12 @@ export function isValidTerminalSize(cols: unknown, rows: unknown): boolean {
     );
 }
 
-// throws when the session could not be probed AND not created, carrying
-// the daemon's reason (a shell that failed to start must reach the viewer,
-// never pass as an empty scrollback)
+// throws with the daemon's reason when the session could not be probed or
+// created: a shell that failed to start must reach the viewer, never pass as
+// an empty scrollback, and a probe that failed is not a shell that is gone
+// (taking it for one would wipe a live shell's scrollback)
 async function ensureSession(id: string, cols?: number, rows?: number): Promise<void> {
-    let exists = false;
-    try {
-        exists = await terminalApi.exists(id);
-    } catch (err) {
-        console.error(`[TerminalService] session probe failed for ${id}:`, err);
-    }
-    if (exists) {
+    if (await terminalApi.exists(id)) {
         // an existing session keeps whatever size its pty was spawned or
         // last set to: a viewer returning with a different size (window
         // resized while away, fonts changed) would otherwise desync the
@@ -280,19 +283,11 @@ async function tryEnsureSession(id: string): Promise<void> {
 }
 
 function resolveTabId(input?: string): string {
-    return resolveTabIdPure(input, tabs);
-}
-
-// pure form: exported for tests, used by resolveTabId
-export function resolveTabIdPure(
-    input: string | undefined,
-    tabList: TerminalTab[],
-): string {
     const clean = (input || "").trim();
     if (!clean) {
         throw new Error("Terminal tab id required");
     }
-    const tab = tabList.find((t) => t.id === clean);
+    const tab = tabs.find((t) => t.id === clean);
     if (tab) return tab.id;
     // an unknown/renamed id must REFUSE, never fall back to another
     // session: keystrokes silently landing in the wrong shell is the
@@ -300,25 +295,16 @@ export function resolveTabIdPure(
     throw new Error(`Unknown terminal tab: ${clean}`);
 }
 
-// One-shot shell resolution lives in PaperAPI (shared with the actions
-// panel) — re-exported here so existing imports keep working. One
-// invariant, one implementation.
-export { resolveOneShotShell };
-
 // keystrokes must never vanish: a session that could not be created, or a
-// write the daemon refused, fails the action instead of returning true
-export async function writeToTerminal(
-    _ctx: Ctx,
-    inputs?: { tabId?: string; text?: string },
-): Promise<boolean> {
-    const id = resolveTabId(inputs?.tabId);
+// write the daemon refused, fails the block
+async function writeToTerminal(tabId: string | undefined, text: string | undefined): Promise<void> {
+    const id = resolveTabId(tabId);
     try {
         await ensureSession(id);
     } catch (err) {
         throw new Error(`Terminal session "${id}" could not be created; keystrokes were not sent: ${errorMessage(err)}`);
     }
-    await writeTerminal(id, inputs?.text || "");
-    return true;
+    await writeTerminal(id, text || "");
 }
 
 const SAVED_COMMANDS_FILE = "saved-commands.json";
@@ -356,7 +342,7 @@ for (const signal of ["SIGTERM", "SIGINT"] as const) {
     });
 }
 
-// What the actions (v1) and the blocks (v2) both do: one implementation each.
+// What the blocks and the panel's page both do: one implementation each.
 
 function liveCtx(): Ctx {
     if (!serviceCtx) throw new Error("The terminal service is still starting");
@@ -374,6 +360,8 @@ function newSessionId(prefix: string): string {
  * since is said in the new terminal, not refused.
  */
 export async function createTab(ctx: Ctx, label?: string, start: { cwd?: string; shell?: string; besides?: string } = {}): Promise<string> {
+    // no shell starts for a tab that could not be saved
+    if (tabsError) throw new Error(tabsError);
     const asked = requireStart(start);
     const shell = asked.shell;
     let cwd = asked.cwd;
@@ -397,15 +385,23 @@ export async function createTab(ctx: Ctx, label?: string, start: { cwd?: string;
             await ensureSession(id);
         } catch (err) {
             tabs = tabs.filter((t) => t.id !== id);
-            buffers.delete(id);
+            await dropSession(id);
             throw err;
         }
     } else {
         await tryEnsureSession(id);
     }
-    activeTabId = id;
-    subscribeSession(id, ctx);
-    await persistTabs(ctx);
+    subscribeSession(id);
+    try {
+        await changeTabs(ctx, () => {
+            activeTabId = id;
+        });
+    } catch (err) {
+        // a tab that was not saved is not opened: its shell goes with it
+        tabs = tabs.filter((t) => t.id !== id);
+        await endSession(id);
+        throw err;
+    }
     announcer.fire("tab-opened", tabPayload({ id, label: name }));
     return id;
 }
@@ -421,8 +417,15 @@ export async function splitTab(ctx: Ctx, tabId: string | undefined, direction: S
     if (tab.shell) session.shell = tab.shell;
     tab.split = { direction, session };
     await tryEnsureSession(session.id);
-    subscribeSession(session.id, ctx);
-    await persistTabs(ctx);
+    subscribeSession(session.id);
+    try {
+        await changeTabs(ctx);
+    } catch (err) {
+        const owner = tabs.find((t) => t.id === tab.id);
+        if (owner?.split?.session.id === session.id) owner.split = undefined;
+        await endSession(session.id);
+        throw err;
+    }
     return session.id;
 }
 
@@ -433,24 +436,35 @@ export async function unsplitTab(ctx: Ctx, tabId: string | undefined): Promise<v
     const id = tab.split.session.id;
     // a shell that would not stop keeps its pane, so it stays reachable
     await terminalApi.destroy(id);
-    tab.split = undefined;
-    forgetSession(id);
-    await files.delete(scrollbackPath(id), PANEL_ID);
-    await persistTabs(ctx);
+    // a split that was not saved stays, and opening it starts a new shell
+    await changeTabs(ctx, () => {
+        const owner = tabs.find((t) => t.id === tab.id);
+        if (owner) owner.split = undefined;
+    });
+    await dropSession(id);
 }
 
-function forgetSession(id: string) {
+/** Forgets a session whose shell is gone: its listeners, output and saved scrollback. */
+async function dropSession(id: string): Promise<void> {
     buffers.delete(id);
     // teardown: detach listeners and drop the subscription id, then
     // cancel the pending debounce so no write fires for a dead session
     unsubscribeSession(id);
     cancelPersistTimer(id);
+    await files.delete(scrollbackPath(id), PANEL_ID);
+}
+
+/** Ends a shell that was started for a tab or split that could not be saved. */
+async function endSession(id: string): Promise<void> {
+    await terminalApi.destroy(id).catch((err) => console.error(`[TerminalService] the unsaved session ${id} would not stop:`, err));
+    await dropSession(id);
 }
 
 export async function setLayout(ctx: Ctx, next: unknown): Promise<void> {
     if (next !== "horizontal" && next !== "vertical") throw new Error("Tabs are laid out horizontal or vertical");
-    layout = next;
-    await persistTabs(ctx);
+    await changeTabs(ctx, () => {
+        layout = next;
+    });
 }
 
 export async function renameTab(ctx: Ctx, id: string | undefined, label: string | undefined): Promise<void> {
@@ -458,9 +472,12 @@ export async function renameTab(ctx: Ctx, id: string | undefined, label: string 
     if (!tab) throw new Error(`Unknown terminal tab "${id}"`);
     const name = (label || "").trim();
     if (!name) throw new Error("Label is required");
-    tab.label = name;
-    tab.named = true;
-    await persistTabs(ctx);
+    await changeTabs(ctx, () => {
+        const now = tabs.find((t) => t.id === tab.id);
+        if (!now) return;
+        now.label = name;
+        now.named = true;
+    });
 }
 
 export async function closeTab(ctx: Ctx, input: string | undefined): Promise<void> {
@@ -469,13 +486,12 @@ export async function closeTab(ctx: Ctx, input: string | undefined): Promise<voi
     if (!closing) throw new Error(`Unknown terminal tab "${input}"`);
     // a shell that would not stop keeps its tab, so it stays reachable
     for (const session of tabSessions(closing)) await terminalApi.destroy(session.id);
-    tabs = tabs.filter((t) => t.id !== id);
-    for (const session of tabSessions(closing)) {
-        forgetSession(session.id);
-        await files.delete(scrollbackPath(session.id), PANEL_ID);
-    }
-    if (activeTabId === id) activeTabId = tabs[0]?.id || "";
-    await persistTabs(ctx);
+    // a close that was not saved keeps the tab, and opening it starts a new shell
+    await changeTabs(ctx, () => {
+        tabs = tabs.filter((t) => t.id !== id);
+        if (activeTabId === id) activeTabId = tabs[0]?.id || "";
+    });
+    for (const session of tabSessions(closing)) await dropSession(session.id);
     announcer.fire("tab-closed", tabPayload(closing));
 }
 
@@ -486,8 +502,9 @@ export async function reorderTabs(ctx: Ctx, orderedIds: unknown): Promise<void> 
     if (ids.length !== tabs.length || new Set(ids).size !== ids.length || !ids.every((id) => byId.has(id))) {
         throw new Error("reorder-tabs requires exactly the current tab ids");
     }
-    tabs = ids.map((id) => byId.get(id)!);
-    await persistTabs(ctx);
+    await changeTabs(ctx, () => {
+        tabs = ids.map((id) => byId.get(id)!);
+    });
 }
 
 /** Moves a tab to a place in the tab bar, 1 being the first. */
@@ -511,9 +528,10 @@ function activeTab(): string {
 /** Switches every open window to the tab, and makes it the one a new window opens on. */
 export async function showTab(ctx: Ctx, tabId: string | undefined): Promise<void> {
     const id = resolveTabId(tabId);
-    activeTabId = id;
-    showTabRequest = { id, request: `${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}` };
-    await persistTabs(ctx);
+    await changeTabs(ctx, () => {
+        activeTabId = id;
+        showTabRequest = { id, request: `${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}` };
+    });
 }
 
 /** The tab's last whole lines, 1 to 1000 of them (100 when not given). */
@@ -549,10 +567,11 @@ const calls = {
         if (!owner) {
             throw new Error(`Unknown terminal tab "${input?.id}"`);
         }
-        activeTabId = owner.tab.id;
         await ensureSession(id, input?.cols, input?.rows);
-        subscribeSession(id, ctx);
-        await persistTabs(ctx);
+        subscribeSession(id);
+        await changeTabs(ctx, () => {
+            activeTabId = owner.tab.id;
+        });
         return buffers.get(id) || "";
     },
     "rename-tab": (ctx: Ctx, input: { id: string; label: string }) => renameTab(ctx, input?.id, input?.label),
@@ -562,8 +581,9 @@ const calls = {
     "touch-tab": async (ctx: Ctx, input: { id: string }) => {
         const id = (input?.id || "").trim();
         if (!tabs.some((t) => t.id === id)) return false;
-        activeTabId = id;
-        await persistTabs(ctx);
+        await changeTabs(ctx, () => {
+            activeTabId = id;
+        });
         return true;
     },
     "save-command": (_ctx: Ctx, input: { label?: string; command?: string }) => savedCommands.add(input?.label, input?.command),
@@ -572,7 +592,7 @@ const calls = {
 };
 
 export const terminalService = definePanelService({
-    id: "dev.paperboard.terminal",
+    id: PANEL_ID,
     state: {
         tabs: [] as TerminalTab[],
         activeTabId: "",
@@ -582,6 +602,7 @@ export const terminalService = definePanelService({
         savedCommands: [] as SavedCommand[],
         commandRuns: {} as Record<string, CommandRun>,
         savedCommandsError: "",
+        tabsError: "",
     },
     // Home's gallery: the "Command" dropdown of the Pinned command widget
     widgetChoices: {
@@ -595,13 +616,15 @@ export const terminalService = definePanelService({
         await savedCommands.init();
 
         try {
-            const saved = await config.get<any>(PANEL_ID, "tabs.json");
+            const saved = await config.get<any>(PANEL_ID, TABS_FILE);
             tabs = readSavedTabs(saved?.tabs);
             layout = readLayout(saved?.layout);
             if (typeof saved?.activeTabId === "string") {
                 activeTabId = saved.activeTabId;
             }
         } catch (err) {
+            // unreadable is not empty: no tab opens over it, and nothing writes over it
+            tabsError = `Your saved tabs (${TABS_FILE}) could not be read, and Terminal won't open a tab over them: ${errorMessage(err)}`;
             console.error("[TerminalService] Failed to load tabs:", err);
         }
 
@@ -614,15 +637,18 @@ export const terminalService = definePanelService({
             } catch (err) {
                 console.error(`[TerminalService] scrollback restore failed for ${session.id}:`, err);
             }
-            subscribeSession(session.id, ctx);
+            subscribeSession(session.id);
         }
 
-        if (tabs.length === 0) {
-            tabs.push({ id: "tab1", label: "Tab 1" });
-            activeTabId = "tab1";
-            subscribeSession("tab1", ctx);
-            await persistTabs(ctx);
-        } else if (!tabs.some((t) => t.id === activeTabId)) {
+        if (tabs.length === 0 && !tabsError) {
+            // a first tab that could not be saved is not opened; the page
+            // opens one when it finds none, and says why that fails
+            await changeTabs(ctx, () => {
+                tabs.push({ id: "tab1", label: "Tab 1" });
+                activeTabId = "tab1";
+            }).catch((err) => console.error("[TerminalService] the first tab was not saved:", err));
+            subscribeSession("tab1");
+        } else if (tabs.length > 0 && !tabs.some((t) => t.id === activeTabId)) {
             activeTabId = tabs[0].id;
         }
         // No shell is started here: a tab's shell starts when the tab is
@@ -647,7 +673,7 @@ export const terminalService = definePanelService({
                 unsplitTab: (id) => unsplitTab(liveCtx(), id),
                 renameTab: (id, label) => renameTab(liveCtx(), id, label),
                 closeTab: (id) => closeTab(liveCtx(), id),
-                write: (id, text) => writeToTerminal(liveCtx(), { tabId: id, text }),
+                write: writeToTerminal,
                 readOutput,
                 runShellCommand: (command) => runShellCommand(command),
                 savedCommands: () => savedCommands.view().savedCommands.map((c) => c.id),
