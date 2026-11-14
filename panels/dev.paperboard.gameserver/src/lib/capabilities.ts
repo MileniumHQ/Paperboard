@@ -1,4 +1,3 @@
-import { createMemo } from "solid-js";
 import semver from "semver";
 import { serverVersion } from "./server";
 import {
@@ -13,11 +12,6 @@ import {
 export { CAPABILITIES };
 export type { CapabilityName };
 
-const mcVersion = createMemo(() => {
-    const v = serverVersion();
-    return v ? semver.coerce(v) : null;
-});
-
 export function supports(capability: CapabilityName): boolean {
     return versionSupports(serverVersion(), capability);
 }
@@ -28,5 +22,6 @@ export function mcVersionAtLeast(since: string): boolean {
 }
 
 export function hasKnownMcVersion(): boolean {
-    return mcVersion() !== null;
+    const version = serverVersion();
+    return Boolean(version) && semver.coerce(version) !== null;
 }
