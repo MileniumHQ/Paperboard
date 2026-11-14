@@ -13,14 +13,10 @@ import {
 } from "../../../../shared/updateQueue";
 import { updateWhere } from "../../hooks/useUpdateQueue";
 import { errorMessage } from "../../lib/errorMessage";
+import { formatBytes } from "../home/builtins/usageSegments";
 
 // how long the finished check (or cross) stays before the button goes
 const FINISH_MS = 1800;
-
-function megabytes(bytes: number): string {
-    const mb = bytes / 1048576;
-    return mb >= 100 ? `${Math.round(mb)} MB` : `${mb.toFixed(1)} MB`;
-}
 
 /** what the list says under an item's name */
 export function itemDetail(item: UpdateItem): string {
@@ -36,7 +32,7 @@ export function itemDetail(item: UpdateItem): string {
     }
     if (item.stage === "stopping") return "Stopping processes";
     if (item.stage === "installing") return "Installing";
-    if (item.bytesLoaded !== null && item.bytesTotal) return `Downloading ${megabytes(item.bytesLoaded)} of ${megabytes(item.bytesTotal)}`;
+    if (item.bytesLoaded !== null && item.bytesTotal) return `Downloading ${formatBytes(item.bytesLoaded)} of ${formatBytes(item.bytesTotal)}`;
     if (item.percent !== null) return `Downloading ${item.percent}%`;
     return "Downloading";
 }

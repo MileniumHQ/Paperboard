@@ -1,5 +1,6 @@
 import { createEffect, createMemo, createSignal, on, type Setter } from "solid-js";
 import { panelsApi } from "@mileniumhq/paperapi";
+import { errorMessage } from "../lib/errorMessage";
 import { logToMain } from "../lib/shell";
 import type { RestartState } from "../components/panels/PanelView";
 import type { useUpdateQueue } from "./useUpdateQueue";
@@ -49,7 +50,7 @@ export function usePanelRestarts(options: PanelRestartsOptions) {
             logToMain("error", "Failed to restart panel:", err);
             setRestartState(key, {
                 kind: "failed",
-                message: `Couldn't restart ${name}${err instanceof Error && err.message ? `: ${err.message}` : ""}`,
+                message: `Couldn't restart ${name}: ${errorMessage(err)}`,
             });
         }
     };

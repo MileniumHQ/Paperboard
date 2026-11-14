@@ -1,7 +1,9 @@
 import { createSignal, Show } from "solid-js";
-import { PaperModal, PaperFlex, PaperText, PaperButton, PaperProgress, showToast } from "@mileniumhq/paperui";
+import { PaperModal, PaperFlex, PaperText, PaperButton, PaperProgress } from "@mileniumhq/paperui";
 import type { AppUpdateState } from "../../../../shared/appUpdate";
+import { errorMessage } from "../../lib/errorMessage";
 import { shellIpc } from "../../lib/shell";
+import { checkForUpdates } from "../../hooks/useAppUpdate";
 
 export default function AppUpdateModal(props: { state: AppUpdateState; open: boolean; onClose(): void }) {
     const [downloadError, setDownloadError] = createSignal<string | null>(null);
@@ -19,7 +21,7 @@ export default function AppUpdateModal(props: { state: AppUpdateState; open: boo
     const openDownload = async () => {
         setDownloadError(null);
         try { await shellIpc().invoke("open-update-download"); }
-        catch (err) { setDownloadError(`Could not open downloads: ${String(err)}`); }
+        catch (err) { setDownloadError(`Could not open downloads: ${errorMessage(err)}`); }
     };
     return <PaperModal
         open={props.open}
@@ -35,7 +37,7 @@ export default function AppUpdateModal(props: { state: AppUpdateState; open: boo
                 <Show when={!packageManaged() || packageDownload()}><PaperButton variant="text" onClick={openDownload}>Download manually</PaperButton></Show>
                 <PaperButton onClick={() => {
                     props.onClose();
-                    shellIpc().invoke<void>("update-check").catch((err) => showToast({ variant: "danger", title: "Couldn't check for updates", message: String(err) }));
+                    void checkForUpdates();
                 }}>{packageManaged() ? "Retry check" : "Retry update"}</PaperButton>
             </Show>
             <Show when={ready()}>

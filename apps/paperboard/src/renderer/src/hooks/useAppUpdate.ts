@@ -1,6 +1,14 @@
 import { createSignal, onMount, onCleanup } from "solid-js";
+import { showToast } from "@mileniumhq/paperui";
 import { initialAppUpdateState, type AppUpdateState } from "../../../shared/appUpdate";
+import { errorMessage } from "../lib/errorMessage";
 import { isBrowserShell, shellIpc } from "../lib/shell";
+
+/** looks for updates to everything now; the top bar lists what it finds and says each failure, a toast says a check that didn't start */
+export const checkForUpdates = () =>
+    shellIpc()
+        .invoke<void>("update-check")
+        .catch((err) => showToast({ variant: "danger", title: "Couldn't check for updates", message: errorMessage(err) }));
 
 export function useAppUpdate() {
     const [state, setState] = createSignal<AppUpdateState>({ ...initialAppUpdateState });
@@ -22,7 +30,7 @@ export function useAppUpdate() {
         });
         void ipc.invoke<AppUpdateState>("app-update-state").then(accept).catch((err) => {
             if (disposed) return;
-            accept({ ...state(), status: "failed", error: `Could not read update status: ${String(err)}` });
+            accept({ ...state(), status: "failed", error: `Could not read update status: ${errorMessage(err)}` });
         });
     });
     return { state, open, setOpen };

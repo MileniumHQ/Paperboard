@@ -19,6 +19,8 @@ import {
     showToast,
 } from "@mileniumhq/paperui";
 import { isBrowserShell, shellIpc, signOutOfBrowser } from "../../lib/shell";
+import { errorMessage } from "../../lib/errorMessage";
+import { checkForUpdates } from "../../hooks/useAppUpdate";
 import type { SettingsFailure } from "../../hooks/useAppSettings";
 import { START_ON_HOME, startTarget } from "../../lib/startOn";
 import type { AppSettingsData } from "../../lib/appSettings";
@@ -77,15 +79,10 @@ const LICENSE_TEXTS: Record<LicenseKind, string> = {
 const UPDATE_NOTE = "Looks for updates to Paperboard, every panel, package, and computer now. The top bar shows them as they run.";
 const QUIT_NOTE = "Stops the panels on this computer, unless its server daemon runs as a service. Panels on other computers keep running.";
 
-// the top bar lists what it finds, and says each failure
-const updateEverything = () =>
-    shellIpc()
-        .invoke<void>("update-check")
-        .catch((err) => showToast({ variant: "danger", title: "Couldn't check for updates", message: String(err) }));
 const quitApp = () => shellIpc().send("quit-app");
 const SIGN_OUT_NOTE = "Signs this browser out. Open Paperboard in the browser from Paperboard to come back.";
 const signOut = () =>
-    signOutOfBrowser().catch((err) => showToast({ variant: "danger", title: "Couldn't sign out", message: String(err) }));
+    signOutOfBrowser().catch((err) => showToast({ variant: "danger", title: "Couldn't sign out", message: errorMessage(err) }));
 
 export default function AppSettings(props: {
     settings: AppSettingsData;
@@ -257,7 +254,7 @@ export default function AppSettings(props: {
                         >
                             <PaperEffect variant="primary">
                                 <PaperButton
-                                    onClick={updateEverything}>
+                                    onClick={() => void checkForUpdates()}>
                                     <PaperIcon>update</PaperIcon>
                                     Update everything now
                                 </PaperButton>

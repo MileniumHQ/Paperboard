@@ -1,6 +1,7 @@
 import { createSignal, onMount, onCleanup } from "solid-js";
 import { showToast } from "@mileniumhq/paperui";
 import { initialUpdateQueueState, type UpdateItem, type UpdateQueueState } from "../../../shared/updateQueue";
+import { errorMessage } from "../lib/errorMessage";
 import { isBrowserShell, shellIpc } from "../lib/shell";
 
 /** where an update ran, for messages: "" on this computer */
@@ -53,7 +54,7 @@ export function useUpdateQueue() {
         });
         void ipc.invoke<UpdateQueueState>("update-queue").then(accept).catch((err) => {
             if (disposed) return;
-            showToast({ variant: "danger", title: "Couldn't read the update list", message: String(err) });
+            showToast({ variant: "danger", title: "Couldn't read the update list", message: errorMessage(err) });
         });
     });
 
