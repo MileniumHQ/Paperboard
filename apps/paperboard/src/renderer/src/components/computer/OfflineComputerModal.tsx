@@ -1,4 +1,4 @@
-import { type Component, createEffect, createSignal, Show } from "solid-js";
+import { type Component, createEffect, createSignal, on, Show } from "solid-js";
 import { PaperFlex, PaperText, PaperButton, PaperIcon, PaperModal } from "@mileniumhq/paperui";
 import type { ComputerItem } from "../../App";
 import { computersApi } from "../../lib/shell";
@@ -21,37 +21,50 @@ export const OfflineComputerModal: Component<OfflineComputerModalProps> = (
     const [isProbing, setIsProbing] = createSignal(false);
     const [error, setError] = createSignal<string | null>(null);
 
+    // a newer probe, or the dialog closing, makes an older probe's answer moot
+    let probeRequest = 0;
     const attemptReconnect = async () => {
         const target = props.computer;
-        if (!target || isProbing()) return;
+        if (!target) return;
+        const request = ++probeRequest;
         setIsProbing(true);
         setError(null);
         try {
             const probe = await computersApi.probe(target.host, target.port);
-            if (target !== props.computer) return;
+            if (request !== probeRequest) return;
             if (probe?.reachable) {
                 props.onReconnectSuccess();
                 return;
             }
             setError(probe?.error || "Unreachable");
         } catch (err: any) {
-            if (target !== props.computer) return;
+            if (request !== probeRequest) return;
             setError(err?.message || "Unreachable");
         } finally {
-            // R13: only the probe that owns the CURRENT target may clear
-            // the busy flag — a stale probe's finally used to re-enable
-            // "Try Again" while a newer probe for a new target was in
-            // flight, briefly allowing a double-probe.
-            if (target === props.computer) {
-                setIsProbing(false);
-            }
+            // only the current probe may clear the busy flag: a stale one
+            // would re-enable "Try Again" while a newer probe is in flight
+            if (request === probeRequest) setIsProbing(false);
         }
     };
 
-    // Probe each time the modal opens (it stays mounted, so onMount won't refire)
-    createEffect(() => {
-        if (props.open && props.computer) void attemptReconnect();
-    });
+    // Probe once each time the modal opens, and again if it is opened for
+    // another computer (it stays mounted, so onMount won't refire). Only the
+    // opening and the computer's id are followed: the probe's own busy flag
+    // and status must not start it again, or a failed probe would retry
+    // without end while the dialog is open.
+    createEffect(
+        on(
+            () => (props.open ? props.computer?.id : undefined),
+            (id) => {
+                if (id) {
+                    void attemptReconnect();
+                    return;
+                }
+                probeRequest++;
+                setIsProbing(false);
+            },
+        ),
+    );
 
     return (
         <PaperModal
