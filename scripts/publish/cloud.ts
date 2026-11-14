@@ -12,14 +12,11 @@ let wranglerBin: string[] | null = null;
 
 async function wrBin(): Promise<string[]> {
     if (!wranglerBin) {
-        if (await cmdOk(["wrangler", "--version"])) {
-            wranglerBin = ["wrangler"];
-        } else {
-            p.log.warn(
-                "wrangler is not on PATH — running it via `bun x wrangler` (downloads on first use).",
-            );
-            wranglerBin = [process.execPath, "x", "wrangler"];
-        }
+        // a wrangler on PATH wins; otherwise `bun x` runs apps/origami's own
+        // dev dependency, from the directory every wrangler call runs in
+        wranglerBin = (await cmdOk(["wrangler", "--version"], ORIGAMI_DIR))
+            ? ["wrangler"]
+            : [process.execPath, "x", "wrangler"];
     }
     return wranglerBin;
 }
@@ -114,37 +111,28 @@ export async function kvReadRecord(app: DlApp): Promise<DlAppRecord | null> {
 export async function kvWriteRecord(app: DlApp, rec: DlAppRecord): Promise<void> {
     // --remote is load-bearing: without it wrangler writes to local
     // miniflare state and the publish "succeeds" while production stays
-    // empty (the index then never reaches i.paperboard.dev).
-    await wr([
-        "kv",
-        "key",
-        "put",
-        "--binding",
-        KV_PACKAGES_BINDING,
-        kvKeyFor(app),
-        JSON.stringify(rec),
-        "--remote",
-    ]);
+    // empty (the index then never reaches i.paperboard.dev). The record
+    // grows with every release, past what one argv string may hold, so
+    // wrangler reads it from a file.
+    await withTempFile(`${app}.json`, JSON.stringify(rec), (file) =>
+        wr(["kv", "key", "put", "--binding", KV_PACKAGES_BINDING, kvKeyFor(app), "--path", file, "--remote"]),
+    );
 }
 
-// Uploads `text` to the download bucket at `key`. wrangler reads the body
-// from a file, which lives in a temp dir only for the upload.
+// Uploads `text` to the download bucket at `key`, read by wrangler from a file.
 export async function r2PutText(key: string, text: string, contentType: string): Promise<void> {
-    const dir = mkdtempSync(join(tmpdir(), "paperboard-r2-"));
+    await withTempFile(basename(key), text, (file) =>
+        wr(["r2", "object", "put", `${PAPERDL_R2_BUCKET}/${key}`, "--file", file, "--content-type", contentType, "--remote"]),
+    );
+}
+
+// Writes `text` to a file that lives in a temp dir only while `use` runs.
+async function withTempFile(name: string, text: string, use: (file: string) => Promise<unknown>): Promise<void> {
+    const dir = mkdtempSync(join(tmpdir(), "paperboard-wrangler-"));
     try {
-        const file = join(dir, basename(key));
+        const file = join(dir, name);
         writeFileSync(file, text);
-        await wr([
-            "r2",
-            "object",
-            "put",
-            `${PAPERDL_R2_BUCKET}/${key}`,
-            "--file",
-            file,
-            "--content-type",
-            contentType,
-            "--remote",
-        ]);
+        await use(file);
     } finally {
         rmSync(dir, { recursive: true, force: true });
     }
