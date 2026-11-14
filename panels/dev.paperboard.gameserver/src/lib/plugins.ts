@@ -895,7 +895,8 @@ export async function installProjectVersion(
 const MAX_DEP_DEPTH = 1;
 const MAX_DEP_INSTALLS = 25;
 
-export type PluginUpdateStatus = CoreUpdateStatus | "error";
+/** "unchecked": no Modrinth record says what it is (uploaded, or added by hand), so nothing could be looked up */
+export type PluginUpdateStatus = CoreUpdateStatus | "error" | "unchecked";
 
 export interface PluginUpdateCheck {
     filename: string;
@@ -908,7 +909,8 @@ export interface PluginUpdateCheck {
 
 // For every installed plugin, resolve the newest build for this server's
 // software + Minecraft version. "incompatible" means no build matches (the
-// UI offers to uninstall); "error" means the lookup itself failed.
+// UI offers to uninstall); "error" means the lookup itself failed;
+// "unchecked" means there was nothing to look up.
 export async function checkPluginUpdates(): Promise<PluginUpdateCheck[]> {
     const { plugins } = await listInstalledPlugins();
     const results: PluginUpdateCheck[] = [];
@@ -916,13 +918,13 @@ export async function checkPluginUpdates(): Promise<PluginUpdateCheck[]> {
         const title =
             plugin.record?.title ??
             plugin.record?.slug ??
+            plugin.described?.name ??
             plugin.filename.replace(/\.jar$/i, "");
         if (!plugin.record?.projectId) {
             results.push({
                 filename: plugin.filename,
                 title,
-                status: "error",
-                error: "No Modrinth record — cannot check for updates.",
+                status: "unchecked",
             });
             continue;
         }

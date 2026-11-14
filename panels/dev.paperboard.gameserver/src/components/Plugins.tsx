@@ -183,10 +183,9 @@ export default function Plugins(props: {
         setUpdateError("");
         try {
             const checks = await checkPluginUpdates();
-            // "incompatible" (no compatible build) AND "error" (no record /
-            // lookup failed) both mean "we could not update this" — drop
-            // neither silently
-            const failed: PluginUpdateCheck[] = checks.filter((c) => c.status === "incompatible" || c.status === "error");
+            // nothing that was not updated is dropped silently: no compatible
+            // build, a lookup or update that failed, and one with nothing to look up
+            const failed: PluginUpdateCheck[] = checks.filter((c) => c.status === "incompatible" || c.status === "error" || c.status === "unchecked");
             for (const check of checks.filter((c) => c.status === "update-available")) {
                 try {
                     await updatePlugin(check);
@@ -219,9 +218,19 @@ export default function Plugins(props: {
         }
     };
 
-    const uninstallAllFailures = async () => {
-        for (const failure of failures() ?? []) await uninstallFailure(failure.filename);
-        setFailures(null);
+    const withStatus = (status: PluginUpdateCheck["status"]) => (failures() ?? []).filter((f) => f.status === status);
+    const incompatible = () => withStatus("incompatible");
+    const notUpdated = () => withStatus("error");
+    const unchecked = () => withStatus("unchecked");
+    const resultTitle = () => {
+        if (incompatible().length > 0 || notUpdated().length > 0) return `Couldn't update every ${unit()}`;
+        const count = unchecked().length;
+        return count === 1 ? `1 ${unit()} wasn't checked` : `${count} ${unit()}s weren't checked`;
+    };
+
+    // only what is known to have no build for this server is offered to be removed
+    const uninstallIncompatible = async () => {
+        for (const failure of incompatible()) await uninstallFailure(failure.filename);
     };
 
     // the Versions tab hands off here after switching the server jar; a
@@ -297,46 +306,84 @@ export default function Plugins(props: {
             <PaperModal
                 open={failures() !== null && failures()!.length > 0}
                 onClose={() => setFailures(null)}
-                title={`Couldn't update these ${unit()}s`}
+                title={resultTitle()}
                 size="medium"
                 footer={
                     <>
-                        <PaperButton variant="danger" disabled={uninstallingFailure() !== null} onClick={() => void uninstallAllFailures()}>
-                            Uninstall all
-                        </PaperButton>
+                        <Show when={incompatible().length > 1}>
+                            <PaperButton variant="danger" disabled={uninstallingFailure() !== null} onClick={() => void uninstallIncompatible()}>
+                                Uninstall incompatible
+                            </PaperButton>
+                        </Show>
                         <PaperButton onClick={() => setFailures(null)}>Close</PaperButton>
                     </>
                 }
             >
-                <PaperFlex direction="column" gap="half">
-                    <PaperText preset="body">
-                        These {unit()}s have no build for your server's software and Minecraft version. They may crash the server on startup.
-                        Uninstall the ones you no longer need.
-                    </PaperText>
-                    <For each={failures() ?? []}>
-                        {(failure) => (
-                            <PaperFlex direction="row" justify="space-between" align="center" gap="half" fullWidth>
-                                <PaperFlex direction="column" gap="onefourth" minWidth={0}>
-                                    <PaperText size={3} weight={600}>
+                <PaperFlex direction="column" gap="full">
+                    <Show when={incompatible().length > 0}>
+                        <PaperFlex direction="column" gap="half">
+                            <PaperText preset="heading">No compatible build</PaperText>
+                            <PaperText preset="body">
+                                These {unit()}s have no build for your server's software and Minecraft version. They may crash the server on startup.
+                                Uninstall the ones you no longer need.
+                            </PaperText>
+                            <For each={incompatible()}>
+                                {(failure) => (
+                                    <PaperFlex direction="row" justify="space-between" align="center" gap="half" fullWidth>
+                                        <PaperFlex direction="column" gap="onefourth" minWidth={0}>
+                                            <PaperText size={3} weight={600} breakWord>
+                                                {failure.title}
+                                            </PaperText>
+                                            <PaperText size={2} color="text-subtle">
+                                                Latest targets {failure.latest?.gameVersions.join(", ") || "another version"}
+                                            </PaperText>
+                                        </PaperFlex>
+                                        <PaperButton
+                                            variant="danger"
+                                            disabled={uninstallingFailure() === failure.filename}
+                                            onClick={() => void uninstallFailure(failure.filename)}
+                                        >
+                                            <PaperIcon>delete</PaperIcon>
+                                            Uninstall
+                                        </PaperButton>
+                                    </PaperFlex>
+                                )}
+                            </For>
+                        </PaperFlex>
+                    </Show>
+                    <Show when={notUpdated().length > 0}>
+                        <PaperFlex direction="column" gap="half">
+                            <PaperText preset="heading">Not updated</PaperText>
+                            <For each={notUpdated()}>
+                                {(failure) => (
+                                    <PaperFlex direction="column" gap="onefourth" minWidth={0}>
+                                        <PaperText size={3} weight={600} breakWord>
+                                            {failure.title}
+                                        </PaperText>
+                                        <PaperText preset="error" breakWord>
+                                            {failure.error ?? "The update failed without saying why."}
+                                        </PaperText>
+                                    </PaperFlex>
+                                )}
+                            </For>
+                        </PaperFlex>
+                    </Show>
+                    <Show when={unchecked().length > 0}>
+                        <PaperFlex direction="column" gap="half">
+                            <PaperText preset="heading">Not checked</PaperText>
+                            <PaperText preset="body">
+                                Paperboard looks for updates on Modrinth, and these {unit()}s weren't installed from there, so it can't tell if
+                                a newer build exists. They stay as they are.
+                            </PaperText>
+                            <For each={unchecked()}>
+                                {(failure) => (
+                                    <PaperText size={3} weight={600} breakWord>
                                         {failure.title}
                                     </PaperText>
-                                    <PaperText size={2} color="text-subtle">
-                                        {failure.status === "incompatible"
-                                            ? `No compatible build (latest targets ${failure.latest?.gameVersions.join(", ") || "another version"})`
-                                            : (failure.error ?? "Update failed")}
-                                    </PaperText>
-                                </PaperFlex>
-                                <PaperButton
-                                    variant="danger"
-                                    disabled={uninstallingFailure() === failure.filename}
-                                    onClick={() => void uninstallFailure(failure.filename)}
-                                >
-                                    <PaperIcon>delete</PaperIcon>
-                                    Uninstall
-                                </PaperButton>
-                            </PaperFlex>
-                        )}
-                    </For>
+                                )}
+                            </For>
+                        </PaperFlex>
+                    </Show>
                 </PaperFlex>
             </PaperModal>
         </AddonBrowser>

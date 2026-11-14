@@ -129,7 +129,7 @@ describe("an add-on update the Versions tab asks for", () => {
     test("runs once, and a later visit to Plugins does not run it again", async () => {
         const served = await setUp();
         const page = await openPage(`${served.url}/?server=s-mc`);
-        const failuresModal = `document.body.innerText.includes("Couldn't update these plugins")`;
+        const failuresModal = `document.body.innerText.includes("1 plugin wasn't checked")`;
         try {
             await page.waitFor(`document.body.innerText.includes("Versions")`, "the server menu");
             await openTab(page, "versions", "Minecraft version");
@@ -145,6 +145,13 @@ describe("an add-on update the Versions tab asks for", () => {
             // the update runs once, on the Plugins tab: the home-made plugin has nothing to update from
             await page.evaluate(`${button("Update plugins")}.click()`);
             await page.waitFor(failuresModal, "the update's result");
+            // a plugin with no Modrinth record is only not checked: nothing says it will crash the
+            // server, and nothing offers to remove it
+            const dialog = await page.evaluate<string>(`document.querySelector("[role=dialog]").innerText`);
+            expect(dialog).toContain("Not checked");
+            expect(dialog).toContain("Homemade");
+            expect(dialog).not.toContain("crash");
+            expect(dialog).not.toContain("Uninstall");
             await page.evaluate(`${button("Close")}.click()`);
             await page.waitFor(`!(${failuresModal})`, "the result to close");
 
