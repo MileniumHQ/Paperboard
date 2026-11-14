@@ -2,13 +2,13 @@ import { afterEach, describe, expect, test } from "vitest";
 import { createRoot } from "solid-js";
 import { MOBILE_ATTRIBUTE, createPaperMobile, paperMobile, setPaperMobile } from "../utils/mobileMode";
 
-// Inventory: mobile mode is the host's fact; an unknown one is an error, never "desktop".
+// Inventory: mobile mode is the host's fact; a host that never said is the desktop, and a garbled value is an error.
 describe("mobile mode", () => {
     afterEach(() => document.documentElement.removeAttribute(MOBILE_ATTRIBUTE));
 
-    test("a document the host never told throws instead of guessing", () => {
-        expect(() => paperMobile()).toThrow(MOBILE_ATTRIBUTE);
-        expect(() => createRoot(() => createPaperMobile())).toThrow(MOBILE_ATTRIBUTE);
+    test("a document the host never told is the desktop, and a value that isn't true or false throws", () => {
+        expect(paperMobile()).toBe(false);
+        createRoot((dispose) => { expect(createPaperMobile()()).toBe(false); dispose(); });
         document.documentElement.setAttribute(MOBILE_ATTRIBUTE, "yes");
         expect(() => paperMobile()).toThrow(/"true" or "false"/);
     });

@@ -9,21 +9,20 @@ import { createSignal, onCleanup, type Accessor } from "solid-js";
 // The host owns the fact and writes it on the document root, a panel's
 // <html> included (PaperAPI relays the shell's changes to a framed panel),
 // so CSS reads `:root[data-paper-mobile="true"]` and TypeScript reads
-// paperMobile(). A document the host never told is an error, not "desktop".
+// paperMobile(). A document the host never told is the desktop: only the
+// phone app turns mobile mode on.
 
 /** set on the root by the host: "true" in mobile mode, "false" outside it */
 export const MOBILE_ATTRIBUTE = "data-paper-mobile";
 
-const MISSING = `Mobile mode is unknown: the host never set ${MOBILE_ATTRIBUTE} on this document. A panel gets it from Paperboard, and a page outside Paperboard sets it with setPaperMobile().`;
-
 function readMobile(root: HTMLElement): boolean {
     const value = root.getAttribute(MOBILE_ATTRIBUTE);
     if (value === "true") return true;
-    if (value === "false") return false;
-    throw new Error(value === null ? MISSING : `${MOBILE_ATTRIBUTE} must be "true" or "false", not "${value}"`);
+    if (value === "false" || value === null) return false;
+    throw new Error(`${MOBILE_ATTRIBUTE} must be "true" or "false", not "${value}"`);
 }
 
-/** Whether Paperboard is in mobile mode. Throws when the host never said. */
+/** Whether Paperboard is in mobile mode: false when the host never said. Throws on a value that isn't "true" or "false". */
 export function paperMobile(root: HTMLElement = document.documentElement): boolean {
     return readMobile(root);
 }
@@ -33,7 +32,7 @@ export function setPaperMobile(on: boolean, root: HTMLElement = document.documen
     root.setAttribute(MOBILE_ATTRIBUTE, on ? "true" : "false");
 }
 
-/** A reactive paperMobile(): follows the host as it changes. Throws when the host never said. */
+/** A reactive paperMobile(): follows the host as it changes. */
 export function createPaperMobile(root: HTMLElement = document.documentElement): Accessor<boolean> {
     const [mobile, setMobile] = createSignal(readMobile(root));
     const observer = new MutationObserver(() => setMobile(readMobile(root)));

@@ -387,7 +387,7 @@ export function Done() {
                 </tbody>
             </PaperTable>
             <PaperText preset="body" as="p">
-                A document the host never told throws an error naming the attribute instead of guessing "desktop": both readers throw when the attribute is missing or isn't <PaperCode>true</PaperCode> or <PaperCode>false</PaperCode>. CSS rules simply don't match.
+                A document the host never told is the desktop: both readers return <PaperCode>false</PaperCode> when the attribute is missing, so only the phone app has to say anything. A value that isn't <PaperCode>true</PaperCode> or <PaperCode>false</PaperCode> throws an error naming the attribute.
             </PaperText>
             <PaperCode block language="tsx">
 {`import { createPaperMobile } from "@mileniumhq/paperui";
