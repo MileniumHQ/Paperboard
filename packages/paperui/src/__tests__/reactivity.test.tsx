@@ -193,6 +193,7 @@ describe("controlled controls the parent refuses", () => {
         fireEvent.change(input);
         fireEvent.blur(input);
         expect(read).toEqual(["change Creative", "blur Creative"]);
+        // quiet: yields one task, the one the field puts its value back in; no duration is tuned
         await new Promise((resolve) => setTimeout(resolve, 0));
         expect(input.value).toBe("Survival");
     });

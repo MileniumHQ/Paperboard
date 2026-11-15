@@ -13,9 +13,7 @@
 #   its sources and tests: the mechanical Solid mistakes AGENTS.md's "Solid:"
 #   section names, and the house rules that kept coming back (a catch that
 #   only logs, an effect without on(), <For> fed fresh rows, fixed sleeps in
-#   tests). The deprecated panels (actions, ai) get the Solid rules alone;
-#   paperapi and paperui run the house rules as advisory until their hits
-#   are fixed.
+#   tests). The deprecated panels (actions, ai) get the Solid rules alone.
 #   paperboard, origami-library and the panels also run an advisory styling
 #   check (scripts/check-app-styling.sh): literal sizes, colors, motion,
 #   z-index and the like that have a PaperUI token. It warns, never fails.
@@ -230,12 +228,11 @@ gstep paperdocs "paperdocs code check" run_in "$ROOT" bun scripts/check-solid.ts
 gstep paperapi "paperapi typecheck" run_in "$ROOT/packages/paperapi" bunx tsc --noEmit
 gstep paperapi "paperapi tests" run_in "$ROOT/packages/paperapi" bun test
 gstep paperapi "paperapi silent-catches" run_in "$ROOT/packages/paperapi" bash "$CATCH" src test
-gwarn paperapi "paperapi code check" run_in "$ROOT" bun scripts/check-solid.ts packages/paperapi/src packages/paperapi/test
+gstep paperapi "paperapi code check" run_in "$ROOT" bun scripts/check-solid.ts packages/paperapi/src packages/paperapi/test
 gstep paperui "paperui tests" run_in "$ROOT/packages/paperui" bun run test
 gstep paperui "paperui styling invariant" bash "$ROOT/scripts/check-paperui-styling.sh"
 gstep paperui "paperui silent-catches" run_in "$ROOT/packages/paperui" bash "$CATCH" src
-gstep paperui "paperui solid check" run_in "$ROOT" bun scripts/check-solid.ts --solid-only packages/paperui/src packages/paperui/test
-gwarn paperui "paperui code check" run_in "$ROOT" bun scripts/check-solid.ts packages/paperui/src packages/paperui/test
+gstep paperui "paperui code check" run_in "$ROOT" bun scripts/check-solid.ts packages/paperui/src packages/paperui/test
 gstep create-panel "create-panel tests" run_in "$ROOT/packages/create-panel" bun run test
 gstep create-panel "create-panel silent-catches" run_in "$ROOT/packages/create-panel" bash "$CATCH" src bin test template
 gstep create-panel "create-panel code check" run_in "$ROOT" bun scripts/check-solid.ts packages/create-panel/src packages/create-panel/bin packages/create-panel/test packages/create-panel/template

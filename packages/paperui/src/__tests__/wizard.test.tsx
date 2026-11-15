@@ -1,9 +1,10 @@
 import { describe, expect, test } from "vitest";
 import { fireEvent, render, screen } from "@solidjs/testing-library";
-import { createEffect, createSignal, Show } from "solid-js";
+import { createEffect, createSignal, on, Show } from "solid-js";
 import { PaperCheckbox, PaperInput, PaperToggle, PaperWizard, PaperWizardStep, useWizard } from "../index";
 
 /** lets queued enters, exits and their microtask ends run */
+// quiet: yields one task so queued work lands; no duration is tuned
 const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
 
 const next = () => fireEvent.click(screen.getByRole("button", { name: /Next|Finish/ }));
@@ -74,14 +75,12 @@ describe("PaperWizard step skipped on arrival", () => {
     function Skipper() {
         const wizard = useWizard()!;
         // a shell's router: a step it has no use for is passed over either way
-        let previous = 0;
-        createEffect(() => {
-            const step = wizard.currentStep();
-            const from = previous;
-            previous = step;
-            if (from === 0 && step === 1) wizard.setCurrentStep(2);
-            else if (from === 2 && step === 1) wizard.setCurrentStep(0);
-        });
+        createEffect(
+            on(wizard.currentStep, (step, from = 0) => {
+                if (from === 0 && step === 1) wizard.setCurrentStep(2);
+                else if (from === 2 && step === 1) wizard.setCurrentStep(0);
+            }),
+        );
         return null;
     }
 

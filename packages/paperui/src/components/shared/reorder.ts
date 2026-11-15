@@ -55,6 +55,14 @@ export interface Reorder {
 // a pointer that moves less than this is a click, not a drag
 const DRAG_THRESHOLD = 6;
 
+function releaseCapture(el: HTMLElement, pointerId: number): void {
+    try {
+        el.releasePointerCapture(pointerId);
+    } catch {
+        // quiet: a capture the browser already let go of (the pointer lifted, the element left) has nothing to release
+    }
+}
+
 export function createReorder(options: ReorderOptions): Reorder {
     const [dragState, setDragState] = createSignal<DragState | null>(null);
     const [isDropping, setIsDropping] = createSignal(false);
@@ -108,8 +116,8 @@ export function createReorder(options: ReorderOptions): Reorder {
         const targetEl = e.currentTarget as HTMLElement;
         try {
             targetEl.setPointerCapture(e.pointerId);
-        } catch (err) {
-            console.debug("[PaperUI reorder] pointer capture failed:", err);
+        } catch {
+            // quiet: a pointer already lifted has nothing to capture; the drag goes on without it
         }
 
         const handlePointerMove = (ev: PointerEvent) => {
@@ -118,11 +126,7 @@ export function createReorder(options: ReorderOptions): Reorder {
                 // moved before the hold lifted it: not a reorder after all
                 if (Math.hypot(ev.clientX - startX, ev.clientY - startY) > HOLD_SLOP) {
                     cleanup();
-                    try {
-                        targetEl.releasePointerCapture(ev.pointerId);
-                    } catch (err) {
-                        console.debug("[PaperUI reorder] pointer capture release failed:", err);
-                    }
+                    releaseCapture(targetEl, ev.pointerId);
                 }
                 return;
             }
@@ -185,11 +189,7 @@ export function createReorder(options: ReorderOptions): Reorder {
             if (!didDrag && !(lifted && startOptions.holdMs !== undefined)) return;
             ev.preventDefault();
             ev.stopPropagation();
-            try {
-                targetEl.releasePointerCapture(e.pointerId);
-            } catch (err) {
-                console.debug("[PaperUI reorder] pointer capture release failed:", err);
-            }
+            releaseCapture(targetEl, e.pointerId);
             cleanup();
             setDragState(null);
             swallowNextClick();
@@ -197,11 +197,7 @@ export function createReorder(options: ReorderOptions): Reorder {
 
         const finish = (ev: PointerEvent) => {
             if (ev.pointerId !== e.pointerId) return;
-            try {
-                targetEl.releasePointerCapture(ev.pointerId);
-            } catch (err) {
-                console.debug("[PaperUI reorder] pointer capture release failed:", err);
-            }
+            releaseCapture(targetEl, ev.pointerId);
             const wasHeld = lifted && startOptions.holdMs !== undefined;
             cleanup();
 

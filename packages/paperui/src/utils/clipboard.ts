@@ -10,6 +10,7 @@ export async function copyText(text: string): Promise<boolean> {
             return true;
         }
     } catch (err) {
+        // quiet: the textarea copy below tries next, and its outcome is what the caller hears
         console.debug("[paperui] clipboard write failed, falling back:", String(err));
     }
 
@@ -43,6 +44,7 @@ export async function pasteText(): Promise<string | null> {
             return await navigator.clipboard.readText();
         }
     } catch (err) {
+        // quiet: the textarea paste below tries next, and its outcome is what the caller hears
         console.debug("[paperui] clipboard read failed, falling back:", String(err));
     }
 
