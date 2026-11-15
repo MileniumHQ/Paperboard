@@ -359,15 +359,33 @@ export class Windows {
             if (url !== "about:blank") still = await this.navigate(tab, url);
         } catch (e) {
             // a window that never got its page isn't left behind
-            try {
-                await this.closeWindow(tab);
-            } catch (closing) {
-                throw new ToolError(`${errorText(e)} Its window ${tab.id} couldn't be closed: ${errorText(closing)}`);
-            }
-            throw e;
+            return this.closeFailed(tab, e);
         }
         await this.refreshInfo(tab);
         return { tab, still };
+    }
+
+    /** Do something in a window opened for it at an address, and close it again after, whichever way it went. */
+    async inWindow<T>(url: string, job: (session: string) => Promise<T>): Promise<T> {
+        const { tab } = await this.openWindow(url);
+        let done: T;
+        try {
+            done = await job(await this.session(tab));
+        } catch (e) {
+            return this.closeFailed(tab, e);
+        }
+        await this.closeWindow(tab);
+        return done;
+    }
+
+    /** Close a window whose job failed: that failure stays the one reported, with the window's own if it couldn't be closed. */
+    private async closeFailed(tab: Tab, failure: unknown): Promise<never> {
+        try {
+            await this.closeWindow(tab);
+        } catch (closing) {
+            throw new ToolError(`${errorText(failure)} Its window ${tab.id} couldn't be closed: ${errorText(closing)}`);
+        }
+        throw failure;
     }
 }
 

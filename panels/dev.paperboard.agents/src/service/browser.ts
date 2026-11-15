@@ -461,29 +461,21 @@ export class BrowserComputer {
     /** A JPEG of a page, taken in a window opened for it and closed again: an app's picture on its card. */
     async picture(url: string): Promise<string> {
         if (!this.on) throw new Error("your computer is off, and a page's picture is taken in its browser");
-        const { tab } = await this.windows.openWindow(url);
-        try {
-            const s = await this.windows.session(tab);
+        return this.windows.inWindow(url, async (s) => {
             const { data } = await this.connection().send<{ data: string }>("Page.captureScreenshot", { format: "jpeg", quality: 80 }, s, 10_000);
             return data;
-        } finally {
-            await this.windows.closeWindow(tab);
-        }
+        });
     }
 
     /** A page printed to a PDF, as its own print CSS lays it out: in a window of its own, closed after. */
     async pdf(url: string): Promise<Buffer> {
         if (!this.on) throw new Error("the agent's computer is off, and a page is saved as a PDF in its browser. Start it in the agent's Computer page");
-        const { tab } = await this.windows.openWindow(url);
-        try {
-            const s = await this.windows.session(tab);
+        return this.windows.inWindow(url, async (s) => {
             // its fonts first: a PDF made before they've loaded is set in the fallback
             await this.connection().send("Runtime.evaluate", { expression: "document.fonts.ready.then(() => true)", awaitPromise: true }, s, 10_000);
             const { data } = await this.connection().send<{ data: string }>("Page.printToPDF", { printBackground: true, preferCSSPageSize: true }, s, 30_000);
             return Buffer.from(data, "base64");
-        } finally {
-            await this.windows.closeWindow(tab);
-        }
+        });
     }
 
     // ------------------------------------------------------------- files

@@ -3,6 +3,8 @@ import fs from "node:fs";
 import path from "node:path";
 import { BROWSER_PROC_ID, BrowserComputer } from "../src/service/browser";
 import { HomeFolder } from "../src/service/homeFolder";
+import { ToolError, Windows } from "../src/service/browserWindows";
+import type { Cdp } from "../src/service/cdp";
 import type { ComputerState } from "../src/contract";
 import { fakeEnv, packageHost, Recorder, SLOW, tempDir, TestHost } from "./support/host";
 
@@ -70,5 +72,31 @@ describe("the computer's failures", () => {
         expect(computer.state).toMatchObject({ phase: "failed", error: "The browser couldn't be stopped: the daemon refused" });
         await expect(computer.install()).rejects.toThrow("the daemon refused");
         expect(computer.state).toMatchObject({ phase: "failed", error: "The computer couldn't be set up: the daemon refused" });
+    });
+
+    test("a page's picture that failed because the browser went away says why it failed, not that the browser is gone", async () => {
+        let running = true;
+        // the browser's side of DevTools, until it goes away mid-capture
+        const cdp = {
+            send: async (method: string) => {
+                if (method === "Target.createTarget") return { targetId: "page-1" };
+                if (method === "Target.attachToTarget") return { sessionId: "session-1" };
+                if (method === "Target.getTargetInfo") return { targetInfo: { title: "", url: "about:blank" } };
+                return {};
+            },
+        } as unknown as Cdp;
+        const windows = new Windows({
+            connection: () => {
+                if (!running) throw new ToolError("Your browser isn't running.");
+                return cdp;
+            },
+            note: () => {},
+            platform: "linux",
+        });
+        const capture = windows.inWindow("about:blank", async () => {
+            running = false;
+            throw new Error("the browser's connection closed");
+        });
+        await expect(capture).rejects.toThrow("the browser's connection closed Its window 1 couldn't be closed: Your browser isn't running.");
     });
 });
