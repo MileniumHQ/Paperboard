@@ -541,17 +541,3 @@ export function buildPoll(inputs: { question?: unknown; answers?: unknown; hours
         allowMultiselect: inputs.multiple === true,
     };
 }
-
-/** A file to attach, from an http(s) address: the service downloads it (discord.js fetches the address) and uploads the bytes to Discord. */
-export function fileFromUrl(url: unknown, name?: unknown): { attachment: string; name?: string } {
-    const text = typeof url === "string" ? url.trim() : "";
-    let parsed: URL;
-    try {
-        parsed = new URL(text);
-    } catch {
-        throw new Error(`"${text}" isn't a web address`);
-    }
-    if (parsed.protocol !== "https:" && parsed.protocol !== "http:") throw new Error("A file is sent from an http or https address");
-    const fileName = typeof name === "string" && name.trim() ? name.trim() : undefined;
-    return { attachment: parsed.href, ...(fileName ? { name: fileName } : {}) };
-}

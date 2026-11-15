@@ -10,8 +10,10 @@ import type {
 } from "discord.js";
 import { loadDiscord } from "./discord";
 import { MessageOps, parseMoment, permissionNames, resolveGuild, resolveMember } from "./discordOps";
-import { buildPoll, fileFromUrl } from "./payloads";
-import { SNOWFLAKE_PATTERN } from "./types";
+import { fetchPublic, type PublicFetchResponse } from "@mileniumhq/paperapi/net";
+import { buildPoll } from "./payloads";
+import { discordOrigins } from "./session";
+import { SNOWFLAKE_PATTERN, errorToMessage } from "./types";
 
 // discord presence statuses — the only legal values for set-status
 export const PRESENCE_STATUSES = ["online", "idle", "dnd", "invisible"] as const;
@@ -93,11 +95,29 @@ export async function sendPoll(bot: Client, inputs: { channel: string; question:
     return channel.send({ poll });
 }
 
-/** `bot` is asked for only once the address is checked: a refused address is refused whether or not the bot is on. */
-export async function sendFile(bot: () => Client, inputs: { channel: string; url: unknown; name?: unknown; content?: string }): Promise<Message> {
-    const file = fileFromUrl(inputs.url, inputs.name);
-    const channel = await sendableChannel(bot(), inputs.channel);
-    return channel.send({ ...(inputs.content ? { content: inputs.content } : {}), files: [file] });
+/** The biggest file a bot may upload to `channel`: 10 MiB, more on a server boosted to level 2 or 3. */
+function uploadLimit(channel: { guild?: Guild }): number {
+    const tier = channel.guild?.premiumTier ?? 0;
+    return (tier >= 3 ? 100 : tier === 2 ? 50 : 10) * 1024 * 1024;
+}
+
+/**
+ * The file at a web address, uploaded to Discord. The address comes from a
+ * flow, and so maybe from anyone in Discord: the service fetches it under the
+ * public-address rule (never this computer or its network) and no bigger than
+ * the channel takes, then hands discord.js the bytes.
+ */
+export async function sendFile(bot: Client, inputs: { channel: string; url: unknown; name?: unknown; content?: string }): Promise<Message> {
+    const channel = await sendableChannel(bot, inputs.channel);
+    let file: PublicFetchResponse;
+    try {
+        file = await fetchPublic(inputs.url, { maxBytes: uploadLimit(channel), trustedOrigins: discordOrigins() });
+    } catch (err) {
+        throw new Error(`Couldn't get the file to send: ${errorToMessage(err)}`);
+    }
+    const named = typeof inputs.name === "string" ? inputs.name.trim() : "";
+    const name = named || decodeURIComponent(new URL(file.url).pathname.split("/").pop() ?? "") || "file";
+    return channel.send({ ...(inputs.content ? { content: inputs.content } : {}), files: [{ attachment: Buffer.from(file.body), name }] });
 }
 
 export async function showTyping(bot: Client, channelId: string): Promise<void> {

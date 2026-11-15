@@ -4,7 +4,6 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { blocksApi } from "@mileniumhq/paperapi";
 import type { BotsServiceState } from "../src/bots";
-import { fileFromUrl } from "../src/payloads";
 import { guild, startFakeDiscord, type FakeDiscord } from "./helpers/discord";
 import { PANEL_ID, savedBots, startService, stopServices, storedBot } from "./helpers/service";
 import { stateWhere } from "./helpers/wait";
@@ -14,15 +13,23 @@ setDefaultTimeout(60_000);
 
 let discord: FakeDiscord;
 const work = fs.mkdtempSync(path.join(os.tmpdir(), "botcreator-files-"));
-// a web server with one file on it
 const PICTURE = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 1, 2, 3, 4, 5]);
-const web = Bun.serve({ port: 0, hostname: "127.0.0.1", fetch: (req) => (new URL(req.url).pathname === "/cat.png" ? new Response(PICTURE, { headers: { "content-type": "image/png" } }) : new Response("Not found", { status: 404 })) });
+// a web server on this computer, which a file's address must never reach
+const insideHits: string[] = [];
+const inside = Bun.serve({
+    port: 0,
+    hostname: "127.0.0.1",
+    fetch: (req) => {
+        insideHits.push(new URL(req.url).pathname);
+        return new Response(PICTURE);
+    },
+});
 beforeAll(() => {
     discord = startFakeDiscord();
 });
 afterAll(() => {
     discord.stop();
-    web.stop(true);
+    inside.stop(true);
     fs.rmSync(work, { recursive: true, force: true });
 });
 afterEach(stopServices);
@@ -30,38 +37,42 @@ afterEach(stopServices);
 const BOT = "b-files";
 const run = <T = any>(command: string, inputs: Record<string, unknown>) => blocksApi.run<T>(PANEL_ID, command, inputs, { project: BOT });
 
-// Files are sent from web addresses only.
-describe("files are sent from web addresses only", () => {
-    test("only an http or https address is a file to send", () => {
-        expect(fileFromUrl("https://example.com/a.png")).toEqual({ attachment: "https://example.com/a.png" });
-        expect(fileFromUrl(" http://example.com/a.png ", " cat.png ")).toEqual({ attachment: "http://example.com/a.png", name: "cat.png" });
-        expect(() => fileFromUrl("/home/me/.ssh/id_ed25519")).toThrow('"/home/me/.ssh/id_ed25519" isn\'t a web address');
-        expect(() => fileFromUrl("C:\\Users\\me\\secret.txt")).toThrow("A file is sent from an http or https address");
-        expect(() => fileFromUrl("file:///etc/passwd")).toThrow("A file is sent from an http or https address");
-        expect(() => fileFromUrl("data:text/plain,hi")).toThrow("A file is sent from an http or https address");
-        expect(() => fileFromUrl(undefined)).toThrow('"" isn\'t a web address');
-    });
-
-    test("Send File refuses a file on this computer, and nothing reaches Discord", async () => {
+// A file's address comes from a flow, and so maybe from anyone in Discord.
+// The service fetches it under the public-address rule, no bigger than
+// Discord takes; the test's Discord (and its CDN, where these files are) is
+// the one address on this computer it may reach.
+describe("Send File", () => {
+    test("uploads the file at a web address, and refuses this computer, its network and anything too big", async () => {
         const home = guild("Home");
         const fake = discord.addBot({ username: "Uploader", guilds: [home] });
         await savedBots([{ stored: storedBot(BOT, fake.appId), token: fake.token }]);
         await startService({ discordApi: discord.api });
         await stateWhere<BotsServiceState>(PANEL_ID, (s) => Boolean(s.bots[0]?.connected), "the bot to connect");
-        const secret = path.join(work, "id_ed25519");
-        fs.writeFileSync(secret, "-----BEGIN OPENSSH PRIVATE KEY-----");
         const channel = home.channels[0].id;
         const messages = () => discord.requests.filter((r) => r.method === "POST" && r.path === `/channels/${channel}/messages`);
+        const cdn = `${new URL(discord.api).origin}/cdn`;
+        discord.cdnAnswers.set("/cdn/files/cat.png", () => new Response(PICTURE, { headers: { "content-type": "image/png" } }));
+        discord.cdnAnswers.set("/cdn/files/to-inside", () => Response.redirect(`http://127.0.0.1:${inside.port}/secret`, 302));
+        discord.cdnAnswers.set("/cdn/files/huge.bin", () => new Response(new Uint8Array(10 * 1024 * 1024 + 1)));
 
+        const secret = path.join(work, "id_ed25519");
+        fs.writeFileSync(secret, "-----BEGIN OPENSSH PRIVATE KEY-----");
         await expect(run("send-file", { channel, url: secret })).rejects.toThrow("expected a web address");
-        await expect(run("send-file", { channel, url: `file://${secret}` })).rejects.toThrow("A file is sent from an http or https address");
+        await expect(run("send-file", { channel, url: `file://${secret}` })).rejects.toThrow("Only http and https addresses are fetched");
+        await expect(run("send-file", { channel, url: `http://127.0.0.1:${inside.port}/secret` })).rejects.toThrow(`127.0.0.1:${inside.port} is a private or local address`);
+        await expect(run("send-file", { channel, url: "http://192.168.1.1/router.cfg" })).rejects.toThrow("192.168.1.1 is a private or local address");
+        await expect(run("send-file", { channel, url: `${cdn}/files/to-inside` })).rejects.toThrow(`127.0.0.1:${inside.port} is a private or local address`);
+        await expect(run("send-file", { channel, url: `${cdn}/files/huge.bin` })).rejects.toThrow("is over 10 MB");
+        expect(insideHits).toEqual([]);
         expect(messages()).toEqual([]);
 
-        // a web address is fetched and uploaded as the file
-        const sentMessage = await run<{ id: string; channel: string }>("send-file", { channel, url: `http://127.0.0.1:${web.port}/cat.png`, name: "cat.png", content: "a cat" });
+        // a web address is fetched and uploaded as the file, named after it unless named
+        const sentMessage = await run<{ id: string; channel: string }>("send-file", { channel, url: `${cdn}/files/cat.png`, content: "a cat" });
         expect(sentMessage).toEqual({ id: expect.stringMatching(/^\d+$/), channel });
-        const [sent] = messages();
+        await run("send-file", { channel, url: `${cdn}/files/cat.png`, name: " kitten.png " });
+        const [sent, named] = messages();
         expect(sent.body).toMatchObject({ content: "a cat", attachments: [{ id: "0" }] });
         expect(sent.files).toEqual([{ name: "cat.png", bytes: PICTURE }]);
+        expect(named.files).toEqual([{ name: "kitten.png", bytes: PICTURE }]);
     });
 });

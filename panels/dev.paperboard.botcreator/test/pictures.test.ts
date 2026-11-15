@@ -24,13 +24,13 @@ describe("a picture from Discord's CDN", () => {
 
         // a redirect isn't followed, wherever it points
         discord().cdnAnswers.set("/cdn/moved.png", () => new Response(null, { status: 302, headers: { location: `${cdn()}/avatars/1/a.png` } }));
-        await expect(discordPicture(`${cdn()}/moved.png`)).rejects.toThrow("couldn't be reached");
+        await expect(discordPicture(`${cdn()}/moved.png`)).rejects.toThrow("redirected more than 0 times");
 
         discord().cdnAnswers.set("/cdn/page.png", () => new Response("<script>", { headers: { "content-type": "text/html" } }));
         await expect(discordPicture(`${cdn()}/page.png`)).rejects.toThrow("sent text/html that isn't a picture");
 
         discord().cdnAnswers.set("/cdn/huge.png", () => new Response(new Uint8Array(1024 * 1024 + 1), { headers: { "content-type": "image/png" } }));
-        await expect(discordPicture(`${cdn()}/huge.png`)).rejects.toThrow("bigger than");
+        await expect(discordPicture(`${cdn()}/huge.png`)).rejects.toThrow("is over 1 MB");
 
         // a refused fetch isn't kept: once the CDN has the picture, it shows
         discord().cdnAnswers.delete("/cdn/huge.png");

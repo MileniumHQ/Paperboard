@@ -199,7 +199,7 @@ export function botBlocks(bot: BotBlocksHost): BlockSet {
             name: "Send File",
             category: "Messages",
             icon: "attach_file",
-            description: "Bot Creator downloads the file from its web address and uploads it to Discord; at most 10 MB unless the server is boosted",
+            description: "Bot Creator downloads the file from its web address, which must be on the public internet, and uploads it to Discord; at most 10 MB unless the server is boosted",
             text: "Send the file at {url} to {channel}, named {name}, with {content}",
             inputs: {
                 url: { type: "url", name: "Link" },
@@ -208,7 +208,7 @@ export function botBlocks(bot: BotBlocksHost): BlockSet {
                 content: { type: "text", name: "Content", optional: true, maxLength: 2000 },
             },
             output: "message",
-            run: async (i) => ref(await sendFile(() => bot.client(), { channel: idOf(i.channel, "Channel"), url: i.url, name: i.name, content: i.content })),
+            run: async (i) => ref(await sendFile(bot.client(), { channel: idOf(i.channel, "Channel"), url: i.url, name: i.name, content: i.content })),
         },
         {
             id: "show-typing",

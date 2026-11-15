@@ -1,7 +1,8 @@
 // Avatars and server icons for the panel's pages. Any server member picks
 // their own avatar, so a page never loads one itself: the service fetches it
 // from Discord's CDN, and only from there, and hands the page the bytes.
-import { discordCdnBase } from "./session";
+import { fetchPublic, type PublicFetchResponse } from "@mileniumhq/paperapi/net";
+import { discordCdnBase, discordOrigins } from "./session";
 import { errorToMessage } from "./types";
 
 const PICTURE_TYPES = new Set(["image/png", "image/jpeg", "image/gif", "image/webp"]);
@@ -31,18 +32,15 @@ function cdnAddress(raw: unknown): URL {
 }
 
 async function fetchPicture(url: URL): Promise<string> {
-    let response: Response;
+    let picture: PublicFetchResponse;
     try {
-        response = await fetch(url, { redirect: "error", signal: AbortSignal.timeout(FETCH_MS) });
+        picture = await fetchPublic(url.href, { maxBytes: MAX_PICTURE_BYTES, timeoutMs: FETCH_MS, maxRedirects: 0, accept: "image/*", trustedOrigins: discordOrigins() });
     } catch (err) {
-        throw new Error(`Discord's CDN couldn't be reached: ${errorToMessage(err)}`);
+        throw new Error(`Discord's CDN didn't send the picture at ${url.pathname}: ${errorToMessage(err)}`);
     }
-    if (!response.ok) throw new Error(`Discord's CDN answered ${response.status} for ${url.pathname}.`);
-    const type = (response.headers.get("content-type") ?? "").split(";")[0]!.trim();
+    const type = picture.contentType.split(";")[0]!.trim();
     if (!PICTURE_TYPES.has(type)) throw new Error(`Discord's CDN sent ${type || "something"} that isn't a picture.`);
-    const bytes = Buffer.from(await response.arrayBuffer());
-    if (bytes.length > MAX_PICTURE_BYTES) throw new Error(`The picture at ${url.pathname} is bigger than ${MAX_PICTURE_BYTES} bytes.`);
-    return `data:${type};base64,${bytes.toString("base64")}`;
+    return `data:${type};base64,${Buffer.from(picture.body).toString("base64")}`;
 }
 
 /** A Discord avatar or server icon as a data: address, for a page to show. */

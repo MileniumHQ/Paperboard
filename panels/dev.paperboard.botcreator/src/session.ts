@@ -160,6 +160,16 @@ export function discordCdnBase(env: Record<string, string | undefined> = process
     return api ? `${new URL(api).origin}/cdn` : "https://cdn.discordapp.com";
 }
 
+/**
+ * The origins a bot's fetches (fetchPublic) may reach on this computer: the
+ * Discord BOTCREATOR_DISCORD_API names, which is a test's on loopback. None
+ * for Discord itself, whose servers are public.
+ */
+export function discordOrigins(env: Record<string, string | undefined> = process.env): string[] {
+    const api = discordApiBase(env);
+    return api ? [new URL(api).origin] : [];
+}
+
 export class BotSession {
     client: Client | null = null;
     /** the application id known before login: saved, or read from the token */
