@@ -11,7 +11,7 @@ import "@mileniumhq/paperui/panel.css";
 import Editor from "../../src/Editor";
 import { createProjects } from "../../src/projects/state";
 import { BUILTIN, registryBlockType } from "../../src/lib/names";
-import { SERVICE_CALLS, type SavedFlows } from "../../src/panel";
+import type { SavedFlows } from "../../src/panel";
 import { FIXTURE_PANEL, FIXTURE_PANEL_NAME, service, SERVICED_PROJECT } from "./serviceStub";
 
 /** Where on a block the pointer takes hold of it, from its top left. */
@@ -34,7 +34,7 @@ const settle = async () => {
     }
 };
 /** every save the editor made, oldest first */
-const saves = (): SavedFlows[] => service.calls().filter((c) => c.name === SERVICE_CALLS.save).map((c) => c.input.flows);
+const saves = (): SavedFlows[] => service.calls().filter((c) => c.name === "saveFlows").map((c) => c.input.flows);
 
 async function until<T>(what: string, look: () => T | null | undefined | false): Promise<T> {
     const deadline = performance.now() + 15_000;

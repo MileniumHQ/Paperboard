@@ -2,7 +2,7 @@
 // list them, switch their flows on and off, run and stop them, and hear when
 // one of their flows fails. The service hands in what each block does.
 import type { BlockSet, BlocksHandle } from "@mileniumhq/paperapi";
-import type { ProjectSummary } from "./lib/projects";
+import type { ProjectSummary } from "./panel";
 
 /** What the blocks do, as the service does it. */
 export interface BlocksPanelHost {

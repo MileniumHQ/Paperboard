@@ -4,7 +4,7 @@
 // nothing is rendered or stored as an image.
 import { For, Show } from "solid-js";
 import { PaperIcon } from "@mileniumhq/paperui";
-import type { CanvasPreview as Preview } from "../lib/projects";
+import type { CanvasPreview as Preview } from "../panel";
 import { tokenPixels } from "../lib/tokens";
 import styles from "./Projects.module.css";
 

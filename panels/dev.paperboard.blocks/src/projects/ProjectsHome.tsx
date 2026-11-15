@@ -24,7 +24,7 @@ import CanvasPreview from "./CanvasPreview";
 import { DeleteProjectModal, RenameProjectModal } from "./ProjectDialogs";
 import { editedText, switchFailed, type ProjectsState } from "./state";
 import { oneAtATime } from "../lib/oneAtATime";
-import type { ProjectSummary } from "../lib/projects";
+import type { ProjectSummary } from "../panel";
 import { closedUnsaved, NOT_SAVED, setClosedUnsaved } from "../editorFlows";
 import { errorMessage } from "@mileniumhq/paperapi";
 

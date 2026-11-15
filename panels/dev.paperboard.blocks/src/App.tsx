@@ -12,7 +12,7 @@ import Editor from "./Editor";
 import ProjectsHome from "./projects/ProjectsHome";
 import { createProjects } from "./projects/state";
 import { closedUnsaved, NOT_SAVED, setClosedUnsaved } from "./editorFlows";
-import type { ProjectSummary } from "./lib/projects";
+import type { ProjectSummary } from "./panel";
 
 export default function App() {
     const query = window.matchMedia(`(max-width: ${PAPER_PANEL_COMPACT_WIDTH - 1}px)`);

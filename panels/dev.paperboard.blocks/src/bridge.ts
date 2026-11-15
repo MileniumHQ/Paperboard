@@ -1,9 +1,11 @@
-// The page's one line to its service: every window mirrors the service's
-// state through it and calls the service's actions on it.
-import { createPanelBridge } from "@mileniumhq/paperapi";
-import { DEFAULT_STATE, PANEL_ID, type PanelState } from "./panel";
+// The page's line to its service: every window mirrors the service's state
+// and makes the calls of the panel's contract through one client.
+import { serviceClient } from "@mileniumhq/paperapi";
+import { blocksContract } from "./panel";
 
-export const bridge = createPanelBridge<PanelState>({ panelId: PANEL_ID, defaultState: DEFAULT_STATE });
+const client = serviceClient(blocksContract);
+export const service = client.calls;
+export const serviceState = client.state;
 
 /** What finished or failed: a title naming the operation, and what happened. */
 export interface Notice {

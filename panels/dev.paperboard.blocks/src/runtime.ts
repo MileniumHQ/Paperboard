@@ -2,14 +2,13 @@
 // it over: it keeps the projects and their flows, listens for the events the
 // switched-on projects start from, and runs them. service.ts hands it the
 // daemon's; the tests hand it a registry and storage in memory.
-import { blockEntry, type blocksApi, type BlocksHandle, type ServiceContext, errorMessage, isRecord } from "@mileniumhq/paperapi";
+import { blockEntry, type blocksApi, type BlocksHandle, type CallHandlers, type ServiceContext, errorMessage } from "@mileniumhq/paperapi";
 import { BlockError, hatInputs, isHat, runHat, type Host, type SavedBlock } from "./lib/interpreter";
 import { BUILTIN, parseEntry, parseRegistryBlockType, registryBlockType } from "./lib/names";
 import { BlocksAnnouncer, FLOW_FAILED_EVENT, blocksPanelBlocks } from "./blocks";
 import { RUN_STOPPED } from "./lib/failure";
-import { readFlows } from "./lib/flows";
 import { ProjectStore, readPreview, type ProjectStorage } from "./lib/projects";
-import { MAX_LOG, PANEL_ID, SERVICE_CALLS, type LogEntry, type PanelState, type SavedFlows } from "./panel";
+import { MAX_LOG, PANEL_ID, blocksContract, type LogEntry, type PanelState, type SavedFlows } from "./panel";
 
 /** The most runs one project has at once, so a flow that starts its own project can't run away. */
 export const MAX_RUNS_PER_PROJECT = 50;
@@ -211,10 +210,10 @@ export function createRuntime({ storage, blocks, handle }: RuntimeDeps) {
     const read = new Promise<string | null>((resolve) => (settle = resolve));
 
     /** A call the panel's own page makes: it waits for the projects to be read, and says so if they couldn't be. */
-    const call = (run: (inputs: Record<string, unknown>) => unknown) => async (_ctx: unknown, input: unknown) => {
+    const call = <I, O>(run: (input: I) => O | Promise<O>) => async (input: I): Promise<O> => {
         const failure = await read;
         if (failure) throw new Error(`The projects couldn't be read: ${failure}`);
-        return run(isRecord(input) ? input : {});
+        return run(input);
     };
 
     /** A project change, then the list every window shows, also after a change that only partly happened. */
@@ -227,26 +226,25 @@ export function createRuntime({ storage, blocks, handle }: RuntimeDeps) {
     };
 
     const calls = {
-        [SERVICE_CALLS.load]: call(({ project }) => store.flows(project)),
-        [SERVICE_CALLS.save]: call(({ project, flows, preview }) => changing(store.save(project, readFlows(flows), readPreview(preview)))),
-        [SERVICE_CALLS.run]: call(({ project }) => runProject(project)),
-        [SERVICE_CALLS.stop]: call(({ project }) => stop(String(project))),
-        [SERVICE_CALLS.clearLog]: call(({ project }) => {
+        loadFlows: call(({ project }) => store.flows(project)),
+        saveFlows: call(({ project, flows, preview }) => changing(store.save(project, flows, readPreview(preview)))),
+        runFlows: call(({ project }) => runProject(project)),
+        stopFlows: call(({ project }) => stop(project)),
+        clearLog: call(({ project }) => {
             setState((prev) => ({ log: prev.log.filter((entry) => entry.project !== project) }));
-            return true;
         }),
-        [SERVICE_CALLS.createProject]: call(({ name }) => changing(store.create(name))),
-        [SERVICE_CALLS.updateProject]: call(({ project, name, enabled }) => changing(store.update(project, { name, enabled }))),
-        [SERVICE_CALLS.duplicateProject]: call(({ project }) => changing(store.duplicate(project))),
-        [SERVICE_CALLS.deleteProject]: call(async ({ project, onlyDraft }) => {
+        createProject: call(({ name }) => changing(store.create(name))),
+        updateProject: call(({ project, name, enabled }) => changing(store.update(project, { name, enabled }))),
+        duplicateProject: call(({ project }) => changing(store.duplicate(project))),
+        deleteProject: call(async ({ project, onlyDraft }) => {
             try {
                 return { deleted: await changing(store.remove(project, onlyDraft === true)) };
             } finally {
                 // a deleted project's flows stop with it, also when its file couldn't be emptied after
-                if (!store.has(project)) stop(String(project));
+                if (!store.has(project)) stop(project);
             }
         }),
-    };
+    } satisfies CallHandlers<typeof blocksContract>;
 
     /** Reads the projects, starts listening, and adds the Projects blocks; every failure ends up in the state. */
     async function init(state: SetState): Promise<void> {

@@ -8,8 +8,8 @@ import { memoryBlocks, type BlocksHandle, type BlockSchema } from "@mileniumhq/p
 import { createRuntime, MAX_RUNS_PER_PROJECT, type RuntimeDeps } from "../src/runtime";
 import { FLOW_FAILED_EVENT } from "../src/blocks";
 import { BUILTIN, registryBlockType } from "../src/lib/names";
-import { DEFAULT_STATE, PANEL_ID, SERVICE_CALLS, type PanelState, type SavedFlows } from "../src/panel";
-import type { ProjectStorage, ProjectSummary } from "../src/lib/projects";
+import { PANEL_ID, blocksContract, type PanelState, type SavedFlows } from "../src/panel";
+import type { ProjectStorage } from "../src/lib/projects";
 import type { SavedBlock } from "../src/lib/interpreter";
 
 const GAME = "dev.test.game";
@@ -75,14 +75,14 @@ function setup(options: { storage?: ProjectStorage; handle?: (handle: BlocksHand
     const changed: string[] = [];
     const registry = memoryBlocks(PANEL_ID, { fired: (event, payload) => fired.push({ event, payload }), changed: (value) => changed.push(value) });
     const runtime = createRuntime({ storage, blocks, handle: options.handle ? options.handle(registry.panel) : registry.panel });
-    let state: PanelState = structuredClone(DEFAULT_STATE);
+    let state: PanelState = structuredClone(blocksContract.state.initial);
     const ready = runtime.init((patch) => {
         state = { ...state, ...(typeof patch === "function" ? patch(state) : patch) };
     });
-    const call = <T>(name: string, input: Record<string, unknown> = {}) => runtime.calls[name as keyof typeof runtime.calls](null, input) as Promise<T>;
+    const call = runtime.calls;
     const make = async (name: string, saved: SavedFlows) => {
-        const made = await call<ProjectSummary>(SERVICE_CALLS.createProject, { name });
-        await call(SERVICE_CALLS.save, { project: made.id, flows: saved, preview: null });
+        const made = await call.createProject({ name });
+        await call.saveFlows({ project: made.id, flows: saved, preview: null });
         return made.id;
     };
     const subscribers = (key: string) => listeners.get(key)?.size ?? 0;
@@ -114,10 +114,10 @@ describe("the service's runtime", () => {
         await s.ready;
         const id = await s.make("Greeter", flows(joined("", say("hi"))));
         expect(s.subscribers(JOINED_KEY)).toBe(1);
-        await s.call(SERVICE_CALLS.updateProject, { project: id, enabled: false });
+        await s.call.updateProject({ project: id, enabled: false });
         expect(s.subscribers(JOINED_KEY)).toBe(0);
         s.fire(JOINED_KEY, { player: "bob" });
-        await s.call(SERVICE_CALLS.updateProject, { project: id, enabled: true });
+        await s.call.updateProject({ project: id, enabled: true });
         expect(s.subscribers(JOINED_KEY)).toBe(1);
         // the flow didn't hear the event fired while it was off
         expect(s.said(id)).toEqual([]);
@@ -127,11 +127,11 @@ describe("the service's runtime", () => {
         const s = setup();
         await s.ready;
         const id = await s.make("Runaway", flows(onRun({ type: WAIT })));
-        for (let i = 0; i <= MAX_RUNS_PER_PROJECT; i++) await s.call(SERVICE_CALLS.run, { project: id });
+        for (let i = 0; i <= MAX_RUNS_PER_PROJECT; i++) await s.call.runFlows({ project: id });
         await until("the runs to start", () => s.waiting.length === MAX_RUNS_PER_PROJECT);
         expect(s.state().running[id]).toBe(MAX_RUNS_PER_PROJECT);
         expect(s.said(id)).toEqual([`error: A flow didn't start: ${MAX_RUNS_PER_PROJECT} of this project's flows are already running. Stop them, or check for a flow that starts itself.`]);
-        expect(await s.call(SERVICE_CALLS.stop, { project: id })).toBe(MAX_RUNS_PER_PROJECT);
+        expect(await s.call.stopFlows({ project: id })).toBe(MAX_RUNS_PER_PROJECT);
         await until("the runs to end", () => !s.state().running[id]);
     });
 
@@ -139,9 +139,9 @@ describe("the service's runtime", () => {
         const s = setup();
         await s.ready;
         const id = await s.make("Doomed", flows(onRun({ type: WAIT })));
-        await s.call(SERVICE_CALLS.run, { project: id });
+        await s.call.runFlows({ project: id });
         await until("the run to start", () => s.state().running[id] === 1);
-        expect(await s.call(SERVICE_CALLS.deleteProject, { project: id })).toEqual({ deleted: true });
+        expect(await s.call.deleteProject({ project: id })).toEqual({ deleted: true });
         await until("the run to end", () => !s.state().running[id]);
         expect(s.said(id)).toEqual(["info: The run was stopped"]);
     });
@@ -150,7 +150,7 @@ describe("the service's runtime", () => {
         const s = setup();
         await s.ready;
         const broken = await s.make("Broken", flows(onRun({ type: "pb_no_such_block" })));
-        await s.call(SERVICE_CALLS.run, { project: broken });
+        await s.call.runFlows({ project: broken });
         await until("the failure to fire", () => s.fired.length === 1);
         expect(s.fired[0]).toMatchObject({ event: FLOW_FAILED_EVENT, payload: { project: broken } });
 
@@ -173,7 +173,7 @@ describe("the service's runtime", () => {
         });
         await s.ready;
         const broken = await s.make("Broken", flows(onRun({ type: "pb_no_such_block" })));
-        await s.call(SERVICE_CALLS.run, { project: broken });
+        await s.call.runFlows({ project: broken });
         await until("the failure to be said", () => s.said(broken).length === 2);
         expect(s.said(broken)[1]).toBe('error: "When a Flow Fails" didn\'t hear this failure: the registry is away');
     });
@@ -197,7 +197,7 @@ describe("the service's runtime", () => {
 
         // the same project list again: the registry never heard it, so it is told now, and the banner goes
         away = false;
-        await s.call(SERVICE_CALLS.updateProject, { project: id, name: "Renamed" });
+        await s.call.updateProject({ project: id, name: "Renamed" });
         await until("the list to be told", () => s.changed.length === 1);
         expect(s.changed).toEqual(["projects"]);
         await until("the banner to clear", () => s.state().blocksError === null);
@@ -216,8 +216,8 @@ describe("the service's runtime", () => {
         });
         await s.ready;
         expect(s.state().projectsError).toBe("the disk is gone");
-        await expect(s.call(SERVICE_CALLS.createProject, { name: "x" })).rejects.toThrow("The projects couldn't be read: the disk is gone");
-        await expect(s.call(SERVICE_CALLS.load, { project: "p-x" })).rejects.toThrow("The projects couldn't be read");
+        await expect(s.call.createProject({ name: "x" })).rejects.toThrow("The projects couldn't be read: the disk is gone");
+        await expect(s.call.loadFlows({ project: "p-x" })).rejects.toThrow("The projects couldn't be read");
     });
 });
 
@@ -227,7 +227,7 @@ describe("the Projects blocks", () => {
         const s = setup();
         await s.ready;
         const kept = await s.make("Server tools", flows(onRun(say("hi"))));
-        await s.call(SERVICE_CALLS.createProject);
+        await s.call.createProject({});
         expect(await s.registry.read("projects")).toEqual([kept]);
         expect(await s.registry.property("project", "name", kept)).toBe("Server tools");
         expect(await s.registry.property("project", "flows", kept)).toBe(1);
@@ -270,7 +270,7 @@ describe("the Projects blocks", () => {
         await s.ready;
         const id = await s.make("Mine", flows(onRun(say("hi"))));
         expect(s.changed).toEqual(["projects"]);
-        await s.call(SERVICE_CALLS.updateProject, { project: id, name: "Renamed" });
+        await s.call.updateProject({ project: id, name: "Renamed" });
         expect(s.changed).toEqual(["projects"]);
     });
 });

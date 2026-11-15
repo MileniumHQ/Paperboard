@@ -3,7 +3,7 @@
 // which projects exist and whether their flows run; each canvas is its own
 // file. The store runs in the service and in the tests, over any storage
 // that reads and writes JSON by path.
-import { EMPTY_FLOWS as EMPTY, PANEL_ID, type SavedFlows } from "../panel";
+import { EMPTY_FLOWS as EMPTY, PANEL_ID, type CanvasPreview, type PreviewRect, type ProjectMeta, type ProjectSummary, type SavedFlows } from "../panel";
 import { readFlows } from "./flows";
 import { isHat } from "./interpreter";
 import { errorMessage, isRecord, SerialQueue } from "@mileniumhq/paperapi";
@@ -19,42 +19,6 @@ export const MAX_PROJECT_NAME = 128;
 export const MAX_PROJECTS = 200;
 /** the most stacks a card's miniature draws */
 export const MAX_PREVIEW_RECTS = 200;
-
-export interface PreviewRect {
-    x: number;
-    y: number;
-    w: number;
-    h: number;
-}
-
-/** A project's canvas in miniature: where each stack of blocks sits, as the page last drew them. */
-export interface CanvasPreview {
-    bounds: PreviewRect;
-    rects: PreviewRect[];
-}
-
-export interface ProjectMeta {
-    /** stable, never shown */
-    id: string;
-    name: string;
-    /** whether the project's flows start on their events */
-    enabled: boolean;
-    /** epoch ms */
-    createdAt: number;
-    /** epoch ms of the last saved edit */
-    editedAt: number;
-    preview: CanvasPreview | null;
-}
-
-/** A project as the windows see it. */
-export interface ProjectSummary extends ProjectMeta {
-    /** a new project with no blocks yet: kept once it has one, gone if left empty */
-    draft: boolean;
-    /** why its canvas couldn't be read; its flows don't run until it can be */
-    loadError: string | null;
-    /** the flows it holds: its stacks that start from an event or from Run */
-    flowCount: number;
-}
 
 /** Reads and writes JSON by path; `undefined` is the panel's config document. */
 export interface ProjectStorage {

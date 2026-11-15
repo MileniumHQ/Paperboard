@@ -32,9 +32,8 @@ import "./lib/undrawnFields";
 import { parseEntry, parseRegistryBlockType } from "./lib/names";
 import { Console } from "./Console";
 import { oneAtATime } from "./lib/oneAtATime";
-import { SERVICE_CALLS, type PanelState } from "./panel";
-import { bridge, type Notice } from "./bridge";
-import type { ProjectSummary } from "./lib/projects";
+import { service, serviceState, type Notice } from "./bridge";
+import type { PanelState, ProjectSummary } from "./panel";
 import { switchFailed, type ProjectsState } from "./projects/state";
 import { DeleteProjectModal, ProjectNameField, RenameProjectModal } from "./projects/ProjectDialogs";
 import { createFileActions } from "./FileActions";
@@ -132,7 +131,7 @@ export default function Editor(props: {
         let closed = false;
         let canvas: Canvas | undefined;
         let offRegistry: (() => void) | undefined;
-        const offState = bridge.onStateChange((_patch, full) => showErrors(full));
+        const offState = serviceState.subscribe((full) => showErrors(full));
 
         const start = () => {
             if (closed) return;
@@ -214,7 +213,7 @@ export default function Editor(props: {
         // Run starts what is saved, so the latest edits go first
         flows
             .saveNow()
-            .then(() => bridge.call<number>(SERVICE_CALLS.run, { project: props.projectId }))
+            .then(() => service.runFlows({ project: props.projectId }))
             .then(() => worked(RUN_FAILED), fail(RUN_FAILED));
     };
 
@@ -357,7 +356,7 @@ export default function Editor(props: {
                                     variant="danger"
                                     icon
                                     disabled={running() === 0}
-                                    onClick={() => bridge.call(SERVICE_CALLS.stop, { project: props.projectId }).catch(fail("Stop didn't work"))}
+                                    onClick={() => service.stopFlows({ project: props.projectId }).catch(fail("Stop didn't work"))}
                                     title={running() === 1 ? "Stop the flow running now" : `Stop the ${running()} flows running now`}
                                     aria-label="Stop"
                                 >
@@ -468,7 +467,7 @@ export default function Editor(props: {
                                 </PaperQuote>
                             )}
                         </Show>
-                        <Console entries={log()} onClear={() => bridge.call(SERVICE_CALLS.clearLog, { project: props.projectId }).catch(fail("The log wasn't cleared"))} />
+                        <Console entries={log()} onClear={() => service.clearLog({ project: props.projectId }).catch(fail("The log wasn't cleared"))} />
                     </div>
                     <div class={styles.bottomRight}>
                         <PaperFlex direction="column" gap="half">

@@ -4,7 +4,7 @@
 // at a time and shows the run log this service keeps.
 import { blocksApi, config, definePanelService } from "@mileniumhq/paperapi";
 import { createRuntime } from "./runtime";
-import { DEFAULT_STATE, PANEL_ID } from "./panel";
+import { PANEL_ID, blocksContract } from "./panel";
 
 const runtime = createRuntime({
     storage: {
@@ -18,8 +18,7 @@ const runtime = createRuntime({
 });
 
 export default definePanelService({
-    id: PANEL_ID,
-    state: DEFAULT_STATE,
+    contract: blocksContract,
     calls: runtime.calls,
     onInit: (ctx) => runtime.init(ctx.setState),
 });

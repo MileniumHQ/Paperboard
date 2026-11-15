@@ -11,7 +11,7 @@ import { render } from "solid-js/web";
 import * as Blockly from "blockly";
 import { PaperProvider } from "@mileniumhq/paperui";
 import App from "../../src/App";
-import { SERVICE_CALLS, type LogEntry } from "../../src/panel";
+import type { LogEntry } from "../../src/panel";
 import { BUILTIN } from "../../src/lib/names";
 import { NOT_SAVED } from "../../src/editorFlows";
 import { project, registry, service, SERVICED_PROJECT, unsaved } from "./serviceStub";
@@ -155,10 +155,10 @@ async function dialogChecks() {
     const renameKept = field.value;
     byText("button", "Rename", rename)!.click();
     await until("the Rename dialog to close", () => !openDialog());
-    const renamedTo = service.calls().filter((c) => c.name === SERVICE_CALLS.updateProject).at(-1)?.input.name;
+    const renamedTo = service.calls().filter((c) => c.name === "updateProject").at(-1)?.input.name;
     await settle();
 
-    service.fail(SERVICE_CALLS.deleteProject, "the disk is full");
+    service.fail("deleteProject", "the disk is full");
     const remove = await menu("Delete");
     await settle();
     byText("button", "Delete", remove)!.click();
@@ -168,7 +168,7 @@ async function dialogChecks() {
     const deleteError = remove.querySelector('[role="alert"]')?.textContent ?? "";
     byText("button", "Cancel", remove)!.click();
     await until("the Delete dialog to close", () => !openDialog());
-    service.fail(SERVICE_CALLS.deleteProject, null);
+    service.fail("deleteProject", null);
     await settle();
     return { typed, renameKept, renamedTo, deleteError };
 }
@@ -237,14 +237,14 @@ async function toggleChecks() {
     await until("the switch to move", () => toggle.getAttribute("aria-checked") !== before);
     await frame();
     watch.disconnect();
-    const moved = { before, after: toggle.getAttribute("aria-checked"), animated, saved: service.calls().filter((c) => c.name === SERVICE_CALLS.updateProject).at(-1)?.input.enabled };
+    const moved = { before, after: toggle.getAttribute("aria-checked"), animated, saved: service.calls().filter((c) => c.name === "updateProject").at(-1)?.input.enabled };
 
     // a flip the service refuses is said, and the notice goes once a flip goes through
     const notice = () => [...document.querySelectorAll<HTMLElement>('[role="alert"], [role="status"]')].find((el) => el.textContent?.includes("Flows not turned"));
-    service.fail(SERVICE_CALLS.updateProject, "the disk is full");
+    service.fail("updateProject", "the disk is full");
     await clickAt(toggle);
     const refused = (await until("the refused flip's notice", notice))!.textContent ?? "";
-    service.fail(SERVICE_CALLS.updateProject, null);
+    service.fail("updateProject", null);
     await clickAt(toggle);
     await until("the switch to move back", () => toggle.getAttribute("aria-checked") === before);
     await settle();
@@ -272,7 +272,7 @@ async function registryChecks() {
 async function loadFailureChecks() {
     (await until("the All projects button", () => document.querySelector<HTMLElement>('[aria-label="All projects"]'))).click();
     const card = await until("the project's card", () => byText("*", "Renamed by hand"));
-    service.fail(SERVICE_CALLS.load, "the service is restarting");
+    service.fail("loadFlows", "the service is restarting");
     card.click();
     const alert = await until("the load failure", () => [...document.querySelectorAll<HTMLElement>('[role="alert"]')].find((el) => el.textContent?.includes("Your flows couldn't be loaded")));
     await settle();
@@ -286,7 +286,7 @@ async function loadFailureChecks() {
         library: Boolean(byText("[role=radio], button, label", "Logic")) || getComputedStyle(canvas()!.getFlyout()!.getWorkspace().getParentSvg()).display !== "none",
     };
     document.documentElement.removeAttribute("data-theme");
-    service.fail(SERVICE_CALLS.load, null);
+    service.fail("loadFlows", null);
     byText("button", "Try again", alert)!.click();
     await until("the failure to go", () => !alert.isConnected);
     await settle();
@@ -307,7 +307,7 @@ const addBlock = async (id: string) => {
     await frame();
 };
 const callsOf = (name: string) => service.calls().filter((c) => c.name === name);
-const saveHolding = (blockId: string) => service.calls().findIndex((c) => c.name === SERVICE_CALLS.save && JSON.stringify(c.input.flows).includes(`"${blockId}"`));
+const saveHolding = (blockId: string) => service.calls().findIndex((c) => c.name === "saveFlows" && JSON.stringify(c.input.flows).includes(`"${blockId}"`));
 /** Home is shown: what was called by then. */
 const home = async () => {
     await until("the home screen", () => !backButton() && byText("button", "New project"));
@@ -329,14 +329,14 @@ async function leaveChecks() {
     byText("button, [role=menuitem]", "Project")!.click();
     (await until("the Project menu's New project", () => byText("[role=menuitem]", "New project")))!.click();
     await editing("Untitled project");
-    const savedBeforeMade = saveHolding("edit-before-new") >= 0 && saveHolding("edit-before-new") < service.calls().findIndex((c) => c.name === SERVICE_CALLS.createProject);
-    const emptyDraft = callsOf(SERVICE_CALLS.createProject).length;
+    const savedBeforeMade = saveHolding("edit-before-new") >= 0 && saveHolding("edit-before-new") < service.calls().findIndex((c) => c.name === "createProject");
+    const emptyDraft = callsOf("createProject").length;
 
     // left empty, it is dropped
     const emptyId = (await until("the new project's id", () => service.state().projects.find((p) => p.draft)))!.id;
     backButton()!.click();
     await home();
-    const droppedEmpty = callsOf(SERVICE_CALLS.deleteProject).at(-1)?.input;
+    const droppedEmpty = callsOf("deleteProject").at(-1)?.input;
 
     // given a block, it is saved before the service is asked to drop it, so the service keeps it
     byText("button", "New project")!.click();
@@ -345,7 +345,7 @@ async function leaveChecks() {
     await addBlock("edit-in-draft");
     backButton()!.click();
     await home();
-    const keptDelete = service.calls().findIndex((c) => c.name === SERVICE_CALLS.deleteProject && c.input.project === keptId);
+    const keptDelete = service.calls().findIndex((c) => c.name === "deleteProject" && c.input.project === keptId);
     return {
         savedBeforeHome,
         savedBeforeMade,
@@ -367,7 +367,7 @@ async function leaveChecks() {
  */
 async function openChecks() {
     const name = "Renamed by hand";
-    const saves = () => callsOf(SERVICE_CALLS.save).length;
+    const saves = () => callsOf("saveFlows").length;
     const before = saves();
     byText("*", name)!.click();
     await editing(name);
@@ -404,7 +404,7 @@ async function unsavedChecks() {
     byText("*", name)!.click();
     await editing(name);
     const askedBefore = unsaved.confirm() !== null;
-    service.fail(SERVICE_CALLS.save, "the disk is full");
+    service.fail("saveFlows", "the disk is full");
     await addBlock("edit-refused");
     const refused = (await until("the refused save's notice", () => alertSaying(NOT_SAVED)))!.textContent ?? "";
     const ask = unsaved.confirm();
@@ -417,7 +417,7 @@ async function unsavedChecks() {
     const stayAnswer = await asking;
     await until("the dialog to close", () => !openDialog());
     // the service takes saves again: asked again, the editor saves, and the panel may restart
-    service.fail(SERVICE_CALLS.save, null);
+    service.fail("saveFlows", null);
     const leaveAnswer = await unsaved.confirm()?.();
     await settle();
     const afterSave = { saved: saveHolding("edit-refused") >= 0, notice: alertSaying(NOT_SAVED)?.textContent ?? null, asks: unsaved.confirm() !== null };
@@ -433,12 +433,12 @@ async function unsavedChecks() {
     // the same, but the save fails: the phone screen says so, and so does home once the window is wide again
     byText("*", name)!.click();
     await editing(name);
-    service.fail(SERVICE_CALLS.save, "the disk is full");
+    service.fail("saveFlows", "the disk is full");
     await addBlock("edit-lost-on-close");
     await viewport(PHONE);
     const onPhone = (await until("the failure on the phone screen", () => phoneScreen() && alertSaying(NOT_SAVED)))!.textContent ?? "";
     await viewport(null);
-    service.fail(SERVICE_CALLS.save, null);
+    service.fail("saveFlows", null);
     await shoot("closed-unsaved", true);
     const onHome = (await until("the failure on home", () => byText("button", "New project") && alertSaying(NOT_SAVED)))!;
     const homeText = onHome.textContent ?? "";
@@ -477,7 +477,7 @@ async function homeChecks() {
     const toggle = await until("the card's switch", () => document.querySelector<HTMLElement>(`[role="switch"][aria-label="${name}: flows start on their events"]`));
     const alert = (text: string) => [...document.querySelectorAll<HTMLElement>('[role="alert"]')].find((el) => el.textContent?.includes(text));
     const before = toggle.getAttribute("aria-checked");
-    service.fail(SERVICE_CALLS.updateProject, "the disk is full");
+    service.fail("updateProject", "the disk is full");
     await clickAt(toggle);
     const failed = (await until("the switch's failure", () => alert("Flows not turned")))!.textContent ?? "";
     await settle();
@@ -486,7 +486,7 @@ async function homeChecks() {
     const banner = (await until("the service's banner", () => alert("Flows can't drive projects")))!.textContent ?? "";
     await shoot("home-failed");
 
-    service.fail(SERVICE_CALLS.updateProject, null);
+    service.fail("updateProject", null);
     await clickAt(toggle);
     await until("the switch to move", () => toggle.getAttribute("aria-checked") !== before);
     service.announce({ blocksError: null });

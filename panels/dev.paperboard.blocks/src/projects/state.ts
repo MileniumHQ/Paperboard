@@ -3,9 +3,8 @@
 // change goes through the service, which writes the list and announces it.
 import { batch, createSignal, onCleanup } from "solid-js";
 import { createStore, reconcile } from "solid-js/store";
-import { bridge } from "../bridge";
-import { SERVICE_CALLS, type PanelState } from "../panel";
-import type { ProjectSummary } from "../lib/projects";
+import { service, serviceState } from "../bridge";
+import type { PanelState, ProjectSummary } from "../panel";
 import { errorMessage } from "@mileniumhq/paperapi";
 
 export type ProjectsState = ReturnType<typeof createProjects>;
@@ -13,7 +12,7 @@ export type ProjectsState = ReturnType<typeof createProjects>;
 export function createProjects() {
     // reconciled by id, so a project keeps its object across announcements and
     // its card stays mounted: a remounted switch would skip its slide
-    const [state, setState] = createStore<PanelState>(structuredClone(bridge.getState()));
+    const [state, setState] = createStore<PanelState>(structuredClone(serviceState.current()));
     // only what the announcement carries: a log line is a patch of the log alone, so
     // the projects aren't cloned and compared again with it
     const apply = (patch: Partial<PanelState>) =>
@@ -24,13 +23,13 @@ export function createProjects() {
         });
     const [ready, setReady] = createSignal(false);
     const [loadError, setLoadError] = createSignal<string | null>(null);
-    const off = bridge.onStateChange((patch) => apply(patch));
+    const off = serviceState.subscribe((_state, patch) => apply(patch));
     onCleanup(off);
 
     const load = async () => {
         setLoadError(null);
         try {
-            apply(await bridge.refreshState());
+            apply(await serviceState.refresh());
             setReady(true);
         } catch (err) {
             setLoadError(errorMessage(err));
@@ -47,19 +46,19 @@ export function createProjects() {
         /** the projects Home shows: a draft is only seen in its editor */
         kept: () => state.projects.filter((p) => !p.draft),
         find: (id: string): ProjectSummary | undefined => state.projects.find((p) => p.id === id),
-        create: (name?: string) => bridge.call<ProjectSummary>(SERVICE_CALLS.createProject, name ? { name } : {}),
-        rename: (project: string, name: string) => bridge.call<ProjectSummary>(SERVICE_CALLS.updateProject, { project, name }),
+        create: (name?: string) => service.createProject({ name }),
+        rename: (project: string, name: string) => service.updateProject({ project, name }),
         /** resolves once the list shows the switch where the service put it: a switch moves when its save is answered */
         setEnabled: async (project: string, enabled: boolean) => {
-            const saved = await bridge.call<ProjectSummary>(SERVICE_CALLS.updateProject, { project, enabled });
+            const saved = await service.updateProject({ project, enabled });
             const at = state.projects.findIndex((p) => p.id === saved.id);
             if (at >= 0) setState("projects", at, reconcile(structuredClone(saved)));
             return saved;
         },
-        duplicate: (project: string) => bridge.call<ProjectSummary>(SERVICE_CALLS.duplicateProject, { project }),
-        remove: (project: string) => bridge.call<{ deleted: boolean }>(SERVICE_CALLS.deleteProject, { project }),
+        duplicate: (project: string) => service.duplicateProject({ project }),
+        remove: (project: string) => service.deleteProject({ project }),
         /** a new project left without a block is not kept; the service checks it still is a draft */
-        discardDraft: (project: string) => bridge.call<{ deleted: boolean }>(SERVICE_CALLS.deleteProject, { project, onlyDraft: true }),
+        discardDraft: (project: string) => service.deleteProject({ project, onlyDraft: true }),
     };
 }
 

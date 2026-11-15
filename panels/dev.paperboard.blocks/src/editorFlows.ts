@@ -15,9 +15,8 @@ import { parseRegistryBlockType } from "./lib/names";
 import { appendWorkspace } from "./lib/appendWorkspace";
 import { uiGap } from "./lib/libraryFlyout";
 import type { SavedWorkspace } from "./lib/interpreter";
-import type { CanvasPreview } from "./lib/projects";
-import { SERVICE_CALLS, type SavedFlows } from "./panel";
-import { bridge, type Notice } from "./bridge";
+import type { CanvasPreview, SavedFlows } from "./panel";
+import { service, type Notice } from "./bridge";
 
 type Json = Record<string, unknown>;
 type Schemas = SavedFlows["schemas"];
@@ -198,7 +197,7 @@ export function createEditorFlows(options: {
             saving = saving
                 // quiet: the earlier save's failure was shown by its own handler; this only orders the next one
                 .catch(() => undefined)
-                .then(() => bridge.call(SERVICE_CALLS.save, { project: options.project(), flows, preview }))
+                .then(() => service.saveFlows({ project: options.project(), flows, preview }))
                 .then(options.onSaved, (err: unknown) => {
                     stored = null;
                     throw err;
@@ -261,7 +260,7 @@ export function createEditorFlows(options: {
         setLoaded(false);
         workspace.setIsReadOnly(true);
         try {
-            const flows = await bridge.call<SavedFlows>(SERVICE_CALLS.load, { project: options.project() });
+            const flows = await service.loadFlows({ project: options.project() });
             await refreshBlocks(() => flows.schemas);
             if (!current() || closed) return;
             Blockly.serialization.workspaces.load(flows.workspace, workspace);
