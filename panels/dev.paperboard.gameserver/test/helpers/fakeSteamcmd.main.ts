@@ -7,6 +7,7 @@
 //   truncateInfo: true   prints only the first half of that output
 //   install: { "<appId>": { build, mode: "ok" | "missing-config-once" | "fail" | "silent" | "other-app", reason?, files? } }
 //   selfUpdateOnce: true exits 7 once, as SteamCMD on Windows does after updating itself
+//   workshop: { "<itemId>": "<folder>" } downloads that folder's files as the item; any other item fails
 // Every run's arguments are appended to runs.log there.
 import * as fs from "node:fs";
 import * as path from "node:path";
@@ -80,6 +81,18 @@ for (const [command, ...rest] of commands) {
             // "other-app": a success line, but for an app that was not asked for
             if (install.mode === "other-app") say("Success! App '1007' fully installed.");
             else if (install.mode !== "silent") say(`Success! App '${appId}' fully installed.`);
+            break;
+        }
+        case "workshop_download_item": {
+            const [appId, id] = rest as [string, string];
+            const source = plan.workshop?.[id];
+            if (!source) {
+                say(`ERROR! Download item ${id} failed (File Not Found).`);
+                break;
+            }
+            const folder = path.join(dir, "steamapps", "workshop", "content", appId, id);
+            fs.cpSync(source, folder, { recursive: true });
+            say(`Success. Downloaded item ${id} to "${folder}" (${fs.readdirSync(folder).length} files)`);
             break;
         }
         case "quit":

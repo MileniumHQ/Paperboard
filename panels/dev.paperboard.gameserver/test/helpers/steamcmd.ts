@@ -13,6 +13,8 @@ export interface FakeSteamcmdPlan {
     truncateInfo?: boolean;
     install?: Record<string, { build?: string; mode: "ok" | "missing-config-once" | "fail" | "silent" | "other-app"; reason?: string; files?: Record<string, string> }>;
     selfUpdateOnce?: boolean;
+    /** a Workshop item's id, and the folder whose files SteamCMD downloads as that item */
+    workshop?: Record<string, string>;
 }
 
 export function steamcmdDir(dataDir = process.env.PAPERBOARD_DIR!): string {
