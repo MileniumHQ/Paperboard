@@ -1,3 +1,4 @@
+import { errorMessage, SerialQueue } from "@mileniumhq/paperapi";
 // Saved commands: short shell commands the user keeps in the Terminal panel
 // and runs from Home's "Pinned command" widget. The service owns the list,
 // its file, and every run; the widget only asks. A run's outcome is what the
@@ -11,7 +12,6 @@
 // its runs (dispose); one that restarts after a crash finds the records and
 // takes the runs back with the deadline they had left (init).
 
-import { errorMessage } from "./failure";
 
 export const MAX_SAVED_COMMANDS = 32;
 export const MAX_COMMAND_LENGTH = 4096;
@@ -179,7 +179,7 @@ export class SavedCommands {
     private live = new Map<string, LiveRun>();
     private loadError = "";
     private loaded = false;
-    private transactions: Promise<void> = Promise.resolve();
+    private readonly transactions = new SerialQueue();
     private readonly now: () => number;
     private readonly newId: () => string;
     private readonly timeoutMs: number;
@@ -375,7 +375,7 @@ export class SavedCommands {
         }
         await Promise.allSettled(pending.map((live) => this.deps.kill(live.procId)));
         // a run that ended just before keeps its outcome: its save finishes first
-        if (pending.length === 0 || !this.loaded) return this.transactions;
+        if (pending.length === 0 || !this.loaded) return this.transactions.settled();
         const endedAt = this.now();
         for (const live of pending) {
             if (!this.commands.some((c) => c.id === live.commandId)) continue;
@@ -532,13 +532,7 @@ export class SavedCommands {
      * roll back and a concurrent change is never overwritten.
      */
     private transaction<T>(work: () => Promise<T>): Promise<T> {
-        const result = this.transactions.then(work);
-        // the chain only orders transactions; each one's failure reaches its own caller
-        this.transactions = result.then(
-            () => undefined,
-            () => undefined,
-        );
-        return result;
+        return this.transactions.run(work);
     }
 
     private docNow(): SavedCommandsDoc {

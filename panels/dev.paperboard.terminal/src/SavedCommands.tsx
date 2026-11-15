@@ -16,13 +16,14 @@ import {
     PaperQuote,
     PaperText,
     type PaperColor,
+    createAction,
+    type ActionFailure,
 } from "@mileniumhq/paperui";
-import { serviceApi } from "@mileniumhq/paperapi";
+import { serviceApi, errorMessage } from "@mileniumhq/paperapi";
 import type { CommandRun, SavedCommand } from "./lib/savedCommands";
 import { MAX_LABEL_LENGTH, MAX_SAVED_COMMANDS } from "./lib/savedCommands";
 import { describeRun, type RunTone } from "./lib/runStatus";
 import { createAgoClock } from "./lib/clock";
-import { errorMessage, type Outcome } from "./lib/failure";
 import { PANEL_ID } from "./lib/panel";
 import { Menu, type MenuState } from "./Menus";
 
@@ -119,36 +120,22 @@ function SavedCommandsModal(props: {
     const now = createAgoClock(() => props.open);
     const [label, setLabel] = createSignal("");
     const [command, setCommand] = createSignal("");
-    const [error, setError] = createSignal<Outcome | null>(null);
-    const [busy, setBusy] = createSignal(false);
-
-    const call = async (title: string, name: string, input: Record<string, unknown>) => {
-        setError(null);
-        setBusy(true);
-        try {
-            return await serviceApi.call(PANEL_ID, name, input);
-        } catch (err) {
-            setError({ title, message: errorMessage(err) });
-            return undefined;
-        } finally {
-            setBusy(false);
-        }
-    };
+    const { busy, error, run } = createAction();
+    const call = (title: string, name: string, input: Record<string, unknown>) => run(title, () => serviceApi.call(PANEL_ID, name, input));
 
     const full = () => props.commands.length >= MAX_SAVED_COMMANDS;
     const canSave = () => !busy() && !props.loadError && !full() && command().trim() !== "";
 
     const save = async () => {
         if (!canSave()) return;
-        const id = await call("Command not saved", "save-command", { label: label(), command: command() });
-        if (id) {
+        if (await call("Command not saved", "save-command", { label: label(), command: command() })) {
             setLabel("");
             setCommand("");
         }
     };
 
     // this modal's own failure, else the dropdown's run that brought it open
-    const shownError = (): Outcome | null =>
+    const shownError = (): ActionFailure | null =>
         error() ?? (props.runError ? { title: "Command not started", message: props.runError } : null);
 
     return (

@@ -13,13 +13,12 @@ import {
     PaperWidgetStat,
     type PaperRole,
 } from "@mileniumhq/paperui";
-import { createPanelBridge, defineWidgets, type WidgetContext } from "@mileniumhq/paperapi";
+import { createPanelBridge, defineWidgets, type WidgetContext, errorMessage } from "@mileniumhq/paperapi";
 import "@mileniumhq/paperui/style.css";
 import "./widget.css";
 import type { CommandRun, SavedCommand } from "./lib/savedCommands";
 import { describeRun, runErrorStands, type RunTone } from "./lib/runStatus";
 import { createAgoClock } from "./lib/clock";
-import { errorMessage } from "./lib/failure";
 import { PANEL_ID } from "./lib/panel";
 
 interface WidgetState {

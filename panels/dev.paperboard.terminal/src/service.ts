@@ -7,10 +7,11 @@ import {
     resolveOneShotShell,
     blocksApi,
     type ServiceContext,
+    errorMessage,
+    SerialQueue,
 } from "@mileniumhq/paperapi";
 import * as fs from "node:fs";
 import { SCROLLBACK_CHARS, applyScrollbackCap, readWholeLines } from "./lib/scrollback";
-import { errorMessage } from "./lib/failure";
 import { PANEL_ID } from "./lib/panel";
 import { runShellCommand } from "./lib/shellCommand";
 import { writeTerminal } from "./lib/terminalWrite";
@@ -69,7 +70,7 @@ let commandSeq = 0;
 let showTabRequest = { id: "", request: "" };
 let tabsError = "";
 // tab changes are saved one at a time, so a failed save undoes only its own
-let tabsSaving: Promise<void> = Promise.resolve();
+const tabsSaving = new SerialQueue();
 
 const buffers = new Map<string, string>();
 const persistTimers = new Map<string, ReturnType<typeof setTimeout>>();
@@ -153,7 +154,7 @@ function publishTabs(ctx: Ctx) {
  * would lose; an unreadable tabs.json is never written over.
  */
 function changeTabs(ctx: Ctx, change: () => void | Promise<void> = () => {}): Promise<void> {
-    const saved = tabsSaving.then(async () => {
+    return tabsSaving.run(async () => {
         if (tabsError) throw new Error(tabsError);
         const before = structuredClone({ tabs, activeTabId, layout, showTabRequest });
         try {
@@ -167,12 +168,6 @@ function changeTabs(ctx: Ctx, change: () => void | Promise<void> = () => {}): Pr
         }
         publishTabs(ctx);
     });
-    // the next change waits for this one, whichever way it ends
-    tabsSaving = saved.then(
-        () => undefined,
-        () => undefined,
-    );
-    return saved;
 }
 
 function cancelPersistTimer(id: string) {

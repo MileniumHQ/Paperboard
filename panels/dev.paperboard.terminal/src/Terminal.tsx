@@ -3,11 +3,10 @@ import { Terminal, type IMarker } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { SearchAddon } from "@xterm/addon-search";
 import { WebLinksAddon } from "@xterm/addon-web-links";
-import { copyText, pasteText } from "@mileniumhq/paperui";
-import { serviceApi, terminalApi } from "@mileniumhq/paperapi";
+import { copyText, createLatest, pasteText, type ActionFailure } from "@mileniumhq/paperui";
+import { serviceApi, terminalApi, errorMessage } from "@mileniumhq/paperapi";
 import { terminalKeyAction, type TerminalKeyAction } from "./keys";
 import { keyBytes, withModifiers, type Modifiers, type NamedKey } from "./lib/softKeys";
-import { errorMessage, type Outcome } from "./lib/failure";
 import { joinScrollback } from "./lib/scrollback";
 import { linkOpens, outputText, pasteRunsAtOnce, promptTarget, type ScreenLine } from "./lib/screen";
 import { onThemeChange, screenColors, token } from "./lib/theme";
@@ -63,7 +62,7 @@ export interface TerminalComponentProps {
     id: string;
     onContextMenu?: (e: MouseEvent | PointerEvent) => void;
     /** a copy, paste or link that failed, said where the panel can show it */
-    onFailure: (failure: Outcome) => void;
+    onFailure: (failure: ActionFailure) => void;
     /** the screen took the keyboard */
     onFocus?: () => void;
     /** Ctrl and Alt latched by the key row, applied to the next key typed */
@@ -223,7 +222,7 @@ export function TerminalComponent(props: TerminalComponentProps) {
 
         let disconnect: (() => void) | null = null;
         // the latest connect; an older one's late answer is ignored
-        let attempt = 0;
+        const attempt = createLatest();
         // set while the session is not usable: the next keypress opens it
         // again instead of typing into a shell that does not exist
         let stopped = false;
@@ -235,7 +234,7 @@ export function TerminalComponent(props: TerminalComponentProps) {
         const hidden = () => containerRef.getClientRects().length === 0;
         const connect = () => {
             const id = props.id;
-            const current = ++attempt;
+            const current = attempt();
             stopped = false;
             opened = false;
             disconnect?.();
@@ -262,7 +261,7 @@ export function TerminalComponent(props: TerminalComponentProps) {
             serviceApi
                 .call<string>(PANEL_ID, "open-tab", { id, cols, rows })
                 .then((scrollback) => {
-                    if (current !== attempt) return;
+                    if (!current()) return;
                     opened = true;
                     sentCols = cols;
                     sentRows = rows;
@@ -273,7 +272,7 @@ export function TerminalComponent(props: TerminalComponentProps) {
                     pending = null;
                 })
                 .catch((err) => {
-                    if (current !== attempt) return;
+                    if (!current()) return;
                     pending = null;
                     // the shell could not start, or the computer is unreachable
                     console.error("[terminal] could not open session:", err);

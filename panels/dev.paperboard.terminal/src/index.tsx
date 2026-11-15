@@ -2,7 +2,7 @@ import { ErrorBoundary } from "solid-js";
 import { render } from "solid-js/web";
 import { PaperButton, PaperEmptyState, PaperFlex, PaperIcon, PaperProvider } from "@mileniumhq/paperui";
 import App from "./App";
-import { errorMessage } from "./lib/failure";
+import { errorMessage } from "@mileniumhq/paperapi";
 
 const root = document.getElementById("app");
 if (!root) throw new Error("The terminal page has no #app element to render into");

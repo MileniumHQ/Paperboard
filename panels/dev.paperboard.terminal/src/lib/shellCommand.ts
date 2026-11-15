@@ -1,7 +1,6 @@
 // Run Shell Command, as the block runs it: one command in a shell of its
 // own, through the daemon, waited for.
-import { processApi, resolveOneShotShell } from "@mileniumhq/paperapi";
-import { errorMessage } from "./failure";
+import { processApi, resolveOneShotShell, errorMessage } from "@mileniumhq/paperapi";
 
 const SHELL_TIMEOUT_MS = 30_000;
 const SHELL_TAIL_LINES = 10;

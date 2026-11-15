@@ -2,8 +2,7 @@
 // so a refusal is shown beside the field that caused it.
 import { createSignal, Show } from "solid-js";
 import { PaperButton, PaperFlex, PaperInput, PaperModal, PaperQuote } from "@mileniumhq/paperui";
-import { serviceApi } from "@mileniumhq/paperapi";
-import { errorMessage } from "./lib/failure";
+import { serviceApi, errorMessage } from "@mileniumhq/paperapi";
 import { PANEL_ID } from "./lib/panel";
 
 export function createRenameTab() {

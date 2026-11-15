@@ -11,6 +11,8 @@ import {
     copyText,
     createPaperMobile,
     showToast,
+    type ActionFailure,
+    createPaperCompact,
 } from "@mileniumhq/paperui";
 import "@mileniumhq/paperui/style.css";
 import "@mileniumhq/paperui/panel.css";
@@ -18,12 +20,10 @@ import "@xterm/xterm/css/xterm.css";
 import "./style.css";
 import TerminalComponent, { activeTerminals, copySelection, pasteClipboard } from "./Terminal";
 import styles from "./Terminal.module.css";
-import { createPanelBridge, serviceApi, terminalApi, type TerminalShell } from "@mileniumhq/paperapi";
+import { createPanelBridge, serviceApi, terminalApi, type TerminalShell, errorMessage } from "@mileniumhq/paperapi";
 import SavedCommands from "./SavedCommands";
 import type { CommandRun, SavedCommand } from "./lib/savedCommands";
-import { errorMessage, type Outcome } from "./lib/failure";
 import SoftKeys from "./SoftKeys";
-import { createCompact } from "./lib/compact";
 import { createKeyRow } from "./lib/keyRow";
 import { createAttention } from "./lib/attention";
 import { createFind } from "./FindBar";
@@ -82,7 +82,7 @@ export default function App() {
     const [tabsUnreadable, setTabsUnreadable] = createSignal(false);
     // a tab action the service refused: shown over the terminals until
     // dismissed, or until the next action replaces it
-    const [failure, setFailure] = createSignal<Outcome | null>(null);
+    const [failure, setFailure] = createSignal<ActionFailure | null>(null);
     const report = (title: string, after = "") => (err: unknown) => {
         console.error(`[terminal] ${title}:`, err);
         setFailure({ title, message: errorMessage(err) + after });
@@ -100,7 +100,7 @@ export default function App() {
     const tabs = () => mirror.tabs;
     // on a phone the tabs are always along the top: a side list would take
     // most of the width, and split shells share the one screen
-    const compact = createCompact();
+    const compact = createPaperCompact();
     const mobile = createPaperMobile();
     const vertical = () => mirror.layout === "vertical" && !compact();
     const applyTabs = (next: unknown) => {
