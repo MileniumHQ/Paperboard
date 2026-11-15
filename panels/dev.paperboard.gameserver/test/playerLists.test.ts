@@ -4,7 +4,7 @@ import * as path from "node:path";
 import { startTestDaemon, type TestDaemon } from "./helpers/crane";
 import { minecraftServer, type McServer } from "./helpers/minecraft";
 import { loopbackServer, routeHost, type LoopbackServer } from "./helpers/http";
-import { setPlayerFlag } from "../src/service/playerLists";
+import { currentPlayerNames, setPlayerFlag } from "../src/service/playerLists";
 import { sendServerCommand, startServerInstance, stopServerInstance } from "../src/service/lifecycle";
 
 const XUID = "2535428504476914";
@@ -123,5 +123,11 @@ describe("op and whitelist edits", () => {
         await stop(mc);
         expect(mc.commands().filter((c) => c !== "list")).toEqual(["stop"]);
         expect(mojang.requests).toEqual([]);
+    });
+
+    test("a name lookup Mojang fails keeps the name on file and says why in the console", async () => {
+        const mc = minecraftServer();
+        expect(await mc.run(() => currentPlayerNames(mc.scope.ctx, ["8667ba71-b85a-4004-af54-457a9734eed7"], null))).toEqual({});
+        expect(mc.scope.ctx.state.serverEntries.map((e) => String(e.content))).toEqual([expect.stringMatching(/^\[Paperboard\] 1 player name lookup\(s\) failed: .*500/)]);
     });
 });

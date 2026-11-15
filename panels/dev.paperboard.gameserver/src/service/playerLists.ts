@@ -13,6 +13,7 @@ import { errorText } from "./failures";
 import { createHash } from "node:crypto";
 import { files as fileApi, type ServiceContext } from "./api";
 import { serverLocal } from "./scope";
+import { report } from "../games/serviceKit";
 import { resolvePlayerIdentities } from "./playerStats";
 import { profileForName, profileForUuid } from "./mojang";
 import { gamertagForXuid, xuidForGamertag } from "./xbox";
@@ -156,7 +157,7 @@ export async function listRoster(): Promise<RosterEntry[]> {
  * hour is answered from memory. An offline-mode server's Java uuids come
  * from the name itself, so there is nothing to look up for those.
  */
-export async function currentPlayerNames(rawUuids: unknown, naming: BedrockNaming | null): Promise<Record<string, string>> {
+export async function currentPlayerNames(ctx: ServiceContext<GameServerState>, rawUuids: unknown, naming: BedrockNaming | null): Promise<Record<string, string>> {
     if (!Array.isArray(rawUuids)) throw new Error("uuids must be a list");
     const valid = [...new Set(rawUuids.map((u) => String(u ?? "").trim().toLowerCase()))]
         .filter((u) => UUID_RE.test(u))
@@ -189,10 +190,8 @@ export async function currentPlayerNames(rawUuids: unknown, naming: BedrockNamin
     };
     await Promise.all(Array.from({ length: MAX_NAME_LOOKUPS }, worker));
     // the roster keeps the names on file; the reason a refresh failed is
-    // still reported, once per batch
-    if (failures.length > 0) {
-        console.warn(`[Service:PlayerLists] ${failures.length} name lookup(s) failed: ${failures[0]}`);
-    }
+    // said in the console, once per batch
+    if (failures.length > 0) report(ctx, `${failures.length} player name lookup(s) failed`, failures[0]);
     return result;
 }
 

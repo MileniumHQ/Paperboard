@@ -506,7 +506,7 @@ export const minecraftCalls: ServerCalls = {
     },
     [CALLS.listRoster]: async () => listRoster(),
     [CALLS.currentPlayerNames]: async (ctx: ServiceContext<GameServerState>, inputs: { uuids?: unknown }) =>
-        currentPlayerNames(inputs?.uuids, await bedrockNaming(ctx)),
+        currentPlayerNames(ctx, inputs?.uuids, await bedrockNaming(ctx)),
     [CALLS.readBedrockNaming]: async (ctx: ServiceContext<GameServerState>) => bedrockNaming(ctx),
     [CALLS.listPlayerStats]: async (ctx: ServiceContext<GameServerState>) => {
         return listPlayerStats(ctx);
