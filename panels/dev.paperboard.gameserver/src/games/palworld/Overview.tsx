@@ -1,16 +1,16 @@
 import { createSignal, Show } from "solid-js";
 import { createAction, PaperAvatar, PaperButton, PaperInput, PaperModal, PaperQuote, PaperText } from "@mileniumhq/paperui";
 import ServerOverview, { EditableDetail } from "../../components/ServerOverview";
-import { gameSettings, serverStatus } from "../../lib/server";
+import { useServer } from "../../lib/server";
 import { errorMessage } from "../../lib/failure";
 import { palworld } from "./index";
 import { createMetrics, createUptime, overviewStats } from "../../components/overviewStats";
 import { fpsTone } from "./health";
-import { serverCalls } from "../../lib/api";
 
 const DESCRIPTION = "ServerDescription";
 
 export default function PalworldOverview() {
+    const { calls, gameSettings, serverStatus } = useServer();
     const description = () => String(gameSettings()[DESCRIPTION] ?? "");
     const [open, setOpen] = createSignal(false);
     const [draft, setDraft] = createSignal("");
@@ -18,12 +18,12 @@ export default function PalworldOverview() {
     const [pending, setPending] = createSignal(false);
     const edit = () => { setDraft(description()); saving.setError(null); setOpen(true); };
     const save = () => saving.run("Description not saved", async () => {
-        await serverCalls.writeGameOptions({ patch: { [DESCRIPTION]: draft().trim() } });
+        await calls.writeGameOptions({ patch: { [DESCRIPTION]: draft().trim() } });
         setPending(serverStatus() !== "offline");
         setOpen(false);
     });
 
-    const metrics = createMetrics(serverCalls.palworldMetrics);
+    const metrics = createMetrics(calls.palworldMetrics);
     const uptime = createUptime();
 
     return (

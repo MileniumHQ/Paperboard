@@ -1,7 +1,7 @@
 import { PANEL_ID } from "../service/types";
-import {   fileApi } from "./api";
+import type { fileApi } from "./api";
 import { parseProperties, stringifyServerProperties } from "../core/properties";
-import { supports, type CapabilityName } from "./capabilities";
+import { versionSupports, type CapabilityName } from "./versionProfile";
 
 export type { CapabilityName };
 
@@ -24,25 +24,20 @@ export interface PropertyField {
     /** show this field only when another field holds the given value */
     dependsOn?: { key: string; equals: string };
 }
-/** white-list's default for the running version (26.3 turned it on) */
-export function whitelistDefault(): string {
-    return supports("whitelistOnByDefault") ? "true" : "false";
+/** white-list's default for the version (26.3 turned it on) */
+export function whitelistDefault(version: string): string {
+    return versionSupports(version, "whitelistOnByDefault") ? "true" : "false";
 }
 
 // a missing file is empty; a failed read throws, so nothing treats an
 // unreadable file as empty and writes over it
-export async function readServerPropertiesStrict(): Promise<Record<string, string>> {
-    const content = await fileApi.read("server.properties", PANEL_ID);
+export async function readServerPropertiesStrict(files: typeof fileApi): Promise<Record<string, string>> {
+    const content = await files.read("server.properties", PANEL_ID);
     return content ? parseProperties(content) : {};
 }
 
-export async function writeServerProperties(values: Record<string, string>) {
-    try {
-        const current = await readServerPropertiesStrict();
-        const content = stringifyServerProperties({ ...current, ...values });
-        await fileApi.write("server.properties", content, PANEL_ID);
-    } catch (err) {
-        console.error("[server.properties] write failed:", err);
-        throw err;
-    }
+/** rejects with why the file was not written; the control that saved shows it */
+export async function writeServerProperties(files: typeof fileApi, values: Record<string, string>) {
+    const current = await readServerPropertiesStrict(files);
+    await files.write("server.properties", stringifyServerProperties({ ...current, ...values }), PANEL_ID);
 }

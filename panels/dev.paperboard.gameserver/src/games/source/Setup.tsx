@@ -1,12 +1,12 @@
-import { createMemo, createResource, createSignal, For, Show } from "solid-js";
-import { createAction, PaperButton, PaperCenteredInterface, PaperFlex, PaperIcon, PaperMediaCard, PaperMediaCardGroup, PaperQuote, PaperText, PaperWizardStep } from "@mileniumhq/paperui";
+import { createMemo, createSignal, For, Show } from "solid-js";
+import { createAction, createRead, PaperButton, PaperCenteredInterface, PaperFlex, PaperIcon, PaperMediaCard, PaperMediaCardGroup, PaperQuote, PaperText, PaperWizardStep } from "@mileniumhq/paperui";
 import { errorMessage } from "../../lib/failure";
 import SteamSetup from "../steam/SteamSetup";
 import { type SourceGameSpec } from "./index";
 import MapCards, { MapPicturesCredit, MapPicturesFailure, mapChoices } from "./MapCards";
 import { playModes } from "./modes";
 import { createMapPictures } from "./useMapPictures";
-import { serverCalls } from "../../lib/api";
+import { useServer } from "../../lib/server";
 
 /** A banner of one big symbol, for a card whose pictures are not there. */
 const iconBanner = (icon: string) => (
@@ -25,12 +25,13 @@ type Choice = { mode: string | null; map: string };
  * maps, once the download has said which maps there are.
  */
 export default function SourceSetup(props: { spec: SourceGameSpec; onComplete(): void }) {
+    const { calls } = useServer();
     const pictures = createMapPictures(props.spec);
     // the maps are only there once the download is, so they are read when its step is left
     const [downloaded, setDownloaded] = createSignal(false);
-    const [resource, { refetch }] = createResource(downloaded, () => serverCalls.sourceMaps());
-    // reading a failed resource throws; the failure is shown where the modes would be
-    const installed = () => (resource.state === "ready" ? resource() : undefined);
+    // a failure is shown where the modes would be
+    const listed = createRead((): Promise<string[]> => calls.sourceMaps(), { source: downloaded, message: errorMessage });
+    const installed = listed.value;
     // the mode picked ("" before one is), and null for the game's own map cycle
     const [mode, setMode] = createSignal<string | null | "">("");
     const [map, setMap] = createSignal("");
@@ -62,7 +63,7 @@ export default function SourceSetup(props: { spec: SourceGameSpec; onComplete():
 
     const save = () => saving.run("Setup is not finished", () => {
         const choice: Choice = { mode: mode() as string | null, map: map() };
-        return serverCalls.sourcePlay(choice);
+        return calls.sourcePlay(choice);
     });
 
     return (
@@ -80,11 +81,11 @@ export default function SourceSetup(props: { spec: SourceGameSpec; onComplete():
                                     Pick a game mode and the server plays its maps in turn, or leave it mixed. You can change this any time on the Maps tab.
                                 </PaperText>
                                 <PaperFlex direction="column" gap="half" fullWidth flex minHeight={0} scrollable="y">
-                                <Show when={resource.error}>
+                                <Show when={listed.error()}>
                                     <PaperQuote variant="danger" icon="warning" title={`Couldn't read ${props.spec.name}'s maps`}>
                                         <PaperFlex direction="column" gap="half" align="flex-start">
-                                            <span>{errorMessage(resource.error)}</span>
-                                            <PaperButton onClick={() => void refetch()}>Try again</PaperButton>
+                                            <span>{listed.error()}</span>
+                                            <PaperButton onClick={() => void listed.reload()}>Try again</PaperButton>
                                         </PaperFlex>
                                     </PaperQuote>
                                 </Show>

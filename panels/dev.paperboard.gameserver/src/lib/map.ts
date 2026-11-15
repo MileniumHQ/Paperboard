@@ -1,5 +1,5 @@
 import type { MapDimension, RegionCoord } from "../core/map";
-import { serverCalls } from "./api";
+import type { ServerCalls } from "./api";
 
 export interface MapDimensionRegions {
     dimension: MapDimension;
@@ -23,8 +23,8 @@ export interface RenderedTile {
     rz: number;
 }
 
-export async function listMapRegions(): Promise<MapRegionsResult> {
-    const result = await serverCalls.listMapRegions();
+export async function listMapRegions(calls: ServerCalls): Promise<MapRegionsResult> {
+    const result = await calls.listMapRegions();
     // the service and this UI ship together; an unrecognized shape is a
     // failure, not "no terrain" — coercing it to empty hid real errors
     if (!result || !Array.isArray(result.dimensions)) {
@@ -34,19 +34,4 @@ export async function listMapRegions(): Promise<MapRegionsResult> {
         levelName: result.levelName ?? "",
         dimensions: result.dimensions,
     };
-}
-
-export async function renderMapTile(
-    dimension: MapDimension,
-    rx: number,
-    rz: number,
-    /** the version of this tile already drawn; the same one comes back with no image */
-    since?: number,
-): Promise<RenderedTile | null> {
-    return serverCalls.renderMapTile({
-        dimension,
-        rx,
-        rz,
-        since,
-    });
 }

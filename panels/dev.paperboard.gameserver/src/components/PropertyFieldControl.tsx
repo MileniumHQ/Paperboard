@@ -10,6 +10,7 @@ import {
     PaperToggle,
 } from "@mileniumhq/paperui";
 import { hasKnownMcVersion } from "../lib/capabilities";
+import { useServer } from "../lib/server";
 import type { PropertyField } from "../lib/properties";
 
 /**
@@ -62,6 +63,8 @@ export function FieldControl(props: {
     onProblem?: (problem: string) => void;
 }) {
     const field = props.field;
+    const { serverVersion } = useServer();
+    const knownVersion = () => hasKnownMcVersion(serverVersion());
 
     switch (field.control) {
         case "toggle":
@@ -115,7 +118,7 @@ export function FieldControl(props: {
                         step={field.step}
                         value={shown()}
                         invalid={invalid()}
-                        disabled={!hasKnownMcVersion()}
+                        disabled={!knownVersion()}
                         onInput={(e) => {
                             setDraft(e.currentTarget.value);
                             if (!invalid()) props.onUpdate(e.currentTarget.value);
@@ -148,7 +151,7 @@ export function FieldControl(props: {
                         max={field.max}
                         value={shown()}
                         formatValue={(n) => (field.unit ? `${n} ${field.unit}` : String(n))}
-                        disabled={!hasKnownMcVersion()}
+                        disabled={!knownVersion()}
                         onInput={setDraft}
                         onChange={(next) => {
                             props.onUpdate(String(next));
@@ -165,7 +168,7 @@ export function FieldControl(props: {
                         fullWidth
                         value={props.value()}
                         maxLength={props.field.maxLength}
-                        disabled={!hasKnownMcVersion()}
+                        disabled={!knownVersion()}
                         onInput={(e) => props.onUpdate(e.currentTarget.value)}
                     />
                 </PaperFlex>

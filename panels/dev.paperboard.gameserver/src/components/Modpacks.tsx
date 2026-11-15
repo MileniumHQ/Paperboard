@@ -1,10 +1,10 @@
 import { createSignal, Show } from "solid-js";
 import { PaperFlex, PaperProgress, PaperQuote, PaperText } from "@mileniumhq/paperui";
 import RecoveryNotice from "./RecoveryNotice";
-import { modpackProgress, serverStatus, serverVersion } from "../lib/server";
+import { useServer } from "../lib/server";
 import { loaderName, modpacksKind } from "../lib/addons/modpacks";
 import { versionLabel } from "../lib/addons/presentation";
-import type { ModpackInstallOutcome } from "../lib/modpacks";
+import type { ModpackInstallOutcome } from "../service/contract";
 import AddonBrowser from "./addons/AddonBrowser";
 import type { InstallExtrasProps } from "./addons/AddonModals";
 import { createAddonBrowser } from "./addons/state";
@@ -20,6 +20,7 @@ const STAGE_LABEL = {
 
 // where an install is, from the service's progress
 function InstallStages() {
+    const { modpackProgress } = useServer();
     return (
         <Show when={modpackProgress()}>
             {(p) => (
@@ -42,6 +43,7 @@ function InstallStages() {
 // Installing a pack replaces the mod set and may move the server to the
 // pack's Minecraft version, so the dialog says so and shows the stages.
 function ModpackInstallNotes(props: InstallExtrasProps) {
+    const { serverVersion } = useServer();
     const switches = () => {
         const versions = props.version?.gameVersions;
         return !!versions && versions.length > 0 && !versions.includes(serverVersion());
@@ -67,9 +69,11 @@ function ModpackInstallNotes(props: InstallExtrasProps) {
 // browser, with the server-must-be-stopped rule, the recovery notice and
 // the outcome of the last install.
 export default function Modpacks(props: { active: boolean }) {
+    const server = useServer();
+    const { serverStatus } = server;
     const [outcome, setOutcome] = createSignal<ModpackInstallOutcome | null>(null);
     const browser = createAddonBrowser({
-        kind: modpacksKind,
+        kind: modpacksKind(server),
         active: () => props.active,
         installed: (result) => setOutcome(result as ModpackInstallOutcome),
         removed: () => setOutcome(null),
@@ -102,7 +106,7 @@ export default function Modpacks(props: { active: boolean }) {
                                 <PaperFlex direction="column" gap="half">
                                     <span>
                                         {done().switchedServer
-                                            ? `The server now runs ${loaderName()} ${done().loaderVersion} for Minecraft ${done().mcVersion}. `
+                                            ? `The server now runs ${loaderName(server.serverSoftware())} ${done().loaderVersion} for Minecraft ${done().mcVersion}. `
                                             : ""}
                                         The replaced mods and configs are in the server folder's trash.
                                     </span>

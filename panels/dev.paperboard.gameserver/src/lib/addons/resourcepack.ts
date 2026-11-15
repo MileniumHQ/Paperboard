@@ -1,14 +1,8 @@
-import { serverVersion } from "../server";
+import type { ServerPage } from "../server";
 import { readServerPropertiesStrict } from "../properties";
-import {
-    listResourcePackVersions,
-    readResourcePack,
-    removeResourcePack,
-    searchResourcePacks,
-    selectModrinthResourcePack,
-    type ResourcePackView,
-} from "../resourcepack";
-import { promptFromProperty } from "../../core/resourcepack";
+import { searchProjects } from "../modrinth";
+import type { ResourcePackView } from "../../service/resourcepack";
+import { promptFromProperty, RESOURCEPACK_PROJECT_TYPE } from "../../core/resourcepack";
 import { versionLabel } from "./presentation";
 import { modrinthHits, modrinthSource } from "./sources";
 import type { AddonKind, AddonListing, InstalledAddon } from "./kind";
@@ -16,6 +10,7 @@ import type { AddonKind, AddonListing, InstalledAddon } from "./kind";
 // Resource Pack: one pack at a time, written to server.properties. The
 // service points the pack's URL and sha1 at a Modrinth build or a pasted
 // URL; players download it from there, so there is nothing to upload.
+// Modrinth search runs in the page like the Datapacks tab's.
 
 export interface PackSettings {
     require: boolean;
@@ -44,7 +39,7 @@ export function currentPack(view: ResourcePackView): InstalledAddon | null {
     };
 }
 
-export const resourcePackKind: AddonKind<ResourcePackMeta> = {
+export const resourcePackKind = ({ calls, files, serverVersion }: ServerPage): AddonKind<ResourcePackMeta> => ({
     title: "Resource Pack",
     icon: "texture",
     glyph: "texture",
@@ -58,7 +53,7 @@ export const resourcePackKind: AddonKind<ResourcePackMeta> = {
     watch: serverVersion,
 
     async list(): Promise<AddonListing<ResourcePackMeta>> {
-        const [view, stored] = await Promise.all([readResourcePack(), readServerPropertiesStrict()]);
+        const [view, stored] = await Promise.all([calls.readResourcePack(), readServerPropertiesStrict(files)]);
         const current = currentPack(view);
         return {
             items: current ? [current] : [],
@@ -74,9 +69,13 @@ export const resourcePackKind: AddonKind<ResourcePackMeta> = {
     },
     listFailureTitle: () => "Couldn't read the resource pack settings",
 
-    search: async (query, signal) => modrinthHits(await searchResourcePacks(query, signal)),
+    async search(query, signal) {
+        const mcVersion = serverVersion();
+        if (!mcVersion) throw new Error("Choose a server version before browsing resource packs.");
+        return modrinthHits(await searchProjects({ query, signal, facets: [[`project_type:${RESOURCEPACK_PROJECT_TYPE}`], [`versions:${mcVersion}`]] }));
+    },
     async versions(projectId) {
-        return (await listResourcePackVersions(projectId)).map((v) => ({ id: v.id, label: v.versionNumber || v.name }));
+        return (await calls.listResourcePackVersions({ projectId })).map((v) => ({ id: v.id, label: v.versionNumber || v.name }));
     },
 
     itemClick: "none",
@@ -92,7 +91,7 @@ export const resourcePackKind: AddonKind<ResourcePackMeta> = {
             title: "No compatible build",
             text: `This resource pack has no build for Minecraft ${serverVersion()}.`,
         }),
-        run: (target, versionId) => selectModrinthResourcePack(target.projectId, versionId),
+        run: (target, versionId) => calls.selectResourcePack({ projectId: target.projectId, versionId }),
     },
 
     remove: {
@@ -102,6 +101,6 @@ export const resourcePackKind: AddonKind<ResourcePackMeta> = {
         errorTitle: "Resource pack not removed",
         describe: (item) =>
             `Stop offering ${item.title} to players? server.properties no longer points at it. Players get the change the next time the server starts.`,
-        run: () => removeResourcePack().then(() => undefined),
+        run: () => calls.removeResourcePack().then(() => undefined),
     },
-};
+});

@@ -1,4 +1,4 @@
-import { createEffect, createSignal, on, Show } from "solid-js";
+import { createSignal, Show } from "solid-js";
 import {
     PaperButton,
     PaperCopyButton,
@@ -9,45 +9,32 @@ import {
     PaperSettingList,
     PaperText,
     PaperToggle,
-    keepUnchanged,
-    createLatest,
+    createRead,
 } from "@mileniumhq/paperui";
 import ConfigSettings from "./ConfigSettings";
 import { errorMessage } from "../lib/failure";
 import { createSaves } from "../lib/saves";
-import { crossplayPlatform, disableCrossplay, enableCrossplay, readCrossplay } from "../lib/crossplay";
-import { localIp, serverSoftware, serverStatus } from "../lib/server";
-import type { CrossplayView } from "../service/crossplay";
+import { crossplayPlatform, disableCrossplay, enableCrossplay } from "../lib/crossplay";
+import { useServer } from "../lib/server";
 import { BEDROCK_PORT_SETTING_ID } from "../software/crossplay";
-import { serverCalls } from "../lib/api";
 
 // Crossplay: one switch for Geyser and Floodgate, then their settings.
 // Turning it off removes the jars and keeps their settings folders, so
 // turning it back on picks up where it left off.
 export default function Crossplay(props: { active: boolean }) {
-    const [view, setView] = createSignal<CrossplayView | null>(null);
-    const [loadError, setLoadError] = createSignal("");
+    const server = useServer();
+    const { calls, localIp, serverSoftware, serverStatus } = server;
+    // read whenever the tab opens or the software changes; a view read
+    // again, or answered by a save, keeps the rows it did not change
+    const read = createRead(() => calls.readCrossplay(), {
+        source: () => props.active && crossplayPlatform(serverSoftware()) !== null && serverSoftware(),
+        message: errorMessage,
+    });
+    const view = read.value;
+    // a read again hides the last failure
+    const loadError = () => (read.loading() ? "" : (read.error() ?? ""));
+    const load = read.reload;
     const [error, setError] = createSignal("");
-
-    const latest = createLatest();
-    // a view read again, or answered by a save, keeps the rows it did not change
-    const show = (next: CrossplayView) => setView((prev) => keepUnchanged(prev, next));
-    const load = async () => {
-        setLoadError("");
-        const current = latest();
-        try {
-            const answer = await readCrossplay();
-            if (current()) show(answer);
-        } catch (err) {
-            if (current()) setLoadError(errorMessage(err));
-        }
-    };
-
-    createEffect(
-        on([() => props.active, serverSoftware], ([active]) => {
-            if (active && crossplayPlatform()) void load();
-        }),
-    );
 
     const enabled = () => Boolean(view()?.geyser && view()?.floodgate);
 
@@ -59,7 +46,7 @@ export default function Crossplay(props: { active: boolean }) {
         const current = view();
         if (!current) throw new Error("Crossplay has not been read yet");
         try {
-            show(on ? await enableCrossplay(current) : await disableCrossplay(current));
+            read.set(on ? await enableCrossplay(server, current) : await disableCrossplay(server, current));
         } catch (err) {
             // whatever did land is what the switch shows
             await load();
@@ -139,7 +126,7 @@ export default function Crossplay(props: { active: boolean }) {
                     </Show>
                     <ConfigSettings
                         groups={view()!.groups}
-                        write={(id, value) => serverCalls.writeCrossplaySetting({ id, value })}
+                        write={(id, value) => calls.writeCrossplaySetting({ id, value })}
                         reload={load}
                         plain
                     />

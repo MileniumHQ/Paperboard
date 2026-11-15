@@ -21,7 +21,6 @@ export function createInstallFlow() {
             setInstalled(true);
             return true;
         } catch (err) {
-            console.error("[Install] Install failed:", err);
             setError(errorMessage(err));
             return false;
         } finally {

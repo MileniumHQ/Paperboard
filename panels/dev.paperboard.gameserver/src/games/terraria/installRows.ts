@@ -1,11 +1,10 @@
 import { createSignal } from "solid-js";
 import type { LoaderStatus } from "@mileniumhq/paperui";
 import type { InstallLoaderItem } from "../../components/InstallLoaders";
-import { installProgress, setInstallProgress } from "../../lib/server";
+import { useServer } from "../../lib/server";
 import { ensureJavaRuntime, type DownloadedBytes } from "../../lib/ensureJava";
 import { createInstallFlow } from "../installFlow";
 import { softwareName, tmodloaderReleaseFor, type TerrariaSoftware } from "./catalog";
-import { serverCalls } from "../../lib/api";
 
 /**
  * A Terraria install as Setup and Versions show it: tModLoader first gets the
@@ -13,6 +12,7 @@ import { serverCalls } from "../../lib/api";
  * unpacking follows it. run() resolves true once installed.
  */
 export function createTerrariaInstall() {
+    const { calls, installProgress, patch } = useServer();
     const flow = createInstallFlow();
     const { error, installed, running } = flow;
     const [runtimePercent, setRuntimePercent] = createSignal(0);
@@ -25,7 +25,7 @@ export function createTerrariaInstall() {
             // a previous install's last stage is not this one's: until the
             // service starts this download, the rows wait instead of showing
             // it done (a push brings only a stage that changed)
-            setInstallProgress(null);
+            patch({ installProgress: null });
             setRuntimeReady(false);
             setRuntimePercent(0);
             setRuntimeBytes(undefined);
@@ -43,7 +43,7 @@ export function createTerrariaInstall() {
                 });
                 setRuntimeReady(true);
             }
-            await serverCalls.terrariaInstall({ software, version });
+            await calls.terrariaInstall({ software, version });
         });
 
     const stage = () => installProgress()?.stage;

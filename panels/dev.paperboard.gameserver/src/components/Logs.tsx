@@ -1,4 +1,4 @@
-import { batch, createSignal, For, onMount, Show } from "solid-js";
+import { createSignal, For, onMount, Show } from "solid-js";
 import {
     PaperButton,
     PaperCard,
@@ -12,13 +12,10 @@ import {
     PaperSelectMenu,
     PaperSelectMenuItem,
     createLatest,
+    createRead,
 } from "@mileniumhq/paperui";
-import {
-    listLogFiles,
-    readLogFile,
-    type LogFileContent,
-    type LogFileInfo,
-} from "../lib/logFiles";
+import { useServer } from "../lib/server";
+import type { ServerCalls } from "../lib/api";
 import { logLabel } from "../core/logs";
 import { errorMessage, type Outcome } from "../lib/failure";
 
@@ -26,15 +23,23 @@ import { errorMessage, type Outcome } from "../lib/failure";
 // Logs rotate on server start, so the list can change under us — a manual
 // refresh is genuinely useful here rather than surprising.
 export default function Logs() {
-    const [files, setFiles] = createSignal<LogFileInfo[] | null>(null);
+    const { calls } = useServer();
+    const [files, setFiles] = createSignal<Awaited<ReturnType<ServerCalls["listLogFiles"]>> | null>(null);
     // a menu entry is a log's name, so a refresh (which rotates the list and
     // grows latest.log) keeps every entry whose log is still there
     const names = () => (files() ?? []).map((file) => file.name);
     const modifiedAt = (name: string) => files()!.find((file) => file.name === name)!.mtimeMs;
     const [selected, setSelected] = createSignal("");
-    const [content, setContent] = createSignal<LogFileContent | null>(null);
-    const [loading, setLoading] = createSignal(false);
-    const [error, setError] = createSignal<Outcome | null>(null);
+    // the log picked is read, the newest pick the one shown; a log that
+    // can't be read shows nothing of the one before it
+    const log = createRead((name) => calls.readLogFile({ name }), { source: selected, message: errorMessage });
+    const loading = log.loading;
+    const content = () => (log.error() === null ? (log.value() ?? null) : null);
+    const [listError, setError] = createSignal<Outcome | null>(null);
+    const error = (): Outcome | null => {
+        const read = log.loading() ? null : log.error();
+        return listError() ?? (read === null ? null : { title: "Couldn't read this log", message: read });
+    };
     const [filter, setFilter] = createSignal("");
 
     // the newest listing and the newest read are the ones shown: an older
@@ -44,7 +49,7 @@ export default function Logs() {
         setError(null);
         const current = latestList();
         try {
-            const list = await listLogFiles();
+            const list = await calls.listLogFiles();
             if (!current()) return;
             setFiles(list);
             const wanted =
@@ -52,37 +57,19 @@ export default function Logs() {
                     ? selectName
                     : list[0]?.name;
             if (wanted) await selectFile(wanted);
-            else setContent(null);
+            else log.set(undefined);
         } catch (err) {
             if (!current()) return;
-            console.error("[Logs] Failed to list log files:", err);
             setError({ title: "Couldn't list the logs", message: errorMessage(err) });
         }
     };
 
-    const latest = createLatest();
-    const selectFile = async (name: string) => {
-        setSelected(name);
-        setLoading(true);
+    /** shows the log `name`, read again when it is the one shown */
+    const selectFile = (name: string) => {
         setError(null);
-        const current = latest();
-        try {
-            const answer = await readLogFile(name);
-            if (!current()) return;
-            batch(() => {
-                setContent(answer);
-                setLoading(false);
-            });
-        } catch (err) {
-            if (!current()) return;
-            const message = errorMessage(err);
-            console.error(`[Logs] Failed to read "${name}":`, message);
-            batch(() => {
-                setContent(null);
-                setError({ title: "Couldn't read this log", message });
-                setLoading(false);
-            });
-        }
+        if (name === selected()) return log.reload();
+        setSelected(name);
+        return log.ready();
     };
 
     onMount(() => {

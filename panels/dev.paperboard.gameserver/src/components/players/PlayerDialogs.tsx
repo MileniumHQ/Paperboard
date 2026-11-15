@@ -53,9 +53,7 @@ export function WhitelistDialog(props: {
         try {
             await props.onAdd(name);
         } catch (err) {
-            const message = errorMessage(err);
-            console.error(`[Players] whitelist failed for "${name}":`, message);
-            setError(message);
+            setError(errorMessage(err));
             return;
         }
         props.onClose();

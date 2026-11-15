@@ -8,13 +8,12 @@ import {
     PaperIcon,
     PaperQuote,
 } from "@mileniumhq/paperui";
-import { files as fileApi } from "../lib/api";
-import { activeIssue, clearActiveIssue, killConflictingProcess, type ServerIssue, type ServerIssueAction } from "../lib/diagnostics";
-import { serverPort, serverStatus, startServer } from "../lib/server";
+import type { ServerIssue, ServerIssueAction } from "../core/diagnostics";
+import { useServer, type ServerStatus } from "../lib/server";
 import { errorMessage } from "../lib/failure";
 
 /** Resolves true once the server is offline, or false if it turns out to run after all. */
-function whenOffline(): Promise<boolean> {
+function whenOffline(serverStatus: () => ServerStatus): Promise<boolean> {
     return new Promise((resolve) =>
         createRoot((dispose) =>
             createEffect(
@@ -29,6 +28,7 @@ function whenOffline(): Promise<boolean> {
 }
 
 const ServerIssueModal: Component = () => {
+    const { activeIssue, calls, files, serverPort, serverStatus, startServer } = useServer();
     const [actionError, setActionError] = createSignal<{ title: string; message: string } | null>(null);
     const [repairing, setRepairing] = createSignal(false);
     // the last issue stays on the modal while it closes, so it animates out instead of vanishing
@@ -43,13 +43,14 @@ const ServerIssueModal: Component = () => {
         try {
             switch (action.actionKey) {
                 case "killPortAndRetry":
-                    await killConflictingProcess(serverPort());
+                    // ends what holds the port; rejects with why it could not
+                    await calls.killConflictingProcess({ port: serverPort() });
                     break;
                 case "acceptEula":
-                    await fileApi.write("eula.txt", "eula=true\n", PANEL_ID);
+                    await files.write("eula.txt", "eula=true\n", PANEL_ID);
                     break;
             }
-            await clearActiveIssue();
+            await calls.clearActiveIssue();
         } catch (err) {
             // the issue stays open and says why
             setActionError({ title: "Repair failed", message: errorMessage(err) });
@@ -57,13 +58,13 @@ const ServerIssueModal: Component = () => {
         } finally {
             setRepairing(false);
         }
-        if (await whenOffline()) startServer();
+        if (await whenOffline(serverStatus)) startServer();
     };
 
     // a dismissal the service refused leaves the issue open, saying why
     const dismiss = () => {
         setActionError(null);
-        clearActiveIssue().catch((err) => setActionError({ title: "Issue not dismissed", message: errorMessage(err) }));
+        calls.clearActiveIssue().catch((err) => setActionError({ title: "Issue not dismissed", message: errorMessage(err) }));
     };
 
     return (

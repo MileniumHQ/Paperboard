@@ -17,7 +17,6 @@ import {
     type LoaderStatus,
 } from "@mileniumhq/paperui";
 import InstallStepView from "./InstallStepView";
-import { fileApi } from "../lib/api";
 import { createInstallRun } from "../lib/installRun";
 import {
     SOFTWARE,
@@ -27,7 +26,7 @@ import {
 } from "../lib/software";
 import SoftwareIcon from "./SoftwareIcon";
 import VersionPicker from "./VersionPicker";
-import { updatePanelConfig } from "../lib/server";
+import { useServer } from "../lib/server";
 import { errorMessage } from "../lib/failure";
 
 interface VersionStepProps {
@@ -64,6 +63,7 @@ interface InstallStepProps {
 
 function InstallStep(props: InstallStepProps) {
     const wizard = useWizard();
+    const { files } = useServer();
 
     const install = createInstallRun();
     const [setupPercent, setSetupPercent] = createSignal(0);
@@ -95,19 +95,19 @@ function InstallStep(props: InstallStepProps) {
         wizard?.setOptionsShown(false);
         wizard?.setCanProceed(false);
 
+        let installed = false;
         try {
             // the service downloads, installs and records the software;
             // the rows follow its published progress
             await install.run(props.software, props.version);
-            if (disposed) return;
+            installed = true;
         } catch (err) {
-            console.error("[InstallStep] Server install error:", err);
             reportFailure(err);
-            return;
         }
+        if (!installed || disposed) return;
 
         try {
-            const eulaContent = await fileApi.read("eula.txt", PANEL_ID);
+            const eulaContent = await files.read("eula.txt", PANEL_ID);
             if (disposed) return;
             setBusy(false);
             if (eulaContent && eulaContent.includes("eula=true")) {
@@ -122,7 +122,6 @@ function InstallStep(props: InstallStepProps) {
             setSetupPercent(50);
             setShowEulaModal(true);
         } catch (err) {
-            console.error("[InstallStep] Server setup error:", err);
             setSetupStatus("error");
             reportFailure(err);
         }
@@ -133,7 +132,7 @@ function InstallStep(props: InstallStepProps) {
         setBusy(true);
         setEulaError("");
         try {
-            await fileApi.write(
+            await files.write(
                 "eula.txt",
                 "#By changing the setting below to TRUE you are indicating your agreement to our EULA (https://aka.ms/MinecraftEULA).\neula=true\n",
                 PANEL_ID,
@@ -250,6 +249,7 @@ export default function Setup(props: SetupProps) {
         createSignal<ServerSoftwareType>(props.initialSoftware || "paper");
     const [serverVersion, setServerVersion] = createSignal<string>(props.initialVersion || "");
 
+    const { updatePanelConfig } = useServer();
     const finishing = createAction({ message: errorMessage });
     const handleFinishSetup = async () => {
         if (finishing.busy()) return;

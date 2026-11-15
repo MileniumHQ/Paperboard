@@ -1,4 +1,4 @@
-import { createStateSignal, createLatest } from "@mileniumhq/paperui/headless";
+import { createLatest, createRead } from "@mileniumhq/paperui/headless";
 import { batch, createEffect, createSignal, on, onCleanup, type Accessor } from "solid-js";
 import { errorMessage } from "../../lib/failure";
 import { versionLabel } from "../../lib/addons/presentation";
@@ -20,30 +20,12 @@ import { newStage, stageFolder } from "../../lib/addons/upload";
 
 const TYPING_DEBOUNCE_MS = 400;
 
-export function createAddonListing<Meta>(kind: Accessor<AddonKind<Meta>>) {
-    // a reload keeps the entries it did not change, so their cards stay
-    const [listing, setListing] = createStateSignal<AddonListing<Meta> | null>(null);
-    const [error, setError] = createSignal("");
-    const latest = createLatest();
-    const reload = async () => {
-        const current = latest();
-        try {
-            const answer = await kind().list();
-            if (!current()) return;
-            batch(() => {
-                setListing(answer);
-                setError("");
-            });
-        } catch (err) {
-            if (!current()) return;
-            console.error(`[${kind().title}] Failed to list what is installed:`, err);
-            batch(() => {
-                setListing(null);
-                setError(errorMessage(err));
-            });
-        }
-    };
-    return { listing, error, reload };
+/** what is installed, read while `reading` is on and each time it changes; a reload keeps the entries it did not change, so their cards stay */
+export function createAddonListing<Meta>(kind: Accessor<AddonKind<Meta>>, reading: Accessor<unknown>) {
+    const read = createRead<AddonListing<Meta>, unknown>(() => kind().list(), { source: reading, message: errorMessage });
+    // a listing that failed shows none, not the last one as if it were current
+    const listing = (): AddonListing<Meta> | null => (read.error() === null ? (read.value() ?? null) : null);
+    return { listing, error: () => read.error() ?? "", reload: read.reload };
 }
 
 export function createAddonSearch(kind: Accessor<Pick<AddonKind<unknown>, "title" | "search" | "source">>) {
@@ -71,7 +53,6 @@ export function createAddonSearch(kind: Accessor<Pick<AddonKind<unknown>, "title
             if (!own.signal.aborted) setResults(hits);
         } catch (err) {
             if (own.signal.aborted) return;
-            console.error(`[${kind().title}] ${kind().source.name} search failed:`, err);
             setError(errorMessage(err));
         } finally {
             if (controller === own) setSearching(false);
@@ -126,7 +107,6 @@ export function createAddonInstall<Meta>(
                 })
                 .catch((err) => {
                     if (!current()) return;
-                    console.error(`[${kind().title}] Failed to load versions of "${next.title}":`, err);
                     batch(() => {
                         setError(errorMessage(err));
                         setLoading(false);
@@ -154,7 +134,6 @@ export function createAddonInstall<Meta>(
             setTarget(null);
             await hooks.reload();
         } catch (err) {
-            console.error(`[${kind().title}] Failed to install "${next.title}":`, err);
             setError(errorMessage(err));
             // a failure may come after a change that was recorded; show what is there now
             await hooks.reload();
@@ -203,7 +182,6 @@ export function createAddonRemove<Meta>(
             await hooks.reload();
         } catch (err) {
             // the dialog stays open: the entry is still on disk
-            console.error(`[${kind().title}] Failed to remove "${item.id}":`, err);
             setError(errorMessage(err));
         } finally {
             setRemoving(false);
@@ -255,7 +233,10 @@ export function createAddonBrowser<Meta = undefined>(options: {
 }) {
     const { kind } = options;
     const get = () => kind;
-    const { listing, error: listError, reload } = createAddonListing(get);
+    const active = () => options.active?.() ?? true;
+    // what exists depends on the server, so the tab reads again whenever it
+    // opens, and whenever what the kind watches changes
+    const { listing, error: listError, reload } = createAddonListing(get, () => active() && { watched: kind.watch?.() });
     const search = createAddonSearch(get);
     const install = createAddonInstall(get, { reload, installed: (result) => options.installed?.(result) });
     const remove = createAddonRemove(get, { reload, removed: () => options.removed?.() });
@@ -277,7 +258,6 @@ export function createAddonBrowser<Meta = undefined>(options: {
         try {
             await way.discard(stage);
         } catch (cleanup) {
-            console.error(`[${kind.title}] Could not remove the staged upload:`, cleanup);
             message += ` The files Paperboard staged could not be removed: ${errorMessage(cleanup)}`;
         }
         if (message) setUploadError(message.trim());
@@ -293,7 +273,6 @@ export function createAddonBrowser<Meta = undefined>(options: {
             setUploadNotice(way.describe(result));
             await reload();
         } catch (err) {
-            console.error(`[${kind.title}] Upload failed:`, err);
             // the service clears the staging folder when it got that far; stopping before it leaves the files
             await discardStage(stage, errorMessage(err));
             await reload();
@@ -310,21 +289,19 @@ export function createAddonBrowser<Meta = undefined>(options: {
         setUploadError("");
         setUploadNotice(null);
         const stage = newStage();
+        let commit = false;
         try {
             const picked = await source.pick(stageFolder(stage));
             if (picked.status === "canceled") return;
-            if (way.confirm) {
-                setPendingUpload({ stage, name: picked.name ?? "this file" });
-                return;
-            }
+            if (way.confirm) setPendingUpload({ stage, name: picked.name ?? "this file" });
+            else commit = true;
         } catch (err) {
-            console.error(`[${kind.title}] Upload failed:`, err);
+            // the tab's upload failure shows it
             await discardStage(stage, errorMessage(err));
-            return;
         } finally {
             setUploading(false);
         }
-        await commitUpload(stage);
+        if (commit) await commitUpload(stage);
     };
 
     const confirmUpload = async () => {
@@ -341,18 +318,16 @@ export function createAddonBrowser<Meta = undefined>(options: {
         await discardStage(pending.stage);
     };
 
-    // what exists depends on the server, so the tab reads again whenever it opens
+    // the catalog too
     createEffect(
-        on([() => options.active?.() ?? true, () => kind.watch?.()], ([active]) => {
-            if (!active) return;
-            void reload();
-            void search.run();
+        on([active, () => kind.watch?.()], ([on]) => {
+            if (on) void search.run();
         }),
     );
     // what was added to or taken from the folder outside Paperboard shows as
     // soon as the panel is looked at again
     const lookedAgain = () => {
-        if ((options.active?.() ?? true) && document.visibilityState === "visible") void reload();
+        if (active() && document.visibilityState === "visible") void reload();
     };
     window.addEventListener("focus", lookedAgain);
     document.addEventListener("visibilitychange", lookedAgain);
@@ -432,7 +407,6 @@ export function createAddonBrowser<Meta = undefined>(options: {
                 await way.run();
                 await reload();
             } catch (err) {
-                console.error(`[${kind.title}] ${way.label} failed:`, err);
                 setRecoverError(errorMessage(err));
             } finally {
                 setRecovering(false);

@@ -1,8 +1,7 @@
-import { batch } from "solid-js";
-import type { PaperConsoleEntry } from "@mileniumhq/paperui";
-import type { ServerSoftwareType } from "../lib/software";
-import type { PlayerStatData, PlayerPosition } from "./players";
-import type { ServerIssue } from "./diagnostics";
+import { createMemo, type Accessor } from "solid-js";
+import { serverStateShape } from "../service/contract";
+import type { GameServerState } from "../service/types";
+
 
 export type ServerStatus =
     | "offline"
@@ -46,119 +45,21 @@ export interface ModpackProgress {
     total: number;
 }
 
-export interface StateSetters {
-    setServerStatus: (v: ServerStatus) => void;
-    setServerEntries: (v: PaperConsoleEntry[]) => void;
-    setChatMessages: (v: ChatMessage[]) => void;
-    setLocalIp: (v: string) => void;
-    setServerPort: (v: string) => void;
-    setServerMotd: (v: string) => void;
-    setServerLevel: (v: string | null) => void;
-    setServerSoftware: (v: string) => void;
-    setGameSettings?: (v: Readonly<Record<string, unknown>>) => void;
-    setServerVersion: (v: string) => void;
-    setRamAllocation: (v: number) => void;
-    setMaxPlayers?: (v: number | null) => void;
-    setOnlineSince?: (v: number | null) => void;
-    setActiveIssue: (v: ServerIssue | null) => void;
-    setRecoveryBlock: (v: string | null) => void;
-    setInitFailure: (v: string | null) => void;
-    setOnlinePlayerNames: (v: Set<string>) => void;
-    setSeenPlayerNames: (v: Set<string>) => void;
-    setPlayerStats: (v: Map<string, PlayerStatData>) => void;
-    setPlayerPositions: (v: Map<string, PlayerPosition>) => void;
-    setPlayerPlaytime: (v: Map<string, number>) => void;
-    setGamerules: (v: Record<string, string>) => void;
-    setInstallProgress: (v: InstallProgress | null) => void;
-    setModpackProgress: (v: ModpackProgress | null) => void;
-}
+export type Fields = { readonly [K in keyof GameServerState]: Accessor<GameServerState[K]> };
 
-// serverVersion applies only when truthy, rest when defined. One push is one
-// update: everything it changes is seen together, once.
-export function applyStatePatch(
-    source: Record<string, unknown> | null | undefined,
-    setters: StateSetters,
-): void {
-    if (!source || typeof source !== "object") return;
-    batch(() => applyEach(source, setters));
-}
-
-function applyEach(source: Record<string, unknown>, setters: StateSetters): void {
-
-    const table: { key: string; apply: (value: unknown) => void }[] = [
-        { key: "gameSettings", apply: (v) => setters.setGameSettings?.(v as Record<string, unknown>) },
-        { key: "serverStatus", apply: (v) => setters.setServerStatus(v as ServerStatus) },
-        { key: "serverEntries", apply: (v) => setters.setServerEntries(v as PaperConsoleEntry[]) },
-        { key: "chatMessages", apply: (v) => setters.setChatMessages(v as ChatMessage[]) },
-        { key: "localIp", apply: (v) => setters.setLocalIp(v as string) },
-        { key: "serverPort", apply: (v) => setters.setServerPort(v as string) },
-        { key: "serverMotd", apply: (v) => setters.setServerMotd(v as string) },
-        { key: "serverLevel", apply: (v) => setters.setServerLevel((v as string | null) ?? null) },
-        { key: "maxPlayers", apply: (v) => setters.setMaxPlayers?.((v as number | null) ?? null) },
-        { key: "onlineSince", apply: (v) => setters.setOnlineSince?.((v as number | null) ?? null) },
-        {
-            key: "serverSoftware",
-            apply: (v) => setters.setServerSoftware(v as ServerSoftwareType),
-        },
-        {
-            key: "serverVersion",
-            apply: (v) => {
-                if (v) setters.setServerVersion(v as string);
-            },
-        },
-        { key: "ramAllocation", apply: (v) => setters.setRamAllocation(v as number) },
-        { key: "activeIssue", apply: (v) => setters.setActiveIssue(v as ServerIssue | null) },
-        { key: "recoveryBlock", apply: (v) => setters.setRecoveryBlock((v as string | null) ?? null) },
-        { key: "initFailure", apply: (v) => setters.setInitFailure((v as string | null) ?? null) },
-        {
-            key: "onlinePlayers",
-            apply: (v) => setters.setOnlinePlayerNames(new Set<string>(v as string[])),
-        },
-        {
-            key: "seenPlayers",
-            apply: (v) => setters.setSeenPlayerNames(new Set<string>(v as string[])),
-        },
-        {
-            key: "playerStats",
-            apply: (v) =>
-                setters.setPlayerStats(
-                    new Map<string, PlayerStatData>(
-                        Object.entries(v as Record<string, PlayerStatData>),
-                    ),
-                ),
-        },
-        {
-            key: "playerPlaytime",
-            apply: (v) =>
-                setters.setPlayerPlaytime(
-                    new Map<string, number>(Object.entries(v as Record<string, number>)),
-                ),
-        },
-        {
-            key: "playerPositions",
-            apply: (v) =>
-                setters.setPlayerPositions(
-                    new Map<string, PlayerPosition>(
-                        Object.entries(v as Record<string, PlayerPosition>),
-                    ),
-                ),
-        },
-        {
-            key: "gamerules",
-            apply: (v) => setters.setGamerules(v as Record<string, string>),
-        },
-        {
-            key: "installProgress",
-            apply: (v) => setters.setInstallProgress(v as InstallProgress | null),
-        },
-        {
-            key: "modpackProgress",
-            apply: (v) => setters.setModpackProgress(v as ModpackProgress | null),
-        },
-    ];
-
-    for (const { key, apply } of table) {
-        const value = (source as Record<string, unknown>)[key];
-        if (value !== undefined) apply(value);
-    }
+/** What the page shows of a server's state: a memo per field, and the players' as sets and maps by name. */
+export function serverFields(state: Accessor<GameServerState | null>) {
+    const fields = Object.fromEntries(
+        Object.keys(serverStateShape.fields).map((key) => [key, createMemo(() => state()?.[key as keyof GameServerState])]),
+    ) as unknown as Fields;
+    return {
+        ...fields,
+        // a push mid-install can say no version yet; the page keeps the last one it knew
+        serverVersion: createMemo<string>((prev) => state()?.serverVersion || prev, ""),
+        onlinePlayerNames: createMemo(() => new Set(fields.onlinePlayers())),
+        seenPlayerNames: createMemo(() => new Set(fields.seenPlayers())),
+        playerStats: createMemo(() => new Map(Object.entries(fields.playerStats() ?? {}))),
+        playerPlaytime: createMemo(() => new Map(Object.entries(fields.playerPlaytime() ?? {}))),
+        playerPositions: createMemo(() => new Map(Object.entries(fields.playerPositions() ?? {}))),
+    };
 }

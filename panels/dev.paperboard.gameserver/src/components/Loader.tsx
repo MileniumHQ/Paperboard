@@ -1,40 +1,24 @@
 import { minecraftSoftware } from "../games/minecraft/index";
-import { createEffect, createSignal, on, Show } from "solid-js";
-import { PaperButton, PaperFlex, PaperPageHeader, PaperQuote, keepUnchanged, createLatest } from "@mileniumhq/paperui";
+import { Show } from "solid-js";
+import { PaperButton, PaperFlex, PaperPageHeader, PaperQuote, createRead } from "@mileniumhq/paperui";
 import ConfigSettings from "./ConfigSettings";
-import { serverSoftware, serverStatus } from "../lib/server";
+import { useServer } from "../lib/server";
 import { SOFTWARE_NAMES } from "../lib/software";
-import type { LoaderSettingsView } from "../service/loaderSettings";
 import { errorMessage } from "../lib/failure";
-import { serverCalls } from "../lib/api";
 
 // Loader: the installed software's own settings files (Paper's YAML,
 // NeoForge/Forge TOML). The service owns reading and writing; this tab
 // only shows what the files hold and sends one validated edit at a time.
 export default function Loader(props: { active: boolean }) {
-    const [settings, setSettings] = createSignal<LoaderSettingsView | null>(null);
-    const [loadError, setLoadError] = createSignal("");
-
-    const latest = createLatest();
-    const load = async () => {
-        setLoadError("");
-        const current = latest();
-        try {
-            const answer = await serverCalls.readLoaderSettings();
-            // a setting read again unchanged keeps its row
-            if (current()) setSettings((prev) => keepUnchanged(prev, answer));
-        } catch (err) {
-            if (current()) setLoadError(errorMessage(err));
-        }
-    };
-
+    const { calls, serverSoftware, serverStatus } = useServer();
     // read whenever the tab opens or the software changes: the files
-    // appear on the server's first start and differ per software
-    createEffect(
-        on([() => props.active, serverSoftware], ([active]) => {
-            if (active) void load();
-        }),
-    );
+    // appear on the server's first start and differ per software. A
+    // setting read again unchanged keeps its row
+    const read = createRead(() => calls.readLoaderSettings(), { source: () => props.active && serverSoftware(), message: errorMessage });
+    const settings = read.value;
+    // a read again hides the last failure
+    const loadError = () => (read.loading() ? "" : (read.error() ?? ""));
+    const load = read.reload;
 
     const name = () => SOFTWARE_NAMES[minecraftSoftware(serverSoftware())];
 
@@ -70,7 +54,7 @@ export default function Loader(props: { active: boolean }) {
                         </Show>
                         <ConfigSettings
                             groups={view().groups}
-                            write={(id, value) => serverCalls.writeLoaderSetting({ id, value })}
+                            write={(id, value) => calls.writeLoaderSetting({ id, value })}
                             reload={load}
                         />
                     </Show>

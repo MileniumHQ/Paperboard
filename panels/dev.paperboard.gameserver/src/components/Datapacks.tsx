@@ -1,16 +1,17 @@
 import { createSignal, Show } from "solid-js";
 import { PaperButton, PaperEffect, PaperIcon, PaperQuote, PaperText } from "@mileniumhq/paperui";
-import { serverStatus } from "../lib/server";
+import { useServer } from "../lib/server";
 import { errorMessage } from "../lib/failure";
 import { datapacksKind } from "../lib/addons/datapacks";
 import AddonBrowser from "./addons/AddonBrowser";
 import { createAddonBrowser } from "./addons/state";
-import { serverCalls } from "../lib/api";
 
 // Datapacks: the shared add-on browser over the active world's datapacks/
 // folder, plus the world note and the reload command only this tab has.
 export default function Datapacks(props: { active: boolean }) {
-    const browser = createAddonBrowser({ kind: datapacksKind, active: () => props.active });
+    const server = useServer();
+    const { calls, serverStatus } = server;
+    const browser = createAddonBrowser({ kind: datapacksKind(server), active: () => props.active });
     const world = () => browser.listing()?.meta;
 
     const [reloading, setReloading] = createSignal(false);
@@ -19,7 +20,7 @@ export default function Datapacks(props: { active: boolean }) {
         setReloading(true);
         setReloadMessage(null);
         try {
-            await serverCalls.runCommand({ command: "reload" });
+            await calls.runCommand({ command: "reload" });
             setReloadMessage({ ok: true, text: "Reload sent. The console shows whether every datapack loaded." });
         } catch (err) {
             setReloadMessage({ ok: false, text: errorMessage(err) });

@@ -7,12 +7,13 @@ import {
 } from "@mileniumhq/paperui";
 import InstallStepView, { createWizardInstall } from "../../components/InstallStepView";
 import { UnsupportedHost } from "../../components/InstallNotices";
-import { serverCalls } from "../../lib/api";
+import { useServer } from "../../lib/server";
 import { errorMessage, type Outcome } from "../../lib/failure";
 import { createSteamInstall, type SteamInstallInfo } from "./installRows";
 import FailureText from "../../components/FailureText";
 
 function InstallStep(props: { name: string }) {
+    const { calls } = useServer();
     const install = createSteamInstall();
     const { run, wizard, disposed } = createWizardInstall(install.run);
     const [blocked, setBlocked] = createSignal<{ failure?: Outcome; host?: SteamInstallInfo["host"] } | null>(null);
@@ -22,9 +23,8 @@ function InstallStep(props: { name: string }) {
         wizard?.setOptionsShown(false);
         let info: SteamInstallInfo;
         try {
-            info = await serverCalls.steamInfo();
+            info = await calls.steamInfo();
         } catch (err) {
-            console.error(`[Setup] Failed to check ${props.name}:`, err);
             if (!disposed()) setBlocked({ failure: { title: `${props.name} could not be checked`, message: errorMessage(err) } });
             return;
         }

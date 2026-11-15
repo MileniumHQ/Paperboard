@@ -1,10 +1,9 @@
-import { batch, createEffect, createSignal, on, Show } from "solid-js";
-import { PaperButton, PaperCard, PaperFlex, PaperIcon, PaperLoader, PaperModal, PaperPageHeader, PaperQuote, PaperSettingItem, PaperSettingList, PaperTable, PaperText, PaperToggle, createAction, createLatest } from "@mileniumhq/paperui";
-import { serverStatus } from "../../lib/server";
+import { createEffect, createSignal, on, Show } from "solid-js";
+import { PaperButton, PaperCard, PaperFlex, PaperIcon, PaperLoader, PaperModal, PaperPageHeader, PaperQuote, PaperSettingItem, PaperSettingList, PaperTable, PaperText, PaperToggle, createAction, createRead } from "@mileniumhq/paperui";
+import { useServer } from "../../lib/server";
 import { errorMessage } from "../../lib/failure";
 import type { RustMapView } from "./index";
 import styles from "./Map.module.css";
-import { serverCalls } from "../../lib/api";
 
 /**
  * The map a Rust server plays, and its wipe: a fresh map with everything on
@@ -13,44 +12,35 @@ import { serverCalls } from "../../lib/api";
  * folder; nothing is deleted.
  */
 export default function RustMap(props: { active: boolean }) {
-    const [view, setView] = createSignal<RustMapView>();
-    const [loadError, setLoadError] = createSignal("");
+    const { calls, serverStatus } = useServer();
     const [open, setOpen] = createSignal(false);
     const [blueprints, setBlueprints] = createSignal(false);
     const wiping = createAction({ message: errorMessage });
     /** set once a wipe is done: whether there was a map to move to the trash */
     const [wiped, setWiped] = createSignal<{ trashed: boolean }>();
 
-    // the map from above: undefined until read, null until the server draws it
-    const [picture, setPicture] = createSignal<string | null>();
+    // the map, and the map from above: undefined until read, null until the server draws it
+    const map = createRead(
+        async (): Promise<{ view: RustMapView; picture: string | null }> => ({ view: await calls.rustMap(), picture: await calls.rustMapPicture() }),
+        { source: () => props.active && serverStatus(), message: errorMessage },
+    );
+    const view = () => map.value()?.view;
+    const picture = () => map.value()?.picture;
     const [drawing, setDrawing] = createSignal(false);
     const [pictureError, setPictureError] = createSignal("");
-
-    const latest = createLatest();
-    const load = async () => {
-        const current = latest();
-        try {
-            const view = await serverCalls.rustMap();
-            const picture = await serverCalls.rustMapPicture();
-            if (!current()) return;
-            batch(() => {
-                setView(view);
-                setPicture(picture);
-                setLoadError("");
-            });
-            // a running server without a picture of its map draws one, once
-            if (picture === null && serverStatus() === "online" && !drawing() && !pictureError()) void draw();
-        } catch (err) {
-            if (current()) setLoadError(errorMessage(err));
-        }
-    };
-    createEffect(on([() => props.active, serverStatus], ([active]) => { if (active) void load(); }));
+    // a running server without a picture of its map draws one, once each read lands
+    createEffect(
+        on(map.loading, (loading) => {
+            if (!loading && !map.error() && picture() === null && serverStatus() === "online" && !drawing() && !pictureError()) void draw();
+        }, { defer: true }),
+    );
 
     const draw = async () => {
         setDrawing(true);
         setPictureError("");
         try {
-            setPicture(await serverCalls.rustMapDraw());
+            const drawn = await calls.rustMapDraw();
+            map.set((prev) => prev && { ...prev, picture: drawn });
         } catch (err) {
             setPictureError(errorMessage(err));
         } finally {
@@ -61,8 +51,7 @@ export default function RustMap(props: { active: boolean }) {
     const ask = () => { setBlueprints(false); wiping.setError(null); setOpen(true); };
     const wipe = () => wiping.run("Not wiped", async () => {
         const trashed = view()?.made === true;
-        setView(await serverCalls.rustWipe({ blueprints: blueprints() }));
-        setPicture(null);
+        map.set({ view: await calls.rustWipe({ blueprints: blueprints() }), picture: null });
         setWiped({ trashed });
         setOpen(false);
     });
@@ -71,8 +60,8 @@ export default function RustMap(props: { active: boolean }) {
         <>
             <PaperPageHeader icon="map" title="Map" />
 
-            <Show when={loadError()}>
-                <PaperQuote variant="danger" icon="warning" title="The map could not be read">{loadError()}</PaperQuote>
+            <Show when={map.error()}>
+                <PaperQuote variant="danger" icon="warning" title="The map could not be read">{map.error()}</PaperQuote>
             </Show>
             <Show when={serverStatus() !== "offline"}>
                 <PaperQuote variant="warning" icon="warning" title="Server running">Stop the server to wipe it.</PaperQuote>

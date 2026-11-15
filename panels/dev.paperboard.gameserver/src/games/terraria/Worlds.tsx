@@ -1,13 +1,12 @@
 import { createSignal, For, Show } from "solid-js";
 import { PaperBadge, PaperCopyButton, PaperFlex, PaperQuote, PaperTable } from "@mileniumhq/paperui";
-import { fileApi } from "../../lib/api";
 import { PANEL_ID } from "../../service/contract";
 import { GameOptionItem } from "../../components/GameOptions";
 import WorldsPage from "../../components/WorldsPage";
 import { options } from "./index";
 import { gameModeLabel, worldSizeLabel, type TerrariaWorldHeader } from "./worldFile";
 import type { TerrariaWorld } from "./worldStore";
-import { serverCalls } from "../../lib/api";
+import { useServer } from "../../lib/server";
 
 const WLD_FILTERS = [{ name: "Terraria worlds", extensions: ["wld"] }];
 const UPLOAD_DIR = ".terraria-upload";
@@ -31,12 +30,13 @@ function fileSize(bytes: number): string {
 
 /** Terraria's worlds: each one .wld file in the server's worlds folder. */
 export default function TerrariaWorlds() {
+    const { calls, files } = useServer();
     // New World: the size, difficulty and seed Terraria generates it with
     const [generation, setGeneration] = createSignal<Record<string, unknown>>({});
 
     return (
         <WorldsPage
-            list={() => serverCalls.terrariaWorlds()}
+            list={() => calls.terrariaWorlds()}
             game={{
                 listName: "terraria-worlds",
                 title: (world) => world.header?.name ?? world.name,
@@ -121,9 +121,9 @@ export default function TerrariaWorlds() {
                 ),
                 canDelete: (world) => world.generated,
                 canSwitch: (world) => world.header !== null,
-                download: (world) => fileApi.exportFile(`worlds/${world.name}.wld`, PANEL_ID, { suggestedName: `${world.name}.wld`, filters: WLD_FILTERS }),
-                switchTo: (world) => serverCalls.terrariaWorld({ name: world.name, create: false }),
-                remove: (world) => serverCalls.terrariaWorldDelete({ name: world.name }),
+                download: (world) => files.exportFile(`worlds/${world.name}.wld`, PANEL_ID, { suggestedName: `${world.name}.wld`, filters: WLD_FILTERS }),
+                switchTo: (world) => calls.terrariaWorld({ name: world.name, create: false }),
+                remove: (world) => calls.terrariaWorldDelete({ name: world.name }),
                 deleteNote: (world) => `This moves "${world.name}" and its backup to the server folder's trash, with everything built in it.`,
                 takenNames: (worlds) => worlds.map((w) => w.name),
                 namePattern: NAME_PATTERN,
@@ -135,7 +135,7 @@ export default function TerrariaWorlds() {
                         for (let n = 2; ; n++) if (free(`World ${n}`)) return `World ${n}`;
                     },
                     load: async () => {
-                        const saved = await serverCalls.readGameOptions();
+                        const saved = await calls.readGameOptions();
                         setGeneration(Object.fromEntries(GENERATION.map((field) => [field.id, saved[field.id] ?? (field.kind === "secret" ? "" : field.default)])));
                     },
                     fields: () => (
@@ -151,20 +151,20 @@ export default function TerrariaWorlds() {
                     ),
                     note: "The world is generated the next time the server starts.",
                     submit: async (name) => {
-                        await serverCalls.terrariaWorld({ name, create: true, generation: generation() });
+                        await calls.terrariaWorld({ name, create: true, generation: generation() });
                     },
                 },
                 // the page brings the .wld in and the service checks it is a world
                 upload: {
                     choose: async () => {
                         const file = `upload-${crypto.randomUUID()}.wld`;
-                        const result = await fileApi.importFile(`${UPLOAD_DIR}/${file}`, PANEL_ID, { filters: WLD_FILTERS });
+                        const result = await files.importFile(`${UPLOAD_DIR}/${file}`, PANEL_ID, { filters: WLD_FILTERS });
                         if (result.status === "canceled") return null;
-                        const { header, suggestedName } = await serverCalls.terrariaWorldInspect({ file });
+                        const { header, suggestedName } = await calls.terrariaWorldInspect({ file });
                         return { file, name: suggestedName, note: `${header.name}: ${summary(header)}.` };
                     },
-                    discard: (file) => serverCalls.terrariaWorldDiscard({ file }),
-                    add: (file, name) => serverCalls.terrariaWorldImport({ file, name }),
+                    discard: (file) => calls.terrariaWorldDiscard({ file }),
+                    add: (file, name) => calls.terrariaWorldImport({ file, name }),
                     label: "File name",
                 },
             }}

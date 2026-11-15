@@ -1,5 +1,6 @@
-import { createSignal, onMount, Show } from "solid-js";
+import { createSignal, Show } from "solid-js";
 import {
+    createRead,
     PaperButton,
     PaperCard,
     PaperFlex,
@@ -11,33 +12,25 @@ import {
 } from "@mileniumhq/paperui";
 import InstallNotices, { type HostSupport } from "../../components/InstallNotices";
 import InstallProgressModal from "../../components/InstallProgressModal";
-import { serverSoftware, serverStatus, serverVersion } from "../../lib/server";
+import { useServer } from "../../lib/server";
 import { errorMessage, type Outcome } from "../../lib/failure";
 import { softwareName, terrariaSoftware } from "./catalog";
 import ReleaseSelector, { releasesOf } from "./ReleaseSelector";
 import { createTerrariaInstall } from "./installRows";
-import { serverCalls } from "../../lib/api";
 
 export default function TerrariaVersions() {
+    const { calls, serverSoftware, serverStatus, serverVersion } = useServer();
     // a server keeps the software it was made with; only its releases are offered
     const software = () => terrariaSoftware(serverSoftware());
     const name = () => (software() === "tmodloader" ? "tModLoader" : "Terraria");
     const [selected, setSelected] = createSignal(serverVersion() || releasesOf(software())[0]!.version);
-    const [support, setSupport] = createSignal<HostSupport | null>(null);
-    const [loadFailure, setLoadFailure] = createSignal<Outcome>();
+    const hosts = createRead(async (): Promise<Record<string, HostSupport>> => (await calls.terrariaVersions()).hosts, { message: errorMessage });
+    const support = () => hosts.value()?.[software()] ?? null;
+    const loadFailure = (): Outcome | undefined => (hosts.error() ? { title: "Terraria releases could not be read", message: hosts.error()! } : undefined);
     const [confirmOpen, setConfirmOpen] = createSignal(false);
     const [installOpen, setInstallOpen] = createSignal(false);
     const install = createTerrariaInstall();
     const reinstall = () => selected() === serverVersion();
-
-    onMount(async () => {
-        try {
-            setSupport((await serverCalls.terrariaVersions()).hosts[software()] ?? null);
-        } catch (err) {
-            console.error("[Versions] Failed to read the Terraria releases:", err);
-            setLoadFailure({ title: "Terraria releases could not be read", message: errorMessage(err) });
-        }
-    });
 
     const canInstall = () => serverStatus() === "offline" && support()?.supported === true && !install.running();
 

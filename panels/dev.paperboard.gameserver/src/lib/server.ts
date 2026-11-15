@@ -1,193 +1,113 @@
+// The server a page is open on. App makes one ServerPage for the server it
+// shows and hands it down through ServerContext; switching servers makes
+// another and drops this one with everything it owns, so nothing of one
+// server's page can reach the next.
 import { createStateSignal } from "@mileniumhq/paperui/headless";
-import { createSignal } from "solid-js";
-import { errorMessage, serverCalls, serverState } from "./api";
-import type { PaperConsoleEntry } from "@mileniumhq/paperui";
-import stripAnsi from "strip-ansi";
-import { SOFTWARE_NAMES, type ServerSoftwareType } from "./software";
-import type { InstallProgress, ModpackProgress } from "../core/state";
-import { DEFAULT_MOTD } from "../core/motd";
-import {
-    forgetPlayerData,
-    getPlayerPlaytimeSeconds,
-    loadPlayerStats,
-    onlinePlayerNames,
-    playerStats,
-    playerPositions,
-    playerStatSummaries,
-    playerPlaytime,
-    queryOnlinePlayers,
-    queryPlayerStats,
-    queryPlayerPositions,
-    seenPlayerNames,
-    setOnlinePlayerNames,
-    setSeenPlayerNames,
-    setPlayerStats,
-    setPlayerPositions,
-    setPlayerPlaytime,
-    type PlayerStatData,
-    type PlayerPosition,
-    type PlayerStatSummary,
-} from "./players";
-import { setActiveIssue, type ServerIssue } from "./diagnostics";
-import { applyStatePatch } from "../core/state";
-import type { ServerStatus as CoreServerStatus, ChatMessage as CoreChatMessage } from "../core/state";
-import { PLAYER_NAME_PATTERN as CORE_PLAYER_NAME_PATTERN, SERVER_PROC_ID as CORE_SERVER_PROC_ID } from "../core/players";
+import { createContext, createSignal, onCleanup, useContext, type Accessor } from "solid-js";
+import { callsFor, filesFor, portsFor, serverStates, type ServerCalls, fileApi, portApi } from "./api";
+import { errorMessage } from "./failure";
+import type { ServerSummary } from "../service";
+import type { GameServerState } from "../service/types";
+import type { PlayerPosition, PlayerStatData } from "../core/players";
+import { serverFields, type Fields } from "../core/state";
+import type { ChatMessage as CoreChatMessage, ServerStatus as CoreServerStatus } from "../core/state";
 
 export type ServerStatus = CoreServerStatus;
 export interface ChatMessage extends CoreChatMessage {}
+export { getStatusBadge } from "../core/statusBadge";
 
-export const SERVER_PROC_ID = CORE_SERVER_PROC_ID;
-export { stripAnsi };
-export const PLAYER_NAME_PATTERN = CORE_PLAYER_NAME_PATTERN;
+/** The server's state, a field each, and the players' as sets and maps by name. */
+export interface ServerPage extends Omit<Fields, "playerStats" | "playerPlaytime" | "playerPositions"> {
+    readonly id: string;
+    /** what the servers list says of it; App's view of it ends before it is removed */
+    readonly summary: Accessor<ServerSummary>;
+    readonly calls: ServerCalls;
+    /** the server's files: every path is inside its folder */
+    readonly files: typeof fileApi;
+    readonly ports: typeof portApi;
+    /** true once its state has been read: nothing of the page shows before */
+    readonly loaded: Accessor<boolean>;
+    /** reads its state again; rejects with why it could not */
+    refresh(): Promise<void>;
+    /** a change the page knows of before the service pushes it */
+    patch(change: Partial<GameServerState>): void;
+    readonly onlinePlayerNames: Accessor<ReadonlySet<string>>;
+    readonly seenPlayerNames: Accessor<ReadonlySet<string>>;
+    readonly playerStats: Accessor<ReadonlyMap<string, PlayerStatData>>;
+    readonly playerPlaytime: Accessor<ReadonlyMap<string, number>>;
+    readonly playerPositions: Accessor<ReadonlyMap<string, PlayerPosition>>;
+    /** the service reloads the server's config; one that fails is the Overview's serverActionError */
+    loadServerConfig(): Promise<void>;
+    updatePanelConfig(patch: Record<string, unknown>): Promise<void>;
+    /** the last start, stop or restart that failed, which the Overview quotes */
+    readonly serverActionError: Accessor<string>;
+    startServer(): void;
+    stopServer(): void;
+    restartServer(): void;
+}
 
-export const [serverStatus, setServerStatus] = createSignal<ServerStatus>("offline");
-// Every push carries fresh copies of the whole state. The signals below that
-// hold objects keep what did not change (createStateSignal): a push that says
-// nothing new notifies no one, and the chat keeps the messages it shows, so it
-// adds only the new rows instead of redrawing every row and its player head.
-export const [serverEntries, setServerEntries] = createStateSignal<PaperConsoleEntry[]>([]);
-export const [chatMessages, setChatMessages] = createStateSignal<ChatMessage[]>([]);
-export const [localIp, setLocalIp] = createSignal("127.0.0.1");
-export const [serverPort, setServerPort] = createSignal("25565");
-export const [serverMotd, setServerMotd] = createSignal(DEFAULT_MOTD);
-/** The map the running server plays, for games that change maps while running. */
-export const [serverLevel, setServerLevel] = createSignal<string | null>(null);
-/** the running server's player cap; null while offline or until it has answered */
-export const [maxPlayers, setMaxPlayers] = createSignal<number | null>(null);
-/** when the server came online, in milliseconds since 1970; null while it is not */
-export const [onlineSince, setOnlineSince] = createSignal<number | null>(null);
-export const [serverSoftware, setServerSoftware] = createSignal<string>("paper");
-export const [gameSettings, setGameSettings] = createStateSignal<Readonly<Record<string, unknown>>>({});
-export const [serverVersion, setServerVersion] = createSignal("");
-export const [ramAllocation, setRamAllocation] = createSignal(4);
-export const [gamerules, setGamerules] = createStateSignal<Record<string, string>>({});
-export const [installProgress, setInstallProgress] = createStateSignal<InstallProgress | null>(null);
-export const [modpackProgress, setModpackProgress] = createStateSignal<ModpackProgress | null>(null);
-// why an interrupted install could not be settled; starting and installing refuse while set
-export const [recoveryBlock, setRecoveryBlock] = createSignal<string | null>(null);
-// why the server could not be set up; every call but setting it up again refuses while set
-export const [initFailure, setInitFailure] = createSignal<string | null>(null);
-// last lifecycle (start/stop/restart) failure, surfaced on the Overview
-// tab — bridge-call rejections otherwise land in console.error only, and
-// a button that does nothing is a silent failure with a click handler.
-export const [serverActionError, setServerActionError] = createSignal("");
-
-
-function currentSetters() {
+/**
+ * The server `summary` names, for its page: its calls and files, and its
+ * state as the service pushes it. Made inside the view that shows it, which
+ * owns it. Every push is a fresh copy of the whole state; the state keeps
+ * what did not change (createStateSignal), and each field is a memo of it,
+ * so a push that says nothing new notifies no one, and one that changes a
+ * field notifies only that field's readers.
+ */
+export function createServerPage(summary: Accessor<ServerSummary>): ServerPage {
+    const id = summary().id;
+    const calls = callsFor(id);
+    const [state, setState] = createStateSignal<GameServerState | null>(null);
+    const read = async () => {
+        const next = await serverStates.read(id);
+        if (!next) throw new Error("Choose a server that has not been removed");
+        setState(next);
+    };
+    // a push before the read is in: the read answers with it (the keyed state's read hears it)
+    onCleanup(
+        serverStates.follow(id)((next) => {
+            if (next) setState(next);
+        }),
+    );
+    const [serverActionError, setServerActionError] = createSignal("");
+    const lifecycle = (run: () => Promise<unknown>) => () => {
+        setServerActionError("");
+        run().catch((err) => setServerActionError(errorMessage(err)));
+    };
     return {
-        setServerStatus,
-        setServerEntries,
-        setChatMessages,
-        setLocalIp,
-        setServerPort,
-        setServerMotd,
-        setServerLevel,
-        setMaxPlayers,
-        setOnlineSince,
-        setServerSoftware,
-        setGameSettings,
-        setServerVersion,
-        setRamAllocation,
-        setActiveIssue,
-        setRecoveryBlock,
-        setInitFailure,
-        setOnlinePlayerNames,
-        setSeenPlayerNames,
-        setPlayerStats,
-        setPlayerPositions,
-        setPlayerPlaytime,
-        setGamerules,
-        setInstallProgress,
-        setModpackProgress,
+        ...serverFields(state),
+        id,
+        summary,
+        calls,
+        files: filesFor(summary),
+        ports: portsFor(summary),
+        loaded: () => state() !== null,
+        refresh: read,
+        patch: (change) => setState((prev) => (prev ? { ...prev, ...change } : prev)),
+        loadServerConfig: async () => {
+            try {
+                await calls.loadConfig();
+                await read();
+            } catch (err) {
+                setServerActionError(errorMessage(err));
+            }
+        },
+        updatePanelConfig: async (patch) => {
+            await calls.updatePanelConfig({ patch });
+            await read();
+        },
+        serverActionError,
+        startServer: lifecycle(() => calls.startServer()),
+        stopServer: lifecycle(() => calls.stopServer()),
+        restartServer: lifecycle(() => calls.restartServer()),
     };
 }
 
-serverState.onChange((patch) => {
-    applyStatePatch(patch, currentSetters());
-});
+export const ServerContext = createContext<ServerPage>();
 
-/** reads the server's own state into the page; App does it before it shows the server's game */
-export async function loadServerState() {
-    applyStatePatch(await serverState.refresh(), currentSetters());
+/** The server the page is open on; only a server's own view has one. */
+export function useServer(): ServerPage {
+    const server = useContext(ServerContext);
+    if (!server) throw new Error("This part of the page belongs to a server's page, and none is open");
+    return server;
 }
-
-// config lives in the service, which owns every read-merge-write of it. The
-// UI only triggers a reload and pulls the resulting state.
-export async function loadServerConfig() {
-    try {
-        await serverCalls.loadConfig();
-        applyStatePatch(await serverState.refresh(), currentSetters());
-    } catch (err) {
-        reportActionError("load-server-config", err);
-    }
-}
-
-export async function updatePanelConfig(patch: Record<string, unknown>) {
-    await serverCalls.updatePanelConfig({ patch });
-    applyStatePatch(await serverState.refresh(), currentSetters());
-}
-
-/** loads the server's config once, which also reads its state */
-export async function initServerListeners() {
-    await loadServerConfig();
-}
-
-function reportActionError(action: string, err: unknown): void {
-    const message = errorMessage(err);
-    console.error(`[ServerBridge] ${action} failed:`, message);
-    setServerActionError(message);
-}
-
-export function startServer() {
-    setServerActionError("");
-    serverCalls
-        .startServer()
-        .catch((err) => reportActionError("start-server", err));
-}
-
-export function stopServer() {
-    setServerActionError("");
-    serverCalls
-        .stopServer()
-        .catch((err) => reportActionError("stop-server", err));
-}
-
-export function restartServer() {
-    setServerActionError("");
-    serverCalls
-        .restartServer()
-        .catch((err) => reportActionError("restart-server", err));
-}
-
-/** Rejects when the command did not run; the console that sent it shows why. */
-export function sendServerCommand(cmd: string): Promise<unknown> {
-    return serverCalls.runCommand({ command: cmd });
-}
-
-/** Rejects when the message was not sent; the chat that sent it shows why. */
-export function sendChatMessage(msg: string): Promise<unknown> {
-    return serverCalls.sayChat({ message: msg });
-}
-
-/** Asks the game to write its world to disk; resolves once the game confirms it. */
-export function saveWorld(): Promise<unknown> {
-    return serverCalls.saveWorld();
-}
-
-export { getStatusBadge } from "../core/statusBadge";
-
-export {
-    forgetPlayerData,
-    getPlayerPlaytimeSeconds,
-    loadPlayerStats,
-    onlinePlayerNames,
-    playerStats,
-    playerPositions,
-    playerStatSummaries,
-    playerPlaytime,
-    queryOnlinePlayers,
-    queryPlayerPositions,
-    queryPlayerStats,
-    seenPlayerNames,
-};
-export type { PlayerStatData, PlayerPosition, PlayerStatSummary };

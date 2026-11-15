@@ -1,25 +1,25 @@
 import { minecraftSoftware } from "../../games/minecraft/index";
-import { serverSoftware, serverStatus, serverVersion } from "../server";
-import { installModpack, listModpackVersions, readModpack, removeModpack, searchModpacks } from "../modpacks";
+import type { ServerPage } from "../server";
+import { searchProjects } from "../modrinth";
 import { SOFTWARE } from "../../software/catalog";
 import { versionLabel } from "./presentation";
-import type { ModpackRecord } from "../../core/modpack";
-import { commitModpack, discardUpload, pickModpackFile } from "./upload";
+import { MODPACK_LOADER, type ModpackRecord } from "../../core/modpack";
+import { discardUpload, pickModpackFile } from "./upload";
 import { modrinthHits, modrinthSource } from "./sources";
 import type { AddonKind, AddonListing, InstalledAddon } from "./kind";
 
 // Modpacks: one Modrinth pack for the server's loader. Installing replaces
 // the mod set and may switch the Minecraft version and loader build; the
-// service does all of it (service/modpacks.ts).
+// service does all of it (service/modpacks.ts). Modrinth search runs in the
+// page like the Mods tab's.
 
-export const loaderName = () => SOFTWARE[minecraftSoftware(serverSoftware())].name;
-const offline = () => serverStatus() === "offline";
+export const loaderName = (software: string) => SOFTWARE[minecraftSoftware(software)].name;
 
-export function installedModpack(pack: ModpackRecord): InstalledAddon {
+export function installedModpack(pack: ModpackRecord, loader: string): InstalledAddon {
     return {
         id: "modpack",
         title: pack.title,
-        subtitle: `Minecraft ${pack.mcVersion} · ${loaderName()} ${pack.loaderVersion}`,
+        subtitle: `Minecraft ${pack.mcVersion} · ${loader} ${pack.loaderVersion}`,
         iconUrl: pack.iconUrl,
         badge: pack.uploaded ? { label: "Uploaded", variant: "monochrome" } : { label: versionLabel(pack.versionNumber), variant: "success" },
         footer: `${versionLabel(pack.versionNumber)} · ${pack.files.length} files`,
@@ -29,34 +29,48 @@ export function installedModpack(pack: ModpackRecord): InstalledAddon {
     };
 }
 
-export const modpacksKind: AddonKind<ModpackRecord | null> = {
+export function modpacksKind({ calls, files, serverSoftware, serverStatus, serverVersion }: ServerPage): AddonKind<ModpackRecord | null> {
+    const loader = () => loaderName(serverSoftware());
+    const offline = () => serverStatus() === "offline";
+    return {
     title: "Modpacks",
     icon: "package_2",
     glyph: "package_2",
     noun: "modpack",
     source: modrinthSource("modpack", "https://modrinth.com/modpacks"),
     searchPlaceholder: "Search Modpacks",
-    searchScope: () => `${loaderName()} modpacks that run on a server`,
-    emptySearch: () => `No ${loaderName()} modpacks matched your search.`,
+    searchScope: () => `${loader()} modpacks that run on a server`,
+    emptySearch: () => `No ${loader()} modpacks matched your search.`,
     installedTitle: "Installed Modpack",
     resultBadge: "Installed",
     watch: serverSoftware,
 
     async list(): Promise<AddonListing<ModpackRecord | null>> {
-        const { modpack } = await readModpack();
-        return { items: modpack ? [installedModpack(modpack)] : [], meta: modpack };
+        const { modpack } = await calls.readModpack();
+        return { items: modpack ? [installedModpack(modpack, loader())] : [], meta: modpack };
     },
     listFailureTitle: () => "Could not read the installed modpack",
     recover: {
         label: "Forget it (files stay)",
         errorTitle: "Not forgotten",
         disabled: () => !offline(),
-        run: () => removeModpack().then(() => undefined),
+        run: () => calls.removeModpack().then(() => undefined),
     },
 
-    search: async (query, signal) => modrinthHits(await searchModpacks(query, signal)),
+    async search(query, signal) {
+        const pack = MODPACK_LOADER[minecraftSoftware(serverSoftware())];
+        if (!pack) return [];
+        const hits = await searchProjects({
+            query,
+            signal,
+            facets: [["project_type:modpack"], [`categories:${pack.modrinth}`], ["server_side:required", "server_side:optional"]],
+            // the facet lets a few client-only packs through; they install nothing on a server
+            keep: (hit) => hit.server_side !== "unsupported",
+        });
+        return modrinthHits(hits);
+    },
     async versions(projectId) {
-        return (await listModpackVersions(projectId)).map((v) => ({
+        return (await calls.listModpackVersions({ projectId })).map((v) => ({
             id: v.id,
             label: `${v.versionNumber || v.name} · Minecraft ${v.gameVersions.join(", ")}`,
             gameVersions: v.gameVersions,
@@ -68,7 +82,7 @@ export const modpacksKind: AddonKind<ModpackRecord | null> = {
 
     itemClick: "none",
     upload: {
-        sources: [pickModpackFile("Upload .mrpack")],
+        sources: [pickModpackFile(files, "Upload .mrpack")],
         failureTitle: "Not installed",
         confirm: {
             title: "Install this modpack",
@@ -76,8 +90,9 @@ export const modpacksKind: AddonKind<ModpackRecord | null> = {
             action: "Install",
         },
         disabled: () => !offline(),
-        commit: commitModpack,
-        discard: discardUpload,
+        // reading, downloading and placing a pack runs for minutes: the contract waits it out
+        commit: (stage) => calls.uploadModpack({ stage }),
+        discard: discardUpload(calls),
         // the tab shows the install's outcome like any other install
         describe: () => null,
     },
@@ -92,9 +107,10 @@ export const modpacksKind: AddonKind<ModpackRecord | null> = {
         busyAction: "Installing…",
         icon: "download",
         errorTitle: "Not installed",
-        noVersions: () => ({ title: "No compatible version", text: `This modpack has no ${loaderName()} version.` }),
+        noVersions: () => ({ title: "No compatible version", text: `This modpack has no ${loader()} version.` }),
         disabled: () => !offline(),
-        run: (target, versionId) => installModpack(target.projectId, versionId),
+        // downloading and placing a pack runs for minutes: the contract waits it out (progress arrives through state)
+        run: (target, versionId) => calls.installModpack({ projectId: target.projectId, versionId }),
     },
 
     remove: {
@@ -103,8 +119,9 @@ export const modpacksKind: AddonKind<ModpackRecord | null> = {
         busyAction: "Removing…",
         errorTitle: "Not removed",
         describe: (item, listing) =>
-            `Move the ${listing?.meta?.files.length} files ${item.title} placed into the server folder's trash? ${loaderName()} ${listing?.meta?.loaderVersion} stays installed, and so do mods and configs you added.`,
+            `Move the ${listing?.meta?.files.length} files ${item.title} placed into the server folder's trash? ${loader()} ${listing?.meta?.loaderVersion} stays installed, and so do mods and configs you added.`,
         disabled: () => !offline(),
-        run: () => removeModpack().then(() => undefined),
+        run: () => calls.removeModpack().then(() => undefined),
     },
 };
+}

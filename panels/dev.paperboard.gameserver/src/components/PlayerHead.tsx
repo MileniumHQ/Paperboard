@@ -1,5 +1,6 @@
 import type { PaperAvatarSize } from "@mileniumhq/paperui";
-import { loadHead } from "../lib/skins";
+import { headsFrom } from "../lib/skins";
+import { useServer } from "../lib/server";
 import HeadAvatar from "./HeadAvatar";
 
 /** A Minecraft player head, over the panel's bridge. */
@@ -12,5 +13,5 @@ export default function PlayerHead(props: {
     class?: string;
     onFailure?: (reason: string | null) => void;
 }) {
-    return <HeadAvatar {...props} loadHead={loadHead} />;
+    return <HeadAvatar {...props} loadHead={headsFrom(useServer().calls)} />;
 }

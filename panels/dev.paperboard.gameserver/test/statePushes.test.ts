@@ -3,65 +3,17 @@
 // new notifies no one, and one that does is seen once, all together.
 import { createStateSignal, keepUnchanged } from "@mileniumhq/paperui/headless";
 import { describe, expect, test } from "bun:test";
-import { createEffect, createRoot, createSignal, on } from "solid-js";
-import { applyStatePatch, type StateSetters } from "../src/core/state";
+import { createEffect, createRoot, on, type Accessor } from "solid-js";
+import { serverFields } from "../src/core/state";
+import type { GameServerState } from "../src/service/types";
 
-/** the page's state signals, made the way lib/server.ts and lib/players.ts make them */
+/** the page's view of a server's state, made the way a server's page makes it: one state signal, a memo per field */
 function pageState() {
-    const primitive = <T,>(initial: T) => createSignal<T>(initial);
-    const signals = {
-        serverStatus: primitive<string>("offline"),
-        serverEntries: createStateSignal<unknown[]>([]),
-        chatMessages: createStateSignal<unknown[]>([]),
-        localIp: primitive(""),
-        serverPort: primitive(""),
-        serverMotd: primitive(""),
-        serverLevel: primitive<string | null>(null),
-        maxPlayers: primitive<number | null>(null),
-        onlineSince: primitive<number | null>(null),
-        serverSoftware: primitive(""),
-        gameSettings: createStateSignal<Readonly<Record<string, unknown>>>({}),
-        serverVersion: primitive(""),
-        ramAllocation: primitive(0),
-        activeIssue: createStateSignal<unknown>(null),
-        recoveryBlock: primitive<string | null>(null),
-        initFailure: primitive<string | null>(null),
-        onlinePlayers: createStateSignal<Set<string>>(new Set()),
-        seenPlayers: createStateSignal<Set<string>>(new Set()),
-        playerStats: createStateSignal<Map<string, unknown>>(new Map()),
-        playerPositions: createStateSignal<Map<string, unknown>>(new Map()),
-        playerPlaytime: createStateSignal<Map<string, number>>(new Map()),
-        gamerules: createStateSignal<Record<string, string>>({}),
-        installProgress: createStateSignal<unknown>(null),
-        modpackProgress: createStateSignal<unknown>(null),
-    };
-    const setters = {
-        setServerStatus: signals.serverStatus[1],
-        setServerEntries: signals.serverEntries[1],
-        setChatMessages: signals.chatMessages[1],
-        setLocalIp: signals.localIp[1],
-        setServerPort: signals.serverPort[1],
-        setServerMotd: signals.serverMotd[1],
-        setServerLevel: signals.serverLevel[1],
-        setMaxPlayers: signals.maxPlayers[1],
-        setOnlineSince: signals.onlineSince[1],
-        setServerSoftware: signals.serverSoftware[1],
-        setGameSettings: signals.gameSettings[1],
-        setServerVersion: signals.serverVersion[1],
-        setRamAllocation: signals.ramAllocation[1],
-        setActiveIssue: signals.activeIssue[1],
-        setRecoveryBlock: signals.recoveryBlock[1],
-        setInitFailure: signals.initFailure[1],
-        setOnlinePlayerNames: signals.onlinePlayers[1],
-        setSeenPlayerNames: signals.seenPlayers[1],
-        setPlayerStats: signals.playerStats[1],
-        setPlayerPositions: signals.playerPositions[1],
-        setPlayerPlaytime: signals.playerPlaytime[1],
-        setGamerules: signals.gamerules[1],
-        setInstallProgress: signals.installProgress[1],
-        setModpackProgress: signals.modpackProgress[1],
-    } as unknown as StateSetters;
-    return { signals, setters };
+    return createRoot((dispose) => {
+        const [state, setState] = createStateSignal<GameServerState | null>(null);
+        const fields = serverFields(state) as unknown as Record<string, Accessor<unknown>>;
+        return { fields, apply: (next: Record<string, unknown>) => setState(next as unknown as GameServerState), dispose };
+    });
 }
 
 /** a running server's state as the service pushes it: a new copy each time */
@@ -97,13 +49,13 @@ const push = (onlinePlayers = ["steve", "alex"]) =>
 
 describe("state pushes", () => {
     test("a push that says nothing new notifies nothing and keeps every value", () => {
-        const { signals, setters } = pageState();
-        applyStatePatch(push(), setters);
-        const before = Object.fromEntries(Object.entries(signals).map(([key, [get]]) => [key, get()]));
+        const { fields, apply, dispose: drop } = pageState();
+        apply(push());
+        const before = Object.fromEntries(Object.entries(fields).map(([key, get]) => [key, get()]));
         const runs: Record<string, number> = {};
         // effects run once the root is set up, so the counting starts after it
         const dispose = createRoot((dispose) => {
-            for (const [key, [get]] of Object.entries(signals)) {
+            for (const [key, get] of Object.entries(fields)) {
                 runs[key] = 0;
                 createEffect(on(get, () => runs[key]++));
             }
@@ -111,30 +63,33 @@ describe("state pushes", () => {
         });
         const settled = { ...runs };
         expect(Object.values(settled).every((n) => n === 1)).toBe(true);
-        applyStatePatch(push(), setters);
-        applyStatePatch(push(), setters);
+        apply(push());
+        apply(push());
         expect(runs).toEqual(settled);
-        for (const [key, [get]] of Object.entries(signals)) expect([key, get() === before[key]]).toEqual([key, true]);
-        // and a change is still heard
-        applyStatePatch(push(["steve"]), setters);
-        expect(runs.onlinePlayers).toBe(2);
-        expect(runs.seenPlayers).toBe(1);
+        for (const [key, get] of Object.entries(fields)) expect([key, get() === before[key]]).toEqual([key, true]);
+        // and a change is still heard, by its readers alone
+        apply(push(["steve"]));
+        expect(runs.onlinePlayerNames).toBe(2);
+        expect(runs.seenPlayerNames).toBe(1);
+        expect(runs.serverStatus).toBe(1);
         dispose();
+        drop();
     });
 
     test("a push is applied as one update", () => {
-        const { signals, setters } = pageState();
-        applyStatePatch(push(), setters);
+        const { fields, apply, dispose: drop } = pageState();
+        apply(push());
         let runs = 0;
         const dispose = createRoot((dispose) => {
-            createEffect(on([signals.onlinePlayers[0], signals.serverStatus[0], signals.maxPlayers[0]], () => runs++));
+            createEffect(on([fields.onlinePlayerNames, fields.serverStatus, fields.maxPlayers], () => runs++));
             return dispose;
         });
         expect(runs).toBe(1);
-        applyStatePatch({ ...push(["steve"]), serverStatus: "stopping", maxPlayers: 10 }, setters);
+        apply({ ...push(["steve"]), serverStatus: "stopping", maxPlayers: 10 });
         expect(runs).toBe(2);
-        expect([...signals.onlinePlayers[0]()]).toEqual(["steve"]);
+        expect([...(fields.onlinePlayerNames() as Set<string>)]).toEqual(["steve"]);
         dispose();
+        drop();
     });
 
     test("a changed value keeps the parts that did not change", () => {

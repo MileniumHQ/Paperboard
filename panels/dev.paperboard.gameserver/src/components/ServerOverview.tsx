@@ -17,22 +17,7 @@ import {
     createAction,
     createPaperCompact,
 } from "@mileniumhq/paperui";
-import {
-    serverActionError,
-    serverStatus,
-    serverEntries,
-    localIp,
-    serverPort,
-    serverVersion,
-    loadServerConfig,
-    startServer,
-    stopServer,
-    restartServer,
-    sendServerCommand,
-    sendChatMessage,
-    saveWorld,
-    getStatusBadge,
-} from "../lib/server";
+import { getStatusBadge, useServer } from "../lib/server";
 import ServerIssueModal from "./ServerIssueModal";
 import RecoveryNotice from "./RecoveryNotice";
 import { errorMessage } from "../lib/failure";
@@ -78,16 +63,18 @@ export default function ServerOverview(props: {
     /** false for a game that keeps no world, which has no Save world */
     world?: boolean;
 }) {
+    const { calls, serverActionError, serverStatus, serverEntries, localIp, serverPort, serverVersion, loadServerConfig, startServer, stopServer, restartServer } = useServer();
     // loading the config also reads the server's state
     onMount(() => void loadServerConfig());
 
     const saving = createAction({ message: errorMessage });
     const [commandError, setCommandError] = createSignal("");
-    const save = () => saving.run("World not saved", saveWorld);
+    // resolves once the game confirms it wrote its world to disk
+    const save = () => saving.run("World not saved", () => calls.saveWorld());
     const control = () => props.control?.kind ?? "stdin";
     const runCommand = (line: string) => {
         setCommandError("");
-        const sent = control() === "broadcast" ? sendChatMessage(line) : sendServerCommand(line);
+        const sent = control() === "broadcast" ? calls.sayChat({ message: line }) : calls.runCommand({ command: line });
         sent.catch((err) => setCommandError(errorMessage(err)));
     };
 

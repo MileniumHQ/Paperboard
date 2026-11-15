@@ -1,4 +1,4 @@
-import { createEffect, createMemo, createSignal, For, on, Show } from "solid-js";
+import { createMemo, createSignal, For, Show } from "solid-js";
 import {
     PaperAvatar,
     PaperButton,
@@ -11,9 +11,9 @@ import {
     PaperPageHeader,
     PaperQuote,
     PaperText,
-    createLatest,
+    createRead,
 } from "@mileniumhq/paperui";
-import { serverLevel, serverStatus } from "../../lib/server";
+import { useServer } from "../../lib/server";
 import { errorMessage } from "../../lib/failure";
 import { mapMode, type SourceGameSpec, type SourceMapCycle } from "./index";
 import MapCards, { MapPicturesCredit, MapPicturesFailure, mapChoices, mapNames, type MapChoice } from "./MapCards";
@@ -22,7 +22,6 @@ import { workshopChoice } from "./useWorkshopMaps";
 import WorkshopPane from "./WorkshopPane";
 import PictureAvatar from "../../components/PictureAvatar";
 import { canonicalMap, workshopId, workshopName, type SourceWorkshopHit, type SourceWorkshopMap } from "./workshop";
-import { serverCalls } from "../../lib/api";
 
 // The maps a server plays through, in order. The server reads a map cycle
 // file; until the rotation is edited here that is the game's own or one the
@@ -30,8 +29,12 @@ import { serverCalls } from "../../lib/api";
 // rotation Paperboard's, written to a file of its own that the server is
 // pointed at (games/source/mapcycle.ts).
 export default function SourceMaps(props: { spec: SourceGameSpec; active: boolean }) {
-    const [view, setView] = createSignal<SourceMapCycle | null>(null);
-    const [loadError, setLoadError] = createSignal("");
+    const { calls, serverLevel, serverStatus } = useServer();
+    // read while the tab is open, and again as the server starts or stops
+    const cycle = createRead((): Promise<SourceMapCycle> => calls.sourceMapCycle(), { source: () => props.active && serverStatus(), message: errorMessage });
+    const view = cycle.value;
+    // a read again clears the failure at once, as it starts
+    const loadError = () => (cycle.loading() ? null : cycle.error());
     const [working, setWorking] = createSignal(false);
     const [error, setError] = createSignal<{ title: string; message: string } | null>(null);
     const [notice, setNotice] = createSignal("");
@@ -44,35 +47,19 @@ export default function SourceMaps(props: { spec: SourceGameSpec; active: boolea
     const shownRemoving = createMemo<SourceWorkshopMap | null>((prev) => removingWorkshop() ?? prev, null);
     const pictures = createMapPictures(props.spec);
 
-    // a save's answer, or a newer read, wins over a read sent before it
-    const latest = createLatest();
-    const load = async () => {
-        setLoadError("");
-        const current = latest();
-        try {
-            const answer = await serverCalls.sourceMapCycle();
-            if (current()) setView(answer);
-        } catch (err) {
-            if (current()) setLoadError(errorMessage(err));
-        }
-    };
-    createEffect(on([() => props.active, serverStatus], ([active]) => { if (active) void load(); }));
-
     /** Sets the rotation, or hands it back to the game's file with null. */
     const save = async (maps: string[] | null, title: string) => {
         setWorking(true);
         setError(null);
         setNotice("");
-        const current = latest();
         try {
-            const answer = await serverCalls.sourceMapCycleSet({ maps });
-            if (current()) setView(answer);
+            // a save's answer wins over a read sent before it
+            cycle.set(await calls.sourceMapCycleSet({ maps }));
             return true;
         } catch (err) {
-            if (!current()) return true;
             setError({ title, message: errorMessage(err) });
             // whatever did land is what the page shows
-            await load();
+            await cycle.reload();
             return false;
         } finally {
             setWorking(false);
@@ -104,7 +91,7 @@ export default function SourceMaps(props: { spec: SourceGameSpec; active: boolea
         setWorking(true);
         setError(null);
         try {
-            await serverCalls.sourceWorkshopAdd({ id: hit.id });
+            await calls.sourceWorkshopAdd({ id: hit.id });
         } catch (err) {
             setError({ title: `${hit.title} was not added`, message: errorMessage(err) });
             setWorking(false);
@@ -139,9 +126,9 @@ export default function SourceMaps(props: { spec: SourceGameSpec; active: boolea
         setWorking(true);
         setError(null);
         try {
-            await serverCalls.sourceWorkshopRemove({ id: map.id });
+            await calls.sourceWorkshopRemove({ id: map.id });
             setRemovingWorkshop(null);
-            await load();
+            await cycle.reload();
         } catch (err) {
             setError({ title: `${map.title} was not removed`, message: errorMessage(err) });
         } finally {
@@ -168,7 +155,7 @@ export default function SourceMaps(props: { spec: SourceGameSpec; active: boolea
                 <PaperQuote variant="danger" icon="warning" title="Could not read the map rotation">
                     <PaperFlex direction="column" gap="half">
                         <span>{loadError()}</span>
-                        <PaperButton onClick={() => void load()}>Try again</PaperButton>
+                        <PaperButton onClick={() => void cycle.reload()}>Try again</PaperButton>
                     </PaperFlex>
                 </PaperQuote>
             </Show>

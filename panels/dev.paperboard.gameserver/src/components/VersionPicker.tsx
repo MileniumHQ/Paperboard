@@ -1,4 +1,5 @@
 import { createEffect, createSignal, For, Show, untrack, on, batch } from "solid-js";
+import { useServer } from "../lib/server";
 import {
     PaperButton,
     PaperCheckbox,
@@ -13,7 +14,6 @@ import {
 import type { ServerSoftwareType, VersionItem } from "../lib/software";
 import FailureText from "./FailureText";
 import { errorMessage } from "../lib/failure";
-import { serverCalls } from "../lib/api";
 
 // Shared Minecraft version picker: search, release-channel filters and the
 // version list. Used by onboarding (Setup) and the Versions tab so there is
@@ -25,6 +25,7 @@ export default function VersionPicker(props: {
     /** Fill the parent instead of a fixed list height. */
     fill?: boolean;
 }) {
+    const { calls } = useServer();
     const [searchQuery, setSearchQuery] = createSignal("");
     const [allVersions, setAllVersions] = createSignal<VersionItem[]>([]);
     const [loading, setLoading] = createSignal(true);
@@ -45,7 +46,7 @@ export default function VersionPicker(props: {
         const current = latest();
         try {
             // the service fetches upstream: some indexes refuse cross-origin reads
-            const answer = await serverCalls.listSoftwareVersions({ software });
+            const answer = await calls.listSoftwareVersions({ software });
             if (!current()) return;
             const versions = answer.filter((v) => v.installable && (v.type === "release" || v.type === "snapshot"));
             setAllVersions(versions);

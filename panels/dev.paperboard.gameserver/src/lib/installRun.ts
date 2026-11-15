@@ -4,9 +4,8 @@ import type { InstallOutcome } from "../games/minecraft/softwareInstall";
 import { providerFor } from "../games/minecraft/providers";
 import { SOFTWARE_NAMES, getRequiredJavaVersion, type ServerSoftwareType } from "./software";
 import { ensureJavaRuntime, type DownloadedBytes } from "./ensureJava";
-import { installProgress, setInstallProgress } from "./server";
+import { useServer } from "./server";
 import type { InstallLoaderItem } from "../components/InstallLoaders";
-import { serverCalls } from "./api";
 
 type Row = { percent: () => number; setPercent: (v: number) => void; status: () => LoaderStatus; setStatus: (v: LoaderStatus) => void };
 
@@ -23,6 +22,7 @@ function row(): Row {
  * progress arrives through service state.
  */
 export function createInstallRun() {
+    const { calls, installProgress, patch } = useServer();
     const javaDownload = row();
     const javaExtract = row();
     const download = row();
@@ -83,7 +83,7 @@ export function createInstallRun() {
         if (!javaPkg) throw new Error(`Could not determine the Java runtime for ${version}.`);
         reset();
         // clear a previous run's terminal state before the effect reads it
-        setInstallProgress(null);
+        patch({ installProgress: null });
         setActive(true);
         try {
             try {
@@ -114,7 +114,7 @@ export function createInstallRun() {
             try {
                 // a jar download plus a Forge or NeoForge installer takes minutes:
                 // the contract waits it out, and the service's progress shows it is alive
-                const outcome = await serverCalls.installServerVersion({ software, version });
+                const outcome = await calls.installServerVersion({ software, version });
                 download.setStatus("success");
                 download.setPercent(100);
                 installer.setStatus("success");

@@ -1,4 +1,4 @@
-import { createEffect, createMemo, createSignal, on, onMount, For, Show, untrack } from "solid-js";
+import { createEffect, createMemo, createSignal, on, For, Show, untrack } from "solid-js";
 import {
     PaperButton,
     PaperCard,
@@ -15,14 +15,14 @@ import {
     PaperText,
     PaperToggle,
     sameData,
+    createRead,
 } from "@mileniumhq/paperui";
 import type { GameFeatures, GameOption, GameTab } from "../games";
-import { serverStatus } from "../lib/server";
+import { useServer } from "../lib/server";
 import { errorMessage } from "../lib/failure";
 import { createSaves } from "../lib/saves";
 import { fitsNumber, numberRule } from "../games/options";
 import { describeWithProblem } from "./PropertyFieldControl";
-import { serverCalls } from "../lib/api";
 
 /**
  * One option's control. Toggles and menus report a change at once; text,
@@ -196,8 +196,11 @@ export default function GameOptions(props: {
     fields: readonly GameOption[];
     whileRunning: GameFeatures["optionsWhileRunning"];
 }) {
-    const [values, setValues] = createSignal<Record<string, unknown> | null>(null);
-    const [loadError, setLoadError] = createSignal("");
+    const { calls, serverStatus } = useServer();
+    const options = createRead(() => calls.readGameOptions(), { message: errorMessage });
+    const values = options.value;
+    // a read again shows the loader, not the last failure
+    const loadError = () => (options.loading() ? "" : (options.error() ?? ""));
     const [saveError, setSaveError] = createSignal("");
     const [search, setSearch] = createSignal("");
     const listed = createMemo(() => props.fields.filter((field) => !field.scope && (field.tab ?? "options") === props.tab.id));
@@ -241,16 +244,6 @@ export default function GameOptions(props: {
         return `${list} ${names.length === 1 ? "applies" : "apply"} now. Other changes apply the next time the server starts.`;
     };
 
-    const load = async () => {
-        setLoadError("");
-        try {
-            setValues(await serverCalls.readGameOptions());
-        } catch (err) {
-            setLoadError(errorMessage(err));
-        }
-    };
-    onMount(() => void load());
-
     const saves = createSaves({ failed: (err) => setSaveError(errorMessage(err)), changed: () => setSaveError("") });
 
     /** one option's row: its control saves through the tab's saves */
@@ -263,7 +256,7 @@ export default function GameOptions(props: {
                 return values()?.[row.id] ?? (option.kind === "secret" ? "" : option.default);
             },
             async (next) => {
-                setValues(await serverCalls.writeGameOptions({ patch: { [row.id]: next } }));
+                options.set(await calls.writeGameOptions({ patch: { [row.id]: next } }));
             },
         );
         return (
@@ -316,7 +309,7 @@ export default function GameOptions(props: {
                 <PaperQuote variant="danger" icon="warning" title="Couldn't read the options">
                     <PaperFlex direction="column" gap="half">
                         <PaperText>{loadError()}</PaperText>
-                        <PaperButton size="tiny" onClick={() => void load()}>Try again</PaperButton>
+                        <PaperButton size="tiny" onClick={() => void options.reload()}>Try again</PaperButton>
                     </PaperFlex>
                 </PaperQuote>
             </Show>

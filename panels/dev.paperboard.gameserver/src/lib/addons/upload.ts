@@ -1,9 +1,8 @@
-import { fileApi } from "../api";
+import type { fileApi, ServerCalls } from "../api";
 import { addonStageDir } from "../../core/addonUpload";
 import { PANEL_ID } from "../../service/types";
 import type { UploadOutcome } from "../../service/addonUploads";
 import type { AddonUploadSource } from "./kind";
-import { serverCalls } from "../api";
 
 // Uploading from disk: the page copies what the user picks into a staging
 // folder of the server folder (paperapi's file import), then asks the
@@ -15,35 +14,28 @@ export const newStage = () => crypto.randomUUID();
 
 export const stageFolder = (stage: string) => addonStageDir(stage);
 
-export const discardUpload = async (stage: string) => {
-    await serverCalls.discardAddonUpload({ stage });
+/** removes what a pick staged */
+export const discardUpload = (calls: ServerCalls) => async (stage: string) => {
+    await calls.discardAddonUpload({ stage });
 };
 
-export const commitPlugins = (stage: string) => serverCalls.uploadPlugins({ stage });
-
-export const commitDatapacks = (stage: string) => serverCalls.uploadDatapacks({ stage });
-
-// reading, downloading and placing a pack runs for minutes: the contract
-// waits it out
-export const commitModpack = (stage: string) => serverCalls.uploadModpack({ stage });
-
-export const pickFiles = (label: string, extensions: string[], icon = "upload_file"): AddonUploadSource => ({
+export const pickFiles = (files: typeof fileApi, label: string, extensions: string[], icon = "upload_file"): AddonUploadSource => ({
     label,
     icon,
-    pick: (dir) => fileApi.importFiles(dir, PANEL_ID, { filters: [{ name: label.replace(/^Upload /, ""), extensions }] }),
+    pick: (dir) => files.importFiles(dir, PANEL_ID, { filters: [{ name: label.replace(/^Upload /, ""), extensions }] }),
 });
 
-export const pickFolder = (label: string): AddonUploadSource => ({
+export const pickFolder = (files: typeof fileApi, label: string): AddonUploadSource => ({
     label,
     icon: "drive_folder_upload",
-    pick: (dir) => fileApi.importFolder(dir, PANEL_ID),
+    pick: (dir) => files.importFolder(dir, PANEL_ID),
 });
 
 /** the one .mrpack a modpack upload takes, staged under a name the service expects */
-export const pickModpackFile = (label: string): AddonUploadSource => ({
+export const pickModpackFile = (files: typeof fileApi, label: string): AddonUploadSource => ({
     label,
     icon: "upload_file",
-    pick: (dir) => fileApi.importFile(`${dir}/pack.mrpack`, PANEL_ID, { filters: [{ name: "Modpacks", extensions: ["mrpack"] }] }),
+    pick: (dir) => files.importFile(`${dir}/pack.mrpack`, PANEL_ID, { filters: [{ name: "Modpacks", extensions: ["mrpack"] }] }),
 });
 
 export const listAdded = (names: string[]) => (names.length <= 3 ? names.join(", ") : `${names.slice(0, 3).join(", ")} and ${names.length - 3} more`);

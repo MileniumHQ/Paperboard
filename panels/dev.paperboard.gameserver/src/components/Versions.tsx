@@ -12,9 +12,8 @@ import {
     PaperText,
     PaperCard,
 } from "@mileniumhq/paperui";
-import { serverCalls } from "../lib/api";
 import InstallProgressModal from "./InstallProgressModal";
-import { serverStatus } from "../lib/server";
+import { useServer } from "../lib/server";
 import { createInstallRun } from "../lib/installRun";
 import {
     SOFTWARE,
@@ -24,7 +23,6 @@ import {
     type ServerSoftwareType,
 } from "../lib/software";
 import { isServerSoftware } from "../software/catalog";
-import { listInstalledPlugins, uninstallAllPlugins } from "../lib/plugins";
 import VersionPicker from "./VersionPicker";
 import { errorMessage, type Outcome } from "../lib/failure";
 import FailureText from "./FailureText";
@@ -33,6 +31,7 @@ import FailureText from "./FailureText";
 // destructive boundary (world format and plugin compatibility can change),
 // so it is offline-only and always warns before switching.
 export default function Versions(props: { onRequestPluginUpdate?: () => void }) {
+    const { calls, serverStatus } = useServer();
     const [software, setSoftware] = createSignal<ServerSoftwareType>("paper");
     const [selectedVersion, setSelectedVersion] = createSignal("");
     const [installedSoftware, setInstalledSoftware] =
@@ -57,7 +56,7 @@ export default function Versions(props: { onRequestPluginUpdate?: () => void }) 
 
     onMount(async () => {
         try {
-            const saved = await serverCalls.readServerConfig();
+            const saved = await calls.readServerConfig();
             const { software, version } = saved;
             if (isServerSoftware(software)) {
                 setInstalledSoftware(software);
@@ -95,7 +94,7 @@ export default function Versions(props: { onRequestPluginUpdate?: () => void }) 
             // count the OLD software's jars before the switch changes which
             // folder is active — that is what the uninstall prompt is about
             // nothing has changed yet when this fails, so the switch stops here
-            const previousCount = await listInstalledPlugins()
+            const previousCount = await calls.listInstalledPlugins()
                 .then((r) => r.plugins.length)
                 .catch((err) => { throw new Error(`The installed add-ons could not be counted before switching: ${errorMessage(err)}`); });
 
@@ -110,7 +109,6 @@ export default function Versions(props: { onRequestPluginUpdate?: () => void }) 
             setPostSwitchOpen(true);
         } catch (err) {
             const message = errorMessage(err);
-            console.error("[Versions] Failed to switch version:", err);
             setError({ title: "Switch failed", message });
             setInstallFailed(true);
         } finally {
@@ -122,12 +120,12 @@ export default function Versions(props: { onRequestPluginUpdate?: () => void }) 
         setUninstallingAll(true);
         setUninstallError("");
         try {
-            await uninstallAllPlugins();
+            // trash-first removal of every jar under both plugins/ and mods/, plus the install records
+            await calls.uninstallAllPlugins();
             setPostSwitchCount(0);
             setPostSwitchOpen(false);
         } catch (err) {
             const message = errorMessage(err);
-            console.error("[Versions] Failed to uninstall plugins:", err);
             setUninstallError(message);
         } finally {
             setUninstallingAll(false);

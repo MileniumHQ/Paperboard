@@ -66,8 +66,8 @@ export async function findCrossplayJars(
         try {
             name = await jarName(software, nodePath.join(root, dir, entry.name));
         } catch (err) {
-            // one unreadable jar is the Plugins tab's problem, not a reason
-            // to hide crossplay; it is logged so it can still be found
+            // quiet: one unreadable jar is the Plugins tab's problem (it shows
+            // it), not a reason to hide crossplay; it is logged so it can still be found
             console.error("[Service:Crossplay] could not read", entry.name, String(err));
             continue;
         }

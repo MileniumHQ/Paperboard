@@ -1,4 +1,4 @@
-import { createEffect, createMemo, createSignal, For, on, Show } from "solid-js";
+import { createMemo, createSignal, For, Show } from "solid-js";
 import {
     PaperButton,
     PaperFlex,
@@ -11,45 +11,35 @@ import {
     PaperText,
     PaperToggle,
     sameData,
-    createLatest,
+    createRead,
 } from "@mileniumhq/paperui";
-import { serverStatus } from "../../lib/server";
+import { useServer } from "../../lib/server";
 import { errorMessage } from "../../lib/failure";
 import { createSaves } from "../../lib/saves";
 import { discardUpload, listAdded, newStage, pickFiles, stageFolder } from "../../lib/addons/upload";
 import { type SourceGameSpec, type SourceModView } from "./index";
 import type { SourcePlugin } from "./sourcemod";
-import { serverCalls } from "../../lib/api";
 
-const upload = pickFiles("Upload plugins", ["smx"]);
 const SOURCEMOD = "sourcemod";
 
 // SourceMod on a Source server: one switch for it, then its plugins, each
 // turned on or off where SourceMod keeps them. There is no catalog that
 // checks what it lists, so plugins come as .smx files the user uploads.
 export default function SourceMods(props: { spec: SourceGameSpec; active: boolean }) {
-    const [view, setView] = createSignal<SourceModView | null>(null);
-    const [loadError, setLoadError] = createSignal("");
+    const { calls, files, serverStatus } = useServer();
+    const upload = pickFiles(files, "Upload plugins", ["smx"]);
+    const discard = discardUpload(calls);
+    // read while the tab is open, and again as the server starts or stops; a save's answer wins over a read sent before it
+    const mods = createRead((): Promise<SourceModView> => calls.sourceSourcemod(), { source: () => props.active && serverStatus(), message: errorMessage });
+    const view = mods.value;
+    // a read again clears the failure at once, as it starts
+    const loadError = () => (mods.loading() ? null : mods.error());
     const [working, setWorking] = createSignal<string | null>(null);
     const [error, setError] = createSignal<{ title: string; message: string } | null>(null);
     const [notice, setNotice] = createSignal("");
     const [removing, setRemoving] = createSignal<SourcePlugin | null>(null);
     // the plugin stays named while its dialog closes
     const shownRemoving = createMemo<SourcePlugin | null>((prev) => removing() ?? prev, null);
-
-    // a save's answer, or a newer read, wins over a read sent before it
-    const latest = createLatest();
-    const load = async () => {
-        setLoadError("");
-        const current = latest();
-        try {
-            const answer = await serverCalls.sourceSourcemod();
-            if (current()) setView(answer);
-        } catch (err) {
-            if (current()) setLoadError(errorMessage(err));
-        }
-    };
-    createEffect(on([() => props.active, serverStatus], ([active]) => { if (active) void load(); }));
 
     // SourceMod's switch and each plugin's flip at once; their saves, the
     // removals and the uploads run one at a time, so none races another
@@ -65,29 +55,26 @@ export default function SourceMods(props: { spec: SourceGameSpec; active: boolea
     });
     /** saves through `work`, and on a failure shows whatever did land */
     const answer = async (work: () => Promise<SourceModView>) => {
-        const current = latest();
         try {
-            const saved = await work();
-            if (current()) setView(saved);
+            mods.set(await work());
         } catch (err) {
-            if (!current()) return;
-            await load();
+            await mods.reload();
             throw err;
         }
     };
     // turning SourceMod on the first time downloads it, which can take a while
     const sourcemod = saves.setting(SOURCEMOD, () => view()?.on ?? false, (on) =>
-        answer(() => serverCalls.sourceSourcemodSet({ on })),
+        answer(() => calls.sourceSourcemodSet({ on })),
     );
     const pluginSetting = (file: string, enabled: () => boolean) =>
-        saves.setting(file, enabled, (on) => answer(() => serverCalls.sourcePlugin({ file, on })));
+        saves.setting(file, enabled, (on) => answer(() => calls.sourcePlugin({ file, on })));
 
     const remove = async (plugin: SourcePlugin) => {
         setWorking(plugin.file);
         setError(null);
         setNotice("");
         try {
-            await saves.run(() => answer(() => serverCalls.sourcePluginRemove({ file: plugin.file })));
+            await saves.run(() => answer(() => calls.sourcePluginRemove({ file: plugin.file })));
             setRemoving(null);
         } catch (err) {
             setError({ title: `${plugin.title} was not removed`, message: errorMessage(err) });
@@ -103,19 +90,19 @@ export default function SourceMods(props: { spec: SourceGameSpec; active: boolea
         try {
             const picked = await upload.pick(stageFolder(stage));
             if (picked.status === "canceled") {
-                await discardUpload(stage);
+                await discard(stage);
                 return;
             }
             const { added, view: next } = await saves.run(() =>
-                serverCalls.sourcePluginUpload({ stage }),
+                calls.sourcePluginUpload({ stage }),
             );
-            setView(next);
+            mods.set(next);
             setNotice(`${listAdded(added)} ${added.length === 1 ? "is" : "are"} on.`);
         } catch (err) {
             setError({ title: "Plugins not added", message: errorMessage(err) });
             // quiet: the upload's own failure is on screen; a stage left behind holds no user data
-            await discardUpload(stage).catch((cleanup) => console.error(`[Mods] Failed to discard upload ${stage}:`, cleanup));
-            await load();
+            await discard(stage).catch((cleanup) => console.error(`[Mods] Failed to discard upload ${stage}:`, cleanup));
+            await mods.reload();
         } finally {
             setWorking(null);
         }
@@ -149,7 +136,7 @@ export default function SourceMods(props: { spec: SourceGameSpec; active: boolea
                 <PaperQuote variant="danger" icon="warning" title="Could not read SourceMod">
                     <PaperFlex direction="column" gap="half">
                         <span>{loadError()}</span>
-                        <PaperButton onClick={() => void load()}>Try again</PaperButton>
+                        <PaperButton onClick={() => void mods.reload()}>Try again</PaperButton>
                     </PaperFlex>
                 </PaperQuote>
             </Show>

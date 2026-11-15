@@ -7,7 +7,6 @@ import { parseModrinthVersion, assertModrinthId, MODRINTH_API } from "../src/cor
 import { pickVersionFile, isPluginFilename } from "../src/core/plugins";
 import { pickDatapackBuild } from "../src/core/datapacks";
 import { installDatapack, type DatapackDeps } from "../src/service/datapacks";
-import { setServerSoftware, setServerVersion } from "../src/lib/server";
 import { resolveLatestFile } from "../src/lib/plugins";
 import { installLatestPlugin, type PluginInstallDeps } from "../src/service/plugins";
 import type { InstalledRecord } from "../src/core/plugins";
@@ -172,8 +171,6 @@ describe("Modrinth downloads", () => {
             return new Response("not found", { status: 404 });
         });
         routeHost("api.modrinth.com", modrinth);
-        setServerSoftware("paper");
-        setServerVersion("1.21.1");
-        await expect(resolveLatestFile("PROJ1234")).rejects.toThrow("Modrinth request failed: rate limited");
+        await expect(resolveLatestFile({ serverSoftware: () => "paper", serverVersion: () => "1.21.1" }, "PROJ1234")).rejects.toThrow("Modrinth request failed: rate limited");
     });
 });

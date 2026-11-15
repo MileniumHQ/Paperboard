@@ -1,5 +1,5 @@
-import { batch, createMemo, createSignal, For, onMount, Show } from "solid-js";
-import { PaperButton, PaperFlex, PaperInput, PaperLink, PaperQuote, PaperText, createLatest } from "@mileniumhq/paperui";
+import { createMemo, createSignal, For, Show, untrack } from "solid-js";
+import { PaperButton, PaperFlex, PaperInput, PaperLink, PaperQuote, PaperText, createRead } from "@mileniumhq/paperui";
 import { errorMessage } from "../../lib/failure";
 import { formatCount } from "../../lib/addons/presentation";
 import { type SourceGameSpec } from "./index";
@@ -8,7 +8,7 @@ import { workshopChoice } from "./useWorkshopMaps";
 import type { MapPicturesState } from "./useMapPictures";
 import type { SourceWorkshopHit, SourceWorkshopResults } from "./workshop";
 import { workshopName } from "./workshop";
-import { serverCalls } from "../../lib/api";
+import { useServer } from "../../lib/server";
 
 /**
  * The Steam Workshop's maps for a game, searched by name or found by a pasted
@@ -26,34 +26,15 @@ export default function WorkshopPane(props: {
     inRotation: readonly string[];
     onPick(map: SourceWorkshopHit): void;
 }) {
+    const { calls } = useServer();
     const [query, setQuery] = createSignal("");
-    const [results, setResults] = createSignal<SourceWorkshopResults | null>(null);
-    const [searching, setSearching] = createSignal(false);
-    const [error, setError] = createSignal("");
-    // the answer in view is the last one asked for, whichever search comes back last
-    const latest = createLatest();
-
-    const search = async () => {
-        setSearching(true);
-        setError("");
-        const current = latest();
-        try {
-            const answer = await serverCalls.sourceWorkshopFind({ query: query() });
-            if (!current()) return;
-            batch(() => {
-                setResults(answer);
-                setSearching(false);
-            });
-        } catch (err) {
-            if (!current()) return;
-            batch(() => {
-                setError(errorMessage(err));
-                setSearching(false);
-            });
-        }
-    };
-    // what is popular, until something is asked for
-    onMount(() => void search());
+    // what is popular, until something is asked for; the answer in view is the last one asked for
+    const found = createRead((): Promise<SourceWorkshopResults> => calls.sourceWorkshopFind({ query: untrack(query) }), { message: errorMessage });
+    const results = found.value;
+    const searching = found.loading;
+    // a new search clears the failure at once, as it starts
+    const error = () => (found.loading() ? null : found.error());
+    const search = () => found.reload();
 
     const choices = createMemo(() => (results()?.items ?? []).map((hit) => workshopChoice(hit, props.inRotation.includes(workshopName(hit.id)) ? "In the rotation" : hit.subscribers === null ? undefined : `${formatCount(hit.subscribers)} subscribers`)));
     const pick = (name: string) => {

@@ -9,6 +9,7 @@ import { SERVER_PROC_ID } from "./types";
  * unhandled rejection; callers that need delivery await ctx.process.write.
  */
 export function writeServerLineBestEffort(ctx: Server, line: string): void {
+    // quiet: nobody waits for this line; a stop that never arrived is the force-kill timer's to recover
     const failed = (err: unknown) => console.error("[Service:Console] write to the server console failed:", err);
     try {
         Promise.resolve(ctx.process.write(SERVER_PROC_ID, line)).catch(failed);

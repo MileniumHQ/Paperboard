@@ -3,8 +3,8 @@
 // few at a time, nearest the view's centre first, and the oldest drop out
 // once the cache is full.
 import { createSignal } from "solid-js";
-import { renderMapTile } from "../../lib/map";
-import { loadHead } from "../../lib/skins";
+import type { ServerCalls } from "../../lib/api";
+import { headsFrom } from "../../lib/skins";
 import { errorMessage } from "../../lib/failure";
 import type { MapDimension } from "../../core/map";
 
@@ -38,7 +38,7 @@ export interface PictureReport {
 
 export const tileKey = (dim: MapDimension, rx: number, rz: number) => `${dim}:${rx}:${rz}`;
 
-export function createTileStore(report: PictureReport) {
+export function createTileStore(calls: ServerCalls, report: PictureReport) {
     const tiles = new Map<string, TileState>();
     const pending = new Set<string>();
     const [pendingCount, setPendingCount] = createSignal(0);
@@ -67,7 +67,7 @@ export function createTileStore(report: PictureReport) {
             next();
         };
         // a tile already drawn is only asked whether it changed
-        renderMapTile(dim, rx, rz, existing?.version)
+        calls.renderMapTile({ dimension: dim, rx, rz, since: existing?.version })
             .then((result) => {
                 settle();
                 if (existing) existing.checked = asked;
@@ -91,7 +91,6 @@ export function createTileStore(report: PictureReport) {
             })
             .catch((err) => {
                 settle();
-                console.error(`[Map] Failed to render tile ${key}:`, err);
                 report.failed(key, "A map tile didn't render", errorMessage(err));
             });
     };
@@ -116,7 +115,8 @@ export function createTileStore(report: PictureReport) {
  * arrives a marker draws as a dot. A player without a skin keeps the dot; a
  * lookup or picture that fails says so.
  */
-export function createHeads(report: PictureReport) {
+export function createHeads(calls: ServerCalls, report: PictureReport) {
+    const loadHead = headsFrom(calls);
     const images = new Map<string, HTMLImageElement>();
     return (name: string): HTMLImageElement | null => {
         const key = name.toLowerCase();
@@ -137,7 +137,6 @@ export function createHeads(report: PictureReport) {
                 image.src = dataUrl;
             })
             .catch((err) => {
-                console.error(`[Map] head lookup failed for ${name}:`, err);
                 failed(errorMessage(err));
             });
         return null;

@@ -1,11 +1,11 @@
 import { minecraftSoftware } from "../games/minecraft/index";
 import semver from "semver";
-import { fileApi, errorMessage } from "./api";
+import { errorMessage, type ServerCalls } from "./api";
 import { PANEL_ID } from "../service/types";
-import { serverSoftware, serverVersion } from "./server";
+import type { ServerPage } from "./server";
 import { behaviorVersionOf } from "./versionProfile";
 import { SOFTWARE, type ServerSoftwareType } from "./software";
-import { sanitizeFileName } from "./filesystem";
+import { sanitizeFileName } from "../core/directoryListing";
 import {
     classifyPluginUpdate,
     pickVersionFile,
@@ -14,10 +14,12 @@ import {
 } from "../core/plugins";
 import type { InstalledPlugin, InstalledRecord } from "../core/plugins";
 import { resolveGeyserMCLatest } from "./geysermc";
-import type { InstallPreview, InstallVersionSelection, InstalledFileSummary, RawVersionDependency } from "../service/plugins";
+import type { RawVersionDependency } from "../service/plugins";
 import type { GeyserMCSource } from "../core/plugins";
 import { SEARCH_LIMIT, getProject, modrinthFetch, parseSearchHits, type ModrinthHit, type ModrinthProject, type RawHit } from "./modrinth";
-import { serverCalls } from "./api";
+
+/** the server a lookup picks builds for: its software and Minecraft version */
+type Target = Pick<ServerPage, "serverSoftware" | "serverVersion">;
 
 export type { InstalledPlugin, InstalledRecord, ModrinthHit, ModrinthProject };
 export type { InstallPreview, InstallVersionSelection, InstalledFileSummary, ResolvedDependency } from "../service/plugins";
@@ -31,22 +33,8 @@ const SERVER_ENVIRONMENTS = [
 ];
 
 /** Records installed files and forgets replaced ones; the service merges them into its records. */
-function recordInstalls(set: Record<string, InstalledRecord>, remove: string[] = []): Promise<unknown> {
-    return serverCalls.recordPluginInstalls({ set, remove });
-}
-
-export async function listInstalledPlugins(): Promise<{
-    plugins: InstalledPlugin[];
-    warning?: string;
-}> {
-    // service-owned (service/plugins.ts): listing verifies hashes against install records
-    return serverCalls.listInstalledPlugins();
-}
-
-/** Moves a plugin to the trash; the service forgets its install record. */
-export async function uninstallPlugin(filename: string): Promise<void> {
-    // service-owned: trash-first delete, never a bare fileApi.delete
-    await serverCalls.deletePlugin({ filename });
+function recordInstalls(calls: ServerCalls, set: Record<string, InstalledRecord>, remove: string[] = []): Promise<unknown> {
+    return calls.recordPluginInstalls({ set, remove });
 }
 
 export interface ResolvedDownload {
@@ -97,17 +85,17 @@ export function getEcosystem(software: ServerSoftwareType): EcosystemInfo | null
 }
 
 /** the Modrinth loader id of the installed software; it must have add-ons */
-function currentModrinthLoader(): string {
-    const software = minecraftSoftware(serverSoftware());
+function currentModrinthLoader(server: Target): string {
+    const software = minecraftSoftware(server.serverSoftware());
     const addons = SOFTWARE[software].addons;
     if (!addons) throw new Error(`${SOFTWARE[software].name} has no plugin or mod system.`);
     return addons.modrinthLoader;
 }
 
-export async function searchModrinth(query: string, signal?: AbortSignal): Promise<ModrinthHit[]> {
-    const eco = getEcosystem(minecraftSoftware(serverSoftware()));
+export async function searchModrinth(server: Target, query: string, signal?: AbortSignal): Promise<ModrinthHit[]> {
+    const eco = getEcosystem(minecraftSoftware(server.serverSoftware()));
     if (!eco) return [];
-    const mcVersion = serverVersion();
+    const mcVersion = server.serverVersion();
     if (eco.kind === "mod" && !mcVersion) throw new Error("Choose a server version before browsing Modrinth.");
 
     const facets = JSON.stringify([
@@ -168,9 +156,9 @@ export async function searchModrinth(query: string, signal?: AbortSignal): Promi
 // newest file matching the game version, else any loader build.
 // The fallback pick is returned with exactMatch:false — callers must surface
 // the explicit confirm state, never install it silently.
-export async function resolveLatestFile(projectId: string): Promise<ResolvedDownload> {
-    const loader = currentModrinthLoader();
-    const mcVersion = serverVersion();
+export async function resolveLatestFile(server: Target, projectId: string): Promise<ResolvedDownload> {
+    const loader = currentModrinthLoader(server);
+    const mcVersion = server.serverVersion();
 
     const loaders = JSON.stringify([loader]);
     let exactVersions: RawVersion[] = [];
@@ -283,11 +271,9 @@ export interface ProjectVersionOption {
 /** newest 50 builds for the current loader, recommended first-marked */
 export const MAX_VERSION_OPTIONS = 50;
 
-export async function listProjectVersions(
-    projectId: string,
-): Promise<ProjectVersionOption[]> {
-    const loader = currentModrinthLoader();
-    const mcVersion = serverVersion();
+export async function listProjectVersions(server: Target, projectId: string): Promise<ProjectVersionOption[]> {
+    const loader = currentModrinthLoader(server);
+    const mcVersion = server.serverVersion();
     const versions = await modrinthFetch<RawVersion[]>(
         `/project/${encodeURIComponent(projectId)}/version`,
         { loaders: JSON.stringify([loader]) },
@@ -318,16 +304,6 @@ export async function listProjectVersions(
     return options;
 }
 
-/** What installing a build takes: its file and every dependency, resolved by the service with no writes. */
-export function previewInstall(projectId: string, title: string, versionId: string, includeOptionalKeys: string[] = []): Promise<InstallPreview> {
-    return serverCalls.previewPluginInstall({ projectId, title, versionId, includeOptionalKeys });
-}
-
-/** Installs a chosen build with its required dependencies (and checked optional ones), as Blocks does. */
-export function installProjectVersion(selection: InstallVersionSelection): Promise<InstalledFileSummary[]> {
-    return serverCalls.installPluginVersion({ ...selection });
-}
-
 /** "unchecked": no Modrinth record says what it is (uploaded, or added by hand), so nothing could be looked up */
 export type PluginUpdateStatus = CoreUpdateStatus | "error" | "unchecked";
 
@@ -344,8 +320,8 @@ export interface PluginUpdateCheck {
 // software + Minecraft version. "incompatible" means no build matches (the
 // UI offers to uninstall); "error" means the lookup itself failed;
 // "unchecked" means there was nothing to look up.
-export async function checkPluginUpdates(): Promise<PluginUpdateCheck[]> {
-    const { plugins } = await listInstalledPlugins();
+export async function checkPluginUpdates(server: Target & Pick<ServerPage, "calls">): Promise<PluginUpdateCheck[]> {
+    const { plugins } = await server.calls.listInstalledPlugins();
     const results: PluginUpdateCheck[] = [];
     for (const plugin of plugins) {
         const title =
@@ -364,7 +340,7 @@ export async function checkPluginUpdates(): Promise<PluginUpdateCheck[]> {
         try {
             const latest = plugin.record.source
                 ? await resolveGeyserMCLatest(plugin.record.source, plugin.filename)
-                : await resolveLatestFile(plugin.record.projectId);
+                : await resolveLatestFile(server, plugin.record.projectId);
             const status = classifyPluginUpdate(
                 plugin.record.version,
                 latest.versionNumber,
@@ -393,7 +369,7 @@ export async function checkPluginUpdates(): Promise<PluginUpdateCheck[]> {
 // Download the new jar (checksum-verified), then trash the old one if the
 // filename changed, and retarget the install record. Trash-first keeps an
 // interrupted update recoverable.
-export async function updatePlugin(check: PluginUpdateCheck): Promise<void> {
+export async function updatePlugin(server: ServerPage, check: PluginUpdateCheck): Promise<void> {
     if (check.status !== "update-available" || !check.latest || !check.record) {
         return;
     }
@@ -405,20 +381,19 @@ export async function updatePlugin(check: PluginUpdateCheck): Promise<void> {
         );
     }
 
-    await fileApi.download({
+    await server.files.download({
         url: file.url,
-        targetPath: `${pluginDirName(minecraftSoftware(serverSoftware()))}/${safe}`,
+        targetPath: `${pluginDirName(minecraftSoftware(server.serverSoftware()))}/${safe}`,
         appId: PANEL_ID,
         ...(file.sha1 ? { sha1: file.sha1 } : {}),
         ...(file.sha256 ? { sha256: file.sha256 } : {}),
         ...(file.sha512 ? { checksum: { algorithm: "sha512", value: file.sha512 } } : {}),
     });
 
-    if (safe !== check.filename) {
-        await uninstallPlugin(check.filename);
-    }
+    // service-owned: trash-first delete, never a bare fileApi.delete
+    if (safe !== check.filename) await server.calls.deletePlugin({ filename: check.filename });
 
-    await recordInstalls({
+    await recordInstalls(server.calls, {
         [safe]: {
             projectId: check.record.projectId,
             slug: check.record.slug,
@@ -431,19 +406,13 @@ export async function updatePlugin(check: PluginUpdateCheck): Promise<void> {
 }
 
 /** Installs the newest build GeyserMC publishes for `source`, checked against its sha256, and records it. */
-export async function installGeyserMCProject(source: GeyserMCSource, filename: string, title: string): Promise<void> {
+export async function installGeyserMCProject(server: ServerPage, source: GeyserMCSource, filename: string, title: string): Promise<void> {
     const latest = await resolveGeyserMCLatest(source, filename);
-    await fileApi.download({
+    await server.files.download({
         url: latest.url,
-        targetPath: `${pluginDirName(minecraftSoftware(serverSoftware()))}/${latest.filename}`,
+        targetPath: `${pluginDirName(minecraftSoftware(server.serverSoftware()))}/${latest.filename}`,
         appId: PANEL_ID,
         sha256: latest.sha256,
     });
-    await recordInstalls({ [latest.filename]: { projectId: source.project, slug: source.project, version: latest.versionNumber, title, source } });
-}
-
-// trash-first removal of every jar under both plugins/ and mods/, plus the
-// install records — used when switching server software invalidates them all
-export async function uninstallAllPlugins(): Promise<void> {
-    await serverCalls.uninstallAllPlugins();
+    await recordInstalls(server.calls, { [latest.filename]: { projectId: source.project, slug: source.project, version: latest.versionNumber, title, source } });
 }

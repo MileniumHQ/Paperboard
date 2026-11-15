@@ -1,13 +1,14 @@
-import { serverStatus, serverVersion } from "../server";
-import { installDatapack, listDatapacks, listDatapackVersions, removeDatapack, searchDatapacks } from "../datapacks";
+import type { ServerPage } from "../server";
+import { searchProjects } from "../modrinth";
 import { versionLabel } from "./presentation";
 import type { DatapackListing } from "../../service/datapacks";
-import { commitDatapacks, discardUpload, listAdded, pickFiles, pickFolder, type UploadOutcome } from "./upload";
+import { discardUpload, listAdded, pickFiles, pickFolder, type UploadOutcome } from "./upload";
 import { modrinthHits, modrinthSource } from "./sources";
 import type { AddonKind, AddonListing, InstalledAddon } from "./kind";
 
 // Datapacks: the active world's datapacks/ folder, plus Modrinth's datapack
-// builds for this Minecraft version. The service lists, installs and removes.
+// builds for this Minecraft version. Modrinth search runs in the page like
+// the Mods tab's; the service lists, installs and removes.
 
 export function installedDatapacks(listing: DatapackListing): InstalledAddon[] {
     return listing.packs.map((pack) => ({
@@ -27,7 +28,7 @@ export function installedDatapacks(listing: DatapackListing): InstalledAddon[] {
     }));
 }
 
-export const datapacksKind: AddonKind<DatapackListing> = {
+export const datapacksKind = ({ calls, files, serverStatus, serverVersion }: ServerPage): AddonKind<DatapackListing> => ({
     title: "Datapacks",
     icon: "dataset",
     glyph: "dataset",
@@ -41,7 +42,7 @@ export const datapacksKind: AddonKind<DatapackListing> = {
     watch: serverVersion,
 
     async list(): Promise<AddonListing<DatapackListing>> {
-        const listing = await listDatapacks();
+        const listing = await calls.listDatapacks();
         return {
             items: installedDatapacks(listing),
             note: listing.truncated ? `Showing the first ${listing.packs.length} entries of the folder.` : undefined,
@@ -50,18 +51,22 @@ export const datapacksKind: AddonKind<DatapackListing> = {
     },
     listFailureTitle: () => "Could not read the datapacks folder",
 
-    search: async (query, signal) => modrinthHits(await searchDatapacks(query, signal)),
+    async search(query, signal) {
+        const mcVersion = serverVersion();
+        if (!mcVersion) throw new Error("Choose a server version before browsing datapacks.");
+        return modrinthHits(await searchProjects({ query, signal, facets: [["project_type:datapack"], [`versions:${mcVersion}`]] }));
+    },
     async versions(projectId) {
-        return (await listDatapackVersions(projectId)).map((v) => ({ id: v.id, label: v.versionNumber || v.name }));
+        return (await calls.listDatapackVersions({ projectId })).map((v) => ({ id: v.id, label: v.versionNumber || v.name }));
     },
 
     itemClick: "remove",
 
     upload: {
-        sources: [pickFiles("Upload zips", ["zip"]), pickFolder("Upload folder")],
+        sources: [pickFiles(files, "Upload zips", ["zip"]), pickFolder(files, "Upload folder")],
         failureTitle: "Not added",
-        commit: commitDatapacks,
-        discard: discardUpload,
+        commit: (stage) => calls.uploadDatapacks({ stage }),
+        discard: discardUpload(calls),
         describe: (result) => ({
             title: "Added",
             message: `${listAdded((result as UploadOutcome).added)} loads after a reload or restart.`,
@@ -78,7 +83,7 @@ export const datapacksKind: AddonKind<DatapackListing> = {
             title: "No compatible build",
             text: `This datapack has no build for Minecraft ${serverVersion()}.`,
         }),
-        run: (target, versionId) => installDatapack(target.projectId, versionId),
+        run: (target, versionId) => calls.installDatapack({ projectId: target.projectId, versionId }),
     },
 
     remove: {
@@ -90,6 +95,6 @@ export const datapacksKind: AddonKind<DatapackListing> = {
             `Move ${item.title} out of ${listing?.meta.world}/datapacks/ into the server folder's trash?${
                 serverStatus() === "online" ? " It stays loaded until the next reload or restart." : ""
             }`,
-        run: (item) => removeDatapack(item.id).then(() => undefined),
+        run: (item) => calls.removeDatapack({ name: item.id }).then(() => undefined),
     },
-};
+});

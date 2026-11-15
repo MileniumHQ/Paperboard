@@ -1,4 +1,5 @@
 import { createEffect, createMemo, createSignal, For, onCleanup, Show, on } from "solid-js";
+import { useServer } from "../lib/server";
 import {
     PaperCard,
     PaperFlex,
@@ -11,13 +12,11 @@ import {
     PaperText,
     PaperToggle,
 } from "@mileniumhq/paperui";
-import { serverStatus, gamerules, serverVersion } from "../lib/server";
 import { gamerulesFor, type GameruleEntry } from "../core/gamerules";
 import { humanizeIdentifier } from "../core/format";
 import { errorMessage } from "../lib/failure";
 import { createSaves, type SavedSetting } from "../lib/saves";
 import { commitOnEnter } from "./GameOptions";
-import { serverCalls } from "../lib/api";
 
 const WIKI_URL = "https://minecraft.wiki/w/Game_rule";
 
@@ -50,6 +49,7 @@ function RuleControl(props: { valueType: string; rule: SavedSetting<string> }) {
 }
 
 export default function GameRules() {
+    const { calls, gamerules, serverStatus, serverVersion } = useServer();
     const [search, setSearch] = createSignal("");
     const [syncError, setSyncError] = createSignal("");
     const [ruleError, setRuleError] = createSignal<{ title: string; message: string } | null>(null);
@@ -70,7 +70,7 @@ export default function GameRules() {
             if (!online) return;
             let current = true;
             onCleanup(() => (current = false));
-            serverCalls
+            calls
                 .queryGamerules()
                 .catch((err) => current && setSyncError(errorMessage(err)));
         }),
@@ -88,7 +88,7 @@ export default function GameRules() {
             rule.name,
             () => gamerules()[rule.name] ?? rule.defaultValue,
             async (value) => {
-                await serverCalls.setGamerule({ name: rule.name, value });
+                await calls.setGamerule({ name: rule.name, value });
             },
         );
 

@@ -1,21 +1,10 @@
 import { createSignal, For } from "solid-js";
 import { PaperTable } from "@mileniumhq/paperui";
-import { fileApi } from "../lib/api";
+import { useServer } from "../lib/server";
 import { FieldItem } from "./PropertyFieldControl";
 import WorldsPage from "./WorldsPage";
 import { readServerPropertiesStrict, writeServerProperties } from "../lib/properties";
-import {
-    deleteActiveWorldDirs,
-    discardWorldTransfer,
-    exportWorld,
-    importWorld,
-    listWorlds,
-    normalizeLevelType,
-    setActiveWorld,
-    WORLD_CREATE_FIELDS,
-    WORLD_NAME_PATTERN,
-    type WorldInfo,
-} from "../lib/worlds";
+import { normalizeLevelType, worldCreateFields, WORLD_NAME_PATTERN, type WorldInfo } from "../lib/worlds";
 import { PANEL_ID } from "../service/contract";
 import { DIMENSION_SUFFIXES, WORLD_TRANSFER_DIR, worldNameFromFile } from "../core/worldArchive";
 import { errorMessage } from "../lib/failure";
@@ -37,13 +26,19 @@ const generated = (made: boolean) => (made ? "Generated" : "Not generated yet");
 
 /** Minecraft's worlds: each a level folder with its Nether and End beside it. */
 export default function Worlds() {
+    // the service owns listing, switching, deleting and zipping worlds (its trash discipline included)
+    const server = useServer();
+    const { calls, files } = server;
+    const fields = worldCreateFields(server);
+    // a world's zip runs through the transfer folder; zipping a big world takes a while
+    const discard = (file: string) => calls.discardWorldTransfer({ file });
     // New World's settings, as server.properties holds them when it opens
     const [createValues, setCreateValues] = createSignal<Record<string, string>>({});
     const createValue = (key: string, fallback: string) => shownValue(key, createValues()[key] ?? fallback);
 
     return (
         <WorldsPage
-            list={listWorlds}
+            list={() => calls.listWorlds()}
             game={{
                 listName: "worlds",
                 title: (world) => world.name,
@@ -69,16 +64,16 @@ export default function Worlds() {
                 // the service zips the world, the page saves the zip, and the
                 // zip is removed again whatever the person chose
                 download: async (world, warn) => {
-                    const { file } = await exportWorld(world.name);
+                    const { file } = await calls.exportWorld({ levelName: world.name });
                     try {
-                        await fileApi.exportFile(`${WORLD_TRANSFER_DIR}/${file}`, PANEL_ID, { suggestedName: `${world.name}.zip`, filters: ZIP_FILTERS });
+                        await files.exportFile(`${WORLD_TRANSFER_DIR}/${file}`, PANEL_ID, { suggestedName: `${world.name}.zip`, filters: ZIP_FILTERS });
                     } finally {
-                        await discardWorldTransfer(file).catch((err) =>
+                        await discard(file).catch((err) =>
                             warn({ title: "Cleanup incomplete", message: `The world's temporary zip could not be removed: ${errorMessage(err)}` }));
                     }
                 },
-                switchTo: (world) => setActiveWorld(world.name),
-                remove: (world) => deleteActiveWorldDirs(world.name),
+                switchTo: (world) => calls.setActiveWorld({ levelName: world.name, createOnly: false }),
+                remove: (world) => calls.deleteWorld({ levelName: world.name }),
                 deleteNote: (world) =>
                     `This moves the overworld${world.hasNether ? ", nether" : ""}${world.hasEnd ? " and end" : ""} directories of "${world.name}" to trash, including all builds and items in them.`,
                 // a world's Nether and End are folders of their own beside it
@@ -89,11 +84,11 @@ export default function Worlds() {
                     defaultName: () => "world",
                     // never filled with defaults over settings that can't be read
                     load: async () => {
-                        const properties = await readServerPropertiesStrict();
-                        setCreateValues(Object.fromEntries(WORLD_CREATE_FIELDS.map((field) => [field.key, shownValue(field.key, properties[field.key] ?? field.defaultValue)])));
+                        const properties = await readServerPropertiesStrict(files);
+                        setCreateValues(Object.fromEntries(fields.map((field) => [field.key, shownValue(field.key, properties[field.key] ?? field.defaultValue)])));
                     },
                     fields: () => (
-                        <For each={WORLD_CREATE_FIELDS}>
+                        <For each={fields}>
                             {(field) => (
                                 <FieldItem
                                     field={field}
@@ -106,21 +101,21 @@ export default function Worlds() {
                     submit: async (name) => {
                         // generation settings land first; setActiveWorld then reads the
                         // merged file and writes level-name/level-seed on top
-                        await writeServerProperties(createValues());
+                        await writeServerProperties(files, createValues());
                         // createOnly: the service refuses an existing name instead of
                         // degrading into a silent switch when the listing was stale
-                        await setActiveWorld(name, createValue("level-seed", "").trim() || undefined, true);
+                        await calls.setActiveWorld({ levelName: name, seed: createValue("level-seed", "").trim() || undefined, createOnly: true });
                     },
                 },
                 // the page brings the zip in and the service unpacks it into new folders
                 upload: {
                     choose: async (taken) => {
                         const file = `upload-${crypto.randomUUID()}.zip`;
-                        const result = await fileApi.importFile(`${WORLD_TRANSFER_DIR}/${file}`, PANEL_ID, { filters: ZIP_FILTERS });
+                        const result = await files.importFile(`${WORLD_TRANSFER_DIR}/${file}`, PANEL_ID, { filters: ZIP_FILTERS });
                         return result.status === "canceled" ? null : { file, name: worldNameFromFile(result.name, taken) };
                     },
-                    discard: discardWorldTransfer,
-                    add: importWorld,
+                    discard,
+                    add: (file, levelName) => calls.importWorld({ file, levelName }),
                     label: "World name",
                 },
             }}

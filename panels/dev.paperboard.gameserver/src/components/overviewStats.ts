@@ -1,9 +1,8 @@
 import { createEffect, createSignal, on, onCleanup } from "solid-js";
 import type { JSX } from "solid-js";
-import type { PaperRole } from "@mileniumhq/paperui";
-import { maxPlayers, onlineSince, serverStatus } from "../lib/server";
+import { createPolling, createRead, type PaperRole } from "@mileniumhq/paperui";
+import { useServer } from "../lib/server";
 import { errorMessage } from "../lib/failure";
-import { onlinePlayerNames } from "../lib/players";
 import { durationLabel } from "../core/format";
 
 /** One readout of a running server on its Overview. */
@@ -21,8 +20,9 @@ export interface OverviewStat {
  */
 export type OverviewStats = readonly [OverviewStat, OverviewStat, OverviewStat, OverviewStat];
 
-/** How many are on, of how many the server takes once it has said. */
+/** How many are on, of how many the server takes once it has said; read where the Overview draws it. */
 export function playersStat(): OverviewStat {
+    const { maxPlayers, onlinePlayerNames } = useServer();
     const cap = maxPlayers();
     return { icon: "group", label: "Players", value: cap === null ? String(onlinePlayerNames().size) : `${onlinePlayerNames().size} / ${cap}` };
 }
@@ -32,6 +32,7 @@ export const uptimeStat = (seconds: number): OverviewStat => ({ icon: "schedule"
 
 /** Seconds the server has been online, counted on while the component is shown. */
 export function createUptime(): () => number {
+    const { onlineSince } = useServer();
     const [now, setNow] = createSignal(Date.now());
     const timer = setInterval(() => setNow(Date.now()), 1_000);
     onCleanup(() => clearInterval(timer));
@@ -46,30 +47,16 @@ const METRICS_MS = 5_000;
 /**
  * A running server's own figures, asked of the game's call every few seconds
  * while it is online; they are gone when it stops. `error` says why the last
- * ask failed, for the Overview to show.
+ * ask failed, for the Overview to show. An answer that lands after the
+ * server stopped, or after the Overview closed, is dropped.
  */
 export function createMetrics<T>(read: () => Promise<T>): { value: () => T | undefined; error: () => string } {
-    const [value, setValue] = createSignal<T>();
-    const [error, setError] = createSignal("");
-    createEffect(on(serverStatus, (status) => {
-        setValue(undefined);
-        setError("");
-        if (status !== "online") return;
-        // an answer that lands after the server stopped, or after the
-        // Overview closed, is about a server that is no longer running
-        let current = true;
-        const load = () => read().then(
-            (answer) => { if (current) { setValue(() => answer); setError(""); } },
-            (err) => { if (current) setError(errorMessage(err)); },
-        );
-        void load();
-        const timer = setInterval(() => void load(), METRICS_MS);
-        onCleanup(() => {
-            current = false;
-            clearInterval(timer);
-        });
-    }));
-    return { value, error };
+    const { serverStatus } = useServer();
+    const online = () => serverStatus() === "online";
+    const metrics = createRead(read, { source: online, message: errorMessage });
+    createEffect(on(online, (now) => now || metrics.set(undefined), { defer: true }));
+    createPolling(() => (online() ? metrics.reload() : undefined), METRICS_MS);
+    return { value: metrics.value, error: () => metrics.error() ?? "" };
 }
 
 /** The game's own stats between Players and Uptime. */

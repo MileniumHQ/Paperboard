@@ -1,13 +1,13 @@
 import { createMemo, createSignal, For, Show } from "solid-js";
+import { useServer } from "../lib/server";
 import { PaperBadge, PaperButton, PaperFlex, PaperIcon, PaperPageHeader, PaperSelectMenu, PaperSelectMenuItem } from "@mileniumhq/paperui";
-import { onlinePlayerNames } from "../lib/server";
 import { gamertagOf, isFloodgateUuid, type BedrockNaming } from "../core/bedrock";
 import { errorMessage } from "../lib/failure";
 import { createSaves } from "../lib/saves";
 import PlayerHead from "./PlayerHead";
 import PlayerRoster, { statusColor } from "./PlayerRoster";
 import { createPlayers, type PlayerInfo } from "./players/state";
-import { formatPlaytime, playtimeSeconds, SORT_LABELS, sortPlayers, type SortKey } from "./players/leaderboard";
+import { formatPlaytime, SORT_LABELS, type SortKey } from "./players/leaderboard";
 import PlayerInspector, { canEditLists } from "./players/PlayerInspector";
 import { DeleteDataDialog, ReasonActionDialog, WhitelistDialog } from "./players/PlayerDialogs";
 
@@ -17,6 +17,7 @@ function isBedrockPlayer(player: PlayerInfo, naming: BedrockNaming | null): bool
 }
 
 export default function Players() {
+    const { onlinePlayerNames, serverStatus } = useServer();
     const roster = createPlayers();
     const [showOnline, setShowOnline] = createSignal(true);
     const [showWhitelisted, setShowWhitelisted] = createSignal(true);
@@ -42,7 +43,7 @@ export default function Players() {
         });
     });
 
-    const sortedPlayers = createMemo(() => sortPlayers(visiblePlayers(), sortBy()));
+    const sortedPlayers = createMemo(() => roster.leaderboard.sort(visiblePlayers(), sortBy()));
     const onlineSorted = createMemo(() => sortedPlayers().filter((p) => isPlayerOn(p.name)));
     const offlineSorted = createMemo(() => sortedPlayers().filter((p) => !isPlayerOn(p.name)));
     const sections = createMemo(() => [
@@ -61,7 +62,7 @@ export default function Players() {
         changed: () => roster.setFeedback(undefined),
     });
 
-    const playtimeText = (player: PlayerInfo) => formatPlaytime(playtimeSeconds(player));
+    const playtimeText = (player: PlayerInfo) => formatPlaytime(roster.leaderboard.playtimeSeconds(player));
 
     return (
         <>
@@ -86,7 +87,7 @@ export default function Players() {
                 </PaperFlex>
                 <PaperButton
                     variant="primary"
-                    disabled={!canEditLists()}
+                    disabled={!canEditLists(serverStatus())}
                     onClick={() => setWhitelistOpen(true)}
                 >
                     <PaperIcon>how_to_reg</PaperIcon>Whitelist
@@ -127,6 +128,7 @@ export default function Players() {
             >
                 <PlayerInspector
                     player={roster.openPlayer()}
+                    leaderboard={roster.leaderboard}
                     bedrock={roster.openPlayer() ? isBedrockPlayer(roster.openPlayer()!, roster.bedrock()) : false}
                     banned={roster.isBanned(roster.openPlayer()?.name ?? "")}
                     flag={(field) => {
@@ -180,7 +182,7 @@ export default function Players() {
                 open={whitelistOpen()}
                 onClose={() => setWhitelistOpen(false)}
                 bedrock={roster.bedrock()}
-                disabled={!canEditLists()}
+                disabled={!canEditLists(serverStatus())}
                 onAdd={roster.whitelistName}
             />
         </>

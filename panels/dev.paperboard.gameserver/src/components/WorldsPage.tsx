@@ -1,4 +1,5 @@
-import { createEffect, createSignal, For, on, onMount, Show, untrack, type JSX } from "solid-js";
+import { createEffect, createSignal, For, on, Show, untrack, type JSX } from "solid-js";
+import { useServer } from "../lib/server";
 import {
     PaperAvatar,
     PaperBadge,
@@ -15,10 +16,8 @@ import {
     PaperQuote,
     PaperSettingList,
     PaperText,
-    keepUnchanged,
-    createLatest,
+    createRead,
 } from "@mileniumhq/paperui";
-import { serverStatus } from "../lib/server";
 import { errorMessage, type Outcome } from "../lib/failure";
 
 /** What every game's Worlds tab knows about a world. */
@@ -104,8 +103,12 @@ const emptyCard = (text: string) => (
  * worlds, and would let a new world take a name that is in use.
  */
 export default function WorldsPage<W extends WorldEntry>(props: { list: () => Promise<W[]>; game: WorldsGame<W> }) {
-    const [worlds, setWorlds] = createSignal<W[] | null>(null);
-    const [listError, setListError] = createSignal("");
+    const { serverStatus } = useServer();
+    // starting and stopping change the active world's files: each is read again.
+    // A failed listing keeps the last-known worlds, each world the row it is
+    const listing = createRead(() => props.list(), { source: serverStatus, key: "name", message: errorMessage });
+    const worlds = () => listing.value() ?? null;
+    const listError = () => listing.error() ?? "";
     const [selected, setSelected] = createSignal<string | null>(null);
     const [mutating, setMutating] = createSignal(false);
     const [failure, setFailure] = createSignal<Outcome | null>(null);
@@ -118,27 +121,7 @@ export default function WorldsPage<W extends WorldEntry>(props: { list: () => Pr
     };
     const nameValid = (name: string) => props.game.namePattern.test(name.trim()) && !isTaken(name);
 
-    const latest = createLatest();
-    const refresh = async () => {
-        const current = latest();
-        try {
-            const answer = await props.list();
-            if (!current()) return;
-            // an unchanged world stays the row it is
-            setWorlds((prev) => keepUnchanged(prev, answer));
-            setListError("");
-        } catch (err) {
-            if (!current()) return;
-            console.error("[Worlds] Failed to list worlds:", err);
-            setListError(errorMessage(err));
-        }
-    };
-    onMount(() => void refresh());
-    // starting and stopping change the active world's files
-    createEffect(on(serverStatus, () => void refresh(), { defer: true }));
-
     const fail = (title: string, err: unknown) => {
-        console.error(`[Worlds] ${title}:`, err);
         setFailure({ title, message: errorMessage(err) });
     };
     /** runs a change to the worlds, then lists them again; false when it failed */
@@ -147,10 +130,9 @@ export default function WorldsPage<W extends WorldEntry>(props: { list: () => Pr
         setFailure(null);
         try {
             await work();
-            await refresh();
+            await listing.reload();
             return true;
         } catch (err) {
-            console.error(`[Worlds] ${title}:`, err);
             setFailure({ title, message: errorMessage(err) });
             return false;
         } finally {
@@ -201,7 +183,6 @@ export default function WorldsPage<W extends WorldEntry>(props: { list: () => Pr
             await props.game.create.load();
             setCreateReady(true);
         } catch (err) {
-            console.error("[Worlds] Failed to read the new world's settings:", err);
             setCreateError(errorMessage(err));
         }
     };
@@ -213,9 +194,8 @@ export default function WorldsPage<W extends WorldEntry>(props: { list: () => Pr
         try {
             await props.game.create.submit(newName().trim());
             setCreateOpen(false);
-            await refresh();
+            await listing.reload();
         } catch (err) {
-            console.error("[Worlds] Failed to create a world:", err);
             setCreateError(errorMessage(err));
         } finally {
             setMutating(false);
@@ -255,7 +235,7 @@ export default function WorldsPage<W extends WorldEntry>(props: { list: () => Pr
         try {
             await props.game.upload.add(current.file, uploadName().trim());
             setUpload(null);
-            await refresh();
+            await listing.reload();
         } catch (err) {
             // the service removed the upload; choosing again starts over
             setUpload(null);

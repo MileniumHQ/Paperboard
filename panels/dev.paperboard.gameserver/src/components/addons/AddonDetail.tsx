@@ -1,4 +1,4 @@
-import { createEffect, createMemo, createSignal, For, Show, untrack, type JSX, on, batch } from "solid-js";
+import { createEffect, createMemo, createSignal, For, Show, untrack, type JSX, on } from "solid-js";
 import {
     PaperButton,
     PaperEffect,
@@ -12,7 +12,7 @@ import {
     PaperText,
     usePaperPanel,
     type MarkdownImage,
-    createLatest,
+    createRead,
 } from "@mileniumhq/paperui";
 import type { AddonKind, AddonProject, AddonTarget, InstalledAddon } from "../../lib/addons/kind";
 import type { DetailTarget } from "./state";
@@ -61,9 +61,6 @@ export function AddonDetail<Meta>(props: {
     onInstall(target: AddonTarget): void;
     onRemove(entry: InstalledAddon): void;
 }) {
-    const [project, setProject] = createSignal<AddonProject | null>(null);
-    const [loading, setLoading] = createSignal(false);
-    const [loadError, setLoadError] = createSignal<string | null>(null);
 
     // what the page shows stays set while it closes, so it doesn't change under its exit
     const [kept, setKept] = createSignal<DetailTarget | null>(null);
@@ -81,40 +78,17 @@ export function AddonDetail<Meta>(props: {
     const compact = () => Boolean(panel?.compact?.());
 
     // only the newest look-up speaks: an earlier project's answer, or its
-    // end, never lands on the one opened after it
-    const latest = createLatest();
-    createEffect(
-        on(
-            () => props.target,
-            (target) => {
-                if (!target) return;
-                setProject(null);
-                setLoadError(null);
-                // an add-on on disk has nothing to look up, and still replaces the look-up before it
-                setLoading(!target.local);
-                const current = latest();
-                if (target.local) return;
-                props.kind.source.project(target).then(
-                    (answer) => {
-                        if (!current()) return;
-                        batch(() => {
-                            setProject(answer);
-                            setLoading(false);
-                        });
-                    },
-                    (err) => {
-                        if (!current()) return;
-                        // the page still shows what the list knows, and says why the rest is missing
-                        console.error(`[${props.kind.title}] Failed to load project details:`, err);
-                        batch(() => {
-                            setLoadError(errorMessage(err));
-                            setLoading(false);
-                        });
-                    },
-                );
-            },
-        ),
-    );
+    // end, never lands on the one opened after it. An add-on on disk has
+    // nothing to look up; a closing page keeps what it showed
+    const read = createRead((target: DetailTarget) => props.kind.source.project(target), {
+        source: () => (props.target && !props.target.local ? props.target : null),
+        message: errorMessage,
+    });
+    const settled = () => !props.target?.local && !read.loading();
+    const project = (): AddonProject | null => (settled() && read.error() === null ? (read.value() ?? null) : null);
+    const loading = read.loading;
+    // the page still shows what the list knows, and says why the rest is missing
+    const loadError = () => (settled() ? read.error() : null);
 
     const page = (target: DetailTarget) => {
             // made once per entry: both pieces share the state the kind creates

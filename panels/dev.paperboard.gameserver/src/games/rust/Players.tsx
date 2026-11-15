@@ -5,7 +5,7 @@ import PlayerAvatar from "../../components/PlayerAvatar";
 import { durationLabel } from "../../core/format";
 import type { RustBan, RustSeen } from "./roster";
 import type { RustPlayer } from "./webrcon";
-import { serverCalls } from "../../lib/api";
+import { useServer } from "../../lib/server";
 
 interface Player extends RosterPlayer {
     steamId: string;
@@ -17,7 +17,8 @@ interface Player extends RosterPlayer {
 }
 
 export default function RustPlayers() {
-    const state = createRosterState(() => serverCalls.rustPlayers());
+    const { calls } = useServer();
+    const state = createRosterState(() => calls.rustPlayers());
     const seen = () => state.roster()?.seen ?? [];
     const bans = () => state.roster()?.bans ?? [];
     const online = () => state.roster()?.online ?? [];
@@ -42,9 +43,9 @@ export default function RustPlayers() {
             playing={(player) => (player.connected !== undefined ? `Playing · on for ${durationLabel(player.connected)}` : "Playing")}
             pickHint="Players appear here once they join. Pick one to see their Steam id and to kick or ban them."
             moderation={{
-                kick: (player) => serverCalls.rustKick({ steamId: player.steamId }),
-                ban: (player) => serverCalls.rustBan({ steamId: player.steamId }),
-                unban: (player) => serverCalls.rustUnban({ steamId: player.steamId }),
+                kick: (player) => calls.rustKick({ steamId: player.steamId }),
+                ban: (player) => calls.rustBan({ steamId: player.steamId }),
+                unban: (player) => calls.rustUnban({ steamId: player.steamId }),
                 banNote: "Rust bans the player's Steam account, wherever they join from.",
                 needsServer: "Start the server to ban or unban. Rust keeps its own ban list.",
             }}

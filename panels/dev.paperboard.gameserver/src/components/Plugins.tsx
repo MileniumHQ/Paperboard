@@ -11,14 +11,11 @@ import {
     type PaperFileReveal,
     createLatest,
 } from "@mileniumhq/paperui";
-import { serverVersion } from "../lib/server";
-import { locateAddonConfig } from "../lib/files";
+import { useServer } from "../lib/server";
 import { errorMessage } from "../lib/failure";
 import {
     checkPluginUpdates,
     pluginVersionWarning,
-    previewInstall,
-    uninstallPlugin,
     updatePlugin,
     type InstallPreview,
     type PluginUpdateCheck,
@@ -37,6 +34,7 @@ const versionNote = (dep: { file?: unknown; versionNumber: string; gameVersions:
 // What installing a build also installs: its required dependencies, the
 // optional ones to tick, and what clashes. Nothing installs until it resolves.
 function DependencyPreview(props: InstallExtrasProps) {
+    const { calls, serverVersion } = useServer();
     const [preview, setPreview] = createSignal<InstallPreview | null>(null);
     const [loading, setLoading] = createSignal(false);
     const [optional, setOptional] = createSignal<string[]>([]);
@@ -52,7 +50,8 @@ function DependencyPreview(props: InstallExtrasProps) {
             setLoading(!!versionId);
             const current = latest();
             if (!versionId) return;
-            previewInstall(props.target.projectId, props.target.title, versionId, checked).then(
+            // what installing a build takes, resolved by the service with no writes
+            calls.previewPluginInstall({ projectId: props.target.projectId, title: props.target.title, versionId, includeOptionalKeys: checked }).then(
                 (next) => {
                     if (!current()) return;
                     batch(() => {
@@ -63,7 +62,6 @@ function DependencyPreview(props: InstallExtrasProps) {
                 },
                 (err) => {
                     if (!current()) return;
-                    console.error(`[Plugins] Failed to resolve the dependencies of "${props.target.title}":`, err);
                     batch(() => {
                         setError(errorMessage(err));
                         setLoading(false);
@@ -174,8 +172,10 @@ export default function Plugins(props: {
     /** opens the Files tab at an add-on's settings */
     onConfigure?: (reveal: PaperFileReveal) => void;
 }) {
-    const browser = createAddonBrowser({ kind: pluginsKind });
-    const unit = () => pluginsKind.noun;
+    const server = useServer();
+    const kind = pluginsKind(server);
+    const browser = createAddonBrowser({ kind });
+    const unit = () => kind.noun;
 
     const [updating, setUpdating] = createSignal(false);
     const [updateError, setUpdateError] = createSignal("");
@@ -192,16 +192,15 @@ export default function Plugins(props: {
         setUpdateError("");
         setUpdated(null);
         try {
-            const checks = await checkPluginUpdates();
+            const checks = await checkPluginUpdates(server);
             // nothing that was not updated is dropped silently: no compatible
             // build, a lookup or update that failed, and one with nothing to look up
             const failed: PluginUpdateCheck[] = checks.filter((c) => c.status === "incompatible" || c.status === "error" || c.status === "unchecked");
             const available = checks.filter((c) => c.status === "update-available");
             for (const check of available) {
                 try {
-                    await updatePlugin(check);
+                    await updatePlugin(server, check);
                 } catch (err) {
-                    console.error(`[Plugins] Failed to update "${check.filename}":`, err);
                     failed.push({ ...check, status: "error", error: errorMessage(err) });
                 }
             }
@@ -216,7 +215,6 @@ export default function Plugins(props: {
                 else setUpdated({ title: "Updated", message: `${count} ${count === 1 ? unit() : `${unit()}s`} updated.` });
             }
         } catch (err) {
-            console.error("[Plugins] Update check failed:", err);
             setUpdateError(errorMessage(err));
         } finally {
             setUpdating(false);
@@ -227,11 +225,11 @@ export default function Plugins(props: {
         setUninstallingFailure(filename);
         setUninstallError("");
         try {
-            await uninstallPlugin(filename);
+            // service-owned: trash-first delete, never a bare fileApi.delete
+            await server.calls.deletePlugin({ filename });
             setFailures((prev) => (prev ?? []).filter((f) => f.filename !== filename));
             await browser.reload();
         } catch (err) {
-            console.error(`[Plugins] Failed to uninstall "${filename}":`, err);
             setUninstallError(errorMessage(err));
         } finally {
             setUninstallingFailure(null);
@@ -271,7 +269,7 @@ export default function Plugins(props: {
             setError("");
             setConfiguring(true);
             try {
-                const location = await locateAddonConfig(entry.id);
+                const location = await server.calls.locateAddonConfig({ filename: entry.id });
                 if (!location.reveal) {
                     setError(location.message ?? "Paperboard could not find where this keeps its settings.");
                     return;
@@ -279,7 +277,6 @@ export default function Plugins(props: {
                 close();
                 props.onConfigure?.(location.reveal);
             } catch (err) {
-                console.error(`[Plugins] Failed to locate the settings of "${entry.id}":`, err);
                 setError(errorMessage(err));
             } finally {
                 setConfiguring(false);

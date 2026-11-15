@@ -1,15 +1,8 @@
 import { minecraftSoftware } from "../../games/minecraft/index";
-import { serverSoftware, serverVersion } from "../server";
-import {
-    getEcosystem,
-    installProjectVersion,
-    listInstalledPlugins,
-    listProjectVersions,
-    pluginDirName,
-    searchModrinth,
-    uninstallPlugin,
-} from "../plugins";
-import { commitPlugins, discardUpload, listAdded, pickFiles, type UploadOutcome } from "./upload";
+import type { ServerPage } from "../server";
+import type { ServerCalls } from "../api";
+import { getEcosystem, listProjectVersions, pluginDirName, searchModrinth } from "../plugins";
+import { discardUpload, listAdded, pickFiles, type UploadOutcome } from "./upload";
 import { modrinthHits, modrinthSource } from "./sources";
 import type { AddonKind, AddonListing, InstalledAddon } from "./kind";
 import { versionLabel } from "./presentation";
@@ -18,21 +11,19 @@ import { versionLabel } from "./presentation";
 // folder rules, a different word. Installing runs here in the page (lib/plugins);
 // listing and removing belong to the service.
 
-const isMods = () => getEcosystem(minecraftSoftware(serverSoftware()))?.kind === "mod";
+type Listed = Awaited<ReturnType<ServerCalls["listInstalledPlugins"]>>["plugins"];
 
 export const pluginTitle = (filename: string) => filename.replace(/\.jar$/i, "");
 
 /** the version a record or the jar itself gives, or what is known instead */
-function pluginFooter(entry: Awaited<ReturnType<typeof listInstalledPlugins>>["plugins"][number]): string {
+function pluginFooter(entry: Listed[number]): string {
     const version = entry.record?.version ?? entry.described?.version;
     if (version) return versionLabel(version);
     if (entry.described?.error) return `Couldn't read this jar: ${entry.described.error}`;
     return entry.uploaded ? "Uploaded by you" : "Unknown version";
 }
 
-export function installedPlugins(
-    plugins: Awaited<ReturnType<typeof listInstalledPlugins>>["plugins"],
-): InstalledAddon[] {
+export function installedPlugins(plugins: Listed): InstalledAddon[] {
     return plugins.map((entry) => ({
         id: entry.filename,
         title: entry.record?.title ?? entry.record?.slug ?? entry.described?.name ?? pluginTitle(entry.filename),
@@ -47,7 +38,10 @@ export function installedPlugins(
     }));
 }
 
-export const pluginsKind: AddonKind = {
+export function pluginsKind(server: ServerPage): AddonKind {
+    const { calls, files, serverSoftware, serverVersion } = server;
+    const isMods = () => getEcosystem(minecraftSoftware(serverSoftware()))?.kind === "mod";
+    return {
     get title() {
         return isMods() ? "Mods" : "Plugins";
     },
@@ -69,7 +63,8 @@ export const pluginsKind: AddonKind = {
     watch: () => [minecraftSoftware(serverSoftware()), serverVersion()],
 
     async list(): Promise<AddonListing> {
-        const { plugins, warning } = await listInstalledPlugins();
+        // service-owned (service/plugins.ts): listing verifies hashes against install records
+        const { plugins, warning } = await calls.listInstalledPlugins();
         const dir = pluginDirName(minecraftSoftware(serverSoftware()));
         return {
             items: installedPlugins(plugins),
@@ -79,9 +74,9 @@ export const pluginsKind: AddonKind = {
     },
     listFailureTitle: () => `Couldn't read ${pluginDirName(minecraftSoftware(serverSoftware()))}/`,
 
-    search: async (query, signal) => modrinthHits(await searchModrinth(query, signal)),
+    search: async (query, signal) => modrinthHits(await searchModrinth(server, query, signal)),
     async versions(projectId) {
-        return (await listProjectVersions(projectId)).map((option) => ({
+        return (await listProjectVersions(server, projectId)).map((option) => ({
             id: option.versionId,
             label: `v${option.versionNumber || "?"}${option.recommended ? " · Recommended" : ""}`,
             recommended: option.recommended,
@@ -93,11 +88,11 @@ export const pluginsKind: AddonKind = {
 
     upload: {
         get sources() {
-            return [pickFiles(isMods() ? "Upload mods" : "Upload plugins", ["jar"])];
+            return [pickFiles(files, isMods() ? "Upload mods" : "Upload plugins", ["jar"])];
         },
         failureTitle: "Not added",
-        commit: commitPlugins,
-        discard: discardUpload,
+        commit: (stage) => calls.uploadPlugins({ stage }),
+        discard: discardUpload(calls),
         describe: (result) => ({
             title: "Added",
             message: `${listAdded((result as UploadOutcome).added)} will load the next time the server starts.`,
@@ -115,7 +110,7 @@ export const pluginsKind: AddonKind = {
             text: `This ${isMods() ? "mod" : "plugin"} has no build for Minecraft ${serverVersion()}.`,
         }),
         run: (target, versionId, payload) =>
-            installProjectVersion({
+            calls.installPluginVersion({
                 projectId: target.projectId,
                 slug: target.slug,
                 title: target.title,
@@ -132,6 +127,8 @@ export const pluginsKind: AddonKind = {
         errorTitle: "Couldn't uninstall",
         describe: () =>
             `This moves the jar out of the server's ${pluginDirName(minecraftSoftware(serverSoftware()))}/ folder into a .trash folder inside the server folder, where it can be restored. The change takes effect after a restart.`,
-        run: (item) => uninstallPlugin(item.id),
+        // service-owned: trash-first delete, never a bare fileApi.delete
+        run: (item) => calls.deletePlugin({ filename: item.id }).then(() => undefined),
     },
-};
+    };
+}

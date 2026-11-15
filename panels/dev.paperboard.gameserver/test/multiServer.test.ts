@@ -83,23 +83,10 @@ const ACTIVE = `document.querySelector("[class*=PaperInterfaceItem]")`;
 /** the open server's page: its name over the menu, and what its Overview shows */
 const PAGE = `document.body.textContent`;
 const tabs = (page: Page) => page.evaluate<string[]>(`[...document.querySelectorAll("input[name=serverMenu]")].map((i) => i.value)`);
-/**
- * Presses what opens another page of the panel (a server's card, All
- * servers), which loads a new document: the calls the one it leaves made are
- * answered first, and this resolves once the new one has loaded.
- */
+/** presses what opens another server's page or the server list (a server's card, All servers) */
 async function leaveBy(page: Page, press: string): Promise<void> {
     await page.settled();
-    const loaded = new Promise<void>((resolve) => {
-        const off = page.on(({ method }) => {
-            if (method !== "Page.loadEventFired") return;
-            off();
-            resolve();
-        });
-    });
-    // pressed once this evaluation has returned: the document it runs in goes
-    await page.evaluate(`setTimeout(() => (${press}).click())`);
-    await loaded;
+    await page.evaluate(`(${press}).click()`);
 }
 const consoleOf = async (id: Id) => (await state().server(id))!.serverEntries.map((e) => String(e.content)).join("\n");
 
@@ -110,6 +97,8 @@ describe("two servers of different games", () => {
         let terraria: Awaited<ReturnType<typeof running>> | null = null;
         try {
             await page.waitFor(`${card("Survival")} && ${card("Island")}`, "both servers' cards");
+            // switching servers is a change in this document, never a new one
+            await page.evaluate(`window.__sameDocument = true`);
             await leaveBy(page, card("Survival"));
             await page.waitFor(`document.querySelector('input[name=serverMenu][value="loader"]') && ${PAGE}.includes("Survival") && ${ACTIVE}?.innerText.includes("PAPER")`, "Survival's page");
             expect(await page.evaluate<string>(PAGE)).not.toContain("Island");
@@ -143,6 +132,7 @@ describe("two servers of different games", () => {
             await page.waitFor(`document.querySelector('input[name=serverMenu][value="loader"]') && ${PAGE}.includes("Survival") && ${ACTIVE}?.innerText.includes("PAPER") && ${button("Start")}`, "Survival's page, stopped");
             expect(await page.evaluate<string>(`${ACTIVE}.innerText`)).not.toContain("Terraria Server");
             expect(await page.evaluate<string>(`${ACTIVE}.innerText`)).not.toContain("Island only");
+            expect(await page.evaluate<boolean>(`window.__sameDocument === true`)).toBe(true);
             expect(page.exceptions).toEqual([]);
         } finally {
             await terraria?.stop();

@@ -1,4 +1,4 @@
-import { createSignal, For, onMount, Show } from "solid-js";
+import { createSignal, For, Show } from "solid-js";
 import {
     PaperButton,
     PaperFlex,
@@ -10,11 +10,12 @@ import {
     PaperSettingList,
     PaperText,
     PaperToggle,
+    createRead,
 } from "@mileniumhq/paperui";
 import { errorMessage } from "../lib/failure";
 import { createSaves } from "../lib/saves";
 import type { AutomationView } from "../service/automation";
-import { serverCalls } from "../lib/api";
+import { useServer } from "../lib/server";
 
 const OFF = "off";
 const HOURS = Array.from({ length: 24 }, (_, hour) => `${String(hour).padStart(2, "0")}:00`);
@@ -22,25 +23,18 @@ const hourLabel = (hour: string) => new Date(2000, 0, 1, Number(hour.slice(0, 2)
 
 /** What the server does on its own, for every game: restart after a crash and once a day. */
 export default function Automation() {
-    const [view, setView] = createSignal<AutomationView | null>(null);
-    const [loadError, setLoadError] = createSignal("");
+    const { calls } = useServer();
+    const read = createRead(() => calls.readAutomation(), { message: errorMessage });
+    const view = read.value;
+    // a read again shows the loader, not the last failure
+    const loadError = () => (read.loading() ? "" : (read.error() ?? ""));
     const [saveError, setSaveError] = createSignal("");
-
-    const load = async () => {
-        setLoadError("");
-        try {
-            setView(await serverCalls.readAutomation());
-        } catch (err) {
-            setLoadError(errorMessage(err));
-        }
-    };
-    onMount(() => void load());
 
     const saves = createSaves({ failed: (err) => setSaveError(errorMessage(err)), changed: () => setSaveError("") });
     // each switch and menu saves its own field; the answer is the whole view
     const field = <K extends "restartAfterCrash" | "dailyRestart" | "autoUpdate">(key: K) =>
         saves.setting<AutomationView[K]>(key, () => view()![key], async (value) => {
-            setView(await serverCalls.writeAutomation({ patch: { [key]: value } }));
+            read.set(await calls.writeAutomation({ patch: { [key]: value } }));
         });
 
     return (
@@ -50,7 +44,7 @@ export default function Automation() {
                 <PaperQuote variant="danger" icon="warning" title="Couldn't read the automation settings">
                     <PaperFlex direction="column" gap="half">
                         <PaperText>{loadError()}</PaperText>
-                        <PaperButton size="tiny" onClick={() => void load()}>Try again</PaperButton>
+                        <PaperButton size="tiny" onClick={() => void read.reload()}>Try again</PaperButton>
                     </PaperFlex>
                 </PaperQuote>
             </Show>

@@ -1,11 +1,10 @@
 import { createSignal } from "solid-js";
-import { serverVersion } from "../server";
+import type { ServerPage } from "../server";
 import { formatCount, formatSize } from "./presentation";
 import { discardUpload, listAdded, pickFiles } from "./upload";
 import type { WorkshopItem, WorkshopMeta, WorkshopPage } from "../../games/steam/modscan";
 import type { InstalledMod } from "../../games/terraria/modStore";
 import type { AddonHit, AddonKind, AddonListing, AddonNotice, AddonSource, InstalledAddon } from "./kind";
-import { serverCalls } from "../api";
 
 // tModLoader's Mods: the Steam Workshop through modscan, searched and
 // installed by the service (modscan sends no CORS headers, and SteamCMD runs
@@ -19,40 +18,6 @@ export interface ModChange<T> {
 }
 
 const STEAM = "https://store.steampowered.com/";
-
-// Valve's terms ask for the attribution wherever results are; the last answer's
-// meta is what the search card shows
-const [meta, setMeta] = createSignal<WorkshopMeta | null>(null);
-// what the last answers said about each item, for its page and its version line
-const known = new Map<string, WorkshopItem>();
-
-const remember = (page: WorkshopPage) => {
-    setMeta(page.meta);
-    for (const item of page.items) known.set(item.id, item);
-    return page.items;
-};
-
-export const lookupMods = async (ids: string[]): Promise<WorkshopItem[]> =>
-    remember(await serverCalls.terrariaModItems({ ids }));
-
-/** what `ids` require, and what that requires in turn, as the service installs them */
-export async function requiredChain(ids: string[]): Promise<WorkshopItem[]> {
-    const found = new Map<string, WorkshopItem>();
-    for (let next = ids, round = 0; next.length > 0 && round < 8; round++) {
-        const items = await lookupMods(next);
-        const missing = next.filter((id) => !items.some((i) => i.id === id));
-        if (missing.length > 0) throw new Error(`Steam Workshop has no public item ${missing.join(", ")}, which this mod requires.`);
-        for (const item of items) found.set(item.id, item);
-        next = [...new Set(items.flatMap((i) => i.children ?? []))].filter((id) => !found.has(id));
-    }
-    return [...found.values()];
-}
-
-const lookupMod = async (id: string): Promise<WorkshopItem> => {
-    const item = (await lookupMods([id])).find((i) => i.id === id);
-    if (!item) throw new Error(`Steam Workshop has no public item ${id}`);
-    return item;
-};
 
 const formatDate = (seconds: number) =>
     new Date(seconds * 1000).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
@@ -75,14 +40,35 @@ export const workshopHits = (items: WorkshopItem[]): AddonHit[] =>
         stat: item.subscriptions === null ? `Updated ${formatDate(item.timeUpdated)}` : `${formatCount(item.subscriptions)} subscribers`,
     }));
 
-export const workshopSource: AddonSource = {
+/** the Workshop as the server's service reads it, and what its answers said */
+function workshop(calls: ServerPage["calls"]) {
+    // Valve's terms ask for the attribution wherever results are; the last answer's
+    // meta is what the search card shows
+    const [meta, setMeta] = createSignal<WorkshopMeta | null>(null);
+    // what the last answers said about each item, for its page and its version line
+    const known = new Map<string, WorkshopItem>();
+    const remember = (page: WorkshopPage) => {
+        setMeta(page.meta);
+        for (const item of page.items) known.set(item.id, item);
+        return page.items;
+    };
+    const lookup = async (ids: string[]) => remember(await calls.terrariaModItems({ ids }));
+    const item = async (id: string): Promise<WorkshopItem> => {
+        const found = known.get(id) ?? (await lookup([id])).find((i) => i.id === id);
+        if (!found) throw new Error(`Steam Workshop has no public item ${id}`);
+        return found;
+    };
+    return { meta, remember, lookup, item };
+}
+
+const workshopSource = (steam: ReturnType<typeof workshop>): AddonSource => ({
     name: "Steam Workshop",
     pictures: "steam-workshop",
     url: "https://steamcommunity.com/app/1281930/workshop/",
     pageLabel: "Open on Steam Workshop",
     pageUrl: (target) => `https://steamcommunity.com/sharedfiles/filedetails/?id=${target.projectId}`,
     async project(target) {
-        const item = known.get(target.projectId) ?? (await lookupMod(target.projectId));
+        const item = await steam.item(target.projectId);
         return {
             title: item.title,
             description: item.description,
@@ -102,7 +88,7 @@ export const workshopSource: AddonSource = {
         };
     },
     notices(): AddonNotice[] {
-        const terms = meta();
+        const terms = steam.meta();
         if (!terms) return [];
         return [
             { text: "", link: { label: terms.attribution, href: terms.source || STEAM } },
@@ -110,7 +96,7 @@ export const workshopSource: AddonSource = {
             { text: terms.legal },
         ];
     },
-};
+});
 
 export function installedMods(mods: InstalledMod[]): InstalledAddon[] {
     return mods.map((mod) => {
@@ -144,12 +130,27 @@ export function installedMods(mods: InstalledMod[]): InstalledAddon[] {
 export const changeMessage = (did: string, restart: boolean) =>
     `${did} ${restart ? "Restart the server to load the change." : "It loads the next time the server starts."}`;
 
-export const workshopModsKind: AddonKind = {
+/** the Mods tab's kind, and what a mod requires, as the server's service installs it */
+export function workshopMods({ calls, files, serverVersion }: ServerPage): { kind: AddonKind; requiredChain(ids: string[]): Promise<WorkshopItem[]> } {
+    const steam = workshop(calls);
+    /** what `ids` require, and what that requires in turn */
+    const requiredChain = async (ids: string[]) => {
+        const found = new Map<string, WorkshopItem>();
+        for (let next = ids, round = 0; next.length > 0 && round < 8; round++) {
+            const items = await steam.lookup(next);
+            const missing = next.filter((id) => !items.some((i) => i.id === id));
+            if (missing.length > 0) throw new Error(`Steam Workshop has no public item ${missing.join(", ")}, which this mod requires.`);
+            for (const item of items) found.set(item.id, item);
+            next = [...new Set(items.flatMap((i) => i.children ?? []))].filter((id) => !found.has(id));
+        }
+        return [...found.values()];
+    };
+    const kind: AddonKind = {
     title: "Mods",
     icon: "extension",
     glyph: "extension",
     noun: "mod",
-    source: workshopSource,
+    source: workshopSource(steam),
     searchPlaceholder: "Search Mods",
     searchScope: () => "tModLoader mods",
     emptySearch: () => "No mods matched your search.",
@@ -157,21 +158,21 @@ export const workshopModsKind: AddonKind = {
     resultBadge: "Installed",
 
     async list(): Promise<AddonListing> {
-        const { mods } = await serverCalls.terrariaMods();
+        const { mods } = await calls.terrariaMods();
         return { items: installedMods(mods), meta: undefined };
     },
     listFailureTitle: () => "Couldn't read tModLoader/Mods/",
 
     async search(query, signal) {
-        const page = await serverCalls.terrariaModSearch({
+        const page = await calls.terrariaModSearch({
             query,
             sort: query ? "relevance" : "subscriptions",
         });
         if (signal.aborted) return [];
-        return workshopHits(remember(page));
+        return workshopHits(steam.remember(page));
     },
     async versions(projectId) {
-        const item = known.get(projectId) ?? (await lookupMod(projectId));
+        const item = await steam.item(projectId);
         // one upload per item; the service picks the folder built for this tModLoader
         return [{ id: "latest", label: `Latest · updated ${formatDate(item.timeUpdated)}`, recommended: true }];
     },
@@ -180,11 +181,11 @@ export const workshopModsKind: AddonKind = {
     itemClick: "detail",
 
     upload: {
-        sources: [pickFiles("Upload mods", ["tmod"])],
+        sources: [pickFiles(files, "Upload mods", ["tmod"])],
         failureTitle: "Not added",
         // checking the files and their references waits on any running change
-        commit: (stage) => serverCalls.terrariaModUpload({ stage }),
-        discard: discardUpload,
+        commit: (stage) => calls.terrariaModUpload({ stage }),
+        discard: discardUpload(calls),
         describe: (outcome) => {
             const { result, restart } = outcome as ModChange<{ added: string[] }>;
             return { title: "Added", message: changeMessage(`${listAdded(result.added)} ${result.added.length === 1 ? "is" : "are"} on.`, restart) };
@@ -200,7 +201,7 @@ export const workshopModsKind: AddonKind = {
         noVersions: () => ({ title: "Nothing to install", text: `Steam Workshop has no file for tModLoader ${serverVersion()}.` }),
         // SteamCMD's first run updates itself, then downloads; minutes, not seconds
         run: (target, _versionId, payload) =>
-            serverCalls.terrariaModInstall({ id: target.projectId, dependencies: Array.isArray(payload) ? payload : (target.dependencies ?? []) }),
+            calls.terrariaModInstall({ id: target.projectId, dependencies: Array.isArray(payload) ? payload : (target.dependencies ?? []) }),
     },
 
     remove: {
@@ -211,7 +212,9 @@ export const workshopModsKind: AddonKind = {
         describe: () =>
             "This moves the mod out of tModLoader/Mods/ into a .trash folder inside the server folder, where it can be restored, and turns it off. The change takes effect after a restart.",
         run: async (item) => {
-            await serverCalls.terrariaModRemove({ file: item.id });
+            await calls.terrariaModRemove({ file: item.id });
         },
     },
-};
+    };
+    return { kind, requiredChain };
+}

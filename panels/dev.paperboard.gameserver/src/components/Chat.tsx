@@ -11,13 +11,7 @@ import {
     PaperQuote,
 } from "@mileniumhq/paperui";
 import { errorMessage } from "../lib/failure";
-import {
-    chatMessages,
-    sendChatMessage,
-    serverStatus,
-    initServerListeners,
-} from "../lib/server";
-import type { ChatMessage } from "../lib/server";
+import { useServer, type ChatMessage } from "../lib/server";
 
 function MessageContent(props: { message: ChatMessage; avatar: (name: string) => JSX.Element }) {
     const m = props.message;
@@ -50,11 +44,12 @@ const END_SLACK_PX = 24;
 
 /** The game's in-game chat. Each game draws its own small player avatar. */
 export default function Chat(props: { avatar: (name: string) => JSX.Element }) {
+    const { calls, chatMessages, loadServerConfig, serverStatus } = useServer();
     let scrollRef: HTMLDivElement | undefined;
     const [inputVal, setInputVal] = createSignal("");
     const [sendError, setSendError] = createSignal("");
 
-    onMount(() => initServerListeners());
+    onMount(() => void loadServerConfig());
 
     // the chat follows new messages only while it's read at its end; someone
     // scrolled up to read stays where they are
@@ -85,7 +80,7 @@ export default function Chat(props: { avatar: (name: string) => JSX.Element }) {
         atEnd = true;
         // a message that did not go out comes back to the field, with why,
         // unless a newer one is being typed there
-        sendChatMessage(text).catch((err) => {
+        calls.sayChat({ message: text }).catch((err) => {
             if (!inputVal()) setInputVal(text);
             setSendError(errorMessage(err));
         });

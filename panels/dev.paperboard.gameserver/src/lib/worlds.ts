@@ -1,16 +1,14 @@
 import { minecraftSoftware } from "../games/minecraft/index";
-import { serverSoftware, serverVersion } from "./server";
+import type { ServerPage } from "./server";
 import { levelTypeOptionsFor } from "./versionProfile";
 import type { PropertyField } from "./properties";
-import type { WorldInfo } from "../core/worlds";
-import { serverCalls } from "./api";
 
 // The New World creator's fields, in display order. These are the
 // generation-time choices; runtime settings (allow-nether,
 // spawn-protection, difficulty, …) live in Options/Advanced and always
 // apply to whichever world is active. Seed is a field here, not a special
 // input, so the creator is one consistent settings list.
-export const WORLD_CREATE_FIELDS: PropertyField[] = [
+export const worldCreateFields = (server: ServerPage): PropertyField[] => [
     {
         key: "level-seed",
         title: "Seed",
@@ -23,10 +21,9 @@ export const WORLD_CREATE_FIELDS: PropertyField[] = [
         title: "World Type",
         description: "Terrain generator for the new world.",
         control: "select",
-        // preset ids differ by era (see versionProfile); serverVersion is
-        // unknown at module load, so the options resolve per render
+        // preset ids differ by era (see versionProfile), so the options resolve per render
         defaultValue: "normal",
-        options: () => levelTypeOptionsFor(minecraftSoftware(serverSoftware()), serverVersion()),
+        options: () => levelTypeOptionsFor(minecraftSoftware(server.serverSoftware()), server.serverVersion()),
     },
     {
         key: "generate-structures",
@@ -68,43 +65,4 @@ export type { WorldInfo } from "../core/worlds";
 // bare id the select options use, so the label renders instead of the raw id.
 export function normalizeLevelType(value: string): string {
     return value.replace(/\\+/g, "");
-}
-
-// world listing and deletion run in the service (service/worlds.ts owns
-// the trash discipline with an explicit PANEL_ID). The direct
-// fileApi/terminalApi twins that lived here are gone: the UI triggers,
-// the service executes, state syncs back.
-export async function listWorldDirs(): Promise<string[]> {
-    return serverCalls.listWorldDirs();
-}
-
-export async function listWorlds(): Promise<WorldInfo[]> {
-    return serverCalls.listWorlds();
-}
-
-export async function setActiveWorld(
-    levelName: string,
-    seed?: string,
-    createOnly = false,
-): Promise<{ activated: string; created: boolean }> {
-    return serverCalls.setActiveWorld({ levelName, seed, createOnly });
-}
-
-export async function deleteActiveWorldDirs(levelName: string): Promise<void> {
-    await serverCalls.deleteWorld({ levelName });
-}
-
-// world zips go through the transfer folder: the service builds or unpacks
-// them, the page exports or imports them. Zipping a big world takes a
-// while, so these calls are waited out rather than cut off at 30 s.
-export async function exportWorld(levelName: string): Promise<{ file: string; bytes: number }> {
-    return serverCalls.exportWorld({ levelName });
-}
-
-export async function importWorld(file: string, levelName: string): Promise<{ name: string; folders: string[] }> {
-    return serverCalls.importWorld({ file, levelName });
-}
-
-export async function discardWorldTransfer(file: string): Promise<void> {
-    await serverCalls.discardWorldTransfer({ file });
 }

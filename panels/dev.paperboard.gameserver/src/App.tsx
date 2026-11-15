@@ -1,5 +1,5 @@
 import GameOptions from "./components/GameOptions";
-import { createEffect, createMemo, createSignal, on, onMount, onCleanup, untrack, ErrorBoundary, For, Index, Show } from "solid-js";
+import { createEffect, createMemo, createSignal, on, onMount, onCleanup, untrack, ErrorBoundary, For, Index, Show, type Accessor } from "solid-js";
 import { tabIds } from "./lib/tabIds";
 import {
     PaperPanel, PaperPresence, PaperButton, PaperIcon, PaperQuote, PaperLoader, PaperFlex, PaperText,
@@ -12,11 +12,10 @@ import {
     keepUnchanged,
     createPaperCompact,
 } from "@mileniumhq/paperui";
-import { serversState, selectedServerId, selectedServer, openServer } from "./lib/api";
-import { loadServerConfig, loadServerState } from "./lib/server";
-import type { ServersState } from "./service";
+import { serversState } from "./lib/api";
+import { createServerPage, ServerContext } from "./lib/server";
+import type { ServersState, ServerSummary } from "./service";
 import ServersHome from "./components/ServersHome";
-import { serverSoftware, serverVersion, gameSettings, initFailure, recoveryBlock } from "./lib/server";
 import RecoveryNotice from "./components/RecoveryNotice";
 import { gameFor } from "./games";
 import { errorMessage } from "./lib/failure";
@@ -40,28 +39,28 @@ function slideMs(): number {
     return duration.endsWith("ms") ? value : value * 1000;
 }
 
-export default function App() {
-    const [configured, setConfigured] = createSignal<boolean | null>(null);
-    const [activeTab, setActiveTab] = createSignal("overview");
-    // Finish Setup fades the server's page in; opening a set-up server shows it at once
-    const [setUpHere, setSetUpHere] = createSignal(false);
-    // set when a plugin's Configure button asks the Files tab to open its settings
-    const [filesReveal, setFilesReveal] = createSignal<PaperFileReveal | null>(null);
+/** the server the address names: a page opened, or reloaded, on a server shows it */
+const serverInAddress = () => new URL(window.location.href).searchParams.get("server");
 
-    // unknown until apply() reads the server's game: the state bridge can
-    // hydrate first, and another game's describe() refuses this server's software
-    const [gameId, setGameId] = createSignal<string | null>(null);
-    const described = createMemo(() => {
-        const id = gameId();
-        return id ? gameFor(id).describe({ software: serverSoftware(), version: serverVersion(), settings: gameSettings() }) : null;
-    });
-    const features = () => {
-        const shown = described();
-        if (!shown) throw new Error("The server's game is not known yet");
-        return shown;
+export default function App() {
+    const [servers, setServers] = createSignal<ServersState | null>(null);
+    const [failure, setFailure] = createSignal("");
+    // The open server is this page's state, not its address: switching is a
+    // change here, and the server's page is made again for the new server
+    // (see serverPage). The address follows, so a reload opens the same one.
+    const [selected, setSelected] = createSignal<string | null>(serverInAddress());
+    createEffect(
+        on(selected, (id) => {
+            const url = new URL(window.location.href);
+            if (id) url.searchParams.set("server", id);
+            else url.searchParams.delete("server");
+            if (url.href !== window.location.href) window.history.replaceState(window.history.state, "", url.href);
+        }),
+    );
+    const fail = (what: string, err: unknown) => {
+        console.error(`[App] ${what} failed:`, err);
+        setFailure(errorMessage(err));
     };
-    const shownTabs = tabIds(() => described()?.tabs ?? []);
-    const hasTab = (id: string) => features().tabs.some((tab) => tab.id === id);
 
     // A tab holding work that leaving would lose (the Files editor's unsaved
     // edits) asks the person before it goes: every way out of the open tab
@@ -75,84 +74,38 @@ export default function App() {
         if (!leaveGuard) return go();
         leaveGuard().then((leave) => { if (leave) go(); }, (err) => fail("leaving the tab", err));
     };
-    const openTab = (id: string) => {
-        if (id !== activeTab()) leaveTab(() => setActiveTab(id));
-    };
-    const tabContext = {
-        active: activeTab,
-        hasTab,
-        openTab,
-        revealFiles: (reveal: PaperFileReveal) => { setActiveTab("files"); setFilesReveal({ ...reveal }); },
-    };
-    const gameUI = createMemo(() => {
-        const id = gameId();
-        return id ? gameUIFor(id).create(tabContext) : null;
-    });
-    const renderTab = (id: string, owner: "shared" | "game") => {
-        if (owner === "game") return gameUI()!.tab(id);
-        switch (id) {
-            case "files": return <Files reveal={filesReveal()} guardLeaving={guardLeaving} />;
-            case "logs": return <Logs />;
-            case "backups": return <Backups active={activeTab() === id} whileRunning={features().backupWhileRunning} />;
-            case "automation": return <Automation />;
-            default: {
-                // any other shared tab lists the game's options placed on it
-                if (!features().options.some((option) => (option.tab ?? "options") === id)) throw new Error(`Shared tab has no renderer: ${id}`);
-                return <GameOptions tab={features().tabs.find((tab) => tab.id === id)!} fields={features().options} whileRunning={features().optionsWhileRunning} />;
-            }
-        }
-    };
-    // a version without the open tab falls back to the overview
-    createEffect(
-        on([described, activeTab], ([shown, tab]) => {
-            if (shown && !hasTab(tab)) setActiveTab("overview");
-        }),
-    );
 
-    const [servers, setServers] = createSignal<ServersState | null>(null);
-    const [failure, setFailure] = createSignal("");
-
-    // Each server is a document of its own (see lib/api). On a phone the
-    // server is a page that slides in over the list: it opens before the
-    // server's document loads inside it, and a document opened on a server
-    // starts with its page already open. Going back slides the page out over
-    // the list that is already underneath, then lets the server's page go.
+    // On a phone the server is a page that slides in over the list, and
+    // going back slides it out over the list underneath before its server
+    // lets go. A wide layout shows the server in place of the list.
     const compact = createPaperCompact();
-    const [shown, setShown] = createSignal<string | null>(selectedServerId);
-    const [pageOpen, setPageOpen] = createSignal(selectedServerId !== null);
-    // set once the page has slid away: this document no longer shows its server
-    const [retired, setRetired] = createSignal(false);
-    const serverHere = () => selectedServerId !== null && !retired();
+    const [shown, setShown] = createSignal<string | null>(selected());
+    const [pageOpen, setPageOpen] = createSignal(selected() !== null);
     const shownName = () => servers()?.servers.find((server) => server.id === shown())?.name ?? "";
-    let navigation: ReturnType<typeof setTimeout> | undefined;
-    const openServerPage = (id: string) => {
-        if (!compact()) {
-            openServer(id);
-            return;
+    const known = (id: string) => servers()?.servers.some((server) => server.id === id) ?? false;
+    const openServerPage = async (id: string) => {
+        // a server just added is not in the list this page has yet
+        if (!known(id)) {
+            try {
+                apply(await serversState.refresh());
+            } catch (err) {
+                fail("opening the server", err);
+            }
+            if (!known(id)) return;
         }
+        setSelected(id);
         setShown(id);
         setPageOpen(true);
-        if (serverHere() && id === selectedServerId) return;
-        // the page has slid in over the list; the server's document loads inside it
-        navigation = setTimeout(() => openServer(id), slide());
     };
+    const leaveServer = () => leaveTab(() => setSelected(null));
     const closeServerPage = () => {
-        clearTimeout(navigation);
         setPageOpen(false);
         const closed = shown();
         setTimeout(() => {
             if (pageOpen() || shown() !== closed) return;
             setShown(null);
-            if (selectedServerId === null || retired()) return;
-            setRetired(true);
-            const url = new URL(window.location.href);
-            url.searchParams.delete("server");
-            window.history.replaceState(window.history.state, "", url.href);
+            setSelected(null);
         }, slide());
-    };
-    const fail = (what: string, err: unknown) => {
-        console.error(`[App] ${what} failed:`, err);
-        setFailure(errorMessage(err));
     };
     // a page that can't tell how long it slides says so, instead of a tap doing nothing
     const slide = () => {
@@ -164,28 +117,18 @@ export default function App() {
         }
     };
     const apply = (state: ServersState) => {
-        // the server's game and setup state first: the page never renders
-        // the wrong game, or the wizard for a server that is set up
-        if (selectedServerId) {
-            const server = selectedServer(state);
-            gameFor(server.game);
-            setGameId(server.game);
-            // a wizard on screen stays until its Finish Setup, even when an
-            // install marks the server set up underneath it
-            setConfigured((shown) => (shown === false ? false : server.configured));
-        }
+        if (state.serversError) throw new Error(state.serversError);
+        const open = selected();
+        if (open && !state.servers.some((server) => server.id === open)) throw new Error("Choose a server that has not been removed");
         // each push is a fresh copy: a server it did not change keeps its card
         setServers((prev) => keepUnchanged(prev, state));
     };
-    // a push before the first load has its server's state still unread: the load applies it
+    // a push before the first load is answered by the load
     let loaded = false;
     const load = async () => {
         try {
-            // the server's own state first: its game's page never renders with another game's software
-            if (selectedServerId) await loadServerState();
             apply(await serversState.refresh());
             loaded = true;
-            if (selectedServerId) await loadServerConfig();
         } catch (err) { fail("loading the servers", err); }
     };
     onMount(() => {
@@ -196,115 +139,191 @@ export default function App() {
         onCleanup(off);
         void load();
     });
+    const backToServers = () => {
+        setFailure("");
+        setSelected(null);
+        setShown(null);
+        setPageOpen(false);
+        void load();
+    };
 
-    // the server's own page: its setup wizard until it is set up, then its menu and tabs
-    const serverView = () => (
-        <Show
-            when={configured()}
-            fallback={
-                // the wizard has no menu, so a wide layout keeps a way back to the servers
-                <PaperFlex direction="column" fullWidth fullHeight>
-                    <Show when={!compact()}>
-                        <PaperFlex direction="row" align="center" gap="half" padding="half">
-                            <PaperButton icon variant="text" title="Back to Servers" aria-label="Back to Servers" onClick={() => openServer(null)}>
-                                <PaperIcon>arrow_back</PaperIcon>
-                            </PaperButton>
-                            <PaperText preset="title">{selectedServer(servers()!).name}</PaperText>
-                        </PaperFlex>
-                    </Show>
-                    {/* a server that could not be set up can't run its wizard either */}
-                    <Show when={initFailure() ?? recoveryBlock()}>
-                        <PaperFlex padding="full">
-                            <RecoveryNotice />
-                        </PaperFlex>
-                    </Show>
-                    <PaperFlex direction="column" fullWidth fullHeight>
-                        {gameUI()!.setup({
-                            get initialSoftware() { return selectedServer(servers()!).state.serverSoftware; },
-                            get initialVersion() { return selectedServer(servers()!).state.serverVersion; },
-                            onComplete: () => { setSetUpHere(true); setConfigured(true); },
-                        })}
-                    </PaperFlex>
-                </PaperFlex>
+    // The open server's page: made for one server, with its own state, tabs
+    // and dialogs, and dropped with everything it owns when another opens.
+    const serverPage = (id: string) => {
+        // App leaves a removed server before its summary goes (apply)
+        const summary = createMemo<ServerSummary>((prev) => servers()?.servers.find((server) => server.id === id) ?? prev, servers()!.servers.find((server) => server.id === id)!);
+        const server = createServerPage(summary);
+        // a server left before it loaded says nothing over the next one's page
+        let gone = false;
+        onCleanup(() => (gone = true));
+        server.refresh().then(() => server.loadServerConfig(), (err) => { if (!gone) fail("loading the server", err); });
+        return (
+            <ServerContext.Provider value={server}>
+                <Show when={server.loaded()} fallback={loading()}>
+                    {untrack(() => serverView(server, summary))}
+                </Show>
+            </ServerContext.Provider>
+        );
+    };
+
+    const serverView = (server: ReturnType<typeof createServerPage>, summary: Accessor<ServerSummary>) => {
+        const [activeTab, setActiveTab] = createSignal("overview");
+        // a wizard on screen stays until its Finish Setup, even when an
+        // install marks the server set up underneath it
+        const [configured, setConfigured] = createSignal(summary().configured);
+        createEffect(on(() => summary().configured, (now) => setConfigured((shown) => (shown === false ? false : now)), { defer: true }));
+        // Finish Setup fades the server's page in; opening a set-up server shows it at once
+        const [setUpHere, setSetUpHere] = createSignal(false);
+        // set when a plugin's Configure button asks the Files tab to open its settings
+        const [filesReveal, setFilesReveal] = createSignal<PaperFileReveal | null>(null);
+        const game = gameFor(summary().game);
+        const features = createMemo(() => game.describe({ software: server.serverSoftware(), version: server.serverVersion(), settings: server.gameSettings() }));
+        const shownTabs = tabIds(() => features().tabs);
+        const hasTab = (tab: string) => features().tabs.some((t) => t.id === tab);
+        const openTab = (tab: string) => {
+            if (tab !== activeTab()) leaveTab(() => setActiveTab(tab));
+        };
+        const gameUI = gameUIFor(game.id).create({
+            active: activeTab,
+            hasTab,
+            openTab,
+            revealFiles: (reveal: PaperFileReveal) => { setActiveTab("files"); setFilesReveal({ ...reveal }); },
+        });
+        const renderTab = (tab: string, owner: "shared" | "game") => {
+            if (owner === "game") return gameUI.tab(tab);
+            switch (tab) {
+                case "files": return <Files reveal={filesReveal()} guardLeaving={guardLeaving} />;
+                case "logs": return <Logs />;
+                case "backups": return <Backups active={activeTab() === tab} whileRunning={features().backupWhileRunning} />;
+                case "automation": return <Automation />;
+                default: {
+                    // any other shared tab lists the game's options placed on it
+                    if (!features().options.some((option) => (option.tab ?? "options") === tab)) throw new Error(`Shared tab has no renderer: ${tab}`);
+                    return <GameOptions tab={features().tabs.find((t) => t.id === tab)!} fields={features().options} whileRunning={features().optionsWhileRunning} />;
+                }
             }
-        >
-            <PaperPresence when appear={setUpHere()} motion="fade">
-            <PaperPanel>
-                <PaperMenu
-                    name="serverMenu"
-                    value={activeTab()}
-                    onValueChange={(val) => {
-                        if (val === HOME_ENTRY) leaveTab(() => openServer(null));
-                        else openTab(String(val));
-                    }}
-                >
-                    {/* a phone leaves the server with the page's back button, under the server's name */}
-                    <Show when={!compact()}>
-                        <PaperMenuItem value={HOME_ENTRY} icon="arrow_back">
-                            All servers
-                        </PaperMenuItem>
-                        <PaperMenuLabel>{selectedServer(servers()!).name}</PaperMenuLabel>
-                    </Show>
-                    {/* by position: describe() makes new tab objects whenever the state changes */}
-                    <Index each={features().tabs}>
-                        {(tab, index) => <>
-                            <Show when={tab().group && tab().group !== features().tabs[index - 1]?.group}>
-                                <PaperMenuLabel>{tab().group}</PaperMenuLabel>
-                            </Show>
-                            <PaperMenuItem value={tab().id} icon={tab().icon}>{tab().label}</PaperMenuItem>
-                        </>}
-                    </Index>
-                </PaperMenu>
+        };
+        // a version without the open tab falls back to the overview
+        createEffect(
+            on([features, activeTab], ([, tab]) => {
+                if (!hasTab(tab)) setActiveTab("overview");
+            }),
+        );
 
-                <PaperInterfaceGroup value={activeTab()}>
-                    <For each={shownTabs()}>
-                        {(id) => {
-                            const tab = () => features().tabs.find((t) => t.id === id)!;
-                            const owner = untrack(() => tab().owner);
-                            return <PaperInterfaceItem value={id} variant={(compact() && tab().compactVariant) || tab().variant} width={tab().width}>
-                                {/* a tab that can't be drawn says why, instead of standing blank */}
-                                <ErrorBoundary
-                                    fallback={(err) => {
-                                        console.error(`[App] the ${id} tab could not be drawn:`, err);
-                                        return (
-                                            <PaperQuote variant="danger" icon="warning" title={`${untrack(tab).label} could not open`} role="alert">
-                                                {errorMessage(err)}
-                                            </PaperQuote>
-                                        );
-                                    }}
-                                >
-                                    {/* made once; its props follow the features, so a state change never remounts the tab */}
-                                    {untrack(() => renderTab(id, owner))}
-                                </ErrorBoundary>
-                            </PaperInterfaceItem>;
+        return (
+            <Show
+                when={configured()}
+                fallback={
+                    // the wizard has no menu, so a wide layout keeps a way back to the servers
+                    <PaperFlex direction="column" fullWidth fullHeight>
+                        <Show when={!compact()}>
+                            <PaperFlex direction="row" align="center" gap="half" padding="half">
+                                <PaperButton icon variant="text" title="Back to Servers" aria-label="Back to Servers" onClick={leaveServer}>
+                                    <PaperIcon>arrow_back</PaperIcon>
+                                </PaperButton>
+                                <PaperText preset="title">{summary().name}</PaperText>
+                            </PaperFlex>
+                        </Show>
+                        {/* a server that could not be set up can't run its wizard either */}
+                        <Show when={server.initFailure() ?? server.recoveryBlock()}>
+                            <PaperFlex padding="full">
+                                <RecoveryNotice />
+                            </PaperFlex>
+                        </Show>
+                        <PaperFlex direction="column" fullWidth fullHeight>
+                            {gameUI.setup({
+                                get initialSoftware() { return summary().state.serverSoftware; },
+                                get initialVersion() { return summary().state.serverVersion; },
+                                onComplete: () => { setSetUpHere(true); setConfigured(true); },
+                            })}
+                        </PaperFlex>
+                    </PaperFlex>
+                }
+            >
+                <PaperPresence when appear={setUpHere()} motion="fade">
+                <PaperPanel>
+                    <PaperMenu
+                        name="serverMenu"
+                        value={activeTab()}
+                        onValueChange={(val) => {
+                            if (val === HOME_ENTRY) leaveServer();
+                            else openTab(String(val));
                         }}
-                    </For>
-                </PaperInterfaceGroup>
-            </PaperPanel>
-            </PaperPresence>
-        </Show>
-    );
+                    >
+                        {/* a phone leaves the server with the page's back button, under the server's name */}
+                        <Show when={!compact()}>
+                            <PaperMenuItem value={HOME_ENTRY} icon="arrow_back">
+                                All servers
+                            </PaperMenuItem>
+                            <PaperMenuLabel>{summary().name}</PaperMenuLabel>
+                        </Show>
+                        {/* by position: describe() makes new tab objects whenever the state changes */}
+                        <Index each={features().tabs}>
+                            {(tab, index) => <>
+                                <Show when={tab().group && tab().group !== features().tabs[index - 1]?.group}>
+                                    <PaperMenuLabel>{tab().group}</PaperMenuLabel>
+                                </Show>
+                                <PaperMenuItem value={tab().id} icon={tab().icon}>{tab().label}</PaperMenuItem>
+                            </>}
+                        </Index>
+                    </PaperMenu>
 
-    // the server's page is made once and moved between the wide layout and
-    // the phone's sliding page, so crossing the width keeps its tab, its open
-    // player and its dialogs with what was typed in them
-    const pageHere = createMemo(() => servers() !== null && serverHere());
-    const page = createMemo(() => (pageHere() ? untrack(serverView) : null));
+                    <PaperInterfaceGroup value={activeTab()}>
+                        <For each={shownTabs()}>
+                            {(tabId) => {
+                                const tab = () => features().tabs.find((t) => t.id === tabId)!;
+                                const owner = untrack(() => tab().owner);
+                                return <PaperInterfaceItem value={tabId} variant={(compact() && tab().compactVariant) || tab().variant} width={tab().width}>
+                                    {/* a tab that can't be drawn says why, instead of standing blank */}
+                                    <ErrorBoundary
+                                        fallback={(err) => {
+                                            console.error(`[App] the ${tabId} tab could not be drawn:`, err);
+                                            return (
+                                                <PaperQuote variant="danger" icon="warning" title={`${untrack(tab).label} could not open`} role="alert">
+                                                    {errorMessage(err)}
+                                                </PaperQuote>
+                                            );
+                                        }}
+                                    >
+                                        {/* made once; its props follow the features, so a state change never remounts the tab */}
+                                        {untrack(() => renderTab(tabId, owner))}
+                                    </ErrorBoundary>
+                                </PaperInterfaceItem>;
+                            }}
+                        </For>
+                    </PaperInterfaceGroup>
+                </PaperPanel>
+                </PaperPresence>
+            </Show>
+        );
+    };
+
+    // the server's page is made once per server and moved between the wide
+    // layout and the phone's sliding page, so crossing the width keeps its
+    // tab, its open player and its dialogs with what was typed in them
+    const pageServer = createMemo(() => {
+        const id = selected();
+        return id !== null && servers() !== null && known(id) ? id : null;
+    });
+    const page = createMemo(() => {
+        const id = pageServer();
+        return id === null ? null : untrack(() => serverPage(id));
+    });
 
     const loading = () => (
-        // centred, and only after a moment: opening a server reloads the page
+        // centred, and only after a moment: most servers load at once
         <PaperFlex fullWidth fullHeight align="center" justify="center">
             <PaperLoader loaderStatus="indeterminate" delay={400} label="Loading servers" />
         </PaperFlex>
     );
 
     return (
-        <Show when={!failure()} fallback={<PaperQuote variant="danger" title="Servers could not be loaded" role="alert">{failure()}<PaperButton onClick={() => openServer(null)}>Servers</PaperButton></PaperQuote>}>
+        <Show when={!failure()} fallback={<PaperQuote variant="danger" title="Servers could not be loaded" role="alert">{failure()}<PaperButton onClick={backToServers}>Servers</PaperButton></PaperQuote>}>
         <Show
             when={compact()}
             fallback={
                 <Show when={servers()} fallback={loading()}>
-                    <Show when={serverHere()} fallback={<ServersHome state={servers()!} onOpen={openServerPage} />}>
+                    <Show when={pageServer()} fallback={<ServersHome state={servers()!} onOpen={(id) => void openServerPage(id)} />}>
                         {/* its own box: the layout that lets go of it removes this, never the page moved out of it */}
                         <PaperFlex direction="column" fullWidth fullHeight>{page()}</PaperFlex>
                     </Show>
@@ -312,15 +331,11 @@ export default function App() {
             }
         >
             <Show when={servers()}>
-                <ServersHome state={servers()!} onOpen={openServerPage} />
+                <ServersHome state={servers()!} onOpen={(id) => void openServerPage(id)} />
             </Show>
             <PaperSlidePage enabled open={pageOpen()} position="fixed" title={shownName()} onBack={() => leaveTab(closeServerPage)}>
-                <Show when={shown()}>
-                    {(id) => (
-                        <Show when={servers() && serverHere() && id() === selectedServerId} fallback={loading()}>
-                            <PaperFlex direction="column" fullWidth fullHeight>{page()}</PaperFlex>
-                        </Show>
-                    )}
+                <Show when={shown() !== null && shown() === pageServer()} fallback={loading()}>
+                    <PaperFlex direction="column" fullWidth fullHeight>{page()}</PaperFlex>
                 </Show>
             </PaperSlidePage>
         </Show>

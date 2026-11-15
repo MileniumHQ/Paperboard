@@ -1,15 +1,15 @@
 import { Show } from "solid-js";
 import { PaperAvatar, PaperQuote, PaperText } from "@mileniumhq/paperui";
 import ServerOverview from "../../components/ServerOverview";
-import { gameSettings } from "../../lib/server";
+import { useServer } from "../../lib/server";
 import { createMetrics, createUptime, overviewStats } from "../../components/overviewStats";
 import { rust } from "./index";
 import { fpsTone } from "./health";
-import { serverCalls } from "../../lib/api";
 
 export default function RustOverview() {
+    const { calls, gameSettings } = useServer();
     const description = () => String(gameSettings().description ?? "");
-    const metrics = createMetrics(serverCalls.rustMetrics);
+    const metrics = createMetrics(calls.rustMetrics);
     const uptime = createUptime();
 
     return (

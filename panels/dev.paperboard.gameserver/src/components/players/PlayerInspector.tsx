@@ -16,29 +16,27 @@ import {
     PaperText,
     PaperToggle,
 } from "@mileniumhq/paperui";
-import { onlinePlayerNames, playerStats, queryPlayerStats, serverStatus } from "../../lib/server";
+import { useServer, type ServerStatus } from "../../lib/server";
 import type { SavedSetting } from "../../lib/saves";
 import { errorMessage } from "../../lib/failure";
 import PlayerHead from "../PlayerHead";
-import { formatDistance, formatPlaytime, playtimeSeconds, summaryOf } from "./leaderboard";
+import { formatDistance, formatPlaytime, type Leaderboard } from "./leaderboard";
 import type { PlayerFlagField, PlayerInfo } from "./state";
 
 // how often an online player's open page asks the game for their health,
 // food and experience: each ask is four console commands
 const LIVE_STATS_MS = 15000;
 
-const isOnline = () => serverStatus() === "online";
-
 // a running server takes op and whitelist through its console, a stopped
 // one has its files edited; only a server between the two must wait
-export function canEditLists(): boolean {
-    const status = serverStatus();
+export function canEditLists(status: ServerStatus): boolean {
     return status === "online" || status === "starting" || status === "offline";
 }
 
 /** The open player: who they are, moderation, their stats and permissions, and deleting their data. */
 export default function PlayerInspector(props: {
     player?: PlayerInfo;
+    leaderboard: Leaderboard;
     bedrock: boolean;
     banned: boolean;
     /** the open player's op or whitelist switch, made once per player shown */
@@ -48,11 +46,13 @@ export default function PlayerInspector(props: {
     onPardon: () => void | Promise<void>;
     onKill: () => void;
 }) {
+    const { calls, onlinePlayerNames, playerStats, serverStatus } = useServer();
+    const isOnline = () => serverStatus() === "online";
     const name = () => props.player?.name ?? "";
     const key = () => name().toLowerCase();
     const isPlayerOnline = () => onlinePlayerNames().has(key());
     const stats = () => playerStats().get(key());
-    const summary = () => (props.player ? summaryOf(props.player) : undefined);
+    const summary = () => (props.player ? props.leaderboard.summaryOf(props.player) : undefined);
 
     // live stats for an online player: asked when their page opens or they
     // come online, then on a slow poll, never because other state arrived
@@ -66,7 +66,7 @@ export default function PlayerInspector(props: {
             // an answer about the player shown before does not count
             let current = true;
             const ask = () =>
-                queryPlayerStats(player).then(
+                calls.queryPlayerStats({ player }).then(
                     () => current && setLiveError(""),
                     (err) => current && setLiveError(errorMessage(err)),
                 );
@@ -79,7 +79,7 @@ export default function PlayerInspector(props: {
         }),
     );
 
-    const playtimeText = () => formatPlaytime(props.player ? playtimeSeconds(props.player) : undefined);
+    const playtimeText = () => formatPlaytime(props.player ? props.leaderboard.playtimeSeconds(props.player) : undefined);
     const distanceText = () => {
         const s = summary();
         return s ? formatDistance(s.distanceCm) : "–";
@@ -310,10 +310,10 @@ export default function PlayerInspector(props: {
                                             : "Full command and administration access."
                                     }
                                 >
-                                    <PaperToggle checked={op.value()} disabled={!canEditLists()} onChange={op.set} />
+                                    <PaperToggle checked={op.value()} disabled={!canEditLists(serverStatus())} onChange={op.set} />
                                 </PaperSettingItem>
                                 <PaperSettingItem title="Whitelisted" description="May join while the whitelist is enabled.">
-                                    <PaperToggle checked={whitelisted.value()} disabled={!canEditLists()} onChange={whitelisted.set} />
+                                    <PaperToggle checked={whitelisted.value()} disabled={!canEditLists(serverStatus())} onChange={whitelisted.set} />
                                 </PaperSettingItem>
                             </PaperSettingList>
                         );

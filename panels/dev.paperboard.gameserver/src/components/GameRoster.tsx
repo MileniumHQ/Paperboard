@@ -1,4 +1,4 @@
-import { batch, createEffect, createMemo, createSignal, on, Show, untrack, type JSX } from "solid-js";
+import { createEffect, createMemo, createSignal, on, Show, untrack, type JSX } from "solid-js";
 import {
     PaperBadge,
     PaperButton,
@@ -14,11 +14,11 @@ import {
     PaperText,
     type PaperAvatarSize,
     keepUnchanged,
-    createLatest,
+    createRead,
 } from "@mileniumhq/paperui";
 import PlayerRoster, { statusColor } from "./PlayerRoster";
 import { createSaves } from "../lib/saves";
-import { onlinePlayerNames, serverStatus } from "../lib/server";
+import { useServer } from "../lib/server";
 import { errorMessage, type Outcome } from "../lib/failure";
 
 /** What every game's roster knows about a player. */
@@ -33,37 +33,22 @@ export interface RosterPlayer {
 /**
  * A roster's loading and moderation: `read` asks the game for its roster,
  * again whenever who is online or the server's status changes, and the
- * newest answer is the one kept. An action that fails is told to the user
- * with the player it failed for.
+ * newest answer is the one kept, each player matched by name. An action
+ * that fails is told to the user with the player it failed for.
  */
 export function createRosterState<R>(read: () => Promise<R>) {
-    const [roster, setRoster] = createSignal<R>();
-    const [loadFailure, setLoadFailure] = createSignal<Outcome>();
+    const { onlinePlayerNames, serverStatus } = useServer();
+    // joins, leaves and kicks change who is online, and a stopped server changes who can be moderated
+    const roster = createRead(read, { source: () => [onlinePlayerNames(), serverStatus()], key: "name", message: errorMessage });
+    const loadFailure = (): Outcome | undefined => {
+        const message = roster.error();
+        return message === null ? undefined : { title: "Players not loaded", message };
+    };
+    const reload = roster.reload;
     const [actionFailure, setActionFailure] = createSignal<Outcome>();
     const [busy, setBusy] = createSignal(false);
-    const latest = createLatest();
-
-    const reload = async () => {
-        const current = latest();
-        try {
-            const answer = await read();
-            if (!current()) return;
-            batch(() => {
-                // a roster read again unchanged is no news
-                setRoster((prev) => keepUnchanged(prev, answer));
-                setLoadFailure(undefined);
-            });
-        } catch (err) {
-            if (!current()) return;
-            console.error("[Players] Failed to read the roster:", err);
-            setLoadFailure({ title: "Players not loaded", message: errorMessage(err) });
-        }
-    };
-    // joins, leaves and kicks change who is online, and a stopped server changes who can be moderated
-    createEffect(on([onlinePlayerNames, serverStatus], () => void reload()));
 
     const fail = (title: string, err: unknown) => {
-        console.error(`[Players] ${title}:`, err);
         setActionFailure({ title, message: errorMessage(err) });
     };
     // a player's switch, such as SourceMod admin: it flips at once and saves
@@ -100,7 +85,7 @@ export function createRosterState<R>(read: () => Promise<R>) {
 
     return {
         /** the game's roster as last read; undefined until the first answer */
-        roster,
+        roster: roster.value,
         busy,
         run,
         /**
@@ -119,7 +104,8 @@ export function createRosterState<R>(read: () => Promise<R>) {
         actionFailure,
         /** what the roster tells about the last thing that went wrong */
         feedback: () => actionFailure() ?? loadFailure(),
-        dismiss: () => { setActionFailure(undefined); setLoadFailure(undefined); },
+        // the roster as it is lands again, which clears why the last read failed
+        dismiss: () => { setActionFailure(undefined); roster.set(untrack(roster.value)); },
         clearActionFailure: () => setActionFailure(undefined),
     };
 }
@@ -187,6 +173,7 @@ export default function GameRoster<T extends RosterPlayer>(props: {
     /** false for a player with no Details to show, such as a bot */
     hasDetails?(player: T): boolean;
 }) {
+    const { serverStatus } = useServer();
     const idOf = (player: T) => props.playerId?.(player) ?? player.name;
     const [search, setSearch] = createSignal("");
     const [showOnline, setShowOnline] = createSignal(true);

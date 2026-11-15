@@ -1,7 +1,8 @@
-import { createSignal, onMount } from "solid-js";
+import { createRead } from "@mileniumhq/paperui";
+import { createSignal, type Accessor, type Setter } from "solid-js";
 import { errorMessage } from "../../lib/failure";
 import { type SourceGameSpec, type SourceMapPictures } from "./index";
-import { serverCalls } from "../../lib/api";
+import { useServer, type ServerPage } from "../../lib/server";
 
 /** A game's map pictures and names as a screen has them: asked for once, kept, and failing out loud. */
 export interface MapPicturesState {
@@ -22,8 +23,16 @@ export interface MapPicturesState {
 // service when a card first shows its map, and kept for as long as this
 // server's page is open: each is a few hundred kilobytes at most, and a
 // server can have dozens of maps.
-const [fetched, setFetched] = createSignal<Readonly<Record<string, string | null>>>({});
-const asked = new Set<string>();
+const kept = new WeakMap<ServerPage, { fetched: Accessor<Readonly<Record<string, string | null>>>; setFetched: Setter<Readonly<Record<string, string | null>>>; asked: Set<string> }>();
+function keptFor(server: ServerPage) {
+    let cache = kept.get(server);
+    if (!cache) {
+        const [fetched, setFetched] = createSignal<Readonly<Record<string, string | null>>>({});
+        cache = { fetched, setFetched, asked: new Set() };
+        kept.set(server, cache);
+    }
+    return cache;
+}
 
 /**
  * A game's map pictures, each fetched by the service as it is shown, and the
@@ -31,26 +40,21 @@ const asked = new Set<string>();
  * source has none, and nothing to say about it.
  */
 export function createMapPictures(spec: SourceGameSpec): MapPicturesState {
+    const server = useServer();
+    const { fetched, setFetched, asked } = keptFor(server);
     const hasPictures = Boolean(spec.mapPictures || spec.installPictures);
-    const [wiki, setWiki] = createSignal<SourceMapPictures | null>(null);
-    const [error, setError] = createSignal("");
-    const loadWiki = async () => {
-        try {
-            setWiki(await serverCalls.sourceMapPictures());
-        } catch (err) {
-            setError(errorMessage(err));
-        }
-    };
-    onMount(() => { if (spec.mapPictures) void loadWiki(); });
+    const wiki = createRead((): Promise<SourceMapPictures> => server.calls.sourceMapPictures(), { source: () => spec.mapPictures, message: errorMessage });
+    const [pictureError, setPictureError] = createSignal("");
+    const error = () => wiki.error() ?? pictureError();
 
     const fetchPicture = async (map: string) => {
         try {
-            const picture = await serverCalls.sourceMapPicture({ map });
+            const picture = await server.calls.sourceMapPicture({ map });
             setFetched((have) => ({ ...have, [map]: picture }));
         } catch (err) {
             // asked again on Try again
             asked.delete(map);
-            setError(errorMessage(err));
+            setPictureError(errorMessage(err));
         }
     };
     // a Workshop map's picture is its preview, which its card asks for itself
@@ -66,12 +70,12 @@ export function createMapPictures(spec: SourceGameSpec): MapPicturesState {
             return fetched()[map] ?? undefined;
         },
         loading: (map) => fromSource(map) && !error() && !(map in fetched()),
-        titleOf: (map) => wiki()?.titles[map.toLowerCase()],
-        source: () => wiki()?.source ?? null,
+        titleOf: (map) => wiki.value()?.titles[map.toLowerCase()],
+        source: () => wiki.value()?.source ?? null,
         error,
         retry: () => {
-            setError("");
-            if (spec.mapPictures) void loadWiki();
+            setPictureError("");
+            void wiki.reload();
             // the cards on screen ask again for what failed
             setFetched((have) => ({ ...have }));
         },

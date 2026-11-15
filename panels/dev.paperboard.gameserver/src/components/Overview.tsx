@@ -1,5 +1,5 @@
 import { minecraftSoftware } from "../games/minecraft/index";
-import { createEffect, createSignal, on, onMount, Show } from "solid-js";
+import { createMemo, createSignal, Show } from "solid-js";
 import {
     PaperFlex,
     PaperButton,
@@ -8,20 +8,19 @@ import {
     PaperContextMenu,
     PaperContextMenuItem,
     useContextMenuState,
-    createLatest,
+    createRead,
 } from "@mileniumhq/paperui";
-import { ramAllocation, serverStatus, serverMotd, serverSoftware, serverVersion, loadServerConfig } from "../lib/server";
+import { useServer } from "../lib/server";
 import { createUptime, overviewStats } from "./overviewStats";
 import { SOFTWARE_NAMES } from "../lib/software";
 import ServerOverview from "./ServerOverview";
 import { MotdEditor, MotdPreview } from "./Motd";
-import { fileApi } from "../lib/api";
 import { PANEL_ID } from "../service/contract";
 import { parseProperties } from "../core/properties";
 import { readServerPropertiesStrict, whitelistDefault, writeServerProperties } from "../lib/properties";
 import { DEFAULT_MOTD, minecraftMotd } from "../core/motd";
 import { countJsonEntries, joinRestriction, type JoinRestriction } from "../core/whitelist";
-import { readServerIcon, removeServerIcon, setServerIconFromFile } from "../lib/serverIcon";
+import { setServerIconFromFile } from "../lib/serverIcon";
 import { errorMessage } from "../lib/failure";
 
 export default function Overview(props: {
@@ -32,62 +31,53 @@ export default function Overview(props: {
     /** whether this version has a Players tab */
     hasPlayersTab: boolean;
 }) {
+    const { calls, files, ramAllocation, serverStatus, serverMotd, serverSoftware, serverVersion, loadServerConfig } = useServer();
     const [motdOpen, setMotdOpen] = createSignal(false);
-    const [restriction, setRestriction] = createSignal<JoinRestriction>(null);
-    const [whitelistError, setWhitelistError] = createSignal("");
-    // the world the server runs: server.properties' level-name, "world" when it names none
-    const [world, setWorld] = createSignal("world");
     const uptime = createUptime();
 
     // the whitelist can lock everyone but operators out, and 26.3 turns it
-    // on for new servers; say so where people look when friends can't join
-    const latestCheck = createLatest();
-    const checkWhitelist = async () => {
-        const current = latestCheck();
-        try {
-            const [properties, whitelist, ops] = await Promise.all([
-                fileApi.read("server.properties", PANEL_ID),
-                fileApi.read("whitelist.json", PANEL_ID),
-                fileApi.read("ops.json", PANEL_ID),
+    // on for new servers; say so where people look when friends can't join.
+    // Checked again whenever the tab is shown, and the server starts, stops or changes version
+    const whitelist = createRead(
+        async () => {
+            const [properties, list, ops] = await Promise.all([
+                files.read("server.properties", PANEL_ID),
+                files.read("whitelist.json", PANEL_ID),
+                files.read("ops.json", PANEL_ID),
             ]);
-            if (!current()) return;
             const parsed = properties ? parseProperties(properties) : {};
-            setWorld(parsed["level-name"] || "world");
-            const on = parsed["white-list"] ?? whitelistDefault();
-            setRestriction(joinRestriction(on === "true", countJsonEntries(whitelist), countJsonEntries(ops)));
-            setWhitelistError("");
-        } catch (err) {
-            if (!current()) return;
-            // unreadable files make no claim either way, and say so
-            setRestriction(null);
-            setWhitelistError(errorMessage(err));
-        }
-    };
-    createEffect(
-        on([() => props.active, serverStatus, serverVersion], ([active]) => {
-            if (active) void checkWhitelist();
-        }),
+            const on = parsed["white-list"] ?? whitelistDefault(serverVersion());
+            return { world: parsed["level-name"] || "world", restriction: joinRestriction(on === "true", countJsonEntries(list), countJsonEntries(ops)) };
+        },
+        { source: () => props.active && [serverStatus(), serverVersion()], message: errorMessage },
     );
+    // unreadable files make no claim either way, and say so
+    const restriction = (): JoinRestriction => (whitelist.error() === null ? (whitelist.value()?.restriction ?? null) : null);
+    const whitelistError = () => whitelist.error() ?? "";
+    // the world the server runs: server.properties' level-name, "world" when it names none
+    const world = createMemo((prev: string) => whitelist.value()?.world ?? prev, "world");
 
     // the server list icon: the avatar's edit button opens the file picker,
     // and a right click offers to change or remove it
-    const [icon, setIcon] = createSignal<string | null>(null);
-    const [iconError, setIconError] = createSignal<{ title: string; message: string } | null>(null);
-    let iconPicker!: HTMLInputElement;
-
-    const loadIcon = async () => {
-        try {
-            setIcon(await readServerIcon());
-        } catch (err) {
-            setIconError({ title: "Couldn't read the server icon", message: errorMessage(err) });
-        }
+    const iconRead = createRead(() => calls.readServerIcon(), { message: errorMessage });
+    const icon = () => iconRead.value() ?? null;
+    const [iconActionError, setIconActionError] = createSignal<{ title: string; message: string } | null>(null);
+    const iconError = () => {
+        const read = iconRead.error();
+        return iconActionError() ?? (read === null ? null : { title: "Couldn't read the server icon", message: read });
     };
+    const setIconError = (failure: { title: string; message: string } | null) => {
+        setIconActionError(failure);
+        // a dismissed read failure is let go of: the icon stays as it was read
+        if (failure === null && iconRead.error() !== null) iconRead.set(iconRead.value());
+    };
+    let iconPicker!: HTMLInputElement;
 
     const changeIcon = async (file: File | undefined) => {
         if (!file) return;
         setIconError(null);
         try {
-            setIcon(await setServerIconFromFile(file));
+            iconRead.set(await setServerIconFromFile(calls, file));
         } catch (err) {
             setIconError({ title: "Server icon not changed", message: errorMessage(err) });
         }
@@ -98,14 +88,12 @@ export default function Overview(props: {
         iconMenu.close();
         setIconError(null);
         try {
-            await removeServerIcon();
-            setIcon(null);
+            await calls.removeServerIcon();
+            iconRead.set(null);
         } catch (err) {
             setIconError({ title: "Server icon not removed", message: errorMessage(err) });
         }
     };
-
-    onMount(() => void loadIcon());
 
     return (
         <ServerOverview
@@ -175,7 +163,7 @@ export default function Overview(props: {
             </Show>
 
             <Show when={whitelistError()}>
-                <PaperQuote variant="danger" icon="warning" title="Whitelist not checked" onDismiss={() => setWhitelistError("")}>
+                <PaperQuote variant="danger" icon="warning" title="Whitelist not checked" onDismiss={() => whitelist.set(undefined)}>
                     {whitelistError()}
                 </PaperQuote>
             </Show>
@@ -205,9 +193,9 @@ export default function Overview(props: {
                 dialect={minecraftMotd}
                 title="Server list message"
                 source="server.properties"
-                load={async () => (await readServerPropertiesStrict()).motd ?? DEFAULT_MOTD}
+                load={async () => (await readServerPropertiesStrict(files)).motd ?? DEFAULT_MOTD}
                 save={async (motd) => {
-                    await writeServerProperties({ motd });
+                    await writeServerProperties(files, { motd });
                     await loadServerConfig();
                 }}
             />

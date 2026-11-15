@@ -1,5 +1,6 @@
-import { createEffect, createSignal, For, onMount, Show, on } from "solid-js";
+import { createEffect, createSignal, For, Show, on } from "solid-js";
 import {
+    createRead,
     PaperButton,
     PaperCenteredInterface,
     PaperFlex,
@@ -17,7 +18,7 @@ import { errorMessage } from "../../lib/failure";
 import { createTerrariaInstall } from "./installRows";
 import ReleaseSelector, { releasesOf } from "./ReleaseSelector";
 import { releases, SOFTWARE, SOFTWARE_ICON, softwareName, type TerrariaSoftware } from "./catalog";
-import { serverCalls } from "../../lib/api";
+import { useServer } from "../../lib/server";
 
 /** what each software is, as the setup and Versions selectors describe it */
 export const SOFTWARE_DESCRIPTION: Record<TerrariaSoftware, string> = {
@@ -56,18 +57,10 @@ function InstallStep(props: { software: TerrariaSoftware; version: string }) {
 export default function TerrariaSetup(props: { onComplete(): void }) {
     const [software, setSoftware] = createSignal<TerrariaSoftware>("vanilla");
     const [version, setVersion] = createSignal<string>(releases[0].version);
-    const [hosts, setHosts] = createSignal<Record<TerrariaSoftware, HostSupport> | null>(null);
-    const [loadError, setLoadError] = createSignal("");
-    const support = () => hosts()?.[software()] ?? null;
-    onMount(async () => {
-        try {
-            const info = await serverCalls.terrariaVersions();
-            setHosts(info.hosts);
-        } catch (err) {
-            console.error("[Setup] Failed to read the Terraria releases:", err);
-            setLoadError(errorMessage(err));
-        }
-    });
+    const { calls } = useServer();
+    const releasesRead = createRead(async (): Promise<Record<TerrariaSoftware, HostSupport>> => (await calls.terrariaVersions()).hosts, { message: errorMessage });
+    const loadError = releasesRead.error;
+    const support = () => releasesRead.value()?.[software()] ?? null;
 
     return (
         <PaperWizard

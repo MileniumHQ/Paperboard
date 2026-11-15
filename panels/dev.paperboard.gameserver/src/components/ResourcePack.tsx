@@ -12,11 +12,11 @@ import {
     PaperToggle,
     showToast,
 } from "@mileniumhq/paperui";
-import { supports } from "../lib/capabilities";
+import { versionSupports, type CapabilityName } from "../lib/versionProfile";
+import { useServer } from "../lib/server";
 import { errorMessage } from "../lib/failure";
 import { createSaves } from "../lib/saves";
 import { writeServerProperties } from "../lib/properties";
-import { selectCustomResourcePack } from "../lib/resourcepack";
 import { resourcePackKind, type PackSettings } from "../lib/addons/resourcepack";
 import { isResourcePackId, promptToProperty } from "../core/resourcepack";
 import AddonBrowser from "./addons/AddonBrowser";
@@ -43,7 +43,9 @@ const draftError = (next: PackSettings): string => idProblem(next.id) || promptP
 // server.properties key that belongs to the server resource pack and a
 // pasted URL, which only this tab has.
 export default function ResourcePack(props: { active: boolean }) {
-    const browser = createAddonBrowser({ kind: resourcePackKind, active: () => props.active });
+    const server = useServer();
+    const supports = (capability: CapabilityName) => versionSupports(server.serverVersion(), capability);
+    const browser = createAddonBrowser({ kind: resourcePackKind(server), active: () => props.active });
     const [settings, setSettings] = createSignal<PackSettings | null>(null);
     const [saveError, setSaveError] = createSignal("");
 
@@ -55,18 +57,26 @@ export default function ResourcePack(props: { active: boolean }) {
 
     // what server.properties holds replaces the draft whenever it is read
     // again, unless typing it is still waiting to be saved
-    createEffect(on(() => browser.listing()?.meta.settings, (stored) => stored && !saveTimer && setSettings({ ...stored })));
+    // (a copy of each field, so a change to any of them is heard)
+    createEffect(
+        on(
+            () => {
+                const stored = browser.listing()?.meta.settings;
+                return stored && { ...stored };
+            },
+            (stored) => stored && !saveTimer && setSettings(stored),
+        ),
+    );
 
     const useCustomUrl = async () => {
         if (hashing()) return;
         setHashing(true);
         setCustomError("");
         try {
-            await selectCustomResourcePack(customUrl());
+            await server.calls.selectResourcePack({ url: customUrl() });
             setCustomUrl("");
             await browser.reload();
         } catch (err) {
-            console.error("[Resource Pack] Failed to set the custom URL:", err);
             setCustomError(errorMessage(err));
         } finally {
             setHashing(false);
@@ -75,10 +85,7 @@ export default function ResourcePack(props: { active: boolean }) {
 
     // every write of server.properties takes its turn, so one never undoes another
     const saves = createSaves({
-        failed: (err) => {
-            console.error("[Resource Pack] Failed to save the settings:", err);
-            setSaveError(errorMessage(err));
-        },
+        failed: (err) => setSaveError(errorMessage(err)),
         changed: () => setSaveError(""),
     });
 
@@ -88,13 +95,12 @@ export default function ResourcePack(props: { active: boolean }) {
         if (!next || draftError(next)) return;
         saves
             .run(() =>
-                writeServerProperties({
+                writeServerProperties(server.files, {
                     ...(supports("resourcePackPrompt") ? { "resource-pack-prompt": promptToProperty(next.prompt) } : {}),
                     ...(supports("resourcePackId") ? { "resource-pack-id": next.id.trim().toLowerCase() } : {}),
                 }),
             )
             .catch((err) => {
-                console.error("[Resource Pack] Failed to save the settings:", err);
                 // a save the tab sent as it closed has nowhere on the tab to say so
                 if (left) showToast({ variant: "danger", title: "Resource pack settings not saved", message: errorMessage(err) });
                 else setSaveError(errorMessage(err));
@@ -156,7 +162,7 @@ export default function ResourcePack(props: { active: boolean }) {
                             const required = saves.setting(
                                 "require-resource-pack",
                                 () => values().require,
-                                (on) => writeServerProperties({ "require-resource-pack": String(on) }),
+                                (on) => writeServerProperties(server.files, { "require-resource-pack": String(on) }),
                             );
                             return (
                                 <PaperSettingList autoHeight>

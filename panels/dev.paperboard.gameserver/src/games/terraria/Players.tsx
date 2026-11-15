@@ -2,9 +2,8 @@ import { createMemo, Show } from "solid-js";
 import GameRoster, { CopyRow, createRosterState, type RosterPlayer } from "../../components/GameRoster";
 import { byName } from "../rosterNames";
 import PlayerAvatar from "../../components/PlayerAvatar";
-import { onlinePlayerNames } from "../../lib/server";
+import { useServer } from "../../lib/server";
 import type { BanEntry, SeenPlayer } from "./roster";
-import { serverCalls } from "../../lib/api";
 
 interface Player extends RosterPlayer {
     address?: string;
@@ -13,7 +12,8 @@ interface Player extends RosterPlayer {
 const key = (name: string) => name.toLowerCase();
 
 export default function TerrariaPlayers() {
-    const state = createRosterState(() => serverCalls.terrariaPlayers());
+    const { calls, onlinePlayerNames } = useServer();
+    const state = createRosterState(() => calls.terrariaPlayers());
     const seen = () => state.roster()?.seen ?? [];
     const bans = () => state.roster()?.bans ?? [];
 
@@ -36,9 +36,9 @@ export default function TerrariaPlayers() {
             playing={() => "Playing"}
             pickHint="Players appear here once they join. Pick one to see when they played and to kick or ban them."
             moderation={{
-                kick: (player) => serverCalls.terrariaKick({ name: player.name }),
-                ban: (player) => serverCalls.terrariaBan({ name: player.name }),
-                unban: (player) => serverCalls.terrariaUnban({ name: player.name }),
+                kick: (player) => calls.terrariaKick({ name: player.name }),
+                ban: (player) => calls.terrariaBan({ name: player.name }),
+                unban: (player) => calls.terrariaUnban({ name: player.name }),
                 banNote: "Terraria bans the address a player joins from, so anyone else joining from it is turned away too.",
             }}
             details={(player) => (

@@ -1,6 +1,7 @@
-import { createSignal, onMount, Show, type JSX } from "solid-js";
+import { createSignal, Show, type JSX } from "solid-js";
 import {
     PaperBadge,
+    createRead,
     PaperButton,
     PaperCard,
     PaperFlex,
@@ -13,8 +14,7 @@ import {
 } from "@mileniumhq/paperui";
 import InstallNotices from "../../components/InstallNotices";
 import InstallProgressModal from "../../components/InstallProgressModal";
-import { serverStatus } from "../../lib/server";
-import { serverCalls } from "../../lib/api";
+import { useServer } from "../../lib/server";
 import { errorMessage, type Outcome } from "../../lib/failure";
 import { createSteamInstall, type SteamInstallInfo, type SteamUpdateStatus } from "./installRows";
 import FailureText from "../../components/FailureText";
@@ -25,39 +25,19 @@ import FailureText from "../../components/FailureText";
  * updates it in place.
  */
 export default function SteamVersions(props: { name: string }) {
-    const [info, setInfo] = createSignal<SteamInstallInfo | null>(null);
-    const [loadFailure, setLoadFailure] = createSignal<Outcome>();
+    const { calls, serverStatus } = useServer();
     const [installOpen, setInstallOpen] = createSignal(false);
-    const [status, setStatus] = createSignal<SteamUpdateStatus>();
-    const [checking, setChecking] = createSignal(false);
-    const [checkFailure, setCheckFailure] = createSignal<Outcome>();
     const install = createSteamInstall();
-
-    const load = async () => {
-        try {
-            setInfo(await serverCalls.steamInfo());
-            setLoadFailure(undefined);
-        } catch (err) {
-            console.error(`[Updates] Failed to read the ${props.name} install:`, err);
-            setLoadFailure({ title: `The ${props.name} install could not be read`, message: errorMessage(err) });
-        }
-    };
-
+    const read = createRead((): Promise<SteamInstallInfo> => calls.steamInfo(), { message: errorMessage });
+    const info = read.value;
+    const loadFailure = (): Outcome | undefined => (!read.loading() && read.error() ? { title: `The ${props.name} install could not be read`, message: read.error()! } : undefined);
     // a check waits behind a download in progress, and asks Steam over the network
-    const check = async () => {
-        setChecking(true);
-        try {
-            setStatus(await serverCalls.steamLatest());
-            setCheckFailure(undefined);
-        } catch (err) {
-            console.error(`[Updates] Failed to check for ${props.name} updates:`, err);
-            setStatus(undefined);
-            setCheckFailure({ title: `${props.name} could not be checked for updates`, message: errorMessage(err) });
-        } finally {
-            setChecking(false);
-        }
-    };
-    onMount(() => { void load(); void check(); });
+    const latest = createRead((): Promise<SteamUpdateStatus> => calls.steamLatest(), { message: errorMessage });
+    const checking = latest.loading;
+    // a failed check knows nothing of the newest build
+    const status = () => (latest.error() ? undefined : latest.value());
+    const checkFailure = (): Outcome | undefined => (latest.error() ? { title: `${props.name} could not be checked for updates`, message: latest.error()! } : undefined);
+    const check = latest.reload;
 
     /** what the install says, once it is read; until then it is being read, or could not be */
     const installed = (fact: (read: SteamInstallInfo) => JSX.Element) => (
@@ -70,7 +50,7 @@ export default function SteamVersions(props: { name: string }) {
     const update = async () => {
         setInstallOpen(true);
         const ok = await install.run();
-        await load();
+        await read.reload();
         if (ok) {
             setInstallOpen(false);
             await check();

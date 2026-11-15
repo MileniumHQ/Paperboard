@@ -1,6 +1,6 @@
 import { Show } from "solid-js";
+import { useServer } from "../lib/server";
 import { PaperQuote } from "@mileniumhq/paperui";
-import { serverStatus } from "../lib/server";
 import type { Outcome } from "../lib/failure";
 
 export interface HostSupport {
@@ -31,6 +31,7 @@ export default function InstallNotices(props: {
     loadFailure?: Outcome;
     host: HostSupport | null;
 }) {
+    const { serverStatus } = useServer();
     return (
         <>
             <Show when={serverStatus() !== "offline"}>

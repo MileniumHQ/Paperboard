@@ -11,7 +11,7 @@ import {
 } from "@mileniumhq/paperui";
 import { listMapRegions, type MapDimensionRegions, type MapRegionsResult } from "../lib/map";
 import { DIMENSION_LABELS, REGION_BLOCKS, type MapDimension } from "../core/map";
-import { onlinePlayerNames, playerPositions, queryPlayerPositions, seenPlayerNames, serverStatus } from "../lib/server";
+import { useServer } from "../lib/server";
 import styles from "./Map.module.css";
 import { errorMessage, type Outcome } from "../lib/failure";
 import { createHeads, createTileStore, tileKey, type PictureReport } from "./map/tiles";
@@ -40,6 +40,7 @@ const coordinate = (typed: string): number | null => {
 // its own. This wires the pictures (map/tiles), the painter (map/paint) and
 // the gestures (map/gestures) to the view and its controls.
 export default function MapView() {
+    const { calls, onlinePlayerNames, playerPositions, seenPlayerNames, serverStatus } = useServer();
     const [info, setInfo] = createSignal<MapRegionsResult | null>(null);
     // why the region files could not be listed, until a listing goes through
     const [regionsError, setRegionsError] = createSignal<string | null>(null);
@@ -70,8 +71,8 @@ export default function MapView() {
             if (failure()?.key === key) setFailure(null);
         },
     };
-    const store = createTileStore(report);
-    const head = createHeads(report);
+    const store = createTileStore(calls, report);
+    const head = createHeads(calls, report);
 
     const availableDimensions = () => info()?.dimensions?.map((d) => d.dimension) ?? [];
     const regionsFor = (dim: MapDimension) =>
@@ -110,7 +111,6 @@ export default function MapView() {
             paintMap(canvas, { ...sizeOf(), scale: scale(), offsetX: offsetX(), offsetY: offsetY(), dimension: dimension() }, store.tiles, playerPositions(), head);
             report.succeeded("draw");
         } catch (err) {
-            console.error("[Map] drawing failed:", err);
             report.failed("draw", "The map didn't draw", errorMessage(err));
         }
     };
@@ -176,7 +176,7 @@ export default function MapView() {
 
     const loadRegions = async () => {
         try {
-            const result = await listMapRegions();
+            const result = await listMapRegions(calls);
             batch(() => {
                 setInfo(result);
                 setRegionsError(null);
@@ -196,14 +196,13 @@ export default function MapView() {
             }
             centeredView = true;
         } catch (err) {
-            console.error("[Map] Failed to list regions:", err);
             setRegionsError(errorMessage(err));
         }
     };
 
     // live positions arrive as state; asking for them can fail, and says so
     const askPositions = () =>
-        queryPlayerPositions().then(
+        calls.queryPlayerPositions().then(
             () => report.succeeded("positions"),
             (err) => report.failed("positions", "Player positions not read", errorMessage(err)),
         );

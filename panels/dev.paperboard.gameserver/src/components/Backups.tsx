@@ -1,4 +1,4 @@
-import { batch, createEffect, createSignal, For, onCleanup, Show, on } from "solid-js";
+import { createSignal, For, Show } from "solid-js";
 import {
     PaperButton,
     PaperFlex,
@@ -13,20 +13,17 @@ import {
     PaperSettingList,
     PaperText,
     PaperToggle,
-    createStateSignal,
-    createLatest,
+    createRead,
 } from "@mileniumhq/paperui";
 import {
     backupApi,
     backupProgressText,
     ROUTINE_BACKUP_HOURS,
     ROUTINE_BACKUP_LABEL,
-    type BackupProgress,
     type BackupRecord,
     type BackupSchedule,
-    type BackupStatus,
 } from "../lib/api";
-import { selectedServerId } from "../lib/api";
+import { useServer } from "../lib/server";
 import { PANEL_ID } from "../service/contract";
 import { errorMessage, type Outcome } from "../lib/failure";
 import { createSaves } from "../lib/saves";
@@ -55,50 +52,44 @@ function sizeText(bytes: number): string {
 const dateText = (iso: string) => new Date(iso).toLocaleString();
 
 export default function Backups(props: { active: boolean; whileRunning: "quiesce" | "offline" }) {
-    if (!selectedServerId) throw new Error("Choose a server before opening backups");
-    const backupsApi = backupApi.forSource(PANEL_ID, selectedServerId);
-    // each read keeps the rows it did not change, so a reload rebuilds no backup's row
-    const [status, setStatus] = createStateSignal<BackupStatus | null>(null);
-    const [backups, setBackups] = createStateSignal<BackupRecord[] | null>(null);
-    const [loadError, setLoadError] = createSignal("");
+    const backupsApi = backupApi.forSource(PANEL_ID, useServer().id);
+    // looked up again each time the tab is shown: routine backups happen
+    // while it is not. Each read keeps the rows it did not change, so a
+    // reload rebuilds no backup's row; the server's running backup or
+    // restore, made here or routinely, arrives as it moves
+    // why the running backup's progress can't be heard; once it can again, what it missed is read again
+    const [lost, setLost] = createSignal<string | null>(null);
+    const read = createRead(
+        async () => {
+            const status = await backupsApi.status();
+            return { status, backups: status.location ? await backupsApi.list() : [] };
+        },
+        {
+            source: () => props.active,
+            follow: (land) =>
+                backupsApi.onProgress(
+                    (change) => land((prev) => prev && { ...prev, status: { ...prev.status, progress: change.progress } }),
+                    (why) => {
+                        setLost(why);
+                        if (why === null) void read.reload();
+                    },
+                ),
+            message: (err) => `Backups could not be loaded: ${errorMessage(err)}`,
+        },
+    );
+    const status = () => read.value()?.status ?? null;
+    const backups = () => read.value()?.backups ?? null;
+    const progress = () => status()?.progress ?? null;
+    // a read again shows the loader, not the last failure
+    const loadError = () => {
+        const why = lost();
+        if (why) return `Backup progress can't be heard: ${why}`;
+        return read.loading() ? "" : (read.error() ?? "");
+    };
+    const load = read.reload;
     const [error, setError] = createSignal<Outcome | null>(null);
     const [notice, setNotice] = createSignal<Outcome | null>(null);
     const [busy, setBusy] = createSignal<"create" | "location" | null>(null);
-    // the server's running backup or restore, made here or routinely
-    const [progress, setProgress] = createSignal<BackupProgress | null>(null);
-    let stopProgress: (() => void) | null = null;
-    onCleanup(() => stopProgress?.());
-
-    // showing the tab and finishing an action both read again: the newest read is the one shown
-    const latest = createLatest();
-    const load = async () => {
-        setLoadError("");
-        const current = latest();
-        try {
-            stopProgress ??= backupsApi.onProgress((change) => setProgress(change.progress));
-            const now = await backupsApi.status();
-            const list = now.location ? await backupsApi.list() : [];
-            if (!current()) return;
-            batch(() => {
-                setStatus(now);
-                setProgress(now.progress);
-                setBackups(list);
-            });
-        } catch (err) {
-            if (current()) setLoadError(`Backups could not be loaded: ${errorMessage(err)}`);
-        }
-    };
-
-    // looked up again each time the tab is shown: routine backups happen
-    // while it is not
-    createEffect(
-        on(
-            () => props.active,
-            (active) => {
-                if (active) void load();
-            },
-        ),
-    );
 
     // the routine schedule is one setting, its switch and both menus change
     // it; a backup made now and a new location take their turn with its
@@ -157,7 +148,8 @@ export default function Backups(props: { active: boolean; whileRunning: "quiesce
         async (next) => {
             // a first routine backup needs somewhere to go; closing the picker calls it off
             if (next && !(await ensureLocation())) return false;
-            setStatus(await backupsApi.setSchedule(next));
+            const saved = await backupsApi.setSchedule(next);
+            read.set((prev) => prev && { ...prev, status: saved });
         },
     );
     const keepChoices = () => {

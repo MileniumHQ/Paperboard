@@ -1,7 +1,7 @@
 import { createMemo, createSignal, Show } from "solid-js";
-import { PaperAvatar, PaperButton, PaperModal, PaperQuote, PaperText } from "@mileniumhq/paperui";
+import { createAction, createRead, PaperAvatar, PaperButton, PaperModal, PaperQuote, PaperText } from "@mileniumhq/paperui";
 import ServerOverview, { EditableDetail } from "../../components/ServerOverview";
-import { gameSettings, serverLevel, serverStatus } from "../../lib/server";
+import { useServer } from "../../lib/server";
 import { errorMessage } from "../../lib/failure";
 import type { GameDefinition } from "../types";
 import { createMetrics, createUptime, overviewStats } from "../../components/overviewStats";
@@ -11,20 +11,22 @@ import MapCards, { mapChoices, mapNames } from "./MapCards";
 import { createMapPictures } from "./useMapPictures";
 import { createWorkshopMaps } from "./useWorkshopMaps";
 import { canonicalMap } from "./workshop";
-import { serverCalls } from "../../lib/api";
 
 export default function SourceOverview(props: { spec: SourceGameSpec; game: GameDefinition }) {
+    const { calls, gameSettings, serverLevel, serverStatus } = useServer();
     const features = props.game.describe({ software: "", version: "" });
     // a running server's own map, which its map cycle changes; the one it starts on otherwise
     const map = () => canonicalMap(serverLevel() ?? String(gameSettings().map ?? ""));
     const [open, setOpen] = createSignal(false);
-    const [maps, setMaps] = createSignal<string[]>([]);
+    // the installed maps, read each time the dialog opens
+    const listed = createRead((): Promise<string[]> => calls.sourceMaps(), { source: open, message: errorMessage });
+    const maps = () => listed.value() ?? [];
     const [choice, setChoice] = createSignal("");
-    const [busy, setBusy] = createSignal(false);
-    const [error, setError] = createSignal("");
+    const changing = createAction({ message: errorMessage });
+    const busy = changing.busy;
     const pictures = createMapPictures(props.spec);
     const uptime = createUptime();
-    const metrics = createMetrics(serverCalls.sourceMetrics);
+    const metrics = createMetrics(calls.sourceMetrics);
     /** how the server plays: the game mode it was started in, or its map's; a map of no listed mode is a custom one */
     const mode = () => {
         const chosen = gameSettings().gamemode;
@@ -34,29 +36,20 @@ export default function SourceOverview(props: { spec: SourceGameSpec; game: Game
     };
     const workshop = createWorkshopMaps(props.spec);
     const choices = createMemo(() => [...mapChoices(props.spec, maps()), ...workshop.choices()]);
+    /** why the dialog can't change the map: the change's failure, or a read's */
+    const error = () => changing.error()?.message ?? (listed.loading() ? null : listed.error()) ?? workshop.error();
 
-    const edit = async () => {
+    const edit = () => {
         setChoice(map());
-        setError("");
+        changing.setError(null);
         setOpen(true);
-        try {
-            setMaps(await serverCalls.sourceMaps());
-            if (props.spec.workshop) await workshop.reload();
-            if (workshop.error()) setError(workshop.error());
-        } catch (err) { setError(errorMessage(err)); }
+        if (props.spec.workshop) void workshop.reload();
     };
-    const change = async () => {
-        setBusy(true);
-        setError("");
-        try {
-            await serverCalls.sourceChangeMap({ map: choice() });
+    const change = () =>
+        changing.run("Map not changed", async () => {
+            await calls.sourceChangeMap({ map: choice() });
             setOpen(false);
-        } catch (err) {
-            setError(errorMessage(err));
-        } finally {
-            setBusy(false);
-        }
-    };
+        });
     const label = (name: string) => mapMode(props.spec, name);
     /** the map as people name it: its Workshop title or real name, the file name beside it, and what it plays as */
     const detail = () => {

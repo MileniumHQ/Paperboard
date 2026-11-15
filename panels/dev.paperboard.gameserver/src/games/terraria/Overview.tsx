@@ -2,19 +2,19 @@ import { createSignal, Show } from "solid-js";
 import { PaperAvatar, PaperQuote, PaperText } from "@mileniumhq/paperui";
 import ServerOverview, { EditableDetail } from "../../components/ServerOverview";
 import { MotdEditor, MotdPreview } from "../../components/Motd";
-import { gameSettings, serverMotd, serverSoftware } from "../../lib/server";
+import { useServer } from "../../lib/server";
 import { createUptime, overviewStats } from "../../components/overviewStats";
 import { terraria } from "./index";
 import { terrariaMotd } from "./motd";
 import { softwareName, terrariaSoftware } from "./catalog";
-import { serverCalls } from "../../lib/api";
 
 export default function TerrariaOverview() {
+    const { calls, gameSettings, serverMotd, serverSoftware } = useServer();
     const [motdOpen, setMotdOpen] = createSignal(false);
     const [motdPending, setMotdPending] = createSignal(false);
     const uptime = createUptime();
     const saveMotd = async (motd: string) => {
-        const result = await serverCalls.terrariaMotd({ motd });
+        const result = await calls.terrariaMotd({ motd });
         setMotdPending(result.appliesOnRestart);
     };
 
@@ -47,7 +47,7 @@ export default function TerrariaOverview() {
                 dialect={terrariaMotd}
                 title="Message of the day"
                 source="the server's options"
-                load={async () => String((await serverCalls.readGameOptions()).motd ?? "")}
+                load={async () => String((await calls.readGameOptions()).motd ?? "")}
                 save={saveMotd}
             />
         </ServerOverview>

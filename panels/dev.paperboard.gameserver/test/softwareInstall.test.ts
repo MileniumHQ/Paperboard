@@ -171,17 +171,31 @@ describe("software installs", () => {
     test("the UI waits out install and modpack calls instead of cutting them off at the default timeout", async () => {
         // the panel's Java check finds the runtime installed on the test daemon
         installFakeJava("java-21");
-        const { serverCalls } = await import("../src/lib/api");
+        const { ServerContext } = await import("../src/lib/server");
         const { createInstallRun } = await import("../src/lib/installRun");
         const { gameServerContract } = await import("../src/service/contract");
         const asked: unknown[] = [];
-        // the page's one way to the install, recorded
-        serverCalls.installServerVersion = async (input) => {
-            asked.push(input);
-            return { software: "neoforge", version: "1.21.1", build: "21.1.256" };
-        };
+        // the server's page, with its one way to the install recorded
+        const server = {
+            calls: {
+                installServerVersion: async (input: unknown) => {
+                    asked.push(input);
+                    return { software: "neoforge", version: "1.21.1", build: "21.1.256" };
+                },
+            },
+            installProgress: () => null,
+            patch: () => {},
+        } as unknown as import("../src/lib/server").ServerPage;
         await createRoot(async (dispose) => {
-            await createInstallRun().run("neoforge", "1.21.1");
+            let install!: ReturnType<typeof createInstallRun>;
+            ServerContext.Provider({
+                value: server,
+                get children() {
+                    install = createInstallRun();
+                    return null;
+                },
+            });
+            await install.run("neoforge", "1.21.1");
             dispose();
         });
         expect(asked).toEqual([{ software: "neoforge", version: "1.21.1" }]);
