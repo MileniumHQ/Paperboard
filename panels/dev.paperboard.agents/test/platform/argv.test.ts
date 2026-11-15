@@ -88,7 +88,7 @@ describe("what reaches a brain's command line", () => {
     test("a saved model is a single value that can't be read as a flag", async () => {
         const base = { name: "Ada", harness: "codex" };
         for (const model of ["--dangerously-bypass-approvals-and-sandbox", "-c", "gpt 5", "gpt-5;rm", "a".repeat(65), "x\ny"]) {
-            expect(parseSettings({ ...base, model })).toBeNull();
+            expect(() => parseSettings({ ...base, model })).toThrow("isn't a model's name");
         }
         expect(parseSettings({ ...base, model: "gpt-5.5" })).toMatchObject({ model: "gpt-5.5" });
         rig = await conversationRig({ harness: "codex" });

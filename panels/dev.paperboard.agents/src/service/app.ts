@@ -405,13 +405,7 @@ export class AiApp {
     // ------------------------------------------------------------- actions
 
     async setup(input: unknown) {
-        const i = (input ?? {}) as Record<string, unknown>;
-        const asked = (i.settings ?? {}) as Record<string, unknown>;
-        if (typeof asked.automationInstructions === "string" && asked.automationInstructions.trim().length > LIMITS.instructions) {
-            throw new Error(`instructions for automations are limited to ${LIMITS.instructions} characters`);
-        }
-        const settings = parseSettings(i.settings);
-        if (!settings) throw new Error("name and brain are required");
+        const settings = parseSettings(((input ?? {}) as Record<string, unknown>).settings);
         const brain = this.brains.snapshot()[settings.harness];
         if (brain.phase !== "ready") {
             throw new Error(`${HARNESS_NAMES[settings.harness]} isn't ready: ${brain.installed ? "sign in to it first" : "install it first"}`);
@@ -423,10 +417,15 @@ export class AiApp {
         return { saved: true };
     }
 
-    /** The settings live in the panel's config document; none yet is a fresh install. */
+    /** The settings live in the panel's config document; none yet is a fresh install. One that won't read is never taken for none. */
     private async loadSettings(): Promise<Settings | null> {
         const saved = await this.host.readSettings();
-        return saved === null ? null : parseSettings(saved);
+        if (saved === null) return null;
+        try {
+            return parseSettings(saved);
+        } catch (e) {
+            throw new Error(`the agent's settings can't be read (${errorText(e)}); they were left as they are`);
+        }
     }
 
     /** What a brain can think with, from its harness's own catalog. */
@@ -835,23 +834,25 @@ export class AiApp {
 
 // ------------------------------------------------------------- validation (the service owns these)
 
-export function parseSettings(v: unknown): Settings | null {
-    if (!v || typeof v !== "object") return null;
+/** The settings, checked; throws with what's wrong with them. */
+export function parseSettings(v: unknown): Settings {
+    if (!v || typeof v !== "object") throw new Error("there are no settings to save");
     const s = v as Record<string, unknown>;
     const name = typeof s.name === "string" ? s.name.trim() : "";
-    if (!name || name.length > LIMITS.name) return null;
-    if (!HARNESSES.includes(s.harness as Harness)) return null;
+    if (!name) throw new Error("give the agent a name");
+    if (name.length > LIMITS.name) throw new Error(`names are limited to ${LIMITS.name} characters`);
+    if (!HARNESSES.includes(s.harness as Harness)) throw new Error("pick a brain");
     let model: string | null = null;
     if (typeof s.model === "string" && s.model && s.model !== DEFAULT_MODEL) {
         // it lands in argv after -m/--model: it can never be read as a flag
-        if (s.model.length > LIMITS.model || !/^\w[\w.:\-/]*$/.test(s.model)) return null;
+        if (s.model.length > LIMITS.model || !/^\w[\w.:\-/]*$/.test(s.model)) throw new Error(`"${s.model.slice(0, LIMITS.model)}" isn't a model's name`);
         model = s.model;
     }
     // settings saved before compaction was a choice summarize, as it's done since
-    if (s.compaction !== undefined && !COMPACTIONS.includes(s.compaction as Compaction)) return null;
+    if (s.compaction !== undefined && !COMPACTIONS.includes(s.compaction as Compaction)) throw new Error(`compaction is ${COMPACTIONS.join(" or ")}`);
     const compaction = (s.compaction as Compaction | undefined) ?? "summarize";
-    if (s.automationInstructions !== undefined && typeof s.automationInstructions !== "string") return null;
+    if (s.automationInstructions !== undefined && typeof s.automationInstructions !== "string") throw new Error("instructions for automations are text");
     const automationInstructions = s.automationInstructions?.trim() ?? "";
-    if (automationInstructions.length > LIMITS.instructions) return null;
+    if (automationInstructions.length > LIMITS.instructions) throw new Error(`instructions for automations are limited to ${LIMITS.instructions} characters`);
     return { name, harness: s.harness as Harness, model, compaction, ...(automationInstructions ? { automationInstructions } : {}) };
 }

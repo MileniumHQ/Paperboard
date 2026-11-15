@@ -312,7 +312,7 @@ async function upload(c: BrowserComputer, args: Record<string, unknown>): Promis
     if (!chooser) throw new ToolError("No file picker is open in that window: click the page's upload button first.");
     const files = Array.isArray(args.files) ? args.files : [args.files];
     if (!files.length || files.length > UPLOAD_MAX) throw new ToolError(`pick 1 to ${UPLOAD_MAX} files`);
-    if (files.length > 1 && !chooser.multiple) throw new ToolError("c picker takes one file");
+    if (files.length > 1 && !chooser.multiple) throw new ToolError("this picker takes one file");
     const paths = files.map((f) => {
         const full = c.home.resolve(f);
         if (!fs.statSync(full, { throwIfNoEntry: false })?.isFile()) throw new ToolError(`there's no file at ${c.home.shown(full)}`);

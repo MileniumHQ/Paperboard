@@ -94,7 +94,6 @@ export interface BrowserDeps {
     startMs?: number;
 }
 
-/** A tool's refusal, told to the agent as it is. */
 /** A refusal the agent reads as the tool's answer. */
 export class ToolError extends Error {}
 

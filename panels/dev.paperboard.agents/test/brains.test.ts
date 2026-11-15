@@ -418,6 +418,20 @@ describe("brain failures", () => {
         expect(unhandled).toEqual([]);
     }, SLOW);
 
+    test("saved settings that don't read stop the service with why, never taken for a fresh install", async () => {
+        const root = tempDir("settings");
+        try {
+            const written: unknown[] = [];
+            const app = new AiApp({ storageDir: async () => root, readSettings: async () => ({ name: "Ada", harness: "codex", compaction: "shred" }), writeSettings: async (s: unknown) => void written.push(s) } as unknown as AppHost);
+            const ctx = { state: {} as never, setState: () => {}, emit: () => {}, trigger: () => {} };
+            await expect(app.init(ctx)).rejects.toThrow("the agent's settings can't be read (compaction is summarize or forget); they were left as they are");
+            await expect(app.ready()).rejects.toThrow("the Agent service didn't start: the agent's settings can't be read");
+            expect(written).toEqual([]);
+        } finally {
+            fs.rmSync(root, { recursive: true, force: true });
+        }
+    });
+
     test("a service whose init throws rejects ready(), so its actions fail instead of hanging", async () => {
         const app = new AiApp({ storageDir: async () => Promise.reject(new Error("the panel's storage is gone")) } as unknown as AppHost);
         const ctx = { state: {} as never, setState: () => {}, emit: () => {}, trigger: () => {} };
