@@ -12,8 +12,6 @@ import { logger } from "../../../../papercrane/logger";
 import { pinnedRequest } from "../../../../papercrane/pinnedTls";
 import { bareHost, bracketHost, checkProbeTarget } from "./probeTarget";
 import { PaperCraneClient } from "./PaperCraneClient";
-import type { ComputerDriver } from "../driver/ComputerDriver";
-import { RemoteComputerDriver } from "../driver/RemoteComputerDriver";
 
 export interface StoredComputer {
     id: string;
@@ -68,7 +66,6 @@ export function checkComputerName(name: unknown): string {
 export class ConnectionPool extends EventEmitter {
     private computers: Map<string, StoredComputer> = new Map();
     private clients: Map<string, PaperCraneClient> = new Map();
-    private remoteDrivers: Map<string, RemoteComputerDriver> = new Map();
     private activeId: string = "local";
     private configPath: string;
     /** resolves once this computer's record carries its OS details; init() awaits it */
@@ -143,17 +140,8 @@ export class ConnectionPool extends EventEmitter {
         this.computers.set("local", localComp);
     }
 
-    // never default id — operations must not land on wrong machine
-    public getDriver(id: string): ComputerDriver {
-        let remoteDriver = this.remoteDrivers.get(id);
-        if (!remoteDriver) {
-            const client = this.getClient(id);
-            remoteDriver = new RemoteComputerDriver(id, client);
-            this.remoteDrivers.set(id, remoteDriver);
-        }
-        return remoteDriver;
-    }
-
+    // never a default id: operations must not land on the wrong machine.
+    // The first ask connects.
     public getClient(id: string): PaperCraneClient {
         const comp = this.computers.get(id);
         if (!comp) throw new Error(`Unknown computer: ${id}`);
@@ -198,7 +186,7 @@ export class ConnectionPool extends EventEmitter {
         this.activeId = id;
         try { this.saveConfig(); }
         catch (err) { this.activeId = previous; throw err; }
-        this.getDriver(id);
+        this.getClient(id);
         this.emit("change");
         return true;
     }
@@ -301,7 +289,7 @@ export class ConnectionPool extends EventEmitter {
                 this.computers.delete(id);
                 throw new Error(`Paired, but this computer could not save the pairing: ${err instanceof Error ? err.message : String(err)}`);
             }
-            this.getDriver(id);
+            this.getClient(id);
             this.emit("change");
             return comp;
         } catch (err) {
@@ -379,7 +367,6 @@ export class ConnectionPool extends EventEmitter {
             client.disconnect();
             this.clients.delete(id);
         }
-        this.remoteDrivers.delete(id);
         const removedRecord = this.computers.get(id);
         const removed = this.computers.delete(id);
         if (removed) {
@@ -417,7 +404,6 @@ export class ConnectionPool extends EventEmitter {
             client.disconnect();
         }
         this.clients.clear();
-        this.remoteDrivers.clear();
     }
 }
 

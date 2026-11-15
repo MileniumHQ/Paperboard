@@ -183,11 +183,11 @@ async function pingComputers(): Promise<{ reached: ComputerUpdateState[]; unavai
     for (let offset = 0; offset < computers.length; offset += 8) {
         await Promise.all(computers.slice(offset, offset + 8).map(async ({ id, name }) => {
             try {
-                const driver = connectionPool.getDriver(id);
+                const client = connectionPool.getClient(id);
                 const [panels, packages, sysInfo] = await Promise.all([
-                    withTimeout(driver.listPanels(), PING_TIMEOUT_MS),
-                    withTimeout(driver.getPackageIndex(), PING_TIMEOUT_MS),
-                    withTimeout(driver.getSystemInfo(), PING_TIMEOUT_MS),
+                    withTimeout(client.listPanels(), PING_TIMEOUT_MS),
+                    withTimeout(client.getPackageIndex(), PING_TIMEOUT_MS),
+                    withTimeout(client.getSystemInfo(), PING_TIMEOUT_MS),
                 ]);
                 reached.push({ id, name, isLocal: id === "local", panels: panels ?? [], packages: packages ?? {}, sysInfo });
             } catch (err) {
@@ -202,7 +202,7 @@ async function pingComputers(): Promise<{ reached: ComputerUpdateState[]; unavai
 // the Paperboard Server version a computer recorded, when its system:info doesn't say
 async function readCraneVersion(computerId: string): Promise<string | null> {
     try {
-        const cfg = await withTimeout(connectionPool.getDriver(computerId).getConfig("crane_version"), 2000);
+        const cfg = await withTimeout(connectionPool.getClient(computerId).getConfig("crane_version"), 2000);
         return (cfg as { version?: string } | null)?.version ?? null;
     } catch (err) {
         // planning refuses an update over an unknown version, and says so

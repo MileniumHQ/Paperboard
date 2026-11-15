@@ -4,7 +4,6 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { WebSocketServer, type WebSocket as ServerSocket } from "ws";
 import { PaperCraneClient } from "../../src/main/communication/papercrane/PaperCraneClient";
-import { RemoteComputerDriver } from "../../src/main/communication/driver/RemoteComputerDriver";
 import { CraneTransport } from "../../../../packages/paperapi/src/ws";
 import { PROTOCOL_VERSION as SDK_PROTOCOL_VERSION } from "../../../../packages/paperapi/src/protocol";
 import { PROTOCOL_VERSION } from "../../papercrane/protocol";
@@ -77,6 +76,42 @@ describe("the master token goes only to a daemon that proves itself", () => {
 			await impostor.close();
 		});
 	}
+
+	test("a connection that fails before it has a socket says why on the computer's status", async () => {
+		// a paired computer whose stored certificate can't be read
+		const unreadable = new PaperCraneClient();
+		await expect(unreadable.connect("192.0.2.1", 45464, "pc_token", "not a certificate")).rejects.toThrow("Cannot connect to 192.0.2.1:45464");
+		expect(unreadable.getStatus().error).toStartWith("Cannot connect to 192.0.2.1:45464: ");
+		unreadable.disconnect();
+
+		// a local daemon that can't start, which is retried
+		const dir = dataDir();
+		// the daemon can't read its own state, so it can't start
+		fs.mkdirSync(path.join(dir, "local", "authorized_tokens.json"));
+		const client = new PaperCraneClient({ reconnectBaseMs: 1, reconnectMaxMs: 1 });
+		const statuses: (string | undefined)[] = [];
+		const retried = new Promise<void>((resolve) =>
+			client.on("status", (status: { error?: string }) => {
+				statuses.push(status.error);
+				if (statuses.length === 2) resolve();
+			}),
+		);
+		await withDataDir(dir, async () => {
+			try {
+				await expect(client.connect()).rejects.toThrow("Paperboard Server couldn't start on this computer");
+				expect(client.getStatus().connected).toBe(false);
+				const error = client.getStatus().error;
+				expect(error).toStartWith("Paperboard Server couldn't start on this computer: ");
+				expect(error).toContain("EISDIR");
+				// the retry the app schedules fails the same way, and says so again
+				await within("the local daemon to be retried", retried);
+				expect(statuses.every((each) => each?.includes("EISDIR"))).toBe(true);
+			} finally {
+				client.disconnect();
+				client.stopEmbeddedServer();
+			}
+		});
+	});
 
 	test("a restarted daemon refuses the previous daemon's token", async () => {
 		const dir = dataDir();
@@ -169,8 +204,7 @@ describe("the master token goes only to a daemon that proves itself", () => {
 		const client = new PaperCraneClient();
 		await withDataDir(dir, async () => {
 			await client.connect();
-			const driver = new RemoteComputerDriver("r", client);
-			await expect(driver.getSystemInfo()).rejects.toThrow("system:info is broken here");
+			await expect(client.getSystemInfo()).rejects.toThrow("system:info is broken here");
 			client.disconnect();
 		});
 		await listener.close();

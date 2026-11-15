@@ -3,7 +3,6 @@
 // is using them (then the job ends held), and Paperboard Server replaces
 // itself and must report the new version back.
 import connectionPool from "./communication/papercrane/ConnectionPool";
-import { PACKAGE_DOWNLOAD_TIMEOUT_MS } from "./communication/papercrane/PaperCraneClient";
 import { withTimeout } from "../../papercrane/util";
 import { logger } from "../../papercrane/logger";
 import { validSha256, type UpdateTask } from "./updatePlan";
@@ -126,10 +125,9 @@ export function taskJob(task: UpdateTask): UpdateJob {
 type OnProgress = ReturnType<typeof progressReporter>;
 
 async function installPanel(task: UpdateTask, key: string, onProgress: OnProgress): Promise<UpdateHold | void> {
-    const outcome = await withTimeout(
-        connectionPool.getDriver(task.computerId).installPanel(task.id!, { version: task.version, sha256: task.sha256 }, { ifUnused: true, onProgress }),
-        TASK_TIMEOUT_MS,
-    );
+    // the RPC carries its own timeout, as long as the daemon's download may
+    // run: a shorter one here would show "failed" while the daemon installs
+    const outcome = await connectionPool.getClient(task.computerId).installPanel(task.id!, { version: task.version, sha256: task.sha256 }, { ifUnused: true, onProgress });
     if (!("held" in outcome)) return;
     heldPanels.set(key, { task, processes: outcome.held.processes });
     return {
@@ -151,18 +149,12 @@ async function installPackage(task: UpdateTask, key: string, onProgress: OnProgr
     if (!validSha256(task.sha256)) {
         throw new Error(`Install refused for package "${task.id}": update task carries no sha256 checksum`);
     }
-    const outcome = await withTimeout(
-        connectionPool.getDriver(task.computerId).downloadPackage(task.id!, `updater-${task.id}`, onProgress, task.sha256),
-        PACKAGE_DOWNLOAD_TIMEOUT_MS,
-    );
+    const outcome = await connectionPool.getClient(task.computerId).downloadPackage(task.id!, `updater-${task.id}`, onProgress, task.sha256);
     if (!outcome.waiting) return;
     // only what people rely on holds it (important or long running);
     // anything else stops for it and starts again
     if (!outcome.waiting.blockedBy.some((user) => user.holds)) {
-        const { failures } = await withTimeout(
-            connectionPool.getClient(task.computerId).updateInUse({ packages: [task.id!] }, (_target, payload) => onProgress(payload)),
-            TASK_TIMEOUT_MS,
-        );
+        const { failures } = await connectionPool.getClient(task.computerId).updateInUse({ packages: [task.id!] }, (_target, payload) => onProgress(payload));
         const failure = failures[`package:${task.id}`];
         if (failure) throw new Error(failure);
         return;
@@ -199,7 +191,7 @@ async function updateServer(task: UpdateTask, report: (progress: UpdateProgress)
         throw new Error(`Paperboard Server update to ${task.version} on ${task.computerName ?? task.computerId} did not report back`);
     }
     try {
-        await connectionPool.getDriver(task.computerId).setConfig("crane_version", { version: task.version });
+        await connectionPool.getClient(task.computerId).setConfig("crane_version", { version: task.version });
     } catch (err) {
         logger.warn(`[Updater] failed to persist crane_version on ${task.computerId}:`, err);
     }
