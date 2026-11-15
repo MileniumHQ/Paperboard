@@ -7,6 +7,7 @@ import { STATE_EVENT, STATE_VALUE, WIDGET_CHOICES_COMMAND, callBlockId, eventBlo
 import { parseWidgetChoices, type WidgetChoice } from "./widgetManifest";
 import type { BackupEnded } from "./backups";
 import { errorMessage } from "./errors";
+import { problemsApi } from "./problems";
 
 export interface ServiceContext<TState> {
     state: TState;
@@ -206,10 +207,11 @@ function pageEvents(panelId: string, blocks: Blocks, legacyActions: boolean): (e
     return (event, payload) => {
         // a name that can't be an id is the panel's mistake: thrown where it was made
         const id = eventBlockId(event);
+        // emit is fire-and-forget, with no caller to hear it: a page that
+        // missed it is the panel's problem
         void registerEvent(id, event)
             .then(() => blocks.fire(id, payload === undefined ? {} : { payload }))
-            // quiet: emit is fire-and-forget, with no caller to hear it; the daemon's log keeps what the service wrote
-            .catch((err) => console.error(`[Service:${panelId}] Failed to emit event '${event}':`, err));
+            .catch((err) => problemsApi.report(panelId, { key: `paperapi:emit:${event}`, title: "The panel's page missed an update", message: `${event}: ${errorMessage(err)}` }));
         // TRANSITIONAL (Actions removal): a page still listening with actionsApi.on hears it too
         if (legacyActions) {
             // quiet: TRANSITIONAL (Actions removal): the deprecated Actions page is the only one listening
@@ -337,11 +339,12 @@ function answerTheDaemon(panelId: string, options: AnyOptions, ctx: ServiceConte
             );
         });
     };
-    const hear = (type: string, hook: string, run: (message: any) => unknown) => {
+    // the daemon doesn't wait on an after-hook, so its failure is the panel's problem
+    const hear = (type: string, after: string, run: (message: any) => unknown) => {
         process.on("message", (message: any) => {
             if (message?.type !== type) return;
-            // quiet: the daemon doesn't wait on an after-hook, so its failure has no caller; the daemon's log keeps what the service wrote
-            void (async () => run(message))().catch((err) => console.error(`[Service:${panelId}] ${hook} failed:`, err));
+            void (async () => run(message))().catch((err) =>
+                problemsApi.report(panelId, { key: `paperapi:${type}`, title: `Finishing up after ${after} failed`, message: errorMessage(err) }));
         });
     };
 
@@ -353,9 +356,9 @@ function answerTheDaemon(panelId: string, options: AnyOptions, ctx: ServiceConte
             processes: Array.isArray(m.processes) ? m.processes.filter((p: unknown): p is string => typeof p === "string") : [],
         }));
     }
-    if (afterUpdate) hear("paperboard:after-update", "afterUpdate", (m) => afterUpdate(ctx, m.ended as UpdateEnded));
-    if (afterBackup) hear("paperboard:after-backup", "afterBackup", (m) => afterBackup(ctx, m.ended as BackupEnded));
-    if (afterRestore) hear("paperboard:after-restore", "afterRestore", (m) => afterRestore(ctx, m.ended as BackupEnded));
+    if (afterUpdate) hear("paperboard:after-update", "an update", (m) => afterUpdate(ctx, m.ended as UpdateEnded));
+    if (afterBackup) hear("paperboard:after-backup", "a backup", (m) => afterBackup(ctx, m.ended as BackupEnded));
+    if (afterRestore) hear("paperboard:after-restore", "a restore", (m) => afterRestore(ctx, m.ended as BackupEnded));
 
     process.send({
         type: "paperboard:service-ready",

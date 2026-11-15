@@ -78,6 +78,9 @@
                 "ports": {
                     "name": "Ports API"
                 },
+                "problems": {
+                    "name": "Problems API"
+                },
                 "process": {
                     "name": "Process API"
                 },

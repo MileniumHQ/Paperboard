@@ -201,6 +201,11 @@ export default function ErrorsGuideDoc() {
                 The next check that works removes the city's entry from <PaperCode>failures</PaperCode>, and its quote goes away.
                 Keep the reason until then: a failure that disappears before anyone looks is a failure nobody sees.
             </PaperText>
+            <PaperText preset="body" as="p">
+                A failure with no place on the page, or that matters while the panel isn't open, goes to <PaperLink href="/docs/paperapi/problems/">problemsApi</PaperLink> instead.
+                Paperboard counts it on the panel's row in the sidebar until the panel clears it or the person dismisses it.
+                Give it a key, so a check that keeps failing is one problem, and clear the key once it works again.
+            </PaperText>
 
             <PaperText preset="subheader" as="h2" id="at-start">Failures when the service starts</PaperText>
             <PaperText preset="body" as="p">
@@ -224,6 +229,7 @@ export default function ErrorsGuideDoc() {
                     <tr><td>Something the panel needs and doesn't have yet, such as an API key</td><td><PaperLink href="/docs/paperui/paperemptystate/">PaperEmptyState</PaperLink> with the button that fixes it.</td></tr>
                     <tr><td>One item in a list or grid</td><td>The item's own error state, such as <PaperCode>tone="danger"</PaperCode> on a <PaperLink href="/docs/paperui/paperstattile/">PaperStatTile</PaperLink>, and the reason below.</td></tr>
                     <tr><td>A Home widget</td><td><PaperCode>PaperWidgetMessage</PaperCode> with <PaperCode>tone="danger"</PaperCode> and the reason as its hint. See <PaperLink href="/docs/developers/widgets/#failures">Add a Home widget</PaperLink>.</td></tr>
+                    <tr><td>Work in the background with no place on the page, such as a reconnect or a Blocks event</td><td><PaperLink href="/docs/paperapi/problems/">problemsApi.report</PaperLink> with a key, cleared once it works again.</td></tr>
                     <tr><td>Inside a modal</td><td>A toast, which shows above the modal. Keep the modal open, so the person can fix the input.</td></tr>
                 </tbody>
             </PaperTable>

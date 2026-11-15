@@ -204,6 +204,8 @@ export const RPC_ROUTES: Record<string, WsRoute> = {
     "backup-location-add": { action: "backup:destination-add", timeoutMs: 120_000 },
     "backup-location-remove": { action: "backup:destination-remove", unwrap: () => undefined },
     "backup-panel-location-set": { action: "backup:panel-destination-set" },
+    "problems-list": { action: "problems:list", unwrap: (r) => r.problems },
+    "problems-every": { action: "problems:every" },
     "ports-claim": { action: "ports:claim" },
     "ports-prepare": { action: "ports:prepare" },
     "ports-release": { action: "ports:release", unwrap: () => undefined },
