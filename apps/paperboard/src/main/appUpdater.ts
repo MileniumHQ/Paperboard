@@ -3,9 +3,9 @@
 // can install one itself, and otherwise a notice with where to download it.
 // One AppUpdateSession owns the state every window shows.
 import * as path from "path";
-import { app } from "electron";
+import { app, autoUpdater as electronAutoUpdater } from "electron";
 import type { AppUpdater } from "electron-updater";
-import { AppUpdateSession, retainAppUpdateState } from "./appUpdateSession";
+import { AppUpdateSession, getAppUpdateState, retainAppUpdateState } from "./appUpdateSession";
 import { ManualAppUpdater } from "./manualAppUpdater";
 import { DOWNLOAD_BASE, linuxPackageInstall } from "./linuxPackageInstall";
 import { LinuxPackageUpdater, onPath } from "./linuxPackageUpdater";
@@ -48,6 +48,10 @@ function platformUpdater(): AppUpdater {
     } as any;
     updater.autoDownload = true;
     updater.autoInstallOnAppQuit = true;
+    // the install started (Restart to update already asked the pages): quit
+    // without asking again. An install that refuses never says this, so a
+    // later quit still asks.
+    electronAutoUpdater.on("before-quit-for-update", agreeToQuit);
     autoUpdater = updater;
     return updater;
 }
@@ -91,7 +95,7 @@ export function appUpdateDownloadUrl(): string {
  * open; throws when there is no update to install.
  */
 export async function restartToUpdate(): Promise<boolean> {
-    if (!packageUpdater && !autoUpdater) throw new Error("No app update has been downloaded");
+    if (getAppUpdateState().status !== "ready") throw new Error("No app update has been downloaded");
     if (!(await confirmQuit())) return false;
     if (packageUpdater) {
         const updater = packageUpdater;
@@ -107,7 +111,6 @@ export async function restartToUpdate(): Promise<boolean> {
         );
         return true;
     }
-    agreeToQuit();
     autoUpdater!.quitAndInstall(false, true);
     return true;
 }

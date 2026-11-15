@@ -1,10 +1,11 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
+import * as fs from "node:fs";
 import * as path from "node:path";
 import { installDevPanelInto } from "../../scripts/devPanel";
 import { BUILD_TIMEOUT_MS, buildApp, buildCrane, type BuiltApp } from "../platform/app/support/build";
 import { startCrane, WAIT_MS, type RunningCrane } from "../platform/app/support/crane";
 import { domCondition, launchElectron, SHELL, shellReady, type ElectronApp } from "../platform/app/support/electron";
-import { tempDataDir } from "../platform/app/support/temp";
+import { tempDataDir, tempDir } from "../platform/app/support/temp";
 
 // an editor whose note is unsaved until Save, and asks before it goes
 const NOTES = {
@@ -25,7 +26,16 @@ beforeAll(async () => {
     const dataDir = tempDataDir("quit-asks");
     await installDevPanelInto(NOTES, dataDir);
     daemon = await startCrane(crane.file, dataDir);
-    electron = await launchElectron({ appDir: app.dir, dataDir, args: ["--skip-update"] });
+    // an update check runs offline: the registry is a closed port, and the
+    // AppImage updater of an unpacked build looks at no feed
+    const appImage = path.join(tempDir("quit-asks-appimage"), "Paperboard.AppImage");
+    fs.writeFileSync(appImage, "never run");
+    electron = await launchElectron({
+        appDir: app.dir,
+        dataDir,
+        args: ["--skip-update", "--allow-registry-override"],
+        env: { ORIGAMI_REGISTRY_URL: "http://127.0.0.1:1", APPIMAGE: appImage },
+    });
     await shellReady(electron);
 }, BUILD_TIMEOUT_MS);
 
@@ -38,6 +48,10 @@ const alive = () => electron.child.exitCode === null && electron.child.signalCod
 
 // Inventory: Updates/releases — Restart to update that can't restart answers why, so the dialog can say it.
 test("Restart to update with nothing downloaded is refused with why, and Paperboard keeps running", async () => {
+    // an update check has run, so Paperboard's updater exists, with nothing
+    // downloaded; the refused restart must leave the next quit asking (the next test)
+    await electron.evalIn(SHELL, `window.electron.ipcRenderer.invoke("update-check")`);
+    expect(await electron.evalIn(SHELL, `window.electron.ipcRenderer.invoke("app-update-state").then((s) => s.status)`)).not.toBe("ready");
     const answer = await electron.evalIn(SHELL, `window.electron.ipcRenderer.invoke("quit-and-install").then(() => "restarted", (err) => err.message)`);
     expect(answer).toContain("No app update has been downloaded");
     expect(alive()).toBe(true);
