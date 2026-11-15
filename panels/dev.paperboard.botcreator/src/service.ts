@@ -492,7 +492,7 @@ async function createCommand(entry: BotEntry, input: any): Promise<CommandMutati
     const definition: SlashCommandDefinition = { id: randomUUID(), name, description, scope, options, userInstall };
     await setCommands(entry, [...commands, definition]);
     const triggerError = await registerCommandTrigger(entry, definition);
-    const sync = await entry.session.syncAfterMutation();
+    const sync = await entry.session.syncCommands();
     return { command: definition, ...sync, triggerError };
 }
 
@@ -509,7 +509,7 @@ async function deleteCommand(entry: BotEntry, rawId: unknown): Promise<CommandMu
     const scopesToClear = next.some((c) => c.scope === target.scope) ? [] : [target.scope];
     await setCommands(entry, next);
     const triggerError = await unregisterCommandTrigger(entry, target);
-    const sync = await entry.session.syncAfterMutation(scopesToClear);
+    const sync = await entry.session.syncCommands(scopesToClear);
     return { command: target, ...sync, triggerError };
 }
 
@@ -624,7 +624,7 @@ async function replaceToken(entry: BotEntry): Promise<void> {
     else publish();
 }
 
-/** Clears a bot's commands on Discord while it is online, stops it and removes it, its token and its Blocks project; gives its id. */
+/** Clears a bot's commands on Discord, stops it and removes it, its token and its Blocks project; gives its id. */
 async function deleteBot(entry: BotEntry): Promise<string> {
     requireReadable();
     const id = entry.stored.id;
@@ -632,8 +632,10 @@ async function deleteBot(entry: BotEntry): Promise<string> {
     // failed one stopped
     let step = "remove its slash commands from Discord";
     try {
-        // while it is online: a bot that is off can't reach Discord, and its commands stay there
-        await entry.session.unregisterCommands();
+        // with its saved token, online or off; a bot with no token has
+        // nothing left to reach Discord with
+        const token = await readToken(id);
+        if (token) await entry.session.unregisterCommands(token);
         step = "stop the bot";
         await entry.session.stop();
         step = "remove its blocks from Blocks";

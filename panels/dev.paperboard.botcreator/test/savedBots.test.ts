@@ -103,4 +103,36 @@ describe("deleting a bot", () => {
             [guildCommands, []],
         ].sort());
     });
+
+    test("a bot that is off has its commands cleared with its token alone, never logging in", async () => {
+        const home = guild("Home");
+        const fake = discord.addBot({ username: "Sleeper", guilds: [home] });
+        const commands = [command("ping"), { ...command("hello"), id: "c-home", scope: home.id }];
+        await savedBots([{ stored: storedBot("b-sleep", fake.appId, { name: "Sleeper", enabled: false, commands }), token: fake.token }]);
+        await startService({ discordApi: discord.api });
+        await stateWhere<BotsServiceState>(PANEL_ID, (s) => s.bots[0]?.name === "Sleeper", "Sleeper");
+
+        const before = discord.requests.length;
+        expect(await call("deleteBot", { bot: "b-sleep" })).toEqual({ deleted: "b-sleep" });
+        const made = discord.requests.slice(before).filter((r) => r.bot === fake.token);
+        expect(made.map((r) => [r.method, r.path, r.body]).sort()).toEqual([
+            ["PUT", `/applications/${fake.appId}/commands`, []],
+            ["PUT", `/applications/${fake.appId}/guilds/${home.id}/commands`, []],
+        ].sort());
+    });
+
+    test("a bot that is off stays when Discord refuses to clear its commands, saying why", async () => {
+        const home = guild("Home");
+        const fake = discord.addBot({ username: "Stuck", guilds: [home] });
+        await savedBots([{ stored: storedBot("b-stuck", fake.appId, { name: "Stuck", enabled: false, commands: [{ ...command("hello"), scope: home.id }] }), token: fake.token }]);
+        await startService({ discordApi: discord.api });
+        await stateWhere<BotsServiceState>(PANEL_ID, (s) => s.bots[0]?.name === "Stuck", "Stuck");
+        // the bot was removed from the server on Discord's side
+        fake.guilds = [];
+
+        await expect(call("deleteBot", { bot: "b-stuck" })).rejects.toThrow(`Couldn't remove its slash commands from Discord: Guild ${home.id}: Missing Access`);
+        const state = await stateWhere<BotsServiceState>(PANEL_ID, () => true, "the bots");
+        expect(state.bots.map((b) => b.id)).toEqual(["b-stuck"]);
+        expect((await secretsApi.get(tokenName("b-stuck"), PANEL_ID)).found).toBe(true);
+    });
 });

@@ -11,7 +11,7 @@ import {
     modalSubmitPayload,
 } from "./discordOps";
 import { CommandActivityRecorder, CommandUseCounter } from "./commandActivity";
-import { syncSlashCommands } from "./commandSync";
+import { clearSlashCommands, syncSlashCommands } from "./commandSync";
 import {
     appendCapped,
     RECENT_MESSAGE_CAP,
@@ -488,7 +488,7 @@ export class BotSession {
             // command registration must not fail the login: a connected bot
             // whose commands are not on Discord yet is a sync problem,
             // recorded in health rather than reported as a connection failure
-            await this.syncAfterLogin(bot);
+            await this.syncCommands();
         } catch (err: any) {
             const message = err instanceof Error ? err.message : String(err);
             console.error("[DiscordService] Login failed:", message);
@@ -867,19 +867,6 @@ export class BotSession {
     // slash commands
     // ---------------------------------------------------------------------
 
-    private async syncAfterLogin(bot: Client): Promise<void> {
-        try {
-            const errors = await syncSlashCommands(bot, this.commands);
-            // a newer session may own the state by now
-            if (this.client !== bot) return;
-            this.noteSync(errors.length > 0 ? errors.join(" ") : null);
-        } catch (err) {
-            if (this.client !== bot) return;
-            console.error("[DiscordService] command sync failed:", err);
-            this.noteSync(errorToMessage(err));
-        }
-    }
-
     /** Why the bot's commands aren't all on Discord, as of the last sync; null when they are. */
     syncError(): string | null {
         return this.commandSyncError;
@@ -894,30 +881,42 @@ export class BotSession {
         this.host.changed();
     }
 
-    /** Takes every stored command off Discord while the bot is online; throws what Discord refused. */
-    async unregisterCommands(): Promise<void> {
-        const bot = this.client;
-        if (!bot || !this.connected() || this.commands.length === 0) return;
-        const errors = await syncSlashCommands(bot, [], [...new Set(this.commands.map((c) => c.scope))]);
+    /**
+     * Takes every stored command off Discord with the bot's token alone, over
+     * REST with no gateway login, so a bot that is off is cleared too; throws
+     * what Discord refused.
+     */
+    async unregisterCommands(token: string): Promise<void> {
+        const scopes = [...new Set(this.commands.map((c) => c.scope))];
+        if (scopes.length === 0) return;
+        const { REST } = await loadDiscord();
+        const api = discordApiBase();
+        // A live client's REST queues each route's requests in order, so a
+        // sync still on its way lands before the clear. A bot that is off
+        // gets one for these requests alone, with no sweep timers to outlive it.
+        const rest = this.client?.rest ?? new REST({ ...(api ? { api } : {}), hashSweepInterval: 0, handlerSweepInterval: 0 }).setToken(token);
+        const errors = await clearSlashCommands(rest, token, scopes, (scope) => this.client?.guilds.cache.get(scope)?.name ?? scope);
         if (errors.length > 0) throw new Error(errors.join(" "));
     }
 
-    // save-then-sync for UI mutations: offline is reported as "not
-    // registered" rather than as an error, because the stored definition is
-    // not a lie
-    async syncAfterMutation(scopesToClear: string[] = []): Promise<{ registered: boolean; syncError: string | null }> {
+    /**
+     * Sets Discord to the stored commands, after login and after every
+     * change. The client's REST sends each route's requests one at a time in
+     * the order they were made, so a later sync lands after an earlier one. Offline is "not registered"
+     * rather than an error, because the stored definition is not a lie.
+     */
+    async syncCommands(scopesToClear: string[] = []): Promise<{ registered: boolean; syncError: string | null }> {
         const bot = this.client;
-        if (!bot || !this.connectionStatus.connected) {
-            return { registered: false, syncError: null };
-        }
+        if (!bot || !this.connectionStatus.connected) return { registered: false, syncError: null };
+        let error: string | null;
         try {
             const errors = await syncSlashCommands(bot, this.commands, scopesToClear);
-            this.noteSync(errors.length > 0 ? errors.join(" ") : null);
-            return { registered: this.commandSyncError === null, syncError: this.commandSyncError };
+            error = errors.length > 0 ? errors.join(" ") : null;
         } catch (err) {
-            console.error("[DiscordService] command sync failed:", err);
-            this.noteSync(errorToMessage(err));
-            return { registered: false, syncError: this.commandSyncError };
+            error = errorToMessage(err);
         }
+        // a newer session may own the state by now
+        if (this.client === bot) this.noteSync(error);
+        return { registered: error === null, syncError: error };
     }
 }

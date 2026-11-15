@@ -1,8 +1,8 @@
 // A bot's slash commands as Discord holds them: each scope is set to
-// exactly the stored list.
-import type { Client, ApplicationCommandOptionData, ChatInputApplicationCommandData } from "discord.js";
+// exactly the stored list, or cleared when the bot is deleted.
+import type { Client, ApplicationCommandOptionData, ChatInputApplicationCommandData, REST } from "discord.js";
 import { discord, loadDiscord } from "./discord";
-import { GLOBAL_SCOPE, errorToMessage, type SlashCommandDefinition, type SlashCommandOption } from "./types";
+import { GLOBAL_SCOPE, errorToMessage, extractApplicationIdFromToken, type SlashCommandDefinition, type SlashCommandOption } from "./types";
 
 function optionPayload(option: SlashCommandOption): ApplicationCommandOptionData {
     const { ApplicationCommandOptionType } = discord();
@@ -108,5 +108,31 @@ export async function syncSlashCommands(
         }
     }
 
+    return errors;
+}
+
+/**
+ * Sets each of `scopes` to no commands with the bot's token alone, through
+ * `rest`: the gateway is never needed. Gives what Discord refused, scope by
+ * scope, with `guildName` naming a server.
+ */
+export async function clearSlashCommands(
+    rest: REST,
+    token: string,
+    scopes: string[],
+    guildName: (id: string) => string,
+): Promise<string[]> {
+    const applicationId = extractApplicationIdFromToken(token);
+    if (!applicationId) throw new Error("The saved token doesn't name a Discord application, so its commands can't be cleared.");
+    const { Routes } = await loadDiscord();
+    const errors: string[] = [];
+    for (const scope of scopes) {
+        const global = scope === GLOBAL_SCOPE;
+        try {
+            await rest.put(global ? Routes.applicationCommands(applicationId) : Routes.applicationGuildCommands(applicationId, scope), { body: [] });
+        } catch (err) {
+            errors.push(`${global ? "Global commands" : `Guild ${guildName(scope)}`}: ${errorToMessage(err)}`);
+        }
+    }
     return errors;
 }

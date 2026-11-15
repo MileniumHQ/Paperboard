@@ -47,7 +47,7 @@ describe("sync is declarative and reports what it couldn't do", () => {
         // the last command of a scope removed: that scope is set to empty, the rest in full
         const before = discord().requests.length;
         bot.session.commands = bot.session.commands.filter((c) => c.scope === GLOBAL_SCOPE && c.name === "ping");
-        expect(await bot.session.syncAfterMutation([home.id])).toEqual({ registered: true, syncError: null });
+        expect(await bot.session.syncCommands([home.id])).toEqual({ registered: true, syncError: null });
         const after = puts(before, fake.appId);
         expect(after.map(scopeOf).sort()).toEqual([GLOBAL_SCOPE, home.id].sort());
         expect(after.find((r) => scopeOf(r) === home.id)!.body).toEqual([]);
@@ -63,7 +63,7 @@ describe("sync is declarative and reports what it couldn't do", () => {
         await bot.until(() => bot.session.connected(), "the bot to connect");
         const before = discord().requests.length;
         bot.session.commands = [command("ping", GLOBAL_SCOPE), command("hello", home.id), command("lost", gone)];
-        const result = await bot.session.syncAfterMutation();
+        const result = await bot.session.syncCommands();
         const message = `Guild ${gone} is not in this bot's server list; its commands were not registered.`;
         expect(result).toEqual({ registered: false, syncError: message });
         expect(bot.session.syncError()).toBe(message);
@@ -79,7 +79,7 @@ describe("sync is declarative and reports what it couldn't do", () => {
         // the bot was removed from the server on Discord's side; its cache still lists it
         fake.guilds = [];
         bot.session.commands = [command("hello", home.id)];
-        expect(await bot.session.syncAfterMutation()).toEqual({ registered: false, syncError: "Guild Home: Missing Access" });
+        expect(await bot.session.syncCommands()).toEqual({ registered: false, syncError: "Guild Home: Missing Access" });
     });
 
     test("a client without an application rejects instead of reporting success", async () => {
@@ -97,7 +97,7 @@ describe("sync is declarative and reports what it couldn't do", () => {
         const bot = recordedSession("b-offline");
         bot.session.commands = [command("ping", GLOBAL_SCOPE)];
         const before = discord().requests.length;
-        expect(await bot.session.syncAfterMutation()).toEqual({ registered: false, syncError: null });
+        expect(await bot.session.syncCommands()).toEqual({ registered: false, syncError: null });
         expect(discord().requests.length).toBe(before);
     });
 });
