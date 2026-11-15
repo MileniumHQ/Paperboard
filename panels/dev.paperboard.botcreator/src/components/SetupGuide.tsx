@@ -16,7 +16,7 @@ import styles from "./SetupGuide.module.css";
 
 function Step(props: { title: string; shot: string; alt: string; children: JSX.Element; action?: JSX.Element }) {
     return (
-        <PaperFlex direction="column" gap="full" padding="double" fullWidth fullHeight justify="center" align="center">
+        <PaperFlex direction="column" gap="full" padding="double" fullWidth fullHeight align="center">
             <PaperFlex direction="column" gap="half" fullWidth>
                 <PaperText preset="title" as="h2">{props.title}</PaperText>
                 <PaperText preset="body">{props.children}</PaperText>
@@ -78,7 +78,7 @@ export default function SetupGuide(props: {
                         </Step>
                     </PaperWizardStep>
                     <PaperWizardStep index={4} canProceed={Boolean(appId()) && !busy()}>
-                        <PaperFlex direction="column" gap="full" padding="double" fullWidth fullHeight justify="center">
+                        <PaperFlex direction="column" gap="full" padding="double" fullWidth fullHeight>
                             <PaperFlex direction="column" gap="half" fullWidth>
                                 <PaperText preset="title" as="h2">Paste the token</PaperText>
                                 <PaperText preset="body">It's kept in Paperboard's vault, not in the bot's files.</PaperText>

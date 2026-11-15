@@ -45,7 +45,8 @@ export function TokenField(props: { value: string; onInput: (value: string) => v
                             </PaperQuote>
                         }
                     >
-                        <PaperQuote variant="success" icon="check_circle">Application ID: {appId()}</PaperQuote>
+                        {/* read from the token, not checked with Discord: named, never shown as good */}
+                        <PaperText preset="hint">Application ID: {appId()}</PaperText>
                     </Show>
                 )}
             </Show>
