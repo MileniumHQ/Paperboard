@@ -4,7 +4,6 @@ import {
     BrowserWindow,
     ipcMain,
     Menu,
-    protocol,
     nativeTheme,
     nativeImage,
     session,
@@ -14,7 +13,7 @@ import {
 import * as fs from "fs";
 import * as path from "path";
 import { electronApp, optimizer, is } from "@electron-toolkit/utils";
-import { startCommunicator, logRendererMessage } from "./communication/communication";
+import { startCommunicator } from "./communication/communication";
 import { allowDevShellOrigin, keepShellNavigation, opensExternally } from "./communication/shellGuard";
 import connectionPool from "./communication/papercrane/ConnectionPool";
 import { startBackgroundUpdates, stopBackgroundUpdates } from "./updater";
@@ -28,21 +27,12 @@ import {
     TITLEBAR_SYMBOL_COLORS,
     WINDOW_BACKGROUND_COLORS,
 } from "../../papercrane/themeConstants";
-import { parsePanelHost, servePanelAsset } from "./panelServe";
 import { installPanelPermissions, panelPermissionStore } from "./panelPermissionHost";
-import { readShellFile, SHELL_HOST, SHELL_ORIGIN, SHELL_SCHEME } from "./shellAssets";
-import { readPanelFileForBrowser, statPanelFileForBrowser, writePanelFileFromBrowser } from "./panelFileTransfer";
-import { poolEndpoint } from "./panelFileEndpoint";
-import { startBrowserHost, type BrowserHost } from "./browserHost";
-import { BrowserSessions } from "./browserSessions";
-import { getLocalDir } from "../../papercrane/paths";
-import { portRefusal } from "../../papercrane/ports";
-import { createShellInvokeHandlers } from "./communication/shellHandlers";
-import { SHARED_SHELL_INVOKE_CHANNELS } from "./communication/shellChannels";
+import { SHELL_ORIGIN } from "./shellAssets";
+import { handleAppProtocols, registerAppSchemes } from "./protocols";
+import { browserMode, closeBrowserHost, openInBrowser as openBrowserTab, serveBrowserShell as serveBrowser, webLaunch } from "./browserMode";
 import { launchOptionsFromArgv } from "../shared/launchOptions";
 import { emulatePhone, mobileWindowOptions } from "./mobileMock";
-import { applySavedAppSettings } from "./communication/shelldata";
-import { addShellPushSink } from "./communication/shellPush";
 import { createDesktopTray, destroyDesktopTray, hasDesktopTray, refreshDesktopTray } from "./tray";
 import { pollTrayCount } from "./trayCount";
 import icon from "../../resources/icon.png?asset";
@@ -110,12 +100,10 @@ if (relaunchOnX11IfNeeded(app, process.argv, process.env, process.platform)) pro
 // before the single-instance lock: it lives in userData
 const electronDataError = relocateElectronData(app);
 
-// `--web`: no window; Paperboard opens in the default browser instead
-// (browserHost.ts), signed in. `--browser` is the same for development: it
-// prints the sign-in link and opens no tab, for an agent's own browser.
-// `--web-port=<n>` picks the port.
-const webLaunch = app.commandLine.hasSwitch("web");
-const browserMode = webLaunch || app.commandLine.hasSwitch("browser");
+// `--web` and `--browser`: no window; the shell is served to a browser
+// (browserMode.ts), and the tray brings it back
+const openInBrowser = () => openBrowserTab(ensureDesktopTray);
+const serveBrowserShell = () => serveBrowser(ensureDesktopTray);
 // `--mobile`: the phone layout in an iPhone-sized window (mobileMock.ts)
 const mobileMode = launchOptionsFromArgv(process.argv).mobile;
 
@@ -143,29 +131,7 @@ process.on("unhandledRejection", (reason) => {
     log.error("[Main] Unhandled rejection:", reason as any);
 });
 
-protocol.registerSchemesAsPrivileged([
-    // the packaged shell's origin (see shellAssets.ts)
-    {
-        scheme: SHELL_SCHEME,
-        privileges: {
-            standard: true,
-            secure: true,
-            supportFetchAPI: true,
-            codeCache: true,
-        },
-    },
-    {
-        scheme: "panel",
-        privileges: {
-            standard: true,
-            secure: true,
-            supportFetchAPI: true,
-            corsEnabled: true,
-            codeCache: true,
-            stream: true,
-        },
-    },
-]);
+registerAppSchemes();
 
 function getTitleBarOverlayOptions() {
     const isDark = nativeTheme.shouldUseDarkColors;
@@ -284,115 +250,6 @@ function createWindow(): void {
     });
 }
 
-// ── Browser mode ────────────────────────────────────────────────────────────
-
-let browserHost: BrowserHost | null = null;
-let browserHostStarting: Promise<BrowserHost> | null = null;
-let removeBrowserPushSink: (() => void) | null = null;
-
-// The installed app keeps one port, so a bookmarked tab finds it again.
-// Development builds take any free one and never collide with it; so does
-// `--browser`, which is for development too.
-const WEB_PORT = 45470;
-
-function browserPort(): number {
-    const raw = app.commandLine.getSwitchValue("web-port");
-    if (!raw) return is.dev || (app.commandLine.hasSwitch("browser") && !webLaunch) ? 0 : WEB_PORT;
-    const port = Number(raw);
-    if (!Number.isInteger(port) || port < 1 || port > 65535) {
-        throw new Error(`--web-port must be a port number (1-65535), got "${raw}"`);
-    }
-    return port;
-}
-
-let browserSessions: BrowserSessions | null = null;
-
-function ensureBrowserHost(): Promise<BrowserHost> {
-    if (browserHost) return Promise.resolve(browserHost);
-    browserHostStarting ??= (async () => {
-        const shared = createShellInvokeHandlers({
-            appVersion: () => app.getVersion(),
-            launchOptions: () => launchOptionsFromArgv(process.argv),
-            // the page is drawn by the browser it's open in, not by this process
-            graphics: () => ({ gpu: true }),
-            openPath: (dir) => shell.openPath(dir),
-        });
-        const invoke: Record<string, (args: unknown) => unknown> = {};
-        for (const channel of SHARED_SHELL_INVOKE_CHANNELS) invoke[channel] = shared[channel];
-        invoke["app-settings-changed"] = () => applySavedAppSettings();
-        browserSessions ??= new BrowserSessions(path.join(getLocalDir(), "browser-sessions.json"));
-        const port = browserPort();
-        const host = await startBrowserHost({
-            port,
-            sessions: browserSessions,
-            rendererDir: path.join(__dirname, "../renderer"),
-            rendererDevUrl: is.dev ? process.env["ELECTRON_RENDERER_URL"] : undefined,
-            invoke,
-            send: {
-                "renderer-log": (level, message) => logRendererMessage(level, message),
-            },
-            servePanel: servePanelAsset,
-            panelFiles: {
-                stat: (args) => statPanelFileForBrowser(args, poolEndpoint),
-                read: (args) => readPanelFileForBrowser(args, poolEndpoint),
-                write: (args, body, size) => writePanelFileFromBrowser(args, body, size, poolEndpoint),
-            },
-        }).catch((err: NodeJS.ErrnoException) => {
-            if (!err?.code) throw err;
-            throw new Error(
-                `Paperboard can't open in the browser on port ${port}: ${portRefusal(err, port)}. ` +
-                    "Start it with --web-port=<port> to use another.",
-            );
-        });
-        removeBrowserPushSink = addShellPushSink((channel, payload) => host.push(channel, payload));
-        ensureDesktopTray();
-        browserHost = host;
-        log.info(`[Browser] shell served at ${host.origin}`);
-        return host;
-    })().finally(() => {
-        browserHostStarting = null;
-    });
-    return browserHostStarting;
-}
-
-// A windowless launch that couldn't serve has nothing to show: it exits
-// visibly, through quit, so before-quit can stop children and sockets.
-function failWindowlessLaunch(err: any): void {
-    if (!browserMode || browserHost) return;
-    console.error(`Paperboard could not open in the browser: ${err?.message || err}`);
-    process.exitCode = 1;
-    app.quit();
-}
-
-// "Open in Browser" and `--web`: the default browser opens Paperboard,
-// signed in with a link that works once
-async function openInBrowser(): Promise<void> {
-    try {
-        const host = await ensureBrowserHost();
-        await shell.openExternal(host.signInUrl());
-        log.info(`[Browser] opened ${host.origin} in the default browser`);
-    } catch (err: any) {
-        log.error("[Browser] could not open Paperboard in the browser:", err?.message || err);
-        dialog.showErrorBox("Paperboard couldn't open in the browser", err?.message || String(err));
-        failWindowlessLaunch(err);
-    }
-}
-
-// `--browser`, for development: serves the shell and prints a sign-in link
-// instead of opening a tab (an agent's own browser goes there)
-async function serveBrowserShell(): Promise<void> {
-    try {
-        const host = await ensureBrowserHost();
-        console.log(
-            `\nPaperboard is running at ${host.origin}\n` +
-                `Sign in (works once, for 5 minutes): ${host.signInUrl()}\n`,
-        );
-    } catch (err: any) {
-        log.error("[Browser] could not serve Paperboard in the browser:", err?.message || err);
-        failWindowlessLaunch(err);
-    }
-}
-
 app.whenReady().then(async () => {
     if (electronDataError) {
         log.error("[Main]", electronDataError.message);
@@ -493,30 +350,7 @@ app.whenReady().then(async () => {
     stopCommunicator = startCommunicator(ipcMain);
     initAppSettingsSync();
 
-    // panel://<computerId>.<panelId>/<path> — serving is shared with the
-    // browser-mode host (panelServe.ts)
-    const handlePanelProtocol = async (request: Request) => {
-        const parsedUrl = new URL(request.url);
-        const parsedHost = parsePanelHost(parsedUrl.hostname);
-        if (!parsedHost) {
-            return new Response(
-                `Malformed panel URL: missing computer scope prefix`,
-                { status: 400 },
-            );
-        }
-        return servePanelAsset(parsedHost.comp, parsedHost.panelId, parsedUrl.pathname);
-    };
-
-    protocol.handle("panel", handlePanelProtocol);
-
-    const rendererDir = path.join(__dirname, "../renderer");
-    protocol.handle(SHELL_SCHEME, async (request: Request) => {
-        const url = new URL(request.url);
-        if (url.host !== SHELL_HOST) return new Response("Not found", { status: 404 });
-        const file = await readShellFile(rendererDir, url.pathname);
-        if (!file.ok) return new Response(null, { status: file.status });
-        return new Response(new Uint8Array(file.data), { headers: file.headers });
-    });
+    handleAppProtocols(path.join(__dirname, "../renderer"));
 
     // a signal or the system shutting down quits without asking
     for (const signal of ["SIGINT", "SIGTERM"] as const) process.on(signal, quitWithoutAsking);
@@ -569,15 +403,10 @@ app.on("before-quit", (event) => {
     } catch (err: any) {
         log.warn("[Paperboard] cleanup warning:", err?.message);
     }
-    removeBrowserPushSink?.();
-    removeBrowserPushSink = null;
+    closeBrowserHost();
     stopTrayPoll?.();
     stopTrayPoll = null;
     destroyDesktopTray();
-    void browserHost
-        ?.close()
-        .catch((err) => log.warn("[Paperboard] browser host close failed:", err));
-    browserHost = null;
     // the mDNS browser cannot outlive the app either
     try {
         stopCommunicator?.();
