@@ -80,6 +80,8 @@ processApi.write(id: string, data: string): Promise<void>;
 /** ends its input after what was written, for a program that reads its input to the end */
 processApi.closeInput(id: string): Promise<void>;
 processApi.kill(id: string, signal?: string): Promise<void>;
+/** SIGTERM, then SIGKILL after 2 s; resolves once it is gone */
+processApi.stop(id: string): Promise<void>;
 
 processApi.onData(id: string, callback: (text: string) => void): StreamSubscription;
 processApi.onStdout(id: string, callback: (text: string) => void): StreamSubscription;
@@ -115,6 +117,7 @@ interface ProcessStartOptions {
                 <li><PaperCode>write</PaperCode> sends text as it is, with no newline added, at most 64 KB a call.</li>
                 <li><PaperCode>closeInput</PaperCode> ends the process's input once everything written before it has arrived, as the end of a pipe does. A program that reads its input to the end (<PaperCode>codex exec -</PaperCode>, <PaperCode>sort</PaperCode>) goes on. Later writes fail. A long text can go this way instead of in <PaperCode>args</PaperCode>, which every system limits in size and other users can read.</li>
                 <li><PaperCode>kill</PaperCode> sends the signal, <PaperCode>SIGTERM</PaperCode> by default. It resolves when the id is not running. Rejects with the daemon's reason when the kill is refused.</li>
+                <li><PaperCode>stop</PaperCode> is the way to end a process and know it ended. It sends <PaperCode>SIGTERM</PaperCode>, waits up to 2 seconds for the exit, sends <PaperCode>SIGKILL</PaperCode> if the process is still running, waits 2 seconds more, and resolves once the daemon says it's gone. A process that isn't running, or that ends between the check and the signal, is already stopped. A service has 3 seconds to stop, so one <PaperCode>stop</PaperCode> in its shutdown ends in time.</li>
                 <li>Installing or updating a panel stops every process it owns.</li>
             </PaperTextList>
 
@@ -144,6 +147,7 @@ interface ProcessStartOptions {
                     <tr><td><PaperCode>"&lt;id&gt;" belongs to another panel</PaperCode></td><td><PaperCode>FORBIDDEN</PaperCode></td><td>Another panel started that id.</td></tr>
                     <tr><td><PaperCode>Invalid parameter: env exceeds 128 entries</PaperCode></td><td><PaperCode>INVALID_PARAMS</PaperCode></td><td>Too many <PaperCode>env</PaperCode> entries.</td></tr>
                     <tr><td><PaperCode>RUN_TIMEOUT: "&lt;command&gt;" exceeded &lt;n&gt;ms and was killed</PaperCode></td><td>No code</td><td><PaperCode>exec</PaperCode> ran past its timeout.</td></tr>
+                    <tr><td><PaperCode>The process &lt;id&gt; didn't stop</PaperCode></td><td>No code</td><td><PaperCode>stop</PaperCode> sent both signals and the process still runs.</td></tr>
                 </tbody>
             </PaperTable>
             <PaperText preset="body" as="p">

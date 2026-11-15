@@ -51,6 +51,24 @@ interface PublicFetchOptions {
     trustedOrigins?: string[];
     /** how a name is resolved (default the system's resolver) */
     lookup?: (host: string) => Promise<{ address: string }[]>;
+    /** only https addresses, the first and every redirect */
+    requireHttps?: boolean;
+    /** how one GET is made (default Node's http and https) */
+    dial?: PublicFetchDial;
+}
+
+/** one GET of url, dialed to address (the one checked) */
+type PublicFetchDial = (address: string, url: URL, request: { accept: string; signal: AbortSignal }) => Promise<PublicFetchAnswer>;
+
+interface PublicFetchAnswer {
+    status: number;
+    /** the status line's words, such as "Not Found", or "" */
+    statusText: string;
+    /** by lower-case name */
+    headers: Record<string, string | string[] | undefined>;
+    body: AsyncIterable<Uint8Array>;
+    /** stops reading the body and drops the connection */
+    close(): void;
 }
 
 interface PublicFetchResponse {
@@ -78,6 +96,11 @@ class PublicFetchError extends Error {
                 <li>Each redirect is checked the same way before it is followed.</li>
                 <li>A body over <PaperCode>maxBytes</PaperCode> is refused, by its declared length or once that many bytes have arrived.</li>
                 <li>No cookies or credentials are sent. Only a 2xx answer resolves.</li>
+                <li><PaperCode>requireHttps</PaperCode> refuses an <PaperCode>http</PaperCode> address before anything is dialed, and a redirect to one before it is followed. Use it for anything shown in a page, such as a picture a chat message names.</li>
+                <li>
+                    <PaperCode>dial</PaperCode> replaces how one GET is made. It is given the address that was checked and must connect there, naming <PaperCode>url</PaperCode>'s host, and it must end the connection when <PaperCode>signal</PaperCode> aborts.
+                    A test passes its own to see which address each hop dialed without reaching the internet, or to reach a server whose certificate it made. Every rule above still applies to what it answers.
+                </li>
                 <li>
                     <PaperCode>trustedOrigins</PaperCode> is for a server the person set up themselves, or a test's server on loopback.
                     A redirect out of a trusted origin is checked like any other address. Never put an origin from untrusted input there.
@@ -93,7 +116,7 @@ class PublicFetchError extends Error {
                     </tr>
                 </thead>
                 <tbody>
-                    <tr><td><PaperCode>invalid-url</PaperCode></td><td>Not an <PaperCode>http</PaperCode> or <PaperCode>https</PaperCode> address, or one with a user name or password. A redirect to one fails the same way.</td></tr>
+                    <tr><td><PaperCode>invalid-url</PaperCode></td><td>Not an <PaperCode>http</PaperCode> or <PaperCode>https</PaperCode> address (not <PaperCode>https</PaperCode> with <PaperCode>requireHttps</PaperCode>), or one with a user name or password. A redirect to one fails the same way.</td></tr>
                     <tr><td><PaperCode>refused</PaperCode></td><td>The address, or one it redirected to, is on this computer or its local network.</td></tr>
                     <tr><td><PaperCode>unreachable</PaperCode></td><td>The name didn't resolve, or the server couldn't be reached.</td></tr>
                     <tr><td><PaperCode>bad-response</PaperCode></td><td>An answer other than 2xx, a redirect with nowhere to go, or more redirects than <PaperCode>maxRedirects</PaperCode>.</td></tr>

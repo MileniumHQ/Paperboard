@@ -6,7 +6,7 @@ import { afterAll, describe, expect, test } from "bun:test";
 import http from "node:http";
 import type { AddressInfo } from "node:net";
 import os from "node:os";
-import { fetchPublic, publicAddressRefusal, PublicFetchError } from "../src/net";
+import { fetchPublic, publicAddressRefusal, PublicFetchError, type PublicFetchAnswer, type PublicFetchDial } from "../src/net";
 
 const hits: string[] = [];
 const servers: http.Server[] = [];
@@ -165,5 +165,53 @@ describe("fetchPublic", () => {
         expect(await refusal(fetchPublic(`${FILES}/missing`, trusted))).toEqual({ code: "bad-response", message: `127.0.0.1:${filesPort} answered 404 Not Found` });
         expect(await refusal(fetchPublic(`${FILES}/never`, { ...trusted, timeoutMs: 300 }))).toEqual({ code: "timeout", message: `127.0.0.1:${filesPort} took longer than 300 ms to answer` });
         expect(await refusal(fetchPublic("http://nowhere.example/", { maxBytes: 32, lookup: async () => Promise.reject(new Error("ENOTFOUND")) }))).toMatchObject({ code: "unreachable" });
+    });
+
+    test("a dial of its own is handed the address checked for each hop, and its answer is read as the default's is", async () => {
+        const names: Record<string, string> = { "images.example": "93.184.216.34", "cdn.example": "1.1.1.1", "intranet.example": "10.1.2.3" };
+        const pages: Record<string, { status: number; headers: Record<string, string>; body?: string }> = {
+            "https://images.example/moved": { status: 302, headers: { location: "https://cdn.example/cat.png" } },
+            "https://cdn.example/cat.png": { status: 200, headers: { "content-type": "image/png" }, body: "png" },
+            "https://images.example/sneaky": { status: 301, headers: { location: "https://intranet.example/admin.png" } },
+        };
+        const asked: string[] = [];
+        let open = 0;
+        const dial: PublicFetchDial = async (address, url, request) => {
+            asked.push(`${address} ${url.href} accept=${request.accept}`);
+            const page = pages[url.href];
+            if (!page) throw new Error(`the test serves no ${url.href}`);
+            open++;
+            const answer: PublicFetchAnswer = {
+                status: page.status,
+                statusText: "",
+                headers: page.headers,
+                body: (async function* () {
+                    if (page.body) yield new TextEncoder().encode(page.body);
+                })(),
+                close: () => open--,
+            };
+            return answer;
+        };
+        const options = { maxBytes: 32, accept: "image/*", dial, lookup: async (host: string) => [{ address: names[host]! }] };
+        const res = await fetchPublic("https://images.example/moved", options);
+        expect(res).toEqual({ url: "https://cdn.example/cat.png", status: 200, contentType: "image/png", body: new TextEncoder().encode("png") });
+        expect(asked).toEqual(["93.184.216.34 https://images.example/moved accept=image/*", "1.1.1.1 https://cdn.example/cat.png accept=image/*"]);
+        expect(await refusal(fetchPublic("https://images.example/sneaky", options))).toMatchObject({ code: "refused" });
+        expect(asked.at(-1)).toBe("93.184.216.34 https://images.example/sneaky accept=image/*");
+        // every answer was closed, the refused hop's too
+        expect(open).toBe(0);
+    });
+
+    test("requireHttps refuses an http address, and a redirect to one, before it is dialed", async () => {
+        const asked: string[] = [];
+        const dial: PublicFetchDial = async (_address, url) => {
+            asked.push(url.href);
+            return { status: 302, statusText: "Found", headers: { location: "http://cdn.example/cat.png" }, body: (async function* () {})(), close: () => {} };
+        };
+        const options = { maxBytes: 32, requireHttps: true, dial, lookup: lookup("93.184.216.34") };
+        expect(await refusal(fetchPublic("http://images.example/cat.png", options))).toEqual({ code: "invalid-url", message: "Only https addresses are fetched, not http:" });
+        expect(asked).toEqual([]);
+        expect(await refusal(fetchPublic("https://images.example/moved", options))).toEqual({ code: "invalid-url", message: "Only https addresses are fetched, not http:" });
+        expect(asked).toEqual(["https://images.example/moved"]);
     });
 });

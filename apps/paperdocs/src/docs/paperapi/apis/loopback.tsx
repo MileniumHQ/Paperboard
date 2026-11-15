@@ -40,6 +40,41 @@ try {
                 Start waiting before the browser can finish the sign-in. Call <PaperCode>controller.abort()</PaperCode> when the person cancels, or when the program reports the sign-in done another way.
             </PaperText>
 
+            <PaperText preset="subheader" as="h2" id="sign-in">A whole sign-in</PaperText>
+            <PaperText preset="body" as="p">
+                <PaperCode>catchLoopbackSignIn</PaperCode> is the way a panel handles a sign-in with a loopback redirect from start to end.
+                It catches the redirect, hands the address to <PaperCode>finish</PaperCode> (which passes it to the program and resolves whether it was taken), and tells the page when the person has to paste the address instead.
+            </PaperText>
+            <PaperCode block language="tsx">
+{`import { catchLoopbackSignIn } from "@mileniumhq/paperapi";
+
+const controller = new AbortController();
+const result = await catchLoopbackSignIn(redirectUri, (url) => service.calls.finishSignIn({ url }), { signal: controller.signal });
+if (result.status === "paste") {
+    showPasteAddressField();
+    if (result.error) showError(result.error);
+}`}
+            </PaperCode>
+            <PaperCode block language="tsx">
+{`catchLoopbackSignIn(
+    redirectUri: string,
+    finish: (url: string) => Promise<boolean>,
+    options?: { signal?: AbortSignal },
+): Promise<LoopbackSignInResult>;
+
+type LoopbackSignInResult =
+    /** finish took the address, or the program on this device received the redirect itself */
+    | { status: "finished" }
+    /** the person pastes the address; error says why it wasn't caught, or is null */
+    | { status: "paste"; error: string | null };`}
+            </PaperCode>
+            <PaperTextList>
+                <li>Where nothing can catch the redirect (<PaperCode>unavailable</PaperCode>, such as Paperboard in a web browser), the person pastes with <PaperCode>error: null</PaperCode>: the field is the way, not a failure.</li>
+                <li>When <PaperCode>finish</PaperCode> resolves <PaperCode>false</PaperCode>, the address was refused and the person can paste one again, with <PaperCode>error: null</PaperCode>. Show the refusal from <PaperCode>finish</PaperCode> itself.</li>
+                <li>Any other failure to catch it (<PaperCode>in-use</PaperCode>, <PaperCode>timeout</PaperCode> and the rest) is a paste with the error's message.</li>
+                <li>When <PaperCode>signal</PaperCode> aborts, even as the redirect arrives, nothing is handed to <PaperCode>finish</PaperCode> and it rejects with the <PaperCode>canceled</PaperCode> error. A <PaperCode>finish</PaperCode> that throws rejects with its error.</li>
+            </PaperTextList>
+
             <PaperText preset="subheader" as="h2" id="api">API</PaperText>
             <PaperCode block language="tsx">
 {`catchLoopbackRedirect(redirectUri: string, options?: { signal?: AbortSignal }): Promise<LoopbackRedirectResult>;

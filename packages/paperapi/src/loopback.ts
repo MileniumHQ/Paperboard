@@ -5,6 +5,7 @@
 // The Paperboard app listens there once and hands the address the browser
 // landed on to the panel, which passes it to its program. The panel frame
 // asks its shell through requestShell.
+import { errorMessage } from "./errors";
 import { requestShell } from "./shellRequest";
 
 export type LoopbackRedirectResult =
@@ -78,4 +79,44 @@ export function catchLoopbackRedirect(redirectUri: string, options: { signal?: A
             return new LoopbackRedirectError("failed", "The shell sent a malformed loopback redirect result");
         },
     });
+}
+
+/** How a sign-in's redirect ended: taken, or left for the person to paste. */
+export type LoopbackSignInResult =
+    /** `finish` took the address, or the program on this device received the redirect itself */
+    | { status: "finished" }
+    /**
+     * The person pastes the address the browser landed on. `error` says why
+     * it wasn't caught, or is null when there was nothing to say: nothing can
+     * catch a redirect here (Paperboard in a web browser), or `finish`
+     * refused the address and it can be pasted again.
+     */
+    | { status: "paste"; error: string | null };
+
+/**
+ * A sign-in whose page comes back to a loopback address, the whole way a
+ * panel handles it. On another device the redirect is caught here and its
+ * address handed to `finish`, which resolves whether it was taken. Where
+ * nothing can catch it, or `finish` refused it, the person pastes it. A
+ * `signal` that aborts rejects with the `canceled` LoopbackRedirectError, as
+ * catchLoopbackRedirect does; a `finish` that throws rejects with its error.
+ */
+export async function catchLoopbackSignIn(
+    redirectUri: string,
+    finish: (url: string) => Promise<boolean>,
+    options: { signal?: AbortSignal } = {},
+): Promise<LoopbackSignInResult> {
+    let caught: LoopbackRedirectResult;
+    try {
+        caught = await catchLoopbackRedirect(redirectUri, options);
+    } catch (err) {
+        if (err instanceof LoopbackRedirectError && err.code === "canceled") throw err;
+        // no listener here is why there's a field, not a failure
+        const unavailable = err instanceof LoopbackRedirectError && err.code === "unavailable";
+        return { status: "paste", error: unavailable ? null : errorMessage(err) };
+    }
+    // a sign-in given up on while its redirect arrived hands nothing over
+    if (options.signal?.aborted) throw new LoopbackRedirectError("canceled", "Waiting for the sign-in redirect was canceled");
+    if (caught.status === "local") return { status: "finished" };
+    return (await finish(caught.url)) ? { status: "finished" } : { status: "paste", error: null };
 }

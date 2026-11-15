@@ -1,5 +1,11 @@
 import { invoke, send, on, type StreamSubscription } from "./ipc";
 import { newClientId } from "./channels";
+import { errorMessage } from "./errors";
+
+// How long stop() waits after each signal for the process to end. The
+// daemon gives a whole service 3 s to stop, so one stop() inside it ends
+// in time.
+const STOP_GRACE_MS = 2_000;
 
 export interface ProcessRunResult {
     exitCode: number;
@@ -59,6 +65,37 @@ export const processApi = {
     exists: async (id: string): Promise<boolean> =>
         invoke<boolean>("process-exists", { id }),
 
+    /**
+     * Stops a supervised process: SIGTERM, then SIGKILL if it is still running
+     * after a grace of 2 s, and resolves once the daemon says it's gone. One
+     * that isn't running is already stopped; one still running after both
+     * signals throws.
+     */
+    stop: async (id: string): Promise<void> => {
+        let exited!: () => void;
+        const gone = new Promise<void>((resolve) => (exited = resolve));
+        const off = processApi.onExit(id, () => exited());
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        try {
+            // the daemon tells a process's exit only to connections attached to it;
+            // nothing to attach to is nothing running
+            if (!(await off.attached)) return;
+            for (const signal of ["SIGTERM", "SIGKILL"]) {
+                if (!(await processApi.exists(id))) return;
+                // one that ended between the look and the signal is stopped all the same
+                await processApi.kill(id, signal).catch(async (err) => {
+                    if (await processApi.exists(id)) throw err;
+                });
+                await Promise.race([gone, new Promise<void>((resolve) => (timer = setTimeout(resolve, STOP_GRACE_MS)))]);
+                clearTimeout(timer);
+            }
+            if (await processApi.exists(id)) throw new Error(`The process ${id} didn't stop`);
+        } finally {
+            clearTimeout(timer);
+            off();
+        }
+    },
+
     attach: async (id: string): Promise<{ success: boolean }> =>
         invoke<{ success: boolean }>("process-attach", { id }),
 
@@ -104,7 +141,7 @@ export const processApi = {
                         (err) =>
                             reject(
                                 new Error(
-                                    `"${options.command}" timed out after ${timeoutMs} ms and could not be stopped: ${err instanceof Error ? err.message : String(err)}`,
+                                    `"${options.command}" timed out after ${timeoutMs} ms and could not be stopped: ${errorMessage(err)}`,
                                 ),
                             ),
                     );

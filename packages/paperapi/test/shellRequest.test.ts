@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { backupApi, BackupLocationError } from "../src/backups";
 import { exportFile, FileTransferError, importFile } from "../src/fileTransfer";
 import { setFrameSession } from "../src/frameSession";
-import { catchLoopbackRedirect, LoopbackRedirectError } from "../src/loopback";
+import { catchLoopbackRedirect, catchLoopbackSignIn, LoopbackRedirectError } from "../src/loopback";
 
 // A panel frame's window as the SDK sees it: its own message events, and a
 // parent it posts to. Messages are delivered with the source the browser
@@ -157,5 +157,55 @@ describe("shell requests accept only the parent's matching reply and refuse bad 
         setFrameSession(null as any);
         expect(await importFile("a", "dev.a").then(() => null, (e: FileTransferError) => e.code)).toBe("unavailable");
         expect(posted).toEqual([]);
+    });
+});
+
+// A loopback sign-in: caught and handed over, or left for the person to paste.
+describe("catchLoopbackSignIn", () => {
+    const URI = "http://localhost:1455/auth/callback";
+    const answer = (result: unknown) => {
+        const request = posted.pop();
+        deliver({ type: `${request.type}-result`, generation: "gen-2", requestId: request.requestId, result });
+    };
+
+    test("a caught address goes to finish; one finish takes, or the program's own catch, is finished; one it refuses is pasted", async () => {
+        const handed: string[] = [];
+        const taken = catchLoopbackSignIn(URI, async (url) => (handed.push(url), true));
+        answer({ status: "caught", url: `${URI}?code=abc` });
+        expect(await taken).toEqual({ status: "finished" });
+        expect(handed).toEqual([`${URI}?code=abc`]);
+
+        const local = catchLoopbackSignIn(URI, async () => {
+            throw new Error("finish is not called for a local sign-in");
+        });
+        answer({ status: "local" });
+        expect(await local).toEqual({ status: "finished" });
+
+        const refused = catchLoopbackSignIn(URI, async () => false);
+        answer({ status: "caught", url: `${URI}?code=stale` });
+        expect(await refused).toEqual({ status: "paste", error: null });
+    });
+
+    test("where nothing can catch it the person pastes with no error; a failed catch says why; a canceled one rejects", async () => {
+        setFrameSession(null as any);
+        expect(await catchLoopbackSignIn(URI, async () => true)).toEqual({ status: "paste", error: null });
+        setFrameSession({ generation: "gen-2", widget: false, computerName: "Workshop PC" });
+
+        const inUse = catchLoopbackSignIn(URI, async () => true);
+        answer({ status: "failed", code: "in-use", message: "Another program is using port 1455" });
+        expect(await inUse).toEqual({ status: "paste", error: "Another program is using port 1455" });
+
+        const stop = new AbortController();
+        let finished = false;
+        const canceled = catchLoopbackSignIn(URI, async () => (finished = true), { signal: stop.signal });
+        stop.abort();
+        expect(await canceled.then(() => null, (e: LoopbackRedirectError) => e.code)).toBe("canceled");
+        // given up on just as its redirect arrived: nothing is handed over
+        const late = new AbortController();
+        const arrived = catchLoopbackSignIn(URI, async () => (finished = true), { signal: late.signal });
+        answer({ status: "caught", url: `${URI}?code=late` });
+        late.abort();
+        expect(await arrived.then(() => null, (e: LoopbackRedirectError) => e.code)).toBe("canceled");
+        expect(finished).toBe(false);
     });
 });

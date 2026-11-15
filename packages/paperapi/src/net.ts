@@ -15,6 +15,7 @@ import http from "node:http";
 import https from "node:https";
 import net from "node:net";
 import os from "node:os";
+import { errorMessage } from "./errors";
 
 // ─── which addresses are public ─────────────────────────────────────────────
 
@@ -159,7 +160,35 @@ export interface PublicFetchOptions {
     trustedOrigins?: string[];
     /** how a name is resolved (default the system's resolver) */
     lookup?: (host: string) => Promise<{ address: string }[]>;
+    /** only https addresses, the first and every redirect; an http one fails as invalid-url */
+    requireHttps?: boolean;
+    /**
+     * How one GET is made (default Node's http and https). A test passes its
+     * own to see which address each hop dialed, or to reach a server whose
+     * certificate it made.
+     */
+    dial?: PublicFetchDial;
 }
+
+/** A server's answer, as much of it as fetchPublic reads. */
+export interface PublicFetchAnswer {
+    status: number;
+    /** the status line's words, such as "Not Found", or "" */
+    statusText: string;
+    /** by lower-case name */
+    headers: Record<string, string | string[] | undefined>;
+    body: AsyncIterable<Uint8Array>;
+    /** stops reading the body and drops the connection */
+    close(): void;
+}
+
+/**
+ * One GET of `url`, dialed to `address` (the one checked, never a second
+ * lookup of the name). The request names `url`'s host, and an https
+ * certificate is checked for it. Past `signal`, the connection and the body
+ * being read from it end.
+ */
+export type PublicFetchDial = (address: string, url: URL, request: { accept: string; signal: AbortSignal }) => Promise<PublicFetchAnswer>;
 
 export interface PublicFetchResponse {
     /** the address the body came from, after redirects */
@@ -187,7 +216,9 @@ export async function fetchPublic(raw: unknown, options: PublicFetchOptions): Pr
     const maxRedirects = options.maxRedirects ?? DEFAULT_REDIRECTS;
     const trusted = new Set((options.trustedOrigins ?? []).map((o) => new URL(o).origin));
     const lookup = options.lookup ?? ((h: string) => dns.lookup(h, { all: true, verbatim: true }));
-    let url = webAddress(raw);
+    const dial = options.dial ?? get;
+    const httpsOnly = options.requireHttps === true;
+    let url = webAddress(raw, httpsOnly);
     // the deadline covers every step: each one ends with this error once it passes
     const deadline = new AbortController();
     const late = () => new PublicFetchError("timeout", `${url.host} took longer than ${seconds(timeoutMs)} to answer`);
@@ -201,23 +232,23 @@ export async function fetchPublic(raw: unknown, options: PublicFetchOptions): Pr
     try {
         for (let hops = 0; ; hops++) {
             const address = await inTime(resolve(url, lookup, !trusted.has(url.origin)));
-            const res = await inTime(get(address, url, options.accept ?? "*/*", deadline.signal));
+            const res = await inTime(dial(address, url, { accept: options.accept ?? "*/*", signal: deadline.signal }));
             try {
-                const status = res.statusCode ?? 0;
+                const { status } = res;
                 if (REDIRECTS.has(status)) {
                     const to = header(res, "location");
                     if (!to) throw new PublicFetchError("bad-response", `${url.host} sent a redirect with nowhere to go`);
                     if (hops >= maxRedirects) throw new PublicFetchError("bad-response", `${url.host} redirected more than ${maxRedirects} times`);
-                    url = webAddress(new URL(to, url).href);
+                    url = webAddress(new URL(to, url).href, httpsOnly);
                     continue;
                 }
-                if (status < 200 || status > 299) throw new PublicFetchError("bad-response", `${url.host} answered ${status}${res.statusMessage ? ` ${res.statusMessage}` : ""}`);
+                if (status < 200 || status > 299) throw new PublicFetchError("bad-response", `${url.host} answered ${status}${res.statusText ? ` ${res.statusText}` : ""}`);
                 const declared = Number(header(res, "content-length") ?? NaN);
                 if (declared > maxBytes) throw tooLarge(url, maxBytes);
-                const body = await inTime(readCapped(res, url, maxBytes));
+                const body = await inTime(readCapped(res.body, url, maxBytes));
                 return { url: url.href, status, contentType: header(res, "content-type") ?? "", body };
             } finally {
-                res.destroy();
+                res.close();
             }
         }
     } finally {
@@ -225,8 +256,8 @@ export async function fetchPublic(raw: unknown, options: PublicFetchOptions): Pr
     }
 }
 
-/** One GET dialed to `address`, the one checked; the request names `url`'s host, and a certificate is checked for it. */
-function get(address: string, url: URL, accept: string, signal: AbortSignal): Promise<http.IncomingMessage> {
+/** The default dial: Node's http and https. */
+const get: PublicFetchDial = (address, url, { accept, signal }) => {
     return new Promise((ok, fail) => {
         const tls = url.protocol === "https:";
         const req = (tls ? https : http).request({
@@ -245,13 +276,15 @@ function get(address: string, url: URL, accept: string, signal: AbortSignal): Pr
         signal.addEventListener("abort", stop, { once: true });
         req.on("close", () => signal.removeEventListener("abort", stop));
         req.on("error", (e) => fail(new PublicFetchError("unreachable", `Couldn't reach ${url.host}: ${e.message}`)));
-        req.on("response", ok);
+        req.on("response", (res) =>
+            ok({ status: res.statusCode ?? 0, statusText: res.statusMessage ?? "", headers: res.headers, body: res, close: () => res.destroy() }),
+        );
         req.end();
     });
-}
+};
 
-/** An address this fetches: http or https, with no user name or password in it. */
-function webAddress(raw: unknown): URL {
+/** An address this fetches: http or https (only https when `httpsOnly`), with no user name or password in it. */
+function webAddress(raw: unknown, httpsOnly: boolean): URL {
     const text = typeof raw === "string" ? raw.trim() : "";
     if (!text) throw new PublicFetchError("invalid-url", "There's no web address");
     if (text.length > MAX_URL) throw new PublicFetchError("invalid-url", `A web address is at most ${MAX_URL} characters`);
@@ -261,6 +294,7 @@ function webAddress(raw: unknown): URL {
     } catch {
         throw new PublicFetchError("invalid-url", `"${text.slice(0, 200)}" isn't a web address`);
     }
+    if (httpsOnly && url.protocol !== "https:") throw new PublicFetchError("invalid-url", `Only https addresses are fetched, not ${url.protocol}`);
     if (url.protocol !== "https:" && url.protocol !== "http:") throw new PublicFetchError("invalid-url", `Only http and https addresses are fetched, not ${url.protocol}`);
     if (url.username || url.password) throw new PublicFetchError("invalid-url", "A web address can't carry a user name or password");
     return url;
@@ -282,7 +316,7 @@ async function resolve(url: URL, lookup: NonNullable<PublicFetchOptions["lookup"
     try {
         found = await lookup(host);
     } catch (err) {
-        throw new PublicFetchError("unreachable", `Couldn't find ${url.hostname}: ${err instanceof Error ? err.message : String(err)}`);
+        throw new PublicFetchError("unreachable", `Couldn't find ${url.hostname}: ${errorMessage(err)}`);
     }
     if (!found.length) throw new PublicFetchError("unreachable", `Couldn't find ${url.hostname}`);
     const allowed = checked ? found.filter((a) => publicAddressRefusal(a.address) === null) : found;
@@ -290,16 +324,16 @@ async function resolve(url: URL, lookup: NonNullable<PublicFetchOptions["lookup"
     return allowed[0]!.address;
 }
 
-function header(res: http.IncomingMessage, name: string): string | undefined {
+function header(res: PublicFetchAnswer, name: string): string | undefined {
     const v = res.headers[name];
     return Array.isArray(v) ? v[0] : v;
 }
 
-async function readCapped(body: AsyncIterable<Buffer>, url: URL, maxBytes: number): Promise<Uint8Array> {
-    const parts: Buffer[] = [];
+async function readCapped(body: AsyncIterable<Uint8Array>, url: URL, maxBytes: number): Promise<Uint8Array> {
+    const parts: Uint8Array[] = [];
     let total = 0;
     for await (const chunk of body) {
-        total += chunk.length;
+        total += chunk.byteLength;
         if (total > maxBytes) throw tooLarge(url, maxBytes);
         parts.push(chunk);
     }
