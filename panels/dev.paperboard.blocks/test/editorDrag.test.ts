@@ -1,7 +1,8 @@
 // Dragging and copying blocks in the editor (real browser).
 //
-// The editor is bundled with Vite and mounted in headless Chrome over an SDK
-// with no daemon behind it (fixtures/serviceStub.ts); the fixture drags
+// The editor is bundled with Vite and mounted in headless Chrome over the
+// real service on a real daemon, with another panel offering its blocks
+// (test/browserFixture.ts); the fixture drags
 // blocks out of the Library with pointer events and reports what the canvas
 // held and what the editor saved. Only a browser can prove this: Blockly
 // draws a preview of the block where it would snap on, and a renderer that

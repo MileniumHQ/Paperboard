@@ -1,7 +1,7 @@
 // A new project left without a block by closing its window (real browser):
 // no page tells the service it was left, so the service still holds it as a
-// draft. The whole panel runs over the real service with its projects in
-// memory (test/fixtures/projectsFixture.tsx).
+// draft. The whole panel runs over the real service, on a real daemon
+// (test/fixtures/projectsFixture.tsx).
 import { describe, expect, test } from "bun:test";
 import { browserFixture } from "./browserFixture";
 

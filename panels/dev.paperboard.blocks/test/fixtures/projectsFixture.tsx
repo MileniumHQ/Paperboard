@@ -1,5 +1,5 @@
-// The whole panel in a real browser over the real service (src/runtime.ts,
-// its projects in memory): a person makes a new project and closes the
+// The whole panel in a real browser over the real service, which starts
+// with no projects (test/browserFixture.ts): a person makes a new project and closes the
 // window before it has a block, so no page ever tells the service it was
 // left. A window opened after shows no projects, and the next new project,
 // from home and from the editor's menu, is named as if none were ever made.
@@ -7,12 +7,7 @@ import { render } from "solid-js/web";
 import * as Blockly from "blockly";
 import { PaperProvider } from "@mileniumhq/paperui";
 import App from "../../src/App";
-import { createRuntime, type RuntimeDeps } from "../../src/runtime";
-import { PANEL_ID } from "../../src/panel";
 import { BUILTIN } from "../../src/lib/names";
-import type { ProjectStorage } from "../../src/lib/projects";
-import { memoryBlocks } from "@mileniumhq/paperapi";
-import { service } from "./serviceStub";
 
 const errors: string[] = [];
 window.addEventListener("error", (event) => errors.push(event.error instanceof Error ? event.error.message : event.message));
@@ -70,19 +65,6 @@ const mount = () =>
     );
 
 async function run(): Promise<Record<string, unknown>> {
-    const files = new Map<string, unknown>();
-    const storage: ProjectStorage = {
-        get: async (path) => structuredClone(files.get(path ?? "") ?? null),
-        set: async (value, path) => void files.set(path ?? "", structuredClone(value)),
-    };
-    const nothing = async () => {
-        throw new Error("the fixture's flows reach no panel");
-    };
-    const blocks = { run: nothing, read: nothing, property: nothing, onEvent: () => () => {}, onChange: () => () => {} } as unknown as RuntimeDeps["blocks"];
-    const runtime = createRuntime({ storage, blocks, handle: memoryBlocks(PANEL_ID).panel });
-    service.serve(runtime.calls);
-    await runtime.init((patch) => service.announce(typeof patch === "function" ? patch(service.state()) : patch));
-
     // a new project, and the window closed on it before it had a block
     let dispose = mount();
     (await home()).click();

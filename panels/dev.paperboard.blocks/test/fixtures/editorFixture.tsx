@@ -2,7 +2,9 @@
 // are dragged out of the Library with pointer events, onto the canvas and
 // into each other. What happened is posted back to the test as JSON. A
 // block a drag left behind by mistake shows on the canvas, which each check
-// reads once the drop is saved.
+// reads once the drop is saved. The editor runs over the real service, and
+// the Fixture Panel offers its blocks from a process of its own
+// (test/browserFixture.ts).
 import { render } from "solid-js/web";
 import * as Blockly from "blockly";
 import { PaperProvider } from "@mileniumhq/paperui";
@@ -12,7 +14,8 @@ import Editor from "../../src/Editor";
 import { createProjects } from "../../src/projects/state";
 import { BUILTIN, registryBlockType } from "../../src/lib/names";
 import type { SavedFlows } from "../../src/panel";
-import { FIXTURE_PANEL, FIXTURE_PANEL_NAME, service, SERVICED_PROJECT } from "./serviceStub";
+import { calls } from "./wire";
+import { FIXTURE_PANEL, FIXTURE_PANEL_NAME, SERVICED_PROJECT } from "./world";
 
 /** Where on a block the pointer takes hold of it, from its top left. */
 const GRIP = 8;
@@ -25,6 +28,7 @@ window.addEventListener("error", (event) => errors.push(event.error instanceof E
 window.addEventListener("unhandledrejection", (event) => errors.push(event.reason instanceof Error ? event.reason.message : String(event.reason)));
 
 const frame = () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+// quiet: a task, not a wait for time: Blockly fires its events a frame and then a task after a change
 const task = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
 /** Until Blockly has told the editor what changed: it fires its events a frame and then a task later (events/utils.ts fireInternal). */
 const settle = async () => {
@@ -34,7 +38,7 @@ const settle = async () => {
     }
 };
 /** every save the editor made, oldest first */
-const saves = (): SavedFlows[] => service.calls().filter((c) => c.name === "saveFlows").map((c) => c.input.flows);
+const saves = (): SavedFlows[] => calls().filter((c) => c.name === "saveFlows").map((c) => c.input.flows);
 
 async function until<T>(what: string, look: () => T | null | undefined | false): Promise<T> {
     const deadline = performance.now() + 15_000;

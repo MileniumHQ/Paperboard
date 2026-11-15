@@ -1,6 +1,5 @@
-// The whole panel in headless Chrome (test/fixtures/panelFixture.tsx) over a
-// service that announces its state as the daemon delivers it, run once per
-// test process: every file that asks shares the one run's results.
+// The whole panel in headless Chrome (test/fixtures/panelFixture.tsx) over
+// the real service on a real daemon, run once per test process: every file that asks shares the one run's results.
 import { expect } from "bun:test";
 import { browserFixture } from "../browserFixture";
 

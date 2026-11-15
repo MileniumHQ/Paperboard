@@ -23,16 +23,19 @@ afterAll(() => {
 
 const original = globalThis.WebSocket;
 
-// The one exception: the headless Chrome a browser test started itself, on
-// the loopback DevTools port its helper registered here (browserFixture.ts).
+// The one exception: what a browser test started itself on loopback, on a
+// port its helper registered here: the headless Chrome's DevTools
+// (browserFixture.ts), and a test daemon, which the relay in front of the
+// Blocks service reaches (helpers/crane.ts). A relay hands its headers in
+// the second argument, as Bun's WebSocket takes them.
 const ALLOWED = Symbol.for("paperboard.blocks.test.ports");
 const allowedPorts: Set<number> = ((globalThis as any)[ALLOWED] ??= new Set<number>());
 
 class NoNetworkWebSocket {
-    constructor(url: string | URL, protocols?: string | string[]) {
+    constructor(url: string | URL, protocols?: string | string[] | { headers: Record<string, string> }) {
         const target = new URL(String(url));
         if (original && target.protocol === "ws:" && target.hostname === "127.0.0.1" && allowedPorts.has(Number(target.port))) {
-            return new original(target, protocols) as unknown as NoNetworkWebSocket;
+            return new original(target, protocols as string[]) as unknown as NoNetworkWebSocket;
         }
         throw new Error(
             "unit tests must not open network connections (a live daemon " +

@@ -1,8 +1,10 @@
 // The panel keeps what a person is doing while the service announces its
-// state underneath (real browser): the whole panel, over a service that
-// delivers every announcement as new objects, as the daemon does
-// (test/fixtures/panelFixture.tsx). The log's rows are in console.test.ts.
+// state underneath (real browser): the whole panel, over the real service
+// on a real daemon, which delivers every announcement as new objects
+// (test/fixtures/panelFixture.tsx). A refused call is one the service
+// refuses for real (fixtures/wire.ts). The log's rows are in console.test.ts.
 import { describe, expect, test } from "bun:test";
+import { REFUSAL } from "./fixtures/world";
 import { panelFixture } from "./helpers/panelFixture";
 const TIMEOUT = 180_000;
 
@@ -24,7 +26,7 @@ describe("the project dialogs while the project list is announced again", () => 
         async () => {
             const { dialogs } = await panelFixture();
             expect(dialogs.deleteError).toContain("Not deleted");
-            expect(dialogs.deleteError).toContain("the disk is full");
+            expect(dialogs.deleteError).toContain(REFUSAL);
         },
         TIMEOUT,
     );
@@ -67,7 +69,7 @@ describe("the editor", () => {
             expect(toggle.after).toBe("false");
             expect(toggle.saved).toBe(false);
             expect(toggle.animated).toBe(true);
-            expect(toggle.refused).toContain("the disk is full");
+            expect(toggle.refused).toContain(REFUSAL);
             expect(toggle.noticeAfterRetry).toBeNull();
         },
         TIMEOUT,
@@ -90,8 +92,10 @@ describe("the editor", () => {
             expect(leaving.savedBeforeMade).toBe(true);
             expect(leaving.emptyDraft).toBe(1);
             expect(leaving.droppedEmpty).toEqual({ project: leaving.emptyId, onlyDraft: true });
+            // the page asks the service to drop it only while it still holds it as a draft, and only after the save:
+            // the real service's state has said it is kept by the time the save answers, so it may not ask at all
             expect(leaving.keptSavedFirst).toBe(true);
-            expect(leaving.keptAsked).toEqual({ project: leaving.keptId, onlyDraft: true });
+            if (leaving.keptAsked !== undefined) expect(leaving.keptAsked).toEqual({ project: leaving.keptId, onlyDraft: true });
             expect(leaving.keptListed).toBe(true);
         },
         TIMEOUT,
@@ -102,17 +106,17 @@ describe("the editor", () => {
         async () => {
             const { unsavedWork: u } = await panelFixture();
             expect(u.askedBefore).toBe(false);
-            expect(u.refused).toContain("the disk is full");
+            expect(u.refused).toContain(REFUSAL);
             // asked before a restart while the save still fails: the person decides, and Stay keeps the panel
-            expect(u.dialogText).toContain("the disk is full");
+            expect(u.dialogText).toContain(REFUSAL);
             expect(u.stayAnswer).toBe(false);
             // asked once saves go through again: it is saved, and the panel may go
             expect(u.leaveAnswer).toBe(true);
             expect(u.afterSave).toEqual({ saved: true, notice: null, asks: false });
             // the window narrowed straight after an edit, before its save was due
             expect(u.sentOnClose).toBe(true);
-            expect(u.onPhone).toContain("the disk is full");
-            expect(u.homeText).toContain("the disk is full");
+            expect(u.onPhone).toContain(REFUSAL);
+            expect(u.homeText).toContain(REFUSAL);
             expect(u.dismissed).toBe(true);
         },
         TIMEOUT,
@@ -131,7 +135,7 @@ describe("the editor", () => {
         "flows that couldn't be loaded leave the canvas read-only, say so until they load, and Try again loads them",
         async () => {
             const { loadFailure } = await panelFixture();
-            expect(loadFailure.failed.text).toContain("the service is restarting");
+            expect(loadFailure.failed.text).toContain(REFUSAL);
             expect(loadFailure.failed.readOnly).toBe(true);
             expect(loadFailure.failed.dismissable).toBe(false);
             expect(loadFailure.failed.library).toBe(false);
@@ -146,7 +150,7 @@ describe("the home screen", () => {
         "a switch that didn't move says why until a switch moves, and the service's banner goes once its trouble is over",
         async () => {
             const { home } = await panelFixture();
-            expect(home.failed).toContain("the disk is full");
+            expect(home.failed).toContain(REFUSAL);
             expect(home.stayed).toBe(home.before);
             expect(home.banner).toContain("the registry is away");
             expect(home.after.moved).not.toBe(home.before);

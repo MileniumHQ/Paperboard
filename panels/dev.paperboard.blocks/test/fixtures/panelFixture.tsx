@@ -1,10 +1,12 @@
-// The whole panel in a real browser (App, as index.tsx mounts it) over a
-// service that announces its state the way the daemon delivers it
-// (serviceStub.ts): every announcement arrives as new objects. A person opens
-// a project and uses it while the service keeps announcing: log lines arrive,
-// the project list changes under an open dialog, variables are made and
-// renamed while the Library is scrolled. What the page kept through each is
-// posted back to the test as JSON. Keys and clicks that matter as a person's
+// The whole panel in a real browser (App, as index.tsx mounts it) over the
+// real service, on a real daemon (test/browserFixture.ts): every state it
+// announces arrives as new objects. A person opens a project and uses it
+// while the service keeps announcing: log lines arrive (the project's flow
+// logs what the Fixture Panel gives it), the project list changes under an
+// open dialog (another window makes a project), variables are made and
+// renamed while the Library is scrolled. A call the service refuses is
+// sent for a project it doesn't have (fixtures/wire.ts). What the page kept
+// through each is posted back to the test as JSON. Keys and clicks that matter as a person's
 // own (Enter, the click that leaves focus on a button) are sent through
 // DevTools (/input), so Chrome handles them as trusted input.
 import { render } from "solid-js/web";
@@ -14,19 +16,21 @@ import App from "../../src/App";
 import type { LogEntry } from "../../src/panel";
 import { BUILTIN } from "../../src/lib/names";
 import { NOT_SAVED } from "../../src/editorFlows";
-import { project, registry, service, SERVICED_PROJECT, unsaved } from "./serviceStub";
+import { serviceState } from "../../src/bridge";
+import { ask, askLeave, calls, held, holdNextList, holdsUnsaved, refuse, release } from "./wire";
+import { LATE_PANEL_NAME } from "./world";
 
 const errors: string[] = [];
 window.addEventListener("error", (event) => errors.push(event.error instanceof Error ? event.error.message : event.message));
 window.addEventListener("unhandledrejection", (event) => errors.push(event.reason instanceof Error ? event.reason.message : String(event.reason)));
 
 const frame = () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+// quiet: a task, not a wait for time: Blockly fires its events a frame and then a task after a change
 const task = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
 /**
  * Until what was changed has been drawn and told: Blockly fires its events a
  * frame and then a task after a change (events/utils.ts fireInternal), and
- * what its listeners do in turn fires on the next round, as do the stub
- * service's answers (a task each).
+ * what its listeners do in turn fires on the next round.
  */
 const settle = async () => {
     for (let i = 0; i < 3; i++) {
@@ -75,13 +79,24 @@ function canvas(): Blockly.WorkspaceSvg | undefined {
     return Blockly.Workspace.getAll().find((w): w is Blockly.WorkspaceSvg => w.rendered && !(w as Blockly.WorkspaceSvg).isFlyout && !!(w as Blockly.WorkspaceSvg).getFlyout());
 }
 
-let nextLog = 1;
-const logLine = (message: string): LogEntry => ({ id: nextLog++, at: Date.now(), level: "info", message, project: SERVICED_PROJECT });
-const say = (...messages: string[]) => service.announce({ log: [...service.state().log, ...messages.map(logLine)] });
+const logged = (message: string) => serviceState.current().log.some((entry: LogEntry) => entry.message === message);
+/** The service logs each line, in order, and the page has heard the last one. */
+async function say(...messages: string[]): Promise<void> {
+    await ask("say", { lines: messages });
+    await until(`"${messages.at(-1)}" in the page's log`, () => logged(messages.at(-1)!));
+}
+/** Another window makes a project, with a block on it so it's kept: the list is announced again. */
+const madeElsewhere = async (name: string) => {
+    const made = await ask<{ id: string }>("window", { do: "call", name: "createProject", input: { name } });
+    await ask("window", { do: "call", name: "saveFlows", input: { project: made.id, flows: { workspace: { blocks: { languageVersion: 0, blocks: [{ type: BUILTIN.onRun, id: "elsewhere", x: 0, y: 0 }] } }, schemas: {} }, preview: null } });
+    await until(`${name} in the page's list`, () => serviceState.current().projects.some((p) => p.name === name));
+};
+/** The Fixture Panel registers its blocks again: every window hears the registry changed. */
+const registryChanged = () => ask("fixture", { do: "register" });
 
 /** A log line arrives: rows already shown stay as they are, and a reader scrolled up stays there. */
 async function consoleChecks() {
-    say(...Array.from({ length: 30 }, (_, i) => `line ${i}`));
+    await say(...Array.from({ length: 30 }, (_, i) => `line ${i}`));
     const panel = await until("the console", () => document.querySelector('[title="Clear Console"]')?.closest<HTMLElement>('[class*="_panel_"]'));
     const rows = () => [...panel.querySelectorAll<HTMLElement>('[class*="_line_"]')];
     await until("30 console rows", () => rows().length === 30);
@@ -96,7 +111,7 @@ async function consoleChecks() {
     range.selectNodeContents(selected);
     getSelection()!.removeAllRanges();
     getSelection()!.addRange(range);
-    say("one more");
+    await say("one more");
     await settle();
     const after = rows();
     const selection = getSelection()!;
@@ -110,16 +125,16 @@ async function consoleChecks() {
     const followedAtEnd = fromEnd();
     body.scrollTop = 0;
     await settle();
-    say("while reading", "while reading, again");
+    await say("while reading", "while reading, again");
     await settle();
     const stayedWhileReading = body.scrollTop;
     body.scrollTop = body.scrollHeight;
     await settle();
-    say("after coming back");
+    await say("after coming back");
     await settle();
     const followedAgain = fromEnd();
     // a long entry wraps: its time sits on its first line
-    say("a very long line ".repeat(30));
+    await say("a very long line ".repeat(30));
     await settle();
     const wrapped = rows().at(-1)!;
     const time = wrapped.querySelector<HTMLElement>('[class*="_time_"]')!.getBoundingClientRect();
@@ -191,25 +206,25 @@ async function dialogChecks() {
     await typeText("Renamed by hand");
     const typed = field.value;
     // another window makes a project: the list is announced again
-    service.announce({ projects: [...service.state().projects, project("p-other", "Made elsewhere", Date.now())] });
+    await madeElsewhere("Made elsewhere");
     await settle();
     const renameKept = field.value;
     byText("button", "Rename", rename)!.click();
     await until("the Rename dialog to close", () => !openDialog());
-    const renamedTo = service.calls().filter((c) => c.name === "updateProject").at(-1)?.input.name;
+    const renamedTo = calls().filter((c) => c.name === "updateProject").at(-1)?.input.name;
     await settle();
 
-    service.fail("deleteProject", "the disk is full");
+    refuse("deleteProject", true);
     const remove = await menu("Delete");
     await settle();
     byText("button", "Delete", remove)!.click();
     await until("the delete to fail in the dialog", () => remove.querySelector('[role="alert"]'));
-    service.announce({ projects: [...service.state().projects, project("p-third", "Also made elsewhere", Date.now())] });
+    await madeElsewhere("Also made elsewhere");
     await settle();
     const deleteError = remove.querySelector('[role="alert"]')?.textContent ?? "";
     byText("button", "Cancel", remove)!.click();
     await until("the Delete dialog to close", () => !openDialog());
-    service.fail("deleteProject", null);
+    refuse("deleteProject", false);
     await settle();
     return { typed, renameKept, renamedTo, deleteError };
 }
@@ -278,14 +293,14 @@ async function toggleChecks() {
     await until("the switch to move", () => toggle.getAttribute("aria-checked") !== before);
     await frame();
     watch.disconnect();
-    const moved = { before, after: toggle.getAttribute("aria-checked"), animated, saved: service.calls().filter((c) => c.name === "updateProject").at(-1)?.input.enabled };
+    const moved = { before, after: toggle.getAttribute("aria-checked"), animated, saved: calls().filter((c) => c.name === "updateProject").at(-1)?.input.enabled };
 
     // a flip the service refuses is said, and the notice goes once a flip goes through
     const notice = () => [...document.querySelectorAll<HTMLElement>('[role="alert"], [role="status"]')].find((el) => el.textContent?.includes("Flows not turned"));
-    service.fail("updateProject", "the disk is full");
+    refuse("updateProject", true);
     await clickAt(toggle);
     const refused = (await until("the refused flip's notice", notice))!.textContent ?? "";
-    service.fail("updateProject", null);
+    refuse("updateProject", false);
     await clickAt(toggle);
     await until("the switch to move back", () => toggle.getAttribute("aria-checked") === before);
     await settle();
@@ -296,24 +311,31 @@ async function toggleChecks() {
     return { ...moved, refused, noticeAfterRetry };
 }
 
-/** Two registry changes whose answers come back in the other order: the Library shows the newer. */
+/**
+ * Two registry changes, the first one's listing held on its way back while
+ * the Late Panel starts offering a block: the Library shows the newer.
+ */
 async function registryChecks() {
-    const release = registry.hold();
-    registry.changed();
-    registry.offer({ id: "dev.test.late", name: "Late Panel" } as never, { panelId: "dev.test.late", entry: "command.wave", schema: { kind: "command", id: "wave", name: "Wave", text: "Wave" } } as never);
-    registry.changed();
+    holdNextList();
+    await registryChanged();
+    await until("the first listing's answer, held", () => held() === 1);
+    await ask("late", { do: "start" });
     await settle();
     release();
-    await settle();
-    await settle();
-    return { lateShown: Boolean(byText("[role=radio], button, label", "Late Panel")) };
+    const lateShown = await until("the Late Panel in the Library's rail", () => byText("[role=radio], button, label", LATE_PANEL_NAME)).then(
+        () => true,
+        (err: unknown) => {
+            throw new Error(`the newer registry never showed: ${err instanceof Error ? err.message : String(err)}`);
+        },
+    );
+    return { lateShown };
 }
 
 /** Flows that don't load leave the canvas read-only and say so until they do; Try again loads them. */
 async function loadFailureChecks() {
     (await until("the All projects button", () => document.querySelector<HTMLElement>('[aria-label="All projects"]'))).click();
     const card = await until("the project's card", () => byText("*", "Renamed by hand"));
-    service.fail("loadFlows", "the service is restarting");
+    refuse("loadFlows", true);
     card.click();
     const alert = await until("the load failure", () => [...document.querySelectorAll<HTMLElement>('[role="alert"]')].find((el) => el.textContent?.includes("Your flows couldn't be loaded")));
     await settle();
@@ -327,7 +349,7 @@ async function loadFailureChecks() {
         library: Boolean(byText("[role=radio], button, label", "Logic")) || getComputedStyle(canvas()!.getFlyout()!.getWorkspace().getParentSvg()).display !== "none",
     };
     document.documentElement.removeAttribute("data-theme");
-    service.fail("loadFlows", null);
+    refuse("loadFlows", false);
     byText("button", "Try again", alert)!.click();
     await until("the failure to go", () => !alert.isConnected);
     await settle();
@@ -347,12 +369,12 @@ const addBlock = async (id: string) => {
     // Blockly tells the editor a tick later, as it does a person's drop
     await frame();
 };
-const callsOf = (name: string) => service.calls().filter((c) => c.name === name);
-const saveHolding = (blockId: string) => service.calls().findIndex((c) => c.name === "saveFlows" && JSON.stringify(c.input.flows).includes(`"${blockId}"`));
+const callsOf = (name: string) => calls().filter((c) => c.name === name);
+const saveHolding = (blockId: string) => calls().findIndex((c) => c.name === "saveFlows" && JSON.stringify(c.input.flows).includes(`"${blockId}"`));
 /** Home is shown: what was called by then. */
 const home = async () => {
     await until("the home screen", () => !backButton() && byText("button", "New project"));
-    return service.calls().length;
+    return calls().length;
 };
 
 /** Leaving the editor saves the latest edit first, and a new project left without a block is dropped. */
@@ -364,39 +386,39 @@ async function leaveChecks() {
     const savedBeforeHome = saveHolding("edit-before-back") >= 0 && saveHolding("edit-before-back") < callsAtHome;
 
     // New project from the editor's menu: the edit is saved before anything is made
-    byText("*", "Renamed by hand")!.click();
+    (await until("the project's card", () => byText("*", "Renamed by hand")))!.click();
     await editing("Renamed by hand");
     await addBlock("edit-before-new");
     byText("button, [role=menuitem]", "Project")!.click();
     (await until("the Project menu's New project", () => byText("[role=menuitem]", "New project")))!.click();
     await editing("Untitled project");
-    const savedBeforeMade = saveHolding("edit-before-new") >= 0 && saveHolding("edit-before-new") < service.calls().findIndex((c) => c.name === "createProject");
+    const savedBeforeMade = saveHolding("edit-before-new") >= 0 && saveHolding("edit-before-new") < calls().findIndex((c) => c.name === "createProject");
     const emptyDraft = callsOf("createProject").length;
 
     // left empty, it is dropped
-    const emptyId = (await until("the new project's id", () => service.state().projects.find((p) => p.draft)))!.id;
+    const emptyId = (await until("the new project's id", () => serviceState.current().projects.find((p) => p.draft)))!.id;
     backButton()!.click();
     await home();
     const droppedEmpty = callsOf("deleteProject").at(-1)?.input;
 
-    // given a block, it is saved before the service is asked to drop it, so the service keeps it
+    // given a block, it is saved before the service could be asked to drop it, so the service keeps it
     byText("button", "New project")!.click();
     await editing("Untitled project");
-    const keptId = service.state().projects.find((p) => p.draft)!.id;
+    const keptId = (await until("the new project's id", () => serviceState.current().projects.find((p) => p.draft)))!.id;
     await addBlock("edit-in-draft");
     backButton()!.click();
     await home();
-    const keptDelete = service.calls().findIndex((c) => c.name === "deleteProject" && c.input.project === keptId);
+    const keptDelete = calls().findIndex((c) => c.name === "deleteProject" && c.input.project === keptId);
     return {
         savedBeforeHome,
         savedBeforeMade,
         emptyDraft,
         droppedEmpty,
         emptyId,
-        keptSavedFirst: saveHolding("edit-in-draft") >= 0 && saveHolding("edit-in-draft") < keptDelete,
-        keptAsked: service.calls()[keptDelete]?.input,
+        keptSavedFirst: saveHolding("edit-in-draft") >= 0 && (keptDelete === -1 || saveHolding("edit-in-draft") < keptDelete),
+        keptAsked: calls()[keptDelete]?.input,
         keptId,
-        keptListed: service.state().projects.some((p) => p.id === keptId),
+        keptListed: serviceState.current().projects.some((p) => p.id === keptId),
     };
 }
 
@@ -410,13 +432,13 @@ async function openChecks() {
     const name = "Renamed by hand";
     const saves = () => callsOf("saveFlows").length;
     const before = saves();
-    byText("*", name)!.click();
+    (await until(`${name}'s card`, () => byText("*", name)))!.click();
     await editing(name);
     await until("the project's blocks on the canvas", () => canvas()!.getTopBlocks(false).length > 0);
     await settle();
     // drawn in both themes, which Blockly reports as changes
     await shoot("editor-opened");
-    registry.changed();
+    await registryChanged();
     await settle();
     backButton()!.click();
     await home();
@@ -442,15 +464,15 @@ const phoneScreen = () => byText("*", "Blocks isn't on phones yet");
  */
 async function unsavedChecks() {
     const name = "Renamed by hand";
-    byText("*", name)!.click();
+    (await until(`${name}'s card`, () => byText("*", name)))!.click();
     await editing(name);
-    const askedBefore = unsaved.confirm() !== null;
-    service.fail("saveFlows", "the disk is full");
+    const askedBefore = holdsUnsaved();
+    refuse("saveFlows", true);
     await addBlock("edit-refused");
     const refused = (await until("the refused save's notice", () => alertSaying(NOT_SAVED)))!.textContent ?? "";
-    const ask = unsaved.confirm();
+    await until("Paperboard told of the unsaved work", () => holdsUnsaved());
     // Paperboard is about to restart the panel: the save fails again, so the person is asked
-    const asking = ask?.();
+    const asking = askLeave();
     const dialog = await until("the unsaved changes dialog", openDialog);
     const dialogText = dialog.textContent ?? "";
     await shoot("unsaved-dialog");
@@ -458,10 +480,10 @@ async function unsavedChecks() {
     const stayAnswer = await asking;
     await until("the dialog to close", () => !openDialog());
     // the service takes saves again: asked again, the editor saves, and the panel may restart
-    service.fail("saveFlows", null);
-    const leaveAnswer = await unsaved.confirm()?.();
+    refuse("saveFlows", false);
+    const leaveAnswer = await askLeave();
     await settle();
-    const afterSave = { saved: saveHolding("edit-refused") >= 0, notice: alertSaying(NOT_SAVED)?.textContent ?? null, asks: unsaved.confirm() !== null };
+    const afterSave = { saved: saveHolding("edit-refused") >= 0, notice: alertSaying(NOT_SAVED)?.textContent ?? null, asks: holdsUnsaved() };
 
     // an edit, and at once the window is a phone's: the editor closes, sending it
     await addBlock("edit-before-narrow");
@@ -472,14 +494,14 @@ async function unsavedChecks() {
     await home();
 
     // the same, but the save fails: the phone screen says so, and so does home once the window is wide again
-    byText("*", name)!.click();
+    (await until(`${name}'s card`, () => byText("*", name)))!.click();
     await editing(name);
-    service.fail("saveFlows", "the disk is full");
+    refuse("saveFlows", true);
     await addBlock("edit-lost-on-close");
     await viewport(PHONE);
     const onPhone = (await until("the failure on the phone screen", () => phoneScreen() && alertSaying(NOT_SAVED)))!.textContent ?? "";
     await viewport(null);
-    service.fail("saveFlows", null);
+    refuse("saveFlows", false);
     await shoot("closed-unsaved", true);
     const onHome = (await until("the failure on home", () => byText("button", "New project") && alertSaying(NOT_SAVED)))!;
     const homeText = onHome.textContent ?? "";
@@ -518,19 +540,23 @@ async function homeChecks() {
     const toggle = await until("the card's switch", () => document.querySelector<HTMLElement>(`[role="switch"][aria-label="${name}: flows start on their events"]`));
     const alert = (text: string) => [...document.querySelectorAll<HTMLElement>('[role="alert"]')].find((el) => el.textContent?.includes(text));
     const before = toggle.getAttribute("aria-checked");
-    service.fail("updateProject", "the disk is full");
+    refuse("updateProject", true);
     await clickAt(toggle);
     const failed = (await until("the switch's failure", () => alert("Flows not turned")))!.textContent ?? "";
     await settle();
     const stayed = toggle.getAttribute("aria-checked");
-    service.announce({ blocksError: "The other panels weren't told the projects changed: the registry is away" });
+    // the registry goes away as another window makes a project: the service can't tell the other panels
+    await ask("registry", { away: true });
+    await madeElsewhere("Made while the registry was away");
     const banner = (await until("the service's banner", () => alert("Flows can't drive projects")))!.textContent ?? "";
     await shoot("home-failed");
 
-    service.fail("updateProject", null);
+    // the registry is back: the switch that moves next tells the other panels, and the banner goes
+    await ask("registry", { away: false });
+    refuse("updateProject", false);
     await clickAt(toggle);
     await until("the switch to move", () => toggle.getAttribute("aria-checked") !== before);
-    service.announce({ blocksError: null });
+    await until("the service's banner to go", () => !alert("Flows can't drive projects"));
     await settle();
     const after = {
         moved: toggle.getAttribute("aria-checked"),
