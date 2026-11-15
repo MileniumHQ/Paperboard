@@ -171,7 +171,7 @@ export class Conversation {
         removeLeftRunFiles(this.runDir());
         const codexHome = this.deps.env("codex").CODEX_HOME;
         if (codexHome) removeLeftRunFiles(codexHome);
-        // a turn the last service generation left running is not ours to finish
+        // quiet: a turn the last service generation left running is not ours to finish, and nobody waits on it
         void stopChild(this.deps.host, TURN_PROC_ID).catch((e) => console.error("[agents] couldn't stop a turn left from before:", errorMessage(e)));
     }
 
@@ -409,7 +409,10 @@ export class Conversation {
         this.queue = [];
         this.attachments.closeUploads();
         this.notices = [];
+        // a turn still getting ready never starts, and one that runs is waited out: nothing writes after this
+        this.stopRequested = true;
         await this.killTurn();
+        await this.running;
     }
 
     // ------------------------------------------------------------- the history
@@ -421,6 +424,7 @@ export class Conversation {
      */
     private async swap(check: (() => void) | null, change: () => void) {
         if (this.closed) throw new Error("the conversation is shutting down");
+        // quiet: the earlier switch's caller got its failure; this only waits for it to end
         while (this.switching) await this.switching.catch(() => undefined);
         check?.();
         this.deps.onLeave?.();
@@ -488,6 +492,7 @@ export class Conversation {
                 try {
                     this.deps.onTurnEnd?.();
                 } catch (e) {
+                    // quiet: the turn has ended either way; the next one must still start
                     console.error("[agents] a turn's end couldn't be handled:", errorMessage(e));
                 }
                 this.pump();
@@ -543,6 +548,8 @@ export class Conversation {
         if (problem) throw new Error(problem);
         const mcp = this.deps.mcp();
         const sections = await this.deps.instructions();
+        // stopped (or shut down) while it got ready: there is no process to kill yet, so none is started
+        if (this.stopRequested) return;
         const launch = turnLaunch({
             harness: settings.harness,
             command,

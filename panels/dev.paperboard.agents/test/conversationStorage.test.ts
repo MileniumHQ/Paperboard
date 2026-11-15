@@ -31,6 +31,23 @@ function upload(r: Rig, name: string, data: Buffer) {
 
 // Transcripts and history survive.
 describe("the transcript", () => {
+    test("a shutdown while a turn gets ready starts no turn, and nothing is left running to write after it", async () => {
+        let ready!: () => void;
+        const gettingReady = new Promise<void>((ok) => (ready = ok));
+        rig = await conversationRig({
+            instructions: async () => {
+                await gettingReady;
+                return { tools: ["**Test:** a section"], now: [] };
+            },
+        });
+        rig.conversation.send("one");
+        const closing = rig.conversation.shutdown();
+        ready();
+        await closing;
+        expect(rig.conversation.turning()).toBe(false);
+        expect(rig.host.startedAs(turnId)).toEqual([]);
+    });
+
     test("survives a restart: the latest copy of an entry wins and a torn last line is dropped", async () => {
         rig = await conversationRig();
         rig.conversation.send("one");
