@@ -1,26 +1,78 @@
-// Two brains' actions in a real browser (fixtures/brainErrors.tsx): what one
-// brain's refusal says, and when, belongs to that brain alone.
-import { beforeAll, expect, test } from "bun:test";
-import { runBrowserFixture, type FixtureResults } from "./browserFixture";
+// Two brains' actions in the real settings over the real service
+// (test/support/panel.ts): Codex in trouble (the program it was told to run
+// is gone), Claude Code (the fake brain on PATH) in its sign-in, waiting for
+// the code its page shows. What one brain's refusal says, and when, belongs
+// to that brain alone. The page's socket (test/support/wire.ts) holds the
+// code on its way while Codex's install is tried again and refused; the
+// install is let through as one the real service refuses on this computer
+// (a Codex found on it, and there is none), so nothing is downloaded.
+import fs from "node:fs";
+import path from "node:path";
+import { afterAll, beforeAll, expect, setDefaultTimeout, test } from "bun:test";
+import { bootPanel, openSection, type BootedPanel, type Page } from "./support/panel";
+import { holdCalls, releaseCall, sent, WIRE } from "./support/wire";
 
-let result: FixtureResults;
+setDefaultTimeout(60_000);
+
+const SETTINGS = { name: "Ada", harness: "claude-code" as const, model: null, compaction: "summarize" as const };
+const BRAINS = `document.querySelector('[role=region][aria-label="Brains"]')`;
+const CLAUDE = `[...document.querySelectorAll('[role=dialog]')].find((d) => d.innerText.includes("Sign in to Claude"))`;
+const alertsIn = (region: string) => `[...(${region}?.querySelectorAll("[role=alert]") ?? [])].map((a) => a.innerText)`;
+
+let panel: BootedPanel;
+let page: Page;
 beforeAll(async () => {
-    result = await runBrowserFixture("test/fixtures/brainErrors.html", { "@mileniumhq/paperapi": "test/fixtures/paperapiStub.ts" });
-}, 180_000);
+    panel = await bootPanel({
+        settings: SETTINGS,
+        brainsOnPath: { "claude-code": { signedIn: false, chosen: true } },
+        // Codex was told to run a program that has since gone: it stopped with a problem, and isn't installed
+        seed: async (storage) => {
+            const file = path.join(storage, "brains", "choices.json");
+            fs.writeFileSync(file, JSON.stringify({ ...JSON.parse(fs.readFileSync(file, "utf8")), codex: path.join(storage, "gone", "codex") }));
+        },
+    });
+    page = await panel.open({ init: WIRE });
+    await openSection(page, "Ada", "settings");
+    await page.waitFor(`${BRAINS}?.innerText.includes("Try again")`, "Codex's Try again");
+});
+afterAll(() => panel?.close());
 
-test("a brain's button pressed twice before the service answers is sent once", () => {
-    expect(result.error, "the fixture threw").toBe("");
-    expect(result.checks.installs).toBe(1);
+test("a brain's button pressed twice before the service answers is sent once", async () => {
+    // Claude Code's sign-in: its page is opened, and its code pasted and on its way
+    await page.evaluate(`[...${BRAINS}.querySelectorAll("button")].find((b) => b.innerText.includes("Sign in")).click()`);
+    await page.waitFor(`${CLAUDE}?.innerText.includes("Open sign-in page")`, "Claude Code's sign-in page");
+    // what the button opens is the person's own browser's business: here, nothing
+    await page.evaluate(`(() => { window.open = () => null; const a = [...${CLAUDE}.querySelectorAll("a")].find((b) => b.innerText.includes("Open sign-in page")); a.addEventListener("click", (e) => e.preventDefault()); a.click(); })()`);
+    await page.waitFor(`${CLAUDE}?.querySelector("input")`, "Claude Code's code field");
+    await holdCalls(page, "brainCode");
+    await page.evaluate(`(() => {
+        const paste = new ClipboardEvent("paste", { clipboardData: new DataTransfer(), bubbles: true, cancelable: true });
+        paste.clipboardData.setData("text", "abc-123");
+        ${CLAUDE}.querySelector("input").dispatchEvent(paste);
+    })()`);
+    await page.waitFor(`window.__wireApi.heldCalls("brain-code") === 1 && !${CLAUDE}.querySelector("input")`, "the code to be on its way");
+
+    // meanwhile Codex's install is tried again, pressed twice before the service answers, and refused
+    await holdCalls(page, "installBrain");
+    await page.evaluate(`(() => {
+        const again = [...${BRAINS}.querySelectorAll("button")].find((b) => b.innerText.includes("Try again"));
+        again.click();
+        return new Promise((done) => requestAnimationFrame(() => { again.click(); done(); }));
+    })()`);
+    expect(await sent(page, "installBrain"), "the install was sent more than once").toEqual([{ harness: "codex" }]);
 });
 
-test(
-    "a refusal for one brain shows under that brain only, and doesn't undo the other brain's accepted code",
-    () => {
-        const { checks, error } = result;
-        expect(error, "the fixture threw").toBe("");
-        expect(checks.codex.some((a: string) => a.includes("No space left on the disk"))).toBe(true);
-        expect(checks.claude, "Codex's refusal shows under Claude Code").toEqual([]);
-        expect(checks.codeField, "the accepted code is asked for again").toBe(false);
-        expect(checks.uncaught).toEqual([]);
-    },
-);
+test("a refusal for one brain shows under that brain only, and doesn't undo the other brain's accepted code", async () => {
+    await releaseCall(page, "installBrain", { from: "computer" });
+    await page.waitFor(`${alertsIn(BRAINS)}.some((a) => a.includes("Codex not installed"))`, "Codex's refusal");
+    expect((await page.evaluate<string[]>(alertsIn(BRAINS))).some((a) => a.includes("Codex isn't on this computer"))).toBe(true);
+    expect(await page.evaluate(alertsIn(CLAUDE)), "Codex's refusal shows under Claude Code").toEqual([]);
+
+    // then the service takes the code: Claude Code finishes signing in, with no field to paste in again
+    await releaseCall(page, "brainCode");
+    await page.waitFor(`${CLAUDE}?.innerText.includes("Signed in")`, "Claude Code signed in");
+    expect(await page.evaluate(`Boolean(${CLAUDE}.querySelector("input"))`), "the accepted code is asked for again").toBe(false);
+    expect(await page.evaluate(alertsIn(CLAUDE))).toEqual([]);
+    expect(await sent(page, "installBrain")).toHaveLength(1);
+    expect(page.exceptions).toEqual([]);
+});

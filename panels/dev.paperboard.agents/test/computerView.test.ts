@@ -1,4 +1,4 @@
-// The agent's computer in a real browser (fixtures/computerFixture.tsx):
+// The agent's computer in a real browser (fixtures/computerFixture.tsx, over a stand-in agent: see why there):
 // using a window takes control once, an idle spell hands it back, and so
 // does closing the view, so the agent is never left waiting on hands that
 // went.
@@ -9,7 +9,7 @@ describe("control of the computer", () => {
     test(
         "taken once by using a window, handed back when idle and when the view closes",
         async () => {
-            const { checks, error } = await runBrowserFixture("test/fixtures/computerFixture.html", { "@mileniumhq/paperapi": "test/fixtures/paperapiStub.ts" });
+            const { checks, error } = await runBrowserFixture("test/fixtures/computerFixture.html");
             expect(error, "the fixture threw").toBe("");
             expect(checks.takenOnce, "using a window it already held took it again").toEqual([true]);
             expect(checks.afterIdle, "an idle spell didn't hand it back").toEqual([true, false]);

@@ -1,5 +1,5 @@
 // Runs one of the panel's browser fixtures (test/fixtures/*.html): a page of
-// the panel's own components over a stubbed SDK, with no service behind it.
+// the panel's own components, mounted with what they are handed in the page.
 // It bundles the page with Vite, serves it, opens it in headless Chrome
 // (scripts/testing/chrome.ts, which finds Chrome and says how to install it
 // when there is none) and waits for the JSON the fixture posts back to
@@ -19,7 +19,7 @@ export interface FixtureResults {
     error: string;
 }
 
-async function buildFixture(page: string, alias: Record<string, string>, outDir: string): Promise<void> {
+async function buildFixture(page: string, outDir: string): Promise<void> {
     const { build } = await import("vite");
     const solidPlugin = (await import("vite-plugin-solid")).default;
     await build({
@@ -28,28 +28,21 @@ async function buildFixture(page: string, alias: Record<string, string>, outDir:
         logLevel: "error",
         plugins: [solidPlugin()],
         resolve: {
-            alias: Object.entries(alias).map(([name, file]) => ({
-                find: new RegExp(`^${name.replace(/[.*+?^${}()|[\]\\/]/g, "\\$&")}$`),
-                replacement: join(panelDir, file),
-            })),
             dedupe: ["solid-js", "solid-js/web", "solid-js/store"],
         },
         build: { outDir, emptyOutDir: true, minify: false, rollupOptions: { input: join(panelDir, page) } },
     });
 }
 
-/**
- * `page` is the fixture's HTML, relative to the panel; `alias` swaps a
- * package for a panel file, e.g. the SDK for one with no daemon behind it.
- */
-export async function runBrowserFixture(page: string, alias: Record<string, string>): Promise<FixtureResults> {
+/** `page` is the fixture's HTML, relative to the panel. */
+export async function runBrowserFixture(page: string): Promise<FixtureResults> {
     const dir = mkdtempSync(join(tmpdir(), "pb-agents-fixture-"));
     const dist = join(dir, "dist");
     let server: ReturnType<typeof Bun.serve> | undefined;
     let chrome: Page | undefined;
     const disallow: (() => void)[] = [];
     try {
-        await buildFixture(page, alias, dist);
+        await buildFixture(page, dist);
         let report!: (results: FixtureResults) => void;
         const reported = new Promise<FixtureResults>((done) => (report = done));
         server = Bun.serve({

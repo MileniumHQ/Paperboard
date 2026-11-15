@@ -17,6 +17,8 @@
 //   [[tools]]  list the panel's MCP tools with the token from the environment
 //   [[big]]    report a context past any budget
 //   [[notloggedin]] (Claude) Claude's own "Not logged in" reply
+//   [[ask]]    (Codex) call the panel's MCP tools in plan.ask ({ name, arguments }), in order, before replying
+//   [[replies]] (Codex) text each of plan.replies in turn, each once $FAKE_DIR/release is there, in place of the reply
 
 import fs from "node:fs";
 import http from "node:http";
@@ -129,6 +131,20 @@ async function sendMessage(url, text) {
     if (res.status !== 200 || body.result?.isError) throw new Error(`send_message was refused: ${JSON.stringify(body)}`);
 }
 
+/** [[ask]]: the panel's tools in plan.ask, called in order; each answer is logged, and a refusal ends the turn */
+async function ask(url) {
+    for (const [i, tool] of (plan.ask ?? []).entries()) {
+        const res = await fetch(url, {
+            method: "POST",
+            headers: { "content-type": "application/json", authorization: `Bearer ${process.env.PAPERBOARD_COMPUTER_MCP_TOKEN}` },
+            body: JSON.stringify({ jsonrpc: "2.0", id: 10 + i, method: "tools/call", params: { name: tool.name, arguments: tool.arguments ?? {} } }),
+        });
+        const body = await res.json();
+        log({ event: "ask", tool: tool.name, status: res.status, result: body.result });
+        if (res.status !== 200 || body.result?.isError) throw new Error(`${tool.name} was refused: ${JSON.stringify(body)}`);
+    }
+}
+
 /** A turn's reply: a send_message, or plain output for [[plain]] (and for a question from a flow, which has no tools). */
 const texts = (message, url) => url !== null && !newest(message).includes("[[plain]]");
 
@@ -207,6 +223,14 @@ async function codex() {
         const url = urlArg ? JSON.parse(urlArg.slice("mcp_servers.paperboard.url=".length)) : null;
         await cues(message, () => url);
         if (silent(message, thread)) process.exit(0);
+        if (newest(message).includes("[[ask]]")) await ask(url);
+        if (newest(message).includes("[[replies]]")) {
+            for (const text of plan.replies ?? []) {
+                await hold();
+                await sendMessage(url, text);
+            }
+            process.exit(0);
+        }
         const reply = plan.reply ?? `ok: ${message.slice(-20)}`;
         if (texts(message, url)) {
             out({ type: "item.started", item: { type: "mcp_tool_call", server: "paperboard", tool: "send_message" } });
@@ -337,7 +361,22 @@ async function opencode() {
         const host = argv[argv.indexOf("--hostname") + 1];
         const port = Number(argv[argv.indexOf("--port") + 1]);
         const expected = `Basic ${Buffer.from(`opencode:${process.env.OPENCODE_SERVER_PASSWORD}`).toString("base64")}`;
-        const integrations = JSON.parse(fixture("opencodeIntegrations.json"));
+        // what it was told, read again on every request so a test can change it as it goes:
+        //   plan.integrations    the providers it knows (else the captured list)
+        //   plan.attempts        a sign-in's status by its id ({ status, message }); "pending" otherwise
+        //   plan.cancelRefuses   a sign-in it won't stop: its refusal's message
+        // A key connected stays connected (as a credential labelled "<name> key"), and each sign-in is
+        // numbered: both kept in $FAKE_DIR/opencode.json, so a server started again has them too.
+        const now = () => (fs.existsSync(planFile) ? JSON.parse(fs.readFileSync(planFile, "utf8")) : {});
+        const kept = path.join(FAKE_DIR, "opencode.json");
+        const memory = () => (fs.existsSync(kept) ? JSON.parse(fs.readFileSync(kept, "utf8")) : { attempts: 0, keys: [] });
+        const remember = (m) => fs.writeFileSync(kept, JSON.stringify(m));
+        const integrations = () => {
+            const keys = memory().keys;
+            return (now().integrations ?? JSON.parse(fixture("opencodeIntegrations.json"))).map((p) =>
+                keys.includes(p.id) ? { ...p, connections: [...(p.connections ?? []), { id: `${p.id}-key`, type: "credential", label: `${p.name} key` }] } : p,
+            );
+        };
         const server = http.createServer((req, res) => {
             let body = "";
             req.on("data", (d) => (body += d));
@@ -346,8 +385,27 @@ async function opencode() {
                 if (req.headers.authorization !== expected) return res.writeHead(401).end('{"message":"unauthorized"}');
                 const json = (o) => res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify(o));
                 if (req.url === "/api/info") return json({ data: {} });
-                if (req.url === "/api/integration") return json({ data: integrations });
-                if (req.method === "POST" && /\/connect\/key$/.test(req.url)) return json({ data: {} });
+                if (req.url === "/api/integration") return json({ data: integrations() });
+                const key = /^\/api\/integration\/([^/]+)\/connect\/key$/.exec(req.url);
+                if (req.method === "POST" && key) {
+                    const m = memory();
+                    remember({ ...m, keys: [...m.keys, key[1]] });
+                    return json({ data: {} });
+                }
+                const begin = /^\/api\/integration\/([^/]+)\/connect\/oauth$/.exec(req.url);
+                if (req.method === "POST" && begin) {
+                    const m = memory();
+                    const n = m.attempts + 1;
+                    remember({ ...m, attempts: n });
+                    return json({ data: { attemptID: `attempt${n}`, url: `https://${begin[1]}.example/login`, instructions: `Sign-in ${n}`, mode: "auto" } });
+                }
+                const attempt = /^\/api\/integration\/[^/]+\/connect\/oauth\/([^/]+)$/.exec(req.url);
+                if (req.method === "GET" && attempt) return json({ data: now().attempts?.[attempt[1]] ?? { status: "pending" } });
+                if (req.method === "DELETE" && attempt) {
+                    const refused = now().cancelRefuses;
+                    if (refused) return res.writeHead(409, { "content-type": "application/json" }).end(JSON.stringify({ message: refused }));
+                    return res.writeHead(204).end();
+                }
                 res.writeHead(404).end('{"message":"not found"}');
             });
         });
