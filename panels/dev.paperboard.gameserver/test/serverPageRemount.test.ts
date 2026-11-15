@@ -83,4 +83,33 @@ describe("the server page", () => {
             served.stop();
         }
     });
+
+    test("the Logs tab reads only the log its list names, and shows no failure of one it never had", async () => {
+        const config = path.join(daemon.dataDir, "configs", `${PANEL_ID}.json`);
+        fs.mkdirSync(path.dirname(config), { recursive: true });
+        fs.writeFileSync(config, JSON.stringify({ version: 2, serversDirectory: SERVERS, servers: [{ id: "s-mc", name: "Survival", game: "minecraft", directory: `${SERVERS}/s-mc`, createdAt: 0, settings: { configured: true, software: "paper", version: "1.21.1" } }] }));
+        writeTree(path.join(daemon.dataDir, "files", PANEL_ID, SERVERS, "s-mc"), { "server.jar": "jar", "eula.txt": "eula=true\n", "logs/latest.log": "[12:00:00] Done (1.2s)!\n" });
+        const { gameServerService } = await import("../src/service");
+        await gameServerService.ready;
+        const served = await servePanel(daemon);
+        const page = await openPage(`${served.url}/?server=s-mc`);
+        try {
+            await page.waitFor(`document.querySelector('input[name=serverMenu][value="logs"]')`, "the server menu");
+            // a failure shown at any moment is seen, however soon it is gone
+            await page.evaluate(`new MutationObserver(() => { if (document.body.innerText.includes("Couldn't read this log")) window.__readFailed = true; }).observe(document.body, { subtree: true, childList: true, characterData: true })`);
+            await page.click('input[name=serverMenu][value="logs"]');
+            await page.waitFor(`${ACTIVE}?.innerText.includes("Done (1.2s)!")`, "the latest log");
+            await page.settled();
+            const reads = page.sentFrames.flatMap((f) => {
+                if (!f.includes("command.call-read-log-file")) return [];
+                return [JSON.parse(f).params.request.inputs.input.name];
+            });
+            expect(reads).toEqual(["latest.log"]);
+            expect(await page.evaluate<boolean>(`window.__readFailed === true`)).toBe(false);
+            expect(page.exceptions).toEqual([]);
+        } finally {
+            await page.close();
+            served.stop();
+        }
+    });
 });

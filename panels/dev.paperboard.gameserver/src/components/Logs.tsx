@@ -31,8 +31,9 @@ export default function Logs() {
     const modifiedAt = (name: string) => files()!.find((file) => file.name === name)!.mtimeMs;
     const [selected, setSelected] = createSignal("");
     // the log picked is read, the newest pick the one shown; a log that
-    // can't be read shows nothing of the one before it
-    const log = createRead((name) => calls.readLogFile({ name }), { source: selected, message: errorMessage });
+    // can't be read shows nothing of the one before it. Nothing is read
+    // until the list has named one.
+    const log = createRead((name) => calls.readLogFile({ name }), { source: () => selected() || null, message: errorMessage });
     const loading = log.loading;
     const content = () => (log.error() === null ? (log.value() ?? null) : null);
     const [listError, setError] = createSignal<Outcome | null>(null);
