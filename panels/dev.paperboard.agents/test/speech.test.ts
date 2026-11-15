@@ -8,7 +8,7 @@ import type { FaceController } from "../src/face/controller";
 // paced speech, as a person who hasn't asked for reduced motion hears it
 (globalThis as { window?: unknown }).window = { matchMedia: () => ({ matches: false }) };
 // PaperUI's page side can't load outside a page; the speaker only taps with it
-mock.module("@mileniumhq/paperui", () => ({ haptic() {} }));
+mock.module("@mileniumhq/paperui", () => import("./support/paperui"));
 const { createSpeaker } = await import("../src/onboarding/speech");
 
 const face = { talk() {}, express() {}, bounce() {} } as unknown as FaceController;

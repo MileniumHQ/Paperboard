@@ -1,7 +1,10 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, mock, test } from "bun:test";
 import type { PageInfo } from "../src/contract";
 import type { Agent } from "../src/lib/agent";
-import { createLauncher } from "../src/pages/launcher";
+
+// PaperUI's page side can't load outside a page; the launcher only takes its createLatest
+mock.module("@mileniumhq/paperui", () => import("./support/paperui"));
+const { createLauncher } = await import("../src/pages/launcher");
 
 const page = (name: string, pictureAt = 0): PageInfo => ({ name, title: name, description: "", kind: "app", picture: pictureAt > 0, pictureAt });
 const later = <T>() => {

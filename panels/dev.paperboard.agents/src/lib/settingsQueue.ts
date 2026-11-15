@@ -3,8 +3,8 @@
 // goes through one queue: each waits for the one before, reads the settings
 // as they then stand, and says what to write (or that there's nothing to).
 
+import { errorMessage, SerialQueue } from "@mileniumhq/paperapi";
 import type { Settings } from "../contract";
-import { errorText } from "./failure";
 
 export interface SettingsQueueOptions {
     /** the settings as they stand now; null until they're loaded */
@@ -19,7 +19,7 @@ export interface SettingsQueueOptions {
 export type SettingsChange = (current: Settings) => Settings | null;
 
 export function createSettingsQueue(options: SettingsQueueOptions) {
-    let last: Promise<void> = Promise.resolve();
+    const queue = new SerialQueue();
     return (change: SettingsChange): Promise<void> => {
         const step = async () => {
             const current = options.current();
@@ -30,12 +30,10 @@ export function createSettingsQueue(options: SettingsQueueOptions) {
             try {
                 await options.refresh();
             } catch (e) {
-                throw new Error(`The settings were saved, but couldn't be read back: ${errorText(e)}`, { cause: e });
+                throw new Error(`The settings were saved, but couldn't be read back: ${errorMessage(e)}`, { cause: e });
             }
         };
         // a failed save is the caller's to show; the next one in line still runs
-        const run = last.then(step, step);
-        last = run;
-        return run;
+        return queue.run(step);
     };
 }

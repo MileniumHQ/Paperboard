@@ -17,13 +17,15 @@ import {
     PaperSettingItem,
     PaperSettingList,
     PaperText,
+    type ActionFailure,
+    createAction,
+    createSavedValue,
 } from "@mileniumhq/paperui";
+import { errorMessage } from "@mileniumhq/paperapi";
 import BrainLogo from "../lib/BrainLogo";
 import { COMPACTIONS, DEFAULT_MODEL, HARNESSES, LIMITS, type Compaction, type Harness, type Settings as Saved } from "../contract";
 import type { Agent } from "../lib/agent";
 import { SEARCH_MODELS_FROM, createModels, harnessName, loadedModels } from "../lib/brains";
-import { createAction, createAsked } from "../lib/action";
-import { errorText, failure, type Failure } from "../lib/failure";
 import { BrainButtons, BrainStatus, SignInModal, brainLine, createBrainActions } from "./Brain";
 import Providers from "./Providers";
 
@@ -48,7 +50,7 @@ function AgentSettings(props: { agent: Agent }) {
     // the name is typed, so it saves when the field is left; the rest save when picked
     const [name, setName] = createSignal(current().name);
     const [model, setModel] = createSignal(current().model ?? "");
-    const [error, setError] = createSignal<Failure | null>(null);
+    const [error, setError] = createSignal<ActionFailure | null>(null);
     const models = createModels(props.agent, () => current().harness);
     // as the harness lists them: its current models, then its older ones
     const listed = () => loadedModels(models) ?? [];
@@ -60,23 +62,22 @@ function AgentSettings(props: { agent: Agent }) {
     // a change made elsewhere (in another window) shows here
     createEffect(on(() => current().name, (n) => setName(n)));
     createEffect(on(() => current().model, (m) => setModel(m ?? "")));
-    // a pick shows at once, while it saves
-    const harness = createAsked(() => current().harness);
-    const picked = createAsked(() => current().model ?? DEFAULT_MODEL);
-
     // saved through the agent's one queue, each built from the settings as they stand when its turn comes
-    const save = (title: string, patch: Partial<Saved>) => {
+    const save = (patch: Partial<Saved>) =>
+        props.agent.saveSettings((cur) => {
+            const next = { ...cur, ...patch };
+            return next.name === cur.name && next.harness === cur.harness && next.model === cur.model ? null : next;
+        });
+    // a pick shows at once, while it saves
+    const harness = createSavedValue(() => current().harness, (h: Harness) => save({ harness: h, model: null }));
+    const picked = createSavedValue(() => current().model ?? DEFAULT_MODEL, (v: string) => save({ model: v === DEFAULT_MODEL ? null : v }));
+    const report = (title: string, saving: Promise<void>) => {
         setError(null);
-        return props.agent
-            .saveSettings((cur) => {
-                const next = { ...cur, ...patch };
-                return next.name === cur.name && next.harness === cur.harness && next.model === cur.model ? null : next;
-            })
-            .catch((e) => {
-                setError(failure(title, e));
-                // a name stays as typed, to be saved again; a choice goes back to what's saved
-                setModel(current().model ?? "");
-            });
+        saving.catch((e) => {
+            setError({ title, message: errorMessage(e) });
+            // a name stays as typed, to be saved again; a choice goes back to what's saved
+            setModel(current().model ?? "");
+        });
     };
     const saveName = () => {
         const n = name().trim();
@@ -85,7 +86,7 @@ function AgentSettings(props: { agent: Agent }) {
             setName(current().name);
             return;
         }
-        save("Name not saved", { name: n });
+        report("Name not saved", save({ name: n }));
     };
     // only a brain that is installed and signed in can think; the saved one stays choosable
     const isReady = (h: Harness) => props.agent.state.brains[h].phase === "ready" || h === current().harness;
@@ -111,7 +112,7 @@ function AgentSettings(props: { agent: Agent }) {
                         aria-label="Brain"
                         value={harness.value()}
                         // a model belongs to its harness: the new brain starts on its own default
-                        onValueChange={(v) => v !== current().harness && harness.ask(v as Harness, save("Brain not changed", { harness: v as Harness, model: null }))}
+                        onValueChange={(v) => v !== current().harness && report("Brain not changed", harness.set(v as Harness))}
                     >
                         <For each={HARNESSES}>
                             {(h) => (
@@ -134,7 +135,7 @@ function AgentSettings(props: { agent: Agent }) {
                                 value={model()}
                                 maxLength={LIMITS.model}
                                 onInput={(e) => setModel(e.currentTarget.value)}
-                                onChange={() => save("Model not changed", { model: model().trim() || null })}
+                                onChange={() => report("Model not changed", save({ model: model().trim() || null }))}
                                 onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
                             />
                         }
@@ -145,7 +146,7 @@ function AgentSettings(props: { agent: Agent }) {
                             value={picked.value()}
                             disabled={!loadedModels(models)}
                             searchable={listed().length >= SEARCH_MODELS_FROM}
-                            onValueChange={(v) => picked.ask(String(v), save("Model not changed", { model: v === DEFAULT_MODEL ? null : String(v) }))}
+                            onValueChange={(v) => report("Model not changed", picked.set(String(v)))}
                         >
                             <PaperSelectMenuItem value={DEFAULT_MODEL} icon="tune" description={`Whatever ${harnessName(current().harness)} is set to use`}>
                                 Default
@@ -167,7 +168,7 @@ function AgentSettings(props: { agent: Agent }) {
             </PaperSettingList>
             <Show when={models.error}>
                 <PaperQuote variant="danger" icon="error" title="Models not listed" role="alert">
-                    {errorText(models.error).replace(/[.\s]+$/, "")}. Type a model's id instead.
+                    {errorMessage(models.error).replace(/[.\s]+$/, "")}. Type a model's id instead.
                 </PaperQuote>
             </Show>
             <Show when={error()}>
@@ -228,7 +229,7 @@ function ComputerSettings(props: { agent: Agent }) {
     const { busy, error, run: act } = createAction();
     const [confirming, setConfirming] = createSignal(false);
     // a refused erase is told in the confirmation, which stays open over the page
-    const [eraseError, setEraseError] = createSignal<Failure | null>(null);
+    const [eraseError, setEraseError] = createSignal<ActionFailure | null>(null);
     const erase = () =>
         act(
             "Computer not erased",
@@ -349,10 +350,13 @@ function ConversationSettings(props: { agent: Agent }) {
     const [open, setOpen] = createSignal(false);
     const [error, setError] = createSignal<string | null>(null);
     const current = () => props.agent.state.settings!;
-    const compaction = createAsked(() => current().compaction);
+    const compaction = createSavedValue(
+        () => current().compaction,
+        (next: Compaction) => props.agent.saveSettings((cur) => (cur.compaction === next ? null : { ...cur, compaction: next })),
+    );
     const setCompaction = (next: Compaction) => {
         setError(null);
-        compaction.ask(next, props.agent.saveSettings((cur) => (cur.compaction === next ? null : { ...cur, compaction: next })).catch((e) => setError(errorText(e))));
+        compaction.set(next).catch((e) => setError(errorMessage(e)));
     };
     return (
         <PaperFlex gap="full" role="region" aria-label="Conversation">
@@ -401,7 +405,7 @@ function AutomationSettings(props: { agent: Agent }) {
                 return next ? { ...rest, automationInstructions: next } : rest;
             })
             // what was typed stays in the field, to be saved again
-            .catch((e) => setError(errorText(e)));
+            .catch((e) => setError(errorMessage(e)));
     };
     return (
         <PaperFlex gap="full" role="region" aria-label="Flows">

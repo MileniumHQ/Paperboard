@@ -4,10 +4,10 @@
 
 import { createEffect, createSignal, on } from "solid-js";
 import { createStore, reconcile } from "solid-js/store";
+import { errorMessage } from "@mileniumhq/paperapi";
+import { createLatest } from "@mileniumhq/paperui";
 import type { PageInfo, PageKind } from "../contract";
 import type { Agent } from "../lib/agent";
-import { createLatest } from "../lib/action";
-import { errorText } from "../lib/failure";
 
 export interface OpenPage {
     name: string;
@@ -46,7 +46,7 @@ export function createLauncher(agent: Agent) {
                 if (s && !pages.some((a) => a.name === s.name)) setShown(null);
             },
             (e) => {
-                if (current()) setListError(errorText(e));
+                if (current()) setListError(errorMessage(e));
             },
         );
     };

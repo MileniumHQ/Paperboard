@@ -1,8 +1,7 @@
 import { For, Match, Show, Switch, createEffect, createSignal, on } from "solid-js";
-import { PaperButton, PaperCard, PaperFlex, PaperIcon, PaperInput, PaperLoader, PaperText } from "@mileniumhq/paperui";
+import { PaperButton, PaperCard, PaperFlex, PaperIcon, PaperInput, PaperLoader, PaperText, createAction } from "@mileniumhq/paperui";
 import { LIMITS, type PromptEntry } from "../contract";
 import type { Agent } from "../lib/agent";
-import { createAction } from "../lib/action";
 import RequestEnd from "./RequestEnd";
 import type { SignInDraft } from "./SignIn";
 

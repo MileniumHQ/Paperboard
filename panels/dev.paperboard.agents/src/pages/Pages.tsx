@@ -3,10 +3,8 @@
 // so a page the agent makes or deletes shows up live.
 
 import { For, Match, Show, Switch, createSignal } from "solid-js";
-import { PaperButton, PaperEmptyState, PaperFlex, PaperIcon, PaperList, PaperListItem, PaperLoader, PaperModal, PaperQuote, PaperText } from "@mileniumhq/paperui";
+import { PaperButton, PaperEmptyState, PaperFlex, PaperIcon, PaperList, PaperListItem, PaperLoader, PaperModal, PaperQuote, PaperText, type ActionFailure, createAction } from "@mileniumhq/paperui";
 import type { PageInfo } from "../contract";
-import { createAction } from "../lib/action";
-import type { Failure } from "../lib/failure";
 import type { Launcher } from "./launcher";
 import Picture from "./Picture";
 
@@ -15,7 +13,7 @@ const own = (e: PointerEvent) => e.stopPropagation();
 
 export default function Pages(props: { pages: Launcher; name: string; onOpened: () => void }) {
     const { busy, error: openError, run } = createAction();
-    const [deleteError, setDeleteError] = createSignal<Failure | null>(null);
+    const [deleteError, setDeleteError] = createSignal<ActionFailure | null>(null);
     const [deleting, setDeleting] = createSignal<PageInfo | null>(null);
     // one being opened is marked until it's open (then it's the one shown) or wasn't
     const [chosen, setChosen] = createSignal<string | null>(null);

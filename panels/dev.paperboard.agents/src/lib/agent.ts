@@ -2,11 +2,10 @@
 // entries, and the actions. Nothing here decides anything; the service owns
 // the agent, its computer and the conversation, so every open window agrees.
 
-import { actionsApi, createPanelBridge } from "@mileniumhq/paperapi";
+import { actionsApi, createPanelBridge, errorMessage } from "@mileniumhq/paperapi";
+import { createLatest } from "@mileniumhq/paperui";
 import { createSignal } from "solid-js";
 import { createStore, reconcile } from "solid-js/store";
-import { createLatest } from "./action";
-import { errorText } from "./failure";
 import { createFiles } from "./files";
 import { createSettingsQueue } from "./settingsQueue";
 import {
@@ -87,7 +86,7 @@ export function createAgent() {
             setHydration("ready");
         } catch (e) {
             if (!current()) return;
-            setError(errorText(e));
+            setError(errorMessage(e));
             setHydration("failed");
         }
     };

@@ -5,10 +5,10 @@
 // takes control of the computer first (onUse), and the input follows.
 
 import { Show, createEffect, createSignal, on, onCleanup } from "solid-js";
-import { PaperButton, PaperEmptyState, PaperFlex, PaperIcon, PaperInput, PaperLoader, PaperQuote, PaperText, createPaperMobile } from "@mileniumhq/paperui";
+import { PaperButton, PaperEmptyState, PaperFlex, PaperIcon, PaperInput, PaperLoader, PaperQuote, PaperText, createPaperMobile, type ActionFailure } from "@mileniumhq/paperui";
+import { errorMessage } from "@mileniumhq/paperapi";
 import type { ComputerWindow, InputEvent, PageDialog } from "../contract";
 import type { Agent } from "../lib/agent";
-import { errorText, failure, type Failure } from "../lib/failure";
 import { enqueue, keyEvent } from "./input";
 import styles from "./WindowView.module.css";
 
@@ -31,7 +31,7 @@ export function WindowView(props: {
     const [src, setSrc] = createSignal<string | null>(null);
     const [size, setSize] = createSignal({ width: props.window.width, height: props.window.height });
     const [error, setError] = createSignal<string | null>(null);
-    const [inputError, setInputError] = createSignal<Failure | null>(null);
+    const [inputError, setInputError] = createSignal<ActionFailure | null>(null);
     const [dialog, setDialog] = createSignal<PageDialog | null>(null);
     let img: HTMLImageElement | undefined;
     let hash: string | null = null;
@@ -75,7 +75,7 @@ export function WindowView(props: {
                 await nap(props.holding ? DRIVING_MS : WATCHING_MS);
             }
         } catch (e) {
-            if (!disposed) setError(errorText(e));
+            if (!disposed) setError(errorMessage(e));
         } finally {
             polling = false;
         }
@@ -109,7 +109,7 @@ export function WindowView(props: {
             }
         } catch (e) {
             pending = [];
-            setInputError(failure("Input not sent", e));
+            setInputError({ title: "Input not sent", message: errorMessage(e) });
         } finally {
             sending = false;
         }
@@ -153,7 +153,7 @@ export function WindowView(props: {
             setInputError(null);
             wake?.();
         } catch (e) {
-            setInputError(failure("Page not opened", e));
+            setInputError({ title: "Page not opened", message: errorMessage(e) });
         }
     };
     const [answer, setAnswer] = createSignal("");

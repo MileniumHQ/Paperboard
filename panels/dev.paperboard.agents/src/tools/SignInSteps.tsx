@@ -5,8 +5,7 @@
 // pasted. Shown on the Tools page and on the sign-in card in the chat.
 
 import { Show, createSignal } from "solid-js";
-import { PaperButton, PaperCopyButton, PaperFlex, PaperIcon, PaperInput, PaperLoader, PaperQuote, PaperText } from "@mileniumhq/paperui";
-import { createAction } from "../lib/action";
+import { PaperButton, PaperCopyButton, PaperFlex, PaperIcon, PaperInput, PaperLoader, PaperQuote, PaperText, createAction } from "@mileniumhq/paperui";
 import { createLoopbackCatch } from "../lib/loopback";
 import { submitOnPaste } from "../lib/paste";
 import type { Tools } from "./api";

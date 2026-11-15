@@ -4,13 +4,11 @@
 
 import { Match, Show, Switch, createEffect, createSignal, on, type JSX } from "solid-js";
 import { createStore } from "solid-js/store";
-import { PaperButton, PaperCopyButton, PaperFlex, PaperIcon, PaperInput, PaperLoader, PaperModal, PaperProgress, PaperQuote, PaperText } from "@mileniumhq/paperui";
+import { PaperButton, PaperCopyButton, PaperFlex, PaperIcon, PaperInput, PaperLoader, PaperModal, PaperProgress, PaperQuote, PaperText, type ActionFailure, createAction } from "@mileniumhq/paperui";
 import { SIGN_IN_REQUIRED, type BrainState, type Harness } from "../contract";
 import type { Agent } from "../lib/agent";
 import { harnessName } from "../lib/brains";
 import { submitOnPaste } from "../lib/paste";
-import { createAction } from "../lib/action";
-import type { Failure } from "../lib/failure";
 import { createLoopbackCatch } from "../lib/loopback";
 
 /** Who a brain is signed in as. An email is who; anything else (ChatGPT, a provider's name) is how. */
@@ -48,7 +46,7 @@ export function brainLine(harness: Harness, b: BrainState): string {
 /** The actions a person can ask of a brain; a refused one is kept to show under that brain, and only there. */
 export function createBrainActions(agent: Agent) {
     const { run } = createAction();
-    const [errors, setErrors] = createStore<Partial<Record<Harness, Failure | null>>>({});
+    const [errors, setErrors] = createStore<Partial<Record<Harness, ActionFailure | null>>>({});
     // how many of a brain's actions are out: its buttons take no second press until the service answers the first
     const [running, setRunning] = createStore<Partial<Record<Harness, number>>>({});
     const act = async (h: Harness, title: string, fn: () => Promise<unknown>) => {

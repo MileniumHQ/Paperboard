@@ -1,12 +1,11 @@
 import { Show } from "solid-js";
-import { PaperQuote, PaperText } from "@mileniumhq/paperui";
-import type { Failure } from "../lib/failure";
+import { PaperQuote, PaperText, type ActionFailure } from "@mileniumhq/paperui";
 
 /**
  * How every request card in the chat ends, whatever it asked: refused, lapsed, failed at the service
  * (told under the card's own `failed` title), and an answer that never reached the service.
  */
-export default function RequestEnd(props: { entry: { status: string; error?: string }; name: string; failed?: string; error: Failure | null }) {
+export default function RequestEnd(props: { entry: { status: string; error?: string }; name: string; failed?: string; error: ActionFailure | null }) {
     return (
         <>
             <Show when={props.entry.status === "declined"}>

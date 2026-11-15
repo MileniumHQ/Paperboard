@@ -3,10 +3,9 @@
 // document's bar also prints it and saves it as a PDF.
 
 import { Show, createSignal } from "solid-js";
-import { fileApi, grantedComputerId } from "@mileniumhq/paperapi";
-import { PaperButton, PaperEmptyState, PaperFlex, PaperQuote, PaperText } from "@mileniumhq/paperui";
+import { fileApi, grantedComputerId, errorMessage } from "@mileniumhq/paperapi";
+import { PaperButton, PaperEmptyState, PaperFlex, PaperQuote, PaperText, type ActionFailure } from "@mileniumhq/paperui";
 import { PANEL_ID } from "../contract";
-import { failure, type Failure } from "../lib/failure";
 import type { Launcher, OpenPage } from "./launcher";
 import styles from "./PageView.module.css";
 
@@ -18,7 +17,7 @@ export default function PageView(props: { page: OpenPage; pages: Launcher; exten
     const here = grantedComputerId() === "local";
     const isDocument = () => props.page.kind === "document";
     const [saving, setSaving] = createSignal(false);
-    const [error, setError] = createSignal<Failure | null>(null);
+    const [error, setError] = createSignal<ActionFailure | null>(null);
 
     // a frame from another origin can't be printed from here: the page's own script prints it when asked
     const print = () => {
@@ -34,9 +33,9 @@ export default function PageView(props: { page: OpenPage; pages: Launcher; exten
             file = pdf.file;
             await fileApi.exportFile(pdf.file, PANEL_ID, { suggestedName: pdf.name, filters: PDF_FILTERS });
         } catch (e) {
-            setError(failure("PDF not saved", e));
+            setError({ title: "PDF not saved", message: errorMessage(e) });
         } finally {
-            if (file) await props.pages.discardPdf(file).catch((e) => setError(failure("PDF saved, but its copy wasn't removed", e)));
+            if (file) await props.pages.discardPdf(file).catch((e) => setError({ title: "PDF saved, but its copy wasn't removed", message: errorMessage(e) }));
             setSaving(false);
         }
     };

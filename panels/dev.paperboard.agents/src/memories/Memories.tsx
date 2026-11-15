@@ -18,12 +18,13 @@ import {
     PaperQuote,
     PaperSectionHeader,
     PaperText,
+    createAction,
+    createLatest,
 } from "@mileniumhq/paperui";
+import { errorMessage } from "@mileniumhq/paperapi";
 import type { MemoryList } from "../contract";
 import type { Agent } from "../lib/agent";
 import { holdPage } from "../lib/pageHold";
-import { createAction, createLatest } from "../lib/action";
-import { errorText } from "../lib/failure";
 
 export default function Memories(props: { agent: Agent }) {
     const name = () => props.agent.name();
@@ -48,7 +49,7 @@ export default function Memories(props: { agent: Agent }) {
                 setError(null);
             }
         } catch (e) {
-            if (current()) setError(errorText(e));
+            if (current()) setError(errorMessage(e));
         }
     };
     // the page before this one stays up until the first read is in
@@ -137,7 +138,7 @@ function Note(props: { agent: Agent; noteKey: string; onDone: () => void }) {
         try {
             setNote(await props.agent.readNote(props.noteKey));
         } catch (e) {
-            setReadError(errorText(e));
+            setReadError(errorMessage(e));
         }
     };
     void load();

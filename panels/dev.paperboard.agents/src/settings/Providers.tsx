@@ -5,11 +5,10 @@
 
 import { For, Match, Show, Switch, createEffect, createSignal, on } from "solid-js";
 import { createStore, reconcile } from "solid-js/store";
-import { createPolling, PaperButton, PaperCopyButton, PaperFlex, PaperInput, PaperLink, PaperLoader, PaperModal, PaperQuote, PaperSectionHeader, PaperSelectMenu, PaperSelectMenuItem, PaperText } from "@mileniumhq/paperui";
+import { createPolling, PaperButton, PaperCopyButton, PaperFlex, PaperInput, PaperLink, PaperLoader, PaperModal, PaperQuote, PaperSectionHeader, PaperSelectMenu, PaperSelectMenuItem, PaperText, createAction, createLatest } from "@mileniumhq/paperui";
+import { errorMessage } from "@mileniumhq/paperapi";
 import type { ProviderAttempt, ProviderField, ProviderInfo, ProviderMethod } from "../contract";
 import type { Agent } from "../lib/agent";
-import { createAction, createLatest } from "../lib/action";
-import { errorText, failure } from "../lib/failure";
 
 const POLL_MS = 2_000;
 
@@ -30,7 +29,7 @@ export default function Providers(props: { agent: Agent; open: boolean; onClose:
             const next = await props.agent.providers();
             if (current()) setList("providers", reconcile(next, { key: "id" }));
         } catch (e) {
-            if (current()) setListError(errorText(e));
+            if (current()) setListError(errorMessage(e));
         }
     };
     // read afresh each time it opens, with nothing refused yet
@@ -104,7 +103,7 @@ export default function Providers(props: { agent: Agent; open: boolean; onClose:
         } catch (e) {
             if (!still()) return;
             setAttempt(null);
-            setError(failure(`${current()?.name ?? "Provider"} not connected`, e));
+            setError({ title: `${current()?.name ?? "Provider"} not connected`, message: errorMessage(e) });
         }
     };
     // an automatic sign-in finishes on OpenCode's side: ask until it has, one question at a time

@@ -2,9 +2,8 @@
 // and Open, which puts it beside the chat. It is never a link.
 
 import { Show } from "solid-js";
-import { PaperButton, PaperCard, PaperFlex, PaperIcon, PaperQuote, PaperText } from "@mileniumhq/paperui";
+import { PaperButton, PaperCard, PaperFlex, PaperIcon, PaperQuote, PaperText, createAction } from "@mileniumhq/paperui";
 import type { PageEntry } from "../contract";
-import { createAction } from "../lib/action";
 import type { Launcher } from "./launcher";
 import Picture from "./Picture";
 import styles from "./PageCard.module.css";

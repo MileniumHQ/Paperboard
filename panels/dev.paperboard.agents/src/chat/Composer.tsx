@@ -4,10 +4,10 @@
 // (the model, the computer) lives in the menu and settings.
 
 import { For, Show, createEffect, createSignal, on, onCleanup } from "solid-js";
-import { PaperButton, PaperEffect, PaperIcon, PaperQuote, haptic } from "@mileniumhq/paperui";
+import { PaperButton, PaperEffect, PaperIcon, PaperQuote, haptic, type ActionFailure } from "@mileniumhq/paperui";
+import { errorMessage } from "@mileniumhq/paperapi";
 import { LIMITS, type ChatEntry } from "../contract";
 import type { Agent } from "../lib/agent";
-import { failure, type Failure } from "../lib/failure";
 import type { Tray } from "./tray";
 import styles from "./Composer.module.css";
 
@@ -25,7 +25,7 @@ export default function Composer(props: {
 }) {
     const name = () => props.agent.name();
 
-    const [error, setError] = createSignal<Failure | null>(null);
+    const [error, setError] = createSignal<ActionFailure | null>(null);
     const [dragging, setDragging] = createSignal(false);
     let field!: HTMLTextAreaElement;
     let sizer!: HTMLTextAreaElement;
@@ -58,7 +58,7 @@ export default function Composer(props: {
             for (const c of sent) tray().remove(c.key);
             if (props.replyTo === reply) props.onCancelReply();
         } catch (e) {
-            setError(failure("Message not sent", e));
+            setError({ title: "Message not sent", message: errorMessage(e) });
         } finally {
             sending = false;
         }

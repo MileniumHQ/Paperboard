@@ -1,8 +1,7 @@
 import { For, Match, Switch } from "solid-js";
-import { PaperButton, PaperCard, PaperCollapsible, PaperFlex, PaperIcon, PaperText } from "@mileniumhq/paperui";
+import { PaperButton, PaperCard, PaperCollapsible, PaperFlex, PaperIcon, PaperText, createAction } from "@mileniumhq/paperui";
 import type { AccessEntry, AccessItem } from "../contract";
 import type { Agent } from "../lib/agent";
-import { createAction } from "../lib/action";
 import RequestEnd from "./RequestEnd";
 
 /** what a folder or command lets the agent do, in the user's words */

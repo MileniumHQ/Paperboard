@@ -4,9 +4,9 @@
 
 import { onCleanup } from "solid-js";
 import { createStore } from "solid-js/store";
+import { errorMessage } from "@mileniumhq/paperapi";
 import { LIMITS, type Attachment } from "../contract";
 import type { Agent } from "../lib/agent";
-import { errorText } from "../lib/failure";
 
 export interface Chip {
     key: string;
@@ -53,7 +53,7 @@ export function createTray(agent: Agent) {
                     .upload(f, (progress) => update(key, { progress }), abort.signal)
                     .then(
                         (file) => update(key, { file, progress: 1 }),
-                        (e) => !abort.signal.aborted && update(key, { error: errorText(e) }),
+                        (e) => !abort.signal.aborted && update(key, { error: errorMessage(e) }),
                     )
                     .finally(() => aborts.delete(key));
             }

@@ -1,8 +1,7 @@
 import { For, Match, Switch } from "solid-js";
-import { PaperButton, PaperCard, PaperFlex, PaperIcon, PaperText } from "@mileniumhq/paperui";
+import { PaperButton, PaperCard, PaperFlex, PaperIcon, PaperText, createAction } from "@mileniumhq/paperui";
 import type { ToolServerEntry } from "../contract";
 import type { Agent } from "../lib/agent";
-import { createAction } from "../lib/action";
 import RequestEnd from "./RequestEnd";
 
 /** The agent asking to run a program on the user's computer as one of its tool servers. Nothing runs until it's allowed. */

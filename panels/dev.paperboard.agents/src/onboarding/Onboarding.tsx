@@ -14,6 +14,7 @@ import {
     PaperWizardStep,
     useWizard,
 } from "@mileniumhq/paperui";
+import { errorMessage } from "@mileniumhq/paperapi";
 import { Face } from "../face/Face";
 import { skinFor } from "../face/skins";
 import { createFace, type FaceController } from "../face/controller";
@@ -24,7 +25,6 @@ import BrainLogo from "../lib/BrainLogo";
 import { SetupProgress } from "../computer/Computer";
 import { DEFAULT_MODEL, HARNESSES, LIMITS, characterOf, type Harness } from "../contract";
 import type { Agent } from "../lib/agent";
-import { errorText } from "../lib/failure";
 import { BrainButtons, BrainStatus, brainLine, createBrainActions } from "../settings/Brain";
 import Providers from "../settings/Providers";
 import { glideWhenRecentered } from "./glide";
@@ -91,7 +91,7 @@ function Flow(props: { agent: Agent; onSaving: () => void; onDone: () => void })
             if (computer() === "setup") await props.agent.installComputer();
             return true;
         } catch (e) {
-            setSaveError(errorText(e));
+            setSaveError(errorMessage(e));
             return false;
         } finally {
             setSaving(false);
@@ -398,7 +398,7 @@ function Scenes(props: {
                     </PaperSelector>
                     <Show when={models.error}>
                         <PaperQuote variant="danger" icon="error" title="Models not listed" role="alert">
-                            {errorText(models.error).replace(/[.\s]+$/, "")}. You can pick one later in settings.
+                            {errorMessage(models.error).replace(/[.\s]+$/, "")}. You can pick one later in settings.
                         </PaperQuote>
                     </Show>
                 </Reveal>

@@ -1,6 +1,7 @@
 import { For, Show, createComputed, createEffect, createMemo, createSignal, on, onCleanup, onMount, type JSX } from "solid-js";
-import { PAPER_PANEL_COMPACT_WIDTH, PaperButton, PaperContextMenu, PaperContextMenuItem, PaperEmptyState, PaperFlex, PaperIcon, copyText, haptic, PaperMarkdown, useContextMenuState, PaperPresence, PaperProgress, PaperQuote, PaperText, type MarkdownImage, type MarkdownLink } from "@mileniumhq/paperui";
+import { PAPER_PANEL_COMPACT_WIDTH, PaperButton, PaperContextMenu, PaperContextMenuItem, PaperEmptyState, PaperFlex, PaperIcon, copyText, haptic, PaperMarkdown, useContextMenuState, PaperPresence, PaperProgress, PaperQuote, PaperText, type MarkdownImage, type MarkdownLink, type ActionFailure } from "@mileniumhq/paperui";
 import { createStore, reconcile } from "solid-js/store";
+import { errorMessage } from "@mileniumhq/paperapi";
 import { Face } from "../face/Face";
 import { skinFor } from "../face/skins";
 import type { FaceController } from "../face/controller";
@@ -18,7 +19,6 @@ import AccessRequest from "./AccessRequest";
 import Prompt from "./Prompt";
 import ToolServerRequest from "./ToolServerRequest";
 import ToolSignIn from "./ToolSignIn";
-import { failure, type Failure } from "../lib/failure";
 import styles from "./Chat.module.css";
 
 /** A message someone can reply to, and be quoted. */
@@ -80,7 +80,7 @@ export default function Chat(props: { agent: Agent; face: FaceController; pages:
     const [replyTo, setReplyTo] = createSignal<Said | null>(null);
     const [draft, setDraft] = createSignal("");
     const tray = createTray(props.agent);
-    const [notice, setNotice] = createSignal<Failure | null>(null);
+    const [notice, setNotice] = createSignal<ActionFailure | null>(null);
     const [historyOpen, setHistoryOpen] = createSignal(false);
     const [startingNew, setStartingNew] = createSignal(false);
     const canStartNew = () => !startingNew() && props.agent.entries.length > 0;
@@ -89,7 +89,7 @@ export default function Chat(props: { agent: Agent; face: FaceController; pages:
         setStartingNew(true);
         props.agent
             .newConversation()
-            .catch((e) => setNotice(failure("Conversation not started", e)))
+            .catch((e) => setNotice({ title: "Conversation not started", message: errorMessage(e) }))
             .finally(() => setStartingNew(false));
     };
     // the header's buttons fold into one menu when the chat is narrow: a phone, or a page open beside it
@@ -114,7 +114,7 @@ export default function Chat(props: { agent: Agent; face: FaceController; pages:
         setNotice(null);
         copyText(text).then(
             (ok) => !ok && setNotice({ title: "Message not copied", message: "The clipboard refused it." }),
-            (e) => setNotice(failure("Message not copied", e)),
+            (e) => setNotice({ title: "Message not copied", message: errorMessage(e) }),
         );
     };
     const byId = (id: string) => props.agent.entries.find((e): e is Said => e.id === id && (e.kind === "user" || e.kind === "agent"));

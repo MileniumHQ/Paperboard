@@ -18,13 +18,14 @@ import {
     PaperPreview,
     PaperVideo,
     previewKind,
+    sameData,
     type MarkdownImage,
     type MarkdownLink,
 } from "@mileniumhq/paperui";
+import { errorMessage } from "@mileniumhq/paperapi";
 import { ATTACHMENT_ID, ATTACHMENT_SCHEME, type Attachment } from "../contract";
 import type { Files } from "../lib/files";
 import { sizeText } from "../lib/files";
-import { errorText } from "../lib/failure";
 import { youTubeId } from "../lib/youtube";
 import styles from "./Media.module.css";
 
@@ -101,14 +102,14 @@ export function MediaProvider(props: ParentProps<{ files: Files }>) {
                 name={file()?.file.name ?? shown()?.name ?? ""}
                 type={file()?.file.type}
                 src={file()?.url}
-                error={read.error ? `${shown()?.name ?? "The file"} couldn't be read: ${errorText(read.error)}` : (saveError() ?? undefined)}
+                error={read.error ? `${shown()?.name ?? "The file"} couldn't be read: ${errorMessage(read.error)}` : (saveError() ?? undefined)}
                 actions={
                     <PaperButton
                         size="small"
                         disabled={!file()}
                         onClick={() => {
                             const f = file();
-                            if (f) media.save(f.file.id).catch((e) => setSaveError(`${f.file.name} couldn't be saved: ${errorText(e)}`));
+                            if (f) media.save(f.file.id).catch((e) => setSaveError(`${f.file.name} couldn't be saved: ${errorMessage(e)}`));
                         }}
                     >
                         <PaperIcon zeroHeight>download</PaperIcon>
@@ -128,7 +129,7 @@ function FileCard(props: { file: Attachment }) {
     const press = () => {
         setFailed(null);
         if (canPreview()) media.open(props.file.id, props.file.name);
-        else media.save(props.file.id).catch((e) => setFailed(errorText(e)));
+        else media.save(props.file.id).catch((e) => setFailed(errorMessage(e)));
     };
     return (
         <button
@@ -157,7 +158,7 @@ function PlayedFile(props: { file: Attachment; caption?: string }) {
     return (
         <Switch>
             <Match when={read.error}>
-                <Missing caption={name()} why={errorText(read.error)} />
+                <Missing caption={name()} why={errorMessage(read.error)} />
             </Match>
             <Match when={read.loading || !read()}>
                 <span class={styles.loading} classList={{ [styles.loadingAudio!]: props.file.kind === "audio" }} aria-label={`Loading ${name()}`} />
@@ -196,7 +197,7 @@ function WebImage(props: { url: string; alt: string; title?: string }) {
     return (
         <Switch>
             <Match when={read.error}>
-                <Missing caption={name()} why={errorText(read.error)} />
+                <Missing caption={name()} why={errorMessage(read.error)} />
             </Match>
             <Match when={read.loading || !read()}>
                 <span class={styles.loading} aria-label={`Loading ${name()}`} />
@@ -218,7 +219,7 @@ function FileView(props: { id: string; caption?: string }) {
     return (
         <Switch>
             <Match when={info.error}>
-                <Missing caption={props.caption || "A file"} why={errorText(info.error)} />
+                <Missing caption={props.caption || "A file"} why={errorMessage(info.error)} />
             </Match>
             <Match when={info.loading || !info()}>
                 <span class={styles.loading} aria-label={`Loading ${props.caption || "a file"}`} />
@@ -244,13 +245,13 @@ function FileChip(props: { id: string; label: string }) {
     // a resource read while it's failed throws: the chip shows the failure instead
     const file = () => (info.state === "ready" ? info() : undefined);
     const label = () => props.label.trim() || file()?.name || "A file";
-    const problem = () => failed() ?? (info.error ? `${label()} couldn't be found: ${errorText(info.error)}` : null);
+    const problem = () => failed() ?? (info.error ? `${label()} couldn't be found: ${errorMessage(info.error)}` : null);
     const press = () => {
         const file = info.state === "ready" ? info() : undefined;
         if (!file) return;
         setFailed(null);
         if (previewable(file)) media.open(file.id, file.name);
-        else media.save(file.id).catch((e) => setFailed(`${file.name} couldn't be saved: ${errorText(e)}`));
+        else media.save(file.id).catch((e) => setFailed(`${file.name} couldn't be saved: ${errorMessage(e)}`));
     };
     return (
         <PaperInlineChip
@@ -268,7 +269,7 @@ function FileChip(props: { id: string; label: string }) {
 /** The files a message carries, under its text. */
 export function AttachmentList(props: { list: Attachment[]; class?: string }) {
     // by id: a message that turns from waiting into a real entry hands over new objects for the same files, which stay as they are
-    const ids = createMemo(() => props.list.map((a) => a.id), [], { equals: (a, b) => a.length === b.length && a.every((id, i) => id === b[i]) });
+    const ids = createMemo(() => props.list.map((a) => a.id), [], { equals: sameData });
     return (
         <div class={`${styles.list} ${props.class ?? ""}`}>
             <For each={ids()}>{(id) => <FileView id={id} caption={props.list.find((a) => a.id === id)?.name} />}</For>

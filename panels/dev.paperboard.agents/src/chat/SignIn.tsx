@@ -1,9 +1,8 @@
 import { For, Match, Show, Switch, createSignal, onMount } from "solid-js";
-import { PaperButton, PaperCard, PaperFlex, PaperIcon, PaperInput, PaperLoader, PaperQuote, PaperText } from "@mileniumhq/paperui";
+import { PaperButton, PaperCard, PaperFlex, PaperIcon, PaperInput, PaperLoader, PaperQuote, PaperText, createAction } from "@mileniumhq/paperui";
+import { errorMessage } from "@mileniumhq/paperapi";
 import { LIMITS, type SignInEntry } from "../contract";
 import type { Agent } from "../lib/agent";
-import { errorText } from "../lib/failure";
-import { createAction } from "../lib/action";
 import RequestEnd from "./RequestEnd";
 import styles from "./SignIn.module.css";
 
@@ -28,7 +27,7 @@ export default function SignIn(props: { agent: Agent; entry: SignInEntry; name: 
         setShotError(null);
         props.agent.signInShot(e().id).then(
             (r) => setImage((props.draft.image = r.image)),
-            (err) => setShotError(errorText(err)),
+            (err) => setShotError(errorMessage(err)),
         );
     };
     onMount(() => {

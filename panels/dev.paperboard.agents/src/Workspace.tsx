@@ -4,7 +4,7 @@
 // the right, and the chat steps aside to a column, or all the way off to the left.
 
 import { For, Show, createEffect, createSignal, on, onCleanup, untrack } from "solid-js";
-import { PAPER_PANEL_COMPACT_WIDTH, PaperFlex, PaperMenu, PaperMenuItem, PaperModal } from "@mileniumhq/paperui";
+import { createPaperCompact, PaperFlex, PaperMenu, PaperMenuItem, PaperModal } from "@mileniumhq/paperui";
 import Access from "./access/Access";
 import Pages from "./pages/Pages";
 import PageView from "./pages/PageView";
@@ -48,11 +48,7 @@ export default function Workspace(props: { agent: Agent }) {
     const title = () => SECTIONS.find((p) => p.id === shown())!.title;
 
     // phones: the menu becomes a strip above the page, at the width panels take their phone layout
-    const narrow = matchMedia(`(max-width: ${PAPER_PANEL_COMPACT_WIDTH - 1}px)`);
-    const [phone, setPhone] = createSignal(narrow.matches);
-    const onWidth = () => setPhone(narrow.matches);
-    narrow.addEventListener("change", onWidth);
-    onCleanup(() => narrow.removeEventListener("change", onWidth));
+    const phone = createPaperCompact();
 
     const pages = createLauncher(props.agent);
     // the chat gone off to the left, the page the whole width; a phone only ever shows one

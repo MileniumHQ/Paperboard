@@ -3,11 +3,10 @@
 // passes the user's changes on. Secret values go to the service's vault
 // action and are never kept here.
 
-import { actionsApi } from "@mileniumhq/paperapi";
+import { actionsApi, errorMessage } from "@mileniumhq/paperapi";
 import { createSignal, onCleanup } from "solid-js";
 import { createStore, reconcile } from "solid-js/store";
 import { PANEL_ID } from "../contract";
-import { errorText } from "../lib/failure";
 import { TOOLS_ACTION_IDS, TOOLS_EVENT, type ServerSpec, type ToolsView } from "../toolsContract";
 
 export type ToolsLoad = "loading" | "ready" | "failed";
@@ -40,7 +39,7 @@ function openTools() {
             await call(TOOLS_ACTION_IDS.get);
             setLoad("ready");
         } catch (e) {
-            setLoadError(errorText(e));
+            setLoadError(errorMessage(e));
             setLoad("failed");
         }
     };

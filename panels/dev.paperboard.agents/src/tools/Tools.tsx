@@ -24,12 +24,14 @@ import {
     PaperSelectMenuItem,
     PaperText,
     PaperToggle,
+    type ActionFailure,
+    createAction,
+    createSavedValue,
 } from "@mileniumhq/paperui";
 import { createStore, reconcile } from "solid-js/store";
+import { errorMessage, SerialQueue } from "@mileniumhq/paperapi";
 import type { Agent } from "../lib/agent";
 import { holdPage } from "../lib/pageHold";
-import { createAction, createAsked } from "../lib/action";
-import { errorText, failure, type Failure } from "../lib/failure";
 import { TOOL_LIMITS, type ServerSpec } from "../toolsContract";
 import { createTools, type Tools as ToolsClient } from "./api";
 import { blankForm, formFromSpec, newRow, secretOf, specFromForm, typedSecrets, type Form, type Row } from "./form";
@@ -78,7 +80,7 @@ function List(props: { tools: ToolsClient; name: string }) {
     const lastForm = createMemo<Form>((prev) => form() ?? prev, blankForm());
     const [removing, setRemoving] = createSignal<ServerSpec | null>(null);
     // a refused removal is told in the confirmation, which stays open over the page
-    const [removeError, setRemoveError] = createSignal<Failure | null>(null);
+    const [removeError, setRemoveError] = createSignal<ActionFailure | null>(null);
     const { busy, error, setError, run: act } = createAction();
     // the server whose sign-in is shown, while it's under way
     const [signingIn, setSigningIn] = createSignal<string | null>(null);
@@ -98,15 +100,13 @@ function List(props: { tools: ToolsClient; name: string }) {
         });
     // A switch flips at once and its save waits for the ones before it; a refused save puts it back and says why.
     // It isn't held for its save, and neither is anything else on the page.
-    let saves: Promise<unknown> = Promise.resolve();
-    const saveSwitch = (title: string, save: () => Promise<unknown>) => {
+    const saves = new SerialQueue();
+    const switched = (title: string, saving: Promise<void>) => {
         setError(null);
-        const run = saves.then(save).catch((e) => setError(failure(title, e)));
-        saves = run;
-        return run;
+        saving.catch((e) => setError({ title, message: errorMessage(e) }));
     };
-    const actionsAsked = createAsked(() => view().config.actions);
-    const setActions = (on: boolean) => actionsAsked.ask(on, saveSwitch("Panel access not changed", () => props.tools.setActions(on)));
+    const actions = createSavedValue(() => view().config.actions, async (on: boolean) => void (await props.tools.setActions(on)), { queue: saves.run });
+    const setActions = (on: boolean) => switched("Panel access not changed", actions.set(on));
     const remove = (s: ServerSpec) =>
         act(
             "Server not removed",
@@ -119,7 +119,7 @@ function List(props: { tools: ToolsClient; name: string }) {
 
     const choose = (value: string) => {
         if (value === NEW) return setForm(blankForm());
-        if (value === ACTIONS) return void setActions(!actionsAsked.value());
+        if (value === ACTIONS) return setActions(!actions.value());
         const s = view().config.servers.find((x) => rowOf(x.name) === value);
         if (s) setForm(formFromSpec(s));
     };
@@ -152,23 +152,27 @@ function List(props: { tools: ToolsClient; name: string }) {
                 <PaperList name="agents-tools" value={form()?.editing ? rowOf(form()!.name) : ""} onValueChange={(v) => choose(String(v))} borderless fullWidth fullHeight>
                     <PaperListLabel as="h3">Tool servers</PaperListLabel>
                     <For each={view().config.servers}>
-                        {(server) => (
-                            <ServerRow
-                                server={server}
-                                state={stateOf(view(), server)}
-                                busy={busy() || locked()}
-                                locked={locked()}
-                                onSignIn={() => void signIn(server)}
-                                onShowSignIn={() => setSigningIn(server.name)}
-                                onEdit={() => setForm(formFromSpec(server))}
-                                onRestart={(title) => void act(title, () => props.tools.restart(server.name))}
-                                onSwitch={(on) => saveSwitch(on ? "Server not switched on" : "Server not switched off", () => props.tools.save({ ...server, enabled: on }))}
-                                onRemove={() => {
-                                    setRemoveError(null);
-                                    setRemoving(server);
-                                }}
-                            />
-                        )}
+                        {(server) => {
+                            const enabled = createSavedValue(() => server.enabled, async (on: boolean) => void (await props.tools.save({ ...server, enabled: on })), { queue: saves.run });
+                            return (
+                                <ServerRow
+                                    server={server}
+                                    enabled={enabled.value()}
+                                    state={stateOf(view(), server)}
+                                    busy={busy() || locked()}
+                                    locked={locked()}
+                                    onSignIn={() => void signIn(server)}
+                                    onShowSignIn={() => setSigningIn(server.name)}
+                                    onEdit={() => setForm(formFromSpec(server))}
+                                    onRestart={(title) => void act(title, () => props.tools.restart(server.name))}
+                                    onSwitch={(on) => switched(on ? "Server not switched on" : "Server not switched off", enabled.set(on))}
+                                    onRemove={() => {
+                                        setRemoveError(null);
+                                        setRemoving(server);
+                                    }}
+                                />
+                            );
+                        }}
                     </For>
                     <PaperListItem
                         value={NEW}
@@ -186,7 +190,7 @@ function List(props: { tools: ToolsClient; name: string }) {
                         description={`${props.name} can look up what your other panels can do, like start a game server, and run it`}
                         actions={
                             <PaperFlex onPointerDown={own} onClick={own}>
-                                <PaperToggle aria-label="Let it use your other panels" checked={actionsAsked.value()} disabled={locked()} onChange={setActions} />
+                                <PaperToggle aria-label="Let it use your other panels" checked={actions.value()} disabled={locked()} onChange={setActions} />
                             </PaperFlex>
                         }
                     >
@@ -252,12 +256,13 @@ function ServerRow(props: {
     onShowSignIn(): void;
     onEdit(): void;
     onRestart(title: string): void;
-    onSwitch(on: boolean): Promise<unknown>;
+    /** whether its switch is on: the change being saved, else what is saved */
+    enabled: boolean;
+    onSwitch(on: boolean): void;
     onRemove(): void;
 }) {
     const s = () => props.server;
     const restart = () => RESTART[props.state.kind];
-    const enabled = createAsked(() => s().enabled);
     return (
         <PaperListItem
             value={rowOf(s().name)}
@@ -303,7 +308,7 @@ function ServerRow(props: {
                     </PaperButton>
                     {/* last: every row's switch is on the list's right edge, under the one for the other panels */}
                     <PaperFlex onPointerDown={own} onClick={own}>
-                        <PaperToggle aria-label={`${s().name} on`} checked={enabled.value()} disabled={props.locked} onChange={(on) => enabled.ask(on, props.onSwitch(on))} />
+                        <PaperToggle aria-label={`${s().name} on`} checked={props.enabled} disabled={props.locked} onChange={props.onSwitch} />
                     </PaperFlex>
                 </PaperFlex>
             }
@@ -316,7 +321,7 @@ function ServerRow(props: {
 function Editor(props: { tools: ToolsClient; name: string; open: boolean; initial: Form; onClose: () => void }) {
     const [f, setF] = createSignal<Form>(props.initial);
     const [busy, setBusy] = createSignal(false);
-    const [error, setError] = createSignal<Failure | null>(null);
+    const [error, setError] = createSignal<ActionFailure | null>(null);
     // another server (or a new one) to edit: the editor starts from it, with nothing refused yet
     createEffect(
         on(
@@ -374,14 +379,14 @@ function Editor(props: { tools: ToolsClient; name: string; open: boolean; initia
             await props.tools.save(specFromForm(f()));
         } catch (e) {
             console.error("[agents] tool server not saved:", e);
-            refused("Server not saved", errorText(e), true);
+            refused("Server not saved", errorMessage(e), true);
             return;
         }
         // the server is saved; its secrets go to the vault now
         try {
             for (const s of typedSecrets(f())) await props.tools.setSecret(f().name.trim(), s.name, s.value);
         } catch (e) {
-            refused("Secret not saved", `The server was saved, but a secret wasn't: ${errorText(e)} Edit it to add the secret again.`, false);
+            refused("Secret not saved", `The server was saved, but a secret wasn't: ${errorMessage(e)} Edit it to add the secret again.`, false);
             return;
         }
         setBusy(false);

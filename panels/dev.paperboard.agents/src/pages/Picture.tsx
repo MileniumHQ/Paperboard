@@ -3,7 +3,7 @@
 
 import { Match, Switch, createResource } from "solid-js";
 import { PaperIcon } from "@mileniumhq/paperui";
-import { errorText } from "../lib/failure";
+import { errorMessage } from "@mileniumhq/paperapi";
 import type { Launcher } from "./launcher";
 import styles from "./Picture.module.css";
 
@@ -13,7 +13,7 @@ export default function Picture(props: { pages: Launcher; name: string; title: s
     return (
         <Switch fallback={<PaperIcon class={styles.glyph}>web</PaperIcon>}>
             <Match when={picture.error}>
-                <PaperIcon class={styles.glyph} role="img" aria-label={`${props.title}'s picture wasn't loaded: ${errorText(picture.error)}`} title={`Picture not loaded: ${errorText(picture.error)}`}>
+                <PaperIcon class={styles.glyph} role="img" aria-label={`${props.title}'s picture wasn't loaded: ${errorMessage(picture.error)}`} title={`Picture not loaded: ${errorMessage(picture.error)}`}>
                     broken_image
                 </PaperIcon>
             </Match>

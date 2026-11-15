@@ -4,13 +4,12 @@
 
 import { For, Match, Show, Switch, createEffect, createSignal, on } from "solid-js";
 import { createStore, reconcile } from "solid-js/store";
-import { PaperButton, PaperEmptyState, PaperFlex, PaperIcon, PaperList, PaperListItem, PaperLoader, PaperQuote } from "@mileniumhq/paperui";
+import { PaperButton, PaperEmptyState, PaperFlex, PaperIcon, PaperList, PaperListItem, PaperLoader, PaperQuote, createLatest } from "@mileniumhq/paperui";
+import { errorMessage } from "@mileniumhq/paperapi";
 import type { Routine } from "../contract";
 import { describeSchedule, localStamp } from "../routineText";
 import type { Agent } from "../lib/agent";
 import { holdPage } from "../lib/pageHold";
-import { createLatest } from "../lib/action";
-import { errorText } from "../lib/failure";
 
 const capitalize = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);
 
@@ -33,7 +32,7 @@ export default function Routines(props: { agent: Agent }) {
                 setError(null);
             }
         } catch (e) {
-            if (current()) setError(errorText(e));
+            if (current()) setError(errorMessage(e));
         }
     };
     // the page before this one stays up until the first read is in
@@ -49,7 +48,7 @@ export default function Routines(props: { agent: Agent }) {
         try {
             await props.agent.deleteRoutine(r.id);
         } catch (e) {
-            setFailed(errorText(e));
+            setFailed(errorMessage(e));
         } finally {
             stopping.delete(r.id);
         }

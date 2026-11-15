@@ -7,12 +7,11 @@
 
 import { For, Match, Show, Switch, createEffect, createSignal, on, onCleanup } from "solid-js";
 import { createStore, reconcile } from "solid-js/store";
-import { PaperButton, PaperEmptyState, PaperFlex, PaperIcon, PaperList, PaperListItem, PaperLoader, PaperQuote, PaperText } from "@mileniumhq/paperui";
+import { PaperButton, PaperEmptyState, PaperFlex, PaperIcon, PaperList, PaperListItem, PaperLoader, PaperQuote, PaperText, createAction } from "@mileniumhq/paperui";
+import { errorMessage } from "@mileniumhq/paperapi";
 import type { ComputerWindow } from "../contract";
 import type { Agent } from "../lib/agent";
 import { SetupProgress } from "./Computer";
-import { createAction } from "../lib/action";
-import { errorText, failure } from "../lib/failure";
 import { clip } from "../lib/text";
 import { WindowView } from "./WindowView";
 import styles from "./ComputerView.module.css";
@@ -60,7 +59,7 @@ export default function ComputerView(props: { agent: Agent }) {
                 setListed(true);
             } catch (e) {
                 // shown once, until the user tries again; polling a failure would only repeat it
-                if (mine === poll) setListError(errorText(e));
+                if (mine === poll) setListError(errorMessage(e));
                 return;
             }
         }
@@ -104,7 +103,7 @@ export default function ComputerView(props: { agent: Agent }) {
         props.agent.control(false).catch((e) => {
             // closed meanwhile: nowhere on the page is left to say it, and the service's lease frees the agent anyway
             if (disposed) console.error("[agents] computer not handed back:", e);
-            else setError(failure("Computer not handed back", e));
+            else setError({ title: "Computer not handed back", message: errorMessage(e) });
         });
     const handBack = () => {
         clearTimeout(idle);
@@ -133,7 +132,7 @@ export default function ComputerView(props: { agent: Agent }) {
                 () =>
                     void props.agent.control(true).catch((e) => {
                         setHolding(false);
-                        setError(failure("Control lost", e));
+                        setError({ title: "Control lost", message: errorMessage(e) });
                     }),
                 RENEW_MS,
             );

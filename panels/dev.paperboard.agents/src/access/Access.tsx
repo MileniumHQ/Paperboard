@@ -4,12 +4,11 @@
 
 import { For, Match, Show, Switch, createSignal, onCleanup } from "solid-js";
 import { createStore, reconcile } from "solid-js/store";
-import { PaperButton, PaperEmptyState, PaperFlex, PaperIcon, PaperList, PaperListItem, PaperLoader, PaperQuote } from "@mileniumhq/paperui";
+import { PaperButton, PaperEmptyState, PaperFlex, PaperIcon, PaperList, PaperListItem, PaperLoader, PaperQuote, createLatest } from "@mileniumhq/paperui";
+import { errorMessage } from "@mileniumhq/paperapi";
 import type { AccessGrant, AccessView } from "../contract";
 import type { Agent } from "../lib/agent";
 import { holdPage } from "../lib/pageHold";
-import { createLatest } from "../lib/action";
-import { errorText } from "../lib/failure";
 import { localStamp } from "../routineText";
 import { itemText } from "../chat/AccessRequest";
 
@@ -42,7 +41,7 @@ export default function Access(props: { agent: Agent }) {
             const next = await props.agent.access();
             if (current()) setView(next);
         } catch (e) {
-            if (current()) setError(errorText(e));
+            if (current()) setError(errorMessage(e));
         }
     };
     holdPage(load());
@@ -52,7 +51,7 @@ export default function Access(props: { agent: Agent }) {
         try {
             setView(await props.agent.revokeAccess(g.kind === "folder" ? { kind: "folder", path: g.path } : { kind: "command", command: g.command, anyArguments: g.anyArguments }));
         } catch (e) {
-            setFailed(errorText(e));
+            setFailed(errorMessage(e));
         }
     };
 

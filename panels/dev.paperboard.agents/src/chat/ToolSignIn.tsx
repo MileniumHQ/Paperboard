@@ -1,7 +1,6 @@
 import { Match, Show, Switch } from "solid-js";
-import { PaperButton, PaperCard, PaperFlex, PaperIcon, PaperLoader, PaperQuote, PaperText } from "@mileniumhq/paperui";
+import { PaperButton, PaperCard, PaperFlex, PaperIcon, PaperLoader, PaperQuote, PaperText, createAction } from "@mileniumhq/paperui";
 import type { ToolSignInEntry } from "../contract";
-import { createAction } from "../lib/action";
 import { createTools } from "../tools/api";
 import SignInSteps from "../tools/SignInSteps";
 import { hostOf, stateOf, stateText } from "../tools/status";
