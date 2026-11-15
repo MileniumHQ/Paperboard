@@ -11,6 +11,8 @@ export interface Row {
     value: string;
     /** a secret's value, typed now; empty keeps the saved one */
     typed: string;
+    /** the vault name of the secret the server already had here: kept, so a row renamed still finds its value */
+    secret?: string;
 }
 
 export interface Form {
@@ -33,12 +35,15 @@ export const newRow = (o: Partial<Row> = {}): Row => ({ key: ++keys, name: "", k
 
 export const blankForm = (): Form => ({ editing: false, name: "", transport: "stdio", command: "", args: "", url: "", rows: [], oauth: false, sse: false, enabled: true });
 
-/** the vault name the service keeps a row's secret under: the row's own name, made plain */
-export const secretNameOf = (rowName: string) => rowName.toLowerCase().replace(/[^a-z0-9_.-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 64);
+/** the vault name a new secret row is saved under: the row's own name, made plain (the service checks it, mcpConfig.ts) */
+const secretNameOf = (rowName: string) => rowName.toLowerCase().replace(/[^a-z0-9_.-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 64);
+
+/** the vault name a secret row keeps its value under: the one it had, or a new row's from its name */
+export const secretOf = (r: Row) => r.secret ?? secretNameOf(r.name.trim());
 
 export function formFromSpec(s: ServerSpec): Form {
     const values = s.transport === "stdio" ? s.env : s.headers;
-    const rows = Object.entries(values).map(([name, v]) => (typeof v === "string" ? newRow({ name, value: v }) : newRow({ name, kind: "secret" })));
+    const rows = Object.entries(values).map(([name, v]) => (typeof v === "string" ? newRow({ name, value: v }) : newRow({ name, kind: "secret", secret: v.secret })));
     return {
         editing: true,
         name: s.name,
@@ -55,10 +60,17 @@ export function formFromSpec(s: ServerSpec): Form {
 
 export function specFromForm(f: Form): ServerSpec {
     const values: Record<string, ServerValue> = {};
-    for (const r of f.rows) {
+    const named = f.rows.filter((r) => r.name.trim());
+    for (const r of named) {
         const name = r.name.trim();
-        if (!name) continue;
-        values[name] = r.kind === "secret" ? { secret: secretNameOf(name) } : r.value;
+        if (r.kind !== "secret") {
+            values[name] = r.value;
+            continue;
+        }
+        // two rows sharing one vault entry would save one's value over the other's
+        const other = r.secret === undefined && named.find((o) => o !== r && o.kind === "secret" && secretOf(o) === secretOf(r));
+        if (other) throw new Error(`${name} and ${other.name.trim()} would keep their secrets under one name; rename one.`);
+        values[name] = { secret: secretOf(r) };
     }
     if (f.transport === "http") return { name: f.name.trim(), where: "host", transport: "http", url: f.url.trim(), headers: values, oauth: f.oauth, sse: f.sse, enabled: f.enabled };
     return {
@@ -75,5 +87,5 @@ export function specFromForm(f: Form): ServerSpec {
 
 /** secrets whose values were typed in this form, to send to the vault after the server is saved */
 export function typedSecrets(f: Form): { name: string; value: string }[] {
-    return f.rows.filter((r) => r.kind === "secret" && r.name.trim() && r.typed).map((r) => ({ name: secretNameOf(r.name.trim()), value: r.typed }));
+    return f.rows.filter((r) => r.kind === "secret" && r.name.trim() && r.typed).map((r) => ({ name: secretOf(r), value: r.typed }));
 }

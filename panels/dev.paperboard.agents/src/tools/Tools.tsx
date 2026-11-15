@@ -32,7 +32,7 @@ import { createAction, createAsked } from "../lib/action";
 import { errorText, failure, type Failure } from "../lib/failure";
 import { TOOL_LIMITS, type ServerSpec } from "../toolsContract";
 import { createTools, type Tools as ToolsClient } from "./api";
-import { blankForm, formFromSpec, newRow, secretNameOf, specFromForm, typedSecrets, type Form, type Row } from "./form";
+import { blankForm, formFromSpec, newRow, secretOf, specFromForm, typedSecrets, type Form, type Row } from "./form";
 import SignInSteps from "./SignInSteps";
 import { stateOf, stateText, whereText, type ServerState } from "./status";
 
@@ -334,7 +334,7 @@ function Editor(props: { tools: ToolsClient; name: string; open: boolean; initia
     createComputed(() => setRows(reconcile(f().rows, { key: "key" })));
     const setRow = (key: number, patch: Partial<Row>) => setF((cur) => ({ ...cur, rows: cur.rows.map((r) => (r.key === key ? { ...r, ...patch } : r)) }));
     const http = () => f().transport === "http";
-    const saved = (row: Row) => (props.tools.view()?.secrets[f().name.trim()] ?? []).includes(secretNameOf(row.name.trim()));
+    const saved = (row: Row) => (props.tools.view()?.secrets[f().name.trim()] ?? []).includes(secretOf(row));
     const valuesLabel = () => (http() ? "Headers" : "Environment variables");
 
     let form!: HTMLFormElement;
