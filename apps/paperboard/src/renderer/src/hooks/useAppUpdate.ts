@@ -7,7 +7,7 @@ import { errorMessage } from "@mileniumhq/paperapi";
 /** looks for updates to everything now; the top bar lists what it finds and says each failure, a toast says a check that didn't start */
 export const checkForUpdates = () =>
     shellIpc()
-        .invoke<void>("update-check")
+        .invoke("update-check")
         .catch((err) => showToast({ variant: "danger", title: "Couldn't check for updates", message: errorMessage(err) }));
 
 export function useAppUpdate() {
@@ -19,7 +19,8 @@ export function useAppUpdate() {
             if ((next.status === "failed" || next.status === "manual") && state().status !== next.status) setOpen(true);
             setState(next);
         };
-        subscribeRevisioned("app-update-state", state, accept, (err) =>
+        const ipc = shellIpc();
+        subscribeRevisioned(() => ipc.invoke("app-update-state"), (listener) => ipc.on("app-update-state", listener), state, accept, (err) =>
             accept({ ...state(), status: "failed", error: `Could not read update status: ${errorMessage(err)}` }),
         );
     });

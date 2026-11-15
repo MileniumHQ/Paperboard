@@ -8,7 +8,7 @@ import { PaperButton, PaperEmptyState, PaperFlex, PaperProvider } from "@mileniu
 import { logToMain, shellIpc } from "./lib/shell";
 
 async function startShell() {
-    const close = configureHostConnection(() => shellIpc().invoke<{ port: number; token: string }>("crane-credentials"));
+    const close = configureHostConnection(() => shellIpc().invoke("crane-credentials"));
     // the page goes away: its views stop following first, so none of them
     // reports a read that failed only because the connections closed under it
     let dispose: (() => void) | null = null;

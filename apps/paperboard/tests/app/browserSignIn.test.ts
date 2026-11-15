@@ -49,7 +49,7 @@ const invoke = (cookie?: string, origin = host.origin) =>
         origin,
         "content-type": "application/json",
         ...(cookie ? { cookie } : {}),
-    }, JSON.stringify({ args: [] }));
+    }, JSON.stringify({}));
 
 async function signIn(): Promise<string> {
     const link = new URL(host.signInUrl());
@@ -73,7 +73,7 @@ beforeAll(async () => {
         port: 0,
         sessions,
         rendererDir,
-        invoke: { "crane-credentials": () => ({ port: 1, token: SECRET }) },
+        shell: { calls: ["crane-credentials"], sends: [], call: async () => ({ port: 1, token: SECRET }), send: () => undefined },
         servePanel: async () => new Response("<p>panel</p>", { headers: { "content-type": "text/html" } }),
     });
 });
@@ -172,7 +172,7 @@ describe("browser mode from source", () => {
             port: 0,
             sessions,
             rendererDevUrl: `http://127.0.0.1:${devPort}`,
-            invoke: {},
+            shell: { calls: [], sends: [], call: async () => undefined, send: () => undefined },
             servePanel: async () => new Response("", { status: 404 }),
         });
     });

@@ -1,9 +1,10 @@
-// Shell request handlers, independent of the transport that carries them.
-// Electron IPC (shelldata.ts) and the browser-mode bridge (browserHost.ts)
-// register the SAME functions; each transport owns its own caller check
-// (senderFrame origin for IPC, session cookie + Origin for HTTP). Only
-// requests both shells need live here — window and updater
-// channels stay Electron-only in shelldata.ts.
+// The calls both shells serve (BrowserShellCall in shared/shellContract.ts),
+// independent of the transport that carries them. Electron IPC
+// (shelldata.ts) and the browser-mode bridge (browserMode.ts) serve the SAME
+// functions through shellServer.ts, which reads each call's args against
+// the contract first; each transport owns its own caller check (senderFrame
+// origin for IPC, session cookie + Origin for HTTP). Window and updater
+// calls stay Electron-only in shelldata.ts.
 import * as path from "path";
 import connectionPool from "./papercrane/ConnectionPool";
 import discovery from "./discovery";
@@ -15,8 +16,8 @@ import { servePanelAsset } from "../panelServe";
 import type { LaunchOptions } from "../../shared/launchOptions";
 import type { Graphics } from "../../shared/graphics";
 import { isListingFilePath, LISTING_FILE_MAX_BYTES } from "../../shared/listingFile";
-import { field } from "../../shared/fileTransfer";
-import type { SHARED_SHELL_INVOKE_CHANNELS } from "./shellChannels";
+import type { BrowserShellCall } from "../../shared/shellContract";
+import type { CallHandlers } from "./shellServer";
 
 export interface ShellHandlerDeps {
     appVersion: () => string;
@@ -24,31 +25,12 @@ export interface ShellHandlerDeps {
     graphics: () => Graphics;
     // resolves to an error message, empty on success (Electron shell.openPath)
     openPath: (dir: string) => Promise<string>;
+    // main's side effects of freshly saved settings: why Run on startup
+    // couldn't be applied, or null
+    appSettingsChanged: () => Promise<string | null>;
 }
 
-export type ShellInvokeHandler = (args: unknown) => unknown;
-
-export type SharedShellInvokeChannel = (typeof SHARED_SHELL_INVOKE_CHANNELS)[number];
-
-function requireString(value: unknown, name: string): string {
-    if (typeof value !== "string" || !value) {
-        throw new Error(`Missing required parameter: ${name}`);
-    }
-    return value;
-}
-
-// a port as typed: the pool checks its range
-function typedPort(args: unknown): number | string | undefined {
-    const port = field(args, "port");
-    if (port !== undefined && typeof port !== "number" && typeof port !== "string") {
-        throw new Error("port must be a number or a string");
-    }
-    return port;
-}
-
-export function createShellInvokeHandlers(
-    deps: ShellHandlerDeps,
-): Record<SharedShellInvokeChannel, ShellInvokeHandler> {
+export function createShellInvokeHandlers(deps: ShellHandlerDeps): CallHandlers<BrowserShellCall, unknown> {
     return {
         // throws until the local daemon is verified: why it isn't, once known
         "crane-credentials": () => {
@@ -63,41 +45,20 @@ export function createShellInvokeHandlers(
             activeId: connectionPool.getActiveId(),
         }),
 
-        "computer-probe": async (args) => {
-            return await connectionPool.probe(requireString(field(args, "host"), "host"), typedPort(args));
-        },
-
-        "computer-pair": async (args) => {
-            const host = requireString(field(args, "host"), "host");
-            const code = requireString(field(args, "code"), "code");
-            return await connectionPool.pairComputer(host, typedPort(args), code, field(args, "name"));
-        },
-
-        "computer-update": (args) => connectionPool.renameComputer(requireString(field(args, "id"), "id"), field(args, "name")),
-
-        // renderer input is validated here, not trusted from the caller's types
-        "computer-remove": (args) => connectionPool.unpairComputer(requireString(field(args, "id"), "id"), field(args, "evenIfUntold") === true),
-
-        "computer-switch": (id) => connectionPool.setActive(requireString(id, "id")),
-
-        "computer-reorder": (args) => {
-            const ids = field(args, "ids");
-            if (!Array.isArray(ids) || !ids.every((id) => typeof id === "string")) {
-                throw new Error("ids must be a list of computer ids");
-            }
-            connectionPool.reorderComputers(ids);
-        },
+        "computer-probe": ({ host, port }) => connectionPool.probe(host, port),
+        "computer-pair": ({ host, port, code, name }) => connectionPool.pairComputer(host, port, code, name),
+        "computer-update": ({ id, name }) => connectionPool.renameComputer(id, name),
+        "computer-remove": ({ id, evenIfUntold }) => connectionPool.unpairComputer(id, evenIfUntold === true),
+        "computer-switch": ({ id }) => connectionPool.setActive(id),
+        "computer-reorder": ({ ids }) => connectionPool.reorderComputers(ids),
 
         "discovery-list": () => discovery.look(),
 
         // local dir or panel files dir; remotes mount an ephemeral session
         // base64 so both transports (IPC structured clone, browser-mode
         // JSON) carry the same value
-        "panel-listing-file": async (args) => {
-            const computerId = requireString(field(args, "computerId"), "computerId");
-            const panelId = sanitizeId(requireString(field(args, "panelId"), "panelId"));
-            if (!panelId) throw new Error("Invalid parameter: panelId");
-            const subpath = requireString(field(args, "path"), "path").replace(/^\.?\/+/, "");
+        "panel-listing-file": async ({ computerId, panelId, path: given }) => {
+            const subpath = given.replace(/^\.?\/+/, "");
             if (!isListingFilePath(subpath)) throw new Error(`Not a listing file: ${subpath}`);
             const res = await servePanelAsset(computerId, panelId, subpath);
             if (!res.ok) throw new Error(`${subpath}: ${res.status} ${await res.text()}`);
@@ -107,12 +68,10 @@ export function createShellInvokeHandlers(
             }
             return bytes.toString("base64");
         },
-        "open-panel-folder": async (args) => {
-            const computerId = requireString(field(args, "computerId"), "computerId");
-            const panelId = field(args, "panelId");
+        "open-panel-folder": async ({ computerId, panelId }) => {
             // sanitize at this layer for BOTH branches: the remote branch
             // must not receive raw input either
-            const cleanPanelId = panelId ? sanitizeId(panelId as string) : null;
+            const cleanPanelId = panelId ? sanitizeId(panelId) : null;
             if (panelId && !cleanPanelId) {
                 throw new Error("Invalid parameter: panelId");
             }
@@ -147,5 +106,6 @@ export function createShellInvokeHandlers(
         // command-line switches the shell honors, e.g. --mobile
         "launch-options": () => deps.launchOptions(),
         graphics: () => deps.graphics(),
+        "app-settings-changed": () => deps.appSettingsChanged(),
     };
 }

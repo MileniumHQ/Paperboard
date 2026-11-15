@@ -10,7 +10,7 @@
 // ("unavailable"). Otherwise main listens on this device
 // (src/main/loopbackRedirect.ts), checking the address again.
 import { parseLoopbackRedirectUri, type PanelLoopbackRedirectResult } from "../../../shared/loopbackRedirect";
-import { isBrowserShell, logToMain, shellIpc } from "./shell";
+import { isBrowserShell, logToMain, shellIpc, type ShellIpc } from "./shell";
 import { errorMessage } from "@mileniumhq/paperapi";
 
 export const LOOPBACK_REDIRECT_REQUEST = "paperboard:loopback-redirect";
@@ -37,12 +37,12 @@ export function parseLoopbackRedirectMessage(data: unknown): LoopbackRedirectMes
 export interface LoopbackRedirectHost {
     /** true in the browser shell, which has no listener on the person's device */
     browser: () => boolean;
-    invoke: <T>(channel: string, args: unknown) => Promise<T>;
+    invoke: ShellIpc["invoke"];
 }
 
 const shellHost: LoopbackRedirectHost = {
     browser: isBrowserShell,
-    invoke: (channel, args) => shellIpc().invoke(channel, args),
+    invoke: (channel, ...args) => shellIpc().invoke(channel, ...args),
 };
 
 const failed = (code: Extract<PanelLoopbackRedirectResult, { status: "failed" }>["code"], message: string): PanelLoopbackRedirectResult => ({
@@ -76,7 +76,7 @@ export function createFrameLoopbackRedirects(computerId: string, host: LoopbackR
             const shellId = crypto.randomUUID();
             open.set(requestId, shellId);
             try {
-                return await host.invoke<PanelLoopbackRedirectResult>("panel-loopback-redirect", { requestId: shellId, redirectUri });
+                return await host.invoke("panel-loopback-redirect", { requestId: shellId, redirectUri });
             } catch (err) {
                 logToMain("error", "Catching a sign-in redirect failed:", err);
                 return failed("failed", errorMessage(err));

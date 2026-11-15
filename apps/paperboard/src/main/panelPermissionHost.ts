@@ -9,14 +9,13 @@ import { desktopCapturer, shell, systemPreferences, webContents as allWebContent
 import * as path from "path";
 import { logger } from "../../papercrane/logger";
 import { getLocalDir } from "../../papercrane/paths";
-import { pushToShells } from "./communication/shellPush";
+import { pushToShells, pushToWindow } from "./communication/shellPush";
 import { answerShellAsk, askShell } from "./shellAsk";
 import {
     PanelPermissionStore,
     checkedPermission,
     isClipboardPermission,
     isPanelOrigin,
-    isPanelPermission,
     isScreenRequest,
     mediaPermissions,
     panelAsker,
@@ -45,17 +44,16 @@ let store: PanelPermissionStore | null = null;
 export function panelPermissionStore(): PanelPermissionStore {
     if (store) return store;
     store = new PanelPermissionStore(path.join(getLocalDir(), "panel-permissions.json"));
-    store.onChange(() => pushToShells("panel-permissions-changed", null));
+    store.onChange(() => pushToShells("panel-permissions-changed", undefined));
     return store;
 }
 
 /** The shell's answer to a permission ask or screen pick. */
-export function answerPanelPermissionAsk(sender: WebContents, args: unknown): void {
-    answerShellAsk(sender, ["panel-permission-ask", "panel-screen-pick"], args);
+export function answerPanelPermissionAsk(sender: WebContents, answer: { askId: string; answer: string | null }): void {
+    answerShellAsk(sender, ["panel-permission-ask", "panel-screen-pick"], answer);
 }
 
-export function openSystemPrivacySettings(permission: unknown): Promise<void> {
-    if (!isPanelPermission(permission)) throw new Error(`Not a panel permission: ${String(permission)}`);
+export function openSystemPrivacySettings(permission: PanelPermission): Promise<void> {
     if (process.platform !== "darwin" && process.platform !== "win32") throw new Error("This system has no privacy settings for Paperboard");
     const url = SYSTEM_SETTINGS[process.platform][permission];
     if (!url) throw new Error(`This system has no ${permission} privacy setting`);
@@ -82,7 +80,7 @@ function askAnswer(value: unknown): PermissionAnswer | null {
 export function installPanelPermissions(ses: Session, store: PanelPermissionStore): void {
     const askPanel = (wc: WebContents | null, asker: PanelAsker, permissions: PanelPermission[]) =>
         store.decide(asker.panelId, permissions, async (unanswered) =>
-            askAnswer(await askShell(wc, "panel-permission-ask", { ...asker, permissions: unanswered })),
+            askAnswer(await askShell(wc, "panel-permission-ask", (askId) => ({ askId, ...asker, permissions: unanswered }))),
         );
 
     /** your answer, then the system's; a system block is shown, not swallowed */
@@ -92,7 +90,7 @@ export function installPanelPermissions(ses: Session, store: PanelPermissionStor
             if (await systemAllows(permission)) continue;
             if (wc && !wc.isDestroyed() && (process.platform === "darwin" || process.platform === "win32")) {
                 const block: SystemBlock = { ...asker, permission, platform: process.platform };
-                wc.send("panel-permission-system", block);
+                pushToWindow(wc, "panel-permission-system", block);
             }
             return false;
         }
@@ -106,7 +104,7 @@ export function installPanelPermissions(ses: Session, store: PanelPermissionStor
         logger.error(`[Main] panel ${permissions.join(" and ")} for ${asker.panelId} refused:`, message);
         if (wc && !wc.isDestroyed()) {
             const failure: PermissionFailure = { ...asker, permissions, message };
-            wc.send("panel-permission-failed", failure);
+            pushToWindow(wc, "panel-permission-failed", failure);
         }
         return false;
     };
@@ -156,7 +154,7 @@ export function installPanelPermissions(ses: Session, store: PanelPermissionStor
             // one source: the system's picker (Wayland's portal) already chose it
             if (sources.length === 1) return sources[0]!;
             const offered: ScreenSource[] = sources.map((s) => ({ id: s.id, name: s.name, thumbnail: s.thumbnail.toDataURL() }));
-            const chosen = await askShell(wc, "panel-screen-pick", { ...asker, sources: offered });
+            const chosen = await askShell(wc, "panel-screen-pick", (askId) => ({ askId, ...asker, sources: offered }));
             return sources.find((s) => s.id === chosen) ?? null;
         })()
             .catch(refuse(wc, asker, ["screen"]))

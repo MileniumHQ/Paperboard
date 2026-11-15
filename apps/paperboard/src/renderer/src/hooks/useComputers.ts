@@ -64,9 +64,6 @@ export function useComputers() {
         try {
             const data = await computersApi.list();
             if (pushes !== pushesBefore) return;
-            if (!data || !Array.isArray(data.computers)) {
-                throw new Error("Paperboard's computer list came back malformed.");
-            }
             apply(data);
         } catch (err) {
             logToMain("error", "Failed to load the computers:", err);
@@ -80,12 +77,8 @@ export function useComputers() {
 
     const subscribeComputerChanges = () =>
         computersApi.onChanged((data) => {
-            if (!data || !Array.isArray(data.computers)) {
-                logToMain("error", "Ignored a malformed computer list from main:", data);
-                return;
-            }
             pushes++;
-            apply({ computers: data.computers, activeId: data.activeId });
+            apply(data);
         });
 
     // the rail moves at once; a failed save says so and puts it back

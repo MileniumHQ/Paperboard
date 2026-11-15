@@ -16,7 +16,6 @@ import {
     computersApi as computers,
     discoveryApi,
     logToMain,
-    type ComputerInfo,
     type DiscoveredComputer,
 } from "../../lib/shell";
 import frameStyles from "./wizardFrame.module.css";
@@ -25,7 +24,7 @@ import { errorMessage } from "@mileniumhq/paperapi";
 
 export interface ComputerSetupWizardProps {
     onClose: () => void;
-    onComplete: (computer: ComputerInfo) => void;
+    onComplete: (computer: { id: string }) => void;
 }
 
 export const ComputerSetupWizard: Component<ComputerSetupWizardProps> = (
@@ -169,8 +168,8 @@ export const ComputerSetupWizard: Component<ComputerSetupWizardProps> = (
                 name().trim() || undefined,
             );
 
-            if (!res?.id) throw new Error("The computer answered the pairing without saying who it is.");
-            props.onComplete(res);
+            if (!res.id) throw new Error("The computer answered the pairing without saying who it is.");
+            props.onComplete({ id: res.id });
             props.onClose();
         } catch (err) {
             logToMain("error", "Pairing a computer failed:", err);

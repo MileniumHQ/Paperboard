@@ -19,7 +19,8 @@ import { createInterface } from "node:readline";
 import { startBrowserHost } from "../../../src/main/browserHost";
 import { BrowserSessions } from "../../../src/main/browserSessions";
 import { createShellInvokeHandlers } from "../../../src/main/communication/shellHandlers";
-import { SHARED_SHELL_INVOKE_CHANNELS } from "../../../src/main/communication/shellChannels";
+import { shellServer, type CallHandlers } from "../../../src/main/communication/shellServer";
+import type { ShellCall, ShellPush } from "../../../src/shared/shellContract";
 import { addShellPushSink, pushToShells } from "../../../src/main/communication/shellPush";
 import connectionPool from "../../../src/main/communication/papercrane/ConnectionPool";
 import discovery from "../../../src/main/communication/discovery";
@@ -45,97 +46,111 @@ const shared = createShellInvokeHandlers({
     launchOptions: () => launchOptionsFromArgv(process.argv),
     graphics: () => ({ gpu: true }),
     openPath: async () => "Opening folders is not part of the browser suite",
+    // main applies the saved theme and login item to the OS; nothing to apply here
+    appSettingsChanged: async () => null,
 });
 
 let probes = 0;
 // a probe of a held address waits until the test lets it answer
 const held = new Map<string, { release: () => void; promise: Promise<void> }>();
-
-const invoke: Record<string, (args: unknown) => unknown> = {};
-for (const channel of SHARED_SHELL_INVOKE_CHANNELS) invoke[channel] = shared[channel];
-invoke["computer-probe"] = async (args) => {
-    probes++;
-    const answer = await shared["computer-probe"](args);
-    await held.get((args as { host: string }).host)?.promise;
-    return answer;
-};
 let failRemove: string | null = null;
-invoke["computer-remove"] = (args) => {
-    const refused = failRemove;
-    failRemove = null;
-    if (refused) throw new Error(refused);
-    return shared["computer-remove"](args);
-};
-// an Electron window also asks for its updates: there are none here
-invoke["app-update-state"] = () => initialAppUpdateState;
 // the update queue is the test's: it pushes each state, as main's queue does
 // while it runs, and can make the next Stop and update fail
 let updateQueue: UpdateQueueState = { ...initialUpdateQueueState };
 let failRelease: string | null = null;
 const releases: string[][] = [];
 const releaseWaiters: (() => void)[] = [];
-invoke["update-queue"] = () => updateQueue;
-invoke["update-release"] = (args) => {
-    const refused = failRelease;
-    failRelease = null;
-    if (refused) throw new Error(refused);
-    releases.push((args as { keys: string[] }).keys);
-    for (const wake of releaseWaiters.splice(0)) wake();
-    return null;
-};
 // panel permissions are an Electron window's (the browser asks for itself):
 // the shell shows them only when it runs in one
 const permissions = new PanelPermissionStore(path.join(getLocalDir(), "panel-permissions.json"));
-permissions.onChange(() => pushToShells("panel-permissions-changed", null));
+permissions.onChange(() => pushToShells("panel-permissions-changed", undefined));
 const permissionSaves: { answer: PermissionAnswer; run: () => void }[] = [];
 const permissionSaveWaiters: (() => void)[] = [];
 let holdPermissionSaves = false;
 let failPermissionSave: string | null = null;
-invoke["panel-permissions-list"] = () => permissions.list();
-invoke["panel-permission-set"] = (args) => {
-    const { panelId, permission, answer } = args as { panelId: string; permission: PanelPermission; answer: PermissionAnswer };
-    return new Promise<void>((resolve, reject) => {
-        const run = () => {
-            const refused = failPermissionSave;
-            failPermissionSave = null;
-            if (refused) return reject(new Error(refused));
-            permissions.set(panelId, permission, answer);
-            resolve();
-        };
-        if (!holdPermissionSaves) return run();
-        permissionSaves.push({ answer, run });
-        for (const wake of permissionSaveWaiters.splice(0)) wake();
-    });
-};
 // a Google Drive sign-in runs as main runs it; the browser it opens is
 // counted and never comes back, and nothing past it is reachable
 let googleSignIns = 0;
 const googleSignInWaiters: (() => void)[] = [];
-invoke["backup-gdrive-connect"] = () =>
-    signInToGoogleDrive(
-        { clientId: "browser-suite", clientSecret: "browser-suite" },
-        {
-            endpoints: { authUrl: "http://127.0.0.1:9/auth", tokenUrl: "http://127.0.0.1:9/token" },
-            page: () => "",
-            openExternal: async () => {
-                googleSignIns++;
-                for (const wake of googleSignInWaiters.splice(0)) wake();
+
+// what an Electron window serves that this suite has no part in
+const notHere = (channel: string) => () => {
+    throw new Error(`Channel not available in browser mode: ${channel}`);
+};
+
+// the host is an Electron window's: every channel the contract declares
+const calls: CallHandlers<ShellCall, unknown> = {
+    ...shared,
+    "computer-probe": async (args, caller) => {
+        probes++;
+        const answer = await shared["computer-probe"](args, caller);
+        await held.get(args.host)?.promise;
+        return answer;
+    },
+    "computer-remove": (args, caller) => {
+        const refused = failRemove;
+        failRemove = null;
+        if (refused) throw new Error(refused);
+        return shared["computer-remove"](args, caller);
+    },
+    // an Electron window also asks for its updates: there are none here
+    "app-update-state": () => initialAppUpdateState,
+    "update-queue": () => updateQueue,
+    "update-release": ({ keys }) => {
+        const refused = failRelease;
+        failRelease = null;
+        if (refused) throw new Error(refused);
+        releases.push(keys);
+        for (const wake of releaseWaiters.splice(0)) wake();
+    },
+    "panel-permissions-list": () => permissions.list(),
+    "panel-permission-set": ({ panelId, permission, answer }) =>
+        new Promise<void>((resolve, reject) => {
+            const run = () => {
+                const refused = failPermissionSave;
+                failPermissionSave = null;
+                if (refused) return reject(new Error(refused));
+                permissions.set(panelId, permission, answer);
+                resolve();
+            };
+            if (!holdPermissionSaves) return run();
+            permissionSaves.push({ answer, run });
+            for (const wake of permissionSaveWaiters.splice(0)) wake();
+        }),
+    "backup-gdrive-connect": () =>
+        signInToGoogleDrive(
+            { clientId: "browser-suite", clientSecret: "browser-suite" },
+            {
+                endpoints: { authUrl: "http://127.0.0.1:9/auth", tokenUrl: "http://127.0.0.1:9/token" },
+                page: () => "",
+                openExternal: async () => {
+                    googleSignIns++;
+                    for (const wake of googleSignInWaiters.splice(0)) wake();
+                },
             },
-        },
-        async () => {
-            throw new Error("The browser suite keeps no Google sign-in");
-        },
-    );
-invoke["backup-gdrive-cancel"] = () => cancelGoogleSignIn();
-// main applies the saved theme and login item to the OS; nothing to apply here
-invoke["app-settings-changed"] = () => null;
+            async () => {
+                throw new Error("The browser suite keeps no Google sign-in");
+            },
+        ),
+    "backup-gdrive-cancel": () => cancelGoogleSignIn(),
+    "update-check": notHere("update-check"),
+    "open-update-download": notHere("open-update-download"),
+    "quit-and-install": notHere("quit-and-install"),
+    "panel-file-export": notHere("panel-file-export"),
+    "panel-file-import": notHere("panel-file-import"),
+    "panel-loopback-redirect": notHere("panel-loopback-redirect"),
+    "panel-loopback-redirect-cancel": notHere("panel-loopback-redirect-cancel"),
+    "panel-permission-answer": notHere("panel-permission-answer"),
+    "open-system-privacy": notHere("open-system-privacy"),
+    "panels-unsaved": notHere("panels-unsaved"),
+    "quit-answer": notHere("quit-answer"),
+};
 
 const host = await startBrowserHost({
     port: 0,
     sessions: new BrowserSessions(path.join(getLocalDir(), "browser-sessions.json")),
     rendererDir,
-    invoke,
-    send: { "renderer-log": () => undefined },
+    shell: shellServer("window", calls, { "quit-app": notHere("quit-app"), "renderer-log": () => undefined }),
     servePanel: servePanelAsset,
 });
 addShellPushSink((channel, payload) => host.push(channel, payload));
@@ -164,7 +179,7 @@ type Command =
     | { cmd: "next-release" }
     | { cmd: "google-sign-ins"; atLeast: number }
     | { cmd: "fail-mdns"; message: string }
-    | { cmd: "push"; channel: string; payload: unknown };
+    | { cmd: "push"; channel: ShellPush; payload: unknown };
 
 async function run(command: Command): Promise<unknown> {
     switch (command.cmd) {
@@ -233,7 +248,7 @@ async function run(command: Command): Promise<unknown> {
             return true;
         case "push":
             // what main pushes to its windows on its own
-            pushToShells(command.channel, command.payload);
+            host.push(command.channel, command.payload);
             return true;
     }
 }

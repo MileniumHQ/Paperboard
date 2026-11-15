@@ -24,6 +24,8 @@ import { PANEL_PATH_ROOT, parsePanelPath } from "@mileniumhq/paperapi/panelPath"
 import { logger } from "../../papercrane/logger";
 import type { BrowserSessions } from "./browserSessions";
 import { readShellFile } from "./shellAssets";
+import type { ShellServer } from "./communication/shellServer";
+import type { ShellPush } from "../shared/shellContract";
 
 // Every browser resolves localhost to this machine, Safari included, and
 // treats it as a secure context.
@@ -69,8 +71,8 @@ export interface BrowserHostOptions {
     rendererDir?: string;
     // dev: proxy shell documents to the renderer dev server
     rendererDevUrl?: string;
-    invoke: Record<string, (args: unknown) => unknown>;
-    send?: Record<string, (...args: unknown[]) => void>;
+    // the calls and sends the shell makes, read against the contract
+    shell: ShellServer<void>;
     servePanel: (computerId: string, panelId: string, pathname: string) => Promise<Response>;
     // a panel's save and open dialogs run in the browser; these move the
     // bytes. Failures throw an error carrying a `code` the renderer reports.
@@ -86,7 +88,7 @@ export interface BrowserHost {
     readonly origin: string;
     /** a link that signs one browser in, once, for the next few minutes */
     signInUrl(): string;
-    push(channel: string, payload: unknown): void;
+    push(channel: ShellPush, payload: unknown): void;
     close(): Promise<void>;
 }
 
@@ -202,14 +204,21 @@ export function startBrowserHost(opts: BrowserHostOptions): Promise<BrowserHost>
         }
     };
 
+    // a bridge body is { args }, the one value the call or send is given
+    const bridgeArgs = async (req: http.IncomingMessage): Promise<unknown> => {
+        const body = await readJsonBody(req);
+        if (body === undefined) return undefined;
+        if (typeof body !== "object" || body === null || Array.isArray(body)) throw new HttpError(400, "A bridge body is an object");
+        return (body as { args?: unknown }).args;
+    };
+
     const handleInvoke = async (channel: string, req: http.IncomingMessage, res: http.ServerResponse) => {
         assertShellCaller(req);
-        const handler = Object.hasOwn(opts.invoke, channel) ? opts.invoke[channel] : undefined;
-        if (!handler) throw new HttpError(404, `Channel not available in browser mode: ${channel}`);
-        const body = (await readJsonBody(req)) as { args?: unknown[] } | undefined;
-        const args = Array.isArray(body?.args) ? body.args : [];
+        const call = opts.shell.calls.find((served) => served === channel);
+        if (!call) throw new HttpError(404, `Channel not available in browser mode: ${channel}`);
+        const args = await bridgeArgs(req);
         try {
-            sendJson(res, 200, { ok: true, result: await handler(args[0]) });
+            sendJson(res, 200, { ok: true, result: await opts.shell.call(call, args) });
         } catch (err: any) {
             // a handler failure is an answer the renderer must see as a
             // rejected invoke, same as Electron IPC
@@ -285,10 +294,14 @@ export function startBrowserHost(opts: BrowserHostOptions): Promise<BrowserHost>
 
     const handleSend = async (channel: string, req: http.IncomingMessage, res: http.ServerResponse) => {
         assertShellCaller(req);
-        const handler = opts.send && Object.hasOwn(opts.send, channel) ? opts.send[channel] : undefined;
-        if (!handler) throw new HttpError(404, `Channel not available in browser mode: ${channel}`);
-        const body = (await readJsonBody(req)) as { args?: unknown[] } | undefined;
-        handler(...(Array.isArray(body?.args) ? body.args : []));
+        const send = opts.shell.sends.find((served) => served === channel);
+        if (!send) throw new HttpError(404, `Channel not available in browser mode: ${channel}`);
+        const args = await bridgeArgs(req);
+        try {
+            opts.shell.send(send, args);
+        } catch (err: any) {
+            throw new HttpError(400, err?.message || String(err));
+        }
         res.writeHead(204, { "Cache-Control": "no-store" });
         res.end();
     };

@@ -64,7 +64,7 @@ describe("release data from a shipped release", () => {
             // the new app on the same data: its paired computer and settings
             const electron = await launchElectron({ appDir: app.dir, dataDir, args: ["--skip-update"] });
             await shellReady(electron);
-            const listed = await electron.evalIn(SHELL, `window.electron.ipcRenderer.invoke("computers-list")`);
+            const listed = await electron.evalIn(SHELL, `window.paperboardShell.invoke("computers-list")`);
             const paired = readJson(snapshot, "local/paired_computers.json").computers[0];
             expect(listed.computers.find((c: any) => c.id === paired.id)).toMatchObject({ name: paired.name, host: paired.host, port: paired.port });
             expect(await electron.evalMain(`return electron.nativeTheme.themeSource`)).toBe("dark");

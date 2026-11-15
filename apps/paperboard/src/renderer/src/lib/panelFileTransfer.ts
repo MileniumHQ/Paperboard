@@ -68,7 +68,7 @@ export async function runPanelFileTransfer(
     };
     try {
         if (!isBrowserShell()) {
-            return await shellIpc().invoke<PanelFileTransferResult>(
+            return await shellIpc().invoke(
                 message.kind === "export" ? "panel-file-export" : "panel-file-import",
                 request,
             );

@@ -1,5 +1,5 @@
 // What the shell gets from Electron, for the tests of its Electron-only
-// paths. The preload's ipcRenderer is stood in for by the same calls carried
+// paths. The preload's bridge (window.paperboardShell) is stood in for by the same calls carried
 // over the shell host's HTTP bridge, the boundary the browser shell crosses
 // too; and a panel:// address, which Electron's protocol handler serves, is
 // loaded from the host's panel folder of the same panel, which serves the
@@ -17,13 +17,13 @@ export const ELECTRON_PRELOAD = `(() => {
         if (!res.ok) throw new Error(channel + " failed: HTTP " + res.status + " " + (await res.text()));
         return res;
     };
-    const ipcRenderer = {
-        async invoke(channel, ...args) {
+    window.paperboardShell = {
+        async invoke(channel, args) {
             const body = await (await post("invoke", channel, args)).json();
             if (!body.ok) throw new Error(body.error || channel + " failed");
             return body.result;
         },
-        send(channel, ...args) {
+        send(channel, args) {
             post("send", channel, args).catch((err) => console.error(err));
         },
         on(channel, listener) {
@@ -31,19 +31,13 @@ export const ELECTRON_PRELOAD = `(() => {
             if (!listeners.has(channel)) {
                 listeners.set(channel, new Set());
                 source.addEventListener(channel, (message) => {
-                    for (const l of listeners.get(channel)) l({}, JSON.parse(message.data));
+                    for (const l of listeners.get(channel)) l(JSON.parse(message.data));
                 });
             }
             listeners.get(channel).add(listener);
+            return () => listeners.get(channel).delete(listener);
         },
-        once(channel, listener) {
-            const wrapped = (event, ...args) => { ipcRenderer.removeListener(channel, wrapped); listener(event, ...args); };
-            ipcRenderer.on(channel, wrapped);
-        },
-        removeListener(channel, listener) { listeners.get(channel)?.delete(listener); },
-        removeAllListeners(channel) { listeners.get(channel)?.clear(); },
     };
-    window.electron = { ipcRenderer };
     const src = Object.getOwnPropertyDescriptor(HTMLIFrameElement.prototype, "src");
     Object.defineProperty(HTMLIFrameElement.prototype, "src", {
         ...src,

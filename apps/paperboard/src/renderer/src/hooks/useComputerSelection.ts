@@ -1,5 +1,5 @@
 import { createEffect, createSignal, on } from "solid-js";
-import { computersApi, logToMain, type ComputerInfo } from "../lib/shell";
+import { computersApi, logToMain } from "../lib/shell";
 import { START_ON_HOME } from "../lib/startOn";
 import type { AppSettingsData } from "../lib/appSettings";
 import type { useComputers } from "./useComputers";
@@ -93,7 +93,7 @@ export function useComputerSelection(options: ComputerSelectionOptions) {
         showComputer(compId);
     };
 
-    const addComputer = async (newComp: ComputerInfo) => {
+    const addComputer = async (newComp: { id: string }) => {
         await refreshComputers();
         await selectComputer(newComp.id);
     };

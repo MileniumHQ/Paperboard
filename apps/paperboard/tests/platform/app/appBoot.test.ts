@@ -37,7 +37,7 @@ describe("desktop app boot", () => {
         // adopted, not replaced: the daemon's handshake is the one it wrote,
         // and the app holds the credential only after its identity proof
         expect(readHandshake(dataDir).startId).toBe(daemon.handshake.startId);
-        const credentials = await electron.evalIn(SHELL, `window.electron.ipcRenderer.invoke("crane-credentials")`);
+        const credentials = await electron.evalIn(SHELL, `window.paperboardShell.invoke("crane-credentials")`);
         expect(credentials).toEqual({ computerId: "local", port: daemon.handshake.port, token: daemon.handshake.token });
 
         expect(electron.failures()).toEqual([]);

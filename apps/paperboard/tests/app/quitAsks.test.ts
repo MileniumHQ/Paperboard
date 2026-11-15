@@ -50,9 +50,9 @@ const alive = () => electron.child.exitCode === null && electron.child.signalCod
 test("Restart to update with nothing downloaded is refused with why, and Paperboard keeps running", async () => {
     // an update check has run, so Paperboard's updater exists, with nothing
     // downloaded; the refused restart must leave the next quit asking (the next test)
-    await electron.evalIn(SHELL, `window.electron.ipcRenderer.invoke("update-check")`);
-    expect(await electron.evalIn(SHELL, `window.electron.ipcRenderer.invoke("app-update-state").then((s) => s.status)`)).not.toBe("ready");
-    const answer = await electron.evalIn(SHELL, `window.electron.ipcRenderer.invoke("quit-and-install").then(() => "restarted", (err) => err.message)`);
+    await electron.evalIn(SHELL, `window.paperboardShell.invoke("update-check")`);
+    expect(await electron.evalIn(SHELL, `window.paperboardShell.invoke("app-update-state").then((s) => s.status)`)).not.toBe("ready");
+    const answer = await electron.evalIn(SHELL, `window.paperboardShell.invoke("quit-and-install").then(() => "restarted", (err) => err.message)`);
     expect(answer).toContain("No app update has been downloaded");
     expect(alive()).toBe(true);
 });
@@ -68,7 +68,7 @@ test("quitting with an unsaved note asks the note: Stay keeps Paperboard running
     // does, and the shell tells main before its next IPC answers
     await electron.evalIn(SHELL, `window.flushed = new Promise((resolve) => addEventListener("message", (e) => e.data === "test-flush" && resolve())); true`);
     await electron.evalInFrame(FRAME, `(() => { const note = document.getElementById("note"); note.value = "groceries"; note.dispatchEvent(new Event("input")); parent.postMessage("test-flush", "*"); })()`);
-    await electron.evalIn(SHELL, `window.flushed.then(() => window.electron.ipcRenderer.invoke("app-version"))`);
+    await electron.evalIn(SHELL, `window.flushed.then(() => window.paperboardShell.invoke("app-version"))`);
 
     const asked = `!document.getElementById("ask").hidden`;
     await electron.evalMain(`app.quit(); return true;`);

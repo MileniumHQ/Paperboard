@@ -3,10 +3,10 @@
 // on the CPU: a dialog scrolled at 6 frames a second there with its backdrop
 // blur, and 48 without. So there, animations and blur start off; a choice
 // made in the settings is kept either way.
+import { shape, type Infer } from "@mileniumhq/paperapi";
 
-export interface Graphics {
-    gpu: boolean;
-}
+export const graphics = shape.object({ gpu: shape.boolean() });
+export type Graphics = Infer<typeof graphics>;
 
 /** The two settings as saved: absent until the user chooses. */
 export interface LookSettings {

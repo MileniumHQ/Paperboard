@@ -3,62 +3,70 @@
 // computers), and the updates held back because something is using what
 // they replace.
 
-export type UpdateKind = "app" | "panel" | "package" | "server";
+import { shape, type Infer } from "@mileniumhq/paperapi";
+
+const updateKind = shape.oneOf("app", "panel", "package", "server");
+export type UpdateKind = Infer<typeof updateKind>;
 
 // held: downloaded or planned, but something is using what it replaces;
 // it moves to the queue's holds
-export type UpdateStatus = "queued" | "running" | "done" | "held" | "failed";
+const updateStatus = shape.oneOf("queued", "running", "done", "held", "failed");
+export type UpdateStatus = Infer<typeof updateStatus>;
 
-export type UpdateStage = "stopping" | "downloading" | "installing";
+const updateStage = shape.oneOf("stopping", "downloading", "installing");
+export type UpdateStage = Infer<typeof updateStage>;
 
-export interface UpdateItem {
-    key: string;
-    kind: UpdateKind;
-    computerId: string;
+const updateItem = shape.object({
+    key: shape.text(),
+    kind: updateKind,
+    computerId: shape.text(),
     // null for this computer: the list names only other computers
-    computerName: string | null;
+    computerName: shape.nullable(shape.text()),
     // the panel being replaced; it can't be opened while this runs
-    panelId: string | null;
-    name: string;
-    version: string;
-    status: UpdateStatus;
-    stage: UpdateStage | null;
+    panelId: shape.nullable(shape.text()),
+    name: shape.text(),
+    version: shape.text(),
+    status: updateStatus,
+    stage: shape.nullable(updateStage),
     // null while the size of the work is unknown
-    percent: number | null;
-    bytesLoaded: number | null;
-    bytesTotal: number | null;
-    error: string | null;
-}
+    percent: shape.nullable(shape.number()),
+    bytesLoaded: shape.nullable(shape.number()),
+    bytesTotal: shape.nullable(shape.number()),
+    error: shape.nullable(shape.text()),
+});
+export type UpdateItem = Infer<typeof updateItem>;
 
 // an update that waits for what is using it to stop
-export interface UpdateHold {
-    key: string;
-    kind: "panel" | "package";
-    computerId: string;
-    computerName: string | null;
+const updateHold = shape.object({
+    key: shape.text(),
+    kind: shape.oneOf("panel", "package"),
+    computerId: shape.text(),
+    computerName: shape.nullable(shape.text()),
     // the panel id or package name
-    id: string;
-    name: string;
-    version: string;
+    id: shape.text(),
+    name: shape.text(),
+    version: shape.text(),
     // panel releases: what the plan expects the daemon to install
-    sha256: string | null;
+    sha256: shape.nullable(shape.text()),
     // display names of the panels using it ("Paperboard" for processes the
     // app started itself); for a panel, the panel itself
-    users: string[];
-}
+    users: shape.list(shape.text()),
+});
+export type UpdateHold = Infer<typeof updateHold>;
 
-export interface UpdateQueueState {
-    revision: number;
+export const updateQueueState = shape.object({
+    revision: shape.number(),
     // looking for updates: registries and computers are being asked
-    checking: boolean;
-    items: UpdateItem[];
-    holds: UpdateHold[];
+    checking: shape.boolean(),
+    items: shape.list(updateItem),
+    holds: shape.list(updateHold),
     // why the last look for updates could not finish
-    checkError: string | null;
+    checkError: shape.nullable(shape.text()),
     // why the last look at what holds updates back could not finish (a
     // computer that could not report its waiting updates)
-    holdsError: string | null;
-}
+    holdsError: shape.nullable(shape.text()),
+});
+export type UpdateQueueState = Infer<typeof updateQueueState>;
 
 export const initialUpdateQueueState: UpdateQueueState = {
     revision: 0,

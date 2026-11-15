@@ -82,7 +82,7 @@ test("Add Computer: a check of an earlier address that answers late does not ena
         const fetch = window.fetch;
         window.fetch = async (input, init) => {
             if (!String(input).endsWith("/computer-probe")) return fetch(input, init);
-            const { host } = JSON.parse(init.body).args[0];
+            const { host } = JSON.parse(init.body).args;
             note("asked", host);
             const res = await fetch(input, init);
             const json = res.json.bind(res);
@@ -180,7 +180,7 @@ test("a panel file from a computer that can't be reached answers 502 with why", 
 // Inventory: Security — the shell's computer list never carries a pairing's token or pinned certificate.
 test("the computer list the shell gets has no paired computer's token or certificate", async () => {
     const { result: listed } = await shell.page.evaluate<{ result: { computers: Record<string, unknown>[] } }>(
-        `fetch("/_shell/invoke/computers-list", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ args: [] }) }).then((r) => r.json())`,
+        `fetch("/_shell/invoke/computers-list", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({}) }).then((r) => r.json())`,
     );
     const paired = listed.computers.find((c) => c.id === workshop.id);
     expect(paired?.host).toBe("127.0.0.2");

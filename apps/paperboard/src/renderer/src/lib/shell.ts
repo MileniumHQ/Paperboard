@@ -1,101 +1,94 @@
 // Privileged shell-only IPC; panels speak PaperCrane directly over WebSocket.
+// Every channel is the contract's (shared/shellContract.ts): calls, sends and
+// pushes are typed by it, and each answer and push is read against its shape.
 import { onCleanup } from "solid-js";
 import { panelPath } from "@mileniumhq/paperapi";
-import { createBrowserBridge, type ShellIpc } from "./browserBridge";
-import type { LaunchOptions } from "../../../shared/launchOptions";
-import type { Graphics } from "../../../shared/graphics";
-import type { PanelPermission, PanelPermissionEntry, PermissionAnswer, PermissionAsk, PermissionFailure, ScreenPick, SystemBlock } from "../../../shared/panelPermissions";
+import { createBrowserBridge } from "./browserBridge";
+import {
+    readShellAnswer,
+    readShellPush,
+    type CallAnswer,
+    type CallArgs,
+    type ComputerInfo,
+    type Given,
+    type PushPayload,
+    type SendArgs,
+    type ShellCall,
+    type ShellPush,
+    type ShellSend,
+    type ShellWire,
+} from "../../../shared/shellContract";
+import type { PanelPermission, PermissionAnswer } from "../../../shared/panelPermissions";
 
-export interface ComputerInfo {
-    id: string;
-    name: string;
-    host: string;
-    port: number;
-    /** the address other machines reach this computer at (local computer only) */
-    networkAddress?: string;
-    os?: string;
-    osVersion?: string;
-    distroId?: string;
-    distroName?: string;
-    arch?: string;
-    isLocal?: boolean;
-    status: {
-        connected: boolean;
-        isRemote: boolean;
-        host: string;
-        port: number;
-        error?: string;
+export type { ComputerInfo, ComputerListResult, ComputerProbeResult, DiscoveredComputer } from "../../../shared/shellContract";
+
+export interface ShellIpc {
+    invoke<K extends ShellCall>(channel: K, ...args: Given<CallArgs<K>>): Promise<CallAnswer<K>>;
+    send<K extends ShellSend>(channel: K, ...args: Given<SendArgs<K>>): void;
+    /** returns what stops listening */
+    on<K extends ShellPush>(channel: K, listener: (payload: PushPayload<K>) => void): () => void;
+}
+
+function typed(wire: ShellWire): ShellIpc {
+    return {
+        invoke: async (channel, ...args) => readShellAnswer(channel, await wire.invoke(channel, args[0])),
+        send: (channel, ...args) => wire.send(channel, args[0]),
+        on: (channel, listener) =>
+            wire.on(channel, (payload) => {
+                let read: PushPayload<typeof channel>;
+                try {
+                    read = readShellPush(channel, payload);
+                } catch (err) {
+                    // quiet: a push has no caller to reject; main's log and the console say why it was dropped
+                    logToMain("error", err);
+                    return;
+                }
+                listener(read);
+            }),
     };
 }
 
-export interface ComputerListResult {
-    computers: ComputerInfo[];
-    activeId: string;
-}
-
-export interface ComputerProbeResult {
-    reachable: boolean;
-    hostname?: string;
-    error?: string;
-    // what was typed is no address, so there is no port to name
-    invalidAddress?: boolean;
-}
-
-export interface DiscoveredComputer {
-    id: string;
-    name: string;
-    host: string;
-    port: number;
-    version?: string;
-    os?: string;
-}
-
 // Electron windows get the preload bridge; browser mode (`--browser`) has
-// no preload and talks to the host over HTTP with the same surface.
-let browserBridge: ShellIpc | null = null;
+// no preload and talks to the host over HTTP with the same wire.
+let ipc: ShellIpc | null = null;
 
 export function isBrowserShell(): boolean {
-    return !window.electron?.ipcRenderer;
+    return !window.paperboardShell;
 }
 
 export function shellIpc(): ShellIpc {
-    const electron = window.electron?.ipcRenderer;
-    if (electron) return electron as unknown as ShellIpc;
-    browserBridge ??= createBrowserBridge();
-    return browserBridge;
+    ipc ??= typed(window.paperboardShell ?? createBrowserBridge());
+    return ipc;
 }
 
 /**
- * A state main keeps and pushes on `channel` whenever it changes, read once
- * by invoking `channel`: `accept` gets the read and each push, except one
- * older than `current()` (a push and the read travel separately) and any
+ * A state main keeps and pushes whenever it changes: `read` reads it once
+ * and `watch` hears each push. `accept` gets the read and each push, except
+ * one older than `current()` (a push and the read travel separately) and any
  * after the owner is disposed. `failed` gets why the read failed. Called
  * where onCleanup reaches the owner, such as onMount.
  */
 export function subscribeRevisioned<T extends { revision: number }>(
-    channel: string,
+    read: () => Promise<T>,
+    watch: (listener: (next: T) => void) => () => void,
     current: () => T,
     accept: (next: T) => void,
     failed: (err: unknown) => void,
 ): void {
-    const ipc = shellIpc();
     let disposed = false;
     const take = (next: T) => {
         if (disposed || next.revision < current().revision) return;
         accept(next);
     };
-    const handler = (_: unknown, next: T) => take(next);
-    ipc.on(channel, handler);
+    const stop = watch(take);
     onCleanup(() => {
         disposed = true;
-        ipc.removeListener(channel, handler);
+        stop();
     });
-    void ipc.invoke<T>(channel).then(take).catch((err) => {
+    void read().then(take).catch((err) => {
         if (!disposed) failed(err);
     });
 }
-
-const requireIpc = shellIpc;
 
 // Where a panel's documents and assets load from. Electron serves each
 // panel from its own panel:// origin; a browser host from a folder of the
@@ -107,100 +100,41 @@ export function panelUrl(computerId: string, panelId: string, subpath = ""): str
 }
 
 /** One file of an installed panel's manifest or store listing, as bytes. */
-export async function readPanelListingFile(
-    computerId: string,
-    panelId: string,
-    path: string,
-): Promise<Uint8Array> {
-    const base64 = await requireIpc().invoke<string>("panel-listing-file", {
-        computerId,
-        panelId,
-        path,
-    });
+export async function readPanelListingFile(computerId: string, panelId: string, path: string): Promise<Uint8Array> {
+    const base64 = await shellIpc().invoke("panel-listing-file", { computerId, panelId, path });
     return Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
 }
 
 export const computersApi = {
-    list: (): Promise<ComputerListResult> =>
-        requireIpc().invoke<ComputerListResult>("computers-list"),
-
-    probe: (host: string, port?: number | string): Promise<ComputerProbeResult> =>
-        requireIpc().invoke<ComputerProbeResult>("computer-probe", {
-            host,
-            port,
-        }),
-
-    pair: (
-        host: string,
-        port: number | undefined,
-        code: string,
-        name?: string,
-    ): Promise<ComputerInfo> =>
-        requireIpc().invoke<ComputerInfo>("computer-pair", {
-            host,
-            port,
-            code: code || "",
-            name,
-        }),
-
-    rename: (id: string, name: string): Promise<boolean> =>
-        requireIpc().invoke<boolean>("computer-update", { id, name }),
-
+    list: () => shellIpc().invoke("computers-list"),
+    probe: (host: string, port?: number | string) => shellIpc().invoke("computer-probe", { host, port }),
+    pair: (host: string, port: number | undefined, code: string, name?: string) =>
+        shellIpc().invoke("computer-pair", { host, port, code, name }),
+    rename: (id: string, name: string) => shellIpc().invoke("computer-update", { id, name }),
     /** null once forgotten; otherwise why the computer couldn't be told, and
      * nothing was forgotten unless `evenIfUntold` */
-    remove: (id: string, evenIfUntold = false): Promise<string | null> =>
-        requireIpc().invoke<string | null>("computer-remove", { id, evenIfUntold }),
-
-    switch: (id: string): Promise<boolean> =>
-        requireIpc().invoke<boolean>("computer-switch", id),
-
+    remove: (id: string, evenIfUntold = false) => shellIpc().invoke("computer-remove", { id, evenIfUntold }),
+    switch: (id: string) => shellIpc().invoke("computer-switch", { id }),
     /** every computer's id, in the rail's new order */
-    reorder: (ids: string[]): Promise<void> =>
-        requireIpc().invoke<void>("computer-reorder", { ids }),
-
-    onChanged: (
-        cb: (data: { computers?: ComputerInfo[]; activeId?: string }) => void,
-    ): (() => void) => {
-        const handler = (_event: unknown, data: any) => cb(data ?? {});
-        requireIpc().on("computers-changed", handler);
-        return () =>
-            requireIpc().removeListener?.("computers-changed", handler);
-    },
+    reorder: (ids: string[]) => shellIpc().invoke("computer-reorder", { ids }),
+    onChanged: (cb: (data: { computers: ComputerInfo[]; activeId: string }) => void) => shellIpc().on("computers-changed", cb),
 };
 
 // Nearby PaperCrane machines found via mDNS/Bonjour browsing in main.
 export const discoveryApi = {
-    list: (): Promise<DiscoveredComputer[]> =>
-        requireIpc().invoke<DiscoveredComputer[]>("discovery-list"),
-
-    onChanged: (cb: (services: DiscoveredComputer[]) => void): (() => void) => {
-        const handler = (_event: unknown, data: any) =>
-            cb(Array.isArray(data) ? data : []);
-        requireIpc().on("discovery-changed", handler);
-        return () =>
-            requireIpc().removeListener?.("discovery-changed", handler);
-    },
+    list: () => shellIpc().invoke("discovery-list"),
+    onChanged: (cb: (services: PushPayload<"discovery-changed">) => void) => shellIpc().on("discovery-changed", cb),
 };
 
 // Opens the local data dir (or a panel's files dir) in the OS file manager
 export const shellApi = {
     /** an unopened folder answers why */
-    openPanelFolder: (computerId: string, panelId?: string): Promise<{ opened: boolean; error?: string }> =>
-        requireIpc().invoke<{ opened: boolean; error?: string }>("open-panel-folder", {
-            computerId,
-            panelId,
-        }),
-    getAppVersion: (): Promise<string> =>
-        requireIpc().invoke<string>("app-version"),
-    getLaunchOptions: (): Promise<LaunchOptions> =>
-        requireIpc().invoke<LaunchOptions>("launch-options"),
+    openPanelFolder: (computerId: string, panelId?: string) => shellIpc().invoke("open-panel-folder", { computerId, panelId }),
+    getAppVersion: () => shellIpc().invoke("app-version"),
+    getLaunchOptions: () => shellIpc().invoke("launch-options"),
     /** whether Paperboard is drawn on a GPU, and again whenever that changes */
-    getGraphics: (): Promise<Graphics> => requireIpc().invoke<Graphics>("graphics"),
-    onGraphicsChanged: (cb: (graphics: Graphics) => void): (() => void) => {
-        const handler = (_event: unknown, data: Graphics) => cb(data);
-        requireIpc().on("graphics-changed", handler);
-        return () => requireIpc().removeListener?.("graphics-changed", handler);
-    },
+    getGraphics: () => shellIpc().invoke("graphics"),
+    onGraphicsChanged: (cb: (graphics: PushPayload<"graphics-changed">) => void) => shellIpc().on("graphics-changed", cb),
 };
 /** Ends this browser's session (Paperboard in the browser only) and shows
  * the signed-out page. Rejects with why when the host refused. */
@@ -213,7 +147,7 @@ export async function signOutOfBrowser(): Promise<void> {
 // Main applies side effects of freshly persisted settings (theme, title bars,
 // login item); resolves to why Run on startup couldn't be applied, or null
 export function notifyAppSettingsChanged(): Promise<string | null> {
-    return requireIpc().invoke<string | null>("app-settings-changed");
+    return shellIpc().invoke("app-settings-changed");
 }
 
 // Forwards renderer errors into the main file logger
@@ -242,7 +176,7 @@ export function logToMain(
                       : String(a),
             )
             .join(" ");
-        requireIpc().send("renderer-log", level, message);
+        shellIpc().send("renderer-log", { level, message });
     } catch (err) {
         // quiet: logging must never break the caller, and there is nowhere else to log this
         console.warn("[shell.ts] logToMain failed (IPC unavailable):", err);
@@ -255,30 +189,21 @@ export function logToMain(
 // work (main's quitGate.ts): the window says whether it holds any, and
 // answers main's ask once they had their say.
 export const quitApi = {
-    setUnsaved: (unsaved: boolean): Promise<void> => requireIpc().invoke<void>("panels-unsaved", unsaved),
-    onAsk: (cb: (ask: { askId: string }) => void) => listen("quit-ask", cb),
-    answer: (askId: string, quit: boolean): Promise<void> => requireIpc().invoke<void>("quit-answer", { askId, answer: quit }),
+    setUnsaved: (unsaved: boolean) => shellIpc().invoke("panels-unsaved", { unsaved }),
+    onAsk: (cb: (ask: { askId: string }) => void) => shellIpc().on("quit-ask", cb),
+    answer: (askId: string, quit: boolean) => shellIpc().invoke("quit-answer", { askId, answer: quit }),
 };
 
 export const panelPermissionsApi = {
-    list: (): Promise<PanelPermissionEntry[]> =>
-        requireIpc().invoke<PanelPermissionEntry[]>("panel-permissions-list"),
-    set: (panelId: string, permission: PanelPermission, answer: PermissionAnswer): Promise<void> =>
-        requireIpc().invoke<void>("panel-permission-set", { panelId, permission, answer }),
+    list: () => shellIpc().invoke("panel-permissions-list"),
+    set: (panelId: string, permission: PanelPermission, answer: PermissionAnswer) =>
+        shellIpc().invoke("panel-permission-set", { panelId, permission, answer }),
     /** a PermissionAnswer for an ask, a source id (or null) for a screen pick */
-    answer: (askId: string, answer: string | null): Promise<void> =>
-        requireIpc().invoke<void>("panel-permission-answer", { askId, answer }),
-    openSystemSettings: (permission: PanelPermission): Promise<void> =>
-        requireIpc().invoke<void>("open-system-privacy", permission),
-    onAsk: (cb: (ask: PermissionAsk) => void) => listen("panel-permission-ask", cb),
-    onScreenPick: (cb: (pick: ScreenPick) => void) => listen("panel-screen-pick", cb),
-    onSystemBlock: (cb: (block: SystemBlock) => void) => listen("panel-permission-system", cb),
-    onFailure: (cb: (failure: PermissionFailure) => void) => listen("panel-permission-failed", cb),
-    onChanged: (cb: () => void) => listen("panel-permissions-changed", cb),
+    answer: (askId: string, answer: string | null) => shellIpc().invoke("panel-permission-answer", { askId, answer }),
+    openSystemSettings: (permission: PanelPermission) => shellIpc().invoke("open-system-privacy", { permission }),
+    onAsk: (cb: (ask: PushPayload<"panel-permission-ask">) => void) => shellIpc().on("panel-permission-ask", cb),
+    onScreenPick: (cb: (pick: PushPayload<"panel-screen-pick">) => void) => shellIpc().on("panel-screen-pick", cb),
+    onSystemBlock: (cb: (block: PushPayload<"panel-permission-system">) => void) => shellIpc().on("panel-permission-system", cb),
+    onFailure: (cb: (failure: PushPayload<"panel-permission-failed">) => void) => shellIpc().on("panel-permission-failed", cb),
+    onChanged: (cb: () => void) => shellIpc().on("panel-permissions-changed", cb),
 };
-
-function listen<T>(channel: string, cb: (payload: T) => void): () => void {
-    const handler = (_event: unknown, payload: T) => cb(payload);
-    requireIpc().on(channel, handler);
-    return () => requireIpc().removeListener?.(channel, handler);
-}

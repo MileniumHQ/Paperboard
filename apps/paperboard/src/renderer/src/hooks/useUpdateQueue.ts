@@ -44,8 +44,10 @@ export function useUpdateQueue() {
     onMount(() => {
         // browser mode runs no updates: they happen when Paperboard next runs as a window
         if (isBrowserShell()) return;
-        subscribeRevisioned<UpdateQueueState>(
-            "update-queue",
+        const ipc = shellIpc();
+        subscribeRevisioned(
+            () => ipc.invoke("update-queue"),
+            (listener) => ipc.on("update-queue", listener),
             state,
             (next) => {
                 tellFailures(next);
@@ -56,7 +58,7 @@ export function useUpdateQueue() {
     });
 
     /** Stop and update, for held updates on one computer: rejects with why it could not run */
-    const release = (keys: string[]) => shellIpc().invoke<void>("update-release", { keys });
+    const release = (keys: string[]) => shellIpc().invoke("update-release", { keys });
 
     return { state, release };
 }

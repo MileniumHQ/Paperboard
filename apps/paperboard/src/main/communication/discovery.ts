@@ -5,16 +5,7 @@ import { Bonjour } from "bonjour-service";
 import { logger } from "../../../papercrane/logger";
 import { PAPERCRANE_MDNS_TYPE } from "../../../papercrane/discovery";
 import { errorMessage } from "@mileniumhq/paperapi/errors";
-
-export interface DiscoveredComputer {
-    /** stable service identity — dedupe key */
-    id: string;
-    name: string;
-    host: string;
-    port: number;
-    version?: string;
-    os?: string;
-}
+import type { DiscoveredComputer } from "../../shared/shellContract";
 
 interface DiscoveredEntry extends DiscoveredComputer {
     fqdn: string;

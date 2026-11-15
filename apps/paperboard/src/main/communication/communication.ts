@@ -2,26 +2,12 @@ import { type IpcMain, webContents } from "electron";
 import shelldata from "./shelldata";
 import discovery from "./discovery";
 import connectionPool from "./papercrane/ConnectionPool";
-import { logger } from "../../../papercrane/logger";
-import { isRefusedFrame, isShellUrl } from "./shellGuard";
+import { isShellUrl } from "./shellGuard";
 import { addShellPushSink, pushToShells } from "./shellPush";
-
-// renderer errors land in main log; call as logger.log() to preserve this.
-// Browser mode forwards its renderer-log sends here too.
-export function logRendererMessage(level: unknown, message: unknown): void {
-    if (level !== "error" && level !== "warn" && level !== "info") return;
-    logger.log(level, "[Renderer]", String(message));
-}
+import type { DiscoveredComputer } from "../../shared/shellContract";
 
 // privileged/host-coupled channels only; data flows through daemon
 export function startCommunicator(ipcMain: IpcMain) {
-    ipcMain.on("renderer-log", (event, level, message) => {
-        if (isRefusedFrame(event)) {
-            logger.warn('[Shell] PANEL_IPC_REFUSED: channel "renderer-log" is shell-only');
-            return;
-        }
-        logRendererMessage(level, message);
-    });
     shelldata(ipcMain);
 
     // event pushes go to shell documents only, by the same allowlist every
@@ -33,7 +19,7 @@ export function startCommunicator(ipcMain: IpcMain) {
         }
     });
 
-    const onDiscovery = (services: unknown) => pushToShells("discovery-changed", services);
+    const onDiscovery = (services: DiscoveredComputer[]) => pushToShells("discovery-changed", services);
     // a failure to browse is kept and said by discovery-list
     discovery.start();
     discovery.on("update", onDiscovery);

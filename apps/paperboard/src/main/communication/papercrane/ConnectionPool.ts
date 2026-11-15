@@ -13,6 +13,7 @@ import { pinnedRequest } from "../../../../papercrane/pinnedTls";
 import { bareHost, bracketHost, checkProbeTarget } from "./probeTarget";
 import { PaperCraneClient } from "./PaperCraneClient";
 import { errorMessage } from "@mileniumhq/paperapi/errors";
+import type { ComputerInfo } from "../../../shared/shellContract";
 
 export interface StoredComputer {
     id: string;
@@ -199,7 +200,7 @@ export class ConnectionPool extends EventEmitter {
     }
 
     /** what the shell shows of each computer: never a pairing's token or pinned certificate */
-    public listComputers(): (Omit<StoredComputer, "token" | "cert"> & { status: any; networkAddress?: string })[] {
+    public listComputers(): ComputerInfo[] {
         return Array.from(this.computers.values()).map(({ token: _token, cert: _cert, ...c }) => {
             const client = this.clients.get(c.id);
             const status =

@@ -45,7 +45,7 @@ export function confirmQuit(): Promise<boolean> {
                 window.focus();
             }
             // null: the window went away while it asked
-            if ((await askShell(wc, "quit-ask", {})) === false) return false;
+            if ((await askShell(wc, "quit-ask", (askId) => ({ askId }))) === false) return false;
         }
         return true;
     })().finally(() => {

@@ -4,6 +4,7 @@
 // main and the browser-mode host both parse with this one function.
 import { isPanelId } from "@mileniumhq/paperapi/panelIdentity";
 import { errorMessage } from "@mileniumhq/paperapi/errors";
+import { shape, type Infer } from "@mileniumhq/paperapi";
 
 export interface FileTypeFilter {
     name: string;
@@ -13,10 +14,8 @@ export interface FileTypeFilter {
 /** what an import asks the user to pick: one file (path is the file), several files, or a folder (path is the folder to copy them into) */
 export type PanelImportSelection = "file" | "files" | "folder";
 
-export interface ImportedPanelFile {
-    name: string;
-    bytes: number;
-}
+const importedPanelFile = shape.object({ name: shape.text(), bytes: shape.number() });
+export type ImportedPanelFile = Infer<typeof importedPanelFile>;
 
 export interface PanelFileTransferRequest {
     computerId: string;
@@ -30,20 +29,16 @@ export interface PanelFileTransferRequest {
     filters: FileTypeFilter[];
 }
 
-export type PanelFileTransferFailure =
-    | "invalid-request"
-    | "busy"
-    | "not-found"
-    | "too-large"
-    | "unreachable"
-    | "unsupported"
-    | "failed";
+const failureCode = shape.oneOf("invalid-request", "busy", "not-found", "too-large", "unreachable", "unsupported", "failed");
+export type PanelFileTransferFailure = Infer<typeof failureCode>;
 
-export type PanelFileTransferResult =
-    | { status: "exported"; name: string; bytes: number }
-    | { status: "imported"; name: string; bytes: number; files?: ImportedPanelFile[] }
-    | { status: "canceled" }
-    | { status: "failed"; code: PanelFileTransferFailure; message: string };
+export const panelFileTransferResult = shape.either(
+    shape.object({ status: shape.oneOf("exported"), name: shape.text(), bytes: shape.number() }),
+    shape.object({ status: shape.oneOf("imported"), name: shape.text(), bytes: shape.number(), files: shape.optional(shape.list(importedPanelFile)) }),
+    shape.object({ status: shape.oneOf("canceled") }),
+    shape.object({ status: shape.oneOf("failed"), code: failureCode, message: shape.text() }),
+);
+export type PanelFileTransferResult = Infer<typeof panelFileTransferResult>;
 
 export class PanelFileTransferError extends Error {
     constructor(
@@ -73,7 +68,7 @@ function invalid(message: string): never {
 }
 
 /** one field of an IPC call's arguments, whatever shape they came in */
-export function field(args: unknown, key: string): unknown {
+function field(args: unknown, key: string): unknown {
     return args && typeof args === "object" ? (args as Record<string, unknown>)[key] : undefined;
 }
 

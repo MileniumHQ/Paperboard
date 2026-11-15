@@ -5,7 +5,6 @@
 import { app, dialog, shell } from "electron";
 import * as path from "path";
 import { is } from "@electron-toolkit/utils";
-import { logRendererMessage } from "./communication/communication";
 import { servePanelAsset } from "./panelServe";
 import { readPanelFileForBrowser, statPanelFileForBrowser, writePanelFileFromBrowser } from "./panelFileTransfer";
 import { poolEndpoint } from "./panelFileEndpoint";
@@ -14,9 +13,9 @@ import { BrowserSessions } from "./browserSessions";
 import { getLocalDir } from "../../papercrane/paths";
 import { portRefusal } from "../../papercrane/ports";
 import { createShellInvokeHandlers } from "./communication/shellHandlers";
-import { SHARED_SHELL_INVOKE_CHANNELS } from "./communication/shellChannels";
+import { shellServer } from "./communication/shellServer";
 import { launchOptionsFromArgv } from "../shared/launchOptions";
-import { applySavedAppSettings } from "./communication/shelldata";
+import { applySavedAppSettings, logRendererMessage } from "./communication/shelldata";
 import { addShellPushSink } from "./communication/shellPush";
 import { logger as log } from "../../papercrane/logger";
 
@@ -47,16 +46,14 @@ function browserPort(): number {
 function ensureBrowserHost(onServing: () => void): Promise<BrowserHost> {
     if (browserHost) return Promise.resolve(browserHost);
     browserHostStarting ??= (async () => {
-        const shared = createShellInvokeHandlers({
+        const calls = createShellInvokeHandlers({
             appVersion: () => app.getVersion(),
             launchOptions: () => launchOptionsFromArgv(process.argv),
             // the page is drawn by the browser it's open in, not by this process
             graphics: () => ({ gpu: true }),
             openPath: (dir) => shell.openPath(dir),
+            appSettingsChanged: applySavedAppSettings,
         });
-        const invoke: Record<string, (args: unknown) => unknown> = {};
-        for (const channel of SHARED_SHELL_INVOKE_CHANNELS) invoke[channel] = shared[channel];
-        invoke["app-settings-changed"] = () => applySavedAppSettings();
         browserSessions ??= new BrowserSessions(path.join(getLocalDir(), "browser-sessions.json"));
         const port = browserPort();
         const host = await startBrowserHost({
@@ -64,10 +61,7 @@ function ensureBrowserHost(onServing: () => void): Promise<BrowserHost> {
             sessions: browserSessions,
             rendererDir: path.join(__dirname, "../renderer"),
             rendererDevUrl: is.dev ? process.env["ELECTRON_RENDERER_URL"] : undefined,
-            invoke,
-            send: {
-                "renderer-log": (level, message) => logRendererMessage(level, message),
-            },
+            shell: shellServer<void>("browser", calls, { "renderer-log": logRendererMessage }),
             servePanel: servePanelAsset,
             panelFiles: {
                 stat: (args) => statPanelFileForBrowser(args, poolEndpoint),

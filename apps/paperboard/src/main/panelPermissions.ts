@@ -16,7 +16,6 @@ import { parsePanelHost } from "./panelAssets";
 
 import { PANEL_PERMISSIONS, isPanelPermission, type PanelPermission, type PanelPermissionEntry, type PermissionAnswer } from "../shared/panelPermissions";
 
-export { isPanelPermission };
 export type { PanelPermission, PermissionAnswer };
 
 /** who asked: the panel a panel:// frame belongs to */

@@ -121,8 +121,9 @@ describe("failures reach the caller", () => {
             graphics: () => ({ gpu: true }),
             // Electron's shell.openPath resolves to the system's message
             openPath: async (dir) => `Failed to open path: ${dir}`,
+            appSettingsChanged: async () => null,
         });
-        const answer = await handlers["open-panel-folder"]({ computerId: "local", panelId: PANEL });
+        const answer = await handlers["open-panel-folder"]({ computerId: "local", panelId: PANEL }, undefined);
         expect(answer).toEqual({ opened: false, error: `Failed to open path: ${path.join(process.env.PAPERBOARD_DIR!, "files", PANEL)}` });
     });
 
