@@ -36,8 +36,10 @@ export const actionsApi = {
     },
 };
 
+/** The panel's settled state, as the bridge holds it: a fixture changes it before it mounts. */
+export const state = { ...structuredClone(DEFAULT_STATE), settings: { name: "Fixture", harness: "claude-code" as const, model: null, compaction: "summarize" as const } };
+
 export function createPanelBridge() {
-    const state = { ...structuredClone(DEFAULT_STATE), settings: { name: "Fixture", harness: "claude-code" as const, model: null, compaction: "summarize" as const } };
     return {
         getState: () => state,
         refreshState: async () => state,

@@ -21,12 +21,10 @@ const WINDOWS_POLL_MS = 2000;
 // well inside the service's 20 s lease, so a slow call doesn't let it lapse
 const RENEW_MS = 6000;
 // how long after the user's last click or key the agent gets its computer back
-const IDLE_MS = 5000;
-
+export const IDLE_MS = 5000;
 
 /** a tab shows this much of a window's title; the rest is an ellipsis, and the whole title its tooltip */
 const TITLE_CHARS = 32;
-
 
 export default function ComputerView(props: { agent: Agent }) {
     const c = () => props.agent.state.computer;
