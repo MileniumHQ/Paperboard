@@ -1,4 +1,5 @@
 import { files as fileApi, type ServiceContext } from "./api";
+import { errorText } from "./failures";
 import { listDirectory } from "./filesystem";
 import {
     parsePlayerStats,
@@ -14,14 +15,14 @@ const UUID_FILE_RE =
 // must not turn one action into an unbounded read
 const MAX_PLAYER_STATS = 2000;
 
+/** a file the server writes, or null when it has not written it; one it can't read throws why */
 async function readJson(relative: string): Promise<unknown> {
+    const content = await fileApi.read(relative, PANEL_ID);
+    if (!content) return null;
     try {
-        const content = await fileApi.read(relative, PANEL_ID);
-        if (!content) return null;
         return JSON.parse(content);
     } catch (err) {
-        console.debug(`[Service:PlayerStats] unreadable ${relative}:`, String(err));
-        return null;
+        throw new Error(`${relative} is not valid JSON: ${errorText(err)}`);
     }
 }
 
@@ -80,11 +81,7 @@ export async function uuidForPlayerName(rawName: string): Promise<string | null>
 async function resolveStatsDir(level: string): Promise<string | null> {
     const candidates = [`${level}/players/stats`, `${level}/stats`];
     for (const candidate of candidates) {
-        try {
-            if (await fileApi.exists(candidate, PANEL_ID)) return candidate;
-        } catch (err) {
-            console.debug(`[Service:PlayerStats] stats dir probe failed for "${candidate}":`, String(err));
-        }
+        if (await fileApi.exists(candidate, PANEL_ID)) return candidate;
     }
     return null;
 }

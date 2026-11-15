@@ -91,4 +91,22 @@ describe("add-on uploads", () => {
         }
         expect(fs.existsSync(path.join(up.root, STAGE_DIR, "Good.jar"))).toBe(true);
     });
+
+    test("an add that fails after the move says which files could not be taken back out", async () => {
+        const up = staged({ "Good.jar": plugin("Good") });
+        const stageDir = path.join(up.root, STAGE_DIR);
+        // the record write fails once the jar is in place, and the stage can no longer take it back
+        up.deps.writeConfig = async () => {
+            fs.chmodSync(stageDir, 0o555);
+            throw new Error("the config is not writable");
+        };
+        try {
+            const err = await uploadPlugins(STAGE, "paper", up.deps).catch((e: Error) => e);
+            expect((err as Error).message).toStartWith("the config is not writable. Good.jar (");
+            expect((err as Error).message).toEndWith("could not be taken back out of plugins/, so it stays there.");
+            expect(fs.existsSync(path.join(up.root, "plugins", "Good.jar"))).toBe(true);
+        } finally {
+            if (fs.existsSync(stageDir)) fs.chmodSync(stageDir, 0o755);
+        }
+    });
 });

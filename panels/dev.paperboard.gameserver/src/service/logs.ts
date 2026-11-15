@@ -1,6 +1,7 @@
 import * as fs from "node:fs";
 import { gunzipSync } from "node:zlib";
 import { files as fileApi, type ServiceContext } from "./api";
+import { errorCode } from "./failures";
 import { listDirectory } from "./filesystem";
 import { isLogFileName, tailChars } from "../core/logs";
 import { type GameServerState, PANEL_ID } from "./types";
@@ -31,14 +32,15 @@ export async function listLogFiles(
     const files: LogFileInfo[] = [];
     for (const entry of entries) {
         if (!isLogFileName(entry)) continue;
+        let stat: fs.Stats;
         try {
-            const absolute = await fileApi.getPath(`logs/${entry}`, PANEL_ID);
-            const stat = fs.statSync(absolute);
-            if (!stat.isFile()) continue;
-            files.push({ name: entry, size: stat.size, mtimeMs: stat.mtimeMs });
+            stat = fs.statSync(await fileApi.getPath(`logs/${entry}`, PANEL_ID));
         } catch (err) {
-            console.debug(`[Service:Logs] stat failed for "${entry}":`, String(err));
+            // rotated away since the listing
+            if (errorCode(err) === "ENOENT") continue;
+            throw err;
         }
+        if (stat.isFile()) files.push({ name: entry, size: stat.size, mtimeMs: stat.mtimeMs });
     }
     files.sort((a, b) => b.mtimeMs - a.mtimeMs);
     return files;

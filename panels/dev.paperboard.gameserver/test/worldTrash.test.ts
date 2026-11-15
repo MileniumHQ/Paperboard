@@ -10,6 +10,8 @@ import { PANEL_ID } from "../src/servers";
 import { trashRemovePathsWith, type TrashFs } from "../src/service/trash";
 import { deleteActiveWorldDirs, listWorlds, setActiveWorld } from "../src/service/worlds";
 import { resetWorldFiles } from "../src/service/diagnostics";
+import { listPlayerStats } from "../src/service/playerStats";
+import { listLogFiles } from "../src/service/logs";
 
 let daemon: TestDaemon;
 beforeAll(async () => {
@@ -124,5 +126,14 @@ describe("world deletion", () => {
         await expect(setActiveWorld(ctx, "brandnew")).rejects.toThrow("JSON Parse error");
         expect(fs.readFileSync(file, "utf8")).toBe("{\"software\": \"paper\",");
         fs.rmSync(file);
+    });
+
+    test("a world, player or log file that can't be read fails its listing instead of reading as missing", async () => {
+        const mc = minecraftServer({ files: { "server.properties": "level-name=world\n", "world/level.dat": "w", "elsewhere/level.dat": "n", "ops.json/.keep": "", "logs/old.log": "log" } });
+        fs.symlinkSync(path.join(mc.dir, "elsewhere"), path.join(mc.dir, "world_nether"));
+        fs.symlinkSync(path.join(mc.dir, "logs", "old.log"), path.join(mc.dir, "logs", "latest.log"));
+        await expect(mc.run(() => listWorlds())).rejects.toThrow("symbolic link");
+        await expect(mc.run(() => listPlayerStats(mc.scope.ctx))).rejects.toThrow();
+        await expect(mc.run(() => listLogFiles(mc.scope.ctx))).rejects.toThrow("symbolic link");
     });
 });

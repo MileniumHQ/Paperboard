@@ -8,8 +8,7 @@ import nbt from "prismarine-nbt";
 import { paintInTurn, paintRegion } from "../src/service/map";
 
 /** a region file holding `count` chunks, each real NBT the painter must parse */
-function regionOf(count: number): Buffer {
-    const chunk = deflateSync(nbt.writeUncompressed(nbt.comp({ Status: nbt.string("minecraft:full") }) as never));
+function regionOf(count: number, chunk: Buffer = deflateSync(nbt.writeUncompressed(nbt.comp({ Status: nbt.string("minecraft:full") }) as never))): Buffer {
     const sectors = Math.ceil((chunk.length + 5) / 4096);
     const region = Buffer.alloc(8192 + count * sectors * 4096);
     for (let i = 0; i < count; i++) {
@@ -62,5 +61,9 @@ describe("painting the map leaves the service answering", () => {
         const next = paintInTurn("good", async () => "painted");
         await expect(failed).rejects.toThrow("unreadable region");
         expect(await next).toBe("painted");
+    });
+
+    test("a region whose every chunk is unreadable fails, instead of painting as empty terrain", async () => {
+        await expect(paintRegion(regionOf(2, Buffer.from("not zlib data")), 0, "r.0.0.mca")).rejects.toThrow("Region r.0.0.mca could not be read");
     });
 });

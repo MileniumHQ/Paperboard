@@ -103,13 +103,6 @@ async function commit(deps: UploadDeps, stage: unknown, plan: UploadPlan): Promi
 
         await nodeFs.mkdir(targetDir, { recursive: true });
         const moved: StagedEntry[] = [];
-        const putBack = async () => {
-            for (const entry of moved) {
-                await nodeFs.rename(nodePath.join(targetDir, entry.name), entry.path).catch((err) =>
-                    console.error(`[Service:Uploads] could not undo adding ${entry.name}:`, err),
-                );
-            }
-        };
         try {
             for (const entry of entries) {
                 await nodeFs.rename(entry.path, nodePath.join(targetDir, entry.name));
@@ -120,8 +113,20 @@ async function commit(deps: UploadDeps, stage: unknown, plan: UploadPlan): Promi
                 for (const entry of entries) records[`${plan.targetDir}/${entry.name}`] = { at };
             });
         } catch (err) {
-            await putBack();
-            throw new Error(`${errorText(err)}. Nothing was added.`);
+            // what could not be taken back out stays, and the message says so
+            const stuck: string[] = [];
+            for (const entry of moved) {
+                try {
+                    await nodeFs.rename(nodePath.join(targetDir, entry.name), entry.path);
+                } catch (undoErr) {
+                    stuck.push(`${entry.name} (${errorText(undoErr)})`);
+                }
+            }
+            throw new Error(
+                stuck.length
+                    ? `${errorText(err)}. ${stuck.join(", ")} could not be taken back out of ${plan.targetDir}/, so ${stuck.length === 1 ? "it stays" : "they stay"} there.`
+                    : `${errorText(err)}. Nothing was added.`,
+            );
         }
         return { added: entries.map((e) => e.name) };
     } finally {

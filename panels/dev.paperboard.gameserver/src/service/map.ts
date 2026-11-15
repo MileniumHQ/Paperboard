@@ -1,4 +1,5 @@
 import { minecraftSoftware } from "../games/minecraft/index";
+import { errorText } from "./failures";
 import { serverLocal } from "./scope";
 import * as fs from "node:fs";
 import { gunzipSync, inflateSync } from "node:zlib";
@@ -125,11 +126,7 @@ async function resolveRegionDir(
     dimension: MapDimension,
 ): Promise<string | null> {
     for (const candidate of regionDirCandidates(profile, levelName, dimension)) {
-        try {
-            if (await fileApi.exists(candidate, PANEL_ID)) return candidate;
-        } catch (err) {
-            console.debug(`[Service:Map] region dir probe failed for "${candidate}":`, String(err));
-        }
+        if (await fileApi.exists(candidate, PANEL_ID)) return candidate;
     }
     return null;
 }
@@ -255,16 +252,9 @@ function surfaceBlockAt(
 
 // prismarine-nbt long arrays are [high, low] pairs; longPairToBigInt in
 // core/map.ts owns the conversion (and its test)
-async function parseChunk(buffer: Buffer): Promise<ChunkNbt | null> {
-    // outside the try below: a library that won't load is an error, not an unreadable chunk
+async function parseChunk(buffer: Buffer): Promise<ChunkNbt> {
     const nbt = await loadNbt();
-    try {
-        const parsed = await nbt.parse(buffer);
-        return nbt.simplify(parsed.parsed) as ChunkNbt;
-    } catch (err) {
-        console.debug("[Service:Map] chunk NBT parse failed:", String(err));
-        return null;
-    }
+    return nbt.simplify((await nbt.parse(buffer)).parsed) as ChunkNbt;
 }
 
 interface CachedTile {
@@ -370,28 +360,34 @@ export async function paintRegion(buffer: Buffer, minY: number, name: string): P
     let paintedChunks = 0;
     let parsedChunks = 0;
     const unsupportedCompression = new Set<number>();
+    // why the first chunk that could not be read could not be
+    let unreadable: string | null = null;
     for (let cx = 0; cx < REGION_CHUNKS; cx++) {
         for (let cz = 0; cz < REGION_CHUNKS; cz++) {
-            const chunk = readChunkBuffer(buffer, cx, cz);
-            if (!chunk) continue;
-            if (chunk.unsupported !== undefined) {
-                unsupportedCompression.add(chunk.unsupported);
-                continue;
-            }
-            if (await paintChunk(png, chunk.buffer, cx, cz, minY)) {
-                paintedChunks++;
+            try {
+                const chunk = readChunkBuffer(buffer, cx, cz);
+                if (!chunk) continue;
+                if (chunk.unsupported !== undefined) {
+                    unsupportedCompression.add(chunk.unsupported);
+                    continue;
+                }
+                if (await paintChunk(png, chunk.buffer, cx, cz, minY)) paintedChunks++;
+            } catch (err) {
+                // one damaged chunk is a hole in the tile; the rest still paint
+                unreadable ??= errorText(err);
             }
             if (++parsedChunks % CHUNKS_PER_TURN === 0) await loopTurn();
         }
     }
-    // a tile where every chunk was skipped because the compression is not
-    // understood is a failure, not empty terrain: say so instead of serving
-    // a transparent tile that reads as "nothing generated here"
+    // a tile where every chunk was skipped because it could not be read is
+    // a failure, not empty terrain: say so instead of serving a transparent
+    // tile that reads as "nothing generated here"
     if (paintedChunks === 0 && unsupportedCompression.size > 0) {
         throw new Error(
             `Region ${name} uses unsupported chunk compression (type ${[...unsupportedCompression].join(", ")})`,
         );
     }
+    if (paintedChunks === 0 && unreadable) throw new Error(`Region ${name} could not be read: ${unreadable}`);
     return `data:image/png;base64,${PNG.sync.write(png).toString("base64")}`;
 }
 
@@ -410,20 +406,9 @@ function readChunkBuffer(region: Buffer, cx: number, cz: number): ChunkBuffer | 
     const length = region.readUInt32BE(offset);
     const compression = region[offset + 4];
     const payload = region.subarray(offset + 5, offset + 4 + length);
-    try {
-        if (compression === 1)
-            return {
-                buffer: gunzipSync(payload, { maxOutputLength: MAX_CHUNK_BYTES }),
-            };
-        if (compression === 2)
-            return {
-                buffer: inflateSync(payload, { maxOutputLength: MAX_CHUNK_BYTES }),
-            };
-        if (compression === 3) return { buffer: Buffer.from(payload) };
-    } catch (err) {
-        console.debug("[Service:Map] chunk decompress failed:", String(err));
-        return null;
-    }
+    if (compression === 1) return { buffer: gunzipSync(payload, { maxOutputLength: MAX_CHUNK_BYTES }) };
+    if (compression === 2) return { buffer: inflateSync(payload, { maxOutputLength: MAX_CHUNK_BYTES }) };
+    if (compression === 3) return { buffer: Buffer.from(payload) };
     // 4 = LZ4 (server option region-file-compression=lz4) and 127+ are
     // custom; the tile reports the type instead of silently skipping
     return { buffer: Buffer.alloc(0), unsupported: compression };
@@ -437,7 +422,7 @@ async function paintChunk(
     minBuildHeight: number,
 ): Promise<boolean> {
     const root = await parseChunk(chunkBuffer);
-    if (!root || !root.sections || !root.Heightmaps) return false;
+    if (!root.sections || !root.Heightmaps) return false;
     // `Status` was renamed to `status` in 26.4; accept both spellings
     const status = root.Status ?? root.status;
     if (status !== undefined && status !== "minecraft:full") return false;

@@ -1,6 +1,5 @@
 import { minecraftSoftware } from "../games/minecraft/index";
 import { processApi, updateSettings, type ServiceContext } from "./api";
-import { writeServerLineBestEffort } from "./serverConsole";
 import {
     assertGameruleName,
     assertGameruleValue,
@@ -69,15 +68,16 @@ async function persistPendingGamerule(name: string, value: string): Promise<void
 // written directly to the console (like the stat queries) so the console
 // view is not flooded with command entries. The UI supplies the names it
 // displays (version-filtered); every name is re-validated here.
-export function queryGamerules(
+export async function queryGamerules(
     ctx: ServiceContext<GameServerState>,
     names: string[],
-): boolean {
+): Promise<boolean> {
     if (ctx.state.serverStatus !== "online") return false;
     const profile = profileFor(ctx);
     const known = names.filter(isKnownGameruleName).slice(0, MAX_GAMERULE_WRITES);
+    // the tab waits on these readouts: a write the console refused fails the call
     for (const name of known) {
-        writeServerLineBestEffort(`gamerule ${serverGameruleName(profile, name)}\n`);
+        await processApi.write(SERVER_PROC_ID, `gamerule ${serverGameruleName(profile, name)}\n`);
     }
     return true;
 }

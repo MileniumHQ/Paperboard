@@ -13,7 +13,7 @@ import { killConflictingProcessWith } from "../src/service/diagnostics";
 import { minecraftCalls } from "../src/games/minecraft/calls";
 import { CALLS } from "../src/service/contract";
 import { sendServerCommand, startServerInstance, stopServerInstance } from "../src/service/lifecycle";
-import { setGamerule } from "../src/service/gamerules";
+import { queryGamerules, setGamerule } from "../src/service/gamerules";
 import { runtimeCommandsFor } from "../src/service/runtimeProperties";
 import { assertResourcePackUrl } from "../src/core/resourcepack";
 import { selectCustomResourcePack } from "../src/service/resourcepack";
@@ -103,6 +103,8 @@ describe("console and property injection", () => {
         const scope = testScope({ directory: "servers/rules-gone" }, { serverStatus: "online", serverVersion: "1.21.11", serverSoftware: "paper" });
         await expect(inServer(scope, () => setGamerule(scope.ctx, "keep_inventory", "true"))).rejects.toThrow();
         expect(scope.ctx.state.gamerules.keep_inventory).toBeUndefined();
+        // the Game Rules tab's readout of the current values fails the same way
+        await expect(inServer(scope, () => queryGamerules(scope.ctx, ["keep_inventory"]))).rejects.toThrow();
     });
 
     test("difficulty and gamemode map only to known named commands", () => {

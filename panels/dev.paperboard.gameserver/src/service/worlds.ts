@@ -112,17 +112,12 @@ export async function listWorlds(): Promise<WorldInfo[]> {
         infos
             .filter((info) => info.generated)
             .map(async (info) => {
-                const safe = info.name;
-                try {
-                    const [nether, end] = await Promise.all([
-                        fileApi.exists(`${safe}_nether/level.dat`, PANEL_ID),
-                        fileApi.exists(`${safe}_the_end/level.dat`, PANEL_ID),
-                    ]);
-                    info.hasNether = nether === true;
-                    info.hasEnd = end === true;
-                } catch (err) {
-                    console.debug(`[Service:Worlds] dimension check failed for "${safe}":`, String(err));
-                }
+                const [nether, end] = await Promise.all([
+                    fileApi.exists(`${info.name}_nether/level.dat`, PANEL_ID),
+                    fileApi.exists(`${info.name}_the_end/level.dat`, PANEL_ID),
+                ]);
+                info.hasNether = nether;
+                info.hasEnd = end;
             }),
     );
     return infos;
