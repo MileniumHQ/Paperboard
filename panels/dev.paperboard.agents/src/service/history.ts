@@ -6,7 +6,7 @@ import fs from "node:fs";
 import path from "node:path";
 import type { ChatEntry, PastConversation } from "../contract";
 import { errorText } from "../lib/failure";
-import { KEEP_IN_MEMORY, readTranscript, said, TRANSCRIPT, type Said } from "./transcript";
+import { readTranscript, said, TRANSCRIPT, type Said } from "./transcript";
 import { writeAtomic } from "./writeAtomic";
 
 export const THREADS = "threads.json";
@@ -128,20 +128,11 @@ export class History {
         fs.rmSync(dir, { recursive: true });
     }
 
-    /** A past conversation's texts, oldest first. */
+    /** A past conversation's texts, every one of them, oldest first. */
     texts(id: string): Said[] {
         const dir = this.folder(id);
         if (!fs.existsSync(dir)) throw new Error(`the agent has no conversation "${id}"; it may have been deleted`);
-        return said(readTranscript(path.join(dir, TRANSCRIPT)).entries.slice(-KEEP_IN_MEMORY));
-    }
-
-    /** One text by its id, in whichever past conversation has it. */
-    find(messageId: string): Said | undefined {
-        for (const id of this.ids()) {
-            const found = said(readTranscript(path.join(this.pastDir(), id, TRANSCRIPT)).entries).find((e) => e.id === messageId);
-            if (found) return found;
-        }
-        return undefined;
+        return said(readTranscript(path.join(dir, TRANSCRIPT)).entries);
     }
 
     private pastDir() {

@@ -24,10 +24,10 @@ export interface BlocksHost extends FlowHost {
     conversations(): string[];
     /** throws for a conversation the agent doesn't have */
     conversation(id: string): ConversationFacts;
-    /** a conversation's texts, the user's and the agent's, oldest first */
+    /** a conversation's texts' ids, the user's and the agent's, oldest first */
     messages(conversation: string): string[];
-    /** throws for a text in none of the agent's conversations */
-    message(id: string): MessageFacts;
+    /** throws for a text the conversation doesn't have */
+    message(conversation: string, id: string): MessageFacts;
     /** a conversation in the history, for good */
     deleteConversation(id: string): unknown;
     /** the current conversation's messages and files, for good */
@@ -185,8 +185,8 @@ export function flowBlocks(host: BlocksHost): BlockSet {
                 description: "One text in a conversation with the agent",
                 base: "text",
                 fields: {
-                    text: { type: "text", name: "Text", resolve: (id: string) => ready(() => host.message(id).text) },
-                    from: { type: "text", name: "From", description: "user or agent", resolve: (id: string) => ready(() => host.message(id).from) },
+                    text: { type: "text", name: "Text", resolve: (value: string) => ready(() => host.message(...messageOf(value)).text) },
+                    from: { type: "text", name: "From", description: "user or agent", resolve: (value: string) => ready(() => host.message(...messageOf(value)).from) },
                 },
             },
             {
@@ -342,7 +342,11 @@ export function flowBlocks(host: BlocksHost): BlockSet {
                 text: "messages in {conversation}",
                 inputs: { conversation: { type: "conversation", name: "Conversation" } },
                 type: "list<message>",
-                read: ({ conversation }: { conversation: string }) => ready(() => host.messages(conversation.trim())),
+                read: ({ conversation }: { conversation: string }) =>
+                    ready(() => {
+                        const id = conversation.trim();
+                        return host.messages(id).map((m) => messageValue(id, m));
+                    }),
             },
             {
                 id: "facts",
@@ -498,7 +502,7 @@ export function flowBlocks(host: BlocksHost): BlockSet {
                 },
                 output: "message",
                 run: ({ message, instructions }: { message: string; instructions?: string }) =>
-                    ready(() => host.send(message, instructions?.trim() || undefined)),
+                    ready(() => messageValue(host.currentConversation(), host.send(message, instructions?.trim() || undefined))),
             },
             {
                 id: "get-answer",
@@ -808,9 +812,20 @@ export function replyPayload(message: MessageReceived): Record<string, unknown> 
     return {
         text: message.text,
         attachments: message.attachments.map((a) => ({ ...a })),
-        message: message.messageId,
+        message: messageValue(message.conversationId, message.messageId),
         conversation: message.conversationId,
         // the Actions payload says "none" with empty text; a block says it with no value
-        "reply-to": message.replyTo || null,
+        "reply-to": message.replyTo ? messageValue(message.conversationId, message.replyTo) : null,
     };
+}
+
+/** A Message as Blocks holds it: its conversation's id and its own. A message id is unique only in its conversation. */
+export function messageValue(conversation: string, id: string): string {
+    return `${conversation}.${id}`;
+}
+
+function messageOf(value: string): [conversation: string, id: string] {
+    const dot = value.indexOf(".");
+    if (dot <= 0 || dot === value.length - 1) throw new Error(`"${value}" isn't one of the agent's messages`);
+    return [value.slice(0, dot), value.slice(dot + 1)];
 }

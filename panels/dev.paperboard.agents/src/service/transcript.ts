@@ -33,6 +33,11 @@ export class Transcript {
         return this.ids.has(id);
     }
 
+    /** Every entry, the ones past what memory keeps too, oldest first: read from the file only when memory doesn't hold them all. */
+    all(): ChatEntry[] {
+        return this.ids.size > this.entries.length ? readTranscript(this.file).entries : this.entries;
+    }
+
     /**
      * Read the file into memory. A torn last line (a crash mid-append) is cut off the file once the rest has
      * read: the next entry appended after it would join it and be lost.

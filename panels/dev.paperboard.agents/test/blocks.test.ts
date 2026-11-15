@@ -13,6 +13,15 @@ afterEach(async () => {
 
 const replies = (r: AppRig) => r.blocks.fired.items.filter((f) => f.event === "message-received");
 
+/** A conversation put away in the history, as the service leaves one: the user's texts, oldest first. */
+function pastConversation(r: AppRig, id: string, texts: { id: string; text: string }[]) {
+    const dir = path.join(r.root, "storage", "conversation", "past", id);
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, "transcript.jsonl"), texts.map((t, i) => `${JSON.stringify({ id: t.id, at: 1000 + i, kind: "user", text: t.text })}\n`).join(""));
+    fs.writeFileSync(path.join(dir, "meta.json"), JSON.stringify({ id, title: texts[0]!.text, startedAt: 1000, endedAt: 1000 + texts.length, messages: texts.length }));
+    return id;
+}
+
 // The agent's blocks (Actions API v2), as the Blocks panel runs them.
 describe("the agent's blocks", () => {
     test("registers the agent's types, values, commands and events, and none of the panel's own actions", async () => {
@@ -87,11 +96,14 @@ describe("the agent's blocks", () => {
         expect(replies(rig)[0]!.payload).toEqual({
             text: entry.kind === "agent" ? entry.text : "",
             attachments: [],
-            message: entry.id,
+            message: `${current}.${entry.id}`,
             conversation: current,
             "reply-to": null,
         });
-        expect(rig.app.conversation.history()[0]).toMatchObject({ id: message, kind: "user", text: "what's up?" });
+        const sent = rig.app.conversation.history()[0]!;
+        expect(sent).toMatchObject({ kind: "user", text: "what's up?" });
+        // a message is named with its conversation: its own id is unique only there
+        expect(message).toBe(`${current}.${sent.id}`);
 
         await rig.blocks.changes.until((c) => c.includes("conversations"), "the conversations to announce the change");
         expect(rig.blocks.changes.items).not.toContain("current-conversation");
@@ -146,7 +158,7 @@ describe("the agent's blocks", () => {
         await rig.blocks.run("delete-conversation", { conversation: first });
         expect(await rig.blocks.read("conversations")).toEqual([]);
         await expect(rig.blocks.read("messages", { conversation: first })).rejects.toThrow(`the agent has no conversation "${first}"`);
-        await expect(rig.blocks.property("message", "text", sent)).rejects.toThrow(`the agent has no message "${sent}"`);
+        await expect(rig.blocks.property("message", "text", sent)).rejects.toThrow(`the agent has no conversation "${first}"`);
 
         await rig.blocks.run("send-message", { message: "again" });
         await rig.blocks.fired.until(() => replies(rig!).length === 2, "the second reply");
@@ -156,6 +168,28 @@ describe("the agent's blocks", () => {
         expect(await rig.blocks.read("messages", { conversation: second })).toEqual([]);
         expect(await rig.blocks.read("conversations")).toEqual([]);
         expect(rig.blocks.changes.items.slice(changes)).toContain("conversations");
+    }, SLOW);
+
+    test("a Message reads its own conversation's text, though another conversation has a message with the same id", async () => {
+        rig = await appRig();
+        await rig.blocks.run("send-message", { message: "in the current one" });
+        await rig.blocks.fired.until(() => replies(rig!).length === 1, "the reply");
+        const past = pastConversation(rig, "c0ffee000001", [{ id: rig.app.conversation.history()[0]!.id, text: "in the history" }]);
+        const [listed] = await rig.blocks.read<string[]>("messages", { conversation: past });
+        expect(await rig.blocks.property("message", "text", listed)).toBe("in the history");
+    }, SLOW);
+
+    test("Messages lists every text in a long conversation, its start too, in the history and once it's current", async () => {
+        rig = await appRig();
+        const texts = Array.from({ length: 501 }, (_, i) => ({ id: `m${i}`, text: `text ${i}` }));
+        const past = pastConversation(rig, "c0ffee000002", texts);
+        for (const where of ["in the history", "current"]) {
+            if (where === "current") await rig.blocks.run("switch-conversation", { conversation: past });
+            const listed = await rig.blocks.read<string[]>("messages", { conversation: past });
+            expect(listed).toHaveLength(501);
+            expect(await rig.blocks.property("message", "text", listed[0])).toBe("text 0");
+            expect(await rig.blocks.property("conversation", "messages", past)).toBe(501);
+        }
     }, SLOW);
 
     test("When the Agent's Turn Fails fires with the error, in the conversation it failed in", async () => {

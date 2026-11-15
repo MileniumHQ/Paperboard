@@ -330,16 +330,16 @@ export class Conversation {
         return { deleted: true };
     }
 
-    /** A conversation's texts, the user's and the agent's, oldest first: the current one, or one in the history. */
+    /** A conversation's texts, every one of them, the user's and the agent's, oldest first: the current one, or one in the history. */
     texts(id: string): Said[] {
-        return id === this.id() ? said(this.entries) : this.archive.texts(id);
+        return id === this.id() ? said(this.transcript.all()) : this.archive.texts(id);
     }
 
-    /** One text by its id: looked for in the current conversation, then in the history. */
-    text(messageId: string): Said {
-        const found = said(this.entries).find((e) => e.id === messageId) ?? this.archive.find(messageId);
+    /** One text in a conversation, by its id. */
+    text(conversation: string, messageId: string): Said {
+        const found = this.texts(conversation).find((e) => e.id === messageId);
         if (found) return found;
-        throw new Error(`the agent has no message "${messageId}"; its conversation may have been cleared or deleted`);
+        throw new Error(`the agent has no message "${messageId}" in that conversation; it may have been cleared`);
     }
 
     /**

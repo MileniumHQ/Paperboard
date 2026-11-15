@@ -552,8 +552,8 @@ export class AiApp {
             conversations: () => this.conversationIds(),
             conversation: (id) => this.conversationFacts(id),
             messages: (id) => this.conversation.texts(id).map((e) => e.id),
-            message: (id) => {
-                const e = this.conversation.text(id);
+            message: (conversation, id) => {
+                const e = this.conversation.text(conversation, id);
                 return { text: e.text, from: e.kind };
             },
             deleteConversation: (id) => this.deleteConversation(id),
@@ -618,7 +618,8 @@ export class AiApp {
     private conversationFacts(id: string): ConversationFacts {
         if (id === this.conversation.id()) {
             const current = this.conversation.current();
-            return current ? { title: current.title, messages: current.messages } : { title: "New conversation", messages: 0 };
+            // every text, not only the ones the chat keeps in memory
+            return current ? { title: current.title, messages: this.conversation.texts(id).length } : { title: "New conversation", messages: 0 };
         }
         const past = this.conversation.past().find((c) => c.id === id);
         if (!past) throw new Error(`the agent has no conversation "${id}"; it may have been deleted`);
