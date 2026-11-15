@@ -111,7 +111,7 @@ export async function sendFile(bot: () => Client, inputs: { channel: string; url
     // a refused address is refused whether or not the bot is on: `bot` is asked for after
     const url = typeof inputs.url === "string" && URL.canParse(inputs.url.trim()) ? new URL(inputs.url.trim()) : null;
     if (url?.protocol !== "http:" && url?.protocol !== "https:") {
-        throw new Error(`Send File needs a web address (http or https), not "${String(inputs.url ?? "").slice(0, 200)}".`);
+        throw new Error(`"${String(inputs.url ?? "").slice(0, 200)}" isn't a web address Send File can fetch. Only http and https addresses are fetched.`);
     }
     const channel = await sendableChannel(bot(), inputs.channel);
     let file: PublicFetchResponse;
