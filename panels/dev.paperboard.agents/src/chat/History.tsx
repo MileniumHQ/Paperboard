@@ -10,7 +10,7 @@ const when = (at: number) => new Date(at).toLocaleString([], { dateStyle: "mediu
 
 export default function History(props: { agent: Agent; open: boolean; onClose: () => void }) {
     // read afresh each time it opens: the agent may have started or reopened one meanwhile
-    const history = createRead(() => props.agent.conversations(), { source: () => props.open });
+    const history = createRead(() => props.agent.calls.conversations(), { source: () => props.open });
     const list = history.value;
     const { busy, error: openError, setError: setOpenError, run } = createAction();
     const [deleteError, setDeleteError] = createSignal<ActionFailure | null>(null);
@@ -32,7 +32,7 @@ export default function History(props: { agent: Agent; open: boolean; onClose: (
 
     const reopen = async (c: PastConversation) => {
         setChosen(c.id);
-        if (await run("Conversation not opened", () => props.agent.openConversation(c.id))) props.onClose();
+        if (await run("Conversation not opened", () => props.agent.calls.openConversation({ id: c.id }))) props.onClose();
         setChosen(CURRENT);
     };
 
@@ -46,7 +46,7 @@ export default function History(props: { agent: Agent; open: boolean; onClose: (
         return run(
             "Conversation not deleted",
             async () => {
-                await props.agent.deleteConversation(c.id);
+                await props.agent.calls.deleteConversation({ id: c.id });
                 setDeleting(null);
                 history.set((l) => l && { ...l, past: l.past.filter((x) => x.id !== c.id) });
             },

@@ -18,7 +18,7 @@ export const harnessDescription = (id: string) => BRAINS[id as Harness]?.descrip
 
 /** The models a harness offers, fetched again whenever the harness changes, or its brain is installed, signed in or removed (what it lists, or can't, depends on that). */
 export function createModels(agent: Agent, harness: () => Harness | undefined): Read<BrainModel[]> {
-    return createRead((key: string) => agent.models(key.split("|")[0] as Harness), {
+    return createRead((key: string) => agent.calls.models({ harness: key.split("|")[0] as Harness }), {
         source: () => {
             const h = harness();
             const b = h && agent.state.brains[h];

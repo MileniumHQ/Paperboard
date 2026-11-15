@@ -3,49 +3,26 @@
 // agent asked for, typed in where it said.
 
 import { createHash } from "node:crypto";
-import { LIMITS } from "../contract";
+import { LIMITS, type ComputerWindow, type WindowFrame } from "../contract";
 import type { BrowserComputer } from "./browser";
 import { ToolError, type Tab } from "./browserWindows";
 import { close, go, SCROLL_PX, siteOf } from "./browserTools";
 import { EDITABLE_JS, SIGN_IN_FOCUS_JS, SIGN_IN_MOVED_JS } from "./pageScripts";
 
-const VIEW_TOOLS = ["view_windows", "view_frame", "view_input", "view_go", "view_close", "view_sign_in"] as const;
-export type ViewTool = (typeof VIEW_TOOLS)[number];
 // the user's view polls frames from every open shell; it gets its own few slots so it never starves the agent
 const MAX_VIEW_CALLS = 3;
 const VIEW_MAX_EVENTS = 64;
 const VIEW_MAX_TEXT = 2000;
 const BUTTON_NAMES = { 1: "left", 2: "middle", 3: "right" } as const;
 
-/** The user looking at (and, with control, using) the browser's windows. */
-export async function browserView(c: BrowserComputer, tool: ViewTool, args: Record<string, unknown>): Promise<unknown> {
-    if (!VIEW_TOOLS.includes(tool)) throw new Error(`not a view: ${tool}`);
-    if ((tool === "view_input" || tool === "view_go") && !c.state.userControl) throw new Error("Take control of the computer first.");
+/** One of the view's calls, in the view's few slots; `using` the windows needs the user to have taken control. */
+async function viewing<T>(c: BrowserComputer, using: boolean, run: () => Promise<T>): Promise<T> {
+    if (using && !c.state.userControl) throw new Error("Take control of the computer first.");
     if (!c.on) throw new Error("The computer isn't on.");
     if (c.viewCalls >= MAX_VIEW_CALLS) throw new Error("The computer is busy showing other views; try again.");
     c.viewCalls++;
     try {
-        switch (tool) {
-            case "view_windows":
-                await c.windows.refreshAll();
-                return {
-                    windows: [...c.windows.tabs.values()]
-                        .sort((a, b) => a.id - b.id)
-                        .map((t) => ({ id: t.id, title: t.title || t.url, url: t.url, app: "Helium", width: t.size.width, height: t.size.height })),
-                };
-            case "view_frame":
-                return await frame(c, args);
-            case "view_input":
-                return await input(c, args);
-            case "view_go":
-                await go(c, args);
-                return { ok: true };
-            case "view_close":
-                await close(c, args);
-                return { ok: true };
-            case "view_sign_in":
-                return await signInFill(c, args);
-        }
+        return await run();
     } catch (e) {
         throw e instanceof ToolError ? new Error(e.message) : e;
     } finally {
@@ -53,7 +30,23 @@ export async function browserView(c: BrowserComputer, tool: ViewTool, args: Reco
     }
 }
 
-async function frame(c: BrowserComputer, args: Record<string, unknown>) {
+/** The user looking at (and, with control, using) the browser's windows. */
+export const browserView = {
+    windows: (c: BrowserComputer): Promise<ComputerWindow[]> =>
+        viewing(c, false, async () => {
+            await c.windows.refreshAll();
+            return [...c.windows.tabs.values()]
+                .sort((a, b) => a.id - b.id)
+                .map((t) => ({ id: t.id, title: t.title || t.url, url: t.url, app: "Helium", width: t.size.width, height: t.size.height }));
+        }),
+    frame: (c: BrowserComputer, args: Record<string, unknown>) => viewing(c, false, () => frame(c, args)),
+    input: (c: BrowserComputer, args: Record<string, unknown>) => viewing(c, true, () => input(c, args)),
+    go: (c: BrowserComputer, args: Record<string, unknown>) => viewing(c, true, () => go(c, args)),
+    close: (c: BrowserComputer, args: Record<string, unknown>) => viewing(c, false, () => close(c, args)),
+    signIn: (c: BrowserComputer, args: Record<string, unknown>) => viewing(c, false, () => signInFill(c, args)),
+};
+
+async function frame(c: BrowserComputer, args: Record<string, unknown>): Promise<WindowFrame> {
     const tab = c.windows.tab(args.window);
     // a page waiting on a dialog can't be pictured: the last picture stands, with the dialog to answer
     if (tab.dialog) return { same: true, hash: typeof args.since === "string" ? args.since : "", dialog: tab.dialog };
@@ -117,7 +110,6 @@ async function input(c: BrowserComputer, args: Record<string, unknown>) {
                 throw new ToolError(`unknown input ${JSON.stringify(e.type)}`);
         }
     }
-    return { ok: true };
 }
 
 /** The user's values, typed into the fields the waiting request named, then submit pressed. Used once. */
@@ -155,7 +147,6 @@ async function signInFill(c: BrowserComputer, args: Record<string, unknown>) {
         await c.windows.press(tab, p.submit, "left", 1);
         await c.windows.lift(tab, p.submit, "left", 1);
     } else await c.windows.keys(tab, ["Return"]); // the last field still has the cursor
-    return { ok: true };
 }
 
 /** A code longer than its box: a key at a time, moving to the next box whenever the site leaves the cursor in a full one. */

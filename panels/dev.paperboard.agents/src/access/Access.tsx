@@ -18,7 +18,7 @@ export default function Access(props: { agent: Agent }) {
     // each grant keyed by what it is, so a change, read or pushed, touches only what changed
     const shape = (view: AccessView) => ({ error: view.error, grants: view.grants.map((grant) => ({ key: grantKey(grant), grant })) });
     // a change pushed while the first read is out is newer than it: the read doesn't replace it
-    const access = createRead(() => props.agent.access().then(shape), { key: "key", follow: (land) => props.agent.onAccess((next) => land(shape(next))) });
+    const access = createRead(() => props.agent.calls.access().then(shape), { key: "key", follow: (land) => props.agent.events.access((next) => land(shape(next))) });
     const view = access.value;
     const grants = () => view()?.grants ?? [];
     const [failed, setFailed] = createSignal<string | null>(null);
@@ -27,7 +27,7 @@ export default function Access(props: { agent: Agent }) {
     const revoke = async (g: AccessGrant) => {
         setFailed(null);
         try {
-            access.set(shape(await props.agent.revokeAccess(g.kind === "folder" ? { kind: "folder", path: g.path } : { kind: "command", command: g.command, anyArguments: g.anyArguments })));
+            access.set(shape(await props.agent.calls.revokeAccess({ grant: g.kind === "folder" ? { kind: "folder", path: g.path } : { kind: "command", command: g.command, anyArguments: g.anyArguments } })));
         } catch (e) {
             setFailed(errorMessage(e));
         }

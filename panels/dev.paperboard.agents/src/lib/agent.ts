@@ -1,70 +1,48 @@
-// The UI's one line to the service: synced state, the conversation's
-// entries, and the actions. Nothing here decides anything; the service owns
-// the agent, its computer and the conversation, so every open window agrees.
+// The UI's one line to the service: the panel's contract client, its
+// mirrored state, and the conversation's entries. Nothing here decides
+// anything; the service owns the agent, its computer and the conversation,
+// so every open window agrees.
 
-import { actionsApi, createPanelBridge, errorMessage } from "@mileniumhq/paperapi";
+import { errorMessage, serviceClient } from "@mileniumhq/paperapi";
 import { createLatest } from "@mileniumhq/paperui";
 import { createSignal } from "solid-js";
 import { createStore, reconcile } from "solid-js/store";
 import { createFiles } from "./files";
 import { createSettingsQueue } from "./settingsQueue";
-import {
-    DEFAULT_STATE,
-    EVENTS,
-    LIMITS,
-    PANEL_ID,
-    UI_ACTION_IDS,
-    type AiState,
-    type PageInfo,
-    type PageKind,
-    type BrainModel,
-    type ChatEntry,
-    type ComputerWindow,
-    type Harness,
-    type InputEvent,
-    type MemoryList,
-    type PastConversation,
-    type ProviderAttempt,
-    type ProviderAttemptStatus,
-    type ProviderInfo,
-    type Routine,
-    type Settings,
-    type WindowFrame,
-    type AccessItem,
-    type AccessView,
-} from "../contract";
+import { DEFAULT_STATE, LIMITS, agentsContract, type AiState, type ChatEntry } from "../contract";
 
 type Hydration = "loading" | "ready" | "failed";
 
 export function createAgent() {
-    const bridge = createPanelBridge<AiState>({ panelId: PANEL_ID, defaultState: DEFAULT_STATE });
+    const client = serviceClient(agentsContract);
+    const { calls, events } = client;
+    const mirror = client.state;
     const [state, setState] = createStore<AiState>(structuredClone(DEFAULT_STATE));
     const [entries, setEntries] = createStore<ChatEntry[]>([]);
     const [hydration, setHydration] = createSignal<Hydration>("loading");
     const [error, setError] = createSignal<string | null>(null);
 
-    const offState = bridge.onStateChange((_patch, full) => setState(reconcile(full)));
+    const offState = mirror.subscribe((full) => setState(reconcile(full)));
     // an entry is whole every time: add it, or replace the copy we have
-    const offEntry = actionsApi.on(PANEL_ID, EVENTS.entry, (entry: ChatEntry) => {
+    const offEntry = events.entry((entry) => {
         const i = entries.findIndex((e) => e.id === entry.id);
         if (i >= 0) setEntries(i, reconcile(entry));
         else setEntries(entries.length, entry);
     });
 
     // someone started over (here or in another window)
-    const offCleared = actionsApi.on(PANEL_ID, EVENTS.cleared, () => {
+    const offCleared = events.cleared(() => {
         setEntries([]);
         files.clear();
     });
     // another conversation is current now (here or in another window): its history replaces what's shown
-    const offSwitched = actionsApi.on(PANEL_ID, EVENTS.switched, () => {
+    const offSwitched = events.switched(() => {
         setEntries([]);
         files.clear();
         void load(false);
     });
 
-    const call = <T>(id: string, inputs: Record<string, unknown> = {}) => actionsApi.call<T>(PANEL_ID, id, inputs);
-    const files = createFiles(call);
+    const files = createFiles(calls);
 
     // a switch or a retry starts a newer read: an older one's answer (another conversation's history, maybe) is dropped
     const latest = createLatest();
@@ -76,10 +54,10 @@ export function createAgent() {
         const current = latest();
         try {
             if (withState) {
-                const full = await bridge.refreshState();
+                const full = await mirror.refresh();
                 if (current()) setState(reconcile(full));
             }
-            const history = await call<ChatEntry[]>(UI_ACTION_IDS.history, { limit: LIMITS.history });
+            const history = await calls.history({ limit: LIMITS.history });
             if (!current()) return;
             const known = new Set(history.map((e) => e.id));
             setEntries(reconcile([...history, ...entries.filter((e) => !known.has(e.id))]));
@@ -102,8 +80,8 @@ export function createAgent() {
     /** every change to the settings goes through here, one at a time, each built from the settings as they then stand */
     const saveSettings = createSettingsQueue({
         current: () => state.settings,
-        write: (settings) => call(UI_ACTION_IDS.setup, { settings }),
-        refresh: async () => setState(reconcile(await bridge.refreshState())),
+        write: (settings) => calls.setup({ settings }),
+        refresh: async () => setState(reconcile(await mirror.refresh())),
     });
 
     return {
@@ -114,69 +92,19 @@ export function createAgent() {
         hydration,
         error,
         hydrate,
-        installBrain: (harness: Harness, from?: "computer" | "package") => call(UI_ACTION_IDS.installBrain, { harness, from }),
-        signInBrain: (harness: Harness, method?: "browser" | "code") => call(UI_ACTION_IDS.signInBrain, { harness, method }),
-        brainCode: (harness: Harness, code: string) => call(UI_ACTION_IDS.brainCode, { harness, code }),
-        brainAddress: (harness: Harness, address: string) => call(UI_ACTION_IDS.brainAddress, { harness, address }),
-        cancelBrainSignIn: (harness: Harness) => call(UI_ACTION_IDS.cancelBrainSignIn, { harness }),
-        signOutBrain: (harness: Harness) => call(UI_ACTION_IDS.signOutBrain, { harness }),
-        providers: () => call<{ providers: ProviderInfo[] }>(UI_ACTION_IDS.providers).then((r) => r.providers),
-        connectKey: (provider: string, key: string, answer?: Record<string, string>) => call(UI_ACTION_IDS.connectKey, { provider, key, answer }),
-        beginProvider: (provider: string, method: string, answer?: Record<string, string>) => call<ProviderAttempt>(UI_ACTION_IDS.beginProvider, { provider, method, answer }),
-        providerAttempt: (provider: string, attempt: string, code?: string) => call<ProviderAttemptStatus>(UI_ACTION_IDS.providerAttempt, { provider, attempt, code }),
-        cancelProvider: (provider: string, attempt: string) => call(UI_ACTION_IDS.cancelProvider, { provider, attempt }),
-        disconnectProvider: (credential: string) => call(UI_ACTION_IDS.disconnectProvider, { credential }),
-        models: (harness: Harness) => call<{ models: BrainModel[] }>(UI_ACTION_IDS.models, { harness }).then((r) => r.models),
-        setup: (settings: Settings) => call(UI_ACTION_IDS.setup, { settings }),
+        /** everything the page asks the service, as the contract says it */
+        calls,
+        /** what the service tells every open window */
+        events,
         saveSettings,
-        installComputer: () => call(UI_ACTION_IDS.installComputer, {}),
-        startComputer: () => call(UI_ACTION_IDS.startComputer),
-        stopComputer: () => call(UI_ACTION_IDS.stopComputer),
-        send: (text: string, replyTo?: string, attachments: string[] = []) =>
-            call<{ id: string; waiting: boolean }>(UI_ACTION_IDS.send, { text, replyTo, attachments }),
         files,
-        startOver: () => call(UI_ACTION_IDS.startOver),
-        newConversation: () => call(UI_ACTION_IDS.newConversation),
-        conversations: () => call<{ current: PastConversation | null; past: PastConversation[] }>(UI_ACTION_IDS.conversations),
-        openConversation: (id: string) => call(UI_ACTION_IDS.openConversation, { id }),
-        deleteConversation: (id: string) => call(UI_ACTION_IDS.deleteConversation, { id }),
-        memory: () => call<MemoryList>(UI_ACTION_IDS.memory),
-        deleteFact: (id: string) => call(UI_ACTION_IDS.deleteFact, { id }),
-        readNote: (key: string) => call<{ key: string; when: string; body: string }>(UI_ACTION_IDS.readNote, { key }),
-        deleteNote: (key: string) => call(UI_ACTION_IDS.deleteNote, { key }),
-        routines: () => call<Routine[]>(UI_ACTION_IDS.routines),
-        deleteRoutine: (id: string) => call(UI_ACTION_IDS.deleteRoutine, { id }),
-        signInShot: (id: string) => call<{ image: string }>(UI_ACTION_IDS.signInShot, { id }),
-        signIn: (id: string, values: string[]) => call(UI_ACTION_IDS.signIn, { id, values }),
-        declineSignIn: (id: string) => call(UI_ACTION_IDS.declineSignIn, { id }),
-        answerPrompt: (id: string, values: string[]) => call(UI_ACTION_IDS.answerPrompt, { id, values }),
-        declinePrompt: (id: string) => call(UI_ACTION_IDS.declinePrompt, { id }),
-        access: () => call<AccessView>(UI_ACTION_IDS.access),
-        answerAccess: (id: string, how: "once" | "always" | "decline") => call(UI_ACTION_IDS.answerAccess, { id, how }),
-        answerToolServer: (id: string, allow: boolean) => call(UI_ACTION_IDS.answerToolServer, { id, allow }),
-        revokeAccess: (grant: AccessItem) => call<AccessView>(UI_ACTION_IDS.revokeAccess, { grant }),
-        /** what the agent may do on the user's computer changed (here, on a card, or in another window) */
-        onAccess: (cb: (view: AccessView) => void) => actionsApi.on(PANEL_ID, EVENTS.access, cb),
-        pages: () => call<PageInfo[]>(UI_ACTION_IDS.pages),
-        openPage: (name: string) => call<{ url: string; title: string; kind: PageKind }>(UI_ACTION_IDS.openPage, { name }),
-        pagePicture: (name: string) => call<{ image: string }>(UI_ACTION_IDS.pagePicture, { name }),
-        /** the page printed to a PDF in the agent's browser: `file` is its path in the panel's storage, for saving */
-        pagePdf: (name: string) => call<{ file: string; name: string }>(UI_ACTION_IDS.pagePdf, { name }),
-        discardPagePdf: (file: string) => call(UI_ACTION_IDS.discardPagePdf, { file }),
-        deletePage: (name: string) => call(UI_ACTION_IDS.deletePage, { name }),
-        windows: () => call<{ windows: ComputerWindow[] }>(UI_ACTION_IDS.windows).then((r) => r.windows),
-        frame: (window: number, since: string | null) => call<WindowFrame>(UI_ACTION_IDS.frame, { window, since: since ?? undefined }),
-        input: (window: number, events: InputEvent[]) => call(UI_ACTION_IDS.input, { window, events }),
-        closeWindow: (window: number) => call(UI_ACTION_IDS.closeWindow, { window }),
-        go: (window: number, to: string) => call(UI_ACTION_IDS.go, { window, to }),
-        control: (take: boolean) => call<{ userControl: boolean }>(UI_ACTION_IDS.control, { take }),
         dispose: () => {
             offState();
             offEntry();
             offCleared();
             offSwitched();
             files.clear();
-            bridge.dispose();
+            mirror.dispose();
         },
     };
 }

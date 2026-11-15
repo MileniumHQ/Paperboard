@@ -60,7 +60,7 @@ export default function Prompt(props: { agent: Agent; entry: PromptEntry; name: 
                         <form
                             onSubmit={(ev) => {
                                 ev.preventDefault();
-                                answer(() => props.agent.answerPrompt(e().id, values()));
+                                answer(() => props.agent.calls.answerPrompt({ id: e().id, values: values() }));
                             }}
                         >
                             <PaperFlex gap="half">
@@ -86,7 +86,7 @@ export default function Prompt(props: { agent: Agent; entry: PromptEntry; name: 
                                     </PaperText>
                                 </Show>
                                 <PaperFlex direction="row" justify="flex-end" gap="half">
-                                    <PaperButton variant="text" type="button" disabled={busy()} onClick={() => answer(() => props.agent.declinePrompt(e().id))}>
+                                    <PaperButton variant="text" type="button" disabled={busy()} onClick={() => answer(() => props.agent.calls.declinePrompt({ id: e().id }))}>
                                         Not now
                                     </PaperButton>
                                     <PaperButton type="submit" disabled={busy() || values().some((v) => !v.trim())}>

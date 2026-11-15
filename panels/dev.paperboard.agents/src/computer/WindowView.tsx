@@ -65,7 +65,7 @@ export function WindowView(props: {
                     await nap(HIDDEN_MS);
                     continue;
                 }
-                const f = await props.agent.frame(props.window.id, hash);
+                const f = await props.agent.calls.frame({ window: props.window.id, since: hash ?? undefined });
                 setDialog(f.dialog);
                 if (!f.same) {
                     hash = f.hash;
@@ -103,7 +103,7 @@ export function WindowView(props: {
                 await props.onUse();
                 const batch = pending;
                 pending = [];
-                await props.agent.input(props.window.id, batch);
+                await props.agent.calls.input({ window: props.window.id, events: batch });
                 setInputError(null);
                 wake?.(); // show what it did without waiting out the nap
             }
@@ -148,7 +148,7 @@ export function WindowView(props: {
     const go = async (to: string) => {
         try {
             await props.onUse();
-            await props.agent.go(props.window.id, to);
+            await props.agent.calls.go({ window: props.window.id, to });
             setAddress(null);
             setInputError(null);
             wake?.();

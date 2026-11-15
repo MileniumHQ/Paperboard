@@ -60,14 +60,14 @@ export function createBrainActions(agent: Agent) {
     return {
         error: (h: Harness) => errors[h] ?? null,
         busy: (h: Harness) => (running[h] ?? 0) > 0,
-        install: (h: Harness) => act(h, `${harnessName(h)} not installed`, () => agent.installBrain(h)),
-        useFound: (h: Harness) => act(h, `${harnessName(h)} not used`, () => agent.installBrain(h, "computer")),
-        installOwn: (h: Harness) => act(h, `${harnessName(h)} not installed`, () => agent.installBrain(h, "package")),
-        signIn: (h: Harness) => act(h, `${harnessName(h)} not signed in`, () => agent.signInBrain(h)),
-        cancel: (h: Harness) => act(h, "Sign-in not stopped", () => agent.cancelBrainSignIn(h)),
-        signOut: (h: Harness) => act(h, `${harnessName(h)} not signed out`, () => agent.signOutBrain(h)),
-        submitCode: (h: Harness, code: string) => act(h, "Code not accepted", () => agent.brainCode(h, code)),
-        finishAt: (h: Harness, address: string) => act(h, "Sign-in not finished", () => agent.brainAddress(h, address)),
+        install: (h: Harness) => act(h, `${harnessName(h)} not installed`, () => agent.calls.installBrain({ harness: h })),
+        useFound: (h: Harness) => act(h, `${harnessName(h)} not used`, () => agent.calls.installBrain({ harness: h, from: "computer" })),
+        installOwn: (h: Harness) => act(h, `${harnessName(h)} not installed`, () => agent.calls.installBrain({ harness: h, from: "package" })),
+        signIn: (h: Harness) => act(h, `${harnessName(h)} not signed in`, () => agent.calls.signInBrain({ harness: h })),
+        cancel: (h: Harness) => act(h, "Sign-in not stopped", () => agent.calls.cancelBrainSignIn({ harness: h })),
+        signOut: (h: Harness) => act(h, `${harnessName(h)} not signed out`, () => agent.calls.signOutBrain({ harness: h })),
+        submitCode: (h: Harness, code: string) => act(h, "Code not accepted", () => agent.calls.brainCode({ harness: h, code })),
+        finishAt: (h: Harness, address: string) => act(h, "Sign-in not finished", () => agent.calls.brainAddress({ harness: h, address })),
     };
 }
 export type BrainActions = ReturnType<typeof createBrainActions>;

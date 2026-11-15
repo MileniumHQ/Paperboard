@@ -3,7 +3,7 @@
 // would. The service is the stub (paperapiStub.ts): it records what each card
 // sent, holds each answer until the fixture lets it through or refuses it,
 // and tells the chat the request's new status as the real one does.
-import { EVENTS, UI_ACTION_IDS, type AccessEntry, type PromptEntry, type SignInEntry } from "../../src/contract";
+import type { AccessEntry, PromptEntry, SignInEntry } from "../../src/contract";
 import { errors, mountChat, report, until } from "./chatPage";
 import { answers, conversation, emit } from "./paperapiStub";
 
@@ -19,13 +19,13 @@ conversation.push(signIn, prompt, access);
 /** what each card sent, and the answer the fixture hands back when it's ready */
 const asked: { id: string; inputs: Record<string, unknown> }[] = [];
 const pending: { resolve: (v: unknown) => void; reject: (e: Error) => void }[] = [];
-for (const id of [UI_ACTION_IDS.signIn, UI_ACTION_IDS.answerPrompt, UI_ACTION_IDS.answerAccess]) {
+for (const id of ["signIn", "answerPrompt", "answerAccess"]) {
     answers.set(id, (inputs) => {
         asked.push({ id, inputs });
         return new Promise((resolve, reject) => pending.push({ resolve, reject }));
     });
 }
-answers.set(UI_ACTION_IDS.signInShot, async () => ({ image: PNG }));
+answers.set("signInShot", async () => ({ image: PNG }));
 
 const card = (id: string) => document.querySelector<HTMLElement>(`[data-message="${id}"]`)!;
 const button = (id: string, text: string) => [...card(id).querySelectorAll<HTMLButtonElement>("button")].find((b) => b.innerText.trim() === text)!;
@@ -61,7 +61,7 @@ async function run(): Promise<Record<string, unknown>> {
     button("p1", "Send").click();
     const promptSends = asked.length - 1;
     pending.shift()!.resolve(undefined);
-    emit(EVENTS.entry, { ...prompt, status: "sent" });
+    emit("entry", { ...prompt, status: "sent" });
     await until("the prompt to say it was sent", () => card("p1").innerText.includes("Keys are saved for linear"));
     const promptResult = { sends: promptSends, values: asked[1]?.inputs.values, holdsKey: holds(KEY) };
 
@@ -73,7 +73,7 @@ async function run(): Promise<Record<string, unknown>> {
     const refusal = alertIn("a1");
     button("a1", "Decline").click();
     pending.shift()!.resolve(undefined);
-    emit(EVENTS.entry, { ...access, status: "declined" });
+    emit("entry", { ...access, status: "declined" });
     await until("the access request to say no", () => card("a1").innerText.includes("You said no."));
     const accessResult = { how, refusal, afterDecline: alertIn("a1"), answers: [...card("a1").querySelectorAll("button")].filter((b) => /allow|decline/i.test(b.innerText)).length };
 

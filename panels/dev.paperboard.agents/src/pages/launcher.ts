@@ -21,7 +21,7 @@ export function createLauncher(agent: Agent) {
     // (dropped with any answer: an older list missing a page only costs that page one more read)
     const pictures = new Map<string, { at: number; image: Promise<string> }>();
     const read = async () => {
-        const pages = await agent.pages();
+        const pages = await agent.calls.pages();
         for (const name of pictures.keys()) if (!pages.some((p) => p.name === name)) pictures.delete(name);
         return pages;
     };
@@ -44,7 +44,7 @@ export function createLauncher(agent: Agent) {
     const picture = (name: string, at: number) => {
         const kept = pictures.get(name);
         if (kept?.at === at) return kept.image;
-        const image = agent.pagePicture(name).then((r) => `data:image/jpeg;base64,${r.image}`);
+        const image = agent.calls.pagePicture({ name }).then((r) => `data:image/jpeg;base64,${r.image}`);
         const entry = { at, image };
         // a failure is read again next time, not remembered
         image.catch(() => {
@@ -67,20 +67,20 @@ export function createLauncher(agent: Agent) {
         shown,
         /** open a page beside the chat; fails with the service's reason */
         async open(name: string) {
-            const { url, title, kind } = await agent.openPage(name);
+            const { url, title, kind } = await agent.calls.openPage({ name });
             setShown({ name, title, url, kind });
         },
         close: () => setShown(null),
         async remove(name: string) {
-            await agent.deletePage(name);
+            await agent.calls.deletePage({ name });
             if (shown()?.name === name) setShown(null);
             pictures.delete(name);
             pages.set((left) => left?.filter((a) => a.name !== name));
         },
         /** the page as a PDF in the agent's browser, saved where the user chooses; the service's copy goes after */
         async savePdf(name: string) {
-            return agent.pagePdf(name);
+            return agent.calls.pagePdf({ name });
         },
-        discardPdf: (file: string) => agent.discardPagePdf(file),
+        discardPdf: (file: string) => agent.calls.discardPagePdf({ file }),
     };
 }

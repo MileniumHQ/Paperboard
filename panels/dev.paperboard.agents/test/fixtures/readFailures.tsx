@@ -23,10 +23,12 @@ let pushAccess!: (next: AccessView) => void;
 const agent = {
     state,
     name: () => "Ada",
-    pages: () => pagesRead(),
-    pagePicture: () => new Promise(() => {}),
-    access: () => Promise.reject(new Error("access.json is busy")),
-    onAccess: (cb: (next: AccessView) => void) => ((pushAccess = cb), () => {}),
+    calls: {
+        pages: () => pagesRead(),
+        pagePicture: () => new Promise(() => {}),
+        access: () => Promise.reject(new Error("access.json is busy")),
+    },
+    events: { access: (cb: (next: AccessView) => void) => ((pushAccess = cb), () => {}) },
 } as unknown as Agent;
 
 const REPORT: PageInfo = { name: "report", title: "Report", description: "The month's numbers", kind: "document", picture: false, pictureAt: 0 };

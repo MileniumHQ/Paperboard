@@ -10,7 +10,7 @@ export default function ToolServerRequest(props: { agent: Agent; entry: ToolServ
     const { busy, error, run } = createAction();
     const title = () => (e().change ? `${props.name} wants to change what ${e().server} runs` : `${props.name} wants to run ${e().server} on your computer`);
 
-    const answer = (allow: boolean) => void run("Answer not sent", () => props.agent.answerToolServer(e().id, allow));
+    const answer = (allow: boolean) => void run("Answer not sent", () => props.agent.calls.answerToolServer({ id: e().id, allow }));
 
     return (
         <PaperFlex direction="row">

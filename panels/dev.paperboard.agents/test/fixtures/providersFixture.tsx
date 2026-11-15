@@ -12,7 +12,7 @@ import { PaperProvider } from "@mileniumhq/paperui";
 import "@mileniumhq/paperui/style.css";
 import "@mileniumhq/paperui/panel.css";
 import "../../src/tokens.css";
-import { UI_ACTION_IDS, type ProviderAttemptStatus, type ProviderInfo } from "../../src/contract";
+import type { ProviderAttemptStatus, ProviderInfo } from "../../src/contract";
 import { createAgent } from "../../src/lib/agent";
 import Providers from "../../src/settings/Providers";
 import { errors, report, until } from "./chatPage";
@@ -56,17 +56,14 @@ const questions: string[] = [];
 let answerFirst!: (status: ProviderAttemptStatus) => void;
 // every read is a fresh copy, as the service's answer is; once a key is in, Acme has it
 let keyed = false;
-answers.set(UI_ACTION_IDS.providers, async () => ({
-    providers: [{ ...structuredClone(ACME), ...(keyed ? { connected: true, connections: [{ id: "key1", label: "Acme key" }] } : {}) }, structuredClone(REGIONAL)],
-}));
-answers.set(UI_ACTION_IDS.connectKey, async () => void (keyed = true));
-answers.set(UI_ACTION_IDS.beginProvider, async () => ({ id: `attempt${++begun}`, url: "https://acme.example/login", instructions: `Sign-in ${begun}`, mode: "auto" }));
+answers.set("providers", async () => [{ ...structuredClone(ACME), ...(keyed ? { connected: true, connections: [{ id: "key1", label: "Acme key" }] } : {}) }, structuredClone(REGIONAL)]);
+answers.set("connectKey", async () => void (keyed = true));
+answers.set("beginProvider", async () => ({ id: `attempt${++begun}`, url: "https://acme.example/login", instructions: `Sign-in ${begun}`, mode: "auto" }));
 let stops = true;
-answers.set(UI_ACTION_IDS.cancelProvider, async () => {
+answers.set("cancelProvider", async () => {
     if (!stops) throw new Error("OpenCode is busy");
-    return {};
 });
-answers.set(UI_ACTION_IDS.providerAttempt, (inputs) => {
+answers.set("providerAttempt", (inputs) => {
     questions.push(String(inputs.attempt));
     if (inputs.attempt === "attempt1") return new Promise<ProviderAttemptStatus>((resolve) => (answerFirst = resolve));
     return Promise.resolve<ProviderAttemptStatus>({ status: "pending" });

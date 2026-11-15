@@ -53,7 +53,7 @@ export default function Composer(props: {
         haptic("send");
         props.onSend();
         try {
-            await props.agent.send(draft.trim(), reply?.id, sent.map((c) => c.id));
+            await props.agent.calls.send({ text: draft.trim(), replyTo: reply?.id, attachments: sent.map((c) => c.id) });
             props.onDraft(props.draft.startsWith(draft) ? props.draft.slice(draft.length).trimStart() : props.draft);
             for (const c of sent) tray().remove(c.key);
             if (props.replyTo === reply) props.onCancelReply();

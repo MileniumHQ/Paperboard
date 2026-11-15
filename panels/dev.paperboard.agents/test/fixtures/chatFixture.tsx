@@ -4,7 +4,7 @@
 // and nothing else (paperapiStub.ts), then makes the sizes change the way they
 // do in use (a bubble arrives, the message box grows) and reports where the
 // chat was left, as JSON.
-import { EVENTS, type ChatEntry } from "../../src/contract";
+import type { ChatEntry } from "../../src/contract";
 import { errors, mountChat, report, type, until } from "./chatPage";
 import { conversation, emit } from "./paperapiStub";
 
@@ -44,7 +44,7 @@ let arrived = 0;
 /** The agent says something: the service tells every window. */
 function arrive(text: string): string {
     const id = `new${String(++arrived).padStart(3, "0")}`;
-    emit(EVENTS.entry, { id, at: Date.now(), kind: "agent", text });
+    emit("entry", { id, at: Date.now(), kind: "agent", text });
     return id;
 }
 

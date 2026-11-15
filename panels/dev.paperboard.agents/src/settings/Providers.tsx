@@ -17,7 +17,7 @@ const shown = (field: ProviderField, values: Record<string, string>) =>
 
 export default function Providers(props: { agent: Agent; open: boolean; onClose: () => void }) {
     // read afresh each time it opens, with nothing refused yet; a re-read (after a connect or a sign-in) changes what differs, and every row and form stays the one it was
-    const providers = createRead(() => props.agent.providers(), { source: () => props.open });
+    const providers = createRead(() => props.agent.calls.providers(), { source: () => props.open });
     const refetch = providers.reload;
     const { busy, error, setError, run: act } = createAction();
     createEffect(on(() => props.open, (open) => open && setError(null)));
@@ -52,7 +52,7 @@ export default function Providers(props: { agent: Agent; open: boolean; onClose:
 
     const connectKey = (p: ProviderInfo, m: ProviderMethod) =>
         act(`${p.name} not connected`, async () => {
-            await props.agent.connectKey(p.id, key(), answersFor(m));
+            await props.agent.calls.connectKey({ provider: p.id, key: key(), answer: answersFor(m) });
             // the key is used once: it doesn't stay in the field
             setKey("");
             await refetch();
@@ -60,7 +60,7 @@ export default function Providers(props: { agent: Agent; open: boolean; onClose:
 
     const begin = (p: ProviderInfo, m: ProviderMethod) =>
         act(`${p.name} not connected`, async () => {
-            setAttempt({ provider: p.id, info: await props.agent.beginProvider(p.id, m.id!, answersFor(m)) });
+            setAttempt({ provider: p.id, info: await props.agent.calls.beginProvider({ provider: p.id, method: m.id!, answer: answersFor(m) }) });
         });
 
     const finishAttempt = async (title: string, body: { status: string; message?: string }) => {
@@ -76,7 +76,7 @@ export default function Providers(props: { agent: Agent; open: boolean; onClose:
         if (!a) return;
         const still = () => attempt()?.info.id === a.info.id;
         try {
-            const status = await props.agent.providerAttempt(a.provider, a.info.id, withCode);
+            const status = await props.agent.calls.providerAttempt({ provider: a.provider, attempt: a.info.id, code: withCode });
             if (still() && status.status !== "pending") await finishAttempt(`${current()?.name ?? "Provider"} not connected`, status);
         } catch (e) {
             if (!still()) return;
@@ -92,7 +92,7 @@ export default function Providers(props: { agent: Agent; open: boolean; onClose:
         const a = attempt();
         setAttempt(null);
         setCode("");
-        return !a || (await act("Sign-in not stopped", () => props.agent.cancelProvider(a.provider, a.info.id)));
+        return !a || (await act("Sign-in not stopped", () => props.agent.calls.cancelProvider({ provider: a.provider, attempt: a.info.id })));
     };
     // a sign-in under way is stopped first: one OpenCode won't stop keeps the modal open to say so
     const close = async () => {
@@ -138,7 +138,7 @@ export default function Providers(props: { agent: Agent; open: boolean; onClose:
                                                 <PaperButton
                                                     variant="text"
                                                     disabled={busy()}
-                                                    onClick={() => void act(`${p().name} not disconnected`, async () => (await props.agent.disconnectProvider(c.id), await refetch()))}
+                                                    onClick={() => void act(`${p().name} not disconnected`, async () => (await props.agent.calls.disconnectProvider({ credential: c.id }), await refetch()))}
                                                 >
                                                     Disconnect
                                                 </PaperButton>

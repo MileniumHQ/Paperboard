@@ -20,7 +20,7 @@ export default function SignIn(props: { agent: Agent; entry: SignInEntry; name: 
     const [values, setValues] = createSignal<string[]>(props.draft.values.length ? props.draft.values : e().fields.map(() => ""));
     // the draft keeps the picture for the card that replaces this one when the chat redraws
     const kept = props.draft.image;
-    const shot = createRead((id: string) => props.agent.signInShot(id).then((r) => (props.draft.image = r.image)), {
+    const shot = createRead((id: string) => props.agent.calls.signInShot({ id }).then((r) => (props.draft.image = r.image)), {
         source: () => (e().status === "waiting" && !kept ? e().id : undefined),
     });
     const image = () => shot.value() ?? kept;
@@ -83,7 +83,7 @@ export default function SignIn(props: { agent: Agent; entry: SignInEntry; name: 
                         <form
                             onSubmit={(ev) => {
                                 ev.preventDefault();
-                                void answer(() => props.agent.signIn(e().id, values()));
+                                void answer(() => props.agent.calls.signIn({ id: e().id, values: values() }));
                             }}
                         >
                             <PaperFlex gap="half">
@@ -103,7 +103,7 @@ export default function SignIn(props: { agent: Agent; entry: SignInEntry; name: 
                                     )}
                                 </For>
                                 <PaperFlex direction="row" justify="flex-end" gap="half">
-                                    <PaperButton variant="text" type="button" disabled={busy()} onClick={() => void answer(() => props.agent.declineSignIn(e().id))}>
+                                    <PaperButton variant="text" type="button" disabled={busy()} onClick={() => void answer(() => props.agent.calls.declineSignIn({ id: e().id }))}>
                                         Not now
                                     </PaperButton>
                                     <PaperButton type="submit" disabled={busy()}>

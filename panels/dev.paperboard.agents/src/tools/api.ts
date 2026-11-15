@@ -1,13 +1,13 @@
 // The Tools page's one line to the service. The service validates and owns
 // everything; this keeps the latest view it sent (by call or by event) and
 // passes the user's changes on. Secret values go to the service's vault
-// action and are never kept here.
+// call and are never kept here.
 
-import { actionsApi, errorMessage } from "@mileniumhq/paperapi";
+import { errorMessage, serviceClient } from "@mileniumhq/paperapi";
 import { createSignal, onCleanup } from "solid-js";
 import { createStore, reconcile } from "solid-js/store";
-import { PANEL_ID } from "../contract";
-import { TOOLS_ACTION_IDS, TOOLS_EVENT, type ServerSpec, type ToolsView } from "../toolsContract";
+import { agentsContract } from "../contract";
+import type { ServerSpec, ToolsView } from "../toolsContract";
 
 export type ToolsLoad = "loading" | "ready" | "failed";
 
@@ -23,20 +23,22 @@ function openTools() {
     const view = () => state.view;
     const setView = (next: ToolsView) => setState("view", reconcile(next, { key: "name" }));
 
-    const call = async (id: string, inputs: Record<string, unknown> = {}) => {
-        const next = await actionsApi.call<ToolsView>(PANEL_ID, id, inputs);
+    const { calls, events } = serviceClient(agentsContract);
+    // every call answers with the whole view
+    const viewOf = async (answer: Promise<ToolsView>) => {
+        const next = await answer;
         setView(next);
         return next;
     };
 
     // status changes (a server starting, failing, stopping) arrive as events
-    const off = actionsApi.on(PANEL_ID, TOOLS_EVENT, (next: ToolsView) => setView(next));
+    const off = events.tools(setView);
 
     const refresh = async () => {
         setLoad("loading");
         setLoadError(null);
         try {
-            await call(TOOLS_ACTION_IDS.get);
+            await viewOf(calls.tools());
             setLoad("ready");
         } catch (e) {
             setLoadError(errorMessage(e));
@@ -53,14 +55,14 @@ function openTools() {
         load,
         loadError,
         refresh,
-        save: (server: ServerSpec) => call(TOOLS_ACTION_IDS.save, { server }),
-        remove: (name: string) => call(TOOLS_ACTION_IDS.remove, { name }),
-        restart: (name: string) => call(TOOLS_ACTION_IDS.restart, { name }),
-        setActions: (on: boolean) => call(TOOLS_ACTION_IDS.setActions, { on }),
-        setSecret: (server: string, name: string, value: string) => call(TOOLS_ACTION_IDS.setSecret, { server, name, value }),
-        signIn: (name: string) => call(TOOLS_ACTION_IDS.signIn, { name }),
-        finishSignIn: (name: string, address: string) => call(TOOLS_ACTION_IDS.signInFinish, { name, address }),
-        cancelSignIn: (name: string) => call(TOOLS_ACTION_IDS.signInCancel, { name }),
+        save: (server: ServerSpec) => viewOf(calls.saveServer({ server })),
+        remove: (name: string) => viewOf(calls.removeServer({ name })),
+        restart: (name: string) => viewOf(calls.restartServer({ name })),
+        setActions: (on: boolean) => viewOf(calls.setActions({ on })),
+        setSecret: (server: string, name: string, value: string) => viewOf(calls.setSecret({ server, name, value })),
+        signIn: (name: string) => viewOf(calls.signInServer({ name })),
+        finishSignIn: (name: string, address: string) => viewOf(calls.finishServerSignIn({ name, address })),
+        cancelSignIn: (name: string) => viewOf(calls.cancelServerSignIn({ name })),
     };
 }
 

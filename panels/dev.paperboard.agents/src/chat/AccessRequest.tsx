@@ -24,7 +24,7 @@ export default function AccessRequest(props: { agent: Agent; entry: AccessEntry;
     const e = () => props.entry;
     const { busy, error, run } = createAction();
 
-    const answer = (how: "once" | "always" | "decline") => void run("Answer not sent", () => props.agent.answerAccess(e().id, how));
+    const answer = (how: "once" | "always" | "decline") => void run("Answer not sent", () => props.agent.calls.answerAccess({ id: e().id, how }));
 
     return (
         <PaperFlex direction="row">

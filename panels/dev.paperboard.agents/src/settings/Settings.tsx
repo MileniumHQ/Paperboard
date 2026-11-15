@@ -234,7 +234,7 @@ function ComputerSettings(props: { agent: Agent }) {
         act(
             "Computer not erased",
             async () => {
-                await props.agent.installComputer();
+                await props.agent.calls.installComputer();
                 setConfirming(false);
             },
             setEraseError,
@@ -263,7 +263,7 @@ function ComputerSettings(props: { agent: Agent }) {
                 <Match when={!c().installed && c().phase !== "installing"}>
                     <PaperSettingList autoHeight>
                         <PaperSettingItem title={`${name()}'s own computer`} description="A web browser of its own it uses for its work, about 400 MB of storage. It reaches the internet, never your files or your network.">
-                            <PaperButton variant="primary" disabled={busy()} onClick={() => void act("Computer not set up", props.agent.installComputer)}>
+                            <PaperButton variant="primary" disabled={busy()} onClick={() => void act("Computer not set up", props.agent.calls.installComputer)}>
                                 <PaperIcon>computer</PaperIcon> Set up
                             </PaperButton>
                         </PaperSettingItem>
@@ -274,12 +274,12 @@ function ComputerSettings(props: { agent: Agent }) {
                         <PaperSettingItem title="Status" description={c().phase === "failed" ? (c().error ?? undefined) : `${status()}.`}>
                             <Switch>
                                 <Match when={c().phase === "ready"}>
-                                    <PaperButton disabled={busy()} onClick={() => void act("Computer not turned off", props.agent.stopComputer)}>
+                                    <PaperButton disabled={busy()} onClick={() => void act("Computer not turned off", props.agent.calls.stopComputer)}>
                                         <PaperIcon>power_settings_new</PaperIcon> Turn off
                                     </PaperButton>
                                 </Match>
                                 <Match when={c().phase === "stopped" || c().phase === "failed"}>
-                                    <PaperButton disabled={busy()} onClick={() => void act("Computer not turned on", props.agent.startComputer)}>
+                                    <PaperButton disabled={busy()} onClick={() => void act("Computer not turned on", props.agent.calls.startComputer)}>
                                         <PaperIcon>power_settings_new</PaperIcon> {c().phase === "failed" ? "Try again" : "Turn on"}
                                     </PaperButton>
                                 </Match>
@@ -459,7 +459,7 @@ function StartOver(props: { agent: Agent; open: boolean; onClose: () => void }) 
                         disabled={busy()}
                         onClick={() =>
                             void run("Conversation not cleared", async () => {
-                                await props.agent.startOver();
+                                await props.agent.calls.startOver();
                                 props.onClose();
                             })
                         }

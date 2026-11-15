@@ -26,7 +26,7 @@ const [brains] = createStore<Record<Harness, BrainState>>({
 const held: Record<string, { resolve: () => void; reject: (e: Error) => void }> = {};
 const hold = (name: string) => new Promise<void>((resolve, reject) => (held[name] = { resolve, reject }));
 let installs = 0;
-const agent = { state: { brains }, installBrain: () => (installs++, hold("install")), brainCode: () => hold("code") } as unknown as Agent;
+const agent = { state: { brains }, calls: { installBrain: () => (installs++, hold("install")), brainCode: () => hold("code") } } as unknown as Agent;
 
 const region = (h: Harness) => document.querySelector<HTMLElement>(`[data-brain="${h}"]`)!;
 const alerts = (h: Harness) => [...region(h).querySelectorAll<HTMLElement>("[role=alert]")].map((a) => a.innerText);

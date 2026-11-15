@@ -8,7 +8,7 @@ import { PaperProvider } from "@mileniumhq/paperui";
 import "@mileniumhq/paperui/style.css";
 import "@mileniumhq/paperui/panel.css";
 import "../../src/tokens.css";
-import { UI_ACTION_IDS, type ComputerWindow } from "../../src/contract";
+import type { ComputerWindow } from "../../src/contract";
 import { createAgent } from "../../src/lib/agent";
 import ComputerView, { IDLE_MS } from "../../src/computer/ComputerView";
 import { errors, report, until } from "./chatPage";
@@ -36,14 +36,11 @@ state.computer = { phase: "ready", installed: true, steps: [], error: null, user
 const WINDOW: ComputerWindow = { id: 1, title: "Example", url: "https://example.com/", app: "browser", width: 800, height: 600 };
 /** every take (true) and hand-back (false), in order */
 const control: boolean[] = [];
-answers.set(UI_ACTION_IDS.windows, async () => ({ windows: [structuredClone(WINDOW)] }));
+answers.set("windows", async () => [structuredClone(WINDOW)]);
 // a 1×1 GIF: the window's picture
-answers.set(UI_ACTION_IDS.frame, async () => ({ same: false, hash: "h1", frame: "R0lGODlhAQABAAAAACw=", width: 800, height: 600, dialog: null }));
-answers.set(UI_ACTION_IDS.go, async () => ({}));
-answers.set(UI_ACTION_IDS.control, async (inputs) => {
-    control.push(inputs.take === true);
-    return { userControl: inputs.take === true };
-});
+answers.set("frame", async () => ({ same: false, hash: "h1", frame: "R0lGODlhAQABAAAAACw=", width: 800, height: 600, dialog: null }));
+answers.set("go", async () => undefined);
+answers.set("control", async (inputs) => void control.push(inputs.take === true));
 
 const reload = () => document.querySelector<HTMLButtonElement>('button[aria-label="Reload"]')!;
 const picture = () => document.querySelector<HTMLImageElement>('img[alt^="Example"]');

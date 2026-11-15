@@ -2,10 +2,10 @@
 //
 // Everything the UI shows comes from here, so every open shell (and none)
 // sees the same agent: settings and status travel as synced state, the
-// conversation as chat-entry events plus a history call.
+// conversation as entry events plus a history call.
 
 import path from "node:path";
-import { DEFAULT_MODEL, HARNESSES, EVENTS, TRIGGER_IDS, parseSettings, type AiState, type Harness, type Settings } from "../contract";
+import { DEFAULT_MODEL, HARNESSES, TRIGGER_IDS, parseSettings, type AiState, type Harness, type Settings, type agentsContract } from "../contract";
 import { HomeFolder, moveHomeFolder } from "./homeFolder";
 import { Checkpoints } from "./checkpoints";
 import { shellToolset } from "./shell";
@@ -25,7 +25,7 @@ import { actionsToolset, type ActionsHost } from "./actionsToolset";
 import { McpServers, type Vault } from "./mcpServers";
 import { checkSecretName } from "./mcpConfig";
 import { mcpToolset } from "./mcpToolset";
-import { TOOLS_EVENT, type ToolsConfig } from "../toolsContract";
+import type { ToolsConfig } from "../toolsContract";
 import { askClaudeModels, listModels } from "./models";
 import { Memory } from "./memory";
 import { messagesToolset } from "./messages";
@@ -40,7 +40,7 @@ import { Asker } from "./ask";
 import { FlowActionsPublisher, flowActions, type ConversationChoice, type FlowHost, type MessageReceived } from "./flowActions";
 import { BlocksSync } from "./blocksSync";
 import { flowBlocks, replyPayload, type ConversationFacts } from "./flowBlocks";
-import { type ActionDefinition, type BlocksHandle, errorMessage } from "@mileniumhq/paperapi";
+import { type ActionDefinition, type BlocksHandle, type ContractContext, errorMessage } from "@mileniumhq/paperapi";
 export { findProgram } from "./which";
 import type { Launch } from "./which";
 import { openTurnLog, type TurnLog } from "./turnLog";
@@ -79,7 +79,8 @@ export interface AppHost extends Omit<ComputerHost, "packages">, Omit<TurnHost, 
 export interface AppContext {
     state: AiState;
     setState(patch: Partial<AiState>): void;
-    emit(event: string, payload: unknown): void;
+    /** tells the panel's pages, as the contract's events */
+    emit: ContractContext<typeof agentsContract>["emit"];
     /** an event flows start from */
     trigger(id: string, payload: unknown): void;
 }
@@ -152,7 +153,7 @@ export class AiApp {
             store: { read: t.readTools, write: t.writeTools },
             vault: t.vault,
             onChange: (view) => {
-                this.ctx.emit(TOOLS_EVENT, view);
+                this.ctx.emit("tools", view);
                 this.serverTools?.seen(view);
                 this.blocks.announce("tool-servers");
             },
@@ -176,7 +177,7 @@ export class AiApp {
         });
         this.signIns = new SignIns({
             prepare: (args) => browserTool(this.computer, "sign_in_prepare", args),
-            fill: (args) => browserView(this.computer, "view_sign_in", args),
+            fill: (args) => browserView.signIn(this.computer, args),
             post: (entry) => this.conversation.post(entry),
             tell: (text) => this.conversation.tell(text),
         });
@@ -187,7 +188,7 @@ export class AiApp {
             post: (entry) => this.conversation.post(entry),
             tell: (text) => this.conversation.tell(text),
             turning: () => this.conversation?.turning() ?? false,
-            onChange: (view) => this.ctx.emit(EVENTS.access, view),
+            onChange: (view) => this.ctx.emit("access", view),
         });
         this.access.load();
         this.prompts = new Prompts({
@@ -308,7 +309,7 @@ export class AiApp {
             mcp: () => ({ url: this.mcp!.url, token: this.mcp!.token, onToolsListed: (cb) => this.mcp!.onToolsListed(cb) }),
             instructions: () => this.tools!.instructions(),
             emit: (entry) => {
-                this.ctx.emit(EVENTS.entry, entry);
+                this.ctx.emit("entry", entry);
                 if (entry.kind === "agent") {
                     const message: MessageReceived = {
                         text: entry.text,
@@ -404,18 +405,16 @@ export class AiApp {
         const harness = this.harnessOf(input);
         // OpenCode's own listing opens the folder its provider server is using
         if (harness === "opencode" && !(await this.providers.quiet())) throw new Error("Finish connecting the provider first.");
-        return {
-            models: await listModels(harness, this.brains.homes, (command, args, o) => {
-                const h: Harness = command === "codex" ? "codex" : "opencode";
-                const resolved = this.brains.resolve(h);
-                if (!resolved) throw new Error(`${HARNESS_NAMES[h]} isn't installed`);
-                return this.host.exec(resolved, args, { timeoutMs: o.timeoutMs, env: this.brains.env(h) });
-            }, () => {
-                const command = this.brains.resolve("claude-code");
-                if (!command) throw new Error("Claude isn't installed");
-                return askClaudeModels({ ...this.host, write: this.host.tools.write }, { command, env: { ...this.brains.env("claude-code"), ...CLAUDE_MEMORY_OFF }, cwd: this.modelsDir });
-            }),
-        };
+        return listModels(harness, this.brains.homes, (command, args, o) => {
+            const h: Harness = command === "codex" ? "codex" : "opencode";
+            const resolved = this.brains.resolve(h);
+            if (!resolved) throw new Error(`${HARNESS_NAMES[h]} isn't installed`);
+            return this.host.exec(resolved, args, { timeoutMs: o.timeoutMs, env: this.brains.env(h) });
+        }, () => {
+            const command = this.brains.resolve("claude-code");
+            if (!command) throw new Error("Claude isn't installed");
+            return askClaudeModels({ ...this.host, write: this.host.tools.write }, { command, env: { ...this.brains.env("claude-code"), ...CLAUDE_MEMORY_OFF }, cwd: this.modelsDir });
+        });
     }
 
     /** Why a brain can't think right now, in words that say how to fix it; null when it can. */
@@ -485,10 +484,6 @@ export class AiApp {
         return { signedOut: true };
     }
 
-    async providerList() {
-        return { providers: await this.providers.list() };
-    }
-
     installComputer() {
         // quiet: a download and an unpack, accepted now and followed through state.computer, which carries the error
         void this.computer.install().catch((e) => console.error("[agents] computer setup failed:", String(e)));
@@ -508,7 +503,7 @@ export class AiApp {
 
     async startOver() {
         const r = await this.conversation.clear();
-        this.ctx.emit(EVENTS.cleared, {});
+        this.ctx.emit("cleared", undefined);
         this.publish();
         return r;
     }
@@ -516,14 +511,14 @@ export class AiApp {
     /** Start a new conversation, or continue a past one: what's waiting belongs to the one being put away. */
     async newConversation() {
         const r = await this.conversation.newConversation();
-        this.ctx.emit(EVENTS.switched, {});
+        this.ctx.emit("switched", undefined);
         this.publish();
         return r;
     }
 
     async openConversation(id: unknown) {
         const r = await this.conversation.open(id);
-        this.ctx.emit(EVENTS.switched, {});
+        this.ctx.emit("switched", undefined);
         this.publish();
         return r;
     }
@@ -562,7 +557,7 @@ export class AiApp {
             startComputer: () => this.computer.start(),
             stopComputer: async () => void (await this.stopComputer()),
             models: {
-                list: async () => (await this.models({ harness: this.settings().harness })).models,
+                list: () => this.models({ harness: this.settings().harness }),
                 current: () => this.settings().model ?? DEFAULT_MODEL,
                 choose: async (model) => void (await this.setup({ settings: { ...this.settings(), model } })),
             },

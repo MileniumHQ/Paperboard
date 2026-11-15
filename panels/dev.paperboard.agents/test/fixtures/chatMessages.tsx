@@ -5,7 +5,7 @@
 // nothing; switched to another conversation twice, the chat shows the last
 // one's history even when the first one's answers last. The service is the stub (paperapiStub.ts), answering the actions
 // this needs the way the real one does, and recording what it was asked.
-import { EVENTS, UI_ACTION_IDS, type ChatEntry } from "../../src/contract";
+import type { ChatEntry } from "../../src/contract";
 import { errors, field, frame, mountChat, report, type, until } from "./chatPage";
 import { answers, emit } from "./paperapiStub";
 
@@ -15,12 +15,12 @@ const PNG = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGNgYGD4DwA
 const sent: Record<string, unknown>[] = [];
 const webImages: string[] = [];
 let deliver!: () => void;
-answers.set(UI_ACTION_IDS.send, (inputs) => {
+answers.set("send", (inputs) => {
     sent.push(inputs);
     // on its way until the fixture lets it arrive
     return new Promise((resolve) => (deliver = () => resolve({ id: `m${sent.length}`, waiting: false })));
 });
-answers.set(UI_ACTION_IDS.webImage, async (inputs) => {
+answers.set("webImage", async (inputs) => {
     webImages.push(String(inputs.url));
     return { type: "image/png", data: PNG };
 });
@@ -51,7 +51,7 @@ async function run(): Promise<Record<string, unknown>> {
     const afterSend = { sends: sendsInFlight, text: sent[0]?.text, left: field().value };
 
     // a YouTube link in the agent's message
-    emit(EVENTS.entry, { id: "yt1", at: Date.now(), kind: "agent", text: "Here it is:\n\n![How to make pasta](https://www.youtube.com/watch?v=dQw4w9WgXcQ)" });
+    emit("entry", { id: "yt1", at: Date.now(), kind: "agent", text: "Here it is:\n\n![How to make pasta](https://www.youtube.com/watch?v=dQw4w9WgXcQ)" });
     const thumb = await until("the thumbnail", () => document.querySelector<HTMLImageElement>('[data-message="yt1"] img[alt="How to make pasta"]'));
     await until("the thumbnail to be drawn", () => thumb.complete && thumb.naturalWidth > 0);
     const youTube = {
@@ -63,9 +63,9 @@ async function run(): Promise<Record<string, unknown>> {
 
     // two switches in a row: the first one's history is on its way longest
     const histories: ((entries: ChatEntry[]) => void)[] = [];
-    answers.set(UI_ACTION_IDS.history, () => new Promise((resolve) => histories.push(resolve)));
-    emit(EVENTS.switched, {});
-    emit(EVENTS.switched, {});
+    answers.set("history", () => new Promise((resolve) => histories.push(resolve)));
+    emit("switched");
+    emit("switched");
     await until("both histories asked for", () => histories.length === 2);
     histories[1]!([{ id: "last1", at: Date.now(), kind: "agent", text: "The conversation switched to last" }]);
     await until("the last conversation's history", () => document.querySelector('[data-message="last1"]'));

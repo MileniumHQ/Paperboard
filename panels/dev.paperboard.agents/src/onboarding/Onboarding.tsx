@@ -87,8 +87,8 @@ function Flow(props: { agent: Agent; onSaving: () => void; onDone: () => void })
         setSaveError(null);
         props.onSaving();
         try {
-            await props.agent.setup({ name: name().trim(), harness: harness()!, model: model() === DEFAULT_MODEL ? null : (model() ?? null), compaction: "summarize" });
-            if (computer() === "setup") await props.agent.installComputer();
+            await props.agent.calls.setup({ settings: { name: name().trim(), harness: harness()!, model: model() === DEFAULT_MODEL ? null : (model() ?? null), compaction: "summarize" } });
+            if (computer() === "setup") await props.agent.calls.installComputer();
             return true;
         } catch (e) {
             setSaveError(errorMessage(e));

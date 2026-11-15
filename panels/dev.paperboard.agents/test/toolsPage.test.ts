@@ -127,7 +127,7 @@ describe("a server's switch", () => {
         })()`);
         expect(pressed).toEqual({ checked: "true", disabled: null, othersDisabled: null });
         // the service saves it and pushes the servers' status with it on
-        await page.received((f) => f.includes(":tools-changed") && f.includes('"enabled":true'), "the servers' status, pushed with the server on");
+        await page.received((f) => f.includes("event.emit-tools") && f.includes('"enabled":true'), "the servers' status, pushed with the server on");
         await page.settled();
         expect(await marked(page, toggle, "before")).toEqual({ kept: 1, all: 1 });
         expect(await page.evaluate(`document.querySelector('${toggle}').getAttribute("aria-checked")`)).toBe("true");

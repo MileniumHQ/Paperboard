@@ -1,11 +1,10 @@
 // The UI's side of the conversation's files: uploading the user's in chunks
-// (one action can't carry 25 MB), and reading any of them back into a blob
+// (one call can't carry 25 MB), and reading any of them back into a blob
 // URL to show. Read files are kept in a small cache bounded by count and
 // bytes; the oldest are released when it's full.
 
-import { LIMITS, UI_ACTION_IDS, type Attachment } from "../contract";
-
-type Call = <T>(id: string, inputs?: Record<string, unknown>) => Promise<T>;
+import type { ServiceCalls } from "@mileniumhq/paperapi";
+import { LIMITS, type Attachment, type agentsContract } from "../contract";
 
 const CACHE_FILES = 32;
 const CACHE_BYTES = 160 * 1024 * 1024;
@@ -20,7 +19,7 @@ const toBase64 = (blob: Blob) =>
 
 const fromBase64 = (data: string) => Uint8Array.from(atob(data), (c) => c.charCodeAt(0));
 
-export function createFiles(call: Call) {
+export function createFiles(calls: ServiceCalls<typeof agentsContract>) {
     type Read = { url: string; file: Attachment };
     const cache = new Map<string, { read: Promise<Read>; bytes: number }>();
     let cached = 0;
@@ -42,20 +41,20 @@ export function createFiles(call: Call) {
         /** Upload a file; progress is 0–1. An abort cancels the upload on the service too. */
         async upload(file: File, onProgress: (done: number) => void, signal: AbortSignal): Promise<Attachment> {
             if (file.size > LIMITS.attachments.fileBytes) throw new Error(`${file.name} is over ${LIMITS.attachments.fileBytes / 1024 / 1024} MB`);
-            const { id } = await call<{ id: string }>(UI_ACTION_IDS.attachBegin, { name: file.name, bytes: file.size });
+            const { id } = await calls.attachBegin({ name: file.name, bytes: file.size });
             try {
                 for (let offset = 0; offset < file.size; ) {
                     signal.throwIfAborted();
                     const chunk = file.slice(offset, offset + LIMITS.attachments.chunkBytes);
-                    await call(UI_ACTION_IDS.attachPut, { id, offset, data: await toBase64(chunk) });
+                    await calls.attachPut({ id, offset, data: await toBase64(chunk) });
                     offset += chunk.size;
                     onProgress(offset / file.size);
                 }
                 signal.throwIfAborted();
-                return await call<Attachment>(UI_ACTION_IDS.attachFinish, { id });
+                return await calls.attachFinish({ id });
             } catch (e) {
                 // quiet: the service drops the half-made file; if even that fails, its idle timer does
-                await call(UI_ACTION_IDS.attachCancel, { id }).catch((why) => console.error("[agents] couldn't cancel an upload:", why));
+                await calls.attachCancel({ id }).catch((why) => console.error("[agents] couldn't cancel an upload:", why));
                 throw e;
             }
         },
@@ -77,7 +76,7 @@ export function createFiles(call: Call) {
                 const parts: Uint8Array<ArrayBuffer>[] = [];
                 let file: Attachment | null = null;
                 for (let offset = 0, done = false; !done; ) {
-                    const r = await call<{ data: string; done: boolean; file: Attachment }>(UI_ACTION_IDS.attachRead, { id, offset });
+                    const r = await calls.attachRead({ id, offset });
                     const chunk = fromBase64(r.data);
                     parts.push(chunk);
                     offset += chunk.length;
@@ -111,7 +110,7 @@ export function createFiles(call: Call) {
         info(id: string): Promise<Attachment> {
             const hit = infos.get(id);
             if (hit) return hit;
-            const info = call<Attachment>(UI_ACTION_IDS.attachInfo, { id });
+            const info = calls.attachInfo({ id });
             infos.set(id, info);
             // a failed look isn't kept: the next one tries again
             info.catch(() => infos.get(id) === info && infos.delete(id));
@@ -129,7 +128,7 @@ export function createFiles(call: Call) {
                 webImages.set(url, hit);
                 return hit;
             }
-            const read = call<{ type: string; data: string }>(UI_ACTION_IDS.webImage, { url }).then((r) => URL.createObjectURL(new Blob([fromBase64(r.data)], { type: r.type })));
+            const read = calls.webImage({ url }).then((r) => URL.createObjectURL(new Blob([fromBase64(r.data)], { type: r.type })));
             webImages.set(url, read);
             // a failed load isn't kept: the next look tries again
             read.catch(() => webImages.get(url) === read && webImages.delete(url));

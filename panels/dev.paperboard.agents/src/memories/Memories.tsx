@@ -27,7 +27,7 @@ import { holdPage } from "../lib/pageHold";
 export default function Memories(props: { agent: Agent }) {
     const name = () => props.agent.name();
     // follows the memory revision; a re-read changes only what differs, and every card stays the card it was
-    const memory = createRead(() => props.agent.memory(), { source: () => props.agent.state.memory.revision });
+    const memory = createRead(() => props.agent.calls.memory(), { source: () => props.agent.state.memory.revision });
     const list = () => memory.value() ?? null;
     const [open, setOpen] = createSignal<string | null>(null);
     // the page before this one stays up until the first read is in
@@ -72,7 +72,7 @@ function Facts(props: { agent: Agent; facts: MemoryList["facts"] }) {
     const forget = (id: string) => {
         if (forgetting.has(id)) return;
         forgetting.add(id);
-        void run("Fact not forgotten", () => props.agent.deleteFact(id)).then(() => forgetting.delete(id));
+        void run("Fact not forgotten", () => props.agent.calls.deleteFact({ id })).then(() => forgetting.delete(id));
     };
 
     return (
@@ -106,11 +106,11 @@ function Facts(props: { agent: Agent; facts: MemoryList["facts"] }) {
 }
 
 function Note(props: { agent: Agent; noteKey: string; onDone: () => void }) {
-    const note = createRead(() => props.agent.readNote(props.noteKey));
+    const note = createRead(() => props.agent.calls.readNote({ key: props.noteKey }));
     const { busy: forgetting, error, run } = createAction();
 
     const forget = async () => {
-        if (await run("Note not forgotten", () => props.agent.deleteNote(props.noteKey))) props.onDone();
+        if (await run("Note not forgotten", () => props.agent.calls.deleteNote({ key: props.noteKey }))) props.onDone();
     };
 
     return (

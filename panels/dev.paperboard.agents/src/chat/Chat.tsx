@@ -87,7 +87,7 @@ export default function Chat(props: { agent: Agent; face: FaceController; pages:
     const startNew = () => {
         setNotice(null);
         setStartingNew(true);
-        props.agent
+        props.agent.calls
             .newConversation()
             .catch((e) => setNotice({ title: "Conversation not started", message: errorMessage(e) }))
             .finally(() => setStartingNew(false));

@@ -15,7 +15,7 @@ const capitalize = (text: string) => text.charAt(0).toUpperCase() + text.slice(1
 export default function Routines(props: { agent: Agent }) {
     const name = () => props.agent.name();
     // follows the routines revision; a re-read changes only what differs, and every row stays the row it was
-    const routines = createRead(() => props.agent.routines(), { source: () => props.agent.state.routines.revision });
+    const routines = createRead(() => props.agent.calls.routines(), { source: () => props.agent.state.routines.revision });
     const list = () => routines.value() ?? null;
     const [failed, setFailed] = createSignal<string | null>(null);
     // the page before this one stays up until the first read is in
@@ -28,7 +28,7 @@ export default function Routines(props: { agent: Agent }) {
         stopping.add(r.id);
         setFailed(null);
         try {
-            await props.agent.deleteRoutine(r.id);
+            await props.agent.calls.deleteRoutine({ id: r.id });
         } catch (e) {
             setFailed(errorMessage(e));
         } finally {

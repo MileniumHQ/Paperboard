@@ -83,7 +83,7 @@ export async function appRig(o: { settings?: Settings; actions?: ActionEntry[]; 
             ctx.state = { ...ctx.state, ...patch };
         },
         emit: (event: string, payload: unknown) => {
-            if (event === "chat-entry") entries.push(payload as ChatEntry);
+            if (event === "entry") entries.push(payload as ChatEntry);
         },
         trigger: (id: string, payload: unknown) => triggers.push({ id, payload }),
     };

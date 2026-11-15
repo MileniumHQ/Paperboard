@@ -13,7 +13,7 @@ const later = <T>() => {
 const settle = () => new Promise((r) => setTimeout(r, 0));
 
 function launcher(pages: () => Promise<PageInfo[]>, pagePicture: (name: string) => Promise<{ image: string }> = async () => ({ image: "" })) {
-    const agent = { state: { pages: { revision: 0 } }, pages, pagePicture } as unknown as Agent;
+    const agent = { state: { pages: { revision: 0 } }, calls: { pages, pagePicture: ({ name }: { name: string }) => pagePicture(name) } } as unknown as Agent;
     return createLauncher(agent);
 }
 
