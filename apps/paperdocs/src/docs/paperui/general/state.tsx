@@ -11,13 +11,83 @@ export default function StateDoc() {
         <PaperFlex direction="column" gap="double" fullWidth>
             <PaperText preset="header" as="h1">State and saving</PaperText>
             <PaperText preset="body" as="p">
-                Four Solid helpers for what every view does with its service: read something without an older answer landing over a newer one, run an action that shows why it didn't happen, save a control the one way controls save, and take pushed state without rebuilding the rows that didn't change.
+                Five Solid helpers for what every view does with its service: read its data, drop an answer that something newer replaced, run an action that shows why it didn't happen, save a control the one way controls save, and take pushed state without rebuilding the rows that didn't change.
                 Each imports from <PaperCode>@mileniumhq/paperui</PaperCode> and is called where a component is created.
             </PaperText>
             <PaperText preset="body" as="p">
                 They also import from <PaperCode>@mileniumhq/paperui/headless</PaperCode>, which loads without a page: no component and no CSS, only Solid.
                 Code that a Bun test runs, such as a page's store or a launcher's logic, imports them from there. The haptics (<PaperCode>haptic</PaperCode>, <PaperCode>playHaptic</PaperCode>, <PaperCode>setHapticPlayer</PaperCode>) are in it too. Both entries share the same modules, so a value made through one is the value the other sees.
             </PaperText>
+
+            <PaperText preset="subheader" as="h2" id="create-read">createRead</PaperText>
+            <PaperCode block language="tsx">
+{`createRead<T, S = true>(fetcher: (source: S) => Promise<T>, options?: ReadOptions<T, S>): Read<T>;
+
+interface ReadOptions<T, S> {
+    /** reads at once and on each change; false, null or undefined reads nothing */
+    source?: Accessor<S | false | null | undefined>;
+    /** the field array items are matched by across reads (default "id") */
+    key?: string;
+    /** what the service pushes: subscribe with land, return the function that stops it */
+    follow?: (land: (change: ReadChange<T>) => void) => () => void;
+    /** a failure's words, as the view shows them (default its own message) */
+    message?: (err: unknown) => string;
+}
+
+interface Read<T> {
+    /** the last answer, push or set; undefined until the first */
+    value: Accessor<T | undefined>;
+    /** a read is out */
+    loading: Accessor<boolean>;
+    /** why the newest read failed, until the next answer */
+    error: Accessor<string | null>;
+    /** reads again; resolves once it settled, never rejects */
+    reload: () => Promise<void>;
+    /** resolves once no read is out, never rejects */
+    ready: () => Promise<void>;
+    /** a change the view knows is newer, such as an action's answer */
+    set: (change: ReadChange<T>) => void;
+}
+
+/** a whole value (undefined forgets it), or a function for the part that changed */
+type ReadChange<T> = T | undefined | ((prev: T | undefined) => T | undefined);`}
+            </PaperCode>
+            <PaperText preset="body" as="p">
+                Data a view reads from its service: the last answer, whether a read is out, and why the newest one failed. Late answers lose without a token to check: only the newest read lands, and nothing lands once the component is gone.
+            </PaperText>
+            <PaperCode block language="tsx">
+{`import { createRead, PaperButton, PaperEmptyState, PaperLoader } from "@mileniumhq/paperui";
+
+const worlds = createRead(() => service.calls.listWorlds(), {
+    source: () => state().worldsRevision,
+});
+
+<Switch>
+    <Match when={worlds.error()}>
+        {(why) => (
+            <PaperEmptyState icon="error" title="Worlds can't be read" description={why()}>
+                <PaperButton onClick={() => void worlds.reload()}>Try again</PaperButton>
+            </PaperEmptyState>
+        )}
+    </Match>
+    <Match when={worlds.value()}>
+        {(list) => <For each={list()}>{(world) => <WorldRow world={world} />}</For>}
+    </Match>
+    <Match when={true}>
+        <PaperLoader loaderStatus="indeterminate" label="Reading worlds" />
+    </Match>
+</Switch>`}
+            </PaperCode>
+            <PaperTextList>
+                <li>Without <PaperCode>source</PaperCode> it reads once, at once. With one, it reads each time the source changes, and the fetcher gets its value. While the source is <PaperCode>false</PaperCode>, <PaperCode>null</PaperCode> or <PaperCode>undefined</PaperCode> nothing is read, and a read still out is dropped. A dialog that reads each time it opens passes <PaperCode>{"source: () => props.open"}</PaperCode>.</li>
+                <li>An answer is reconciled into what was there, so every row of a list keeps its identity and only what changed in it redraws. Items are matched by <PaperCode>key</PaperCode>, and items without it by position.</li>
+                <li>A failure keeps the value that was there. Show <PaperCode>error()</PaperCode> with a way to <PaperCode>reload()</PaperCode>; it clears when the next answer lands.</li>
+                <li><PaperCode>loading()</PaperCode> is true while a read is out, the first one and every reload. A view that keeps its rows on screen during a reload shows the loader only while <PaperCode>value()</PaperCode> is undefined.</li>
+                <li>A push (through <PaperCode>follow</PaperCode>) and a <PaperCode>set</PaperCode> are changes newer than any read still out. A whole value lands like an answer and drops that read: the list a remove answered with, or the state a service pushed. <PaperCode>set(undefined)</PaperCode> forgets the value, as before the first read: a view whose data went away.</li>
+                <li>A function changes the part it knows, such as a row taken out after it went, or a progress line pushed while the list is read. It applies at once, and again to the answer of the read still out, so that answer can't bring back what it changed.</li>
+                <li><PaperCode>follow</PaperCode> is any subscribe function: it gets <PaperCode>land</PaperCode> and returns the function that stops it. The read stops it when the component goes.</li>
+                <li>A poll is <PaperLink href="/docs/paperui/utilities/#polling">createPolling</PaperLink> calling <PaperCode>reload</PaperCode>: a tick never starts while the last read is out.</li>
+            </PaperTextList>
 
             <PaperText preset="subheader" as="h2" id="create-latest">createLatest</PaperText>
             <PaperCode block language="tsx">
@@ -31,7 +101,8 @@ interface Latest {
 }`}
             </PaperCode>
             <PaperText preset="body" as="p">
-                Late answers lose. Each call of the function it returns starts a read and hands back <PaperCode>current()</PaperCode>, which is true while no newer read has started and the component is still there.
+                Late answers lose, for work that isn't a read: a sign-in that a person can cancel, a probe a newer one replaces. A read uses <PaperCode>createRead</PaperCode>, which does this itself.
+                Each call of the function it returns starts the work and hands back <PaperCode>current()</PaperCode>, which is true while no newer read has started and the component is still there.
                 Check it after every <PaperCode>await</PaperCode>, before the answer or its failure lands on screen.
             </PaperText>
             <PaperCode block language="tsx">
