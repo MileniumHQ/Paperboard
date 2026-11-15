@@ -30,7 +30,7 @@ const TITLE_CHARS = 32;
 
 export default function ComputerView(props: { agent: Agent }) {
     const c = () => props.agent.state.computer;
-    const name = () => props.agent.state.settings?.name ?? "Your agent";
+    const name = () => props.agent.name();
     const ready = () => c().phase === "ready";
 
     const { busy, error, setError, run: act } = createAction();

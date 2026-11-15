@@ -23,7 +23,7 @@ export default function Composer(props: {
     onCancelReply: () => void;
     tray: Tray;
 }) {
-    const name = () => props.agent.state.settings?.name ?? "your agent";
+    const name = () => props.agent.name();
 
     const [error, setError] = createSignal<Failure | null>(null);
     const [dragging, setDragging] = createSignal(false);

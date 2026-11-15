@@ -1,4 +1,4 @@
-import { For, Match, Show, Switch, createEffect, createSignal, on, onCleanup, onMount, type JSX } from "solid-js";
+import { For, Index, Match, Show, Switch, createEffect, createSignal, on, onCleanup, onMount, type JSX } from "solid-js";
 import {
     PaperButton,
     PaperFlex,
@@ -312,9 +312,10 @@ function Scenes(props: {
                         }}
                         aria-live="polite"
                     >
-                        <For each={props.speaker.segments()}>
-                            {(seg) => (seg.br ? <br /> : seg.bold ? <strong>{seg.text}</strong> : <>{seg.text}</>)}
-                        </For>
+                        {/* by place: the segment being typed grows in place, it isn't built again per character */}
+                        <Index each={props.speaker.segments()}>
+                            {(seg) => <>{seg().br ? <br /> : seg().bold ? <strong>{seg().text}</strong> : seg().text}</>}
+                        </Index>
                     </div>
                 </div>
             </Show>

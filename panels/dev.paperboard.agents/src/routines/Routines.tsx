@@ -13,7 +13,7 @@ import { createLatest } from "../lib/action";
 import { errorText } from "../lib/failure";
 
 export default function Routines(props: { agent: Agent }) {
-    const name = () => props.agent.state.settings?.name ?? "Your agent";
+    const name = () => props.agent.name();
     // reconciled by id, so a re-read changes what differs and every card stays the card it was
     const [state, setState] = createStore<{ routines: Routine[] | null }>({ routines: null });
     const list = () => state.routines;

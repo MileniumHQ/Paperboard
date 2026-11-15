@@ -432,7 +432,7 @@ function AutomationSettings(props: { agent: Agent }) {
 /** The confirmation for starting over. */
 function StartOver(props: { agent: Agent; open: boolean; onClose: () => void }) {
     const { busy, error, setError, run } = createAction();
-    const name = () => props.agent.state.settings?.name ?? "Your agent";
+    const name = () => props.agent.name();
     // each time it opens, it asks afresh
     createEffect(on(() => props.open, (open) => open && setError(null)));
     return (

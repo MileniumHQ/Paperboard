@@ -20,7 +20,7 @@ import type { Agent } from "./lib/agent";
 import { PageHold } from "./lib/pageHold";
 import styles from "./Workspace.module.css";
 
-export type Section = "computer" | "pages" | "memories" | "routines" | "tools" | "access" | "settings";
+type Section = "computer" | "pages" | "memories" | "routines" | "tools" | "access" | "settings";
 
 const SECTIONS: { id: Section; title: string; icon: string }[] = [
     { id: "computer", title: "Computer", icon: "computer" },
@@ -74,7 +74,7 @@ export default function Workspace(props: { agent: Agent }) {
             case "computer":
                 return <ComputerView agent={props.agent} />;
             case "pages":
-                return <Pages pages={pages} name={props.agent.state.settings?.name ?? "your agent"} onOpened={() => setOpen(false)} />;
+                return <Pages pages={pages} name={props.agent.name()} onOpened={() => setOpen(false)} />;
             case "memories":
                 return <Memories agent={props.agent} />;
             case "routines":

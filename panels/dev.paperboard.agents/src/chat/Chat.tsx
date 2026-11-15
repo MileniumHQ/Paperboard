@@ -55,7 +55,7 @@ const stampText = (at: number) => {
 
 /** One conversation, like texting a friend. */
 export default function Chat(props: { agent: Agent; face: FaceController; pages: Launcher; onMenu: () => void }) {
-    const name = () => props.agent.state.settings?.name ?? "Your agent";
+    const name = () => props.agent.name();
 
     // thinking while the agent is on it, working or writing
     createEffect(on(() => props.agent.state.chat.busy, (busy) => props.face.ponder(busy)));

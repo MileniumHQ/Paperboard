@@ -109,6 +109,8 @@ export function createAgent() {
 
     return {
         state,
+        /** what the person named their agent; every view that shows it waits for the settings, which name it */
+        name: () => state.settings?.name ?? "Your agent",
         entries,
         hydration,
         error,

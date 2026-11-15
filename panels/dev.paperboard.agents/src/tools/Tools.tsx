@@ -40,7 +40,7 @@ export default function Tools(props: { agent: Agent }) {
     const tools = createTools();
     // the page before this one stays up until the first read is in
     holdPage(tools.first);
-    const name = () => props.agent.state.settings?.name ?? "Your agent";
+    const name = () => props.agent.name();
 
     return (
         <Switch>
@@ -353,10 +353,10 @@ function Editor(props: { tools: ToolsClient; name: string; open: boolean; initia
 
     let form!: HTMLFormElement;
     const field = (name: string) => form.querySelector<HTMLElement>(`[name="${name}"]`);
-    /** the field a refusal is about, from what the form itself shows is wrong */
-    const invalid = (message: string): HTMLElement | null => {
+    /** the field a refusal is about, from what the form itself shows is wrong; the refusal's own words name anything else */
+    const invalid = (): HTMLElement | null => {
         const cur = f();
-        const row = cur.rows.find((r) => r.name.trim() && message.includes(`"${r.name.trim()}"`)) ?? cur.rows.find((r) => !r.name.trim() && (r.value || r.typed));
+        const row = cur.rows.find((r) => !r.name.trim() && (r.value || r.typed));
         if (row) return field(`row-name-${row.key}`);
         if (!cur.name.trim()) return field("name");
         if (cur.transport === "http" ? !cur.url.trim() : !cur.command.trim()) return field(cur.transport === "http" ? "url" : "command");
@@ -367,7 +367,7 @@ function Editor(props: { tools: ToolsClient; name: string; open: boolean; initia
         setError({ title, message });
         setBusy(false);
         queueMicrotask(() => {
-            if (to) invalid(message)?.focus({ preventScroll: true });
+            if (to) invalid()?.focus({ preventScroll: true });
             form.querySelector('[role="alert"]')?.scrollIntoView({ block: "nearest" });
         });
     };

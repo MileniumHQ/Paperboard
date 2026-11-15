@@ -26,7 +26,7 @@ import { createAction, createLatest } from "../lib/action";
 import { errorText } from "../lib/failure";
 
 export default function Memories(props: { agent: Agent }) {
-    const name = () => props.agent.state.settings?.name ?? "Your agent";
+    const name = () => props.agent.name();
     // facts by id and notes by key, so a re-read changes what differs and every card stays the card it was
     const [facts, setFacts] = createStore<MemoryList["facts"]>([]);
     const [notes, setNotes] = createStore<MemoryList["notes"]>([]);
