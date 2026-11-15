@@ -33,10 +33,10 @@ let daemon: TestDaemon;
 beforeAll(async () => {
     installPanel(dataDir);
     fs.mkdirSync(path.join(dataDir, "configs"), { recursive: true });
-    fs.writeFileSync(path.join(dataDir, "configs", `${PANEL_ID}.json`), JSON.stringify({ version: 2, serversDirectory: SERVERS, servers: [stored("s-a"), stored("s-b"), { ...stored("s-c"), settings: {} }] }));
-    // s-c can't be set up: a file stands where its folder goes
+    fs.writeFileSync(path.join(dataDir, "configs", `${PANEL_ID}.json`), JSON.stringify({ version: 2, serversDirectory: SERVERS, servers: [stored("s-a"), stored("s-b"), { ...stored("s-c"), settings: {} }, { ...stored("s-d"), settings: {} }] }));
+    // s-c and s-d can't be set up: a file stands where each one's folder goes
     fs.mkdirSync(filesRoot, { recursive: true });
-    fs.writeFileSync(serverDir("s-c"), "not a folder");
+    for (const id of ["s-c", "s-d"]) fs.writeFileSync(serverDir(id), "not a folder");
     for (const id of ["s-a", "s-b"]) writeTree(serverDir(id), { "server.jar": "jar", "eula.txt": "eula=true\n", "world/level.dat": `${id} world` });
     writeTree(serverDir("s-a"), { "fake-server.json": JSON.stringify({ players: ["alice", "bob"], maxPlayers: 10 }) });
     installFakeJava(javaPackageFor("1.21.1")!, dataDir);
@@ -65,6 +65,18 @@ describe("servers through restarts", () => {
         expect(fs.statSync(serverDir("s-c")).isDirectory()).toBe(true);
         expect(await callServer("s-c", "read-automation")).toBeTruthy();
         expect(await call("remove-server", { server: "s-c" })).toEqual({ removed: "s-c" });
+    });
+
+    test("a server that could not be set up is renamed and removed as it is, and what stands at its folder is kept", async () => {
+        const state = servicesState();
+        await state.waitFor("s-d", (s) => typeof s.initFailure === "string", "s-d's setup failure");
+        expect(await call("rename-server", { server: "s-d", name: "Broken" })).toBe(true);
+        const named = JSON.parse(fs.readFileSync(path.join(dataDir, "configs", `${PANEL_ID}.json`), "utf8"));
+        expect(named.servers.find((s: { id: string }) => s.id === "s-d").name).toBe("Broken");
+        expect(await call("remove-server", { server: "s-d" })).toEqual({ removed: "s-d" });
+        const saved = JSON.parse(fs.readFileSync(path.join(dataDir, "configs", `${PANEL_ID}.json`), "utf8"));
+        expect(saved.servers.map((s: { id: string }) => s.id)).not.toContain("s-d");
+        expect(fs.readFileSync(serverDir("s-d"), "utf8")).toBe("not a folder");
     });
 
     test("a server running when the service starts again is shown online with its players and its console history", async () => {

@@ -7,7 +7,9 @@ export interface ServerScope {
     legacy: boolean;
     processIds: readonly string[];
     ctx: ServiceContext<GameServerState>;
-    /** the server's Blocks project */
+    /** whether the server is a backup source, once its setup has made it one */
+    backupSource?: true;
+    /** the server's Blocks project, once its setup has made it */
     blocks?: BlocksProjectHandle;
     /** maps the saved settings in the panel's write queue; gives what was saved */
     updateSettings(change: (current: Record<string, unknown>) => Record<string, unknown>): Promise<Record<string, unknown>>;

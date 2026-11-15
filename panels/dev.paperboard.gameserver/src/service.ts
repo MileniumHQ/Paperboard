@@ -249,7 +249,6 @@ async function initialize(scope: ServerScope): Promise<ServerScope> {
     const { server } = scope;
     const game = gameServiceFor(server.game);
     try {
-        await nodeFs.mkdir(await fileApi.getPath(server.directory, PANEL_ID), { recursive: true });
         await backupApi.defineSource(PANEL_ID, {
             id: server.id,
             directory: server.directory,
@@ -259,6 +258,8 @@ async function initialize(scope: ServerScope): Promise<ServerScope> {
             ...(scope.legacy || game.backupExclude ? { exclude: [...(scope.legacy ? [saved.serversDirectory] : []), ...(game.backupExclude ?? [])] } : {}),
             ...(game.backupSkip ? { skip: [...game.backupSkip] } : {}),
         });
+        scope.backupSource = true;
+        await nodeFs.mkdir(await fileApi.getPath(server.directory, PANEL_ID), { recursive: true });
         scope.blocks = await blocksApi.defineProject({ id: server.id, ...blocksProject(server) }, PANEL_ID);
         const blocks = scope.blocks;
         await inServer(scope, async () => blocks.register(bindBlocks(scope, mergeBlocks(sharedBlocks(scope.ctx), settingsBlocks(scope.ctx), await game.blocks?.(scope.ctx)))));
@@ -368,7 +369,8 @@ function renameServer(server: unknown, name: unknown): Promise<void> {
     return serial(async () => {
         const scope = requireServer(server);
         const renamed = { ...scope.server, name: serverName(name) };
-        await scope.blocks!.update(blocksProject(renamed));
+        // a server whose setup failed has no project yet: setting it up again names it
+        await scope.blocks?.update(blocksProject(renamed));
         await updateSaved((current) => ({
             ...current,
             servers: current.servers.map((s) =>
@@ -397,8 +399,9 @@ function removeServer(server: unknown): Promise<void> {
                 for (const name of currentGameService().portNames)
                     await livePortDeps().ports.release(name);
             });
-            await backupApi.forSource(PANEL_ID, id).setSchedule(null);
-            await scope.blocks!.remove();
+            // a setup that failed may have made neither
+            if (scope.backupSource) await backupApi.forSource(PANEL_ID, id).setSchedule(null);
+            await scope.blocks?.remove();
             await updateSaved((current) => {
                 const next = {
                     ...current,
