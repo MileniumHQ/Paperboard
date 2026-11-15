@@ -163,9 +163,10 @@ export function initAppSettingsSync(): void {
         });
     });
 
-    // fires on OS flips too
+    // fires on OS flips too: under System the panels follow the OS with the shell
     nativeTheme.on("updated", () => {
         syncTitleBarOverlays();
+        broadcastAppSettings().catch((err) => logger.warn("[AppSettings] theme broadcast failed:", err));
     });
 
     // a GPU process that crashes for good leaves Chromium drawing in software
