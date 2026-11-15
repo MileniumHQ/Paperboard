@@ -42,8 +42,9 @@ export function getPlayerPlaytimeSeconds(name: string): number | undefined {
     return playerPlaytime().get(key);
 }
 
-// local echo of a delete; uuid also drops the offline stats summary, which
-// would otherwise list the player again until the next stats poll
+// local echo of a delete the service has made (it forgets the player
+// itself); uuid also drops the offline stats summary, which would otherwise
+// list the player again until the next stats poll
 export function forgetPlayerData(name: string, uuid?: string) {
     const key = name.toLowerCase();
     if (uuid) {
@@ -78,9 +79,6 @@ export function forgetPlayerData(name: string, uuid?: string) {
         next.delete(key);
         return next;
     });
-    serverBridge.call(CALLS.forgetPlayerData, { player: name }).catch((err) =>
-        console.debug("[players] forgetPlayerData failed:", String(err)),
-    );
 }
 
 export function queryPlayerStats(name: string) {
