@@ -7,7 +7,7 @@ import { releaseMessage, signRelease } from "../../../../scripts/releaseSigning"
 import { RELEASE_PUBLIC_KEY, verifyRelease } from "../../../paperboard/papercrane/releaseSignature";
 import { parsePackageRecipe, recipeDigest } from "../../../paperboard/papercrane/packageRecipe";
 import { kvPut, runCommand, type CommandRunner } from "./wrangler";
-import { messageOf } from "./errors";
+import { errorMessage } from "../../../../packages/paperapi/src/errors";
 import { REGISTRY_ORIGIN } from "../../src/downloadUrl";
 
 // Signs every platform entry with the offline release key. Daemons refuse
@@ -72,7 +72,7 @@ export async function putRecord(
     // skip: the write goes ahead.
     if (published) {
         const live = await published(signed.name).catch((err) => {
-            console.warn(messageOf(err));
+            console.warn(errorMessage(err));
             return undefined;
         });
         if (live !== undefined && canonical(live) === canonical(signed)) return "unchanged";

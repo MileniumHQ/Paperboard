@@ -3,7 +3,7 @@ import { putRecord, readPublished, type PublishedReader } from "./kv";
 import type { CommandRunner } from "./wrangler";
 import { loadReleaseSigningKey } from "../../../../scripts/releaseSigning";
 import type { PackageRecord } from "./records";
-import { messageOf } from "./errors";
+import { errorMessage } from "../../../../packages/paperapi/src/errors";
 
 export interface UpdateOutcome {
     written: string[];
@@ -38,7 +38,7 @@ export async function writeRecords(
             const result = await putRecord(record, signingKey!, opts.run, opts.publicKey, opts.published ?? readPublished);
             outcome[result].push(key);
         } catch (err) {
-            outcome.errors[key] = messageOf(err);
+            outcome.errors[key] = errorMessage(err);
         }
     }
     return outcome;
@@ -61,7 +61,7 @@ export async function settle(key: string, build: () => Promise<PackageRecord>): 
     try {
         return { key, record: await build() };
     } catch (err) {
-        return { key, error: messageOf(err) };
+        return { key, error: errorMessage(err) };
     }
 }
 
@@ -70,7 +70,7 @@ export async function settleAll(keys: string[], build: () => Promise<PackageReco
     try {
         return (await build()).map((record) => ({ key: record.name, record }));
     } catch (err) {
-        const error = messageOf(err);
+        const error = errorMessage(err);
         return keys.map((key) => ({ key, error }));
     }
 }
@@ -84,7 +84,7 @@ export function runUpdater(build: (argv: string[]) => Promise<BuiltEntry[]>): vo
         .then(
             (outcome) => process.exit(report(outcome, dryRun)),
             (err) => {
-                console.error(messageOf(err));
+                console.error(errorMessage(err));
                 process.exit(1);
             },
         );

@@ -41,6 +41,7 @@ import {
     type PlatformDownload,
     type PlatformKey,
 } from "./lib/records";
+import { errorCode } from "../../../packages/paperapi/src/errors";
 
 const RELEASES = "https://downloads.claude.ai/claude-code-releases";
 const KEY_URL = "https://downloads.claude.ai/keys/claude-code.asc";
@@ -252,7 +253,7 @@ export async function gpgVerify(manifest: Uint8Array, signature: Uint8Array, pub
                 env,
             );
         } catch (err) {
-            if ((err as NodeJS.ErrnoException).code === "ENOENT") {
+            if (errorCode(err) === "ENOENT") {
                 throw new Error("gpg is not installed; it is needed to verify Anthropic's signed manifest");
             }
             throw err;
