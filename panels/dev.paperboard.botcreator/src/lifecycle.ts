@@ -5,19 +5,38 @@ import { errorToMessage, extractApplicationIdFromToken } from "./types";
 import { MAX_BOTS, PANEL_ID, isBotId, tokenName, type BotSummary, type DeleteBotResult } from "./bots";
 import { adding, bots, logFailure, publish, requireReadable, summary, type BotEntry } from "./registry";
 import { readToken, saveBots, takeNewToken } from "./persistence";
-import { tokenUser } from "./session";
+import { tokenUser } from "./discord";
 import { botsChanged, createEntry, firePanelEvent, noteIdentity, noteOnline, registerBlocks } from "./blocksBridge";
+
+/**
+ * The bot's saved token. Why there is none (none is saved, or the vault
+ * couldn't be read) becomes the bot's error, on its card and in its
+ * Overview, and is thrown.
+ */
+async function savedToken(entry: BotEntry): Promise<string> {
+    const refuse = (message: string): never => {
+        entry.session.fail(message);
+        throw new Error(message);
+    };
+    let token: string | null;
+    try {
+        token = await readToken(entry.stored.id);
+    } catch (err) {
+        return refuse(`Its token couldn't be read from Paperboard's vault: ${errorToMessage(err)}`);
+    }
+    entry.hasToken = Boolean(token);
+    return token ?? refuse("No token is saved for this bot. Replace its token in Configuration.");
+}
 
 /** Connects a saved bot with its vault token; the reason it can't is the bot's error. */
 export async function connect(entry: BotEntry): Promise<void> {
-    const token = await readToken(entry.stored.id);
-    entry.hasToken = Boolean(token);
-    if (!token) {
-        const message = "No token is saved for this bot. Replace its token in Configuration.";
-        entry.session.fail(message);
-        throw new Error(message);
-    }
-    await entry.session.start(token);
+    await entry.session.start(await savedToken(entry));
+}
+
+/** Brings the session in line with the bot's switch: logged in when it's on, stopped (and its last error gone) when it's off. */
+async function follow(entry: BotEntry): Promise<void> {
+    if (entry.stored.enabled) await connect(entry);
+    else await entry.session.stop();
 }
 
 export async function setEnabled(entry: BotEntry, enabled: boolean): Promise<void> {
@@ -33,8 +52,7 @@ export async function setEnabled(entry: BotEntry, enabled: boolean): Promise<voi
         }
         publish();
     }
-    if (enabled) await connect(entry);
-    else await entry.session.stop();
+    await follow(entry);
 }
 
 /** Adds a saved bot's blocks to Blocks. The daemon is local, so this is quick, and it's done before the service is
@@ -51,9 +69,8 @@ export async function registerEntry(entry: BotEntry): Promise<void> {
 /** Logs a saved bot in to Discord, which can stall on a rate limit, so it runs after the service is ready. */
 export async function connectEntry(entry: BotEntry): Promise<void> {
     try {
-        entry.hasToken = Boolean(await readToken(entry.stored.id));
-        if (!entry.hasToken) entry.session.fail("No token is saved for this bot. Replace its token in Configuration.");
-        else if (entry.stored.enabled) await connect(entry);
+        if (entry.stored.enabled) await connect(entry);
+        else await savedToken(entry);
     } catch (err) {
         // the reason is the bot's error, on its card and in its Overview
         console.error(`[DiscordService] ${entry.stored.name} didn't connect:`, errorToMessage(err));
@@ -121,8 +138,9 @@ export async function addBot(id: unknown): Promise<BotSummary> {
 
 /**
  * Replaces a bot's token with the new one the panel left in the vault, once
- * Discord takes it as this bot's, and reconnects the bot if it's on. A token
- * Discord refuses, or one for another bot, leaves the saved token as it was.
+ * Discord takes it as this bot's, then logs the bot in with it if it's on
+ * (one that's off drops the error its old token left). A token Discord
+ * refuses, or one for another bot, leaves the saved token as it was.
  */
 export async function replaceToken(entry: BotEntry): Promise<void> {
     requireReadable();
@@ -141,8 +159,9 @@ export async function replaceToken(entry: BotEntry): Promise<void> {
     if (expected && user !== expected) throw new Error(other);
     await secretsApi.set(tokenName(entry.stored.id), token, PANEL_ID);
     entry.hasToken = true;
-    if (entry.stored.enabled) await connect(entry);
-    else publish();
+    // the token is replaced: the login it starts can take minutes on a rate
+    // limit, and how it goes is the bot's to say, on its card and its Overview
+    follow(entry).catch(logFailure(`${entry.stored.name} didn't connect with its new token`));
 }
 
 /** Logs a bot that's on in again, with its saved token. */

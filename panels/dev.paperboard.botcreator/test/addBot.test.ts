@@ -8,7 +8,7 @@ import { blocksApi, secretsApi } from "@mileniumhq/paperapi";
 import { newTokenName, tokenName, type BotsServiceState } from "../src/bots";
 import { startFakeDiscord, type FakeDiscord } from "./helpers/discord";
 import { call, PANEL_ID, savedBots, startService, stopServices, storedBot } from "./helpers/service";
-import { stateWhere } from "./helpers/wait";
+import { stateWhere, within } from "./helpers/wait";
 
 // each wait below has its own bound; a test as a whole may take longer than bun's 5 s default
 setDefaultTimeout(60_000);
@@ -95,6 +95,18 @@ describe("replacing a bot's token", () => {
         expect(state.bots[0]).toMatchObject({ hasToken: true, lastError: null });
         expect(await secretsApi.get(tokenName("b-lost"), PANEL_ID)).toMatchObject({ found: true, value: fake.token });
         expect((await secretsApi.get(newTokenName("b-lost"), PANEL_ID)).found).toBe(false);
+    });
+
+    test("a new token is replaced as soon as Discord takes it, while the login it starts waits out a rate limit", async () => {
+        const fake = discord.addBot({ username: "Throttled", gateway: "rate-limited" });
+        await savedBots([{ stored: storedBot("b-throttled", fake.appId, { name: "Throttled" }) }]);
+        await startService({ discordApi: discord.api });
+        await stateWhere<BotsServiceState>(PANEL_ID, (s) => s.bots[0]?.hasToken === false && Boolean(s.bots[0].lastError), "the missing token");
+
+        await within("the replace to answer", replace("b-throttled", fake.token), 10_000);
+        const state = await stateWhere<BotsServiceState>(PANEL_ID, (s) => Boolean(s.bots[0]?.connecting), "the bot to be logging in");
+        expect(state.bots[0]).toMatchObject({ hasToken: true, connected: false, lastError: null });
+        expect(await secretsApi.get(tokenName("b-throttled"), PANEL_ID)).toMatchObject({ found: true, value: fake.token });
     });
 
     test("a mistyped token for the same bot is refused, and the bot keeps its working token and stays online", async () => {

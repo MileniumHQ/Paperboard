@@ -85,6 +85,37 @@ describe("connection status is truthful per session", () => {
         expect(fired(bot.triggers, "on-connection-error")).toEqual([{ trigger: "on-connection-error", output: { error: "Session invalidated: token was reset or revoked" } }]);
     });
 
+    test("what goes wrong mid-session is in its problems, and an invalidated session has nothing left to answer", async () => {
+        const fake = discord().addBot({ username: "Troubled Bot" });
+        const bot = recordedSession("b-troubled");
+        await bot.session.start(fake.token);
+        await bot.until(() => bot.session.connected(), "the bot to connect");
+        const client = bot.session.client!;
+        const problems = () => bot.session.problems().map((p) => p.text);
+
+        // a transient error leaves the bot connected, and is in its Overview
+        client.emit("error", new Error("heartbeat hiccup"));
+        expect(bot.session.connected()).toBe(true);
+        expect(problems()).toEqual(["Its connection to Discord had an error: heartbeat hiccup"]);
+        expect(fired(bot.triggers, "on-connection-error").map((t) => t.output.error)).toEqual(["heartbeat hiccup"]);
+
+        // a click no flow has answered yet, then the token is revoked and the client won't close
+        bot.session.rememberInteraction({ id: "i-1", createdTimestamp: Date.now() } as any);
+        expect(bot.session.health().pendingInteractions).toBe(1);
+        const close = client.destroy.bind(client);
+        client.destroy = async () => {
+            throw new Error("the socket is stuck");
+        };
+        try {
+            client.emit("invalidated");
+            expect(bot.session.health()).toMatchObject({ connected: false, lastError: "Session invalidated: token was reset or revoked", pendingInteractions: 0, uptimeMs: 0 });
+            await bot.until(() => problems().length === 2, "the close that failed");
+            expect(problems()[1]).toBe("Its connection to Discord didn't close cleanly: the socket is stuck");
+        } finally {
+            await close();
+        }
+    });
+
     test("a superseded client's events change nothing", async () => {
         const fake = discord().addBot({ username: "Twice Bot", guilds: [guild("Home")] });
         const bot = recordedSession("b-twice");

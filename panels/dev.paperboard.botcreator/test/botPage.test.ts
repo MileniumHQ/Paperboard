@@ -226,6 +226,38 @@ describe("a bot's page", () => {
         }
     });
 
+    test("a new token for a bot that's off takes away its missing-token error, on its Overview and its card", async () => {
+        const fake = discord.addBot({ username: "Keyless" });
+        await savedBots([{ stored: storedBot("b-keyless", fake.appId, { name: "Keyless", enabled: false }) }]);
+        await startService({ discordApi: discord.api });
+        const missing = "No token is saved for this bot.";
+        await stateWhere<BotsServiceState>(PANEL_ID, (s) => Boolean(s.bots[0]?.lastError?.startsWith(missing)), "the missing token");
+        const served = await servePanel();
+        const page = await browser.open(served.url);
+        try {
+            await page.waitFor(`document.body.innerText.includes(${JSON.stringify(missing)})`, "the card to say no token is saved");
+            await clickText(page, "[class*=card], [class*=Card]", "Keyless");
+            await page.waitFor(`document.body.innerText.includes("This bot has a problem")`, "the Overview to say no token is saved");
+            await page.click(`input[name=botMenu][value="config"]`);
+            await clickText(page, "button", "Replace");
+            await page.waitFor(`document.querySelector("[role=dialog] input[type=password]") !== null`, "the Replace token dialog");
+            await page.type("[role=dialog] input[type=password]", fake.token, true);
+            await page.waitFor(`!document.querySelector("[role=dialog] input[type=password]")`, "the dialog to close once the token is saved");
+            expect((await stateWhere<BotsServiceState>(PANEL_ID, (s) => s.bots[0]?.hasToken === true, "the token")).bots[0]).toMatchObject({ enabled: false, connected: false, lastError: null });
+
+            await page.click(`input[name=botMenu][value="overview"]`);
+            await page.waitFor(`document.body.innerText.includes("Gateway status")`, "the Overview");
+            expect(await page.evaluate<string>("document.body.innerText")).not.toContain("This bot has a problem");
+            await page.click(`input[name=botMenu][value="home"]`);
+            await page.waitFor(`document.body.innerText.includes("Keyless") && !document.body.innerText.includes("Gateway status")`, "the bot list");
+            expect(await page.evaluate<string>("document.body.innerText")).not.toContain(missing);
+            expect(page.exceptions).toEqual([]);
+        } finally {
+            await page.close();
+            served.stop();
+        }
+    });
+
     test("on a phone the Overview fits: the switch, the name and every message stay inside their cards", async () => {
         const home = guild("Home");
         const fake = discord.addBot({ username: "ModerationHelperBot", guilds: [home] });

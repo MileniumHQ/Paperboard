@@ -1,4 +1,5 @@
 import { afterAll, afterEach, beforeAll, describe, expect, setDefaultTimeout, test } from "bun:test";
+import * as path from "node:path";
 import { blocksApi, serviceApi } from "@mileniumhq/paperapi";
 import type { BotsServiceState } from "../src/bots";
 import { startFakeDiscord, type FakeDiscord } from "./helpers/discord";
@@ -48,5 +49,19 @@ describe("ready doesn't wait for Discord", () => {
         expect(service.output()).toContain("Bot b-broken didn't connect: Discord login failed: An invalid token was provided.");
         // the stuck bot is still connecting: its login is Discord's to finish
         expect(await serviceApi.call(PANEL_ID, "getBotInfo", { bot: "b-stuck" })).toMatchObject({ connected: false, lastError: null });
+    });
+});
+
+describe("a bot that can't start says why", () => {
+    test("a token the vault won't give back is the bot's error, on or off", async () => {
+        const fake = discord.addBot({ username: "Locked" });
+        await savedBots([
+            { stored: storedBot("b-locked-on", fake.appId), token: fake.token },
+            { stored: storedBot("b-locked-off", fake.appId, { enabled: false }), token: fake.token },
+        ]);
+        await startService({ discordApi: discord.api, entry: path.join(import.meta.dir, "fixtures/unreadableVault.ts") });
+        const why = "Its token couldn't be read from Paperboard's vault: the vault couldn't be decrypted";
+        const state = await stateWhere<BotsServiceState>(PANEL_ID, (s) => s.bots.length === 2 && s.bots.every((b) => b.lastError), "both bots to say why they can't run");
+        for (const bot of state.bots) expect(bot).toMatchObject({ connected: false, connecting: false, lastError: why });
     });
 });
