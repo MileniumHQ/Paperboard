@@ -1,4 +1,4 @@
-import { batch, createMemo, createSignal, Show } from "solid-js";
+import { createMemo, Show } from "solid-js";
 import GameRoster, { CopyRow, createRosterState, type RosterPlayer } from "../../components/GameRoster";
 import { byName } from "../rosterNames";
 import PlayerAvatar from "../../components/PlayerAvatar";
@@ -12,15 +12,9 @@ interface Player extends RosterPlayer {
 const key = (name: string) => name.toLowerCase();
 
 export default function TerrariaPlayers() {
-    const [seen, setSeen] = createSignal<SeenPlayer[]>([]);
-    const [bans, setBans] = createSignal<BanEntry[]>([]);
-    const state = createRosterState(async () => {
-        const roster = await serverBridge.call<{ seen: SeenPlayer[]; bans: BanEntry[] }>("terraria-players");
-        batch(() => {
-            setSeen(roster.seen);
-            setBans(roster.bans);
-        });
-    });
+    const state = createRosterState(() => serverBridge.call<{ seen: SeenPlayer[]; bans: BanEntry[] }>("terraria-players"));
+    const seen = () => state.roster()?.seen ?? [];
+    const bans = () => state.roster()?.bans ?? [];
     const act = (action: string) => (player: Player) => serverBridge.call(action, { name: player.name });
 
     // everyone who has joined, who is online now, or who is banned by name

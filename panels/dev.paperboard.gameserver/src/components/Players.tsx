@@ -1,4 +1,3 @@
-import { PANEL_ID } from "../service/types";
 import { createSignal, createEffect, createMemo, For, on, onCleanup, onMount, Show } from "solid-js";
 import {
     PaperBadge,
@@ -42,7 +41,8 @@ import { bedrockPlayerName, gamertagOf, isFloodgateUuid, type BedrockNaming } fr
 import PlayerHead from "./PlayerHead";
 import PlayerRoster, { statusColor } from "./PlayerRoster";
 import { errorMessage, type Outcome } from "../lib/failure";
-import { keepUnchanged } from "../core/state";
+import { createLatest, keepUnchanged } from "../core/state";
+import { createSaves, type SavedSetting } from "../lib/saves";
 
 const LIST_POLL_MS = 15000;
 const STATS_POLL_MS = 30000;
@@ -187,9 +187,12 @@ export default function Players() {
 
     // whitelist, operators and bans, by uuid, from the service; the files
     // are the truth, so this runs again after anything that changes them
+    const latestRoster = createLatest();
     const loadRoster = async (): Promise<void> => {
         try {
-            const roster = (await serverBridge.call<RosterEntry[]>(CALLS.listRoster)) ?? [];
+            const answer = await latestRoster(() => serverBridge.call<RosterEntry[]>(CALLS.listRoster));
+            if (!answer) return;
+            const roster = answer.value ?? [];
             const listed = withCurrentNames(roster.map(({ banned: _banned, ...player }) => player));
             setPlayers(listed);
             setBannedNames(new Set(listed.filter((_, i) => roster[i].banned).map((p) => p.name.toLowerCase())));
@@ -229,7 +232,7 @@ export default function Players() {
     });
 
     // players known only from their stats files get current names too
-    createEffect(() => refreshNames([...playerStatSummaries().keys()]));
+    createEffect(on(playerStatSummaries, (summaries) => refreshNames([...summaries.keys()])));
 
     // the roster is the server's lists plus everyone with data in this
     // world, one row per uuid; usercache.json is only a name book (the
@@ -389,7 +392,6 @@ export default function Players() {
         }
     };
 
-    // the switch moves at once; a refusal puts it back and says why
     const setFlag = (playerName: string, uuid: string | undefined, field: "op" | "whitelisted", value: boolean) => {
         const key = playerName.toLowerCase();
         setPlayers((prev) =>
@@ -400,29 +402,30 @@ export default function Players() {
         );
     };
 
-    const togglePlayerFlag = async (
+    // op and whitelist switches flip at once and save in the order pressed
+    // (lib/saves); a refusal is quoted and the switch shows what is stored
+    const saves = createSaves({
+        failed: (err) => setFeedback({ title: "Permission not changed", message: errorMessage(err) }),
+        changed: () => setFeedback(undefined),
+    });
+    const writePlayerFlag = async (
         playerName: string,
         field: "op" | "whitelisted",
         value: boolean,
-    ) => {
+    ): Promise<boolean> => {
         const actionId: CallName =
             field === "op"
                 ? value ? CALLS.opPlayer : CALLS.deopPlayer
                 : value ? CALLS.whitelistPlayer : CALLS.unwhitelistPlayer;
         const failure = field === "op" ? (value ? "made an operator" : "removed as an operator") : value ? "whitelisted" : "removed from the whitelist";
         const player = allPlayers().find((p) => p.name === playerName);
-        const listed = players().some((p) => p.name.toLowerCase() === playerName.toLowerCase());
+        if (!(await callPlayerAction(actionId, playerName, failure, { uuid: player?.uuid }))) return false;
         setFlag(playerName, player?.uuid, field, value);
-        const ok = await callPlayerAction(actionId, playerName, failure, { uuid: player?.uuid });
-        if (!ok) {
-            if (listed) setFlag(playerName, player?.uuid, field, !value);
-            else setPlayers((prev) => prev.filter((p) => p.name.toLowerCase() !== playerName.toLowerCase()));
-            return;
-        }
         // a stopped server's files were edited in place: read them back.
         // A running one writes them a moment after the command, so the
-        // switch already shows what it will write
+        // switch shows what it will write
         if (serverStatus() === "offline") await loadRoster();
+        return true;
     };
 
     const setPlayerBanned = (playerName: string, banned: boolean, reason?: string): Promise<boolean> => {
@@ -467,7 +470,7 @@ export default function Players() {
         try {
             await serverBridge.call(CALLS.whitelistPlayer, { player: name });
         } catch (err) {
-            const message = err instanceof Error ? err.message : String(err);
+            const message = errorMessage(err);
             console.error(`[Players] whitelist failed for "${name}":`, message);
             setWhitelistError(message);
             return;
@@ -613,7 +616,15 @@ export default function Players() {
                     player={openPlayer()}
                     bedrock={openPlayer() ? isBedrockPlayer(openPlayer()!, bedrock()) : false}
                     banned={openIsBanned()}
-                    onToggleFlag={togglePlayerFlag}
+                    flag={(field) => {
+                        // the player it was made for, even once another is open
+                        const name = openPlayer()!.name;
+                        return saves.setting(
+                            `${field}:${name}`,
+                            () => allPlayers().find((p) => p.name === name)?.[field] ?? false,
+                            (value) => writePlayerFlag(name, field, value),
+                        );
+                    }}
                     onAction={(action) => setActionModal(action)}
                     onDeleteRequest={() => setDeleteConfirmOpen(true)}
                     onPardon={pardonOpenPlayer}
@@ -745,7 +756,8 @@ function PlayerInspector(props: {
     player?: PlayerInfo;
     bedrock: boolean;
     banned: boolean;
-    onToggleFlag: (name: string, field: "op" | "whitelisted", value: boolean) => void;
+    /** the open player's op or whitelist switch, made once per player shown */
+    flag: (field: "op" | "whitelisted") => SavedSetting<boolean>;
     onAction: (action: "kick" | "ban") => void;
     onDeleteRequest: () => void;
     onPardon: () => void | Promise<void>;
@@ -982,34 +994,30 @@ function PlayerInspector(props: {
                 <PaperText size={2} weight={700} color="text-subtle">
                     Permissions
                 </PaperText>
-                <PaperSettingList autoHeight>
-                    <PaperSettingItem
-                        title="Operator"
-                        description={
-                            props.bedrock
-                                ? "Full command and administration access. While the server runs, only a Bedrock player who has joined once can be made an operator."
-                                : "Full command and administration access."
-                        }
-                    >
-                        <PaperToggle
-                            checked={props.player?.op ?? false}
-                            disabled={!canEditLists()}
-                            onChange={(checked) => props.onToggleFlag(name(), "op", checked)}
-                        />
-                    </PaperSettingItem>
-                    <PaperSettingItem
-                        title="Whitelisted"
-                        description="May join while the whitelist is enabled."
-                    >
-                        <PaperToggle
-                            checked={props.player?.whitelisted ?? false}
-                            disabled={!canEditLists()}
-                            onChange={(checked) =>
-                                props.onToggleFlag(name(), "whitelisted", checked)
-                            }
-                        />
-                    </PaperSettingItem>
-                </PaperSettingList>
+                {/* made again for each player, so a switch saving for one never shows on another */}
+                <Show when={name()} keyed>
+                    {(_name) => {
+                        const op = props.flag("op");
+                        const whitelisted = props.flag("whitelisted");
+                        return (
+                            <PaperSettingList autoHeight>
+                                <PaperSettingItem
+                                    title="Operator"
+                                    description={
+                                        props.bedrock
+                                            ? "Full command and administration access. While the server runs, only a Bedrock player who has joined once can be made an operator."
+                                            : "Full command and administration access."
+                                    }
+                                >
+                                    <PaperToggle checked={op.value()} disabled={!canEditLists()} onChange={op.set} />
+                                </PaperSettingItem>
+                                <PaperSettingItem title="Whitelisted" description="May join while the whitelist is enabled.">
+                                    <PaperToggle checked={whitelisted.value()} disabled={!canEditLists()} onChange={whitelisted.set} />
+                                </PaperSettingItem>
+                            </PaperSettingList>
+                        );
+                    }}
+                </Show>
 
                 <PaperSeparator />
 
@@ -1045,11 +1053,18 @@ function ReasonActionModal(props: {
     onSubmit: (reason: string) => void | Promise<void>;
 }) {
     const [reason, setReason] = createSignal("");
+    // one press sends one action: the button waits for it
+    const [sending, setSending] = createSignal(false);
 
-    const submit = () => {
-        if (!props.open) return;
-        void props.onSubmit(reason().trim());
-        setReason("");
+    const submit = async () => {
+        if (!props.open || sending()) return;
+        setSending(true);
+        try {
+            await props.onSubmit(reason().trim());
+            setReason("");
+        } finally {
+            setSending(false);
+        }
     };
 
     return (
@@ -1063,7 +1078,7 @@ function ReasonActionModal(props: {
                     <PaperButton onClick={props.onClose}>
                         Cancel
                     </PaperButton>
-                    <PaperButton variant="danger" onClick={submit}>
+                    <PaperButton variant="danger" disabled={sending()} onClick={() => void submit()}>
                         {props.confirmLabel}
                     </PaperButton>
                 </>

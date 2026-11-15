@@ -1,4 +1,4 @@
-import { createEffect, createMemo, createSignal, on, Show, untrack, type JSX } from "solid-js";
+import { batch, createEffect, createMemo, createSignal, on, Show, untrack, type JSX } from "solid-js";
 import {
     PaperBadge,
     PaperButton,
@@ -15,7 +15,8 @@ import {
     type PaperAvatarSize,
 } from "@mileniumhq/paperui";
 import PlayerRoster, { statusColor } from "./PlayerRoster";
-import { keepUnchanged } from "../core/state";
+import { createLatest, keepUnchanged } from "../core/state";
+import { createSaves } from "../lib/saves";
 import { onlinePlayerNames, serverStatus } from "../lib/server";
 import { errorMessage, type Outcome } from "../lib/failure";
 
@@ -29,20 +30,27 @@ export interface RosterPlayer {
 }
 
 /**
- * A roster's loading and moderation: it is read again whenever who is online
- * or the server's status changes, and an action that fails is told to the
- * user with the player it failed for. `load` reads the game's roster files
- * or service and keeps them in the game's own signals, set in one `batch`.
+ * A roster's loading and moderation: `read` asks the game for its roster,
+ * again whenever who is online or the server's status changes, and the
+ * newest answer is the one kept. An action that fails is told to the user
+ * with the player it failed for.
  */
-export function createRosterState(load: () => Promise<void>) {
+export function createRosterState<R>(read: () => Promise<R>) {
+    const [roster, setRoster] = createSignal<R>();
     const [loadFailure, setLoadFailure] = createSignal<Outcome>();
     const [actionFailure, setActionFailure] = createSignal<Outcome>();
     const [busy, setBusy] = createSignal(false);
+    const latest = createLatest();
 
     const reload = async () => {
         try {
-            await load();
-            setLoadFailure(undefined);
+            const answer = await latest(read);
+            if (!answer) return;
+            batch(() => {
+                // a roster read again unchanged is no news
+                setRoster((prev) => keepUnchanged(prev, answer.value));
+                setLoadFailure(undefined);
+            });
         } catch (err) {
             console.error("[Players] Failed to read the roster:", err);
             setLoadFailure({ title: "Players not loaded", message: errorMessage(err) });
@@ -50,6 +58,18 @@ export function createRosterState(load: () => Promise<void>) {
     };
     // joins, leaves and kicks change who is online, and a stopped server changes who can be moderated
     createEffect(on([onlinePlayerNames, serverStatus], () => void reload()));
+
+    const fail = (title: string, err: unknown) => {
+        console.error(`[Players] ${title}:`, err);
+        setActionFailure({ title, message: errorMessage(err) });
+    };
+    // a player's switch, such as SourceMod admin: it flips at once and saves
+    // in turn with the moderation actions; a failure is titled by its setting
+    const titles = new Map<string, (value: boolean) => string>();
+    const saves = createSaves({
+        failed: (err, key, value) => fail(titles.get(key)!(value as boolean), err),
+        changed: () => setActionFailure(undefined),
+    });
 
     /**
      * Runs a moderation action, then reads the roster again; `failure` titles
@@ -61,10 +81,9 @@ export function createRosterState(load: () => Promise<void>) {
         setBusy(true);
         setActionFailure(undefined);
         try {
-            await work();
+            await saves.run(work);
         } catch (err) {
-            console.error(`[Players] ${failure}:`, err);
-            setActionFailure({ title: failure, message: errorMessage(err) });
+            fail(failure, err);
             setBusy(false);
             return false;
         }
@@ -77,8 +96,23 @@ export function createRosterState(load: () => Promise<void>) {
     };
 
     return {
+        /** the game's roster as last read; undefined until the first answer */
+        roster,
         busy,
         run,
+        /**
+         * A switch about a player, made in the section that shows it. `key`
+         * tells it from every other, `failure` titles the quote when saving
+         * `value` fails, `stored` is what the roster says, and `write` saves
+         * a value; the roster is read again once it lands.
+         */
+        setting(key: string, failure: (value: boolean) => string, stored: () => boolean, write: (value: boolean) => Promise<unknown>) {
+            titles.set(key, failure);
+            return saves.setting(key, stored, async (value) => {
+                await write(value);
+                await reload();
+            });
+        },
         actionFailure,
         /** what the roster tells about the last thing that went wrong */
         feedback: () => actionFailure() ?? loadFailure(),

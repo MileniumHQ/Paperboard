@@ -1,4 +1,4 @@
-import { batch, createMemo, createSignal, Show } from "solid-js";
+import { createMemo, Show } from "solid-js";
 import GameRoster, { CopyRow, createRosterState, type RosterPlayer } from "../../components/GameRoster";
 import { byName, withUniqueNames } from "../rosterNames";
 import PlayerAvatar from "../../components/PlayerAvatar";
@@ -13,17 +13,10 @@ interface Player extends RosterPlayer {
 }
 
 export default function PalworldPlayers() {
-    const [seen, setSeen] = createSignal<PalworldSeen[]>([]);
-    const [bans, setBans] = createSignal<string[]>([]);
-    const [online, setOnline] = createSignal<PalworldPlayer[]>([]);
-    const state = createRosterState(async () => {
-        const roster = await serverBridge.call<{ seen: PalworldSeen[]; bans: string[]; online: PalworldPlayer[] }>("palworld-players");
-        batch(() => {
-            setSeen(roster.seen);
-            setBans(roster.bans);
-            setOnline(roster.online);
-        });
-    });
+    const state = createRosterState(() => serverBridge.call<{ seen: PalworldSeen[]; bans: string[]; online: PalworldPlayer[] }>("palworld-players"));
+    const seen = () => state.roster()?.seen ?? [];
+    const bans = () => state.roster()?.bans ?? [];
+    const online = () => state.roster()?.online ?? [];
     const act = (action: string) => (player: Player) => serverBridge.call(action, { userId: player.userId });
 
     // Palworld names need not be unique, so a clash gets the user id

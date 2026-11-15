@@ -1,4 +1,4 @@
-import { batch, createMemo, createSignal, Show } from "solid-js";
+import { createMemo, Show } from "solid-js";
 import {
     PaperBadge,
     PaperGrid,
@@ -34,20 +34,12 @@ interface Player extends RosterPlayer {
 
 export default function SourcePlayers(props: { spec: SourceGameSpec }) {
     const ids = sourceCalls(props.spec.id);
-    const [seen, setSeen] = createSignal<SourceSeen[]>([]);
-    const [bans, setBans] = createSignal<SourceBan[]>([]);
-    const [online, setOnline] = createSignal<SourceOnline[]>([]);
+    const state = createRosterState(() => serverBridge.call<{ seen: SourceSeen[]; bans: SourceBan[]; online: SourceOnline[]; admins: string[] | null }>(ids.players));
+    const seen = () => state.roster()?.seen ?? [];
+    const bans = () => state.roster()?.bans ?? [];
+    const online = () => state.roster()?.online ?? [];
     /** Steam ids SourceMod makes admins; null while SourceMod is off */
-    const [admins, setAdmins] = createSignal<string[] | null>(null);
-    const state = createRosterState(async () => {
-        const roster = await serverBridge.call<{ seen: SourceSeen[]; bans: SourceBan[]; online: SourceOnline[]; admins: string[] | null }>(ids.players);
-        batch(() => {
-            setSeen(roster.seen);
-            setBans(roster.bans);
-            setOnline(roster.online);
-            setAdmins(roster.admins);
-        });
-    });
+    const admins = () => state.roster()?.admins ?? null;
 
     // a clash between names gets the Steam id
     const players = createMemo(() => {
@@ -109,22 +101,27 @@ export default function SourcePlayers(props: { spec: SourceGameSpec }) {
                     </PaperGrid>
 
                     <Show when={!player().bot && admins()}>
-                        {(list) => (
-                            <>
-                                <PaperSeparator />
+                        {(list) => {
+                            // the open player's switch: it flips at once and saves in turn
+                            const admin = state.setting(
+                                `admin:${player().steamId}`,
+                                (value) => `${player().name} was not ${value ? "made" : "removed as"} an admin`,
+                                () => list().includes(player().steamId),
+                                (value) => serverBridge.call(ids.admin, { steamId: player().steamId, admin: value }),
+                            );
+                            return (
+                                <>
+                                    <PaperSeparator />
 
-                                <PaperText size={2} weight={700} color="text-subtle">Permissions</PaperText>
-                                <PaperSettingList autoHeight>
-                                    <PaperSettingItem title="SourceMod admin" description="Every SourceMod admin command, in chat or the console, and immunity from other admins.">
-                                        <PaperToggle
-                                            checked={list().includes(player().steamId)}
-                                            disabled={state.busy()}
-                                            onChange={(checked) => void state.run(`${player().name} was not ${checked ? "made" : "removed as"} an admin`, () => serverBridge.call(ids.admin, { steamId: player().steamId, admin: checked }))}
-                                        />
-                                    </PaperSettingItem>
-                                </PaperSettingList>
-                            </>
-                        )}
+                                    <PaperText size={2} weight={700} color="text-subtle">Permissions</PaperText>
+                                    <PaperSettingList autoHeight>
+                                        <PaperSettingItem title="SourceMod admin" description="Every SourceMod admin command, in chat or the console, and immunity from other admins.">
+                                            <PaperToggle checked={admin.value()} onChange={admin.set} />
+                                        </PaperSettingItem>
+                                    </PaperSettingList>
+                                </>
+                            );
+                        }}
                     </Show>
                 </>
             )}

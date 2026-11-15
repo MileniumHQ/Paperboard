@@ -1,4 +1,4 @@
-import { batch, createSignal, type Accessor } from "solid-js";
+import { batch, createSignal, onCleanup, type Accessor } from "solid-js";
 import type { PaperConsoleEntry } from "@mileniumhq/paperui";
 import type { ServerSoftwareType } from "../lib/software";
 import type { PlayerStatData, PlayerPosition } from "./players";
@@ -251,4 +251,25 @@ function applyEach(source: Record<string, unknown>, setters: StateSetters): void
         const value = (source as Record<string, unknown>)[key];
         if (value !== undefined) apply(value);
     }
+}
+
+/**
+ * Late answers lose. Each read made through the returned function replaces
+ * the ones made before it, and the owner going away replaces them all: a
+ * replaced read resolves to `undefined`, whether it answered or failed. The
+ * newest resolves to `{ value }`, or rejects with its own failure.
+ */
+export function createLatest(): <T>(read: () => Promise<T>) => Promise<{ value: T } | undefined> {
+    let newest = 0;
+    onCleanup(() => { newest++; });
+    return async (read) => {
+        const mine = ++newest;
+        try {
+            const value = await read();
+            return mine === newest ? { value } : undefined;
+        } catch (err) {
+            if (mine !== newest) return undefined;
+            throw err;
+        }
+    };
 }

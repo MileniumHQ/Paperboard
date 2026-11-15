@@ -1,4 +1,4 @@
-import { batch, createMemo, createSignal, Show } from "solid-js";
+import { createMemo, Show } from "solid-js";
 import GameRoster, { CopyRow, createRosterState, type RosterPlayer } from "../../components/GameRoster";
 import { byName, withUniqueNames } from "../rosterNames";
 import PlayerAvatar from "../../components/PlayerAvatar";
@@ -17,17 +17,10 @@ interface Player extends RosterPlayer {
 }
 
 export default function RustPlayers() {
-    const [seen, setSeen] = createSignal<RustSeen[]>([]);
-    const [bans, setBans] = createSignal<RustBan[]>([]);
-    const [online, setOnline] = createSignal<RustPlayer[]>([]);
-    const state = createRosterState(async () => {
-        const roster = await serverBridge.call<{ seen: RustSeen[]; bans: RustBan[]; online: RustPlayer[] }>("rust-players");
-        batch(() => {
-            setSeen(roster.seen);
-            setBans(roster.bans);
-            setOnline(roster.online);
-        });
-    });
+    const state = createRosterState(() => serverBridge.call<{ seen: RustSeen[]; bans: RustBan[]; online: RustPlayer[] }>("rust-players"));
+    const seen = () => state.roster()?.seen ?? [];
+    const bans = () => state.roster()?.bans ?? [];
+    const online = () => state.roster()?.online ?? [];
     const act = (action: string) => (player: Player) => serverBridge.call(action, { steamId: player.steamId });
 
     // Rust names need not be unique, so a clash gets the Steam id
