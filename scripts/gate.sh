@@ -14,8 +14,8 @@
 #   section names, and the house rules that kept coming back (a catch that
 #   only logs, an effect without on(), <For> fed fresh rows, fixed sleeps in
 #   tests). The deprecated panels (actions, ai) get the Solid rules alone;
-#   paperapi, paperui and gameserver run the house rules as advisory until
-#   their hits are fixed.
+#   paperapi and paperui run the house rules as advisory until their hits
+#   are fixed.
 #   paperboard, origami-library and the panels also run an advisory styling
 #   check (scripts/check-app-styling.sh): literal sizes, colors, motion,
 #   z-index and the like that have a PaperUI token. It warns, never fails.
@@ -283,11 +283,6 @@ for short in actions agents ai blocks botcreator gameserver terminal; do
     case "$short" in
         # deprecated: nobody changes them, so only the Solid rules hold
         actions | ai) gstep "$short" "$panel solid check" run_in "$ROOT" bun scripts/check-solid.ts --solid-only "$panel" ;;
-        # being migrated: the house rules are advisory until its hits are fixed
-        gameserver)
-            gstep "$short" "$panel solid check" run_in "$ROOT" bun scripts/check-solid.ts --solid-only "$panel"
-            gwarn "$short" "$panel code check" run_in "$ROOT" bun scripts/check-solid.ts "$panel"
-            ;;
         *) gstep "$short" "$panel code check" run_in "$ROOT" bun scripts/check-solid.ts "$panel" ;;
     esac
     gwarn "$short" "$panel styling literals" bash "$ROOT/scripts/check-app-styling.sh" "$panel"
