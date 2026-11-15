@@ -22,7 +22,8 @@ export default function SoftwareIcon(props: { software: ServerSoftwareType }) {
     return (
         <Switch fallback={<PaperIcon>{symbol()}</PaperIcon>}>
             <Match when={mask()}>
-                {(path) => <PaperIcon src={path()} tint />}
+                {/* a mask's address is read where the stylesheet is, not the page: it must be whole */}
+                {(path) => <PaperIcon src={new URL(path(), document.baseURI).href} tint />}
             </Match>
             <Match when={image()}>
                 {(value) => <PaperIcon src={value().src} pixelated={value().pixelated} />}

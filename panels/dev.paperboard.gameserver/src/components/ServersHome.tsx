@@ -1,5 +1,6 @@
 import { createSignal, For, Show } from "solid-js";
 import {
+    PaperAvatar,
     PaperBadge,
     PaperButton,
     PaperContextMenu,
@@ -113,8 +114,9 @@ export default function ServersHome(props: {
                             {(server) => (
                                 <PaperMediaCard
                                     effect={false}
-                                    // the card takes a picture only as an absolute URL; the art is relative to the panel
-                                    icon={new URL(server.icon ?? gameFor(server.game).art.icon, document.baseURI).href}
+                                    banner={gameFor(server.game).art.banner}
+                                    bannerAlt={`${gameFor(server.game).name} art`}
+                                    icon={<PaperAvatar size="large" shape="square" src={server.icon ?? gameFor(server.game).art.icon} alt="" fallbackIcon={gameFor(server.game).icon} />}
                                     title={server.name}
                                     subtitle={serverSubtitle(gameFor(server.game), { software: server.state.serverSoftware, version: server.state.serverVersion })}
                                     description={
