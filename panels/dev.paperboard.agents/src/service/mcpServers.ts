@@ -332,16 +332,18 @@ export class McpServers {
         });
     }
 
+    /** Save a server's spec. The secrets the old spec named and this one doesn't are deleted. */
     private async put(spec: ServerSpec) {
         const existing = this.entries.get(spec.name);
         if (existing) await this.stop(existing);
-        const servers = this.config.servers.some((s) => s.name === spec.name)
-            ? this.config.servers.map((s) => (s.name === spec.name ? spec : s))
-            : [...this.config.servers, spec];
+        const old = this.config.servers.find((s) => s.name === spec.name);
+        const servers = old ? this.config.servers.map((s) => (s === old ? spec : s)) : [...this.config.servers, spec];
         await this.commit({ ...this.config, servers });
+        const kept = secretNames(spec);
+        await this.deleteSecrets(spec.name, old ? secretNames(old).filter((s) => !kept.includes(s)) : [], "was saved");
     }
 
-    /** Remove a server: it stops (observed), then its entry and its secrets go. */
+    /** Remove a server: it stops (observed), then its entry and every secret saved for it go. */
     remove(name: unknown): Promise<ToolsView> {
         return this.serial(async () => {
             this.writable();
@@ -350,17 +352,24 @@ export class McpServers {
             this.cancelSignIn(spec.name);
             await this.stop(this.entries.get(spec.name)!);
             await this.commit({ ...this.config, servers: this.config.servers.filter((s) => s !== spec) });
-            const failed: string[] = [];
-            for (const secret of secretNames(spec)) {
-                try {
-                    await this.deps.vault.delete(vaultName(spec.name, secret));
-                } catch (e) {
-                    failed.push(`${secret} (${errorText(e)})`);
-                }
-            }
-            if (failed.length) throw new Error(`${spec.name} was removed, but its secrets couldn't be deleted: ${failed.join(", ")}`);
+            // by the server's own prefix, so a secret its spec stopped naming goes too
+            const prefix = vaultName(spec.name, "");
+            const saved = (await this.deps.vault.list()).filter((n) => n.startsWith(prefix)).map((n) => n.slice(prefix.length));
+            await this.deleteSecrets(spec.name, saved, "was removed");
             return this.view();
         });
+    }
+
+    private async deleteSecrets(server: string, secrets: string[], done: string) {
+        const failed: string[] = [];
+        for (const secret of secrets) {
+            try {
+                await this.deps.vault.delete(vaultName(server, secret));
+            } catch (e) {
+                failed.push(`${secret} (${errorText(e)})`);
+            }
+        }
+        if (failed.length) throw new Error(`${server} ${done}, but its secrets couldn't be deleted: ${failed.join(", ")}`);
     }
 
     /** Stop a server and start it again now. */
@@ -395,18 +404,6 @@ export class McpServers {
             await this.deps.vault.set(vaultName(e.spec.name, secret), value);
             // a running server has the old value: it starts again with the new one when next needed
             if (secretNames(e.spec).includes(secret)) await this.stop(e);
-            this.changed();
-            return this.view();
-        });
-    }
-
-    deleteSecret(server: unknown, name: unknown): Promise<ToolsView> {
-        return this.serial(async () => {
-            const e = this.entries.get(String(server));
-            if (!e) throw new Error("there's no such server");
-            const secret = checkSecretName(name);
-            if (secretNames(e.spec).includes(secret)) throw new Error(`${e.spec.name} still uses "${secret}"; change the server first`);
-            await this.deps.vault.delete(vaultName(e.spec.name, secret));
             this.changed();
             return this.view();
         });

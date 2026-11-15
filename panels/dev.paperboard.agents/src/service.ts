@@ -151,7 +151,6 @@ export const aiService = definePanelService({
         ui(TOOLS_ACTION_IDS.restart, "Restart a tool server", (i) => app.toolsRestart(i)),
         ui(TOOLS_ACTION_IDS.setActions, "Allow or refuse Paperboard actions for the agent", (i) => app.toolsSetActions(i)),
         ui(TOOLS_ACTION_IDS.setSecret, "Save a tool server's secret", (i) => app.toolsSetSecret(i)),
-        ui(TOOLS_ACTION_IDS.deleteSecret, "Delete a tool server's secret", (i) => app.toolsDeleteSecret(i)),
         ui(TOOLS_ACTION_IDS.signIn, "Start signing in to a tool server", (i) => app.toolsSignIn(i)),
         ui(TOOLS_ACTION_IDS.signInFinish, "Finish signing in to a tool server", (i) => app.toolsSignInFinish(i)),
         ui(TOOLS_ACTION_IDS.signInCancel, "Stop signing in to a tool server", (i) => app.toolsSignInCancel(i)),

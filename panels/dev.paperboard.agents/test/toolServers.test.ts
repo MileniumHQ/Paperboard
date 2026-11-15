@@ -86,6 +86,25 @@ describe("tool-server config", () => {
         expect(writes.at(-1)!.servers[0]).toMatchObject({ env: { MY_TOKEN: { secret: "token" } } });
     }, SLOW);
 
+    test("a secret the server stops using is deleted, and removing the server leaves nothing of it in the vault", async () => {
+        const { s, vault } = servers();
+        await s.load();
+        await s.save({ name: "gh", transport: "stdio", command: "gh-server", args: [], env: { TOKEN: { secret: "token" } } });
+        await s.save({ name: "ghost", transport: "stdio", command: "gh-server", args: [], env: { TOKEN: { secret: "token" } } });
+        await s.setSecret("gh", "token", "old-value");
+        await s.setSecret("ghost", "token", "other-server");
+        // the row is renamed: the old name's value goes with it
+        await s.save({ name: "gh", transport: "stdio", command: "gh-server", args: [], env: { GH_TOKEN: { secret: "gh-token" } } });
+        expect([...vault.keys()]).toEqual(["mcp.ghost.token"]);
+        await s.setSecret("gh", "gh-token", "new-value");
+        await s.setSecret("gh", "spare", "unused-value");
+        await s.remove("gh");
+        expect([...vault.entries()]).toEqual([["mcp.ghost.token", "other-server"]]);
+        // a server added again under the same name starts with nothing saved
+        await s.save({ name: "gh", transport: "stdio", command: "gh-server", args: [], env: { TOKEN: { secret: "token" } } });
+        expect((await s.view()).secrets).toEqual({ ghost: ["token"] });
+    });
+
     test("a server that sends a message past the size limit ends with that reason, to its requests and to whoever follows it", async () => {
         const root = tempDir("mcp-big");
         cleanups.push(() => fs.rmSync(root, { recursive: true, force: true }));

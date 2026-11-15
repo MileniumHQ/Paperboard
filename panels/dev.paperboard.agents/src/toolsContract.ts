@@ -13,7 +13,6 @@ export const TOOLS_ACTION_IDS = {
     restart: "ui-tools-restart",
     setActions: "ui-tools-set-actions",
     setSecret: "ui-tools-set-secret",
-    deleteSecret: "ui-tools-delete-secret",
     signIn: "ui-tools-sign-in",
     signInFinish: "ui-tools-sign-in-finish",
     signInCancel: "ui-tools-sign-in-cancel",

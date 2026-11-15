@@ -794,9 +794,6 @@ export class AiApp {
     toolsSetSecret(i: Record<string, unknown>) {
         return this.servers.setSecret(i.server, i.name, i.value);
     }
-    toolsDeleteSecret(i: Record<string, unknown>) {
-        return this.servers.deleteSecret(i.server, i.name);
-    }
     toolsSignIn(i: Record<string, unknown>) {
         return this.servers.signIn(i.name);
     }
