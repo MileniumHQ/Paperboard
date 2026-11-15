@@ -365,7 +365,7 @@ function Scenes(props: {
                                         <PaperText preset="hint">{brainLine(h(), brain()!)}</PaperText>
                                     </Show>
                                     {/* only while there's something to show: an empty one would still take a gap */}
-                                    <Show when={brain()?.phase !== "ready" && brain()?.phase !== "installed" || actions.error()}>
+                                    <Show when={brain()?.phase !== "ready" && brain()?.phase !== "installed" || actions.error(h())}>
                                         <BrainStatus agent={props.agent} harness={h()} actions={actions} />
                                     </Show>
                                     <Show when={!["installing", "signing-in", "unsupported"].includes(brain()?.phase ?? "")}>

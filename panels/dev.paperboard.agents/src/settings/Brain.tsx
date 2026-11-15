@@ -3,12 +3,14 @@
 // (state.brains); this only shows it and sends the person's answers back.
 
 import { Match, Show, Switch, createEffect, createSignal, on, type JSX } from "solid-js";
+import { createStore } from "solid-js/store";
 import { PaperButton, PaperCopyButton, PaperFlex, PaperIcon, PaperInput, PaperLoader, PaperModal, PaperProgress, PaperQuote, PaperText } from "@mileniumhq/paperui";
 import { SIGN_IN_REQUIRED, type BrainState, type Harness } from "../contract";
 import type { Agent } from "../lib/agent";
 import { harnessName } from "../lib/brains";
 import { submitOnPaste } from "../lib/paste";
 import { createAction } from "../lib/action";
+import type { Failure } from "../lib/failure";
 import { createLoopbackCatch } from "../lib/loopback";
 
 /** Who a brain is signed in as. An email is who; anything else (ChatGPT, a provider's name) is how. */
@@ -43,19 +45,21 @@ export function brainLine(harness: Harness, b: BrainState): string {
     }
 }
 
-/** The actions a person can ask of a brain; a refused one is kept to show. */
+/** The actions a person can ask of a brain; a refused one is kept to show under that brain, and only there. */
 export function createBrainActions(agent: Agent) {
-    const { error, run: act } = createAction();
+    const { run } = createAction();
+    const [errors, setErrors] = createStore<Partial<Record<Harness, Failure | null>>>({});
+    const act = (h: Harness, title: string, fn: () => Promise<unknown>) => run(title, fn, (f) => setErrors(h, f));
     return {
-        error,
-        install: (h: Harness) => act(`${harnessName(h)} not installed`, () => agent.installBrain(h)),
-        useFound: (h: Harness) => act(`${harnessName(h)} not used`, () => agent.installBrain(h, "computer")),
-        installOwn: (h: Harness) => act(`${harnessName(h)} not installed`, () => agent.installBrain(h, "package")),
-        signIn: (h: Harness) => act(`${harnessName(h)} not signed in`, () => agent.signInBrain(h)),
-        cancel: (h: Harness) => act("Sign-in not stopped", () => agent.cancelBrainSignIn(h)),
-        signOut: (h: Harness) => act(`${harnessName(h)} not signed out`, () => agent.signOutBrain(h)),
-        submitCode: (h: Harness, code: string) => act("Code not accepted", () => agent.brainCode(h, code)),
-        finishAt: (h: Harness, address: string) => act("Sign-in not finished", () => agent.brainAddress(h, address)),
+        error: (h: Harness) => errors[h] ?? null,
+        install: (h: Harness) => act(h, `${harnessName(h)} not installed`, () => agent.installBrain(h)),
+        useFound: (h: Harness) => act(h, `${harnessName(h)} not used`, () => agent.installBrain(h, "computer")),
+        installOwn: (h: Harness) => act(h, `${harnessName(h)} not installed`, () => agent.installBrain(h, "package")),
+        signIn: (h: Harness) => act(h, `${harnessName(h)} not signed in`, () => agent.signInBrain(h)),
+        cancel: (h: Harness) => act(h, "Sign-in not stopped", () => agent.cancelBrainSignIn(h)),
+        signOut: (h: Harness) => act(h, `${harnessName(h)} not signed out`, () => agent.signOutBrain(h)),
+        submitCode: (h: Harness, code: string) => act(h, "Code not accepted", () => agent.brainCode(h, code)),
+        finishAt: (h: Harness, address: string) => act(h, "Sign-in not finished", () => agent.brainAddress(h, address)),
     };
 }
 export type BrainActions = ReturnType<typeof createBrainActions>;
@@ -92,7 +96,7 @@ export function BrainStatus(props: { agent: Agent; harness: Harness; actions: Br
                     </PaperQuote>
                 </Match>
             </Switch>
-            <Show when={props.actions.error()}>
+            <Show when={props.actions.error(props.harness)}>
                 {(shown) => (
                     <PaperQuote variant="danger" icon="error" title={shown().title} role="alert">
                         {shown().message}
@@ -123,10 +127,7 @@ export function SignInSteps(props: { agent: Agent; harness: Harness; actions: Br
 
     const forward = createLoopbackCatch(
         () => b().login?.callback ?? null,
-        async (url) => {
-            await props.actions.finishAt(props.harness, url);
-            return !props.actions.error();
-        },
+        (url) => props.actions.finishAt(props.harness, url),
     );
 
     // what was pasted is on its way to the brain; the brain says how it went by leaving the sign-in
@@ -136,18 +137,17 @@ export function SignInSteps(props: { agent: Agent; harness: Harness; actions: Br
     const sendCode = async (value: string) => {
         if (!value.trim() || sent()) return;
         setSent(true);
-        await props.actions.submitCode(props.harness, value.trim());
+        const ok = await props.actions.submitCode(props.harness, value.trim());
         // the code is used once: it doesn't stay in the field
         setCode("");
         // a refused one can be pasted again
-        if (props.actions.error()) setSent(false);
+        if (!ok) setSent(false);
     };
     const [address, setAddress] = createSignal("");
     const sendAddress = async (value: string) => {
         if (!value.trim() || sent()) return;
         setSent(true);
-        await props.actions.finishAt(props.harness, value.trim());
-        if (!props.actions.error()) setAddress("");
+        if (await props.actions.finishAt(props.harness, value.trim())) setAddress("");
         else setSent(false);
     };
 
@@ -318,7 +318,7 @@ export function SignInModal(props: { agent: Agent; harness: Harness | null; acti
                                 </PaperFlex>
                             </Match>
                         </Switch>
-                        <Show when={props.actions.error()}>
+                        <Show when={props.actions.error(h())}>
                             {(shown) => (
                                 <PaperQuote variant="danger" icon="error" title={shown().title} role="alert">
                                     {shown().message}

@@ -205,13 +205,14 @@ function BrainsSettings(props: { agent: Agent }) {
                     </PaperFlex>
                 )}
             </For>
-            <Show when={!HARNESSES.some(busy) && !signingIn() && actions.error()}>
-                {(shown) => (
-                    <PaperQuote variant="danger" icon="error" title={shown().title} role="alert">
-                        {shown().message}
+            {/* a refusal for a brain with nothing else to show, and not in its sign-in, is told under the list */}
+            <For each={HARNESSES.filter((h) => !busy(h) && h !== signingIn() && actions.error(h))}>
+                {(h) => (
+                    <PaperQuote variant="danger" icon="error" title={actions.error(h)!.title} role="alert">
+                        {actions.error(h)!.message}
                     </PaperQuote>
                 )}
-            </Show>
+            </For>
             <Providers agent={props.agent} open={providers()} onClose={() => setProviders(false)} />
             <SignInModal agent={props.agent} harness={signingIn()} actions={actions} onClose={() => setSigningIn(null)} />
         </PaperFlex>
