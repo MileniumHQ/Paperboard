@@ -13,7 +13,7 @@ import * as fs from "fs";
 import * as path from "path";
 import { setSupervisorBinary } from "./supervisorBinary";
 import { getPaperboardDir } from "./paths";
-import { errorCode } from "../../../packages/paperapi/src/errors";
+import { errorCode } from "@mileniumhq/paperapi/errors";
 
 // clean one-line startup failures instead of raw stacks
 function fatalCliError(err: any): never {

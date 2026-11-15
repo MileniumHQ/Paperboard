@@ -20,7 +20,7 @@ import { RpcError, invalidParams } from "../rpc/errors";
 import { logger } from "../logger";
 import { createPanelArchive, extractPanelArchive } from "./archive";
 import { hashFile } from "../storage";
-import { SerialQueue } from "../../../../packages/paperapi/src/serialQueue";
+import { SerialQueue } from "@mileniumhq/paperapi/serialQueue";
 import {
     BACKUP_VAULT_OWNER,
     DESTINATION_LABEL_MAX,
@@ -36,7 +36,7 @@ import {
 import { DriveBackupStore, forgetDriveToken, GOOGLE_ENDPOINTS, type DriveEndpoints } from "./driveStore";
 import { LocalBackupStore } from "./localStore";
 import { normalizeS3Prefix, S3BackupStore } from "./s3Store";
-import { ROUTINE_BACKUP_LABEL } from "../../../../packages/paperapi/src/backups";
+import { ROUTINE_BACKUP_LABEL } from "@mileniumhq/paperapi/backups";
 import { BACKUP_ID_RE, BACKUP_LABEL_MAX, newBackupId, type BackupProgress, type BackupProgressChange, type BackupRecord, type BackupStep, type BackupStore, type BackupUsage } from "./types";
 import {
     BUSY_RETRY_MS,
@@ -53,7 +53,7 @@ import {
     type ScheduleFile,
     type ScheduleResult,
 } from "./schedules";
-import { errorMessage } from "../../../../packages/paperapi/src/errors";
+import { errorMessage } from "@mileniumhq/paperapi/errors";
 
 /** create and restore run at most this many at once, one per panel */
 export const MAX_RUNNING_BACKUP_JOBS = 2;

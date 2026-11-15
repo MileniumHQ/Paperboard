@@ -3,7 +3,7 @@ import * as path from "path";
 import { logger } from "./logger";
 import { ensurePrivateDir, getLocalDir } from "./paths";
 import { getDefaultShell } from "./util";
-import { errorCode } from "../../../packages/paperapi/src/errors";
+import { errorCode } from "@mileniumhq/paperapi/errors";
 
 // Shell integration: a terminal's shell says where each prompt starts, which
 // command it runs, how that command ended and which folder it is in, with

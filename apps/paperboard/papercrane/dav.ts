@@ -8,7 +8,7 @@ import { logger } from "./logger";
 import { checkDavAuth, davUnauthorized, type DavSessionStore, DEFAULT_IDLE_MS, mainTokenOf } from "./davAuth";
 import { receiveFileAtomic, UploadTooLargeError } from "./atomicUpload";
 import { hasOnlyRealEntriesBelow } from "./pathContainment";
-import { errorCode, errorMessage } from "../../../packages/paperapi/src/errors";
+import { errorCode, errorMessage } from "@mileniumhq/paperapi/errors";
 
 // WebDAV rooted at the app-data dir, for the main token or an ephemeral
 // session (davAuth.ts)

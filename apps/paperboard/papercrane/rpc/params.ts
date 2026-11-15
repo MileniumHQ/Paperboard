@@ -5,7 +5,7 @@
 // of an INTERNAL crash for a malformed call.
 import { sanitizeId } from "../storage";
 import { ErrorCode } from "../protocol";
-import { isPanelId } from "../../../../packages/paperapi/src/panelIdentity";
+import { isPanelId } from "@mileniumhq/paperapi/panelIdentity";
 
 export class InvalidParamsError extends Error {
     constructor(message: string) {

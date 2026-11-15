@@ -12,7 +12,7 @@ import { logger } from "../../../../papercrane/logger";
 import { pinnedRequest } from "../../../../papercrane/pinnedTls";
 import { bareHost, bracketHost, checkProbeTarget } from "./probeTarget";
 import { PaperCraneClient } from "./PaperCraneClient";
-import { errorMessage } from "../../../../../../packages/paperapi/src/errors";
+import { errorMessage } from "@mileniumhq/paperapi/errors";
 
 export interface StoredComputer {
     id: string;

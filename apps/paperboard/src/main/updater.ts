@@ -13,12 +13,12 @@ import { planUpdateTasks, withInstalledRecords, type ComputerUpdateState } from 
 import { readStateFileSync, writeFileAtomicSync } from "../../papercrane/storage";
 import { getLocalDir } from "../../papercrane/paths";
 import { logger } from "../../papercrane/logger";
-import { fetchRegistryJson } from "../../../../packages/paperapi/src/config";
+import { fetchRegistryJson } from "@mileniumhq/paperapi/config";
 import { updateQueue } from "./updateQueue";
 import { refreshHolds, resumeHoldRefresh, stopHoldRefresh } from "./updateHolds";
 import { PING_TIMEOUT_MS, taskJob } from "./updateTasks";
 import type { AppUpdateState } from "../shared/appUpdate";
-import { errorMessage } from "../../../../packages/paperapi/src/errors";
+import { errorMessage } from "@mileniumhq/paperapi/errors";
 
 // registry override policy shared with the daemon: env override honored only
 // outside production (dev/preview here) or with --allow-registry-override

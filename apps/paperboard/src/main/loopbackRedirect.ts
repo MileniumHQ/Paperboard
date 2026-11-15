@@ -9,7 +9,7 @@
 import * as http from "http";
 import { logger } from "../../papercrane/logger";
 import { LOOPBACK_REDIRECT_TIMEOUT_MS, parseLoopbackRedirectUri, type LoopbackRedirectFailureCode } from "../shared/loopbackRedirect";
-import { errorCode } from "../../../../packages/paperapi/src/errors";
+import { errorCode } from "@mileniumhq/paperapi/errors";
 
 export class LoopbackRedirectFailure extends Error {
     constructor(

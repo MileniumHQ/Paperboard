@@ -6,14 +6,14 @@
 // which the shell shows as the name it gives the computer.
 import * as fs from "fs";
 import * as path from "path";
-import { isPanelId } from "../../../../packages/paperapi/src/panelIdentity";
+import { isPanelId } from "@mileniumhq/paperapi/panelIdentity";
 import { writeFileAtomic } from "../storage";
 import { ErrorCode } from "../protocol";
 import { RpcError } from "../rpc/errors";
 import { computerHostname } from "../hostname";
 import type { S3Settings } from "./s3Store";
 import type { DriveSettings } from "./driveStore";
-import { errorCode } from "../../../../packages/paperapi/src/errors";
+import { errorCode } from "@mileniumhq/paperapi/errors";
 
 /** vault owner for location secrets; shell-* ids are reserved, no panel holds it */
 export const BACKUP_VAULT_OWNER = "shell-backups";

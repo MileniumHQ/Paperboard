@@ -10,14 +10,14 @@
 // arguments are summarised by summarizeParams: protocol identifiers by value,
 // everything else by its shape.
 import type { WebSocket } from "ws";
-import { isPanelId } from "../../../packages/paperapi/src/panelIdentity";
+import { isPanelId } from "@mileniumhq/paperapi/panelIdentity";
 import {
     MONITOR_FRAME,
     monitorRecordInvolves,
     type MonitorArg,
     type MonitorLifecycle,
     type MonitorRecord,
-} from "../../../packages/paperapi/src/monitorProtocol";
+} from "@mileniumhq/paperapi/monitorProtocol";
 
 // Arguments the protocol itself defines, whose values name things rather
 // than carry content: which panel, which action, which process, which path.

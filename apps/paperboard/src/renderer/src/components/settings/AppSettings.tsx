@@ -27,7 +27,7 @@ import PanelPermissionSettings from "./PanelPermissionSettings";
 // Inlined at build time: the viewer always shows the exact files shipped
 // in this repo, so the text cannot drift from the license on disk.
 import paperboardLicenseText from "../../../../../LICENSE?raw";
-import mitLicenseText from "../../../../../../../packages/paperui/LICENSE?raw";
+import mitLicenseText from "@mileniumhq/paperui/LICENSE?raw";
 import { effectiveLook } from "../../../../shared/graphics";
 import { errorMessage } from "@mileniumhq/paperapi";
 

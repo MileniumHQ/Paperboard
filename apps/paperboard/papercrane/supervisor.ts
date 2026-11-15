@@ -62,7 +62,7 @@ export interface SupervisorMetadata {
 
 export { getPaperboardDir } from "./paths";
 import { ensurePrivateDir, getSocketsDir } from "./paths";
-import { errorMessage } from "../../../packages/paperapi/src/errors";
+import { errorMessage } from "@mileniumhq/paperapi/errors";
 
 // Endpoint names are one-to-one with ids. The old scheme replaced every
 // character outside [a-zA-Z0-9_-] with "_", so "a.b" and "a_b" shared one

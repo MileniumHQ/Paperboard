@@ -14,13 +14,13 @@ import type { CredentialStore } from "./credentials";
 import { RpcError } from "./rpc/errors";
 import { ErrorCode } from "./protocol";
 import { requireReleaseOrder } from "./releasePolicy";
-import { requirePanelId } from "../../../packages/paperapi/src/panelIdentity";
+import { requirePanelId } from "@mileniumhq/paperapi/panelIdentity";
 import { fetchRegistryRecord } from "./registryRecord";
-import { releaseMessage, requireReleaseSignature } from "./releaseSignature";
+import { releaseMessage, requireReleaseSignature } from "@mileniumhq/release";
 import { recoverParked, rollbackFailed, swapParked } from "./parkedSwap";
 import type { WorkloadRegistry } from "./engineWorkloads";
 import { sanitizeIdOrThrow, type PackageManager, type ReleaseSource } from "./enginePackages";
-import { errorMessage } from "../../../packages/paperapi/src/errors";
+import { errorMessage } from "@mileniumhq/paperapi/errors";
 
 // what a caller expects to install (the release it showed the user or
 // planned an update to); the daemon's own registry lookup must agree

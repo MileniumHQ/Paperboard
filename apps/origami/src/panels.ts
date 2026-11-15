@@ -1,5 +1,5 @@
 import { RegistryLimitError, UnreadableRecordError } from "./recordError";
-import type { StoreListing } from "../../../packages/paperapi/src/storeListing";
+import type { StoreListing } from "@mileniumhq/paperapi/storeListing";
 
 export interface PanelRecord {
     id: string;
@@ -18,7 +18,7 @@ export interface PanelRecord {
     archiveKey?: string;
     sha256?: string;
     // offline release-key signature over (id, version, sha256); clients
-    // refuse a record without a valid one (papercrane/releaseSignature.ts)
+    // refuse a record without a valid one (packages/release/src/signature.ts)
     signature?: string;
     sizeBytes?: number;
     updatedAt?: string;

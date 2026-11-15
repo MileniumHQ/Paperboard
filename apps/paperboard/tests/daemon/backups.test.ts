@@ -10,7 +10,7 @@ import { S3BackupStore, signS3Request } from "../../papercrane/backups/s3Store";
 import { DriveBackupStore } from "../../papercrane/backups/driveStore";
 import { BUSY_RETRY_MS } from "../../papercrane/backups/schedules";
 import { backupTransferDeadlineMs, newBackupId, type BackupRecord } from "../../papercrane/backups/types";
-import { ROUTINE_BACKUP_LABEL } from "../../../../packages/paperapi/src/backups";
+import { ROUTINE_BACKUP_LABEL } from "@mileniumhq/paperapi/backups";
 import { tarGz } from "./support/archive";
 import { fakeDrive, fakeS3 } from "./support/cloud";
 import { killWorkloads, startCrane } from "./support/crane";

@@ -9,7 +9,7 @@
 import { resolveRegistryUrl } from "./util";
 import { logger } from "./logger";
 import { fetchRegistryRecord } from "./registryRecord";
-import { errorMessage } from "../../../packages/paperapi/src/errors";
+import { errorMessage } from "@mileniumhq/paperapi/errors";
 
 const REGISTRY_URL = resolveRegistryUrl();
 

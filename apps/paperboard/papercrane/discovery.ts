@@ -7,7 +7,7 @@ import { Bonjour } from "bonjour-service";
 import { logger } from "./logger";
 import { getPaperboardDir } from "./paths";
 import pkg from "../package.json";
-import { errorCode, errorMessage } from "../../../packages/paperapi/src/errors";
+import { errorCode, errorMessage } from "@mileniumhq/paperapi/errors";
 
 export const PAPERCRANE_MDNS_TYPE = "papercrane";
 // version travels with the app package.json — one source, never a drift

@@ -29,6 +29,23 @@
             "import": "./dist/fs.es.js",
             "require": "./dist/fs.cjs"
         },
+        "./backups": "./src/backups.ts",
+        "./channels": "./src/channels.ts",
+        "./config": "./src/config.ts",
+        "./errors": "./src/errors.ts",
+        "./monitorProtocol": "./src/monitorProtocol.ts",
+        "./pack": "./src/pack.ts",
+        "./paintReady": "./src/paintReady.ts",
+        "./panelIdentity": "./src/panelIdentity.ts",
+        "./panelMerge": "./src/panelMerge.ts",
+        "./panelPath": "./src/panelPath.ts",
+        "./problemShape": "./src/problemShape.ts",
+        "./protocol": "./src/protocol.ts",
+        "./registryFetch": "./src/registryFetch.ts",
+        "./serialQueue": "./src/serialQueue.ts",
+        "./storeListing": "./src/storeListing.ts",
+        "./widgetManifest": "./src/widgetManifest.ts",
+        "./ws": "./src/ws.ts",
         "./package.json": "./package.json"
     },
     "bin": {

@@ -4,7 +4,7 @@ import { EventEmitter } from "events";
 import { Bonjour } from "bonjour-service";
 import { logger } from "../../../papercrane/logger";
 import { PAPERCRANE_MDNS_TYPE } from "../../../papercrane/discovery";
-import { errorMessage } from "../../../../../packages/paperapi/src/errors";
+import { errorMessage } from "@mileniumhq/paperapi/errors";
 
 export interface DiscoveredComputer {
     /** stable service identity — dedupe key */

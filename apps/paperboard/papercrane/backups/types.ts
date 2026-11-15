@@ -2,7 +2,7 @@
 // gzipped tar of a panel's file storage and config document, plus a record
 // describing it. Stores keep the record beside the archive; the record is
 // read back as untrusted data and checked before anything is restored.
-import { isPanelId } from "../../../../packages/paperapi/src/panelIdentity";
+import { isPanelId } from "@mileniumhq/paperapi/panelIdentity";
 
 export interface BackupRecord {
     format: 1;
@@ -30,7 +30,7 @@ export interface BackupUsage {
 export type BytesProgress = (done: number) => void;
 
 // the progress shapes are PaperAPI's: the daemon sends them as they are
-export type { BackupEnded, BackupProgress, BackupProgressChange, BackupStep } from "../../../../packages/paperapi/src/backups";
+export type { BackupEnded, BackupProgress, BackupProgressChange, BackupStep } from "@mileniumhq/paperapi/backups";
 
 export interface BackupStore {
     /** proves the location is reachable with its credentials */

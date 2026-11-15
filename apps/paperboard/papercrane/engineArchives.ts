@@ -7,7 +7,7 @@ import { spawn } from "child_process";
 import { extractMsi } from "./msiArchive";
 import { moveFileSafe } from "./storage";
 import { extractTarSafely, validateExtractedLinks, TAR_BUDGET } from "./tarSafety";
-import type { PackageRecipe } from "./packageRecipe";
+import type { PackageRecipe } from "@mileniumhq/release";
 
 // Extracts .tar.gz, .tgz, .zip or single files
 export async function extractArchive(
@@ -142,7 +142,7 @@ export async function extractPackageArchive(
 }
 
 // ─── Package recipes ─────────────────────────────────────────────────────────
-// See packageRecipe.ts. The archive is unpacked into a hidden scratch dir
+// See @mileniumhq/release (packages/release/src/recipe.ts). The archive is unpacked into a hidden scratch dir
 // inside the staging dir, each take moves one path out of it, and the
 // scratch dir goes. Nothing in the archive runs.
 

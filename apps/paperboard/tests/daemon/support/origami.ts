@@ -4,9 +4,9 @@
 // the fixture key) and written by the operator publisher (publishPanel).
 import * as fs from "node:fs";
 import * as path from "node:path";
-import worker from "../../../../origami/src/index";
-import { type PanelStorage, publishPanel } from "../../../../origami/scripts/lib/panelPublish";
-import { packPanel } from "../../../../../packages/paperapi/src/pack";
+import worker from "origami";
+import { type PanelStorage, publishPanel } from "origami/panelPublish";
+import { packPanel } from "@mileniumhq/paperapi/pack";
 import { bundleService } from "./panels";
 import { signPanel } from "./release";
 import { tempDir } from "./fs";

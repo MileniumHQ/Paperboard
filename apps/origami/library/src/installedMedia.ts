@@ -4,7 +4,7 @@
 // being viewed. Entries live only while the panel stays installed, so the
 // cache is bounded by the installed set.
 import { type Accessor, createEffect, createSignal, on } from "solid-js";
-import type { InstalledPanelMedia } from "../../../../packages/paperapi/src/storeListing";
+import type { InstalledPanelMedia } from "@mileniumhq/paperapi/storeListing";
 import type { LibraryBridge } from "./bridge";
 
 export interface InstalledMedia {

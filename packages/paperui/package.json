@@ -27,10 +27,14 @@
         },
         "./style.css": "./dist/paperui.css",
         "./panel.css": "./dist/panel.css",
+        "./tokens.css": "./dist/tokens.css",
+        "./colors.css": "./dist/colors.css",
+        "./fonts/NunitoSans.woff2": "./dist/NunitoSans.woff2",
+        "./LICENSE": "./LICENSE",
         "./package.json": "./package.json"
     },
     "scripts": {
-        "build": "tsc --noEmit && vite build && cp src/styles/panel.css dist/panel.css",
+        "build": "tsc --noEmit && vite build && cp src/styles/panel.css src/styles/colors.css dist/ && sed '/^@import /d' src/styles/styles.css > dist/tokens.css",
         "test": "bash scripts/check-styling.sh && vitest run"
     },
     "devDependencies": {

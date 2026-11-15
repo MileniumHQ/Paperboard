@@ -8,13 +8,13 @@
 // requests only from its own frame (see the renderer's libraryFrame). This
 // side holds no authority, so it only validates what it renders.
 import { createSignal } from "solid-js";
-import { isPanelId } from "../../../../packages/paperapi/src/panelIdentity";
-import type { PanelItem } from "../../../../packages/paperapi/src/panelMerge";
+import { isPanelId } from "@mileniumhq/paperapi/panelIdentity";
+import type { PanelItem } from "@mileniumhq/paperapi/panelMerge";
 import {
     isDataImage,
     parseStoreListing,
     type InstalledPanelMedia,
-} from "../../../../packages/paperapi/src/storeListing";
+} from "@mileniumhq/paperapi/storeListing";
 
 export type LibraryMode = "detecting" | "embedded" | "standalone";
 export type LibraryTheme = "light" | "dark" | "system";

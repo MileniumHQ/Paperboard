@@ -6,8 +6,8 @@
 // Both scripts are packages/crane-launcher/install's, the same files
 // `npx @mileniumhq/paperboard install` runs. A browser opening the base gets
 // the downloads page instead of a script.
-import installPs1 from "../../../../packages/crane-launcher/install/install.ps1";
-import installSh from "../../../../packages/crane-launcher/install/install.sh";
+import installPs1 from "@mileniumhq/paperboard/install.ps1";
+import installSh from "@mileniumhq/paperboard/install.sh";
 
 const DOWNLOADS_PAGE = "https://paperboard.dev/downloads/";
 

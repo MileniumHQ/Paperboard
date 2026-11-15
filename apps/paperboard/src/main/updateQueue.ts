@@ -11,7 +11,7 @@ import {
     type UpdateStage,
 } from "../shared/updateQueue";
 import { pushToShells } from "./communication/shellPush";
-import { errorMessage } from "../../../../packages/paperapi/src/errors";
+import { errorMessage } from "@mileniumhq/paperapi/errors";
 
 export type UpdateItemIdentity = Pick<UpdateItem, "key" | "kind" | "computerId" | "computerName" | "panelId" | "name" | "version">;
 

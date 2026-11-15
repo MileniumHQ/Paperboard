@@ -1,6 +1,6 @@
 import { defineConfig } from "vite";
 import solid from "vite-plugin-solid";
-import { REGISTRY_ORIGIN } from "../src/downloadUrl";
+import { REGISTRY_ORIGIN } from "origami/downloadUrl";
 
 // The library is served by Origami at /library/ and reads the registry from
 // its own origin (same-origin /panels/index.json and /panel/:id/download).

@@ -6,9 +6,9 @@ import { execFile } from "node:child_process";
 import { extractArchive, packageArchiveSuffix } from "./engineArchives";
 import { hashFile, writeJsonAtomicSync } from "./storage";
 import { streamToFileWithProgress } from "./download";
-import { RELEASE_PUBLIC_KEY, releaseMessage, verifyRelease } from "./releaseSignature";
+import { RELEASE_PUBLIC_KEY, releaseMessage, verifyRelease } from "@mileniumhq/release";
 import { hostPlatformKey } from "./packageChecksum";
-import { errorMessage } from "../../../packages/paperapi/src/errors";
+import { errorMessage } from "@mileniumhq/paperapi/errors";
 
 export interface CraneRelease {
     downloadUrl: string;

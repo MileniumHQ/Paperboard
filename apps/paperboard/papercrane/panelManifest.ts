@@ -1,8 +1,8 @@
 // Panel manifest validation: only known, bounded fields leave here.
 import * as path from "path";
-import { requirePanelId } from "../../../packages/paperapi/src/panelIdentity";
-import { validateWidgetDeclarations } from "../../../packages/paperapi/src/widgetManifest";
-import { errorMessage } from "../../../packages/paperapi/src/errors";
+import { requirePanelId } from "@mileniumhq/paperapi/panelIdentity";
+import { validateWidgetDeclarations } from "@mileniumhq/paperapi/widgetManifest";
+import { errorMessage } from "@mileniumhq/paperapi/errors";
 
 export interface PanelManifestLike {
     id: string;

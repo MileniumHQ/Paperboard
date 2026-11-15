@@ -4,7 +4,7 @@ import { createHmac } from "node:crypto";
 import { secretsMatch } from "./secretCompare";
 import { getPaperboardDir } from "./paths";
 import { logger } from "./logger";
-import { errorCode } from "../../../packages/paperapi/src/errors";
+import { errorCode } from "@mileniumhq/paperapi/errors";
 
 // Reading crane.json validates discovery metadata, not listener identity.
 // PaperCraneClient verifies the nonce proof on the same WebSocket before

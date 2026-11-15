@@ -25,7 +25,7 @@ import {
     type PermissionAnswer,
 } from "./panelPermissions";
 import type { PermissionFailure, ScreenSource, SystemBlock } from "../shared/panelPermissions";
-import { errorMessage } from "../../../../packages/paperapi/src/errors";
+import { errorMessage } from "@mileniumhq/paperapi/errors";
 
 const SYSTEM_SETTINGS: Record<"darwin" | "win32", Partial<Record<PanelPermission, string>>> = {
     darwin: {

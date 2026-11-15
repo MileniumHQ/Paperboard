@@ -6,7 +6,7 @@ import { Readable, Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { PAPERBOARD_USER_AGENT } from "./userAgent";
 import { LimitError } from "./storage";
-import { errorMessage } from "../../../packages/paperapi/src/errors";
+import { errorMessage } from "@mileniumhq/paperapi/errors";
 
 export interface DownloadProgressPayload {
     stage:

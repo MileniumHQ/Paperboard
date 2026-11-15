@@ -5,7 +5,7 @@
 import connectionPool from "./communication/papercrane/ConnectionPool";
 import { withTimeout } from "../../papercrane/util";
 import { logger } from "../../papercrane/logger";
-import { errorMessage } from "../../../../packages/paperapi/src/errors";
+import { errorMessage } from "@mileniumhq/paperapi/errors";
 
 // a runtime package update that is downloaded and verified on a computer
 // but not installed yet: it waits for the panels whose processes still run

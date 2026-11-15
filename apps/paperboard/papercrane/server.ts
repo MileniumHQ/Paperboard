@@ -29,7 +29,7 @@ import { PanelServicesManager } from "./panelServices";
 import { backupServiceFor } from "./rpc/backups";
 import { readDaemonStatus } from "./localControl";
 import { killStalePaperCrane, removePidFile, writePidFile } from "./pidFile";
-import { errorMessage } from "../../../packages/paperapi/src/errors";
+import { errorMessage } from "@mileniumhq/paperapi/errors";
 
 export const DEFAULT_PORT =
     Number(process.env.PAPERCRANE_PORT) || DEFAULT_LISTEN_PORT;

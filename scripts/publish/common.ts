@@ -7,7 +7,7 @@ import { readFileSync } from "fs";
 import { join } from "path";
 import type { KeyObject } from "node:crypto";
 import { signRelease } from "../releaseSigning";
-import { RELEASE_PUBLIC_KEY, verifyRelease } from "../../apps/paperboard/papercrane/releaseSignature";
+import { RELEASE_PUBLIC_KEY, verifyRelease } from "../../packages/release/src";
 
 export const REPO_ROOT = join(import.meta.dir, "..", "..");
 export const APP_DIR = join(REPO_ROOT, "apps", "paperboard");
@@ -122,7 +122,7 @@ export function bar(total: number): SingleBar {
 export function signVerified(key: KeyObject, msg: Buffer, what: string): string {
     const signature = signRelease(key, msg);
     if (!verifyRelease(msg, signature, RELEASE_PUBLIC_KEY)) {
-        fail(`The release key does not match RELEASE_PUBLIC_KEY in papercrane/releaseSignature.ts; refusing to publish ${what}.`);
+        fail(`The release key does not match RELEASE_PUBLIC_KEY in packages/release/src/signature.ts; refusing to publish ${what}.`);
     }
     return signature;
 }

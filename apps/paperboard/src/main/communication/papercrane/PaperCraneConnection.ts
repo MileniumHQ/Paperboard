@@ -25,7 +25,7 @@ import {
 import type { TLSSocket } from "tls";
 import { pinnableWebSocket } from "../../../../papercrane/pinnableWebSocket";
 import { bracketHost, isLoopback } from "./probeTarget";
-import { errorMessage } from "../../../../../../packages/paperapi/src/errors";
+import { errorMessage } from "@mileniumhq/paperapi/errors";
 
 export type RpcParams = Record<string, unknown>;
 

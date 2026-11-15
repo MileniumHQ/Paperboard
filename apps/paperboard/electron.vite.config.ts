@@ -5,6 +5,9 @@ import solid from "vite-plugin-solid";
 export default defineConfig({
     main: {
         build: {
+            // the SDK and design system ship TypeScript and CSS sources the
+            // main process takes pieces of: bundled, never required at runtime
+            externalizeDeps: { exclude: ["@mileniumhq/paperapi", "@mileniumhq/paperui"] },
             rollupOptions: {
                 input: {
                     index: resolve(__dirname, "src/main/index.ts"),

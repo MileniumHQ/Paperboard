@@ -7,14 +7,14 @@ import { sanitizeId, writeJsonAtomicSync, LimitError } from "./storage";
 import { ProgressCallback, streamToFileWithProgress } from "./download";
 import { logger } from "./logger";
 import { applyPackageRecipe, extractPackageArchive, findBinDir, packageArchiveSuffix, parsePackageLayout, RECIPE_SUFFIX } from "./engineArchives";
-import { assertRecipeRunsHere, parsePackageRecipe, recipeDigest, type PackageRecipe } from "./packageRecipe";
+import { assertRecipeRunsHere, parsePackageRecipe, recipeDigest, type PackageRecipe } from "@mileniumhq/release";
 import { requireReleaseOrder } from "./releasePolicy";
 import { fetchRegistryRecord } from "./registryRecord";
 import { hostPlatformKey } from "./packageChecksum";
-import { releaseMessage, requireReleaseSignature } from "./releaseSignature";
+import { releaseMessage, requireReleaseSignature } from "@mileniumhq/release";
 import { recoverParked, swapParked } from "./parkedSwap";
 import type { WorkloadRegistry, WorkloadRuntime, WorkloadUse } from "./engineWorkloads";
-import { errorMessage } from "../../../packages/paperapi/src/errors";
+import { errorMessage } from "@mileniumhq/paperapi/errors";
 
 // a verified runtime release kept beside the installed one until the
 // workloads running from the installed one have stopped

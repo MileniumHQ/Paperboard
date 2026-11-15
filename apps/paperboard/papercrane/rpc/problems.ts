@@ -4,8 +4,8 @@ import { assertPanelId, rpcErrorCode } from "./params";
 import { invalidParams } from "./errors";
 import { requireHost, resourcePanelId } from "../principal";
 import { PanelProblems } from "../problems";
-import { problemKey, readProblemReport } from "../../../../packages/paperapi/src/problemShape";
-import { errorMessage } from "../../../../packages/paperapi/src/errors";
+import { problemKey, readProblemReport } from "@mileniumhq/paperapi/problemShape";
+import { errorMessage } from "@mileniumhq/paperapi/errors";
 
 // one list per engine; it lives as long as the engine does
 const lists = new WeakMap<PaperCraneEngine, PanelProblems>();

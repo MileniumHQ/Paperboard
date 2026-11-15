@@ -5,9 +5,9 @@
 import * as fs from "fs";
 import { writeFileAtomic } from "../storage";
 import { invalidParams } from "../rpc/errors";
-import { isPanelId } from "../../../../packages/paperapi/src/panelIdentity";
-import { MAX_ROUTINE_BACKUPS_KEPT, ROUTINE_BACKUP_HOURS, ROUTINE_BACKUP_LABEL } from "../../../../packages/paperapi/src/backups";
-import { errorMessage } from "../../../../packages/paperapi/src/errors";
+import { isPanelId } from "@mileniumhq/paperapi/panelIdentity";
+import { MAX_ROUTINE_BACKUPS_KEPT, ROUTINE_BACKUP_HOURS, ROUTINE_BACKUP_LABEL } from "@mileniumhq/paperapi/backups";
+import { errorMessage } from "@mileniumhq/paperapi/errors";
 
 export const SCHEDULE_FILE_VERSION = 1;
 export const MAX_SCHEDULES = 64;

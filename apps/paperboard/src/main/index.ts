@@ -42,7 +42,7 @@ import { installTextEditContextMenu } from "./contextMenu";
 import { relocateElectronData } from "./electronData";
 import { relaunchOnX11IfNeeded } from "./displayBackend";
 import { setSupervisorBinary } from "../../papercrane/supervisorBinary";
-import { errorMessage } from "../../../../packages/paperapi/src/errors";
+import { errorMessage } from "@mileniumhq/paperapi/errors";
 
 const log = logger;
 // the workload supervisor ships in the app's resources (scripts/supervisor.ts

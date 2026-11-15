@@ -6,7 +6,7 @@ import fs from "fs";
 import os from "os";
 import path from "path";
 import { logger } from "./logger";
-import { errorCode } from "../../../packages/paperapi/src/errors";
+import { errorCode } from "@mileniumhq/paperapi/errors";
 
 export type GpuVendor = "nvidia" | "amd" | "intel" | "apple" | "other";
 

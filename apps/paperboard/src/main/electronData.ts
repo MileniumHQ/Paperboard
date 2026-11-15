@@ -9,7 +9,7 @@ import * as os from "os";
 import * as path from "path";
 import type { App } from "electron";
 import { getLocalDir } from "../../papercrane/paths";
-import { errorCode, errorMessage } from "../../../../packages/paperapi/src/errors";
+import { errorCode, errorMessage } from "@mileniumhq/paperapi/errors";
 
 export function electronDataDir(): string {
     return path.join(getLocalDir(), "electron");

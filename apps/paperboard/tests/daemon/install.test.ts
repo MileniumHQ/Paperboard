@@ -2,8 +2,9 @@ import { afterAll, afterEach, describe, expect, setDefaultTimeout, test } from "
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { PaperCraneEngine } from "../../papercrane/engine";
-import { semverGt, resolveRegistryUrl } from "../../papercrane/util";
-import { fetchRegistryJson } from "../../../../packages/paperapi/src/config";
+import { semverGt } from "@mileniumhq/release";
+import { resolveRegistryUrl } from "../../papercrane/util";
+import { fetchRegistryJson } from "@mileniumhq/paperapi/config";
 import { planUpdateTasks, withInstalledRecords, type ComputerUpdateState } from "../../src/main/updatePlan";
 import { killWorkloads, startCrane } from "./support/crane";
 import { dataDir, listTree } from "./support/fs";

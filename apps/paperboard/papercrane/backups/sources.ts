@@ -5,8 +5,8 @@ import * as path from "node:path";
 import { createHash, randomUUID } from "node:crypto";
 import type { PaperCraneEngine } from "../engine";
 import { writeFileAtomicSync } from "../storage";
-import { requirePanelId } from "../../../../packages/paperapi/src/panelIdentity";
-import { errorMessage } from "../../../../packages/paperapi/src/errors";
+import { requirePanelId } from "@mileniumhq/paperapi/panelIdentity";
+import { errorMessage } from "@mileniumhq/paperapi/errors";
 
 export type ConfigSelector = Array<string | { id: string }>;
 export interface BackupSource {

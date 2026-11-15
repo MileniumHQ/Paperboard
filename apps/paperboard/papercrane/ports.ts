@@ -8,9 +8,9 @@
 import * as dgram from "dgram";
 import * as net from "net";
 import * as path from "path";
-import { isPanelId } from "../../../packages/paperapi/src/panelIdentity";
+import { isPanelId } from "@mileniumhq/paperapi/panelIdentity";
 import { readStateFileSync, writeJsonAtomic } from "./storage";
-import { SerialQueue } from "../../../packages/paperapi/src/serialQueue";
+import { SerialQueue } from "@mileniumhq/paperapi/serialQueue";
 import { ErrorCode } from "./protocol";
 import { RpcError, invalidParams } from "./rpc/errors";
 

@@ -5,7 +5,7 @@
 import * as fs from "fs";
 import { logger } from "./logger";
 import { getPaperboardDir } from "./paths";
-import { errorCode } from "../../../packages/paperapi/src/errors";
+import { errorCode } from "@mileniumhq/paperapi/errors";
 
 export interface SupervisorLaunch {
     command: string;

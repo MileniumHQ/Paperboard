@@ -4,8 +4,7 @@ import { readFileSync } from "node:fs";
 import { putRecord, signRecord } from "../scripts/lib/kv";
 import type { CommandRunner } from "../scripts/lib/wrangler";
 import type { PackageRecord } from "../scripts/lib/records";
-import { releaseMessage, verifyRelease } from "../../paperboard/papercrane/releaseSignature";
-import { parsePackageRecipe, recipeDigest } from "../../paperboard/papercrane/packageRecipe";
+import { parsePackageRecipe, recipeDigest, releaseMessage, verifyRelease } from "@mileniumhq/release";
 
 const keys = generateKeyPairSync("ed25519");
 const PUBLIC = keys.publicKey.export({ type: "spki", format: "pem" }).toString();

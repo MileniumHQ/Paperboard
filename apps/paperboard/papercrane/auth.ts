@@ -5,7 +5,7 @@ import { EventEmitter } from "events";
 import { readStateFileSync, writeFileAtomicSync } from "./storage";
 import { getLocalDir } from "./paths";
 import { secretsMatch } from "./secretCompare";
-import { requirePanelId } from "../../../packages/paperapi/src/panelIdentity";
+import { requirePanelId } from "@mileniumhq/paperapi/panelIdentity";
 import { sanitizeId, unrefTimer } from "./storage";
 import { logger } from "./logger";
 

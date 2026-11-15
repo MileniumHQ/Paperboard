@@ -1,0 +1,23 @@
+{
+    "name": "@mileniumhq/release",
+    "version": "0.4.0",
+    "private": true,
+    "type": "module",
+    "description": "What a Paperboard release is, for everything that makes, serves or installs one: the release key and signed messages, package recipes, and version order.",
+    "exports": {
+        ".": "./src/index.ts"
+    },
+    "scripts": {
+        "typecheck": "tsc --noEmit",
+        "test": "bun test ./test"
+    },
+    "dependencies": {
+        "semver": "^7.8.5"
+    },
+    "devDependencies": {
+        "@types/node": "^22.20.5",
+        "@types/semver": "^7.8.0",
+        "typescript": "~6.0.3"
+    },
+    "license": "PolyForm-Noncommercial-1.0.0"
+}

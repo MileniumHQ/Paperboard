@@ -2,7 +2,7 @@
 // its own folder, and nothing on the way there may be a link.
 import * as fs from "fs";
 import * as path from "path";
-import { errorCode } from "../../../packages/paperapi/src/errors";
+import { errorCode } from "@mileniumhq/paperapi/errors";
 
 // A component below an existing file is as absent as a missing one
 export function isMissingPathError(error: unknown): boolean {

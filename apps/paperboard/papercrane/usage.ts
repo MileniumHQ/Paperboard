@@ -11,7 +11,7 @@ import fs from "fs";
 import os from "os";
 import { logger } from "./logger";
 import { getPaperboardDir } from "./paths";
-import { errorCode } from "../../../packages/paperapi/src/errors";
+import { errorCode } from "@mileniumhq/paperapi/errors";
 
 export interface ProcessSample {
     ppid: number;

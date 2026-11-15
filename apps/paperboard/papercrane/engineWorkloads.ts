@@ -18,8 +18,8 @@ import { spawnSupervisedClient } from "./engineSupervisor";
 import { defaultTerminalShell, requireOfferedShell, shellLaunch, type ShellCommand } from "./shellIntegration";
 import { RpcError } from "./rpc/errors";
 import { ErrorCode } from "./protocol";
-import { requirePanelId } from "../../../packages/paperapi/src/panelIdentity";
-import type { MonitorLifecycle } from "../../../packages/paperapi/src/monitorProtocol";
+import { requirePanelId } from "@mileniumhq/paperapi/panelIdentity";
+import type { MonitorLifecycle } from "@mileniumhq/paperapi/monitorProtocol";
 
 type StreamListeners = Record<string, ((...args: any[]) => void) | undefined>;
 /**

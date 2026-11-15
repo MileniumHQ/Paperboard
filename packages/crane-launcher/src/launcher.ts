@@ -5,7 +5,7 @@
 //   1. read the signed crane index the desktop app's updater reads
 //      (<registry>/paperdl/crane/index.json)
 //   2. check the entry's release signature against the Paperboard release
-//      key, with the daemon's own verifier (papercrane/releaseSignature.ts)
+//      key, with the daemon's own verifier (packages/release/src/signature.ts)
 //   3. download the archive, check its sha256 against the signed one
 //   4. unpack it into a per-version folder that outlives npx's cache (a
 //      service installed from here keeps pointing at it), then run it
@@ -20,8 +20,7 @@ import * as path from "path";
 import { spawn } from "child_process";
 import AdmZip from "adm-zip";
 import * as tar from "tar";
-import { RELEASE_PUBLIC_KEY, releaseMessage, verifyRelease } from "../../../apps/paperboard/papercrane/releaseSignature";
-import { semverGt } from "../../../apps/paperboard/papercrane/util";
+import { RELEASE_PUBLIC_KEY, releaseMessage, semverGt, verifyRelease } from "@mileniumhq/release";
 
 export const DEFAULT_REGISTRY = "https://origami.ariapis.com";
 const MAX_INDEX_BYTES = 1024 * 1024;

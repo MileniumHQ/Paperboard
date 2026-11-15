@@ -6,7 +6,7 @@
 import {
     PROBLEMS_PER_PANEL,
     type PanelProblem,
-} from "../../../packages/paperapi/src/problemShape";
+} from "@mileniumhq/paperapi/problemShape";
 
 export class PanelProblems {
     // by panel, then key; a Map keeps the order they were last reported in

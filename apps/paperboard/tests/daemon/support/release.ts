@@ -3,7 +3,7 @@
 // with this fixture's public key and registry URL (production uses the
 // compiled-in release key and origami.ariapis.com).
 import * as crypto from "node:crypto";
-import { releaseMessage } from "../../../papercrane/releaseSignature";
+import { releaseMessage } from "@mileniumhq/release";
 
 const pair = crypto.generateKeyPairSync("ed25519");
 export const FIXTURE_PUBLIC_KEY = pair.publicKey.export({ type: "spki", format: "pem" }).toString();

@@ -4,7 +4,7 @@
 // link, a reload and the embedded iframe all land on the same document
 // without teaching Origami's asset routing about client routes.
 import { createSignal, onCleanup } from "solid-js";
-import { isPanelId } from "../../../../packages/paperapi/src/panelIdentity";
+import { isPanelId } from "@mileniumhq/paperapi/panelIdentity";
 
 const PANEL_QUERY = "panel";
 

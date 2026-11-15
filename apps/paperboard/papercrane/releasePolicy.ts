@@ -1,4 +1,4 @@
-import { semverGt } from "./util";
+import { semverGt } from "@mileniumhq/release";
 
 export interface OrderedRelease {
     version: string;

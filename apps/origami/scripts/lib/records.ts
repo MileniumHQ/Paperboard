@@ -2,8 +2,8 @@
 // updater scripts (never by a worker route). The daemon consumes these in
 // papercrane/engine.ts: it installs platforms[<os>-<arch>] and refuses any
 // entry without a sha256.
-import { parsePackageRecipe, type PackageRecipe } from "../../../paperboard/papercrane/packageRecipe";
-import { errorMessage } from "../../../../packages/paperapi/src/errors";
+import { parsePackageRecipe, type PackageRecipe } from "@mileniumhq/release";
+import { errorMessage } from "@mileniumhq/paperapi/errors";
 
 export type { PackageRecipe };
 
@@ -34,7 +34,7 @@ export interface PlatformDownload {
     layout?: PackageLayout;
     /**
      * Steps the daemon runs on the user's computer to turn a vendor's own
-     * release into the package (papercrane/packageRecipe.ts). Replaces
+     * release into the package (packages/release/src/recipe.ts). Replaces
      * layout; the signature covers it.
      */
     recipe?: PackageRecipe;

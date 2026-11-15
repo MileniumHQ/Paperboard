@@ -14,7 +14,7 @@ import { formatListenAddress } from "./tui";
 import { getDisplayHost } from "./util";
 import { isLoopbackHost } from "./discovery";
 import { EXIT } from "./cli";
-import { errorCode, errorMessage } from "../../../packages/paperapi/src/errors";
+import { errorCode, errorMessage } from "@mileniumhq/paperapi/errors";
 
 const CONNECT_TIMEOUT_MS = 3000;
 const RPC_TIMEOUT_MS = 10_000;

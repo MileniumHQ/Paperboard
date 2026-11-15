@@ -1,5 +1,5 @@
 import { execFile, spawn } from "child_process";
-import { KeyedQueue } from "../../../../packages/paperapi/src/serialQueue";
+import { KeyedQueue } from "@mileniumhq/paperapi/serialQueue";
 import * as fs from "fs";
 import connectionPool from "./communication/papercrane/ConnectionPool";
 import { logger } from "../../papercrane/logger";

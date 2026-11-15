@@ -2,9 +2,9 @@
 // screenshots) and the page loads them from its own origin, the way
 // Download fetches only the archive the registry hosts. An image the
 // record places anywhere else is dropped, never loaded.
-import type { PanelItem } from "../../../../packages/paperapi/src/panelMerge";
-import type { StoreListing, StoreScreenshot } from "../../../../packages/paperapi/src/storeListing";
-import { REGISTRY_ORIGIN } from "../../src/downloadUrl";
+import type { PanelItem } from "@mileniumhq/paperapi/panelMerge";
+import type { StoreListing, StoreScreenshot } from "@mileniumhq/paperapi/storeListing";
+import { REGISTRY_ORIGIN } from "origami/downloadUrl";
 
 /** The image's path on this page's origin, or undefined when the registry does not host it. */
 export function registryImage(url: string | undefined): string | undefined {

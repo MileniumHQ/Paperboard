@@ -19,7 +19,6 @@
 // and the origami package scripts read it from PAPERBOARD_RELEASE_KEY or
 // ~/.config/paperboard/release-signing.pem (see scripts/releaseSigning.ts).
 import * as crypto from "crypto";
-import { logger } from "./logger";
 
 export const RELEASE_PUBLIC_KEY = `-----BEGIN PUBLIC KEY-----
 MCowBQYDK2VwAyEAnPZxRUXmI+YzHGY7gJrpx4R+6+Q0nWQxQ9crtJjdxF8=
@@ -61,7 +60,7 @@ function message(kind: string, fields: string[]): Buffer {
 
 export const releaseMessage = {
     panel: (id: string, version: string, sha256: string) => message("panel", [id, version, sha256.toLowerCase()]),
-    // a recipe entry (packageRecipe.ts) adds its recipe's digest, so the
+    // a recipe entry (recipe.ts) adds its recipe's digest, so the
     // steps are signed with the bytes; daemons that predate recipes then
     // refuse the entry rather than install it without running the recipe
     package: (name: string, version: string, platform: string, sha256: string, recipeSha256?: string) =>
@@ -80,8 +79,8 @@ export function verifyRelease(msg: Buffer, signature: unknown, publicKey: string
     try {
         return crypto.verify(null, msg, publicKey, Buffer.from(signature, "base64"));
     } catch (err) {
-        // an unusable key or signature encoding is a failed verification
-        logger.debug("[release] signature verification could not run:", err);
+        // an unusable key or signature encoding is a failed verification: the caller refuses the release and says so
+        console.debug("[release] signature verification could not run:", err);
         return false;
     }
 }

@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import * as crypto from "node:crypto";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { RELEASE_PUBLIC_KEY, releaseMessage, verifyRelease } from "../apps/paperboard/papercrane/releaseSignature";
+import { RELEASE_PUBLIC_KEY, releaseMessage, verifyRelease } from "../packages/release/src";
 import {
     ALL_TARGETS,
     assetFileName,

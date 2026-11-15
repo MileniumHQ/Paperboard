@@ -4,10 +4,9 @@
 import type { KeyObject } from "node:crypto";
 import { assertValidRecord, type PackageRecord, type PlatformKey } from "./records";
 import { releaseMessage, signRelease } from "../../../../scripts/releaseSigning";
-import { RELEASE_PUBLIC_KEY, verifyRelease } from "../../../paperboard/papercrane/releaseSignature";
-import { parsePackageRecipe, recipeDigest } from "../../../paperboard/papercrane/packageRecipe";
+import { parsePackageRecipe, recipeDigest, RELEASE_PUBLIC_KEY, verifyRelease } from "@mileniumhq/release";
 import { kvPut, runCommand, type CommandRunner } from "./wrangler";
-import { errorMessage } from "../../../../packages/paperapi/src/errors";
+import { errorMessage } from "@mileniumhq/paperapi/errors";
 import { REGISTRY_ORIGIN } from "../../src/downloadUrl";
 
 // Signs every platform entry with the offline release key. Daemons refuse

@@ -2,9 +2,9 @@ import * as fs from "fs";
 import { logger } from "./logger";
 import * as crypto from "crypto";
 import { pipeline } from "node:stream/promises";
-import { errorCode, errorMessage } from "../../../packages/paperapi/src/errors";
-import { writeFileAtomic as writeWhole, writeFileAtomicSync as writeWholeSync } from "../../../packages/paperapi/src/fs";
-import { KeyedQueue } from "../../../packages/paperapi/src/serialQueue";
+import { errorCode, errorMessage } from "@mileniumhq/paperapi/errors";
+import { writeFileAtomic as writeWhole, writeFileAtomicSync as writeWholeSync } from "@mileniumhq/paperapi/fs";
+import { KeyedQueue } from "@mileniumhq/paperapi/serialQueue";
 
 // one-shot timers must never hold the process open: unref and move on.
 // (bun and node both expose unref on Timeout handles)

@@ -3,7 +3,6 @@ import { afterAll, beforeAll, beforeEach, describe, expect, test } from "vitest"
 import { readFile } from "node:fs/promises";
 import { createServer, type Server, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
-import path from "node:path";
 import { fileURLToPath } from "node:url";
 import ts from "typescript";
 import { launchChrome, type Chrome, type Page } from "../../../../scripts/testing/chrome";
@@ -11,7 +10,7 @@ import { launchChrome, type Chrome, type Page } from "../../../../scripts/testin
 // The real paintReady module, served to a real Chrome. Images come from
 // this loopback server: one is held until the test releases it, one is
 // bytes no browser can decode, and one never answers.
-const PAINT_READY = path.resolve(fileURLToPath(new URL(".", import.meta.url)), "../../../../packages/paperapi/src/paintReady.ts");
+const PAINT_READY = fileURLToPath(import.meta.resolve("@mileniumhq/paperapi/paintReady"));
 const PNG = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=", "base64");
 const LONG = 10 * 60_000;
 

@@ -8,7 +8,7 @@ import { collectPackageUpdates } from "./packageUpdates";
 import { updateQueue } from "./updateQueue";
 import { failedItem, heldPanels, inUseJob, taskJob } from "./updateTasks";
 import type { UpdateHold, UpdateItem } from "../shared/updateQueue";
-import { errorMessage } from "../../../../packages/paperapi/src/errors";
+import { errorMessage } from "@mileniumhq/paperapi/errors";
 
 const HOLD_REFRESH_MS = 30_000;
 

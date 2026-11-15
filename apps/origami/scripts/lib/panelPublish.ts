@@ -16,7 +16,7 @@
 // Unlisting takes a panel off the store (out of `panels:index`) and leaves
 // its record and archive: installs that have it keep it, and stop getting
 // updates. Publishing it again lists it again.
-import { isPanelId } from "../../../../packages/paperapi/src/panelIdentity";
+import { isPanelId } from "@mileniumhq/paperapi/panelIdentity";
 import {
     iconKey,
     isValidPanelVersion,
@@ -33,7 +33,7 @@ import {
     STORE_MAX_ABOUT_BYTES,
     STORE_MAX_SCREENSHOT_BYTES,
     type StoreListing,
-} from "../../../../packages/paperapi/src/storeListing";
+} from "@mileniumhq/paperapi/storeListing";
 import { kvGetArgs, kvListArgs, kvPut, ORIGAMI_DIR, runCommand, withTempFile, type CommandRunner } from "./wrangler";
 
 export const PANELS_BUCKET = "paperboard-boards";

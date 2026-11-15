@@ -11,7 +11,7 @@ import type { PaperCraneAuth } from "./auth";
 import { davMaxUploadBytes, replyText as reply, sendFileStream } from "./dav";
 import { isMainBearer } from "./davAuth";
 import { receiveFileAtomic, UploadTooLargeError } from "./atomicUpload";
-import { isPanelId } from "../../../packages/paperapi/src/panelIdentity";
+import { isPanelId } from "@mileniumhq/paperapi/panelIdentity";
 import { logger } from "./logger";
 import { isMissingPathError, openResolvedFile } from "./pathContainment";
 

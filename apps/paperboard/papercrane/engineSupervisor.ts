@@ -9,7 +9,7 @@ import { supervisorBinary } from "./supervisorBinary";
 import { logger } from "./logger";
 import { LimitError, unrefTimer } from "./storage";
 import { getLogsDir } from "./paths";
-import { errorMessage } from "../../../packages/paperapi/src/errors";
+import { errorMessage } from "@mileniumhq/paperapi/errors";
 
 // Live supervised workload budget: each client is a detached supervisor
 // process plus a socket and metadata files, so minting unique ids must not

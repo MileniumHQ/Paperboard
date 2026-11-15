@@ -6,6 +6,11 @@
     "bin": {
         "paperboard": "./dist/cli.js"
     },
+    "exports": {
+        "./install.sh": "./install/install.sh",
+        "./install.ps1": "./install/install.ps1",
+        "./package.json": "./package.json"
+    },
     "files": [
         "dist",
         "install"
@@ -20,6 +25,7 @@
         "postinstall": "node install/postinstall.mjs"
     },
     "devDependencies": {
+        "@mileniumhq/release": "workspace:*",
         "@types/node": "^22.20.5",
         "@types/semver": "^7.8.0",
         "adm-zip": "^0.6.1",

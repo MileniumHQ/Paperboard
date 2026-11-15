@@ -3,7 +3,7 @@ import * as crypto from "node:crypto";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as tar from "tar";
-import { releaseMessage } from "../../../papercrane/releaseSignature";
+import { releaseMessage } from "@mileniumhq/release";
 import { APP_PACKAGE, BUILD_TIMEOUT_MS, buildCrane, buildPanel, compileCrane, installBuiltPanel, type BuiltCrane } from "./support/build";
 import { CraneSocket, startCrane, WAIT_MS, type RunningCrane } from "./support/crane";
 import { tempDataDir, tempDir } from "./support/temp";

@@ -6,11 +6,11 @@ import { logger } from "./logger";
 import { getPaperboardDir } from "./paths";
 import { validatePanelManifest } from "./panelManifest";
 import { DEFAULT_LISTEN_PORT } from "./cli";
-import { isPanelId, requirePanelId } from "../../../packages/paperapi/src/panelIdentity";
+import { isPanelId, requirePanelId } from "@mileniumhq/paperapi/panelIdentity";
 import type { PaperCraneAuth } from "./auth";
-import type { MonitorLifecycle, MonitorServiceRecord } from "../../../packages/paperapi/src/monitorProtocol";
+import type { MonitorLifecycle, MonitorServiceRecord } from "@mileniumhq/paperapi/monitorProtocol";
 import type { BackupEnded } from "./backups/types";
-import { errorMessage } from "../../../packages/paperapi/src/errors";
+import { errorMessage } from "@mileniumhq/paperapi/errors";
 
 type ServiceChange = Omit<MonitorServiceRecord, "type" | "at" | "panel">;
 

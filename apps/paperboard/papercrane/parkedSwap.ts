@@ -7,7 +7,7 @@
 import fs from "fs";
 import path from "path";
 import { logger } from "./logger";
-import { errorCode, errorMessage } from "../../../packages/paperapi/src/errors";
+import { errorCode, errorMessage } from "@mileniumhq/paperapi/errors";
 
 /** What a parked copy is called: `.<tag>-<stamp>-<name>`, beside the live one. */
 function parkedPath(live: string, tag: string, stamp: number): string {

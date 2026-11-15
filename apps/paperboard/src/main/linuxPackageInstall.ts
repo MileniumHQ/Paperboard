@@ -1,6 +1,6 @@
 import * as fs from "fs";
 import * as path from "path";
-import { errorCode } from "../../../../packages/paperapi/src/errors";
+import { errorCode } from "@mileniumhq/paperapi/errors";
 
 const DOWNLOAD_BASE = "https://i.paperboard.dev/pb";
 

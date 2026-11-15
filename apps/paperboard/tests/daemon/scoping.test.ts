@@ -9,7 +9,7 @@ import { CredentialStore } from "../../papercrane/credentials";
 import { readRemotes } from "../../papercrane/remotes";
 import { getPaperboardDir } from "../../papercrane/paths";
 import { parseBackupLocationRequest } from "../../src/renderer/src/lib/backupLocationRequest";
-import { CraneTransport } from "../../../../packages/paperapi/src/ws";
+import { CraneTransport } from "@mileniumhq/paperapi/ws";
 import { dataDir, listTree, restoreEnv } from "./support/fs";
 import { startDaemon, stopDaemon, type InProcessDaemon } from "./support/inproc";
 import { installPanelFiles } from "./support/panels";

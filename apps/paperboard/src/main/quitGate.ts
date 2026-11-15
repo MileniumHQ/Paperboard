@@ -7,7 +7,7 @@
 import { app, BrowserWindow, dialog, type WebContents } from "electron";
 import { askShell } from "./shellAsk";
 import { logger } from "../../papercrane/logger";
-import { errorMessage } from "../../../../packages/paperapi/src/errors";
+import { errorMessage } from "@mileniumhq/paperapi/errors";
 
 // each window holding unsaved work, with what drops it once the window is gone
 const unsaved = new Map<WebContents, () => void>();

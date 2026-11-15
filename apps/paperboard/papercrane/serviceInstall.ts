@@ -17,7 +17,7 @@ import * as os from "os";
 import * as path from "path";
 import { spawnSync } from "child_process";
 import { EXIT, type ServiceTarget } from "./cli";
-import { errorMessage } from "../../../packages/paperapi/src/errors";
+import { errorMessage } from "@mileniumhq/paperapi/errors";
 
 export interface InstallRequest {
     target: ServiceTarget;

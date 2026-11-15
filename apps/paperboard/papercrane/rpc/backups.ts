@@ -7,7 +7,7 @@ import { BackupService } from "../backups/service";
 import { isDestinationId } from "../backups/config";
 import { BACKUP_LABEL_MAX } from "../backups/types";
 import { actionsRegistry, blocksRegistry } from "../actions";
-import { errorMessage } from "../../../../packages/paperapi/src/errors";
+import { errorMessage } from "@mileniumhq/paperapi/errors";
 
 // one service per engine; it lives as long as the engine does
 const services = new WeakMap<PaperCraneEngine, BackupService>();

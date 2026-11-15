@@ -11,7 +11,7 @@ import { getGpuReport } from "../gpu";
 import { usageSampler, type UsageRoots } from "../usage";
 import { requireReleaseOrder } from "../releasePolicy";
 import { installCraneRelease, confirmCraneUpdate } from "../craneUpdate";
-import { daemonReleaseKey } from "../releaseSignature";
+import { daemonReleaseKey } from "@mileniumhq/release";
 
 // self-update URL must be https or loopback http
 function isSafeUpdateUrl(rawUrl: string): boolean {

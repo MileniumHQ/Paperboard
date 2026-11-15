@@ -6,7 +6,7 @@
 //
 // Paperboard does not host Helium. Each entry points at imputnet's own
 // GitHub asset and carries a recipe that the daemon runs on the user's
-// computer (papercrane/packageRecipe.ts): unpack the archive or disk image,
+// computer (packages/release/src/recipe.ts): unpack the archive or disk image,
 // take the browser out into bin/.
 //
 // Trust: GitHub is the authority for imputnet's release assets; each

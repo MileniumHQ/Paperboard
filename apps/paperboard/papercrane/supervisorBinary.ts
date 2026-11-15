@@ -13,8 +13,8 @@ import * as fs from "fs";
 import * as path from "path";
 import { logger } from "./logger";
 import { getLocalDir } from "./paths";
-import { errorCode, errorMessage } from "../../../packages/paperapi/src/errors";
-import { writeFileAtomic } from "../../../packages/paperapi/src/fs";
+import { errorCode, errorMessage } from "@mileniumhq/paperapi/errors";
+import { writeFileAtomic } from "@mileniumhq/paperapi/fs";
 
 type BinaryReader = () => Promise<Uint8Array> | Uint8Array;
 

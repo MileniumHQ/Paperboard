@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import published from "./fixtures/published-0.2.2-linux-x64.json";
-import { RELEASE_PUBLIC_KEY, releaseMessage, verifyRelease } from "../../../apps/paperboard/papercrane/releaseSignature";
+import { RELEASE_PUBLIC_KEY, releaseMessage, verifyRelease } from "../src";
 
 // replaces the character at `index` with the next one in the field's alphabet
 function alter(value: string, index: number, alphabet: string): string {

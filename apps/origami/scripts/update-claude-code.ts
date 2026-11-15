@@ -41,7 +41,7 @@ import {
     type PlatformDownload,
     type PlatformKey,
 } from "./lib/records";
-import { errorCode } from "../../../packages/paperapi/src/errors";
+import { errorCode } from "@mileniumhq/paperapi/errors";
 
 const RELEASES = "https://downloads.claude.ai/claude-code-releases";
 const KEY_URL = "https://downloads.claude.ai/keys/claude-code.asc";

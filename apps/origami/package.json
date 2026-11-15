@@ -2,6 +2,11 @@
     "name": "origami",
     "version": "0.4.0",
     "module": "src/index.ts",
+    "exports": {
+        ".": "./src/index.ts",
+        "./downloadUrl": "./src/downloadUrl.ts",
+        "./panelPublish": "./scripts/lib/panelPublish.ts"
+    },
     "type": "module",
     "private": true,
     "license": "PolyForm-Noncommercial-1.0.0",
@@ -33,5 +38,10 @@
     },
     "peerDependencies": {
         "typescript": "^5"
+    },
+    "dependencies": {
+        "@mileniumhq/paperapi": "workspace:*",
+        "@mileniumhq/paperboard": "workspace:*",
+        "@mileniumhq/release": "workspace:*"
     }
 }

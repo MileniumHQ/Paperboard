@@ -3,7 +3,7 @@ import { putRecord, readPublished, type PublishedReader } from "./kv";
 import type { CommandRunner } from "./wrangler";
 import { loadReleaseSigningKey } from "../../../../scripts/releaseSigning";
 import type { PackageRecord } from "./records";
-import { errorMessage } from "../../../../packages/paperapi/src/errors";
+import { errorMessage } from "@mileniumhq/paperapi/errors";
 
 export interface UpdateOutcome {
     written: string[];

@@ -18,6 +18,8 @@
 #   check (scripts/check-app-styling.sh): literal sizes, colors, motion,
 #   z-index and the like that have a PaperUI token. It warns, never fails.
 #     create-panel   panel scaffolder: build, tests, silent-catches
+#     release        @mileniumhq/release (release key, signed messages, package
+#                    recipes, version order): typecheck, tests, silent-catches
 #     crane-launcher @mileniumhq/paperboard (npx launcher for the daemon):
 #                    build, tests, silent-catches
 #     paperboard     desktop app: typechecks, tests, lint, silent-catches, and
@@ -86,7 +88,7 @@ supervisor_vet() {
 # Every selectable target. The *-build names are prerequisites, not
 # user-facing: they exist so a filtered run can pull in the shared library
 # artifact a consumer needs without running that library's whole suite.
-KNOWN_TARGETS="global platform packages paperapi paperui create-panel crane-launcher paperapi-build paperui-build create-panel-build paperboard paperdocs origami origami-library pbd panelapis scripts actions agents ai blocks botcreator gameserver terminal"
+KNOWN_TARGETS="global platform packages paperapi paperui create-panel release crane-launcher paperapi-build paperui-build create-panel-build paperboard paperdocs origami origami-library pbd panelapis scripts actions agents ai blocks botcreator gameserver terminal"
 
 # Prerequisites per target, expanded transitively. A panel (and any app that
 # bundles the SDK/design system) needs paperapi/paperui dist present; the
@@ -236,6 +238,10 @@ gstep paperui "paperui code check" run_in "$ROOT" bun scripts/check-solid.ts pac
 gstep create-panel "create-panel tests" run_in "$ROOT/packages/create-panel" bun run test
 gstep create-panel "create-panel silent-catches" run_in "$ROOT/packages/create-panel" bash "$CATCH" src bin test template
 gstep create-panel "create-panel code check" run_in "$ROOT" bun scripts/check-solid.ts packages/create-panel/src packages/create-panel/bin packages/create-panel/test packages/create-panel/template
+gstep release "release typecheck" run_in "$ROOT/packages/release" bunx tsc --noEmit
+gstep release "release tests" run_in "$ROOT/packages/release" bun run test
+gstep release "release silent-catches" run_in "$ROOT/packages/release" bash "$CATCH" src test
+gstep release "release code check" run_in "$ROOT" bun scripts/check-solid.ts packages/release/src packages/release/test
 gstep crane-launcher "crane-launcher tests" run_in "$ROOT/packages/crane-launcher" bun run test
 gstep crane-launcher "crane-launcher silent-catches" run_in "$ROOT/packages/crane-launcher" bash "$CATCH" src test
 gstep crane-launcher "crane-launcher code check" run_in "$ROOT" bun scripts/check-solid.ts packages/crane-launcher/src packages/crane-launcher/test

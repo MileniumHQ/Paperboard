@@ -1,6 +1,6 @@
 import type { AppUpdateState } from "../shared/appUpdate";
 import { initialAppUpdateState } from "../shared/appUpdate";
-import { errorMessage } from "../../../../packages/paperapi/src/errors";
+import { errorMessage } from "@mileniumhq/paperapi/errors";
 
 interface AppUpdater {
     on(event: string, listener: (...args: any[]) => void): unknown;

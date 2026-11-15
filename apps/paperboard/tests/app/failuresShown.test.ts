@@ -14,7 +14,7 @@ let app: BuiltApp;
 let crane: BuiltCrane;
 let daemon: RunningCrane;
 let host: CraneSocket;
-let sdk: typeof import("../../../../packages/paperapi/src/index");
+let sdk: typeof import("@mileniumhq/paperapi");
 const previous = { ...process.env };
 
 beforeAll(async () => {
@@ -24,7 +24,7 @@ beforeAll(async () => {
     // the SDK runs here as a panel service does: its own scoped credential
     const { token } = await host.call("auth:panel-token", { panelId: PANEL });
     Object.assign(process.env, { PAPERBOARD_PANEL_ID: PANEL, PAPERCRANE_PANEL_TOKEN: token, PAPERCRANE_PORT: String(daemon.handshake.port) });
-    sdk = await import("../../../../packages/paperapi/src/index");
+    sdk = await import("@mileniumhq/paperapi");
 }, BUILD_TIMEOUT_MS);
 
 afterAll(async () => {

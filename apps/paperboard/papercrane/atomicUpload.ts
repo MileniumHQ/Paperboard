@@ -9,7 +9,7 @@ import * as path from "path";
 import { randomUUID } from "crypto";
 import { Transform } from "stream";
 import { pipeline } from "stream/promises";
-import { errorCode } from "../../../packages/paperapi/src/errors";
+import { errorCode } from "@mileniumhq/paperapi/errors";
 
 export class UploadTooLargeError extends Error {
     constructor(readonly cap: number) {

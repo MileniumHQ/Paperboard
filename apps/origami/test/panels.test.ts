@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, test } from "bun:test";
 import { createHash, generateKeyPairSync, sign } from "node:crypto";
 import worker from "../src/index";
-import { releaseMessage } from "../../paperboard/papercrane/releaseSignature";
+import { releaseMessage } from "@mileniumhq/release";
 import {
     createWranglerStorage,
     MAX_ARCHIVE_BYTES,

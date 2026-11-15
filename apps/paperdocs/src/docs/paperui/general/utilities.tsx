@@ -12,7 +12,7 @@ export default function UtilitiesDoc() {
         <PaperFlex direction="column" gap="double" fullWidth>
             <PaperText preset="header" as="h1">Utilities</PaperText>
             <PaperText preset="body" as="p">
-                PaperUI exports helper functions, two contexts, and two stylesheet entry points besides its components.
+                PaperUI exports helper functions, two contexts, and its stylesheet entry points besides its components.
                 Reach for them when a panel needs a design token in code, a clipboard call that reports failure, bounded polling, or the layout and panel state that components share.
                 Everything on this page imports from <PaperCode>@mileniumhq/paperui</PaperCode> except the stylesheets.
             </PaperText>
@@ -43,6 +43,9 @@ import "@mileniumhq/paperui/panel.css";`}
                     </tr>
                 </tbody>
             </PaperTable>
+            <PaperText preset="body" as="p">
+                A page that isn't a Solid app, such as one the host writes as plain HTML, can still look like PaperUI with the tokens alone. <PaperCode>@mileniumhq/paperui/colors.css</PaperCode> defines the color tokens for light and dark, and <PaperCode>@mileniumhq/paperui/tokens.css</PaperCode> every other token and the document rules, with no fonts and no component styles. <PaperCode>@mileniumhq/paperui/fonts/NunitoSans.woff2</PaperCode> is the body font, for the page's own <PaperCode>@font-face</PaperCode>.
+            </PaperText>
 
             <PaperText preset="subheader" as="h2" id="theme-helpers">Theme helpers</PaperText>
             <PaperText preset="subheader" as="h3" id="getvarcss">getVarCss</PaperText>

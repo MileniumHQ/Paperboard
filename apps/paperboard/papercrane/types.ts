@@ -1,4 +1,4 @@
-import type { WidgetDeclaration } from "../../../packages/paperapi/src/widgetManifest";
+import type { WidgetDeclaration } from "@mileniumhq/paperapi/widgetManifest";
 export interface PanelManifest {
     id: string;
     name: string;

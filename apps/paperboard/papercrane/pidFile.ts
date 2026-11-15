@@ -5,7 +5,7 @@ import { promisify } from "util";
 import { writeFileAtomicSync } from "./storage";
 import { getPaperboardDir } from "./paths";
 import { logger } from "./logger";
-import { errorCode } from "../../../packages/paperapi/src/errors";
+import { errorCode } from "@mileniumhq/paperapi/errors";
 
 const promisifiedExecFile = promisify(execFile);
 

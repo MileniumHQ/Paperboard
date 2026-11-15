@@ -2,9 +2,9 @@
 // panel's caught loopback redirect): PaperUI's empty state, drawn with
 // PaperUI's own tokens and font in the app's theme, so the tab matches
 // Paperboard instead of flashing a bare white page.
-import colors from "../../../../packages/paperui/src/styles/colors.css?raw";
-import tokens from "../../../../packages/paperui/src/styles/styles.css?raw";
-import nunitoSans from "../../../../packages/paperui/src/font/NunitoSans.woff2?inline";
+import colors from "@mileniumhq/paperui/colors.css?raw";
+import tokens from "@mileniumhq/paperui/tokens.css?raw";
+import nunitoSans from "@mileniumhq/paperui/fonts/NunitoSans.woff2?inline";
 
 import { signInReasonHtml } from "./signInReason";
 
@@ -44,7 +44,7 @@ function statePage(tone: PageTone, text: { title: string; description: string },
 <style>
 @font-face { font-family: "Nunito Sans"; font-weight: 200 1000; font-stretch: 75% 125%; src: url(${nunitoSans}) format("woff2"); }
 ${colors}
-${tokens.replace(/^@import .*$/gm, "")}
+${tokens}
 body { margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center; background: var(--paper-surface-app); color: var(--paper-text); font-family: var(--paper-font-family); }
 .state { display: flex; flex-direction: column; align-items: center; gap: var(--paper-uigap-half); padding: var(--paper-uigap-double) var(--paper-uigap); text-align: center; }
 .icon { width: var(--paper-icon-size-huge); height: var(--paper-icon-size-huge); fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }

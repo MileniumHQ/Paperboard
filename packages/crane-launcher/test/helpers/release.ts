@@ -9,7 +9,7 @@ import * as os from "os";
 import * as path from "path";
 import AdmZip from "adm-zip";
 import * as tar from "tar";
-import { releaseMessage } from "../../../../apps/paperboard/papercrane/releaseSignature";
+import { releaseMessage } from "@mileniumhq/release";
 
 export interface TestKey {
     publicKey: string;

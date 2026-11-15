@@ -20,7 +20,7 @@
 import * as http from "http";
 import type { Readable } from "stream";
 import { pipeline } from "stream/promises";
-import { PANEL_PATH_ROOT, parsePanelPath } from "../../../../packages/paperapi/src/panelPath";
+import { PANEL_PATH_ROOT, parsePanelPath } from "@mileniumhq/paperapi/panelPath";
 import { logger } from "../../papercrane/logger";
 import type { BrowserSessions } from "./browserSessions";
 import { readShellFile } from "./shellAssets";

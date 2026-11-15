@@ -2,9 +2,9 @@
 // indexes into install tasks. Checksums are planned facts, not execution
 // surprises — a registry entry without a sha256 never becomes a task, and
 // each update refused that way is returned with its reason, to be shown.
-import { semverGt } from "../../papercrane/util";
+import { semverGt } from "@mileniumhq/release";
 import { logger } from "../../papercrane/logger";
-import { errorMessage } from "../../../../packages/paperapi/src/errors";
+import { errorMessage } from "@mileniumhq/paperapi/errors";
 
 export type UpdateTaskType =
     | "local_panel"
