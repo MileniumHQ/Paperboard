@@ -12,7 +12,7 @@
         transform var(--paper-tiny-transition),
         box-shadow var(--paper-tiny-transition),
         opacity var(--paper-short-transition),
-        filter var(--paper-long-transition);
+        filter var(--paper-short-transition);
     width: fit-content;
     font-weight: 500;
     display: flex;

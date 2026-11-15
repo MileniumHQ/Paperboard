@@ -421,6 +421,16 @@ const scenarios: Record<string, () => JSX.Element> = {
         ));
     },
 
+    button() {
+        const [disabled, setDisabled] = createSignal(true);
+        window.t = { setDisabled };
+        return shell(() => (
+            <div style={{ padding: "24px" }}>
+                <PaperButton id="saving" disabled={disabled()}>Use this location</PaperButton>
+            </div>
+        ));
+    },
+
     listSplit() {
         const [width, setWidth] = createSignal(400);
         const [open, setOpen] = createSignal<string | undefined>();
