@@ -189,8 +189,10 @@ describe("panel CSP and device permissions", () => {
         const csp = remotePanelHtmlCsp(served, "abc");
         expect(csp).toBe("default-src 'self'; script-src 'nonce-abc' 'self'; connect-src 'self'");
         expect(csp).not.toContain("frame-ancestors");
-        // a daemon that sent no usable policy gets the fixed panel one
-        expect(remotePanelHtmlCsp(null, "abc")).toBe(daemonPanelCsp());
+        // a daemon that sent no usable policy gets the one a local panel
+        // gets, nonce and all: the credential script is inline
+        expect(remotePanelHtmlCsp(null, "abc")).toBe(buildPanelCsp("abc"));
+        expect(remotePanelHtmlCsp("default-src 'self'", "abc")).toContain("'nonce-abc'");
     });
 
     test("microphone, camera and screen are asked once per panel, kept, and any no refuses", async () => {

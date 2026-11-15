@@ -29,7 +29,8 @@ export const remotePanelHtmlCsp = (servedCsp: string | null | undefined, nonce: 
             nonce,
         );
     }
-    return fixedPanelCsp();
+    // with the nonce: the credential and mobile scripts are inline
+    return buildPanelCsp(nonce);
 };
 
 export const injectCspNonce = (html: string, nonce: string) =>
