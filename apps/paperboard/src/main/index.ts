@@ -553,6 +553,11 @@ app.whenReady().then(async () => {
         // click on the dock/Taskbar icon: bring back the (hidden) window
         showMainWindow();
     });
+}).catch((err) => {
+    // a start that broke halfway may have no window to say it in
+    log.error("[Main] Paperboard couldn't start:", err);
+    dialog.showErrorBox("Paperboard couldn't start", err instanceof Error ? err.message : String(err));
+    quitWithoutAsking();
 });
 
 app.on("window-all-closed", () => {

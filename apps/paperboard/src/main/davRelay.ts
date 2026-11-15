@@ -200,6 +200,7 @@ export function startDavRelay(opts: DavRelayOptions): Promise<DavRelay> {
             } catch {
                 res.writeHead(400, { "Content-Type": "text/plain" });
                 res.end("Bad Destination");
+                req.resume();
                 return;
             }
         }
