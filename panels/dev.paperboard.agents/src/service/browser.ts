@@ -674,7 +674,7 @@ export class BrowserComputer {
         void this.session(tab).catch((e) => console.warn(`[agents] couldn't attach to window ${tab.id} yet:`, errorText(e)));
     }
 
-    untrack(targetId: string) {
+    private untrack(targetId: string) {
         const t = this.tabs.get(targetId);
         if (!t) return;
         for (const w of t.loads) w();
@@ -942,6 +942,12 @@ export class BrowserComputer {
         return `Browser windows open now (close the ones you're done with):\n${list.map((t) => `- ${t.id}: ${t.title || "(untitled)"} <${t.url}>`).join("\n")}`;
     }
 
+    /** Close a window; one the browser couldn't close stays listed, as it's still open. */
+    async closeWindow(tab: Tab) {
+        await this.connection().send("Target.closeTarget", { targetId: tab.targetId });
+        this.untrack(tab.targetId);
+    }
+
     /** A window of its own at an address, once its page has loaded (or is still loading: `still` says so). */
     async openWindow(url: string): Promise<{ tab: Tab; still: string }> {
         if (this.tabs.size >= MAX_TABS) throw new ToolError(`${MAX_TABS} windows are open already; close some first.`);
@@ -956,8 +962,7 @@ export class BrowserComputer {
         } catch (e) {
             // a window that never got its page isn't left behind
             try {
-                await this.connection().send("Target.closeTarget", { targetId: tab.targetId });
-                this.untrack(tab.targetId);
+                await this.closeWindow(tab);
             } catch (closing) {
                 throw new ToolError(`${errorText(e)} Its window ${tab.id} couldn't be closed: ${errorText(closing)}`);
             }
@@ -976,8 +981,7 @@ export class BrowserComputer {
             const { data } = await this.connection().send<{ data: string }>("Page.captureScreenshot", { format: "jpeg", quality: 80 }, s, 10_000);
             return data;
         } finally {
-            await this.connection().send("Target.closeTarget", { targetId: tab.targetId });
-            this.untrack(tab.targetId);
+            await this.closeWindow(tab);
         }
     }
 
@@ -992,8 +996,7 @@ export class BrowserComputer {
             const { data } = await this.connection().send<{ data: string }>("Page.printToPDF", { printBackground: true, preferCSSPageSize: true }, s, 30_000);
             return Buffer.from(data, "base64");
         } finally {
-            await this.connection().send("Target.closeTarget", { targetId: tab.targetId });
-            this.untrack(tab.targetId);
+            await this.closeWindow(tab);
         }
     }
 

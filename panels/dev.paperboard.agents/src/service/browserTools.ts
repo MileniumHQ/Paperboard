@@ -301,8 +301,7 @@ async function place(c: BrowserComputer, args: Record<string, unknown>): Promise
 
 export async function close(c: BrowserComputer, args: Record<string, unknown>): Promise<ToolResult> {
     const tab = c.tab(args.window);
-    await c.connection().send("Target.closeTarget", { targetId: tab.targetId });
-    c.untrack(tab.targetId);
+    await c.closeWindow(tab);
     return { text: "Closed." };
 }
 

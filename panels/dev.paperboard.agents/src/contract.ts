@@ -48,8 +48,6 @@ export const UI_ACTION_IDS = {
     closeWindow: "ui-close-window",
     go: "ui-go",
     control: "ui-control",
-    // waiting messages: take one back, or interrupt the turn to read them now
-    // the user is typing: waiting messages wait for them to finish
     startOver: "ui-start-over",
     // past conversations: start a new one (the current one is kept), list, reopen or delete them
     newConversation: "ui-new-conversation",
@@ -458,7 +456,7 @@ export interface ChatState {
     busy: boolean;
     /** the agent is writing a message right now, rather than working with its tools */
     typing: boolean;
-    /** messages the agent hasn't read yet: it reads them with its next tool's result, or on its next turn; they join the conversation then */
+    /** messages the agent hasn't read yet: the turn they stopped picks them up next, or a compaction finishes first; they join the conversation then */
     waiting: WaitingMessage[];
     /** the conversation is being compacted (see Settings.compaction): messages sent meanwhile wait for it */
     compacting: boolean;
