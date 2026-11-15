@@ -157,20 +157,22 @@ export async function installDatapack(
     mcVersion: string,
     deps: DatapackDeps,
 ): Promise<{ name: string; world: string; version: string }> {
-    const projectId = assertModrinthId(input.projectId, "Project");
+    const requested = assertModrinthId(input.projectId, "Project");
     const versionId =
         input.versionId === undefined || input.versionId === "" ? undefined : assertModrinthId(input.versionId, "Version");
     const fs = deps.fs ?? (nodeFs as unknown as DatapackFs);
 
+    // a block names the project by its id or by the name in its address: Modrinth says which project that is
+    const project = parseModrinthProject(
+        await deps.fetchJson<RawModrinthProject>(`${MODRINTH_API}/project/${encodeURIComponent(requested)}`),
+    );
+    if (project.projectId !== requested && project.slug.toLowerCase() !== requested.toLowerCase()) throw new Error("Modrinth answered with a different project");
+    const projectId = project.projectId;
     const versions = await listDatapackVersions(projectId, mcVersion, deps);
     const { version, file } = pickDatapackBuild(versions, mcVersion, versionId);
     if (version.projectId !== projectId) {
         throw new Error("Modrinth answered with a different project's version");
     }
-    const project = parseModrinthProject(
-        await deps.fetchJson<RawModrinthProject>(`${MODRINTH_API}/project/${encodeURIComponent(projectId)}`),
-    );
-    if (project.projectId !== projectId) throw new Error("Modrinth answered with a different project");
 
     const root = await deps.serverDir();
     const { world, relative } = await datapacksDir(deps);

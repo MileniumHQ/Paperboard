@@ -192,11 +192,18 @@ export async function installModpack(
     software: ServerSoftwareType,
     deps: ModpackDeps,
 ): Promise<ModpackInstallOutcome> {
-    const projectId = assertModrinthId(input.projectId, "Project");
+    const requested = assertModrinthId(input.projectId, "Project");
     const versionId = assertModrinthId(input.versionId, "Version");
     const loader = modpackLoaderFor(software);
 
     return installPack(software, deps, async ({ stagingDir, staging, root, fs }) => {
+        // a block names the project by its id or by the name in its address: Modrinth says which project that is
+        const project = parseModrinthProject(
+            await deps.fetchJson<RawModrinthProject>(`${MODRINTH_API}/project/${encodeURIComponent(requested)}`),
+        );
+        if (project.projectId !== requested && project.slug.toLowerCase() !== requested.toLowerCase()) throw new Error("Modrinth answered with a different project");
+        if (project.projectType !== "modpack") throw new Error(`${project.title} is not a modpack`);
+        const projectId = project.projectId;
         const version = parseModrinthVersion(
             await deps.fetchJson<RawModrinthVersion>(`${MODRINTH_API}/version/${encodeURIComponent(versionId)}`),
         );
@@ -213,11 +220,6 @@ export async function installModpack(
         if (packFile.size !== null && packFile.size > MAX_MRPACK_BYTES) {
             throw new Error("This modpack's archive is over the 256 MiB limit");
         }
-        const project = parseModrinthProject(
-            await deps.fetchJson<RawModrinthProject>(`${MODRINTH_API}/project/${encodeURIComponent(projectId)}`),
-        );
-        if (project.projectId !== projectId) throw new Error("Modrinth answered with a different project");
-        if (project.projectType !== "modpack") throw new Error(`${project.title} is not a modpack`);
 
         await fs.mkdir(stagingDir, { recursive: true });
         const archiveRel = `${staging}/pack.mrpack`;

@@ -58,7 +58,7 @@ describe("modpack transactions", () => {
         expect(fs.readdirSync(mc.dir).filter((e) => e.startsWith(".modpack-"))).toEqual([]);
     });
 
-    test("a Modrinth pack is fetched by its version record and checked against both hashes", async () => {
+    test("a Modrinth pack, named by its id or the name in its address, is fetched by its version record and checked against both hashes", async () => {
         const mc = neoServer();
         const cdn = packCdn();
         const pack = Buffer.from(mrpack(packIndex([packFile(cdn, "mods/sodium.jar", "sodium")])));
@@ -73,7 +73,7 @@ describe("modpack transactions", () => {
                     game_versions: ["1.21.1"],
                     files: [{ url: "https://cdn.modrinth.com/data/pack.mrpack", filename: "pack.mrpack", primary: true, size: pack.length, hashes: { sha1: sha1(pack), sha512: sha512(pack) } }],
                 });
-            if (url.pathname === "/v2/project/PROJECT1") return Response.json({ id: "PROJECT1", slug: "test-pack", title: "Test Pack", project_type: "modpack" });
+            if (url.pathname === "/v2/project/PROJECT1" || url.pathname === "/v2/project/test-pack") return Response.json({ id: "PROJECT1", slug: "test-pack", title: "Test Pack", project_type: "modpack" });
             return new Response("not found", { status: 404 });
         });
         // the archive's exact bytes, beside the pack's files
@@ -81,7 +81,8 @@ describe("modpack transactions", () => {
         const deps = packDeps(mc, files, {
             fetchJson: async <T>(url: string) => (await (await fetch(url.replace(MODRINTH_API, `${modrinth.url}/v2`))).json()) as T,
         });
-        await installModpack({ projectId: "PROJECT1", versionId: "VERSION1" }, "neoforge", deps);
+        // a block names the project by the name in its Modrinth address
+        await installModpack({ projectId: "test-pack", versionId: "VERSION1" }, "neoforge", deps);
         expect(live(mc)["mods/sodium.jar"]).toBe("sodium");
         expect(mc.scope.server.settings.modpack).toMatchObject({ projectId: "PROJECT1", versionId: "VERSION1", slug: "test-pack" });
     });

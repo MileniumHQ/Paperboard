@@ -55,7 +55,7 @@ const version = (id: string, gameVersions: string[], files: unknown[], loaders =
 function datapackDeps(versions: unknown[]) {
     const modrinth = loopbackServer((_req, url) => {
         if (url.pathname === "/v2/project/PROJ1234/version") return Response.json(versions);
-        if (url.pathname === "/v2/project/PROJ1234") return Response.json({ id: "PROJ1234", slug: "terralith", title: "Terralith", project_type: "datapack" });
+        if (url.pathname === "/v2/project/PROJ1234" || url.pathname === "/v2/project/terralith") return Response.json({ id: "PROJ1234", slug: "terralith", title: "Terralith", project_type: "datapack" });
         return new Response("not found", { status: 404 });
     });
     const downloads: Record<string, unknown>[] = [];
@@ -107,9 +107,9 @@ describe("Modrinth downloads", () => {
         for (const id of ["../x", "a/b", "", "a b", "x?y=1"]) expect(() => assertModrinthId(id, "Project")).toThrow("is not a Modrinth id");
     });
 
-    test("a datapack install downloads the exact version's file with both of its hashes", async () => {
+    test("a datapack install, named by the name in its Modrinth address as a block names it, downloads the exact version's file with both of its hashes", async () => {
         const { deps, downloads } = datapackDeps([version("v121", ["1.21.1"], [file("terralith.zip", "pack")])]);
-        await installDatapack({ projectId: "PROJ1234" }, "1.21.1", deps);
+        await installDatapack({ projectId: "terralith" }, "1.21.1", deps);
         expect(downloads).toHaveLength(1);
         expect(downloads[0]).toMatchObject({
             url: "https://cdn.modrinth.com/data/x/terralith.zip",
