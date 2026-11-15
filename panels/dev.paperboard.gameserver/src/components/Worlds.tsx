@@ -1,38 +1,14 @@
-import {
-    createEffect,
-    createSignal,
-    For,
-    on,
-    onMount,
-    Show,
-} from "solid-js";
-import {
-    PaperBadge,
-    PaperButton,
-    PaperEffect,
-    PaperFlex,
-    PaperIcon,
-    PaperInput,
-    PaperList,
-    PaperListItem,
-    PaperModal,
-    PaperPageHeader,
-    PaperQuote,
-    PaperSettingList,
-    PaperTable,
-    PaperText,
-    PaperCard,
-    PaperAvatar,
-} from "@mileniumhq/paperui";
+import { createSignal, For } from "solid-js";
+import { PaperTable } from "@mileniumhq/paperui";
 import { fileApi } from "../lib/api";
 import { FieldItem } from "./PropertyFieldControl";
+import WorldsPage from "./WorldsPage";
 import { readServerPropertiesStrict, writeServerProperties } from "../lib/properties";
 import {
     deleteActiveWorldDirs,
     discardWorldTransfer,
     exportWorld,
     importWorld,
-    isWorldNameTaken,
     listWorlds,
     normalizeLevelType,
     setActiveWorld,
@@ -40,11 +16,9 @@ import {
     WORLD_NAME_PATTERN,
     type WorldInfo,
 } from "../lib/worlds";
-import { serverStatus } from "../lib/server";
 import { PANEL_ID } from "../service/contract";
-import { WORLD_TRANSFER_DIR, worldNameFromFile } from "../core/worldArchive";
-import { errorMessage, type Outcome } from "../lib/failure";
-import { keepUnchanged } from "../core/state";
+import { DIMENSION_SUFFIXES, WORLD_TRANSFER_DIR, worldNameFromFile } from "../core/worldArchive";
+import { errorMessage } from "../lib/failure";
 
 const ZIP_FILTERS = [{ name: "World zips", extensions: ["zip"] }];
 
@@ -56,558 +30,100 @@ function dimensionsLabel(info: WorldInfo): string {
     return parts.join(" · ");
 }
 
-function WorldTile(props: { active: boolean }) {
-    return (
-        <PaperAvatar
-            shape="square"
-            size="large"
-            fallbackIcon="public"
-            accent={props.active ? "success" : undefined}
-        />
-    );
-}
+// a level type as the select names it
+const shownValue = (key: string, raw: string) => (key === "level-type" ? normalizeLevelType(raw) : raw);
 
+const generated = (made: boolean) => (made ? "Generated" : "Not generated yet");
+
+/** Minecraft's worlds: each a level folder with its Nether and End beside it. */
 export default function Worlds() {
-    const [worlds, setWorlds] = createSignal<WorldInfo[] | null>(null);
-    const [listError, setListError] = createSignal("");
-
-    const [selected, setSelected] = createSignal<WorldInfo | null>(null);
-    const [createOpen, setCreateOpen] = createSignal(false);
-    const [newName, setNewName] = createSignal("world");
+    // New World's settings, as server.properties holds them when it opens
     const [createValues, setCreateValues] = createSignal<Record<string, string>>({});
-    const [createError, setCreateError] = createSignal("");
-    const [mutating, setMutating] = createSignal(false);
-    const [actionError, setActionError] = createSignal<Outcome | null>(null);
-    const [deleteConfirmOpen, setDeleteConfirmOpen] = createSignal(false);
-
-    const online = () => serverStatus() !== "offline";
-
-    // A listing failure keeps the last-known worlds on screen and shows the
-    // error: replacing them with [] would claim "no worlds yet" and would
-    // silently disable the duplicate check for the New World dialog.
-    const refresh = async () => {
-        try {
-            const next = await listWorlds();
-            // an unchanged world stays the row it is
-            setWorlds((prev) => keepUnchanged(prev, next));
-            setListError("");
-        } catch (err) {
-            console.error("[Worlds] Failed to list worlds:", err);
-            setListError(errorMessage(err));
-        }
-    };
-
-    onMount(async () => {
-        await refresh();
-        let props: Record<string, string>;
-        try {
-            props = await readServerPropertiesStrict();
-        } catch (err) {
-            // New World is never filled with defaults over unreadable settings
-            setActionError({ title: "Couldn't read server.properties", message: errorMessage(err) });
-            return;
-        }
-        const next: Record<string, string> = {};
-        for (const field of WORLD_CREATE_FIELDS) {
-            const raw = props[field.key] ?? field.defaultValue;
-            next[field.key] =
-                field.key === "level-type" ? normalizeLevelType(raw) : raw;
-        }
-        setCreateValues(next);
-    });
-
-    // refresh whenever the server starts or stops: dimension data and the
-    // active world's files change without any UI action, so the list keeps
-    // itself current — no Refresh button to forget to press.
-    createEffect(on(serverStatus, () => void refresh(), { defer: true }));
-
-    const createValue = (key: string, fallback: string) => {
-        const raw = createValues()[key] ?? fallback;
-        return key === "level-type" ? normalizeLevelType(raw) : raw;
-    };
-
-    const setCreateValue = (key: string, value: string) =>
-        setCreateValues((prev) => ({ ...prev, [key]: value }));
-
-    const nameValid = () => WORLD_NAME_PATTERN.test(newName().trim());
-
-    // Case-insensitive against every listed world (generated or pending).
-    // null means the listing is unavailable — the boundary then decides.
-    const nameTaken = () =>
-        isWorldNameTaken(
-            (worlds() ?? []).map((w) => w.name),
-            newName(),
-        );
-
-    const runActivate = async (name: string, seed?: string) => {
-        setMutating(true);
-        setActionError(null);
-        try {
-            await setActiveWorld(name, seed || undefined);
-            await refresh();
-            return true;
-        } catch (err) {
-            const message = errorMessage(err);
-            console.error(`[Worlds] Failed to activate "${name}":`, message);
-            setActionError({ title: "World not switched", message });
-            return false;
-        } finally {
-            setMutating(false);
-        }
-    };
-
-    const confirmSwitch = async () => {
-        const target = selected();
-        if (!target || target.active) return;
-        if (await runActivate(target.name)) setSelected(null);
-    };
-
-    const confirmDelete = async () => {
-        const target = selected();
-        setDeleteConfirmOpen(false);
-        if (!target) return;
-        setMutating(true);
-        setActionError(null);
-        try {
-            await deleteActiveWorldDirs(target.name);
-            setSelected(null);
-            await refresh();
-        } catch (err) {
-            const message = errorMessage(err);
-            console.error(`[Worlds] Failed to delete "${target.name}":`, message);
-            setActionError({ title: "World not deleted", message });
-        } finally {
-            setMutating(false);
-        }
-    };
-
-    const submitCreate = async () => {
-        if (!nameValid() || nameTaken() || worlds() === null || mutating()) return;
-        const name = newName().trim();
-        setCreateError("");
-        setMutating(true);
-        try {
-            try {
-                // generation settings land first; setActiveWorld then reads the
-                // merged file and writes level-name/level-seed on top
-                await writeServerProperties(createValues());
-            } catch (err) {
-                const message = errorMessage(err);
-                console.error("[Worlds] Failed to write generation settings:", message);
-                setCreateError(message);
-                return;
-            }
-            try {
-                // createOnly: the service refuses an existing name instead of
-                // degrading into a silent switch when the listing above was stale
-                await setActiveWorld(name, createValue("level-seed", "").trim() || undefined, true);
-            } catch (err) {
-                const message = errorMessage(err);
-                console.error(`[Worlds] Failed to create "${name}":`, message);
-                setCreateError(message);
-                return;
-            }
-            await refresh();
-            setCreateOpen(false);
-            setNewName("world");
-        } finally {
-            setMutating(false);
-        }
-    };
-
-    // download: the service zips the world, the page saves the zip, and
-    // the zip is removed again whatever the user chose
-    const [downloading, setDownloading] = createSignal(false);
-    const downloadWorld = async (name: string) => {
-        setDownloading(true);
-        setActionError(null);
-        let file: string | null = null;
-        try {
-            file = (await exportWorld(name)).file;
-            await fileApi.exportFile(`${WORLD_TRANSFER_DIR}/${file}`, PANEL_ID, { suggestedName: `${name}.zip`, filters: ZIP_FILTERS });
-        } catch (err) {
-            setActionError({ title: "World not downloaded", message: errorMessage(err) });
-        } finally {
-            if (file) {
-                await discardWorldTransfer(file).catch((err) =>
-                    setActionError({ title: "Cleanup incomplete", message: `The world's temporary zip could not be removed: ${errorMessage(err)}` }));
-            }
-            setDownloading(false);
-        }
-    };
-
-    // upload: the page brings the zip in, the user names the world, the
-    // service unpacks it into new folders. Nothing existing is replaced,
-    // so this works with the server running.
-    const [upload, setUpload] = createSignal<{ file: string } | null>(null);
-    const [uploadName, setUploadName] = createSignal("");
-    const [uploading, setUploading] = createSignal(false);
-    const takenNames = () => (worlds() ?? []).flatMap((w) => [w.name, `${w.name}_nether`, `${w.name}_the_end`]);
-    const uploadNameValid = () => WORLD_NAME_PATTERN.test(uploadName().trim()) && !isWorldNameTaken(takenNames(), uploadName());
-
-    const chooseUpload = async () => {
-        setActionError(null);
-        const file = `upload-${crypto.randomUUID()}.zip`;
-        try {
-            const result = await fileApi.importFile(`${WORLD_TRANSFER_DIR}/${file}`, PANEL_ID, { filters: ZIP_FILTERS });
-            if (result.status === "canceled") return;
-            setUploadName(worldNameFromFile(result.name, takenNames()));
-            setUpload({ file });
-        } catch (err) {
-            setActionError({ title: "World not uploaded", message: errorMessage(err) });
-        }
-    };
-
-    const cancelUpload = async () => {
-        const current = upload();
-        setUpload(null);
-        if (!current) return;
-        try {
-            await discardWorldTransfer(current.file);
-        } catch (err) {
-            setActionError({ title: "Cleanup incomplete", message: `The uploaded zip could not be removed: ${errorMessage(err)}` });
-        }
-    };
-
-    const submitUpload = async () => {
-        const current = upload();
-        if (!current || !uploadNameValid() || uploading()) return;
-        setUploading(true);
-        try {
-            await importWorld(current.file, uploadName().trim());
-            setUpload(null);
-            await refresh();
-        } catch (err) {
-            // the service removed the zip; choosing again starts over
-            setUpload(null);
-            setActionError({ title: "World not added", message: errorMessage(err) });
-        } finally {
-            setUploading(false);
-        }
-    };
-
-    const detail = () => {
-        const target = selected();
-        if (!target) return null;
-        return worlds()?.find((w) => w.name === target.name) ?? target;
-    };
-    // what the world modal shows: the last world it opened on, kept through
-    // the close fade so the modal doesn't empty out as it leaves
-    const [shown, setShown] = createSignal<ReturnType<typeof detail>>(null);
-    createEffect(() => { const world = detail(); if (world) setShown(world); });
+    const createValue = (key: string, fallback: string) => shownValue(key, createValues()[key] ?? fallback);
 
     return (
-        <>
-                    <PaperPageHeader icon="public" title="Worlds">
-                        <PaperButton onClick={() => void chooseUpload()}>
-                            <PaperIcon>upload</PaperIcon>
-                            Upload World
-                        </PaperButton>
-                        <PaperEffect variant="success">
-                            <PaperButton
-                                variant="success"
-                                disabled={online()}
-                                onClick={() => {
-                                    setCreateError("");
-                                    setCreateOpen(true);
-                                }}>
-                                <PaperIcon>add</PaperIcon>
-                                New World
-                            </PaperButton>
-                        </PaperEffect>
-                    </PaperPageHeader>
-                    <Show when={online()}>
-                        <PaperQuote variant="warning" icon="warning" title="Server running">
-                            Stop the server to switch, create, or delete worlds.
-                        </PaperQuote>
-                    </Show>
-                    <Show when={actionError()}>
-                        {(failure) => (
-                            <PaperQuote variant="danger" icon="warning" title={failure().title}>
-                                {failure().message}
-                            </PaperQuote>
-                        )}
-                    </Show>
-                    <Show when={listError()}>
-                        <PaperQuote variant="danger" icon="warning" title="Couldn't list the worlds">
-                            {listError()}
-                        </PaperQuote>
-                    </Show>
-
-                    <Show
-                        when={worlds() !== null}
-                        fallback={
-                            <PaperCard>
-                                <PaperFlex padding="full" center>
-                                    <PaperText size={3} color="text-subtle">
-                                        {listError()
-                                            ? "Couldn't load worlds."
-                                            : "Loading worlds..."}
-                                    </PaperText>
-                                </PaperFlex>
-                            </PaperCard>
-                        }
-                    >
-                        <Show
-                            when={(worlds() ?? []).length > 0}
-                            fallback={
-                                <PaperCard>
-                                    <PaperFlex padding="full" center>
-                                        <PaperText size={3} color="text-subtle">
-                                            {listError()
-                                                ? "Couldn't load worlds."
-                                                : "No worlds yet. Create one, or start the server to generate one."}
-                                        </PaperText>
-                                    </PaperFlex>
-                                </PaperCard>
-                            }
-                        >
-                            <PaperList
-                                name="worlds"
-                                value=""
-                                onValueChange={(name) => setSelected((worlds() ?? []).find((world) => world.name === name) ?? null)}
-                                buttons
-                                fullWidth
-                            >
-                                <For each={worlds() ?? []}>
-                                    {(world) => (
-                                        <PaperListItem
-                                            value={world.name}
-                                            icon={<WorldTile active={world.active} />}
-                                            description={dimensionsLabel(world)}
-                                            actions={world.active ? <PaperBadge variant="success">Active</PaperBadge> : undefined}
-                                        >
-                                            {world.name}
-                                        </PaperListItem>
-                                    )}
-                                </For>
-                            </PaperList>
-                        </Show>
-                    </Show>
-
-            <PaperModal
-                open={detail() !== null}
-                onClose={() => setSelected(null)}
-                title={shown()?.name ?? ""}
-                size="medium"
-                footer={
-                    <>
-                        <PaperButton onClick={() => setSelected(null)}>
-                            Close
-                        </PaperButton>
-                        <Show when={shown()?.generated}>
-                            <PaperButton
-                                disabled={downloading() || mutating()}
-                                onClick={() => { const name = shown()?.name; if (name) void downloadWorld(name); }}>
-                                <PaperIcon>download</PaperIcon>
-                                {downloading() ? "Zipping..." : "Download"}
-                            </PaperButton>
-                        </Show>
-                        <PaperButton
-                            variant="danger"
-                            disabled={online() || mutating()}
-                            onClick={() => setDeleteConfirmOpen(true)}>
-                            <PaperIcon>delete</PaperIcon>
-                            Delete
-                        </PaperButton>
-                        <Show when={!(shown()?.active ?? false)}>
-                            <PaperButton
-                                variant="success"
-                                disabled={online() || mutating()}
-                                onClick={() => void confirmSwitch()}>
-                                Switch to this world
-                            </PaperButton>
-                        </Show>
-                    </>
-                }
-            >
-                <Show when={shown()}>
-                    {(world) => (
-                        <PaperFlex direction="column" gap="full">
-                            <PaperFlex direction="row" gap="full" align="center">
-                                <WorldTile active={world().active} />
-                                <PaperFlex direction="column" gap="onefourth">
-                                    <Show
-                                        when={world().active}
-                                        fallback={
-                                            <PaperText size={3} color="text-subtle">
-                                                Inactive. Switching takes effect after a restart.
-                                            </PaperText>
-                                        }
-                                    >
-                                        <PaperBadge variant="success">Active world</PaperBadge>
-                                    </Show>
-                                    <PaperText size={3}>{dimensionsLabel(world())}</PaperText>
-                                </PaperFlex>
-                            </PaperFlex>
-                            <PaperTable>
-                                <tbody>
-                                    <tr>
-                                        <th>Overworld</th>
-                                        <td>
-                                            {world().generated
-                                                ? "Generated"
-                                                : "Not generated yet"}
-                                        </td>
-                                    </tr>
-                                    <tr>
-                                        <th>Nether</th>
-                                        <td>{world().hasNether ? "Generated" : "Not generated yet"}</td>
-                                    </tr>
-                                    <tr>
-                                        <th>End</th>
-                                        <td>{world().hasEnd ? "Generated" : "Not generated yet"}</td>
-                                    </tr>
-                                </tbody>
-                            </PaperTable>
-                        </PaperFlex>
-                    )}
-                </Show>
-            </PaperModal>
-
-            <PaperModal
-                open={upload() !== null}
-                onClose={() => { if (!uploading()) void cancelUpload(); }}
-                title="Add uploaded world"
-                size="small"
-                footer={
-                    <>
-                        <PaperButton variant="text" disabled={uploading()} onClick={() => void cancelUpload()}>
-                            Cancel
-                        </PaperButton>
-                        <PaperButton
-                            variant="success"
-                            disabled={!uploadNameValid() || uploading()}
-                            onClick={() => void submitUpload()}>
-                            {uploading() ? "Adding..." : "Add world"}
-                        </PaperButton>
-                    </>
-                }
-            >
-                <PaperFlex direction="column" gap="half">
-                    <PaperText size={3}>
-                        The world is added beside the others. Switch to it when the server is stopped.
-                    </PaperText>
-                    <PaperInput
-                        fullWidth
-                        label="World name"
-                        value={uploadName()}
-                        onInput={(e) => setUploadName(e.currentTarget.value)}
-                        onKeyDown={(e) => { if (e.key === "Enter") void submitUpload(); }}
-                    />
-                    <Show when={uploadName().trim() && !uploadNameValid()}>
-                        <PaperText size={2} color="danger">
-                            {isWorldNameTaken(takenNames(), uploadName())
-                                ? "A world already has this name."
-                                : "Use letters, numbers, - and _ only."}
-                        </PaperText>
-                    </Show>
-                </PaperFlex>
-            </PaperModal>
-
-            <PaperModal
-                open={createOpen()}
-                onClose={() => setCreateOpen(false)}
-                title="New World"
-                size="medium"
-                footer={
-                    <>
-                        <PaperButton variant="text" onClick={() => setCreateOpen(false)}>
-                            Cancel
-                        </PaperButton>
-                        <PaperButton
-                            variant="success"
-                            disabled={
-                                !nameValid() ||
-                                nameTaken() ||
-                                worlds() === null ||
-                                mutating()
-                            }
-                            onClick={() => void submitCreate()}>
-                            Create
-                        </PaperButton>
-                    </>
-                }
-            >
-                <PaperFlex direction="column" gap="full">
-                    <PaperFlex direction="column" gap="half">
-                        <PaperInput
-                            fullWidth
-                            label="World name"
-                            value={newName()}
-                            invalid={
-                                (newName().trim() !== "" && !nameValid()) ||
-                                nameTaken()
-                            }
-                            onInput={(e) => {
-                                setNewName(e.currentTarget.value);
-                                setCreateError("");
-                            }}
-                        />
-                        <Show when={nameTaken()}>
-                            <PaperText size={2} color="danger">
-                                There's already a world that's named this.
-                            </PaperText>
-                        </Show>
-                        <Show when={newName() && !nameValid() && !nameTaken()}>
-                            <PaperText size={2} color="text-subtle">
-                                Letters, numbers, _ and - only, starting with a letter or number.
-                            </PaperText>
-                        </Show>
-                        <Show when={worlds() === null && !listError()}>
-                            <PaperText size={2} color="text-subtle">
-                                Checking existing worlds...
-                            </PaperText>
-                        </Show>
-                        <Show when={createError()}>
-                            <PaperQuote variant="danger" icon="warning" title="World not created">
-                                {createError()}
-                            </PaperQuote>
-                        </Show>
-                    </PaperFlex>
-
-                        <PaperSettingList autoHeight>
-                            <For each={WORLD_CREATE_FIELDS}>
-                                {(field) => (
-                                    <FieldItem
-                                        field={field}
-                                        value={() => createValue(field.key, field.defaultValue)}
-                                        onUpdate={(value) => setCreateValue(field.key, value)}
-                                    />
-                                )}
-                            </For>
-                        </PaperSettingList>
-                </PaperFlex>
-            </PaperModal>
-
-            <PaperModal
-                open={deleteConfirmOpen()}
-                onClose={() => setDeleteConfirmOpen(false)}
-                title={`Delete world "${selected()?.name ?? ""}"`}
-                size="small"
-                footer={
-                    <>
-                        <PaperButton onClick={() => setDeleteConfirmOpen(false)}>
-                            Cancel
-                        </PaperButton>
-                        <PaperButton variant="danger" onClick={() => void confirmDelete()}>
-                            Delete
-                        </PaperButton>
-                    </>
-                }
-            >
-                <PaperText preset="body">
-                    This moves the overworld
-                    <Show when={selected()?.hasNether}> , nether</Show>
-                    <Show when={selected()?.hasEnd}> and end</Show> directories of
-                    "{selected()?.name}" to trash, including all builds and items
-                    in them.
-                    <Show when={selected()?.active}>
-                        {" "}This is the active world. The server will generate a
-                        fresh one on the next start.
-                    </Show>
-                </PaperText>
-            </PaperModal>
-        </>
+        <WorldsPage
+            list={listWorlds}
+            game={{
+                listName: "worlds",
+                title: (world) => world.name,
+                summary: dimensionsLabel,
+                details: (world) => (
+                    <PaperTable>
+                        <tbody>
+                            <tr>
+                                <th>Overworld</th>
+                                <td>{generated(world().generated)}</td>
+                            </tr>
+                            <tr>
+                                <th>Nether</th>
+                                <td>{generated(world().hasNether)}</td>
+                            </tr>
+                            <tr>
+                                <th>End</th>
+                                <td>{generated(world().hasEnd)}</td>
+                            </tr>
+                        </tbody>
+                    </PaperTable>
+                ),
+                // the service zips the world, the page saves the zip, and the
+                // zip is removed again whatever the person chose
+                download: async (world, warn) => {
+                    const { file } = await exportWorld(world.name);
+                    try {
+                        await fileApi.exportFile(`${WORLD_TRANSFER_DIR}/${file}`, PANEL_ID, { suggestedName: `${world.name}.zip`, filters: ZIP_FILTERS });
+                    } finally {
+                        await discardWorldTransfer(file).catch((err) =>
+                            warn({ title: "Cleanup incomplete", message: `The world's temporary zip could not be removed: ${errorMessage(err)}` }));
+                    }
+                },
+                switchTo: (world) => setActiveWorld(world.name),
+                remove: (world) => deleteActiveWorldDirs(world.name),
+                deleteNote: (world) =>
+                    `This moves the overworld${world.hasNether ? ", nether" : ""}${world.hasEnd ? " and end" : ""} directories of "${world.name}" to trash, including all builds and items in them.`,
+                // a world's Nether and End are folders of their own beside it
+                takenNames: (worlds) => worlds.flatMap((w) => DIMENSION_SUFFIXES.map((suffix) => `${w.name}${suffix}`)),
+                namePattern: WORLD_NAME_PATTERN,
+                nameHint: "Letters, numbers, _ and - only, starting with a letter or number.",
+                create: {
+                    defaultName: () => "world",
+                    // never filled with defaults over settings that can't be read
+                    load: async () => {
+                        const properties = await readServerPropertiesStrict();
+                        setCreateValues(Object.fromEntries(WORLD_CREATE_FIELDS.map((field) => [field.key, shownValue(field.key, properties[field.key] ?? field.defaultValue)])));
+                    },
+                    fields: () => (
+                        <For each={WORLD_CREATE_FIELDS}>
+                            {(field) => (
+                                <FieldItem
+                                    field={field}
+                                    value={() => createValue(field.key, field.defaultValue)}
+                                    onUpdate={(value) => setCreateValues((prev) => ({ ...prev, [field.key]: value }))}
+                                />
+                            )}
+                        </For>
+                    ),
+                    submit: async (name) => {
+                        // generation settings land first; setActiveWorld then reads the
+                        // merged file and writes level-name/level-seed on top
+                        await writeServerProperties(createValues());
+                        // createOnly: the service refuses an existing name instead of
+                        // degrading into a silent switch when the listing was stale
+                        await setActiveWorld(name, createValue("level-seed", "").trim() || undefined, true);
+                    },
+                },
+                // the page brings the zip in and the service unpacks it into new folders
+                upload: {
+                    choose: async (taken) => {
+                        const file = `upload-${crypto.randomUUID()}.zip`;
+                        const result = await fileApi.importFile(`${WORLD_TRANSFER_DIR}/${file}`, PANEL_ID, { filters: ZIP_FILTERS });
+                        return result.status === "canceled" ? null : { file, name: worldNameFromFile(result.name, taken) };
+                    },
+                    discard: discardWorldTransfer,
+                    add: importWorld,
+                    label: "World name",
+                },
+            }}
+        />
     );
 }
