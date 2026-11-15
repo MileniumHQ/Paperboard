@@ -46,7 +46,9 @@ export function createShellInvokeHandlers(deps: ShellHandlerDeps): CallHandlers<
         }),
 
         "computer-probe": ({ host, port }) => connectionPool.probe(host, port),
-        "computer-pair": ({ host, port, code, name }) => connectionPool.pairComputer(host, port, code, name),
+        // the shell goes to the computer it paired; its token and pinned
+        // certificate stay in main, which dials it
+        "computer-pair": async ({ host, port, code, name }) => ({ id: (await connectionPool.pairComputer(host, port, code, name)).id }),
         "computer-update": ({ id, name }) => connectionPool.renameComputer(id, name),
         "computer-remove": ({ id, evenIfUntold }) => connectionPool.unpairComputer(id, evenIfUntold === true),
         "computer-switch": ({ id }) => connectionPool.setActive(id),

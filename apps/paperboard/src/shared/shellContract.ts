@@ -126,8 +126,9 @@ export const SHELL_CALLS = {
     "computer-probe": { args: shape.object({ host: filled(), port }), answer: probeResult, browser: true },
     "computer-pair": {
         args: shape.object({ host: filled(), port, code: filled(), name: shape.optional(shape.text()) }),
-        // the computer it paired, which the shell goes to: an answer
-        // without one is said by the wizard
+        // the id of the computer it paired, which the shell goes to, and
+        // nothing more: the pairing's token stays in main. An answer
+        // without an id is said by the wizard
         answer: shape.object({ id: shape.optional(shape.text()) }),
         browser: true,
     },

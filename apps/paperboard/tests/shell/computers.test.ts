@@ -177,6 +177,11 @@ test("a panel file from a computer that can't be reached answers 502 with why", 
     expect(answer[1]).toMatch(/^\w+ could not be reached: Connection refused/);
 });
 
+// Inventory: Security — pairing answers the shell with the computer's id alone, never its token or certificate.
+test("pairing a computer answers the shell with its id and nothing else", () => {
+    expect(workshop.answer).toEqual({ id: workshop.id });
+});
+
 // Inventory: Security — the shell's computer list never carries a pairing's token or pinned certificate.
 test("the computer list the shell gets has no paired computer's token or certificate", async () => {
     const { result: listed } = await shell.page.evaluate<{ result: { computers: Record<string, unknown>[] } }>(

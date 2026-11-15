@@ -61,10 +61,11 @@ export interface Shell {
     daemon: Crane;
     /** a command for the shell host (host.main.ts); resolves to its answer */
     host<T = unknown>(command: Record<string, unknown>): Promise<T>;
-    /** pairs a second daemon as `name`, the way Add Computer does; returns its computer id and daemon.
+    /** pairs a second daemon as `name` through the shell's computer-pair call, as Add Computer does;
+     * returns its computer id, daemon, and the call's whole answer.
      * It listens on 127.0.0.2, so Paperboard dials it as another computer (TLS, pinned certificate),
      * not as this one; Linux routes all of 127/8 to loopback, which is where this suite runs. */
-    pairComputer(name: string): Promise<{ id: string; daemon: Crane }>;
+    pairComputer(name: string): Promise<{ id: string; daemon: Crane; answer: Record<string, unknown> }>;
     close(): Promise<void>;
 }
 
@@ -202,8 +203,9 @@ export async function bootShell(options: BootOptions = {}): Promise<Shell> {
             await page.waitFor(`document.querySelector("[role=radio][aria-label$='(127.0.0.1)']")`, "the shell to list this computer");
         }
 
+        let pairings = 0;
         const pairComputer = async (name: string) => {
-            const otherDir = path.join(root, `computer-${nextId}`);
+            const otherDir = path.join(root, `computer-${++pairings}`);
             fs.mkdirSync(otherDir);
             const other = await startCrane(binary, otherDir, "127.0.0.2");
             reaper.track();
@@ -226,10 +228,17 @@ export async function bootShell(options: BootOptions = {}): Promise<Shell> {
                 pairing.stdout!.on("data", read);
                 pairing.stderr!.on("data", read);
             });
-            const id = await host<string>({ cmd: "pair", host: "127.0.0.2", port: other.port, code, name });
+            const args = JSON.stringify({ args: { host: "127.0.0.2", port: other.port, code, name } });
+            const reply = await page.evaluate<{ ok: boolean; result?: Record<string, unknown>; error?: string }>(
+                `fetch("/_shell/invoke/computer-pair", { method: "POST", headers: { "Content-Type": "application/json" }, body: ${JSON.stringify(args)} }).then((r) => r.json())`,
+            );
+            if (!reply.ok || !reply.result) throw new Error(`Pairing ${name} failed: ${reply.error}`);
+            const answer = reply.result;
+            if (typeof answer.id !== "string") throw new Error(`Pairing ${name} answered no computer id: ${JSON.stringify(answer)}`);
+            const id = answer.id;
             if ((await paired) !== 0) throw new Error(`papercrane pair did not see the pairing:\n${said}`);
             await page.waitFor(`document.querySelector("[role=radio][aria-label='${name} (127.0.0.2)']")`, `${name} in the rail`);
-            return { id, daemon: other };
+            return { id, daemon: other, answer };
         };
 
         return { page, dataDir, daemon, host, pairComputer, close };

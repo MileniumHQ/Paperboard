@@ -166,7 +166,6 @@ type Command =
     | { cmd: "probes" }
     | { cmd: "hold-probe"; host: string }
     | { cmd: "release-probe"; host: string }
-    | { cmd: "pair"; host: string; port: number; code: string; name: string }
     | { cmd: "rename"; id: string; name: string }
     | { cmd: "fail-remove"; message: string }
     | { cmd: "set-permission"; panelId: string; permission: PanelPermission; answer: PermissionAnswer }
@@ -200,8 +199,6 @@ async function run(command: Command): Promise<unknown> {
             held.delete(command.host);
             return true;
         }
-        case "pair":
-            return (await connectionPool.pairComputer(command.host, command.port, command.code, command.name)).id;
         case "rename":
             // as another window of this app renaming it would: the change is pushed to every shell
             return connectionPool.renameComputer(command.id, command.name);
