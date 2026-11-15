@@ -7,7 +7,8 @@ import { gameServer, type GameServer } from "./helpers/game";
 import { freePort } from "./helpers/palworld";
 import { allowLoopbackSocket, installRust } from "./helpers/rust";
 import { PANEL_ID } from "../src/servers";
-import { CALLS } from "../src/service/contract";
+import { CALLS, TRIGGER_IDS } from "../src/service/contract";
+import { playerPoller } from "../src/games/serviceKit";
 import { sendServerCommand, startServerInstance, stopServerInstance } from "../src/service/lifecycle";
 import { argValue, rconPasswordRule, rustService } from "../src/games/rust/service";
 import { parseBanList, parseBansCfg, steamId } from "../src/games/rust/roster";
@@ -22,16 +23,17 @@ afterAll(async () => {
     await daemon?.stop();
 });
 
-async function rustServer(plan?: Record<string, unknown>): Promise<GameServer & { rconPort: number }> {
-    const rconPort = await freePort();
-    allowLoopbackSocket(rconPort);
+async function rustServer(plan?: Record<string, unknown>): Promise<GameServer & { readonly rconPort: number }> {
     const server = gameServer("rust", {
-        settings: { port: await freePort(), queryPort: await freePort(), rconPort, appPort: await freePort(), worldsize: 1000, seed: 12345 },
+        settings: { port: await freePort(), queryPort: await freePort(), rconPort: await freePort(), appPort: await freePort(), worldsize: 1000, seed: 12345 },
         state: rustService.initialState(),
     });
+    // the port the server was given: a start moves it when another program took it meanwhile
+    const rconPort = () => Number(server.scope.server.settings.rconPort);
+    allowLoopbackSocket(rconPort);
     installRust(server.dir, plan);
     await server.run(() => rustService.initialize(server.scope.ctx, false));
-    return Object.assign(server, { rconPort });
+    return Object.defineProperty(server as GameServer & { readonly rconPort: number }, "rconPort", { get: rconPort });
 }
 const call = async (server: GameServer, id: string, input: unknown = {}) => server.run(async () => (await rustService.calls())[id]!(server.scope.ctx, input));
 const vault = async (server: GameServer) => (await secretsApi.get(`${server.scope.server.id}-rust-rcon-password`, PANEL_ID)).value ?? "";
@@ -241,5 +243,23 @@ describe("Rust", () => {
         expect(() => parsePlayers('[{"DisplayName":"Ann"}]')).toThrow("without a Steam id or a name");
         expect(() => parsePlayers("Unknown command")).toThrow("not JSON");
         expect(() => parseInfo('{"Hostname":"x"}')).toThrow("has no MaxPlayers");
+    });
+
+    test("a players answer a newer one replaced is dropped: no rewound list, no repeated join or leave", async () => {
+        const server = gameServer("rust", { state: { ...rustService.initialState(), serverStatus: "online" } });
+        const answers: ((players: { steamId: string; name: string }[]) => void)[] = [];
+        const players = playerPoller({ game: "Rust", id: (p: { steamId: string; name: string }) => p.steamId, list: () => new Promise((resolve) => answers.push(resolve)), remember: async () => {} });
+        const ann = { steamId: BANNED, name: "Ann" };
+        // a slow poll is out when a kick asks again; the kick's answer comes first
+        const slow = server.run(() => players.poll(server.scope.ctx));
+        const fresh = server.run(() => players.poll(server.scope.ctx));
+        answers[1]!([ann]);
+        await fresh;
+        answers[0]!([]);
+        await slow;
+        expect(server.scope.ctx.state.onlinePlayers).toEqual(["Ann"]);
+        expect(server.scope.ctx.state.chatMessages.map((m) => m.text)).toEqual(["Ann joined the game"]);
+        expect(server.scope.triggers.map((t) => t.id)).toEqual([TRIGGER_IDS.playerJoined]);
+        server.run(() => players.stop());
     });
 });

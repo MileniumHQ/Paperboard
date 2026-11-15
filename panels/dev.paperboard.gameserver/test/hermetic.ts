@@ -112,6 +112,9 @@ const original = globalThis.WebSocket;
 // it, so no other daemon, the developer's included, is ever reachable.
 const ALLOWED = Symbol.for("paperboard.gameserver.test.daemonPorts");
 const allowedPorts: Set<number> = ((globalThis as any)[ALLOWED] ??= new Set<number>());
+// a port a test's own stand-in takes only once it starts, read when the socket opens
+const PORT_RULES = Symbol.for("paperboard.gameserver.test.portRules");
+const portRules: Set<() => number> = ((globalThis as any)[PORT_RULES] ??= new Set<() => number>());
 
 class NoNetworkWebSocket {
     constructor(url: string | URL, protocols?: string | string[]) {
@@ -120,7 +123,7 @@ class NoNetworkWebSocket {
             original &&
             target.protocol === "ws:" &&
             target.hostname === "127.0.0.1" &&
-            allowedPorts.has(Number(target.port))
+            (allowedPorts.has(Number(target.port)) || [...portRules].some((rule) => rule() === Number(target.port)))
         ) {
             return new original(target, protocols) as unknown as NoNetworkWebSocket;
         }

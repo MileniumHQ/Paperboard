@@ -12,11 +12,15 @@ import { writeTree } from "./tmp";
 
 export const RUST_BUILD = "26498655";
 
-/** lets this process open a WebSocket to a loopback port a test's own stand-in listens on */
-export function allowLoopbackSocket(port: number): void {
-    const allowed: Set<number> | undefined = (globalThis as any)[Symbol.for("paperboard.gameserver.test.daemonPorts")];
-    if (!allowed) throw new Error("test/hermetic.ts is not preloaded");
-    allowed.add(port);
+/**
+ * Lets this process open a WebSocket to the loopback port a test's own
+ * stand-in listens on, as `port()` names it when the socket opens: a port
+ * taken by then is moved to another by the Port API, and the rule follows it.
+ */
+export function allowLoopbackSocket(port: () => number): void {
+    const rules: Set<() => number> | undefined = (globalThis as any)[Symbol.for("paperboard.gameserver.test.portRules")];
+    if (!rules) throw new Error("test/hermetic.ts is not preloaded");
+    rules.add(port);
 }
 
 /** installs Rust into the server folder `dir`; `plan` is the stand-in's fake-rust.json */
