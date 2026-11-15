@@ -1,5 +1,5 @@
-import { createEffect, createSignal, For, on, onMount, Show } from "solid-js";
-import { createStore, reconcile } from "solid-js/store";
+import { createEffect, createMemo, createSignal, For, on, Show } from "solid-js";
+import { createStore } from "solid-js/store";
 import {
     PaperFlex,
     PaperButton,
@@ -13,6 +13,7 @@ import {
     showToast,
     type ActionFailure,
     createPaperCompact,
+    createRead,
 } from "@mileniumhq/paperui";
 import "@mileniumhq/paperui/style.css";
 import "@mileniumhq/paperui/panel.css";
@@ -32,16 +33,12 @@ import { createRenameTab } from "./RenameTab";
 import { ScreenMenu, ShellMenu, SplitMenu, TabMenu } from "./Menus";
 import { TabBar, Toolbar } from "./TabBar";
 import { SESSION_ERROR_TITLES, tabSessions, tabTitle } from "./lib/tabs";
-import type { LiveSession, SessionErrorKind, SessionErrors, SplitDirection, TabLayout, TerminalState, TerminalTab } from "./lib/contract";
+import type { SessionErrorKind, SplitDirection, TabLayout, TerminalState, TerminalTab } from "./lib/contract";
 
 
 export default function App() {
     const [activeTab, setActiveTab] = createSignal("");
     const [contextTabId, setContextTabId] = createSignal<string | null>(null);
-    const [hydration, setHydration] = createSignal<"loading" | "ready" | "failed">("loading");
-    const [hydrationError, setHydrationError] = createSignal("");
-    // the service answered, but could not read the saved tabs
-    const [tabsUnreadable, setTabsUnreadable] = createSignal(false);
     // a tab action the service refused: shown over the terminals until
     // dismissed, or until the next action replaces it
     const [failure, setFailure] = createSignal<ActionFailure | null>(null);
@@ -53,31 +50,27 @@ export default function App() {
     // it, so a tab opened, renamed, moved or closed anywhere shows up here.
     // Keyed by id, so a tab keeps its object (and its live terminal) across
     // updates instead of remounting. Which tab is shown stays per window.
-    const [mirror, setMirror] = createStore<{ tabs: TerminalTab[]; live: Record<string, LiveSession>; layout: TabLayout; sessionErrors: SessionErrors }>({
-        tabs: [],
-        live: {},
-        layout: "horizontal",
-        sessionErrors: {},
+    // A push joins a read still out, being newer than it.
+    const service = createRead(() => terminal.state.refresh(), {
+        follow: (land) =>
+            terminal.state.subscribe((full, patch) => {
+                land((prev) => prev && { ...prev, ...patch });
+                if (patch.live) attention.live(patch.live);
+                if (opened()) followShow(full.showTab);
+            }),
     });
-    const tabs = () => mirror.tabs;
+    const tabs = () => service.value()?.tabs ?? [];
+    const live = () => service.value()?.live ?? {};
+    // unavailable is not empty, and unreadable tabs are not empty either:
+    // no fresh tab opens over a service that did not answer, or over saved ones
+    const tabsError = () => service.value()?.tabsError || null;
+    const failed = () => (service.loading() ? null : service.error() ?? tabsError());
+    const opened = createMemo(() => Boolean(service.value()) && !service.error() && !tabsError());
     // on a phone the tabs are always along the top: a side list would take
     // most of the width, and split shells share the one screen
     const compact = createPaperCompact();
     const mobile = createPaperMobile();
-    const vertical = () => mirror.layout === "vertical" && !compact();
-    const applyTabs = (next: TerminalTab[] | undefined) => {
-        if (next) setMirror("tabs", reconcile(next, { key: "id" }));
-    };
-    const [saved, setSaved] = createStore<Pick<TerminalState, "savedCommands" | "commandRuns" | "savedCommandsError">>({
-        savedCommands: [],
-        commandRuns: {},
-        savedCommandsError: "",
-    });
-    const applySaved = (full: TerminalState) => {
-        setSaved("savedCommands", reconcile(full.savedCommands, { key: "id" }));
-        setSaved("commandRuns", reconcile(full.commandRuns));
-        setSaved("savedCommandsError", full.savedCommandsError);
-    };
+    const vertical = () => service.value()?.layout === "vertical" && !compact();
 
     // which of a split tab's two shells has the keyboard, per tab
     const [focusedPane, setFocusedPane] = createStore<Record<string, string>>({});
@@ -104,22 +97,13 @@ export default function App() {
     const [putAway, setPutAway] = createStore<Record<string, true>>({});
     const sessionErrors = () => {
         const session = currentSession();
-        return Object.entries(mirror.sessionErrors[session] ?? {})
+        return Object.entries(service.value()?.sessionErrors[session] ?? {})
             .map(([kind, message]) => [session, kind, message].join("\n"))
             .filter((key) => !putAway[key]);
     };
     const describeSessionError = (key: string) => {
         const [, kind, ...message] = key.split("\n");
         return { title: SESSION_ERROR_TITLES[kind as SessionErrorKind], message: message.join("\n") };
-    };
-    const applySessionErrors = (next: SessionErrors | undefined) => {
-        if (next) setMirror("sessionErrors", reconcile(next));
-    };
-
-    const applyLive = (next: Record<string, LiveSession> | undefined) => {
-        if (!next) return;
-        setMirror("live", reconcile(next));
-        attention.live(next);
     };
 
     // Show Tab (a block) switches every open window; a window follows each
@@ -130,15 +114,6 @@ export default function App() {
         followedShow = request.request;
         if (tabs().some((t) => t.id === request.id)) setActiveTab(request.id);
     };
-    terminal.state.subscribe((full, patch) => {
-        applyTabs(patch.tabs);
-        applyLive(patch.live);
-        applySessionErrors(patch.sessionErrors);
-        if (patch.layout) setMirror("layout", patch.layout);
-        applySaved(full);
-        if (hydration() === "ready") followShow(full.showTab);
-    });
-
     // the shells this computer has, for a new tab's menu
     const [shells, setShells] = createSignal<TerminalShell[]>([]);
     const loadShells = () =>
@@ -147,36 +122,22 @@ export default function App() {
             .then(setShells)
             .catch(report("Shells not listed", ". New tabs start with this computer's default shell."));
 
-    const hydrate = async () => {
-        setHydration("loading");
-        try {
-            const state = await terminal.state.refresh();
-            // unreadable is not empty either: no fresh tab opens over saved ones
-            setTabsUnreadable(Boolean(state.tabsError));
-            if (state.tabsError) throw new Error(state.tabsError);
-            applyTabs(state.tabs);
-            applyLive(state.live);
-            applySessionErrors(state.sessionErrors);
-            setMirror("layout", state.layout);
-            followedShow = state.showTab.request;
-            if (!activeTab()) setActiveTab(state.activeTabId || tabs()[0]?.id || "");
-            setHydration("ready");
+    // the service answered: this window opens on its tab, lists the
+    // computer's shells, and starts a shell when every tab is closed
+    createEffect(
+        on(opened, (now) => {
+            if (!now) return;
+            followedShow = service.value()!.showTab.request;
+            if (!activeTab()) setActiveTab(service.value()!.activeTabId || tabs()[0]?.id || "");
             void loadShells();
-            // opening the panel with every tab closed starts a shell
-            if (tabs().length === 0) await addTab();
-        } catch (err) {
-            // unavailable is not empty: never open a fresh tab over a
-            // service that did not answer
-            setHydrationError(errorMessage(err));
-            setHydration("failed");
-        }
-    };
-    onMount(() => void hydrate());
+            if (tabs().length === 0) void addTab();
+        }),
+    );
 
     // a tab closed in another window takes this window to a remaining one
     createEffect(
-        on([hydration, tabs, activeTab], ([state, list, active]) => {
-            if (state !== "ready") return;
+        on([opened, tabs, activeTab], ([ready, list, active]) => {
+            if (!ready) return;
             if (!list.some((t) => t.id === active)) setActiveTab(list[0]?.id ?? "");
         }),
     );
@@ -239,7 +200,7 @@ export default function App() {
         if (reordered.every((t, i) => t.id === current[i]?.id)) return;
         // shown at once; the service's order is the truth, so a failed
         // reorder pulls it back
-        setMirror("tabs", reordered);
+        service.set((prev) => prev && { ...prev, tabs: reordered });
         setFailure(null);
         terminal.calls
             .reorderTabs({ orderedIds: reordered.map((t) => t.id) })
@@ -270,9 +231,10 @@ export default function App() {
         setFailure(null);
         const next: TabLayout = vertical() ? "horizontal" : "vertical";
         // shown at once; the service's layout is the truth
-        setMirror("layout", next);
+        const setLayout = (layout: TabLayout) => service.set((prev) => prev && { ...prev, layout });
+        setLayout(next);
         terminal.calls.setTabLayout({ layout: next }).catch((err) => {
-            setMirror("layout", next === "vertical" ? "horizontal" : "vertical");
+            setLayout(next === "vertical" ? "horizontal" : "vertical");
             report("Layout not saved")(err);
         });
     };
@@ -331,7 +293,7 @@ export default function App() {
         const tab = contextTab();
         setContextTabId(null);
         // what the tab shows: a tab that was never named is called by its program, and that is the name to start from
-        if (tab) rename.open(tab.id, tab.named ? tab.label : tabTitle(tab, mirror.live, tab.id));
+        if (tab) rename.open(tab.id, tab.named ? tab.label : tabTitle(tab, live(), tab.id));
     };
 
     // the screen of one shell in a tab; a split's second shell keeps a floor
@@ -380,7 +342,7 @@ export default function App() {
                         <PaperFlex flex minWidth={0} minHeight={0}>
                             <TabBar
                                 tabs={tabs()}
-                                live={mirror.live}
+                                live={live()}
                                 vertical={vertical()}
                                 value={currentSession()}
                                 status={attention.status}
@@ -427,22 +389,22 @@ export default function App() {
                     </Show>
                     {find.bar}
                     <PaperFlex fullWidth flex minHeight={0} overflow="hidden" class={styles.stack}>
-                        <Show when={hydration() === "failed"}>
+                        <Show when={failed()}>
                             <PaperFlex fullWidth fullHeight align="center" justify="center">
                                 <PaperEmptyState
-                                    icon={tabsUnreadable() ? "error" : "cloud_off"}
-                                    title={tabsUnreadable() ? "Your tabs couldn't be read" : "The terminal service is not answering"}
-                                    description={hydrationError()}
+                                    icon={tabsError() ? "error" : "cloud_off"}
+                                    title={tabsError() ? "Your tabs couldn't be read" : "The terminal service is not answering"}
+                                    description={failed()!}
                                 >
-                                    <Show when={!tabsUnreadable()}>
-                                        <PaperButton variant="primary" onClick={() => void hydrate()}>
+                                    <Show when={!tabsError()}>
+                                        <PaperButton variant="primary" onClick={() => void service.reload()}>
                                             <PaperIcon>refresh</PaperIcon> Try again
                                         </PaperButton>
                                     </Show>
                                 </PaperEmptyState>
                             </PaperFlex>
                         </Show>
-                        <Show when={hydration() === "ready" && tabs().length === 0}>
+                        <Show when={opened() && tabs().length === 0}>
                             <PaperFlex fullWidth fullHeight align="center" justify="center">
                                 <PaperEmptyState
                                     icon="terminal"
@@ -535,7 +497,7 @@ export default function App() {
             />
             <SplitMenu state={splitMenu} onSplit={(direction) => split(activeTab(), direction)} />
             <ShellMenu state={shellMenu} shells={shells()} onPick={(path) => void addTab(path)} />
-            <SavedCommands menu={savedMenu} commands={saved.savedCommands} runs={saved.commandRuns} loadError={saved.savedCommandsError} />
+            <SavedCommands menu={savedMenu} commands={service.value()?.savedCommands ?? []} runs={service.value()?.commandRuns ?? {}} loadError={service.value()?.savedCommandsError ?? ""} />
             {pasteConfirm.modal}
             {rename.modal}
         </>

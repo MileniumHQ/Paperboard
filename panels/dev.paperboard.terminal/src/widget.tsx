@@ -3,7 +3,6 @@
 // to run and shows the exit the daemon reported, never one it expected.
 import { render } from "solid-js/web";
 import { createSignal, onCleanup, Show, Switch, Match } from "solid-js";
-import { createStore, reconcile } from "solid-js/store";
 import {
     PaperButton,
     PaperIcon,
@@ -11,12 +10,13 @@ import {
     PaperWidget,
     PaperWidgetMessage,
     PaperWidgetStat,
+    createRead,
     type PaperRole,
 } from "@mileniumhq/paperui";
 import { defineWidgets, serviceClient, type WidgetContext, errorMessage } from "@mileniumhq/paperapi";
 import "@mileniumhq/paperui/style.css";
 import "./widget.css";
-import { terminalContract, type CommandRun, type TerminalState } from "./lib/contract";
+import { terminalContract, type CommandRun } from "./lib/contract";
 import { describeRun, runErrorStands, type RunTone } from "./lib/runStatus";
 import { createAgoClock } from "./lib/clock";
 
@@ -32,10 +32,6 @@ function PinnedCommand(props: { widget: WidgetContext }) {
     const commandId = () => props.widget.options.command ?? "";
     // each widget mirrors the service's state for as long as it is shown
     const terminal = serviceClient(terminalContract);
-    // reconciled, so a push that changes nothing here (a shell's folder) notifies nothing
-    const [state, setState] = createStore<TerminalState>(terminal.state.current());
-    const [hydration, setHydration] = createSignal<"loading" | "ready" | "failed">("loading");
-    const [hydrationError, setHydrationError] = createSignal("");
     const [runError, setRunError] = createSignal("");
     const [starting, setStarting] = createSignal(false);
     const [visible, setVisible] = createSignal(props.widget.visible());
@@ -45,32 +41,24 @@ function PinnedCommand(props: { widget: WidgetContext }) {
 
     // the run a failed press started from; its error stands while that run does
     let pressedFrom: CommandRun | undefined;
-    const offState = terminal.state.subscribe((full) => {
-        setState(reconcile(full));
-        if (runError() && !runErrorStands(pressedFrom, full.commandRuns[commandId()])) setRunError("");
+    // reconciled, so a push that changes nothing here (a shell's folder)
+    // notifies nothing; a push joins a read still out, being newer than it
+    const read = createRead(() => terminal.state.refresh(), {
+        follow: (land) =>
+            terminal.state.subscribe((full, patch) => {
+                land((prev) => prev && { ...prev, ...patch });
+                if (runError() && !runErrorStands(pressedFrom, full.commandRuns[commandId()])) setRunError("");
+            }),
     });
-
-    const hydrate = async () => {
-        setHydration("loading");
-        try {
-            setState(reconcile(await terminal.state.refresh()));
-            setHydration("ready");
-        } catch (err) {
-            // unavailable is not "no such command"
-            setHydrationError(errorMessage(err));
-            setHydration("failed");
-        }
-    };
-    void hydrate();
+    const state = () => read.value();
 
     onCleanup(() => {
         offVisible();
-        offState();
         terminal.state.dispose();
     });
 
-    const command = () => state.savedCommands.find((c) => c.id === commandId());
-    const run = () => state.commandRuns[commandId()];
+    const command = () => state()?.savedCommands.find((c) => c.id === commandId());
+    const run = () => state()?.commandRuns[commandId()];
     const status = () => describeRun(run(), now());
     const running = () => run()?.state === "running";
 
@@ -104,12 +92,13 @@ function PinnedCommand(props: { widget: WidgetContext }) {
 
     return (
         <Switch>
-            <Match when={hydration() === "failed"}>
-                {notice("Terminal not answering", hydrationError(), "danger", () => void hydrate(), "Retry")}
+            {/* unavailable is not "no such command"; Retry shows the read going out */}
+            <Match when={!read.loading() && read.error()}>
+                {(why) => notice("Terminal not answering", why(), "danger", () => void read.reload(), "Retry")}
             </Match>
-            <Match when={hydration() === "loading"}>{notice("Loading…", "", undefined)}</Match>
-            <Match when={state.savedCommandsError}>
-                {notice("Saved commands unreadable", state.savedCommandsError, "danger", () => props.widget.openPanel(), "Open")}
+            <Match when={!state()}>{notice("Loading…", "", undefined)}</Match>
+            <Match when={state()?.savedCommandsError}>
+                {(why) => notice("Saved commands unreadable", why(), "danger", () => props.widget.openPanel(), "Open")}
             </Match>
             <Match when={!command()}>
                 {notice("Command removed", "It is no longer saved in Terminal; open the panel to pin another", "warning", () => props.widget.openPanel(), "Open")}
