@@ -96,6 +96,31 @@ describe("a .deb or .rpm Paperboard updates itself", () => {
         await expect(u.install()).rejects.toThrow("No app update has been downloaded");
     });
 
+    test("a package changed after its check is refused before root installs it, and downloads again", async () => {
+        // a pkexec of the test's own that says whether it ran
+        const bin = path.join(dir, "bin");
+        const ran = path.join(dir, "pkexec-ran");
+        fs.mkdirSync(bin);
+        fs.writeFileSync(path.join(bin, "pkexec"), `#!/bin/sh\ntouch ${JSON.stringify(ran)}\n`, { mode: 0o755 });
+        const previousPath = process.env.PATH;
+        process.env.PATH = `${bin}${path.delimiter}${previousPath}`;
+        try {
+            const { updater: u } = updater();
+            await (await u.checkForUpdates()).downloadPromise;
+            // another program of this user swaps the waiting package
+            fs.writeFileSync(path.join(dir, "downloads", FILE), "something else");
+            await expect(u.install()).rejects.toThrow("changed since it was checked");
+            expect(fs.existsSync(ran)).toBe(false);
+            expect(fs.readdirSync(path.join(dir, "downloads"))).toEqual([]);
+            await (await u.checkForUpdates()).downloadPromise;
+            expect(packageRequests).toBe(2);
+            await u.install();
+            expect(fs.existsSync(ran)).toBe(true);
+        } finally {
+            process.env.PATH = previousPath;
+        }
+    });
+
     test("a download cut off, or one the disk can't take, fails at once and leaves nothing behind", async () => {
         // the connection drops halfway through the package
         server.removeAllListeners("request");

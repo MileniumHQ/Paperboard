@@ -6,7 +6,9 @@
 // desktop's software center does.
 //
 // The package is checked against the release's SHA256SUMS (the list the
-// install scripts read, packages/crane-launcher/install) before it is kept.
+// install scripts read, packages/crane-launcher/install) before it is kept,
+// and again right before root installs it: it waits in a folder this user
+// can write to.
 import { EventEmitter } from "node:events";
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
@@ -68,7 +70,7 @@ export interface LinuxPackageUpdaterOptions {
 
 export class LinuxPackageUpdater extends EventEmitter {
     private request: AbortController | null = null;
-    private downloaded: { file: string; version: string } | null = null;
+    private downloaded: { file: string; version: string; sha256: string } | null = null;
 
     constructor(private readonly opts: LinuxPackageUpdaterOptions) {
         super();
@@ -148,16 +150,24 @@ export class LinuxPackageUpdater extends EventEmitter {
             throw err;
         }
         fs.renameSync(partial, target);
-        this.downloaded = { file: target, version };
+        this.downloaded = { file: target, version, sha256: expected };
         this.emit("update-downloaded", { version });
     }
 
     /** Installs the downloaded package; resolves once it is installed. */
-    install(): Promise<void> {
+    async install(): Promise<void> {
         const downloaded = this.downloaded;
-        if (!downloaded) return Promise.reject(new Error("No app update has been downloaded"));
+        if (!downloaded) throw new Error("No app update has been downloaded");
         const command = packageInstallCommand(this.opts.type, downloaded.file, this.opts.which);
-        if (!command) return Promise.reject(new Error(`This computer has no way to install a .${this.opts.type} package itself`));
+        if (!command) throw new Error(`This computer has no way to install a .${this.opts.type} package itself`);
+        const hash = createHash("sha256");
+        await pipeline(fs.createReadStream(downloaded.file), hash);
+        const actual = hash.digest("hex");
+        if (actual !== downloaded.sha256) {
+            this.downloaded = null;
+            fs.rmSync(downloaded.file, { force: true });
+            throw new Error(`The update wasn't installed: the downloaded ${path.basename(downloaded.file)} changed since it was checked (expected ${downloaded.sha256}, got ${actual}). It will download again.`);
+        }
         const [bin, ...args] = command as [string, ...string[]];
         return new Promise((resolve, reject) => {
             const child = spawn(bin, args, { stdio: ["ignore", "ignore", "pipe"] });
