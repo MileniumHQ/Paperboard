@@ -23,7 +23,7 @@ import { scriptFor } from "./script";
 import { SEARCH_MODELS_FROM, createModels, harnessDescription, harnessName, loadedModels } from "../lib/brains";
 import BrainLogo from "../lib/BrainLogo";
 import { SetupProgress } from "../computer/Computer";
-import { DEFAULT_MODEL, HARNESSES, LIMITS, characterOf, type Harness } from "../contract";
+import { DEFAULT_MODEL, HARNESSES, LIMITS, ONBOARDING_STEP, characterOf, type Harness } from "../contract";
 import type { Agent } from "../lib/agent";
 import { BrainButtons, BrainStatus, brainLine, createBrainActions } from "../settings/Brain";
 import Providers from "../settings/Providers";
@@ -36,8 +36,7 @@ import styles from "./Onboarding.module.css";
 // Choosing a brain and pressing Next is all it takes: the next step installs
 // it and opens its sign-in.
 
-// the last step is the answer to the computer: setting it up, or not yet
-const STEP = { name: 0, brain: 1, signIn: 2, model: 3, computer: 4, last: 5 } as const;
+const STEP = ONBOARDING_STEP;
 
 /**
  * onSaving: the settings are about to be saved, so this window keeps the
@@ -74,9 +73,11 @@ function Flow(props: { agent: Agent; onSaving: () => void; onDone: () => void })
     onCleanup(face.dispose);
     const speaker = createSpeaker(face);
 
-    const [name, setName] = createSignal("");
-    const [harness, setHarness] = createSignal<Harness>();
-    const [model, setModel] = createSignal<string>();
+    // a meeting left part way is picked up where it was, with its answers
+    const kept = props.agent.state.onboarding;
+    const [name, setName] = createSignal(kept.name);
+    const [harness, setHarness] = createSignal<Harness | undefined>(kept.harness ?? undefined);
+    const [model, setModel] = createSignal<string | undefined>(kept.model ?? undefined);
     const [computer, setComputer] = createSignal<"setup" | "later">();
 
     // saving belongs to the service: an error here is its answer, shown with a way to try again
@@ -124,6 +125,7 @@ function Flow(props: { agent: Agent; onSaving: () => void; onDone: () => void })
                 setModel={setModel}
                 computer={computer}
                 setComputer={setComputer}
+                keptStep={kept.step}
                 save={save}
                 saving={saving}
                 saveError={saveError}
@@ -148,12 +150,16 @@ function Scenes(props: {
     setModel: Setter<string | undefined>;
     computer: Getter<"setup" | "later" | undefined>;
     setComputer: Setter<"setup" | "later">;
+    /** the step a meeting left part way was on */
+    keptStep: number;
     save: () => Promise<boolean>;
     saving: Getter<boolean>;
     saveError: Getter<string | null>;
     onDone: () => void;
 }) {
     const wizard = useWizard()!;
+    // before any scene plays, so the kept step's is the first
+    wizard.setCurrentStep(Math.min(props.keptStep, STEP.computer));
     const name = () => props.name().trim();
     const machine = () => props.agent.state.computer;
 
@@ -285,6 +291,26 @@ function Scenes(props: {
             setRevealed(false);
             void scenes[step]?.().then((finished) => finished && setRevealed(true));
         }),
+    );
+
+    // every answer is kept with the service until the settings are saved, so
+    // leaving the panel part way doesn't start the meeting over; the newest
+    // answer's failure is the one shown
+    const [keepError, setKeepError] = createSignal<string | null>(null);
+    let keeping = 0;
+    createEffect(
+        on(
+            [wizard.currentStep, props.name, props.harness, props.model],
+            ([step, typed, h, m]) => {
+                if (step > STEP.computer) return;
+                const mine = ++keeping;
+                props.agent.calls.keepOnboarding({ step, name: typed, harness: h ?? null, model: m ?? null }).then(
+                    () => mine === keeping && setKeepError(null),
+                    (e) => mine === keeping && setKeepError(errorMessage(e)),
+                );
+            },
+            { defer: true },
+        ),
     );
 
     // the speaker glides when a step's content re-centers the column, instead of jumping
@@ -464,6 +490,11 @@ function Scenes(props: {
                     </Show>
                 </Show>
             </PaperWizardStep>
+            <Show when={keepError()}>
+                <PaperQuote variant="danger" icon="error" title="Your answers so far aren't kept" role="alert">
+                    {keepError()}
+                </PaperQuote>
+            </Show>
             <div class={styles.below} />
             <Providers agent={props.agent} open={providers()} onClose={() => setProviders(false)} />
         </div>

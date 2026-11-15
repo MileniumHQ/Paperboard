@@ -5,7 +5,7 @@
 // conversation as entry events plus a history call.
 
 import path from "node:path";
-import { DEFAULT_MODEL, HARNESSES, TRIGGER_IDS, parseSettings, type AiState, type Harness, type Settings, type agentsContract } from "../contract";
+import { DEFAULT_MODEL, HARNESSES, LIMITS, NO_ONBOARDING, ONBOARDING_STEP, TRIGGER_IDS, parseSettings, type AiState, type OnboardingDraft, type Harness, type Settings, type agentsContract } from "../contract";
 import { HomeFolder, moveHomeFolder } from "./homeFolder";
 import { Checkpoints } from "./checkpoints";
 import { shellToolset } from "./shell";
@@ -383,10 +383,19 @@ export class AiApp {
             throw new Error(`${HARNESS_NAMES[settings.harness]} isn't ready: ${brain.installed ? "sign in to it first" : "install it first"}`);
         }
         await this.host.writeSettings(settings);
-        this.ctx.setState({ settings });
+        this.ctx.setState({ settings, onboarding: NO_ONBOARDING });
         this.blocks.announce("current-brain");
         this.blocks.announce("current-model");
         return { saved: true };
+    }
+
+    /** The first meeting's answers so far: the page that left picks them up when it opens again. */
+    keepOnboarding(draft: OnboardingDraft) {
+        if (this.ctx.state.settings) throw new Error("the agent is already set up");
+        if (!Number.isInteger(draft.step) || draft.step < 0 || draft.step > ONBOARDING_STEP.computer) throw new Error(`step ${draft.step} isn't one the first meeting picks up at`);
+        if (draft.name.length > LIMITS.name) throw new Error(`names are limited to ${LIMITS.name} characters`);
+        if (draft.model !== null && draft.model.length > LIMITS.model) throw new Error(`models are limited to ${LIMITS.model} characters`);
+        this.ctx.setState({ onboarding: { step: draft.step, name: draft.name, harness: draft.harness, model: draft.model } });
     }
 
     /** The settings live in the panel's config document; none yet is a fresh install. One that won't read is never taken for none. */

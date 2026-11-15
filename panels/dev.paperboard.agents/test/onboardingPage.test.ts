@@ -88,4 +88,34 @@ describe("the first meeting", () => {
         expect(await page.evaluate(`Boolean(${SAVE_ERROR})`)).toBe(false);
         expect(page.exceptions).toEqual([]);
     });
+
+    test("left part way, it's picked up at the same step with the same answers", async () => {
+        panel = await bootPanel({ codexOnPath: { signedIn: true, chosen: true, plan: MODELS } });
+        const page = await panel.open();
+        await page.send("Emulation.setEmulatedMedia", { features: [{ name: "prefers-reduced-motion", value: "reduce" }] });
+        const url = await page.evaluate<string>("location.href");
+        await page.navigate(url);
+        await page.waitFor(`document.querySelector('input[placeholder="Name"]')`, "the name step");
+        await page.type('input[placeholder="Name"]', "Quill");
+        await next(page, "the name step's Next");
+        await choose(page, "harness", "codex");
+        // the panel is left, and opened again
+        await page.settled();
+        await page.navigate(url);
+        await page.waitFor(`document.querySelector('input[name="harness"][value="codex"]')?.checked`, "the brain step, Codex still chosen");
+        expect(await page.evaluate<string>(`document.querySelector('[aria-live="polite"]').innerText`)).toContain("Quill it is!");
+        expect(await page.evaluate(`Boolean(document.querySelector('input[placeholder="Name"]'))`)).toBe(false);
+
+        // and it goes on from there to the end, saving what was kept
+        await next(page, "the brain step's Next");
+        await next(page, "Codex ready");
+        await choose(page, "model", DEFAULT_MODEL);
+        await next(page, "the model step's Next");
+        await choose(page, "computer", "later");
+        await next(page, "the computer step's Next");
+        await next(page, "Let's chat");
+        await panel.settingsSaved({ ...SAVED, name: "Quill" });
+        await page.waitFor(`document.querySelector('[aria-label="Quill: computer and settings"]')`, "the chat");
+        expect(page.exceptions).toEqual([]);
+    });
 });

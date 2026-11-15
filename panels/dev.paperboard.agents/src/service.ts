@@ -75,6 +75,7 @@ const ready =
 
 const calls: CallHandlers<typeof agentsContract> = {
     setup: ready(async (i) => void (await app.setup(i))),
+    keepOnboarding: ready((i) => void app.keepOnboarding(i)),
     installBrain: ready(async (i) => void (await app.installBrain(i))),
     signInBrain: ready(async (i) => void (await app.signInBrain(i))),
     brainCode: ready(async (i) => void (await app.brainCode(i))),

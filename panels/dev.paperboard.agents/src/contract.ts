@@ -462,9 +462,23 @@ const chatState = object({
 });
 export type ChatState = Infer<typeof chatState>;
 
+/** The first meeting's steps; the last is the answer to the computer: setting it up, or not yet. */
+export const ONBOARDING_STEP = { name: 0, brain: 1, signIn: 2, model: 3, computer: 4, last: 5 } as const;
+
+/**
+ * How far the first meeting got before its settings were saved: the step and
+ * what was answered, so leaving the panel and coming back picks it up there.
+ * Kept by the service while it runs; saving the settings clears it. The last
+ * step saves, so the computer's step is the furthest one picked up.
+ */
+const onboardingDraft = object({ step: number(), name: text(), harness: nullable(harness), model: nullable(text()) });
+export type OnboardingDraft = Infer<typeof onboardingDraft>;
+export const NO_ONBOARDING: OnboardingDraft = { step: 0, name: "", harness: null, model: null };
+
 const aiState = object({
     /** null until onboarding has saved them */
     settings: nullable(settings),
+    onboarding: onboardingDraft,
     brains: object({ codex: brainState, "claude-code": brainState, opencode: brainState }),
     computer: computerState,
     chat: chatState,
@@ -643,6 +657,7 @@ const NO_BRAIN: BrainState = { phase: "none", installed: false, version: null, s
 
 export const DEFAULT_STATE: AiState = {
     settings: null,
+    onboarding: NO_ONBOARDING,
     brains: { codex: { ...NO_BRAIN }, "claude-code": { ...NO_BRAIN }, opencode: { ...NO_BRAIN } },
     computer: { phase: "none", installed: false, steps: [], error: null, userControl: false },
     chat: { busy: false, typing: false, waiting: [], compacting: false },
@@ -666,6 +681,8 @@ export const agentsContract = defineContract(PANEL_ID, {
     calls: {
         // onboarding and settings: the settings are saved whole
         setup: { input: object({ settings }), output: nothing() },
+        /** the first meeting's answers so far, kept until the settings are saved */
+        keepOnboarding: { input: onboardingDraft, output: nothing() },
         // the brains (Codex, Claude, OpenCode): install one (the one found on the computer, or its own package), sign in to it, sign out, stop a sign-in
         installBrain: { input: object({ harness, from: optional(oneOf("computer", "package")) }), output: nothing() },
         signInBrain: { input: object({ harness, method: optional(oneOf("browser", "code")) }), output: nothing() },
