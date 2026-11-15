@@ -71,7 +71,7 @@ describe("saved commands in the panel", () => {
             served.stop();
         }
     });
-    test("a failed run shows what it printed, an unnamed command is said once, and the field's placeholder is its type", async () => {
+    test("a failed run shows what it printed, an unnamed command is said once, and a labelled field doesn't repeat its label as a placeholder", async () => {
         await panelFiles({ "tabs.json": TABS });
         await startService();
         const command = "echo before-the-error; ls /nonexistent-qa";
@@ -83,7 +83,7 @@ describe("saved commands in the panel", () => {
             await page.click('button[aria-label="Saved commands"]');
             await page.clickText("[role=menuitem]", "Manage saved commands");
             await page.waitFor(dialog, "the modal");
-            expect(await page.evaluate<string[]>(`[...${dialog}.querySelectorAll("input")].map((i) => i.placeholder)`)).toContain("Command");
+            expect(await page.evaluate<string[]>(`[...${dialog}.querySelectorAll("input")].map((i) => i.placeholder).filter(Boolean)`)).toEqual([]);
             expect(await page.evaluate<boolean>(`[...${dialog}.querySelectorAll("input")].some((i) => i.placeholder === "git pull")`)).toBe(false);
             // the row names the command once
             const row = `${dialog}.querySelector('[data-value="${id}"]')`;

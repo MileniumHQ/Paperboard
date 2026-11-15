@@ -5,6 +5,7 @@ import { For, Show } from "solid-js";
 import { PaperButton, PaperFlex, PaperIcon, PaperList, PaperListItem, type LoaderStatus } from "@mileniumhq/paperui";
 import type { MenuState } from "./Menus";
 import { shortTitle, tabTitle } from "./lib/tabs";
+import styles from "./Terminal.module.css";
 import type { LiveSession, TerminalSession, TerminalTab } from "./lib/contract";
 
 export function TabBar(props: {
@@ -25,6 +26,7 @@ export function TabBar(props: {
     return (
         <PaperList
             reorderable
+            class={props.vertical ? undefined : styles.tabs}
             compact={props.vertical}
             direction={props.vertical ? "vertical" : "horizontal"}
             name="terminal-tabs"

@@ -237,7 +237,6 @@ function SavedCommandsModal(props: {
                         <PaperInput
                             fullWidth
                             label="Command"
-                            placeholder="Command"
                             value={command()}
                             onInput={(e) => setCommand(e.currentTarget.value)}
                             onKeyDown={(e) => {

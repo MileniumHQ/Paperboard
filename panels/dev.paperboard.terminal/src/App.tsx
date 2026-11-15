@@ -296,19 +296,18 @@ export default function App() {
         if (tab) rename.open(tab.id, tab.named ? tab.label : tabTitle(tab, live(), tab.id));
     };
 
+    // a split's shells sit side by side, or stack when asked to or when the
+    // panel is too narrow to share its width
+    const directionOf = (tab: TerminalTab) => (compact() || tab.split?.direction === "down" ? "column" : "row");
     // the screen of one shell in a tab; a split's second shell keeps a floor
     // so dragging the line can't close it
-    // On a phone only the shell with the keyboard shows (the tab list lists
-    // both): it stays mounted when hidden, as every screen does.
-    const awayOnPhone = (tab: TerminalTab, session: string) => compact() && focusedOf(tab) !== session;
     const Pane = (paneProps: { tab: TerminalTab; session: string; class?: string; floor?: boolean }) => (
         <PaperFlex
             flex
-            minWidth={paneProps.floor && !compact() ? "field" : 0}
-            minHeight={paneProps.floor && !compact() ? "field" : 0}
+            minWidth={paneProps.floor ? "field" : 0}
+            minHeight={paneProps.floor ? "field" : 0}
             direction="column"
             class={paneProps.class}
-            hidden={awayOnPhone(paneProps.tab, paneProps.session)}
         >
             <TerminalComponent
                 id={paneProps.session}
@@ -422,17 +421,16 @@ export default function App() {
                         <For each={tabs()}>
                             {(tab) => (
                                 <div classList={{ [styles.layer]: true, [styles.hidden]: activeTab() !== tab.id }}>
-                                    <PaperFlex direction={tab.split?.direction === "down" ? "column" : "row"} fullWidth fullHeight minHeight={0}>
+                                    <PaperFlex direction={directionOf(tab)} fullWidth fullHeight minHeight={0}>
                                         {/* the first shell is one pane whether or not a split sits beside it, so
                                             splitting never rebuilds its screen; the line between the two shells
                                             drags and each keeps a floor */}
                                         <PaperFlex
-                                            direction={tab.split?.direction === "down" ? "column" : "row"}
-                                            resizable={!!tab.split && !compact()}
+                                            direction={directionOf(tab)}
+                                            resizable={!!tab.split}
                                             flex
-                                            minWidth={tab.split && !compact() ? "field" : 0}
-                                            minHeight={tab.split && !compact() ? "field" : 0}
-                                            hidden={awayOnPhone(tab, tab.id)}
+                                            minWidth={tab.split ? "field" : 0}
+                                            minHeight={tab.split ? "field" : 0}
                                         >
                                             <Pane tab={tab} session={tab.id} />
                                         </PaperFlex>
@@ -446,7 +444,7 @@ export default function App() {
                                                         tab={tab}
                                                         session={session}
                                                         floor
-                                                        class={tab.split?.direction === "down" ? styles.splitDown : styles.splitRight}
+                                                        class={directionOf(tab) === "column" ? styles.splitDown : styles.splitRight}
                                                     />
                                                 );
                                             }}

@@ -48,3 +48,13 @@
     padding-bottom: var(--terminal-keyboard-inset, 0px);
     box-sizing: border-box;
 }
+
+/* tabs wider than the strip scroll by finger, wheel or drag, with no bar
+ * drawn under them (PaperMenu's tab row does the same) */
+.tabs {
+    scrollbar-width: none;
+}
+
+.tabs::-webkit-scrollbar {
+    display: none;
+}

@@ -52,7 +52,7 @@ describe("splitting a tab", () => {
         }
     });
 
-    test("a saved split opens both shells at its size, and on a phone only the shell with the keyboard shows", async () => {
+    test("a saved split opens both shells at its size, and on a phone they stack, both in view, each at the full width", async () => {
         await panelFiles({ "tabs.json": { tabs: [{ id: "tab1", label: "One", split: { direction: "right", session: { id: "pane1" } } }], activeTabId: "tab1" } });
         await startService();
         const served = await servePanel();
@@ -66,12 +66,21 @@ describe("splitting a tab", () => {
             await answered(page);
             expect(await page.evaluate<number>(`document.querySelectorAll("[role=alert]").length`)).toBe(0);
 
-            await page.resize(390, 800);
-            await page.waitFor(`JSON.stringify(${inView}) === "[0]"`, "only the first shell in view");
-            await page.click('label[data-value="pane1"]');
-            await page.waitFor(`JSON.stringify(${inView}) === "[1]"`, "only the second shell in view");
-            // the one in view fills the width
-            expect(await page.evaluate<number>(`document.querySelectorAll(".xterm")[1].getBoundingClientRect().width`)).toBeGreaterThan(300);
+            // a narrow panel can't share its width: the shells stack and both stay in view
+            for (const [width, height] of [[390, 800], [280, 600]]) {
+                await page.resize(width, height);
+                await page.waitFor(`JSON.stringify(${inView}) === "[0,1]"`, `both shells in view at ${width}`);
+                await page.waitFor(
+                    `(() => { const [a, b] = [...document.querySelectorAll(".xterm")].map((x) => x.getBoundingClientRect()); return b.top >= a.bottom - 1 && a.width > ${width - 60} && b.width > ${width - 60} && a.height > 40 && b.height > 40; })()`,
+                    `the shells stacked at ${width}`,
+                );
+                // the tabs scroll without a bar, and the buttons after them stay beside the tabs
+                expect(
+                    await page.evaluate<boolean>(
+                        `(() => { const list = document.querySelector('[role=radiogroup], [data-paper-list]') ?? document.querySelector('label[data-value="tab1"]').parentElement; const add = document.querySelector('button[aria-label="New Tab"]').getBoundingClientRect(); return list.getBoundingClientRect().right <= add.left + 1 && list.offsetHeight === list.clientHeight; })()`,
+                    ),
+                ).toBe(true);
+            }
 
             expect(page.exceptions).toEqual([]);
         } finally {
