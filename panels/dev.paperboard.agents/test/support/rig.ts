@@ -29,7 +29,7 @@ export interface Rig {
     close(): Promise<void>;
 }
 
-export async function conversationRig(o: { harness?: Harness; contextBudget?: number; problem?: (h: Harness) => string | null; resolve?: (h: Harness) => string | null; env?: (h: Harness) => Record<string, string>; root?: string; instructions?: () => Promise<Sections> } = {}): Promise<Rig> {
+export async function conversationRig(o: { harness?: Harness; contextBudget?: number; problem?: (h: Harness) => string | null; resolve?: (h: Harness) => string | null; env?: (h: Harness) => Record<string, string>; root?: string; instructions?: () => Promise<Sections>; turnMs?: number } = {}): Promise<Rig> {
     const root = o.root ?? tempDir("conversation");
     const harness = o.harness ?? "codex";
     const host = new TestHost(fakeEnv(root));
@@ -56,6 +56,7 @@ export async function conversationRig(o: { harness?: Harness; contextBudget?: nu
             onState: states.push,
             codexHome,
             contextBudget: o.contextBudget,
+            turnMs: o.turnMs,
         });
         c.init();
         return c;

@@ -33,6 +33,8 @@ import { AcpTurn, type AcpEvent } from "./acp";
 import { HARNESS_NAMES, codexContext, feed, instructions, parseTurnLine, removeLeftRunFiles, runFilesDir, turnLaunch, writeRunFiles, type TurnLaunch } from "./harness";
 import type { TurnLog } from "./turnLog";
 import { writeLine } from "./mcpClient";
+import { writeAtomic } from "./writeAtomic";
+import { errorText } from "../lib/failure";
 import type { Sections, TurnMode } from "./toolsets";
 
 export const TURN_PROC_ID = `${PANEL_ID}.turn`;
@@ -132,6 +134,8 @@ export interface ConversationDeps {
 
 export class Conversation {
     private entries: ChatEntry[] = [];
+    /** every id in the current transcript, the ones past what memory keeps too: a new entry's id is none of these */
+    private ids = new Set<string>();
     private threads: Partial<Record<Harness, string>> = {};
     private queue: WaitingMessage[] = [];
     /** the service's notices for the agent's next turn; not the user's, so not in the conversation */
@@ -173,7 +177,7 @@ export class Conversation {
 
     init() {
         fs.mkdirSync(this.deps.dir, { recursive: true });
-        this.entries = this.load();
+        this.loadCurrent();
         const threads = path.join(this.deps.dir, THREADS);
         if (fs.existsSync(threads)) this.threads = JSON.parse(fs.readFileSync(threads, "utf8"));
         this.carry = this.loadCarry();
@@ -187,7 +191,7 @@ export class Conversation {
             .then(async (alive) => {
                 if (alive) await this.deps.host.kill(TURN_PROC_ID, "SIGKILL");
             })
-            .catch((e) => console.error("[agents] couldn't stop a turn left from before:", String(e)));
+            .catch((e) => console.error("[agents] couldn't stop a turn left from before:", errorText(e)));
     }
 
     history(limit: number = LIMITS.history): ChatEntry[] {
@@ -276,12 +280,13 @@ export class Conversation {
         this.notices = [];
         await this.swap(() => {
             this.entries = [];
+            this.ids = new Set();
             this.compactAt = COMPACT_AT_BYTES;
             this.threads = {};
             this.setCarry(null);
             fs.rmSync(path.join(this.deps.dir, ATTACHMENTS), { recursive: true, force: true });
-            atomicWrite(path.join(this.deps.dir, TRANSCRIPT), "");
-            atomicWrite(path.join(this.deps.dir, THREADS), "{}");
+            writeAtomic(path.join(this.deps.dir, TRANSCRIPT), "");
+            writeAtomic(path.join(this.deps.dir, THREADS), "{}");
         });
         return { cleared: true };
     }
@@ -310,7 +315,7 @@ export class Conversation {
             if (!fs.existsSync(path.join(this.pastDir(), id))) return id;
         }
         const id = randomUUID().replace(/-/g, "").slice(0, 12);
-        atomicWrite(file, id);
+        writeAtomic(file, id);
         return id;
     }
 
@@ -328,7 +333,7 @@ export class Conversation {
                     return JSON.parse(fs.readFileSync(file, "utf8")) as PastConversation;
                 } catch (e) {
                     // unreadable isn't "not there": say which one, so it can be deleted
-                    throw new Error(`${file} can't be read: ${(e as Error).message}`);
+                    throw new Error(`${file} can't be read: ${errorText(e)}`);
                 }
             })
             .sort((a, b) => b.endedAt - a.endedAt);
@@ -352,14 +357,14 @@ export class Conversation {
                 const from = path.join(dir, name);
                 const to = path.join(this.deps.dir, name);
                 if (fs.existsSync(from)) fs.renameSync(from, to);
-                else atomicWrite(to, empty);
+                else writeAtomic(to, empty);
             }
             // a carry is only there if it was compacted and not yet carried on
             const carry = path.join(dir, CARRY);
             if (fs.existsSync(carry)) fs.renameSync(carry, path.join(this.deps.dir, CARRY));
-            atomicWrite(path.join(this.deps.dir, ID), id as string);
+            writeAtomic(path.join(this.deps.dir, ID), id as string);
             fs.rmSync(dir, { recursive: true });
-            this.entries = this.load();
+            this.loadCurrent();
             this.compactAt = COMPACT_AT_BYTES;
             this.threads = JSON.parse(fs.readFileSync(path.join(this.deps.dir, THREADS), "utf8"));
             this.carry = this.loadCarry();
@@ -380,7 +385,7 @@ export class Conversation {
         if (id === this.id()) return said(this.entries);
         const dir = this.pastEntry(id);
         if (!fs.existsSync(dir)) throw new Error(`the agent has no conversation "${id}"; it may have been deleted`);
-        return said(this.load(path.join(dir, TRANSCRIPT)));
+        return said(this.load(path.join(dir, TRANSCRIPT)).entries.slice(-KEEP_IN_MEMORY));
     }
 
     /** One text by its id: looked for in the current conversation, then in the history. */
@@ -388,7 +393,7 @@ export class Conversation {
         const here = said(this.entries).find((e) => e.id === messageId);
         if (here) return here;
         for (const id of this.pastIds()) {
-            const found = said(this.load(path.join(this.pastDir(), id, TRANSCRIPT))).find((e) => e.id === messageId);
+            const found = said(this.load(path.join(this.pastDir(), id, TRANSCRIPT)).entries).find((e) => e.id === messageId);
             if (found) return found;
         }
         throw new Error(`the agent has no message "${messageId}"; its conversation may have been cleared or deleted`);
@@ -503,6 +508,7 @@ export class Conversation {
         // the next conversation gets an id of its own
         fs.rmSync(path.join(this.deps.dir, ID), { force: true });
         this.entries = [];
+        this.ids = new Set();
         this.compactAt = COMPACT_AT_BYTES;
         this.threads = {};
         this.carry = null;
@@ -562,7 +568,7 @@ export class Conversation {
                 try {
                     this.deps.onTurnEnd?.();
                 } catch (e) {
-                    console.error("[agents] a turn's end couldn't be handled:", (e as Error).message);
+                    console.error("[agents] a turn's end couldn't be handled:", errorText(e));
                 }
                 this.pump();
             });
@@ -647,7 +653,7 @@ export class Conversation {
             await this.launched(settings, launch, mcp, message);
             log.end({ outcome: this.stopRequested ? "stopped" : "done", context: { used: this.context?.used ?? null, size: this.context?.size ?? null } });
         } catch (e) {
-            log.end({ outcome: "failed", error: e instanceof Error ? e.message : String(e), context: { used: this.context?.used ?? null, size: this.context?.size ?? null } });
+            log.end({ outcome: "failed", error: errorText(e), context: { used: this.context?.used ?? null, size: this.context?.size ?? null } });
             throw e;
         }
     }
@@ -680,7 +686,7 @@ export class Conversation {
                     this.deps.host
                         .exists(TURN_PROC_ID)
                         .then((alive) => (alive ? this.deps.host.kill(TURN_PROC_ID, signal) : undefined))
-                        .catch((e) => console.warn(`[agents] couldn't stop OpenCode after its answer (the turn's time limit still will): ${e instanceof Error ? e.message : e}`));
+                        .catch((e) => console.warn(`[agents] couldn't stop OpenCode after its answer (the turn's time limit still will): ${errorText(e)}`));
                 void stop("SIGTERM");
                 timers.add(setTimeout(() => void stop("SIGKILL"), STOP_GRACE_MS));
             }
@@ -746,6 +752,8 @@ export class Conversation {
             );
         });
         let timer: ReturnType<typeof setTimeout> | undefined;
+        const turnMs = this.deps.turnMs ?? TURN_MS;
+        let timedOut = false;
         let code: number | undefined;
         // the message the harness couldn't be handed, if it ended first: its own exit says why, when it failed
         let unfed: Error | null = null;
@@ -758,7 +766,10 @@ export class Conversation {
                 cwd: this.workdir(),
                 env: { ...this.deps.env(settings.harness), ...launch.env, [launch.tokenEnv]: mcp.token },
             });
-            timer = setTimeout(() => void this.killTurn(), this.deps.turnMs ?? TURN_MS);
+            timer = setTimeout(() => {
+                timedOut = true;
+                this.killTurn().catch((e) => this.put({ id: this.newId(), at: Date.now(), kind: "error", title: "Not stopped", text: `The turn ran past ${minutes(turnMs)} and couldn't be stopped: ${errorText(e)}` }));
+            }, turnMs);
             // Codex and Claude read the message to the end of their input before they start; ACP talks over it
             const fed = launch.input === null ? null : feed(this.deps.host, TURN_PROC_ID, launch.input).catch((e: Error) => void (unfed = e));
             const driven = acp?.run();
@@ -780,13 +791,14 @@ export class Conversation {
             try {
                 Object.assign(context, codexContext(this.deps.codexHome, codexThread));
             } catch (e) {
-                unmeasured = e instanceof Error ? e.message : String(e);
+                unmeasured = errorText(e);
             }
         }
         if (this.stopRequested) return;
+        if (timedOut) throw new Error(`the turn ran past ${minutes(turnMs)}, so it was stopped`);
         if (failures.length) throw new Error(failures[failures.length - 1]);
         if (code !== 0 && !answered) throw new Error(`the turn ended with exit ${code ?? "?"}${stderr.trim() ? `: ${lastLines(stderr)}` : ""}`);
-        if (unfed) throw new Error(`${HARNESS_NAMES[settings.harness]} ended before it took the message: ${(unfed as Error).message}`);
+        if (unfed) throw new Error(`${HARNESS_NAMES[settings.harness]} ended before it took the message: ${errorText(unfed)}`);
         if (unmeasured) throw new Error(`Couldn't tell how long the conversation is, so it can't be compacted: ${unmeasured}`);
     }
 
@@ -817,7 +829,7 @@ export class Conversation {
                 at: Date.now(),
                 kind: "error",
                 title: "Conversation not compacted",
-                text: `Couldn't summarize the conversation to save space: ${e instanceof Error ? e.message : e}. It tries again after the next reply; if this keeps happening, set Compaction to Forget in settings.`,
+                text: `Couldn't summarize the conversation to save space: ${errorText(e)}. It tries again after the next reply; if this keeps happening, set Compaction to Forget in settings.`,
             });
         } finally {
             this.compactingNow = false;
@@ -840,7 +852,7 @@ export class Conversation {
         const texts = said(this.entries);
         this.setCarry({ summary, from: texts[Math.max(0, texts.length - CARRY_MESSAGES)]?.id ?? null });
         this.threads = {};
-        atomicWrite(path.join(this.deps.dir, THREADS), "{}");
+        writeAtomic(path.join(this.deps.dir, THREADS), "{}");
     }
 
     /** What a fresh thread starts with: the summary, then the latest messages as they were (not the ones it's about to read). */
@@ -859,7 +871,7 @@ export class Conversation {
     private setCarry(carry: Carry | null) {
         this.carry = carry;
         const file = path.join(this.deps.dir, CARRY);
-        if (carry) atomicWrite(file, JSON.stringify(carry));
+        if (carry) writeAtomic(file, JSON.stringify(carry));
         else fs.rmSync(file, { force: true });
     }
 
@@ -871,7 +883,7 @@ export class Conversation {
     private dropThread(harness: Harness) {
         const { [harness]: _, ...rest } = this.threads;
         this.threads = rest;
-        atomicWrite(path.join(this.deps.dir, THREADS), JSON.stringify(this.threads));
+        writeAtomic(path.join(this.deps.dir, THREADS), JSON.stringify(this.threads));
     }
 
     private async killTurn() {
@@ -899,7 +911,7 @@ export class Conversation {
     private saveThread(harness: Harness, id: string) {
         if (this.threads[harness] === id) return;
         this.threads = { ...this.threads, [harness]: id };
-        atomicWrite(path.join(this.deps.dir, THREADS), JSON.stringify(this.threads));
+        writeAtomic(path.join(this.deps.dir, THREADS), JSON.stringify(this.threads));
     }
 
     /** A message as the agent reads it: its id first, so it can reply to it; what it answers is quoted. */
@@ -916,11 +928,11 @@ export class Conversation {
         if (!to || (to.kind !== "user" && to.kind !== "agent")) throw new Error(`no message [${id}] to reply to`);
     }
 
-    /** Short enough for the model to carry in a reply_to; unique among everything the conversation knows. */
+    /** Short enough for the model to carry in a reply_to; unique among the transcript's ids and the messages waiting. */
     private newId(): string {
         for (;;) {
             const id = randomUUID().replace(/-/g, "").slice(0, SHORT_ID);
-            if (!this.entries.some((e) => e.id === id) && !this.queue.some((m) => m.id === id)) return id;
+            if (!this.ids.has(id) && !this.queue.some((m) => m.id === id)) return id;
         }
     }
 
@@ -941,6 +953,7 @@ export class Conversation {
         if (i >= 0) this.entries[i] = entry;
         else this.entries.push(entry);
         if (this.entries.length > KEEP_IN_MEMORY) this.entries.splice(0, this.entries.length - KEEP_IN_MEMORY);
+        this.ids.add(entry.id);
         const file = path.join(this.deps.dir, TRANSCRIPT);
         fs.appendFileSync(file, JSON.stringify(entry) + "\n");
         if (fs.statSync(file).size > this.compactAt) this.dropSuperseded(file);
@@ -961,21 +974,42 @@ export class Conversation {
             try {
                 id = JSON.parse(line).id;
             } catch (err) {
-                throw new Error(`${file} line ${n + 1} is unreadable: ${(err as Error).message}`);
+                throw new Error(`${file} line ${n + 1} is unreadable: ${errorText(err)}`);
             }
             if (typeof id !== "string") throw new Error(`${file} line ${n + 1} has no id`);
             latest.delete(id); // re-insert so a changed entry keeps its newest position
             latest.set(id, line);
         });
-        atomicWrite(file, [...latest.values()].join("\n") + "\n");
+        writeAtomic(file, [...latest.values()].join("\n") + "\n");
         this.compactAt = Math.max(COMPACT_AT_BYTES, fs.statSync(file).size * 2);
     }
 
-    /** A transcript's entries: the current conversation's, or one put away in the history. */
-    private load(file = path.join(this.deps.dir, TRANSCRIPT)): ChatEntry[] {
-        if (!fs.existsSync(file)) return [];
+    /**
+     * The current conversation's transcript, read into memory. A torn last line (a crash mid-append) is cut off
+     * the file once the rest has read: the next entry appended after it would join it and be lost.
+     */
+    private loadCurrent() {
+        const file = path.join(this.deps.dir, TRANSCRIPT);
+        const { entries, ids, torn, unended } = this.load(file);
+        if (torn !== null) fs.truncateSync(file, torn);
+        // a whole entry that lost only its newline would join the next one the same way
+        else if (unended) fs.appendFileSync(file, "\n");
+        this.entries = entries.slice(-KEEP_IN_MEMORY);
+        this.ids = ids;
+    }
+
+    /**
+     * A transcript's entries, oldest first: the current conversation's, or one put away in the history. With every
+     * id it holds (entries no longer shown too), the byte a torn last line starts at (or null), and whether the
+     * file's last line has no newline.
+     */
+    private load(file: string): { entries: ChatEntry[]; ids: Set<string>; torn: number | null; unended: boolean } {
+        const ids = new Set<string>();
+        if (!fs.existsSync(file)) return { entries: [], ids, torn: null, unended: false };
         const byId = new Map<string, ChatEntry>();
-        const lines = fs.readFileSync(file, "utf8").split("\n");
+        const text = fs.readFileSync(file, "utf8");
+        const lines = text.split("\n");
+        let torn: number | null = null;
         lines.forEach((line, n) => {
             if (!line.trim()) return;
             let e: ChatEntry;
@@ -983,9 +1017,13 @@ export class Conversation {
                 e = JSON.parse(line);
             } catch (err) {
                 // only the last line can be torn (a crash mid-append); anything else is damage to report
-                if (n >= lines.length - 2) return;
-                throw new Error(`${file} line ${n + 1} is unreadable: ${(err as Error).message}`);
+                if (lines.slice(n + 1).every((l) => !l.trim())) {
+                    torn = Buffer.byteLength(lines.slice(0, n).map((l) => `${l}\n`).join(""));
+                    return;
+                }
+                throw new Error(`${file} line ${n + 1} is unreadable: ${errorText(err)}`);
             }
+            if (typeof e.id === "string") ids.add(e.id);
             // transcripts from before the chat was only a chat hold tool-call entries: not messages, not shown
             if (e.kind !== "user" && e.kind !== "agent" && e.kind !== "error" && e.kind !== "sign-in" && e.kind !== "app" && e.kind !== "access" && e.kind !== "prompt" && e.kind !== "tool-server" && e.kind !== "tool-sign-in") return;
             // a sign-in request lives only as long as the service that asked for it
@@ -996,7 +1034,7 @@ export class Conversation {
             byId.delete(e.id); // re-insert so a changed entry keeps its newest position
             byId.set(e.id, e);
         });
-        return [...byId.values()].sort((a, b) => a.at - b.at).slice(-KEEP_IN_MEMORY);
+        return { entries: [...byId.values()].sort((a, b) => a.at - b.at), ids, torn, unended: text !== "" && !text.endsWith("\n") };
     }
 }
 
@@ -1007,9 +1045,9 @@ function said(entries: ChatEntry[]): Said[] {
     return entries.filter((e): e is Said => e.kind === "user" || e.kind === "agent");
 }
 
-function atomicWrite(file: string, data: string) {
-    fs.writeFileSync(`${file}.tmp`, data);
-    fs.renameSync(`${file}.tmp`, file);
+function minutes(ms: number) {
+    const [n, unit] = ms >= 60_000 ? [Math.round(ms / 60_000), "minute"] : [Math.ceil(ms / 1000), "second"];
+    return `${n} ${unit}${n === 1 ? "" : "s"}`;
 }
 
 function lastLines(s: string) {

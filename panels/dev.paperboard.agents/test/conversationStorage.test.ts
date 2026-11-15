@@ -1,9 +1,16 @@
-import { afterEach, describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, mock, test } from "bun:test";
+import * as crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { LIMITS } from "../src/contract";
 import { conversationRig, said, settled, type Rig } from "./support/rig";
 import { SLOW } from "./support/host";
+
+const cryptoAsItWas = { ...crypto };
+// the ids a test wants randomUUID to hand out next; past them, it's random as ever
+const realUUID = crypto.randomUUID.bind(crypto);
+const nextUUIDs: string[] = [];
+mock.module("node:crypto", () => ({ ...cryptoAsItWas, default: cryptoAsItWas, randomUUID: () => nextUUIDs.shift() ?? realUUID() }));
 
 let rig: Rig | null = null;
 afterEach(async () => {
@@ -42,6 +49,50 @@ describe("the transcript", () => {
         const byId = (list: typeof after) => Object.fromEntries(list.map((e) => [e.id, e]));
         expect(byId(after)).toEqual(byId([before[0]!, changed, before[2]!, before[3]!]));
         expect(after).toHaveLength(4);
+    }, SLOW);
+
+    test("a torn last line is cut off before anything is appended, so the messages after it survive restarts", async () => {
+        rig = await conversationRig();
+        rig.conversation.send("one");
+        await settled(rig);
+        const file = path.join(rig.dir, "transcript.jsonl");
+        // a crash mid-append, or one that kept a whole entry but not its newline
+        for (const [name, tail] of [
+            ["torn", '{"id":"torn","at":1,"kind":"us'],
+            ["whole", JSON.stringify({ id: "whole1", at: 2, kind: "agent", text: "no newline" })],
+        ]) {
+            fs.appendFileSync(file, tail!);
+            await rig.conversation.shutdown();
+            rig.restart();
+            rig.conversation.send(`after ${name}`);
+            await settled(rig);
+            await rig.conversation.shutdown();
+            rig.restart();
+        }
+        const texts = rig.conversation.history().flatMap((e) => (e.kind === "user" || e.kind === "agent" ? [e.text] : []));
+        expect(texts.filter((t) => !t.startsWith("ok:")).sort()).toEqual(["after torn", "after whole", "no newline", "one"]);
+        expect(texts.filter((t) => t.startsWith("ok:"))).toHaveLength(3);
+        // every line is an entry again: the torn one is gone, the whole one ends where it should
+        expect(fs.readFileSync(file, "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l).id)).not.toContain("torn");
+    }, SLOW);
+
+    test("a new message never takes the id of one older than what's kept in memory", async () => {
+        rig = await conversationRig();
+        const file = path.join(rig.dir, "transcript.jsonl");
+        // the oldest of 600 messages is past the 500 kept in memory, but still on disk
+        const old = Array.from({ length: 600 }, (_, i) => ({ id: i === 0 ? "abc123" : `m${String(i).padStart(4, "0")}`, at: 1000 + i, kind: "agent", text: `old ${i}` }));
+        fs.writeFileSync(file, old.map((e) => JSON.stringify(e)).join("\n") + "\n");
+        await rig.conversation.shutdown();
+        rig.restart();
+        // the next id drawn is the old message's
+        nextUUIDs.push("abc12300-0000-4000-8000-000000000000");
+        const { id } = rig.conversation.send("new");
+        await settled(rig);
+        expect(id).not.toBe("abc123");
+        // no two entries on disk share an id: the older one would be dropped as superseded
+        const ids = fs.readFileSync(file, "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l).id as string);
+        expect(ids).toHaveLength(602);
+        expect(new Set(ids).size).toBe(ids.length);
     }, SLOW);
 
     test("compacting drops superseded copies and never a message, and doesn't rewrite on every append", async () => {

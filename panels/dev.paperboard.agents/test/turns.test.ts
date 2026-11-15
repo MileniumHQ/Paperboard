@@ -39,6 +39,17 @@ describe("a turn's input", () => {
     }, SLOW);
 });
 
+// A turn past its time.
+describe("a turn's time limit", () => {
+    test("a turn that runs past its time is stopped, and the user is told why", async () => {
+        rig = await conversationRig({ harness: "codex", turnMs: 1000 });
+        rig.conversation.send("take forever [[hold]]");
+        await settled(rig);
+        expect(rig.host.kills.filter((k) => k.id === turnId).map((k) => k.signal)).toEqual(["SIGTERM"]);
+        expect(errors(rig).map((e) => (e as { text: string }).text)).toEqual(["the turn ran past 1 second, so it was stopped"]);
+    }, SLOW);
+});
+
 // Messages during a turn.
 describe("messages during a turn", () => {
     test("a message sent mid-turn stops it with one SIGTERM, and the next turn resumes the thread with every queued message", async () => {
