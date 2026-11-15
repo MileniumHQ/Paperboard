@@ -99,6 +99,31 @@ describe("start, stop and restart", () => {
         expect(await mc.run(() => processApi.exists("mc-server"))).toBe(false);
     });
 
+    test("a force-killed restart comes back and stays online, and a server still running after a force-kill is never called offline", async () => {
+        const mc = minecraftServer({ files: { "fake-server.json": JSON.stringify({ ignoreStop: true }) } });
+        await startOnline(mc);
+        await mc.run(() => restartServerInstance(mc.scope.ctx));
+        const killed = mc.nextExit();
+        mc.run(() => __lifecycleTest.scheduleStopForceKill(mc.scope.ctx, 0));
+        expect(await killed).not.toBe(0);
+        await mc.scope.waitFor((s) => s.serverStatus === "online", "the force-killed restart to come online");
+        // the exit ended the force-kill: nothing is left to write over the new instance
+        expect(mc.run(() => __lifecycleTest.isStopForceKillPending())).toBe(false);
+        expect(runs(mc)).toHaveLength(2);
+        // a force-kill that finds the server process still there says so, and leaves it online to stop again
+        await mc.run(() => __lifecycleTest.confirmForceKill(mc.scope.ctx));
+        expect(mc.scope.ctx.state.serverStatus).toBe("online");
+        expect(mc.scope.ctx.state.serverEntries.at(-1)?.content).toBe("[Server] Could not confirm the force-kill: the process is still running.");
+        expect(mc.scope.ctx.state.serverEntries.filter((e) => e.content === "[Server] Process stopped.")).toHaveLength(0);
+
+        await mc.run(() => stopServerInstance(mc.scope.ctx));
+        const stopped = mc.nextExit();
+        mc.run(() => __lifecycleTest.scheduleStopForceKill(mc.scope.ctx, 0));
+        await stopped;
+        await mc.scope.waitFor((s) => s.serverStatus === "offline", "the killed server to read offline");
+        expect(mc.scope.ctx.state.serverEntries.filter((e) => e.content === "[Server] Process stopped.")).toHaveLength(1);
+    });
+
     test("a stop the daemon refuses fails and keeps the status", async () => {
         // the console says online, but no process exists: the daemon refuses the write
         const mc = minecraftServer({ state: { serverStatus: "online" } });

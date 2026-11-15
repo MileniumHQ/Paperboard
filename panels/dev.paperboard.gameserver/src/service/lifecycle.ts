@@ -8,10 +8,11 @@ import { type GameServerState, appendCapped, MAX_BUFFERED_ENTRIES } from "./type
 import { loadServerOptions } from "./options";
 import { oomKillCount } from "./memory";
 import { TRIGGER_IDS } from "./contract";
+import { report } from "../games/serviceKit";
 import { afterCrash, cancelStopRequest, classifyExit, markStarting, markStopRequested, updateBeforeStart } from "./automation";
 
 const primaryProcessId = () => currentGameService().primaryProcessId;
-const local = serverLocal(() => ({ oomBaseline: null as number | null, lineBuffer: "", readinessTimer: null as ReturnType<typeof setTimeout> | null, readinessDeadline: null as ReturnType<typeof setTimeout> | null, generation: 0, isRestarting: false, stopTimeout: null as ReturnType<typeof setTimeout> | null }));
+const local = serverLocal(() => ({ oomBaseline: null as number | null, lineBuffer: "", readinessTimer: null as ReturnType<typeof setTimeout> | null, readinessDeadline: null as ReturnType<typeof setTimeout> | null, generation: 0, isRestarting: false, stopTimeout: null as ReturnType<typeof setTimeout> | null, killDeadline: null as ReturnType<typeof setTimeout> | null }));
 
 export function cancelReadiness(): void {
     local().generation++;
@@ -53,35 +54,61 @@ function monitorReadiness(ctx: ServiceContext<GameServerState>): void {
 }
 
 function cancelStopForceKill(): void {
-    if (local().stopTimeout) {
-        clearTimeout(local().stopTimeout!);
-        local().stopTimeout = null;
-    }
+    if (local().stopTimeout) clearTimeout(local().stopTimeout!);
+    local().stopTimeout = null;
+    if (local().killDeadline) clearTimeout(local().killDeadline!);
+    local().killDeadline = null;
 }
 
 // exactly one pending force-kill at a time: a stop/restart issued while a
 // previous force-kill is pending cancels and reschedules instead of
-// stacking a second timer on the same module-level handle. The timer is
-// unref'd so a pending kill never holds the service process open.
+// stacking a second timer. The timers are unref'd so a pending kill never
+// holds the service process open.
 function scheduleStopForceKill(
     ctx: ServiceContext<GameServerState>,
     delayMs: number = 15000,
+    confirmMs: number = 10000,
 ): void {
     cancelStopForceKill();
-    local().stopTimeout = setTimeout(() => {
+    const timer = setTimeout(() => {
         local().stopTimeout = null;
         if (currentGameService().stopTimeoutMs) ctx.setState({ serverEntries: appendCapped(ctx.state.serverEntries, { type: "error", content: "[Server] Graceful stop timed out; force-killing. World save not confirmed." }) });
-        void Promise.resolve(processApi.kill(primaryProcessId(), "SIGKILL")).catch(err => console.error("[gameserver] force-kill failed:", err));
-        watchForceKill(ctx);
+        void Promise.resolve(processApi.kill(primaryProcessId(), "SIGKILL")).catch((err) => ctx.setState((prev) => ({ serverEntries: appendCapped(prev.serverEntries, { type: "error", content: `[Server] Force-kill failed: ${err instanceof Error ? err.message : String(err)}` }) })));
+        const deadline = setTimeout(() => void confirmForceKill(ctx), confirmMs);
+        deadline.unref?.();
+        local().killDeadline = deadline;
     }, delayMs);
-    (local().stopTimeout as unknown as { unref?: () => void }).unref?.();
+    timer.unref?.();
+    local().stopTimeout = timer;
+}
+
+/**
+ * The exit event ends a force-kill (handleProcessExit clears this deadline).
+ * When none came in time, the process is asked for: gone means the exit was
+ * missed and is handled now; still there is said, and the server is online
+ * again so Stop can be pressed again. Offline is never written over a live
+ * process.
+ */
+async function confirmForceKill(ctx: ServiceContext<GameServerState>): Promise<void> {
+    local().killDeadline = null;
+    let reason: string;
+    try {
+        if (!(await processApi.exists(primaryProcessId()))) return handleProcessExit(ctx);
+        reason = "the process is still running";
+    } catch (err) {
+        reason = err instanceof Error ? err.message : String(err);
+    }
+    local().isRestarting = false;
+    cancelStopRequest();
+    ctx.setState((prev) => ({ serverStatus: "online", serverEntries: appendCapped(prev.serverEntries, { type: "error", content: `[Server] Could not confirm the force-kill: ${reason}.` }) }));
 }
 
 // test seam: the force-kill is time-based, so tests drive it with short
-// delays instead of waiting out the real 15s window
+// delays, and its confirmation directly, instead of waiting out the real windows
 export const __lifecycleTest = {
     scheduleStopForceKill,
-    isStopForceKillPending: () => local().stopTimeout !== null,
+    confirmForceKill,
+    isStopForceKillPending: () => local().stopTimeout !== null || local().killDeadline !== null,
 };
 
 /**
@@ -118,8 +145,10 @@ export async function startServerInstance(
     carry: GameServerState["serverEntries"] = [],
 ): Promise<void> {
     if (ctx.state.serverStatus !== "offline") return;
-    // refused to the caller: a half-settled server folder is not a launch failure
-    assertRecoverySettled("starting the server");
+    // refused to the caller, and said in the console for the restarts that
+    // have none: a half-settled server folder is not a launch failure
+    try { assertRecoverySettled("starting the server"); }
+    catch (err) { report(ctx, "The server was not started", err); throw err; }
     try {
         ctx.setState({ activeIssue: null });
         await loadServerOptions(ctx);
@@ -327,10 +356,8 @@ export function handleProcessExit(ctx: ServiceContext<GameServerState>, exitCode
 
     if (local().isRestarting) {
         local().isRestarting = false;
-        // startServerInstance only proceeds from "offline"; setting
-        // "starting" here made its guard reject the restart's start half, so
-        // a restart just stopped the server. Hand it an offline state and let
-        // startServerInstance own the transition.
+        // startServerInstance only proceeds from "offline" and owns the
+        // transition to "starting"
         ctx.setState({
             serverStatus: "offline",
             onlinePlayers: [],
@@ -370,35 +397,4 @@ export function handleProcessExit(ctx: ServiceContext<GameServerState>, exitCode
             afterCrash(ctx, { whileStarting: exit.whileStarting, exitCode, outOfMemory }, (ctx, carry) => (released ?? Promise.resolve()).then(() => startServerInstance(ctx, carry)));
         }
     }
-}
-
-function watchForceKill(ctx: ServiceContext<GameServerState>): void {
-    const startedAt = Date.now();
-    const poll = setInterval(async () => {
-        try {
-            const stillRunning = await processApi.exists(primaryProcessId());
-            if (!stillRunning || Date.now() - startedAt > 10000) {
-                clearInterval(poll);
-                cancelStopForceKill();
-                // a forced kill during a restart must still restart; the
-                // old code dropped the restart on the floor here
-                const wasRestarting = local().isRestarting;
-                local().isRestarting = false;
-                ctx.setState({
-                    serverStatus: "offline",
-                    maxPlayers: null,
-                    serverLevel: null,
-                    serverEntries: appendCapped(ctx.state.serverEntries, {
-                        type: "warn",
-                        content: "[Server] Process stopped.",
-                    }),
-                });
-                if (wasRestarting) void startServerInstance(ctx).catch(err => console.error("[gameserver] restart failed:", err));
-            }
-        } catch (err) {
-            clearInterval(poll);
-            cancelStopForceKill();
-            console.error("[gameserver] server-poll iteration failed:", String(err));
-        }
-    }, 500);
 }
