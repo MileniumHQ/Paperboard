@@ -75,7 +75,7 @@ export class AcpTurn {
         try {
             msg = JSON.parse(line);
         } catch {
-            return; // not a message (a stray log line)
+            return; // quiet: not a message (a stray log line)
         }
         if (!msg || typeof msg !== "object") return;
         if (msg.method === undefined && typeof msg.id === "number") {

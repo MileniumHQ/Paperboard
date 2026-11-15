@@ -208,6 +208,7 @@ export async function bootPanel(o: BootOptions = {}): Promise<BootedPanel> {
             // the file is read again every few milliseconds, up to the deadline
             while (!Bun.deepEquals(savedSettings(), expected)) {
                 if (Date.now() > deadline) throw new Error(`The saved settings are ${JSON.stringify(savedSettings())}, not ${JSON.stringify(expected)}`);
+                // quiet: the poll interval of a deadline-bound wait for the saved file
                 await new Promise((resolve) => setTimeout(resolve, 20));
             }
         },

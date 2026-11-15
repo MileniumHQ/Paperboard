@@ -126,7 +126,7 @@ export function readProjectIndex(saved: unknown): ProjectMeta[] | null {
         try {
             preview = readPreview(p.preview);
         } catch (err) {
-            // a miniature is drawn again on the next edit; the project itself is fine
+            // quiet: a miniature is drawn again on the next edit; the project itself is fine
             console.error(`[${PANEL_ID}] project ${p.id}'s canvas preview was dropped: ${errorMessage(err)}`);
         }
         return {

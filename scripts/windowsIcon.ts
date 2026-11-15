@@ -139,6 +139,7 @@ export function applyWindowsIcon(exePath: string, icoPath: string): void {
         try {
             unlinkSync(tempPath);
         } catch (cleanupErr) {
+            // quiet: cleanup of the temp copy; the original error is rethrown below
             console.error(`[windowsIcon] could not remove ${tempPath}:`, cleanupErr);
         }
         throw err;

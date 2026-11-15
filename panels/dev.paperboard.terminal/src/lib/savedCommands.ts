@@ -306,6 +306,7 @@ export class SavedCommands {
             // abandoned before the kill: the exit it causes arrives while the
             // kill is awaited and must not be recorded as the run's outcome
             this.abandon(live, previousRun);
+            // quiet: the run's failure is thrown to the user below; this only stops its process
             await this.deps.kill(procId).catch((killErr) =>
                 console.error(`[TerminalService] could not stop unrecorded run of ${command.id}:`, killErr),
             );
@@ -387,6 +388,7 @@ export class SavedCommands {
         try {
             await this.transaction(() => this.deps.save(this.docNow()));
         } catch (err) {
+            // quiet: shutdown: the service is going away, nothing is left to show it
             console.error("[TerminalService] could not record the runs stopped at shutdown:", err);
         }
     }
@@ -450,6 +452,7 @@ export class SavedCommands {
             }
             if (!known) {
                 // removed while it ran: nothing can show it, so it must not keep running
+                // quiet: restart housekeeping with no command to show it on; nobody asked for this kill
                 await this.deps.kill(rec.procId).catch((err) =>
                     console.error(`[TerminalService] could not stop orphaned run ${rec.procId}:`, err),
                 );
@@ -457,6 +460,7 @@ export class SavedCommands {
             }
             if (this.live.has(rec.commandId)) {
                 // one run per command: a second record is a stray
+                // quiet: restart housekeeping with no command to show it on; nobody asked for this kill
                 await this.deps.kill(rec.procId).catch((err) =>
                     console.error(`[TerminalService] could not stop stray run ${rec.procId}:`, err),
                 );
@@ -472,6 +476,7 @@ export class SavedCommands {
         try {
             await this.transaction(() => this.deps.save(this.docNow()));
         } catch (err) {
+            // quiet: restart housekeeping: the runs are live in state either way, only their record waits for the next save
             console.error("[TerminalService] could not record the runs taken back after a restart:", err);
         }
     }
@@ -479,6 +484,7 @@ export class SavedCommands {
     private expire(commandId: string, live: LiveRun): void {
         if (live.settled || live.stopping) return;
         live.timedOut = true;
+        // quiet: the grace timer below reports a timed-out child that never exits
         this.deps.kill(live.procId).catch((err) =>
             console.error(`[TerminalService] could not stop timed-out command ${commandId}:`, err),
         );
@@ -510,6 +516,7 @@ export class SavedCommands {
         }
         // a stop waiting on this run ends once the outcome is on record
         this.transaction(() => this.deps.save(this.docNow()))
+            // quiet: the outcome is already published to the page; only its copy on disk waits for the next save
             .catch((err) => console.error(`[TerminalService] could not keep the last run of ${live.commandId}:`, err))
             .finally(() => live.onSettled?.());
     }

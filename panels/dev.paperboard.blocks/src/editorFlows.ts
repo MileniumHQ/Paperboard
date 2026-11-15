@@ -132,6 +132,7 @@ export function createEditorFlows(options: {
 
     /** Defines the blocks once the refresh before it is done; `saved` is read as it starts. */
     function refreshBlocks(saved: () => Schemas): Promise<void> {
+        // quiet: the earlier refresh's caller got its failure; this only orders the next one
         const next = refreshing.catch(() => undefined).then(() => defineBlocks(saved()));
         refreshing = next;
         return next;
@@ -195,6 +196,7 @@ export function createEditorFlows(options: {
             stored = text;
             const preview = canvasPreview(workspace);
             saving = saving
+                // quiet: the earlier save's failure was shown by its own handler; this only orders the next one
                 .catch(() => undefined)
                 .then(() => bridge.call(SERVICE_CALLS.save, { project: options.project(), flows, preview }))
                 .then(options.onSaved, (err: unknown) => {

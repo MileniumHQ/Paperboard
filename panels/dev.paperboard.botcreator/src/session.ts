@@ -503,6 +503,7 @@ export class BotSession {
         try {
             this.host.emit(trigger, output);
         } catch (err) {
+            // quiet: a Blocks trigger lost must not stop the Discord event it came from
             console.error(`[DiscordService] trigger emit failed for ${trigger}:`, err);
         }
     }

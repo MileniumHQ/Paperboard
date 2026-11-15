@@ -33,6 +33,7 @@ export async function waitFor<T>(
 			const why = lastError ? ` (last error: ${(lastError as Error)?.message ?? lastError})` : "";
 			throw new Error(`Timed out after ${timeoutMs} ms waiting for ${what}${why}`);
 		}
+		// quiet: the poll interval of waitFor, a deadline-bound wait for a condition
 		await new Promise((resolve) => setTimeout(resolve, intervalMs));
 	}
 }

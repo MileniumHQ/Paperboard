@@ -346,6 +346,7 @@ async function promptChoices(
             try {
                 requirePanelId(answer);
             } catch (err) {
+                // quiet: the console is this prompt's UI: the reason is printed and the id asked for again
                 console.error(`  ${(err as Error).message}`);
             }
             continue;

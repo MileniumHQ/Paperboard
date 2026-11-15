@@ -272,6 +272,7 @@ export async function gpgVerify(manifest: Uint8Array, signature: Uint8Array, pub
     } finally {
         // a gpg-agent started by the import would otherwise outlive the directory
         if (agentMayRun) {
+            // quiet: cleanup in a finally; the script's own outcome is what it reports
             await run("gpgconf", ["--kill", "gpg-agent"], env).catch((err) => console.warn(`could not stop the throwaway gpg-agent: ${err.message}`));
         }
         await rm(home, { recursive: true, force: true });

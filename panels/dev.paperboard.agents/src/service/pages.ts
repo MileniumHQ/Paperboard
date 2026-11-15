@@ -662,6 +662,7 @@ export class Pages {
                 this.seen = now;
                 this.o.onChange();
             } catch (e) {
+                // quiet: the launcher keeps its last list; the next change lists them again
                 console.error("[agents] the pages couldn't be listed after a change:", String(e));
             }
         }, 100);

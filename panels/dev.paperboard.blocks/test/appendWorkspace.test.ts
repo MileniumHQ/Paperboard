@@ -5,7 +5,7 @@ import * as Blockly from "blockly";
 import { appendWorkspace } from "../src/lib/appendWorkspace";
 import { saved } from "./helpers/workspace";
 
-// Blockly fires its events (and fills the undo stack) after the current task
+// quiet: Blockly fires its events (and fills the undo stack) after the current task; this yields that one task, no duration is tuned
 const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
 
 const imported = () =>

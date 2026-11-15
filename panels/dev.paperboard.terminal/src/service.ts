@@ -246,6 +246,7 @@ function unsubscribeSession(id: string) {
         try {
             unsub();
         } catch (err) {
+            // quiet: cleanup: the session is being dropped either way
             console.error(`[TerminalService] session unsubscribe failed for ${id}:`, err);
         }
     }
@@ -516,6 +517,7 @@ async function dropSession(id: string): Promise<void> {
 
 /** Ends a shell that was started for a tab or split that could not be saved. */
 async function endSession(id: string): Promise<void> {
+    // quiet: the caller reports the failed save; this only tidies the shell it started
     await terminalApi.destroy(id).catch((err) => console.error(`[TerminalService] the unsaved session ${id} would not stop:`, err));
     await dropSession(id);
 }

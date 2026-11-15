@@ -209,6 +209,7 @@ export class Access {
         try {
             this.deps.onChange(this.view());
         } catch (e) {
+            // quiet: what's allowed keeps its last copy on the page; nobody is waiting on this publish
             console.error("[agents] couldn't publish what's allowed:", errorMessage(e));
         }
     }

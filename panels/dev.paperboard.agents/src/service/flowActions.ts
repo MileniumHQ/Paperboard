@@ -178,6 +178,7 @@ export class FlowActionsPublisher {
             try {
                 choices = JSON.stringify(this.deps.choices());
             } catch (e) {
+                // quiet: the dropdown keeps its last list; nobody is waiting on this publish
                 console.error("[agents] the conversation dropdown can't be listed:", String(e));
                 return;
             }

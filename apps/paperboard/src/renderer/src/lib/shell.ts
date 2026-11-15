@@ -244,7 +244,7 @@ export function logToMain(
             .join(" ");
         requireIpc().send("renderer-log", level, message);
     } catch (err) {
-        // Logging must never break the caller, but the failure itself is logged
+        // quiet: logging must never break the caller, and there is nowhere else to log this
         console.warn("[shell.ts] logToMain failed (IPC unavailable):", err);
     }
 }

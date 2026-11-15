@@ -89,6 +89,7 @@ export async function getPanelsIndex(
             return cached;
         }
     } catch (err) {
+        // quiet: the cached index is a shortcut; walkPanelRecords answers from the records themselves
         console.error("[origami] panels index read failed, falling back:", err);
     }
 

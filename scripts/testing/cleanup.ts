@@ -13,6 +13,7 @@ function undoAll(): void {
         try {
             undo();
         } catch (err) {
+            // quiet: an exit handler: the other undos must still run, and stderr is where the test run reports
             console.error("Cleaning up after the test process failed:", err);
         }
     }

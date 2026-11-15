@@ -344,6 +344,7 @@ async function discard(s: { cancel(): Promise<void>; locked?: boolean } | null |
     try {
         await s?.cancel();
     } catch (e) {
+        // quiet: releasing a stream the answer no longer needs
         console.error("[agents] couldn't release a response stream:", String(e));
     }
 }

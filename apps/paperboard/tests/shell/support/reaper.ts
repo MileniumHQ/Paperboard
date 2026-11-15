@@ -70,6 +70,7 @@ export async function reapOnExit(root: string): Promise<Reaper> {
         } catch (err) {
             // ENXIO: nothing reads it yet
             if ((err as NodeJS.ErrnoException).code !== "ENXIO" || Date.now() > deadline) throw err;
+            // quiet: the poll interval while the reaper opens its fifo, bounded by a deadline
             await new Promise((resolve) => setTimeout(resolve, 5));
         }
     }

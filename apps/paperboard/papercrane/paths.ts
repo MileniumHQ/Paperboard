@@ -58,7 +58,7 @@ export function ensurePrivateDir(dir: string): string {
     fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
     if (process.platform !== "win32" && (fs.statSync(dir).mode & 0o077) !== 0) {
         try { fs.chmodSync(dir, 0o700); }
-        catch (err) { console.warn(`[paths.ts] could not restrict ${dir} to its owner:`, err); }
+        catch (err) { console.warn(`[paths.ts] could not restrict ${dir} to its owner:`, err); } // quiet: a filesystem without POSIX modes (FAT, some network mounts) can't be chmodded; the folder still works
     }
     return dir;
 }

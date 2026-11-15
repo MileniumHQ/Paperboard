@@ -44,6 +44,7 @@ export function createBrowserBridge(): ShellIpc {
             try {
                 payload = JSON.parse((message as MessageEvent).data);
             } catch (err) {
+                // quiet: dev browser mode only: a malformed event from the dev server has no action to fail
                 console.error(`[shell] unreadable ${channel} event:`, err);
                 return;
             }
@@ -59,6 +60,7 @@ export function createBrowserBridge(): ShellIpc {
             return body.result as T;
         },
         send(channel: string, ...args: unknown[]) {
+            // quiet: send() mirrors ipcRenderer.send, which has no answer to fail with; dev browser mode only
             void post("send", channel, args).catch((err) => console.error(err));
         },
         on(channel: string, listener: Listener) {

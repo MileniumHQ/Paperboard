@@ -26,6 +26,7 @@ import { blocksBots, botChoices, serviceCalls } from "./calls";
  */
 function startBots<T>(entries: Iterable<T>, start: (entry: T) => Promise<void>): void {
     for (const entry of entries) {
+        // quiet: connectEntry puts a bot's failure on its card; this only catches a bug in that
         start(entry).catch((err) => console.error("[DiscordService] starting a bot failed:", errorMessage(err)));
     }
 }

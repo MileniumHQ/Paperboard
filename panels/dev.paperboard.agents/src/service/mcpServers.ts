@@ -282,6 +282,7 @@ export class McpServers {
                     this.deps.onChange(await this.view());
                 }
             } catch (e) {
+                // quiet: the tools view keeps its last copy; nobody is waiting on this publish
                 console.error("[agents] couldn't publish the tools view:", errorMessage(e));
             } finally {
                 this.publishing = false;

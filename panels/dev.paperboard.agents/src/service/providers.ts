@@ -195,7 +195,7 @@ export class Providers {
                     const res = await (this.deps.fetch ?? fetch)(`${base}/api/info`, { headers: { authorization: auth }, signal: AbortSignal.timeout(2_000) });
                     if (res.ok) break;
                 } catch {
-                    // not listening yet
+                    // quiet: not listening yet
                 }
                 if (Date.now() > end) throw new ProviderError("OpenCode's provider server didn't start in time");
                 await new Promise((r) => setTimeout(r, 100));
@@ -229,7 +229,7 @@ export class Providers {
         try {
             json = text ? JSON.parse(text) : null;
         } catch {
-            // an error page: reported below with its text
+            // quiet: an error page: reported below with its text
         }
         if (!res.ok) {
             const message = (json as { message?: unknown } | null)?.message;

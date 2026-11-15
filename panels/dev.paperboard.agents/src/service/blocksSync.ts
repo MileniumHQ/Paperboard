@@ -28,7 +28,7 @@ export class BlocksSync {
             try {
                 this.announced.set(value, JSON.stringify(read()));
             } catch (e) {
-                // unreadable now (broken routines, say): the first change it reads after is announced
+                // quiet: unreadable now (broken routines, say): the first change it reads after is announced
                 console.error(`[agents] ${value} can't be read for Blocks:`, String(e));
             }
         }
@@ -46,6 +46,7 @@ export class BlocksSync {
         try {
             next = JSON.stringify(this.deps.watched()[value]!());
         } catch (e) {
+            // quiet: the value is announced on its next readable change
             console.error(`[agents] ${value} can't be read for Blocks:`, String(e));
             return;
         }
@@ -65,6 +66,7 @@ export class BlocksSync {
     /** An event for the Blocks panel; nothing listens before the blocks are registered. */
     fire(event: string, payload: Record<string, unknown>) {
         if (!this.registered) return;
+        // quiet: an event for Blocks with no user action waiting on it
         this.deps.blocks.fire(event, payload).catch((e) => console.error(`[agents] ${event} didn't reach Blocks:`, String(e)));
     }
 

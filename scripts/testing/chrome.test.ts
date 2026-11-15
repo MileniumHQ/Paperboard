@@ -76,6 +76,7 @@ async function suiteThat(driver: Driver, ending: Ending): Promise<{ left: string
     // a suite that ended without closing its page is cleaned up after it
     // ends: done once nothing that names the dir runs any more
     const deadline = Date.now() + 10_000;
+    // quiet: the poll interval of a deadline-bound wait for the Chromes to end
     while (processesIn(dir).length && Date.now() < deadline) await Bun.sleep(50);
     const left = readdirSync(dir);
     const chromes = processesIn(dir);

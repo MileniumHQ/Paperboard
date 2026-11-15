@@ -145,7 +145,7 @@ export async function askClaudeModels(host: TurnHost, launch: ClaudeLaunch): Pro
         try {
             ev = JSON.parse(line);
         } catch {
-            return; // a stray log line
+            return; // quiet: a stray log line
         }
         if (ev?.type !== "control_response" || ev.response?.request_id !== request) return;
         if (ev.response.subtype !== "success") settle.fail(new Error(`Claude couldn't list its models: ${String(ev.response.error ?? ev.response.subtype)}`));

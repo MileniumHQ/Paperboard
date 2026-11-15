@@ -11,6 +11,7 @@ function service() {
     const queue = createSettingsQueue({
         current: () => saved,
         write: async (s) => {
+            // quiet: a write that takes a moment, so later saves queue behind it; the assertions await the queue
             await new Promise((r) => setTimeout(r, 5));
             writes.push(s);
             saved = s;

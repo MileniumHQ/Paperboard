@@ -50,6 +50,7 @@ export async function runHarness(o: HarnessRun): Promise<HarnessOutcome> {
         if (ev.type === "failed") out.failures.push(ev.message);
         else if (ev.type === "done") {
             out.answered = true;
+            // quiet: its time limit stops it anyway; the answer is already in
             void o.stop().catch((e) => console.error(`[agents] couldn't stop ${HARNESS_NAMES[o.harness]} after its answer (its time limit still will): ${errorMessage(e)}`));
         }
         o.onEvent(ev);

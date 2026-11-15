@@ -54,7 +54,7 @@ export function createFiles(call: Call) {
                 signal.throwIfAborted();
                 return await call<Attachment>(UI_ACTION_IDS.attachFinish, { id });
             } catch (e) {
-                // the service drops the half-made file; if even that fails, its idle timer does
+                // quiet: the service drops the half-made file; if even that fails, its idle timer does
                 await call(UI_ACTION_IDS.attachCancel, { id }).catch((why) => console.error("[agents] couldn't cancel an upload:", why));
                 throw e;
             }

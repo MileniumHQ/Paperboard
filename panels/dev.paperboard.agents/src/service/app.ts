@@ -130,7 +130,7 @@ export class AiApp {
             throw e;
         }
         this.settle(null);
-        // the UI follows starting through state.computer
+        // quiet: the UI follows starting through state.computer, which carries the error
         void this.computer.init().catch((e) => console.error("[agents] the computer didn't start:", String(e)));
     }
 
@@ -452,7 +452,7 @@ export class AiApp {
                 },
             );
         }
-        // a download and an unpack: accepted now, followed through state.brains
+        // quiet: a download and an unpack, accepted now and followed through state.brains, which carries the error
         void (from === "package" ? this.brains.installOwn(harness) : this.brains.install(harness)).catch((e) => console.error(`[agents] ${HARNESS_NAMES[harness]} didn't install:`, String(e)));
         return { accepted: true };
     }
@@ -490,12 +490,13 @@ export class AiApp {
     }
 
     installComputer() {
-        // a download and an unpack: accepted now, followed through state.computer
+        // quiet: a download and an unpack, accepted now and followed through state.computer, which carries the error
         void this.computer.install().catch((e) => console.error("[agents] computer setup failed:", String(e)));
         return { accepted: true };
     }
 
     startComputer() {
+        // quiet: accepted now and followed through state.computer, which carries the error
         void this.computer.start().catch((e) => console.error("[agents] the computer didn't start:", String(e)));
         return { accepted: true };
     }

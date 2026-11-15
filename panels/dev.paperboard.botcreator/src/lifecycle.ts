@@ -72,7 +72,7 @@ export async function connectEntry(entry: BotEntry): Promise<void> {
         if (entry.stored.enabled) await connect(entry);
         else await savedToken(entry);
     } catch (err) {
-        // the reason is the bot's error, on its card and in its Overview
+        // quiet: the reason is the bot's error, on its card and in its Overview
         console.error(`[DiscordService] ${entry.stored.name} didn't connect:`, errorMessage(err));
     }
     publish();

@@ -57,7 +57,7 @@ export function openTurnLog(dir: string, env: NodeJS.ProcessEnv = process.env): 
         try {
             fs.appendFileSync(file, `${JSON.stringify({ at: new Date().toISOString(), ...record })}\n`);
         } catch (e) {
-            // the log is a developer's: a full disk or a removed folder is said, and the turn goes on
+            // quiet: the log is a developer's: a full disk or a removed folder is said, and the turn goes on
             console.error(`[agents] the turn log couldn't be written (${file}):`, errorMessage(e));
         }
     };
@@ -112,7 +112,7 @@ export function openTurnLog(dir: string, env: NodeJS.ProcessEnv = process.env): 
                 try {
                     addUsage(o.harness, JSON.parse(l), usage);
                 } catch {
-                    // a line that isn't JSON carries no usage
+                    // quiet: a line that isn't JSON carries no usage
                 }
             }
             write({ type: "ask", ...o, usage });

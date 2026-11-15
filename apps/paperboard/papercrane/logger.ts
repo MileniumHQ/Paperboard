@@ -91,7 +91,7 @@ export class PaperboardLogger {
             if (LEVEL_ORDER[level] >= LEVEL_ORDER[this.minLevel]) {
                 this.writeLine(line);
             }
-        } catch (err) { console.error("[logger] formatting failed:", err); }
+        } catch (err) { console.error("[logger] formatting failed:", err); } // quiet: the logger cannot report its own failure anywhere but the console
     }
 
     private writeLine(line: string): void {
@@ -100,7 +100,7 @@ export class PaperboardLogger {
         try {
             this.rotateIfNeeded();
             fs.appendFileSync(file, line, "utf8");
-        } catch (err) { console.error("[logger] append failed:", err); }
+        } catch (err) { console.error("[logger] append failed:", err); } // quiet: the logger cannot report its own failure anywhere but the console
     }
 
     private ensureLogFile(): string | null {
@@ -142,7 +142,7 @@ export class PaperboardLogger {
                     path.join(this.logDir, `${this.name}.1.log`),
                 );
             }
-        } catch (err) { console.error("[logger] rotation failed:", err); }
+        } catch (err) { console.error("[logger] rotation failed:", err); } // quiet: the logger cannot report its own failure anywhere but the console
     }
 }
 

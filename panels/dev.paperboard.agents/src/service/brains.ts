@@ -147,6 +147,7 @@ export class Brains {
         // a look that fails is in the brain's state; one brain's trouble doesn't stop the service
         await Promise.all(
             (Object.keys(this.state) as Harness[]).map((h) =>
+                // quiet: a look that fails is in the brain's state; one brain's trouble doesn't stop the service
                 this.busy[h].run(() => this.look(h)).catch((e) => console.error(`[agents] couldn't look at ${HARNESS_NAMES[h]}: ${errorMessage(e)}`)),
             ),
         );
@@ -267,6 +268,7 @@ export class Brains {
         if (!reply) throw new Error(`${HARNESS_NAMES[harness]} isn't listening for the sign-in anymore: ${errorMessage(unreachable)}`);
         // a redirect is the harness's "done" page; anything 400 or above is it refusing the answer
         if (reply.status >= 400) {
+            // quiet: only the refusal page's text; the refusal itself is thrown below
             const said = outputTail((await reply.text().catch(() => "")).replace(/<[^>]+>/g, " "), 2);
             throw new Error(`${HARNESS_NAMES[harness]} didn't accept that address (${reply.status})${said ? `: ${said}` : "."}`);
         }

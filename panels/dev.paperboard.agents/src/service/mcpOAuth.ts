@@ -97,6 +97,7 @@ async function getMetadata(f: typeof fetch, url: string): Promise<Record<string,
         await res.body?.cancel();
         return null;
     }
+    // quiet: a well-known address answered with a page that isn't JSON has no document there
     const body = await readJson(res).catch(() => null);
     return isRecord(body) ? body : null;
 }

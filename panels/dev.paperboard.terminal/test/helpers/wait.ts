@@ -45,6 +45,7 @@ export async function until<T>(what: string, read: () => Promise<T> | T, accept:
         const value = await read();
         if (accept(value)) return value;
         if (Date.now() > deadline) throw new Error(`Timed out after ${ms} ms waiting for ${what}; last: ${JSON.stringify(value)}`);
+        // quiet: the poll interval of until, a deadline-bound wait for a condition
         await new Promise((resolve) => setTimeout(resolve, 25));
     }
 }

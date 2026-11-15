@@ -66,7 +66,7 @@ export class StdioWire implements McpWire {
         try {
             m = JSON.parse(line);
         } catch {
-            return; // a server logging to stdout: not a message
+            return; // quiet: a server logging to stdout: not a message
         }
         if (!m || typeof m !== "object" || m.id === undefined || m.method !== undefined) return; // notifications and server requests: we offer no capabilities
         const p = this.pending.get(m.id);

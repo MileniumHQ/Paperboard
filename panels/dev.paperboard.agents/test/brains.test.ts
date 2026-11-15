@@ -188,6 +188,7 @@ describe("brains already on the computer", () => {
         // refused as it's asked, not in a promise nobody waits on: the download itself is followed through state
         let refused: unknown = null;
         try {
+            // quiet: the download is followed through state; this test asserts the refusal thrown as it's asked
             void b.installOwn("codex").catch(() => undefined);
         } catch (e) {
             refused = e;
@@ -424,6 +425,7 @@ describe("brain failures", () => {
             // a write that is slow to land: Claude has ended before anything awaits its answer
             const slowWrite = { ...host, write: async (id: string) => {
                 await host.gone(id);
+                // quiet: a write still pending when Claude ends, which is the case under test; nothing waits on its length
                 await new Promise((r) => setTimeout(r, 20));
             } };
             await expect(askClaudeModels(slowWrite, { command: quits, env: {}, cwd: path.join(root, "models") })).rejects.toThrow("Claude ended before it listed its models (exit 0): no config");

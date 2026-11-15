@@ -12,6 +12,7 @@ const later = <T>() => {
     const promise = new Promise<T>((r) => (resolve = r));
     return { promise, resolve };
 };
+// quiet: yields one task so queued work lands; no duration is tuned
 const settle = () => new Promise((r) => setTimeout(r, 0));
 
 function launcher(pages: () => Promise<PageInfo[]>, pagePicture: (name: string) => Promise<{ image: string }> = async () => ({ image: "" })) {
