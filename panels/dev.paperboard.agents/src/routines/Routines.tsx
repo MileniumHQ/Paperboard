@@ -4,7 +4,7 @@
 
 import { For, Match, Show, Switch, createEffect, createSignal, on } from "solid-js";
 import { createStore, reconcile } from "solid-js/store";
-import { PaperButton, PaperCard, PaperEmptyState, PaperFlex, PaperIcon, PaperLoader, PaperQuote, PaperText } from "@mileniumhq/paperui";
+import { PaperButton, PaperEmptyState, PaperFlex, PaperIcon, PaperList, PaperListItem, PaperLoader, PaperQuote } from "@mileniumhq/paperui";
 import type { Routine } from "../contract";
 import { describeSchedule, localStamp } from "../routineText";
 import type { Agent } from "../lib/agent";
@@ -12,9 +12,11 @@ import { holdPage } from "../lib/pageHold";
 import { createLatest } from "../lib/action";
 import { errorText } from "../lib/failure";
 
+const capitalize = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);
+
 export default function Routines(props: { agent: Agent }) {
     const name = () => props.agent.name();
-    // reconciled by id, so a re-read changes what differs and every card stays the card it was
+    // reconciled by id, so a re-read changes what differs and every row stays the row it was
     const [state, setState] = createStore<{ routines: Routine[] | null }>({ routines: null });
     const list = () => state.routines;
     const [error, setError] = createSignal<string | null>(null);
@@ -79,28 +81,31 @@ export default function Routines(props: { agent: Agent }) {
                             {failed()}
                         </PaperQuote>
                     </Show>
-                    <For each={list()!}>
+                    {/* like alarms: when it runs is the title, what it does wraps below it */}
+                    <PaperList selectable={false} borderless fullWidth>
+                        <For each={list()!}>
+                            {(r) => (
+                                <PaperListItem
+                                    value={r.id}
+                                    icon="event_repeat"
+                                    description={`${r.what}${r.next ? ` · next ${localStamp(r.next)}` : ""}${r.lastRun ? ` · last ran ${localStamp(r.lastRun)}` : ""}`}
+                                    actions={
+                                        <PaperButton icon size="small" variant="text" aria-label={`Stop: ${r.what}`} title="Stop this routine" onClick={() => void stop(r)}>
+                                            <PaperIcon>delete</PaperIcon>
+                                        </PaperButton>
+                                    }
+                                >
+                                    {capitalize(describeSchedule(r.schedule))}
+                                </PaperListItem>
+                            )}
+                        </For>
+                    </PaperList>
+                    {/* a run that went wrong is told under the list, by what it was */}
+                    <For each={list()!.filter((r) => r.lastError)}>
                         {(r) => (
-                            <PaperCard borderless paddingX="full" paddingY="half">
-                                <PaperFlex direction="row" align="center" gap="full">
-                                    <PaperFlex flex minWidth={0} gap="onefourth">
-                                        <PaperText preset="label" breakWord>{r.what}</PaperText>
-                                        <PaperText preset="hint">
-                                            {describeSchedule(r.schedule)}
-                                            {r.next ? ` · next ${localStamp(r.next)}` : ""}
-                                            {r.lastRun ? ` · last ran ${localStamp(r.lastRun)}` : ""}
-                                        </PaperText>
-                                        <Show when={r.lastError}>
-                                            <PaperQuote variant="danger" icon="error" title="Last run missed">
-                                                {r.lastError}
-                                            </PaperQuote>
-                                        </Show>
-                                    </PaperFlex>
-                                    <PaperButton icon size="small" variant="text" aria-label={`Stop: ${r.what}`} title="Stop this routine" onClick={() => void stop(r)}>
-                                        <PaperIcon>delete</PaperIcon>
-                                    </PaperButton>
-                                </PaperFlex>
-                            </PaperCard>
+                            <PaperQuote variant="danger" icon="error" title={`Last run missed: ${r.what}`}>
+                                {r.lastError}
+                            </PaperQuote>
                         )}
                     </For>
                 </PaperFlex>
