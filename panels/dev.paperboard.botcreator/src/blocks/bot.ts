@@ -198,7 +198,7 @@ export function botBlocks(bot: BotBlocksHost): BlockSet {
             name: "Send File",
             category: "Messages",
             icon: "attach_file",
-            description: "Discord downloads the file from its web address; at most 10 MB unless the server is boosted",
+            description: "Bot Creator downloads the file from its web address and uploads it to Discord; at most 10 MB unless the server is boosted",
             text: "Send the file at {url} to {channel}, named {name}, with {content}",
             inputs: {
                 url: { type: "url", name: "Link" },

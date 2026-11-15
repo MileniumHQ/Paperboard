@@ -57,10 +57,6 @@ export const builderValues: BlockValueDefinition[] = [
         },
         type: "component",
         read: (inputs: { style: string; label: string; "component-id"?: string; url?: string; emoji?: string; disabled: boolean }) => {
-            // the shared builder's own message says "Interaction ID"
-            if (inputs.style !== "link" && !inputs["component-id"]?.trim()) {
-                throw new Error(`The ${inputs.style} button "${inputs.label}" needs a Component ID, so a flow can react to it`);
-            }
             return buildButtonComponent({
                 style: inputs.style,
                 label: inputs.label,

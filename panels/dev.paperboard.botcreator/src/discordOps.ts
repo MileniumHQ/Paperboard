@@ -21,7 +21,7 @@ type Discord = Awaited<ReturnType<typeof loadDiscord>>;
 
 // ─── embeds ─────────────────────────────────────────────────────────────────
 
-// A flow passes either the flat inputs or Create Embed's output, which is
+// A flow passes either the flat inputs or the Embed block's output, which is
 // Discord's own shape: footer {text}, image {url}, color as a number.
 export interface DiscordEmbedData {
     title?: string;
@@ -136,10 +136,10 @@ export const BUTTON_STYLES = [
 // the blocks' inputs and refused by the SDK before these builders run, and
 // shown on the block before the flow does; the builders check what a single
 // input can't say: presence, kinds, and how inputs relate.
-function checkCustomId(customId: string, what: string): string {
+function checkCustomId(customId: string, what: string, field = "Component ID"): string {
     const trimmed = customId.trim();
     if (!trimmed) {
-        throw new Error(`${what} needs an Interaction ID so flows can react to it`);
+        throw new Error(`${what} needs a ${field}, so a flow can react to it`);
     }
     return trimmed;
 }
@@ -160,14 +160,14 @@ export function buildButtonComponent(
     if (style === "link") {
         if (!inputs.url || !inputs.url.trim()) {
             throw new Error(
-                `The link button "${label}" needs a URL instead of an interaction id`,
+                `The link button "${label}" needs a Link instead of a Component ID`,
             );
         }
         return { ...inputs, kind: "button", label, style };
     }
     const customId = checkCustomId(
         inputs.customId || "",
-        `The "${style}" button "${label}"`,
+        `The ${style} button "${label}"`,
     );
     return { ...inputs, kind: "button", label, style, customId };
 }
@@ -239,7 +239,7 @@ export function buildSelectMenuComponent(inputs: {
 function componentItem(item: unknown): DiscordComponentData {
     if (!item || typeof item !== "object" || Array.isArray(item)) {
         throw new Error(
-            "Components must be values created by the Create Button, Create Select Menu, or Create Interaction Row actions",
+            "Components must come from the Button, Select Menu or Component Row blocks",
         );
     }
     return item as DiscordComponentData;
@@ -254,35 +254,35 @@ function isSelect(item: DiscordComponentData): item is DiscordSelectMenuData {
 }
 
 /**
- * The Interaction Row block: an explicit row the author arranged. It holds
+ * The Component Row block: an explicit row the author arranged. It holds
  * one to five buttons or exactly one select menu, never another row.
  */
 export function buildComponentRow(input: unknown): DiscordComponentRowData {
     const raw = Array.isArray(input) ? input : input ? [input] : [];
     const components = raw.map(componentItem);
     if (components.some(isRow)) {
-        throw new Error("An Interaction Row cannot contain another Interaction Row");
+        throw new Error("A Component Row cannot hold another Component Row");
     }
     const items = components as (DiscordButtonData | DiscordSelectMenuData)[];
     if (items.length === 0) {
-        throw new Error("An Interaction Row needs at least one button or select menu");
+        throw new Error("A Component Row needs at least one button or select menu");
     }
     const selects = items.filter(isSelect).length;
     if (selects > 0 && items.length > 1) {
         throw new Error(
-            "A select menu fills its whole row; put buttons in a separate Interaction Row",
+            "A select menu fills its whole row; put buttons in a separate Component Row",
         );
     }
     if (items.length > MAX_BUTTONS_PER_ROW) {
         throw new Error(
-            `An Interaction Row holds at most ${MAX_BUTTONS_PER_ROW} buttons (got ${items.length})`,
+            `A Component Row holds at most ${MAX_BUTTONS_PER_ROW} buttons (got ${items.length})`,
         );
     }
     return { kind: "row", components: items };
 }
 
 /**
- * Lays the Components field out into rows, in order: an Interaction Row
+ * Lays the Components field out into rows, in order: a Component Row
  * stays one row; loose buttons share a row until it holds five or a row or
  * select menu interrupts them; a loose select menu takes a row of its own.
  * Result: (button | select)[][] — one inner array per Discord action row.
@@ -324,7 +324,7 @@ export function layoutComponentRows(
             if (!id || (component.kind !== "select" && component.style === "link")) continue;
             if (seen.has(id)) {
                 throw new Error(
-                    `Two components in one message share the Interaction ID "${id}"; Discord needs each to be unique`,
+                    `Two components in one message share the Component ID "${id}"; Discord needs each to be unique`,
                 );
             }
             seen.add(id);
@@ -478,7 +478,7 @@ export async function buildModalPayload(input: {
     title?: string;
     fields?: unknown;
 }) {
-    const customId = checkCustomId(input.modalId || "", "A modal");
+    const customId = checkCustomId(input.modalId || "", "A modal", "Modal ID");
     const title = (input.title || "").trim();
     if (!title) {
         throw new Error("A modal needs a title");
@@ -489,7 +489,7 @@ export async function buildModalPayload(input: {
     }
     const fields = raw.map((item) => {
         if (!item || typeof item !== "object" || (item as { kind?: unknown }).kind !== "text-field") {
-            throw new Error("Modal fields must be values created by the Create Text Field action");
+            throw new Error("A modal's Text Fields must come from the Text Field block");
         }
         return item as DiscordModalFieldData;
     });
