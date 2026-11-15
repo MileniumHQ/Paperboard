@@ -20,9 +20,9 @@
                     "name": "Utilities",
                     "index": 3
                 },
-                "utilities": {
-                    "name": "Utilities",
-                    "index": 3
+                "state": {
+                    "name": "State and saving",
+                    "index": 4
                 }
             }
         },

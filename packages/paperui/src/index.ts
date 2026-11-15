@@ -88,5 +88,10 @@ export * from "./utils/frameBackground";
 export * from "./utils/pageZoom";
 export * from "./utils/haptics";
 export * from "./utils/bytes";
+export * from "./utils/latest";
+export * from "./utils/action";
+export * from "./utils/keepUnchanged";
+export * from "./utils/savedValue";
+export * from "./utils/compact";
 
 export * from "./types";

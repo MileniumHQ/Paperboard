@@ -3,7 +3,7 @@
 import { createMemo, createSignal } from "solid-js";
 import { createStore } from "solid-js/store";
 import type { PaperFileEntry, PaperFileListing } from "./types";
-import { messageOf } from "./files";
+import { errorMessage } from "../../utils/errorMessage";
 
 type FolderState =
     | { status: "loading" }
@@ -49,7 +49,7 @@ export function createFolderTree(list: (path: string) => Promise<PaperFileListin
                 setFolders(path, { status: "ready", entries: listing.entries, note: listing.note });
             } catch (err) {
                 if (generation !== listGeneration) return;
-                setFolders(path, { status: "error", message: messageOf(err) });
+                setFolders(path, { status: "error", message: errorMessage(err) });
             } finally {
                 if (inflight.get(path) === task) inflight.delete(path);
             }

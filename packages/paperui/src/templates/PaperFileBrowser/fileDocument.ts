@@ -2,7 +2,8 @@
 // them, and the question asked before unsaved edits would be lost.
 import { batch, createSignal } from "solid-js";
 import type { PaperEditorPosition } from "../../components/PaperEditor";
-import { baseName, messageOf } from "./files";
+import { baseName } from "./files";
+import { errorMessage } from "../../utils/errorMessage";
 import type { PaperFileBrowserProps, PaperFileContent } from "./types";
 
 type DocState =
@@ -67,7 +68,7 @@ export function createFileDocument(props: Pick<PaperFileBrowserProps, "read" | "
             });
         } catch (err) {
             if (token !== readToken) return;
-            setDoc({ status: "error", path, message: messageOf(err) });
+            setDoc({ status: "error", path, message: errorMessage(err) });
         }
     };
 
@@ -132,7 +133,7 @@ export function createFileDocument(props: Pick<PaperFileBrowserProps, "read" | "
             });
             return true;
         } catch (err) {
-            if (openPath() === path) setNotice({ tone: "danger", text: messageOf(err), reload: true });
+            if (openPath() === path) setNotice({ tone: "danger", text: errorMessage(err), reload: true });
             return false;
         } finally {
             setSaving(false);

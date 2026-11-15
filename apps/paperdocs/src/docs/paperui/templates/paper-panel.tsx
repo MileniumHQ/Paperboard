@@ -91,6 +91,20 @@ export default function App() {
             <PaperText preset="body" as="p">
                 The package also exports <PaperCode>PAPER_PANEL_COMPACT_WIDTH</PaperCode>, the number <PaperCode>520</PaperCode>.
             </PaperText>
+            <PaperText preset="subheader" as="h3" id="create-paper-compact">createPaperCompact</PaperText>
+            <PaperText preset="body" as="p">
+                <PaperCode>createPaperCompact(): Accessor&lt;boolean&gt;</PaperCode> is whether the page has the phone layout: narrower than <PaperCode>PAPER_PANEL_COMPACT_WIDTH</PaperCode>, the line a PaperPanel draws.
+                A panel is its own document, so its viewport is its width. It follows the page as it is resized. Call it where a component is created.
+                Use it for a view outside a PaperPanel, such as a home screen shown before one opens. Inside a PaperPanel, read <PaperCode>usePaperPanel().compact</PaperCode>.
+            </PaperText>
+            <PaperCode block language="tsx">
+{`import { createPaperCompact, PaperGrid } from "@mileniumhq/paperui";
+
+export function Home() {
+    const compact = createPaperCompact();
+    return <PaperGrid columns={compact() ? 1 : 3}>{/* the bots */}</PaperGrid>;
+}`}
+            </PaperCode>
 
             <PaperText preset="subheader" as="h2" id="behavior">Behavior</PaperText>
             <PaperText preset="subheader" as="h3" id="layout">Layout</PaperText>

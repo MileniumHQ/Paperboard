@@ -33,6 +33,7 @@ import {
     PaperSlidePage,
     PaperSplit,
     PaperToggle,
+    createPaperCompact,
     createPolling,
     setHapticPlayer,
     useContextMenuState,
@@ -62,6 +63,12 @@ const shell = (content: () => JSX.Element) => (
 const lines = (from: number, count: number) => Array.from({ length: count }, (_, i) => `line ${from + i}`);
 
 const scenarios: Record<string, () => JSX.Element> = {
+    compact() {
+        return shell(() => {
+            const compact = createPaperCompact();
+            return <span id="compact">{compact() ? "phone" : "wide"}</span>;
+        });
+    },
     modalLeave() {
         const [open, setOpen] = createSignal(true);
         const t = (window.t = { presses: 0, close: () => setOpen(false) });

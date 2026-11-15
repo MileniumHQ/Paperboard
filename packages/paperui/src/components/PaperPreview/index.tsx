@@ -12,6 +12,7 @@ import { PaperText } from "../PaperText";
 import { PaperVideo, prefersNativeVideo } from "../PaperVideo";
 import { grammarFor } from "../../utils/highlight";
 import { cx } from "../../utils/cx";
+import { errorMessage } from "../../utils/errorMessage";
 
 /** How a file is shown: what PaperPreview draws it with. */
 export type PaperPreviewKind = "image" | "video" | "audio" | "markdown" | "code" | "text";
@@ -127,7 +128,7 @@ export function PaperPreview(props: PaperPreviewProps) {
     const failure = () => {
         if (local.error) return local.error;
         if (!kind()) return `${local.name} can't be previewed`;
-        if (textual() && text.error) return text.error instanceof Error ? text.error.message : String(text.error);
+        if (textual() && text.error) return errorMessage(text.error);
         return null;
     };
     const loading = () => !local.src || (textual() && (text.loading || !text()));

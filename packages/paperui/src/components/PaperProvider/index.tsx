@@ -20,6 +20,7 @@ import { installFrameBackground } from "../../utils/frameBackground";
 import { installPageZoomLock } from "../../utils/pageZoom";
 import { installUncaughtErrors } from "../../utils/uncaughtErrors";
 import { cx } from "../../utils/cx";
+import { errorMessage } from "../../utils/errorMessage";
 
 export type ThemeMode = "light" | "dark" | "system";
 
@@ -180,7 +181,7 @@ export function PaperProvider(props: ParentProps<PaperProviderProps>) {
             () => setIconsReady(true),
             (err) => {
                 setIconsReady(true);
-                throw new Error(`PaperUI's icon font failed to load: ${err instanceof Error ? err.message : String(err)}`);
+                throw new Error(`PaperUI's icon font failed to load: ${errorMessage(err)}`);
             },
         );
     }

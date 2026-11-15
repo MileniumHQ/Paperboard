@@ -366,7 +366,7 @@ export function Done() {
                 Mobile mode is whether Paperboard is running as the phone app. Two questions look alike and are answered differently:
             </PaperText>
             <PaperTextList>
-                <li><strong>Layout</strong> (sizes, columns, stacking, spacing) follows the width: a container or media width query, or <PaperCode>PAPER_PANEL_COMPACT_WIDTH</PaperCode>. It never asks for mobile mode, so a narrow window and a phone lay out the same.</li>
+                <li><strong>Layout</strong> (sizes, columns, stacking, spacing) follows the width: a container or media width query, <PaperCode>PAPER_PANEL_COMPACT_WIDTH</PaperCode>, or <PaperLink href="/docs/paperui/paperpanel/#create-paper-compact">createPaperCompact</PaperLink>. It never asks for mobile mode, so a narrow window and a phone lay out the same.</li>
                 <li><strong>Behavior</strong> that differs between a finger and a mouse (a long press that opens a menu, text that must not select under a finger, a control that only shows on hover, haptics, swipe gestures) follows mobile mode. Don't read <PaperCode>@media (hover: none)</PaperCode>, <PaperCode>pointer: coarse</PaperCode>, the user agent or <PaperCode>navigator.maxTouchPoints</PaperCode> for it.</li>
             </PaperTextList>
             <PaperText preset="body" as="p">
