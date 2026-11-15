@@ -392,14 +392,7 @@ function removeServer(server: unknown): Promise<void> {
             await inServer(scope, async () => {
                 await currentGameService().beforeRemove();
                 await stopServerInstance(scope.ctx);
-                const deadline = Date.now() + 40_000;
-                while (await scopedProcess.exists(currentGameService().primaryProcessId)) {
-                    if (Date.now() >= deadline)
-                        throw new Error(
-                            "The server has not stopped; its files and entry were kept",
-                        );
-                    await new Promise((resolve) => setTimeout(resolve, 100));
-                }
+                await waitUntil(async () => !(await scopedProcess.exists(currentGameService().primaryProcessId)), 40_000, "the server to stop; its files and entry were kept");
                 // Keep its directory and backups; removal never deletes user data.
                 for (const name of currentGameService().portNames)
                     await livePortDeps().ports.release(name);

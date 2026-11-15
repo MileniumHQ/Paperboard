@@ -7,7 +7,7 @@ import { backupApi, backupLocationsApi, blocksApi, getTransport, type BackupReco
 import { callServer } from "./helpers/serverCall";
 import { startTestDaemon, type TestDaemon } from "./helpers/crane";
 import { installFakeJava } from "./helpers/fakeJava";
-import { installPanel, restartService, servicesState } from "./helpers/installedPanel";
+import { installPanel, restartService, servicesState, waitForFile } from "./helpers/installedPanel";
 import { freePort } from "./helpers/palworld";
 import { placeStandIn } from "./helpers/standIn";
 import { writeTree } from "./helpers/tmp";
@@ -163,7 +163,8 @@ describe("each server is a Blocks project with its game's blocks", () => {
     test("the values read the players online, and a kick announces the change before a fresh read shows it", async () => {
         const state = servicesState();
         const changed = new Set<string>();
-        const off = ["player-count", "online-players", "server-status"].map((value) => blocksApi.onChange(PANEL_ID, value, () => changed.add(value), "s-a"));
+        let kickAnnounced = () => {};
+        const off = ["player-count", "online-players", "server-status"].map((value) => blocksApi.onChange(PANEL_ID, value, () => { changed.add(value); if (changed.has("player-count") && changed.has("online-players")) kickAnnounced(); }, "s-a"));
         try {
             await settle();
             expect(await run("start-server")).toBeNull();
@@ -181,13 +182,10 @@ describe("each server is a Blocks project with its game's blocks", () => {
             expect((await blocksApi.typeChoices(`${PANEL_ID}:player`)).map((c) => c.value)).toEqual(["alice", "bob"]);
 
             changed.clear();
+            const announced = new Promise<void>((resolve) => (kickAnnounced = resolve));
             expect(await run("kick-player", { player: "alice", reason: "testing" })).toBeNull();
             await state.waitFor("s-a", (s) => s.onlinePlayers.length === 1, "alice to leave");
-            const deadline = Date.now() + 10_000;
-            while (!changed.has("player-count") || !changed.has("online-players")) {
-                if (Date.now() > deadline) throw new Error(`only ${[...changed].join(", ") || "nothing"} announced a change`);
-                await new Promise((resolve) => setTimeout(resolve, 20));
-            }
+            await announced;
             expect(await read("online-players")).toEqual(["bob"]);
             expect(await read("player-count")).toBe(1);
         } finally {
@@ -200,14 +198,9 @@ describe("each server is a Blocks project with its game's blocks", () => {
         await run("run-command", { command: "ban carol cheating" });
         await expect(run("say", { message: "two\nlines" })).rejects.toThrow("Refusing multi-line chat message");
         await expect(run("create-world", { world: "Third" })).rejects.toThrow("Stop the server before managing worlds");
-        const deadline = Date.now() + 10_000;
-        const log = () => (fs.existsSync(path.join(serverDir, "commands.log")) ? fs.readFileSync(path.join(serverDir, "commands.log"), "utf8") : "");
-        while (!log().includes("ban carol cheating")) {
-            if (Date.now() > deadline) throw new Error(`the commands did not reach the server:\n${log()}`);
-            await new Promise((resolve) => setTimeout(resolve, 20));
-        }
-        expect(log()).toContain("say hello there\n");
-        expect(log()).not.toContain("two");
+        const log = await waitForFile(path.join(serverDir, "commands.log"), (text) => text.includes("ban carol cheating"), "the commands to reach the server");
+        expect(log).toContain("say hello there\n");
+        expect(log).not.toContain("two");
     });
 
     test("a kick naming no player, or one that isn't a player name, is refused before the server sees it", async () => {
@@ -287,7 +280,9 @@ describe("the panel's own blocks run its servers, and each server's settings and
         expect((await blocksApi.choices(PANEL_ID, "command.create-server", "game")).map((c) => c.value)).toContain("minecraft");
         await expect(panelRun("create-server", { game: "chess", name: "Nope" })).rejects.toThrow('"Game" must be one of');
         let changes = 0;
-        const off = blocksApi.onChange(PANEL_ID, "servers", () => changes++);
+        let announcedTwice = () => {};
+        const twice = new Promise<void>((resolve) => (announcedTwice = resolve));
+        const off = blocksApi.onChange(PANEL_ID, "servers", () => { if (++changes === 2) announcedTwice(); });
         try {
             await settle();
             const made = await panelRun<string>("create-server", { game: "minecraft", name: "Creative" });
@@ -306,11 +301,8 @@ describe("the panel's own blocks run its servers, and each server's settings and
             expect(fs.readFileSync(path.join(folder(made), "keep.txt"), "utf8")).toBe("mine");
             await expect(panelRun("start-server", { server: made })).rejects.toThrow("Choose a server that has not been removed");
 
-            const deadline = Date.now() + 10_000;
-            while (changes < 2) {
-                if (Date.now() > deadline) throw new Error(`the server list announced ${changes} changes, not 2`);
-                await new Promise((resolve) => setTimeout(resolve, 20));
-            }
+            // the list announced the server made and the server removed
+            await twice;
         } finally {
             off();
         }
