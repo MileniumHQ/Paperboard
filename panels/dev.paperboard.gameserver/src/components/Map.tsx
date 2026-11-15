@@ -8,75 +8,45 @@ import {
     PaperSelectMenu,
     PaperSelectMenuItem,
     PaperText,
-    getVar,
 } from "@mileniumhq/paperui";
-import {
-    listMapRegions,
-    renderMapTile,
-    type MapDimensionRegions,
-    type MapRegionsResult,
-} from "../lib/map";
-import {
-    DIMENSION_LABELS,
-    REGION_BLOCKS,
-    type MapDimension,
-} from "../core/map";
-import {
-    onlinePlayerNames,
-    playerPositions,
-    queryPlayerPositions,
-    seenPlayerNames,
-    serverStatus,
-} from "../lib/server";
-import { loadHead } from "../lib/skins";
+import { listMapRegions, type MapDimensionRegions, type MapRegionsResult } from "../lib/map";
+import { DIMENSION_LABELS, REGION_BLOCKS, type MapDimension } from "../core/map";
+import { onlinePlayerNames, playerPositions, queryPlayerPositions, seenPlayerNames, serverStatus } from "../lib/server";
 import styles from "./Map.module.css";
 import { errorMessage, type Outcome } from "../lib/failure";
+import { createHeads, createTileStore, tileKey, type PictureReport } from "./map/tiles";
+import { paintMap } from "./map/paint";
+import { attachGestures, clampScale } from "./map/gestures";
 
-const MIN_SCALE = 0.05;
-const MAX_SCALE = 3;
-const ZOOM_STEP = 1.2;
 // how much of the map the terrain fills when it opens
 const TERRAIN_FILL = 0.8;
 const POSITION_POLL_MS = 2000;
 // a region file changes when the server saves the world, minutes apart
 const TILE_REFRESH_MS = 30_000;
-// the service paints one region at a time; asking for a whole world at once
-// only queues work for tiles the view may have left by the time they paint
-const MAX_TILE_REQUESTS = 2;
 // new regions appear while the server generates; re-list on a slower clock
 // so the map can show terrain beyond what existed when the tab opened
 const REGION_REFRESH_MS = 15000;
-// decoded tiles held in the renderer; panning across a world must not grow
-// memory without a bound
-const MAX_TILE_CACHE = 256;
-// a marker's side in CSS px: its base at scale 1, never under the min or over the max
-const MARKER_SIZE = { base: 22, min: 18, max: 30 };
-const MARKER_OUTLINE = 2;
 
-// a canvas takes values, not var() strings; a token that isn't defined is a
-// broken stylesheet, not a reason to guess
-function token(name: string): string {
-    const value = getVar(name);
-    if (!value) throw new Error(`PaperUI token --paper-${name} is not defined`);
-    return value;
-}
-
-interface TileState {
-    image: HTMLImageElement;
-    /** the region file's version this image was painted from */
-    version: number;
-    /** the refresh tick that last asked the service about it */
-    checked: number;
-}
+/** a coordinate typed into a go-to field, or null while it isn't one */
+const coordinate = (typed: string): number | null => {
+    const text = typed.trim();
+    const value = Number(text);
+    return text !== "" && Number.isFinite(value) ? value : null;
+};
 
 // Full-bleed top-down world map: region tiles rendered by the service,
 // online players drawn as markers, per-dimension. Pans by drag, zooms on
-// the cursor, pinches on touch, and refreshes both tiles and positions on its own.
+// the cursor, pinches on touch, and refreshes both tiles and positions on
+// its own. This wires the pictures (map/tiles), the painter (map/paint) and
+// the gestures (map/gestures) to the view and its controls.
 export default function MapView() {
     const [info, setInfo] = createSignal<MapRegionsResult | null>(null);
-    const [error, setError] = createSignal<Outcome | null>(null);
+    // why the region files could not be listed, until a listing goes through
+    const [regionsError, setRegionsError] = createSignal<string | null>(null);
+    // the last tile, head, position or drawing failure: it stays until what
+    // failed goes through, or it is dismissed
+    const [failure, setFailure] = createSignal<(Outcome & { key: string }) | null>(null);
     const [dimension, setDimension] = createSignal<MapDimension>("overworld");
-    const [pendingCount, setPendingCount] = createSignal(0);
     const [grabbing, setGrabbing] = createSignal(false);
     const [scale, setScale] = createSignal(1);
     const [offsetX, setOffsetX] = createSignal(0);
@@ -92,96 +62,22 @@ export default function MapView() {
     let canvas: HTMLCanvasElement | undefined;
     let wrapper: HTMLDivElement | undefined;
     let centeredView = false;
-    const tiles = new Map<string, TileState>();
-    const pending = new Set<string>();
-    const headImages = new Map<string, HTMLImageElement>();
 
-    // player heads are composited from Mojang by the service (the browser
-    // cannot read the profile endpoint across origins). Loaded lazily; until
-    // they arrive markers draw as dots, and a load triggers a redraw.
-    const getHead = (name: string): HTMLImageElement | null => {
-        const key = name.toLowerCase();
-        const existing = headImages.get(key);
-        if (existing) return existing.complete && existing.naturalWidth > 0 ? existing : null;
-        // reserve the slot so a redraw does not start a second lookup
-        headImages.set(key, new Image());
-        // a player without a skin keeps the dot; a lookup or picture that fails says so
-        const failed = (message: string) => setError({ title: `${name}'s head didn't load`, message });
-        void loadHead({ name })
-            .then((dataUrl) => {
-                if (!dataUrl) return;
-                const image = new Image();
-                image.onload = () => {
-                    headImages.set(key, image);
-                    setRevision((v) => v + 1);
-                };
-                image.onerror = () => failed("The service's picture of it could not be read.");
-                image.src = dataUrl;
-            })
-            .catch((err) => {
-                console.error(`[Map] head lookup failed for ${name}:`, err);
-                failed(errorMessage(err));
-            });
-        return null;
+    const report: PictureReport = {
+        drawn: () => setRevision((v) => v + 1),
+        failed: (key, title, message) => setFailure({ key, title, message }),
+        succeeded: (key) => {
+            if (failure()?.key === key) setFailure(null);
+        },
     };
-
-    const keyOf = (dim: MapDimension, rx: number, rz: number) => `${dim}:${rx}:${rz}`;
+    const store = createTileStore(report);
+    const head = createHeads(report);
 
     const availableDimensions = () => info()?.dimensions?.map((d) => d.dimension) ?? [];
     const regionsFor = (dim: MapDimension) =>
         info()?.dimensions?.find((d) => d.dimension === dim)?.regions ?? [];
     const playerKeys = () =>
         Array.from(new Set([...seenPlayerNames(), ...onlinePlayerNames()])).sort();
-
-    // the tiles the view still wants, nearest its centre first
-    let wanted: { dim: MapDimension; rx: number; rz: number }[] = [];
-    const requestWanted = () => {
-        while (pending.size < MAX_TILE_REQUESTS) {
-            const next = wanted.shift();
-            if (!next) return;
-            requestTile(next.dim, next.rx, next.rz);
-        }
-    };
-
-    const requestTile = (dim: MapDimension, rx: number, rz: number) => {
-        const key = keyOf(dim, rx, rz);
-        const existing = tiles.get(key);
-        if (pending.has(key)) return;
-        pending.add(key);
-        setPendingCount(pending.size);
-        const asked = tileRefresh();
-        // a tile already drawn is only asked whether it changed
-        renderMapTile(dim, rx, rz, existing?.version)
-            .then((result) => {
-                pending.delete(key);
-                setPendingCount(pending.size);
-                requestWanted();
-                if (existing) existing.checked = asked;
-                const dataUrl = result?.dataUrl;
-                if (!result || !dataUrl) return;
-                const image = new Image();
-                image.onload = () => {
-                    tiles.delete(key);
-                    tiles.set(key, { image, version: result.version, checked: asked });
-                    while (tiles.size > MAX_TILE_CACHE) {
-                        const oldest = tiles.keys().next().value;
-                        if (oldest === undefined) break;
-                        tiles.delete(oldest);
-                    }
-                    setRevision((v) => v + 1);
-                };
-                image.onerror = () =>
-                    setError({ title: "A map tile didn't render", message: `The picture the service painted of region ${rx}, ${rz} could not be read.` });
-                image.src = dataUrl;
-            })
-            .catch((err) => {
-                pending.delete(key);
-                setPendingCount(pending.size);
-                requestWanted();
-                console.error(`[Map] Failed to render tile ${key}:`, err);
-                setError({ title: "A map tile didn't render", message: errorMessage(err) });
-            });
-    };
 
     const sizeOf = () => ({
         width: canvas?.clientWidth ?? 0,
@@ -209,76 +105,13 @@ export default function MapView() {
     };
 
     const draw = () => {
+        if (!canvas) return;
         try {
-            paint();
+            paintMap(canvas, { ...sizeOf(), scale: scale(), offsetX: offsetX(), offsetY: offsetY(), dimension: dimension() }, store.tiles, playerPositions(), head);
+            report.succeeded("draw");
         } catch (err) {
             console.error("[Map] drawing failed:", err);
-            setError({ title: "The map didn't draw", message: errorMessage(err) });
-        }
-    };
-
-    const paint = () => {
-        if (!canvas) return;
-        const ctx = canvas.getContext("2d");
-        if (!ctx) return;
-        const { width, height } = sizeOf();
-        ctx.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0);
-        ctx.clearRect(0, 0, width, height);
-        const s = scale();
-        const size = REGION_BLOCKS * s;
-        const dim = dimension();
-        for (const [key, tile] of tiles) {
-            const [tileDim, rx, rz] = key.split(":");
-            if (tileDim !== dim) continue;
-            ctx.drawImage(
-                tile.image,
-                Number(rx) * REGION_BLOCKS * s + offsetX(),
-                Number(rz) * REGION_BLOCKS * s + offsetY(),
-                size,
-                size,
-            );
-        }
-        drawPlayers(ctx);
-    };
-
-    const drawPlayers = (ctx: CanvasRenderingContext2D) => {
-        const s = scale();
-        const dim = dimension();
-        const size = Math.max(MARKER_SIZE.min, Math.min(MARKER_SIZE.max, MARKER_SIZE.base * Math.max(0.8, s)));
-        // colors and type come from the token set, resolved to values: a
-        // canvas ignores a var() string and keeps its previous value
-        const strokeColor = token("on-color");
-        const markerColor = token("danger");
-        const labelBg = token("scrim");
-        const labelText = token("on-color");
-        const fontSize = token("text-size-1");
-        ctx.font = `${token("weight-semibold")} ${fontSize} ${token("font-family")}`;
-        ctx.textBaseline = "middle";
-        // the label's box: a line and a half tall, padded by a third of the type
-        const labelHeight = parseFloat(fontSize) * 1.5;
-        const labelPad = parseFloat(fontSize) / 3;
-        for (const [key, pos] of playerPositions()) {
-            if (pos.dimension !== `minecraft:${dim}`) continue;
-            const screenX = pos.x * s + offsetX();
-            const screenY = pos.z * s + offsetY();
-            const head = getHead(key);
-            ctx.lineWidth = MARKER_OUTLINE;
-            ctx.strokeStyle = strokeColor;
-            if (head) {
-                ctx.drawImage(head, screenX - size / 2, screenY - size / 2, size, size);
-                ctx.strokeRect(screenX - size / 2, screenY - size / 2, size, size);
-            } else {
-                ctx.beginPath();
-                ctx.arc(screenX, screenY, size / 3, 0, Math.PI * 2);
-                ctx.fillStyle = markerColor;
-                ctx.fill();
-                ctx.stroke();
-            }
-            const labelX = screenX + size / 2 + labelPad;
-            ctx.fillStyle = labelBg;
-            ctx.fillRect(labelX, screenY - labelHeight / 2, ctx.measureText(key).width + labelPad * 2, labelHeight);
-            ctx.fillStyle = labelText;
-            ctx.fillText(key, labelX + labelPad, screenY);
+            report.failed("draw", "The map didn't draw", errorMessage(err));
         }
     };
 
@@ -303,10 +136,11 @@ export default function MapView() {
         };
     };
 
+    // both fields must hold a number: an empty one is not 0
     const goToCoords = () => {
-        const x = Number(coordX().trim());
-        const z = Number(coordZ().trim());
-        if (!Number.isFinite(x) || !Number.isFinite(z)) return;
+        const x = coordinate(coordX());
+        const z = coordinate(coordZ());
+        if (x === null || z === null) return;
         centerOnWorld(x, z);
     };
 
@@ -316,7 +150,7 @@ export default function MapView() {
         const { width, height } = sizeOf();
         const fit = Math.min(width / (terrain.maxX - terrain.minX), height / (terrain.maxZ - terrain.minZ)) * TERRAIN_FILL;
         batch(() => {
-            setScale(Math.max(MIN_SCALE, Math.min(MAX_SCALE, fit)));
+            setScale(clampScale(fit));
             centerOnWorld((terrain.minX + terrain.maxX) / 2, (terrain.minZ + terrain.maxZ) / 2);
         });
     };
@@ -343,8 +177,10 @@ export default function MapView() {
     const loadRegions = async () => {
         try {
             const result = await listMapRegions();
-            setInfo(result);
-            setError(null);
+            batch(() => {
+                setInfo(result);
+                setRegionsError(null);
+            });
             const dims = result.dimensions;
             if (dims.length === 0) return;
             // keep the user's dimension on a refresh; fall back to the
@@ -361,111 +197,32 @@ export default function MapView() {
             centeredView = true;
         } catch (err) {
             console.error("[Map] Failed to list regions:", err);
-            setError({ title: "Couldn't read the world's region files", message: errorMessage(err) });
+            setRegionsError(errorMessage(err));
         }
     };
 
+    // live positions arrive as state; asking for them can fail, and says so
+    const askPositions = () =>
+        queryPlayerPositions().then(
+            () => report.succeeded("positions"),
+            (err) => report.failed("positions", "Player positions not read", errorMessage(err)),
+        );
+
     onMount(() => {
+        if (!canvas || !wrapper) throw new Error("The map's canvas was not made");
         const resize = () => {
-            if (!canvas || !wrapper) return;
             // a phone's screen has more pixels than CSS px; drawing at 1:1 would blur
-            canvas.width = Math.round(wrapper.clientWidth * devicePixelRatio);
-            canvas.height = Math.round(wrapper.clientHeight * devicePixelRatio);
+            canvas!.width = Math.round(wrapper!.clientWidth * devicePixelRatio);
+            canvas!.height = Math.round(wrapper!.clientHeight * devicePixelRatio);
             setRevision((v) => v + 1);
         };
         resize();
         const observer = new ResizeObserver(resize);
-        if (wrapper) observer.observe(wrapper);
-
-        // every finger (or the mouse) on the map, by pointer id: one pans, two pinch
-        const touches = new Map<number, { x: number; y: number }>();
-
-        const worldAt = (clientX: number, clientY: number) => {
-            const rect = canvas?.getBoundingClientRect();
-            if (!rect) return null;
-            const s = scale();
-            if (!s) return null;
-            return {
-                x: (clientX - rect.left - offsetX()) / s,
-                z: (clientY - rect.top - offsetY()) / s,
-            };
-        };
-
-        // zooms to `next`, keeping the world point under (mouseX, mouseY) where it is
-        const zoomAt = (mouseX: number, mouseY: number, next: number) => {
-            const clamped = Math.max(MIN_SCALE, Math.min(MAX_SCALE, next));
-            const worldX = (mouseX - offsetX()) / scale();
-            const worldY = (mouseY - offsetY()) / scale();
-            batch(() => {
-                setScale(clamped);
-                setOffsetX(mouseX - worldX * clamped);
-                setOffsetY(mouseY - worldY * clamped);
-            });
-        };
-
-        // the two fingers' midpoint (relative to the map) and their distance
-        const pinchOf = () => {
-            const rect = canvas?.getBoundingClientRect();
-            const [a, b] = [...touches.values()];
-            if (!rect || !a || !b) return null;
-            return {
-                x: (a.x + b.x) / 2 - rect.left,
-                y: (a.y + b.y) / 2 - rect.top,
-                distance: Math.hypot(a.x - b.x, a.y - b.y),
-            };
-        };
-
-        const onPointerDown = (e: PointerEvent) => {
-            touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
-            setGrabbing(true);
-            canvas?.setPointerCapture(e.pointerId);
-        };
-        const onPointerMove = (e: PointerEvent) => {
-            setCursor(worldAt(e.clientX, e.clientY));
-            const before = touches.get(e.pointerId);
-            if (!before) return;
-            if (touches.size >= 2) {
-                const start = pinchOf();
-                touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
-                const now = pinchOf();
-                if (!start || !now || start.distance === 0) return;
-                // the fingers' midpoint pans, their spread zooms around it
-                batch(() => {
-                    setOffsetX((v) => v + (now.x - start.x));
-                    setOffsetY((v) => v + (now.y - start.y));
-                    zoomAt(now.x, now.y, scale() * (now.distance / start.distance));
-                });
-                return;
-            }
-            batch(() => {
-                setOffsetX((v) => v + (e.clientX - before.x));
-                setOffsetY((v) => v + (e.clientY - before.y));
-            });
-            touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
-        };
-        const onPointerUp = (e: PointerEvent) => {
-            touches.delete(e.pointerId);
-            setGrabbing(touches.size > 0);
-            if (canvas?.hasPointerCapture(e.pointerId)) canvas.releasePointerCapture(e.pointerId);
-        };
-        const onPointerLeave = () => setCursor(null);
-        const onWheel = (e: WheelEvent) => {
-            e.preventDefault();
-            const rect = canvas?.getBoundingClientRect();
-            if (!rect) return;
-            const factor = e.deltaY < 0 ? ZOOM_STEP : 1 / ZOOM_STEP;
-            zoomAt(e.clientX - rect.left, e.clientY - rect.top, scale() * factor);
-        };
-
-        canvas?.addEventListener("pointerdown", onPointerDown);
-        canvas?.addEventListener("pointermove", onPointerMove);
-        canvas?.addEventListener("pointerup", onPointerUp);
-        canvas?.addEventListener("pointercancel", onPointerUp);
-        canvas?.addEventListener("pointerleave", onPointerLeave);
-        canvas?.addEventListener("wheel", onWheel, { passive: false });
+        observer.observe(wrapper);
+        const detach = attachGestures(canvas, { scale, offsetX, offsetY, setScale, setOffsetX, setOffsetY }, { grabbing: setGrabbing, cursor: setCursor });
 
         const positionPoll = setInterval(() => {
-            if (serverStatus() === "online") queryPlayerPositions();
+            if (serverStatus() === "online") void askPositions();
         }, POSITION_POLL_MS);
         const tilePoll = setInterval(
             () => setTileRefresh((v) => v + 1),
@@ -476,15 +233,10 @@ export default function MapView() {
 
         onCleanup(() => {
             observer.disconnect();
+            detach();
             clearInterval(positionPoll);
             clearInterval(tilePoll);
             clearInterval(regionPoll);
-            canvas?.removeEventListener("pointerdown", onPointerDown);
-            canvas?.removeEventListener("pointermove", onPointerMove);
-            canvas?.removeEventListener("pointerup", onPointerUp);
-            canvas?.removeEventListener("pointercancel", onPointerUp);
-            canvas?.removeEventListener("pointerleave", onPointerLeave);
-            canvas?.removeEventListener("wheel", onWheel);
         });
 
         void loadRegions();
@@ -501,16 +253,14 @@ export default function MapView() {
         const centerX = (width / 2 - offsetX()) / scale() / REGION_BLOCKS - 0.5;
         const centerZ = (height / 2 - offsetY()) / scale() / REGION_BLOCKS - 0.5;
         const fromCenter = (t: { rx: number; rz: number }) => (t.rx - centerX) ** 2 + (t.rz - centerZ) ** 2;
-        wanted = visibleTiles()
-            .filter((t) => {
-                const key = keyOf(dim, t.rx, t.rz);
-                const have = tiles.get(key);
+        store.want(
+            visibleTiles()
                 // a drawn tile is asked about again once per refresh
-                return !pending.has(key) && (!have || have.checked !== refresh);
-            })
-            .sort((a, b) => fromCenter(a) - fromCenter(b))
-            .map((t) => ({ dim, rx: t.rx, rz: t.rz }));
-        requestWanted();
+                .filter((t) => store.stale(tileKey(dim, t.rx, t.rz), refresh))
+                .sort((a, b) => fromCenter(a) - fromCenter(b))
+                .map((t) => ({ dim, rx: t.rx, rz: t.rz })),
+            refresh,
+        );
     }));
 
     // redraw on any view or position change
@@ -566,10 +316,10 @@ export default function MapView() {
                         {Math.round((cursor() ?? centerCoords()).x)},{" "}
                         {Math.round((cursor() ?? centerCoords()).z)}
                     </PaperText>
-                    <Show when={pendingCount() > 0}>
+                    <Show when={store.pendingCount() > 0}>
                         <PaperIcon>hourglass_top</PaperIcon>
                         <PaperText size={2} color="text-subtle">
-                            {pendingCount()}
+                            {store.pendingCount()}
                         </PaperText>
                     </Show>
                     <PaperFlex flex minWidth={0}>
@@ -577,9 +327,7 @@ export default function MapView() {
                             placeholder="X"
                             size={9}
                             value={coordX()}
-                            invalid={
-                                coordX().trim() !== "" && !Number.isFinite(Number(coordX()))
-                            }
+                            invalid={coordX().trim() !== "" && coordinate(coordX()) === null}
                             onInput={(e) => setCoordX(e.currentTarget.value)}
                             onKeyDown={(e) => {
                                 if (e.key === "Enter") goToCoords();
@@ -591,9 +339,7 @@ export default function MapView() {
                             placeholder="Z"
                             size={9}
                             value={coordZ()}
-                            invalid={
-                                coordZ().trim() !== "" && !Number.isFinite(Number(coordZ()))
-                            }
+                            invalid={coordZ().trim() !== "" && coordinate(coordZ()) === null}
                             onInput={(e) => setCoordZ(e.currentTarget.value)}
                             onKeyDown={(e) => {
                                 if (e.key === "Enter") goToCoords();
@@ -606,21 +352,30 @@ export default function MapView() {
                 </div>
             </div>
 
-            <Show when={error()}>
-                {(failure) => (
-                    <div class={styles.bottomLeft}>
-                        <PaperQuote variant="danger" icon="warning" title={failure().title}>
-                            {failure().message}
-                        </PaperQuote>
-                    </div>
-                )}
+            <Show when={regionsError() || failure()}>
+                <PaperFlex class={styles.bottomLeft} direction="column" gap="half">
+                    <Show when={regionsError()}>
+                        {(message) => (
+                            <PaperQuote variant="danger" icon="warning" title="Couldn't read the world's region files">
+                                {message()}
+                            </PaperQuote>
+                        )}
+                    </Show>
+                    <Show when={failure()}>
+                        {(failed) => (
+                            <PaperQuote variant="danger" icon="warning" title={failed().title} onDismiss={() => setFailure(null)}>
+                                {failed().message}
+                            </PaperQuote>
+                        )}
+                    </Show>
+                </PaperFlex>
             </Show>
 
             <Show
                 when={
                     info() &&
                     (info()!.dimensions?.length ?? 0) === 0 &&
-                    !error()
+                    !regionsError()
                 }
             >
                 <div class={styles.empty}>
