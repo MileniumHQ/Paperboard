@@ -21,6 +21,8 @@ import type { ToolResult } from "./computerMcp";
 import type { ToolSpec } from "./computerTools";
 import type { Launch } from "./which";
 import type { Toolset } from "./toolsets";
+import { errorText } from "../lib/failure";
+import { writeAtomic } from "./writeAtomic";
 
 const L = LIMITS.access;
 /** what one read or one command may hand back before the rest is cut */
@@ -156,7 +158,6 @@ interface Once {
 }
 
 const fault = (text: string): ToolResult => ({ isError: true, text });
-const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
 const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
 
 /** `child` is `parent` or under it (both already resolved) */
@@ -182,7 +183,7 @@ export class Access {
         try {
             this.described ??= describeComputer();
         } catch (e) {
-            return `Which system the user's computer runs couldn't be read (${e instanceof Error ? e.message : String(e)}). Check before running anything that depends on it.`;
+            return `Which system the user's computer runs couldn't be read (${errorText(e)}). Check before running anything that depends on it.`;
         }
         return this.described;
     }
@@ -194,7 +195,7 @@ export class Access {
             this.error = null;
         } catch (e) {
             this.stored = { folders: [], commands: [] };
-            this.error = `${this.deps.file} can't be read (${message(e)}). Nothing in it is allowed; fix or delete the file.`;
+            this.error = `${this.deps.file} can't be read (${errorText(e)}). Nothing in it is allowed; fix or delete the file.`;
         }
     }
 
@@ -211,15 +212,13 @@ export class Access {
         try {
             this.deps.onChange(this.view());
         } catch (e) {
-            console.error("[agents] couldn't publish what's allowed:", message(e));
+            console.error("[agents] couldn't publish what's allowed:", errorText(e));
         }
     }
 
     private save() {
         if (this.error) throw new Error(this.error);
-        const tmp = `${this.deps.file}.${process.pid}.tmp`;
-        fs.writeFileSync(tmp, JSON.stringify(this.stored, null, 2));
-        fs.renameSync(tmp, this.deps.file);
+        writeAtomic(this.deps.file, JSON.stringify(this.stored, null, 2));
     }
 
     /** a turn ended: grants for this time that were used up lapse */
@@ -317,8 +316,8 @@ export class Access {
                     }
                     return fault(`unknown tool ${name}`);
                 } catch (e) {
-                    console.warn(`[agents] ${name} failed:`, message(e));
-                    return fault(message(e));
+                    console.warn(`[agents] ${name} failed:`, errorText(e));
+                    return fault(errorText(e));
                 }
             },
         };
@@ -379,7 +378,7 @@ export class Access {
                 this.save();
             } catch (e) {
                 this.stored = prev;
-                throw new Error(`Not saved: ${message(e)}`);
+                throw new Error(`Not saved: ${errorText(e)}`);
             }
         }
         if (how === "once") {
@@ -427,7 +426,7 @@ export class Access {
             this.deps.notice(text);
         } catch (e) {
             // the card already shows the answer; the agent hears of it when it's next asked
-            console.error("[agents] couldn't tell the agent about access:", message(e));
+            console.error("[agents] couldn't tell the agent about access:", errorText(e));
         }
     }
 
@@ -440,7 +439,7 @@ export class Access {
             try {
                 return `${e.name}  ${fs.statSync(path.join(dir, e.name)).size} bytes`;
             } catch (err) {
-                console.warn(`[agents] couldn't read the size of ${path.join(dir, e.name)}:`, message(err));
+                console.warn(`[agents] couldn't read the size of ${path.join(dir, e.name)}:`, errorText(err));
                 return `${e.name}  (size unreadable)`;
             }
         });

@@ -6,7 +6,7 @@
 // package.json is kept and add_package installs what it lists. Links are
 // neither kept nor followed, and a restore writes only inside the folder.
 
-import { createHash, randomBytes } from "node:crypto";
+import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { localStamp } from "../routineText";
@@ -14,6 +14,8 @@ import type { ToolResult } from "./computerMcp";
 import type { ToolSpec } from "./computerTools";
 import type { HomeFolder } from "./homeFolder";
 import type { Toolset } from "./toolsets";
+import { errorText } from "../lib/failure";
+import { writeAtomic } from "./writeAtomic";
 
 /** how many are kept; past that the oldest go */
 export const KEPT = 100;
@@ -133,7 +135,7 @@ export class Checkpoints {
                     if (name === "restore") return { text: await this.restore(args.checkpoint, args.path) };
                     return { text: `unknown tool ${name}`, isError: true };
                 } catch (e) {
-                    return { text: e instanceof Error ? e.message : String(e), isError: true };
+                    return { text: errorText(e), isError: true };
                 }
             }),
         };
@@ -176,13 +178,6 @@ export class Checkpoints {
         return path.join(this.o.dir, "files", hash.slice(0, 2), hash);
     }
 
-    private writeAtomic(file: string, data: Buffer | string) {
-        fs.mkdirSync(path.dirname(file), { recursive: true });
-        const tmp = `${file}.${randomBytes(4).toString("hex")}.partial`;
-        fs.writeFileSync(tmp, data);
-        fs.renameSync(tmp, file);
-    }
-
     /** Every file and folder in ~ as it is now; with `keep`, each file's contents are stored too. */
     private async scan(keep: boolean): Promise<Scan> {
         this.o.home.ensure();
@@ -212,7 +207,7 @@ export class Checkpoints {
                     } else {
                         const data = await fs.promises.readFile(full);
                         entry = { hash: createHash("sha256").update(data).digest("hex"), size: st.size, mtime: st.mtimeMs };
-                        if (keep && !fs.existsSync(this.blob(entry.hash))) this.writeAtomic(this.blob(entry.hash), data);
+                        if (keep && !fs.existsSync(this.blob(entry.hash))) writeAtomic(this.blob(entry.hash), data);
                         this.hashes.set(r, entry);
                     }
                     out.files[r] = entry;
@@ -226,7 +221,7 @@ export class Checkpoints {
     private save(scan: Scan, note: string): Checkpoint {
         const ids = this.ids();
         const c: Checkpoint = { id: (ids.at(-1) ?? 0) + 1, note, at: (this.o.now ?? Date.now)(), files: scan.files, dirs: scan.dirs };
-        this.writeAtomic(path.join(this.o.dir, `${c.id}.json`), JSON.stringify(c));
+        writeAtomic(path.join(this.o.dir, `${c.id}.json`), JSON.stringify(c));
         this.loaded.set(c.id, c);
         this.prune();
         return c;
@@ -332,7 +327,7 @@ export class Checkpoints {
                 home.write(`~/${p}`, fs.readFileSync(blob));
             }
         } catch (e) {
-            throw new Error(`${shownScope} is only partly back to ${this.name(target)}, and checkpoint ${kept.id} has how it was: ${e instanceof Error ? e.message : String(e)}`);
+            throw new Error(`${shownScope} is only partly back to ${this.name(target)}, and checkpoint ${kept.id} has how it was: ${errorText(e)}`);
         }
 
         const parts = describe({ changed: undo.changed, added: undo.added, removed: undo.removed }, { changed: "changed back", added: "removed", removed: "brought back" });

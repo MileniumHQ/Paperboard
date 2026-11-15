@@ -16,6 +16,8 @@ import { LIMITS, type MemoryFact, type MemoryList, type MemoryNoteInfo } from ".
 import type { ToolResult } from "./computerMcp";
 import type { ToolSpec } from "./computerTools";
 import type { Toolset } from "./toolsets";
+import { errorText } from "../lib/failure";
+import { writeAtomic } from "./writeAtomic";
 
 const L = LIMITS.memory;
 const KEY = /^[a-z0-9][a-z0-9-]*$/;
@@ -67,7 +69,7 @@ export class Memory {
             this.deps.onChange({ revision: this.revision, error: null });
             return out;
         } catch (e) {
-            this.deps.onChange({ revision: this.revision, error: e instanceof Error ? e.message : String(e) });
+            this.deps.onChange({ revision: this.revision, error: errorText(e) });
             throw e;
         }
     }
@@ -78,14 +80,14 @@ export class Memory {
             raw = await fs.readFile(this.indexPath, "utf8");
         } catch (e) {
             if ((e as NodeJS.ErrnoException).code === "ENOENT") return { version: INDEX_VERSION, facts: [], notes: [] };
-            throw new MemoryError(`memory can't be read (${this.indexPath}): ${(e as Error).message}`);
+            throw new MemoryError(`memory can't be read (${this.indexPath}): ${errorText(e)}`);
         }
         const bad = (why: string) => new MemoryError(`memory's index is unreadable (${why}); it was left as it is: ${this.indexPath}`);
         let doc: any;
         try {
             doc = JSON.parse(raw);
         } catch (e) {
-            throw bad((e as Error).message);
+            throw bad(errorText(e));
         }
         if (!doc || doc.version !== INDEX_VERSION || !Array.isArray(doc.facts) || !Array.isArray(doc.notes)) throw bad("not a memory index of this version");
         const keys = new Set<string>();
@@ -101,26 +103,8 @@ export class Memory {
         };
     }
 
-    private async writeFileAtomic(file: string, data: string) {
-        await fs.mkdir(path.dirname(file), { recursive: true });
-        const tmp = `${file}.${randomUUID().slice(0, 8)}.tmp`;
-        try {
-            const h = await fs.open(tmp, "w", 0o600);
-            try {
-                await h.writeFile(data);
-                await h.sync();
-            } finally {
-                await h.close();
-            }
-            await fs.rename(tmp, file);
-        } catch (e) {
-            await fs.rm(tmp, { force: true }); // a failed cleanup throws instead of hiding the write's own failure
-            throw e;
-        }
-    }
-
     private writeIndex(index: Index) {
-        return this.writeFileAtomic(this.indexPath, JSON.stringify(index, null, 2));
+        writeAtomic(this.indexPath, JSON.stringify(index, null, 2), 0o600);
     }
 
     // ------------------------------------------------------------- reading
@@ -140,7 +124,7 @@ export class Memory {
             try {
                 return { key: k, when: note.when, body: await fs.readFile(this.notePath(k), "utf8") };
             } catch (e) {
-                throw new MemoryError(`note ${k} is listed but its file can't be read: ${(e as Error).message}`);
+                throw new MemoryError(`note ${k} is listed but its file can't be read: ${errorText(e)}`);
             }
         });
     }
@@ -155,7 +139,7 @@ export class Memory {
             if (same) return same;
             if (index.facts.length >= L.facts) throw new MemoryError(`memory holds ${L.facts} facts already: forget some, or put detail in a note`);
             const fact = { id: `f-${randomUUID().slice(0, 8)}`, text: t };
-            await this.writeIndex({ ...index, facts: [...index.facts, fact] });
+            this.writeIndex({ ...index, facts: [...index.facts, fact] });
             return fact;
         });
     }
@@ -167,7 +151,7 @@ export class Memory {
             const old = index.facts.find((f) => f.id === id);
             if (!old) throw new MemoryError(`no fact ${String(id)}`);
             const fact = { id: old.id, text: t };
-            await this.writeIndex({ ...index, facts: index.facts.map((f) => (f.id === old.id ? fact : f)) });
+            this.writeIndex({ ...index, facts: index.facts.map((f) => (f.id === old.id ? fact : f)) });
             return fact;
         });
     }
@@ -176,7 +160,7 @@ export class Memory {
         return this.track(true, async () => {
             const index = await this.readIndex();
             if (!index.facts.some((f) => f.id === id)) throw new MemoryError(`no fact ${String(id)}`);
-            await this.writeIndex({ ...index, facts: index.facts.filter((f) => f.id !== id) });
+            this.writeIndex({ ...index, facts: index.facts.filter((f) => f.id !== id) });
         });
     }
 
@@ -191,9 +175,9 @@ export class Memory {
             const exists = index.notes.some((n) => n.key === k);
             if (!exists && index.notes.length >= L.notes) throw new MemoryError(`memory holds ${L.notes} notes already: forget some first`);
             // body first: a crash between the two leaves an index that still points at a complete file
-            await this.writeFileAtomic(this.notePath(k), body);
+            writeAtomic(this.notePath(k), body, 0o600);
             const info = { key: k, when: w };
-            await this.writeIndex({ ...index, notes: exists ? index.notes.map((n) => (n.key === k ? info : n)) : [...index.notes, info] });
+            this.writeIndex({ ...index, notes: exists ? index.notes.map((n) => (n.key === k ? info : n)) : [...index.notes, info] });
             return info;
         });
     }
@@ -203,7 +187,7 @@ export class Memory {
             const k = parseKey(key);
             const index = await this.readIndex();
             if (!index.notes.some((n) => n.key === k)) throw new MemoryError(`no note called ${k}`);
-            await this.writeIndex({ ...index, notes: index.notes.filter((n) => n.key !== k) });
+            this.writeIndex({ ...index, notes: index.notes.filter((n) => n.key !== k) });
             await fs.rm(this.notePath(k), { force: true });
         });
     }
@@ -247,7 +231,7 @@ export class Memory {
         try {
             list = await this.list();
         } catch (e) {
-            return `Your memory is unavailable right now (${e instanceof Error ? e.message : String(e)}). Tell the user if it matters; don't pretend to remember.`;
+            return `Your memory is unavailable right now (${errorText(e)}). Tell the user if it matters; don't pretend to remember.`;
         }
         const facts = list.facts.length ? list.facts.map((f) => `- [${f.id}] ${f.text}`).join("\n") : "(nothing yet)";
         const notes = list.notes.length ? list.notes.map((n) => `- ${n.key}: ${n.when}`).join("\n") : "(none yet)";

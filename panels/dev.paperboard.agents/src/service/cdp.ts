@@ -3,6 +3,8 @@
 // session. Every command has a deadline and the waiting ones are bounded;
 // when the socket closes, everything still waiting fails with it.
 
+import { errorText } from "../lib/failure";
+
 type Json = Record<string, any>;
 
 const MAX_WAITING = 256;
@@ -85,7 +87,7 @@ export class Cdp {
         try {
             m = JSON.parse(raw);
         } catch (e) {
-            console.warn("[agents] the browser's DevTools connection sent something unreadable:", e instanceof Error ? e.message : String(e));
+            console.warn("[agents] the browser's DevTools connection sent something unreadable:", errorText(e));
             this.end("the browser sent something unreadable");
             this.ws.close();
             return;

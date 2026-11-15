@@ -33,6 +33,8 @@ import {
     type Mark,
 } from "./pageScripts";
 import { startProxy, type Proxy } from "./proxy";
+import { errorText } from "../lib/failure";
+import { writeAtomic } from "./writeAtomic";
 
 export const BROWSER_PROC_ID = `${PANEL_ID}.browser`;
 const RECORD_FILE = "browser.json";
@@ -203,7 +205,7 @@ export class BrowserComputer {
         try {
             this.record = this.readRecord();
         } catch (e) {
-            this.set({ phase: "failed", error: e instanceof Error ? e.message : String(e) });
+            this.set({ phase: "failed", error: errorText(e) });
             return;
         }
         if (!this.supported) {
@@ -279,9 +281,7 @@ export class BrowserComputer {
     }
 
     private writeRecord() {
-        const file = path.join(this.deps.dir, RECORD_FILE);
-        fs.writeFileSync(`${file}.tmp`, JSON.stringify(this.record, null, 2));
-        fs.renameSync(`${file}.tmp`, file);
+        writeAtomic(path.join(this.deps.dir, RECORD_FILE), JSON.stringify(this.record, null, 2));
     }
 
     /** the browser's program in the helium package, or null while it isn't installed */
@@ -426,9 +426,7 @@ export class BrowserComputer {
             }
         }
         edit(settings);
-        fs.mkdirSync(path.dirname(file), { recursive: true });
-        fs.writeFileSync(`${file}.tmp`, JSON.stringify(settings));
-        fs.renameSync(`${file}.tmp`, file);
+        writeAtomic(file, JSON.stringify(settings));
     }
 
     private async launch(signal: AbortSignal): Promise<void> {
@@ -1559,5 +1557,4 @@ function navigationError(url: string, error: string): string {
     return `Couldn't open ${url} (${error}).`;
 }
 
-const errorText = (e: unknown) => (e instanceof Error ? e.message : String(e));
 export const newSignInId = () => randomBytes(8).toString("hex");

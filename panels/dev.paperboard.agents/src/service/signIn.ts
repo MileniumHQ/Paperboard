@@ -10,6 +10,7 @@ import { LIMITS, type SignInEntry } from "../contract";
 import type { ToolResult } from "./computerMcp";
 import type { ToolSpec } from "./computerTools";
 import type { Toolset } from "./toolsets";
+import { errorText } from "../lib/failure";
 
 export const SIGN_IN_INSTRUCTIONS = `**Signing in:** when a site needs the user's account, open its sign-in page, \`look\`, then \`ask_to_sign_in\`. Never type a password, code or other sign-in detail yourself, even one from the chat: ask them to use the sign-in card instead.`;
 export const SIGN_IN_FLOW_INSTRUCTIONS = `**Signing in:** use only sites you're already signed in to. If one needs a sign-in, say so in your reply.`;
@@ -156,7 +157,7 @@ export class SignIns {
         try {
             await this.deps.fill({ id: p.entry.id, values: values as string[] });
         } catch (e) {
-            const error = e instanceof Error ? e.message : String(e);
+            const error = errorText(e);
             this.finish(p, { status: "failed", error });
             this.tell(`The sign-in on ${site} couldn't be filled in: ${error}. Look at window ${p.window} and ask again if it still needs one.`);
             throw new Error(`Couldn't sign in: ${error}`);
@@ -207,7 +208,7 @@ export class SignIns {
             this.deps.notice(text);
         } catch (e) {
             // the request's bubble already shows how it went; the agent hears of it when it's next asked
-            console.error("[agents] couldn't tell the agent about a sign-in:", e instanceof Error ? e.message : String(e));
+            console.error("[agents] couldn't tell the agent about a sign-in:", errorText(e));
         }
     }
 }

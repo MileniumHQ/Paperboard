@@ -18,6 +18,7 @@ import { parseServer, secretNames } from "./mcpConfig";
 import type { McpServers } from "./mcpServers";
 import type { Launch } from "./which";
 import type { Toolset } from "./toolsets";
+import { errorText } from "../lib/failure";
 
 const L = LIMITS.toolServers;
 /** how long a tool waits for a server it just added to come up, before it says it's still starting */
@@ -93,7 +94,6 @@ export interface ServerToolsDeps {
 }
 
 const fault = (text: string): ToolResult => ({ isError: true, text });
-const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
 const WEB_KEYS = ["url", "oauth", "sse", "headers"];
 const PROGRAM_KEYS = ["command", "args", "env"];
@@ -131,8 +131,8 @@ export class ServerTools {
                     }
                     return fault(`unknown tool ${name}`);
                 } catch (e) {
-                    console.warn(`[agents] ${name} failed:`, message(e));
-                    return fault(message(e));
+                    console.warn(`[agents] ${name} failed:`, errorText(e));
+                    return fault(errorText(e));
                 }
             },
         };
@@ -312,7 +312,7 @@ export class ServerTools {
             if (!p.entry.change && exists) throw new Error(`a server called ${name} was added meanwhile`);
             await this.servers.save(p.spec);
         } catch (e) {
-            const error = message(e);
+            const error = errorText(e);
             this.finish({ status: "failed", error });
             this.tell(`The user allowed ${name}, but it couldn't be saved: ${error}.`);
             throw new Error(`Not saved: ${error}`);
@@ -321,7 +321,7 @@ export class ServerTools {
         // the click is answered now; starting can take a while (a package to download), and the agent hears how it went
         void this.bringUp(name).then(
             (how) => this.tell(`The user allowed ${name} to run on their computer, and it's ${p.entry.change ? "changed" : "added"}. ${how}`),
-            (e) => this.tell(`The user allowed ${name}, and it's saved, but it couldn't be started: ${message(e)}.`),
+            (e) => this.tell(`The user allowed ${name}, and it's saved, but it couldn't be started: ${errorText(e)}.`),
         );
         return { status: "allowed" };
     }
@@ -352,7 +352,7 @@ export class ServerTools {
             this.deps.notice(text);
         } catch (e) {
             // the card already shows the answer; the agent hears of it when it's next asked
-            console.error("[agents] couldn't tell the agent about its tool servers:", message(e));
+            console.error("[agents] couldn't tell the agent about its tool servers:", errorText(e));
         }
     }
 }

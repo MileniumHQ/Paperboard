@@ -12,6 +12,7 @@ import { randomBytes, timingSafeEqual } from "node:crypto";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
 import type { Toolbox } from "./toolsets";
+import { errorText } from "../lib/failure";
 
 export const MCP_TOKEN_ENV = "PAPERBOARD_COMPUTER_MCP_TOKEN";
 const MAX_BODY = 1 << 20;
@@ -66,7 +67,7 @@ export async function startComputerMcp(tools: Pick<Toolbox, "list" | "call">): P
                 try {
                     msg = JSON.parse(raw);
                 } catch (e) {
-                    return reply(res, 400, rpcError(null, -32700, `parse error: ${(e as Error).message}`));
+                    return reply(res, 400, rpcError(null, -32700, `parse error: ${errorText(e)}`));
                 }
                 if (Array.isArray(msg) || typeof msg !== "object" || msg === null) {
                     return reply(res, 400, rpcError(null, -32600, "one JSON-RPC message per request"));

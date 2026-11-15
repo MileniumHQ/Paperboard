@@ -22,6 +22,7 @@ import type { ToolResult } from "./computerMcp";
 import { checkSecretName, parseServer, parseToolsConfig, secretNames, vaultName } from "./mcpConfig";
 import { HttpWire, McpClient, SseWire, StdioWire, Unauthorized, type McpTool, type ProcessHost } from "./mcpClient";
 import { Callback, SIGN_IN_MS, SignInNeeded, authorizeUrl, discover, exchange, parseTokens, pkcePair, refresh, register, stale, type Tokens } from "./mcpOAuth";
+import { errorText } from "../lib/failure";
 
 const WARM_MS = 25_000;
 const RETRY_AFTER_MS = 30_000;
@@ -70,7 +71,6 @@ interface Pending extends SignIn {
 }
 
 export const processId = (name: string) => `${PANEL_ID}.mcp.${name}`;
-const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
 export class McpServers {
     config: ToolsConfig = structuredClone(DEFAULT_TOOLS);
@@ -91,7 +91,7 @@ export class McpServers {
             this.configError = null;
         } catch (e) {
             this.config = structuredClone(DEFAULT_TOOLS);
-            this.configError = message(e);
+            this.configError = errorText(e);
         }
         this.sync();
     }
@@ -210,7 +210,7 @@ export class McpServers {
                 e.tools = tools;
                 this.settle(e, gen, "running", null);
             } catch (err) {
-                let why = message(err);
+                let why = errorText(err);
                 if (err instanceof Unauthorized || err instanceof SignInNeeded) {
                     e.needsSignIn = true;
                     why = err instanceof Unauthorized && !(e.spec.transport === "http" && e.spec.oauth) ? "it asks you to sign in" : why;
@@ -219,7 +219,7 @@ export class McpServers {
                     try {
                         await client.close();
                     } catch (closeErr) {
-                        why += ` (and it didn't stop: ${message(closeErr)})`;
+                        why += ` (and it didn't stop: ${errorText(closeErr)})`;
                     }
                 }
                 if (e.gen === gen) this.settle(e, gen, "failed", why);
@@ -290,7 +290,7 @@ export class McpServers {
                     this.deps.onChange(await this.view());
                 }
             } catch (e) {
-                console.error("[agents] couldn't publish the tools view:", message(e));
+                console.error("[agents] couldn't publish the tools view:", errorText(e));
             } finally {
                 this.publishing = false;
             }
@@ -355,7 +355,7 @@ export class McpServers {
                 try {
                     await this.deps.vault.delete(vaultName(spec.name, secret));
                 } catch (e) {
-                    failed.push(`${secret} (${message(e)})`);
+                    failed.push(`${secret} (${errorText(e)})`);
                 }
             }
             if (failed.length) throw new Error(`${spec.name} was removed, but its secrets couldn't be deleted: ${failed.join(", ")}`);
@@ -427,7 +427,7 @@ export class McpServers {
             try {
                 t = await refresh(this.fetcher, t);
             } catch (e) {
-                throw e instanceof SignInNeeded ? e : new SignInNeeded(`the sign-in couldn't be renewed (${message(e)}); sign in again`);
+                throw e instanceof SignInNeeded ? e : new SignInNeeded(`the sign-in couldn't be renewed (${errorText(e)}); sign in again`);
             }
             await this.deps.vault.set(vaultName(server, OAUTH_SECRET), JSON.stringify(t));
         }
@@ -524,7 +524,7 @@ export class McpServers {
         try {
             url = new URL(address);
         } catch (e) {
-            console.warn(`[agents] ${name}'s sign-in came back to an address that isn't a URL:`, message(e));
+            console.warn(`[agents] ${name}'s sign-in came back to an address that isn't a URL:`, errorText(e));
             return "that isn't the address the sign-in came back to";
         }
         const expected = new URL(p.callback);
@@ -543,7 +543,7 @@ export class McpServers {
             const tokens = await exchange(this.fetcher, p.client, code, p.callback, p.verifier);
             await this.deps.vault.set(vaultName(name, OAUTH_SECRET), JSON.stringify(tokens));
         } catch (e) {
-            const why = message(e);
+            const why = errorText(e);
             console.error(`[agents] ${name}'s sign-in couldn't trade its code for tokens:`, why);
             this.failSignIn(name, why, fromListener);
             return why;
@@ -574,7 +574,7 @@ export class McpServers {
         try {
             return await e.client.callTool(tool, args);
         } catch (err) {
-            return { isError: true, text: `${server}: ${message(err)}` };
+            return { isError: true, text: `${server}: ${errorText(err)}` };
         }
     }
 
@@ -583,7 +583,7 @@ export class McpServers {
         this.closed = true;
         for (const name of [...this.signIns.keys()]) this.cancelSignIn(name);
         const results = await Promise.allSettled([...this.entries.values()].map((e) => this.stop(e)));
-        const failures = results.flatMap((r) => (r.status === "rejected" ? [message(r.reason)] : []));
+        const failures = results.flatMap((r) => (r.status === "rejected" ? [errorText(r.reason)] : []));
         if (failures.length) throw new Error(`tool servers didn't all stop: ${failures.join("; ")}`);
     }
 }

@@ -14,6 +14,7 @@ import { askInstructions, askLaunch, feed, HARNESS_NAMES, parseTurnLine, removeL
 import type { TurnLog } from "./turnLog";
 import { writeLine } from "./mcpClient";
 import type { TurnHost } from "./conversation";
+import { errorText } from "../lib/failure";
 
 /** under the 30 s a flow gives an action, so the ask fails with its own reason first */
 export const ASK_MS = 28_000;
@@ -73,7 +74,7 @@ export class Asker {
             log?.ask({ harness: settings.harness, model: settings.model, question: text, instructions: askInstructions(settings.name, custom), answer, ms: Date.now() - started, lines });
             return answer;
         } catch (e) {
-            log?.ask({ harness: settings.harness, model: settings.model, question: text, instructions: askInstructions(settings.name, custom), error: e instanceof Error ? e.message : String(e), ms: Date.now() - started, lines });
+            log?.ask({ harness: settings.harness, model: settings.model, question: text, instructions: askInstructions(settings.name, custom), error: errorText(e), ms: Date.now() - started, lines });
             throw e;
         } finally {
             this.running.delete(id);
@@ -101,7 +102,7 @@ export class Asker {
             else if (ev.type === "done") {
                 // OpenCode waits for another prompt once it has answered
                 answered = true;
-                void host.kill(id, "SIGTERM").catch((e) => console.error(`[agents] couldn't stop OpenCode after its answer: ${e instanceof Error ? e.message : e}`));
+                void host.kill(id, "SIGTERM").catch((e) => console.error(`[agents] couldn't stop OpenCode after its answer: ${errorText(e)}`));
             }
         };
         const acp =
@@ -160,7 +161,7 @@ export class Asker {
             });
             timer = setTimeout(() => {
                 timedOut = true;
-                void host.kill(id, "SIGKILL").catch((e) => console.error(`[agents] couldn't stop a question past its time: ${e instanceof Error ? e.message : e}`));
+                void host.kill(id, "SIGKILL").catch((e) => console.error(`[agents] couldn't stop a question past its time: ${errorText(e)}`));
             }, ms);
             // Codex and Claude read the question to the end of their input; ACP talks over it
             const fed = launch.input === null ? null : feed(host, id, launch.input).catch((e: Error) => void (unfed = e));
@@ -177,7 +178,7 @@ export class Asker {
         if (timedOut) throw new Error(`the agent didn't answer within ${Math.round(ms / 1000)} seconds`);
         if (failures.length) throw new Error(failures[failures.length - 1]);
         if (code !== 0 && !answered) throw new Error(`${HARNESS_NAMES[settings.harness]} ended with exit ${code ?? "?"}${stderr.trim() ? `: ${stderr.trim().split("\n").slice(-3).join(" ").slice(0, 400)}` : ""}`);
-        if (unfed) throw new Error(`${HARNESS_NAMES[settings.harness]} ended before it took the question: ${(unfed as Error).message}`);
+        if (unfed) throw new Error(`${HARNESS_NAMES[settings.harness]} ended before it took the question: ${errorText(unfed)}`);
         // what it said before searching ("let me look that up") isn't the answer; its last message is
         const answer = messages.map((m) => m.trim()).filter(Boolean).at(-1);
         if (!answer) throw new Error("the agent gave no answer");

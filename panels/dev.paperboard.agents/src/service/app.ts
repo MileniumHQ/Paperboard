@@ -312,7 +312,7 @@ export class AiApp {
                     this.turnLog.tool({ name, args, result, ms: Date.now() - started, isError: result.isError === true });
                     return result;
                 } catch (e) {
-                    this.turnLog.tool({ name, args, result: { thrown: e instanceof Error ? e.message : String(e) }, ms: Date.now() - started, isError: true });
+                    this.turnLog.tool({ name, args, result: { thrown: errorText(e) }, ms: Date.now() - started, isError: true });
                     throw e;
                 }
             },

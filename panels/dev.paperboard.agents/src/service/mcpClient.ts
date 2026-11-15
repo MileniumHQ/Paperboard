@@ -6,6 +6,7 @@
 // Everything is bounded: messages, pending requests, time, stderr kept.
 
 import { isImageType, type ToolImage, type ToolResult } from "./computerMcp";
+import { errorText } from "../lib/failure";
 
 export const PROTOCOL_VERSION = "2025-06-18";
 export const MAX_MESSAGE = 4 * 1024 * 1024;
@@ -569,7 +570,7 @@ export class SseWire implements McpWire {
         try {
             m = JSON.parse(raw);
         } catch (e) {
-            console.warn("[agents] a tool server sent an event that isn't JSON:", e instanceof Error ? e.message : String(e));
+            console.warn("[agents] a tool server sent an event that isn't JSON:", errorText(e));
             return;
         }
         for (const one of Array.isArray(m) ? m : [m]) {
@@ -669,7 +670,7 @@ async function errorDetail(res: Response): Promise<string> {
     try {
         return (await readCapped(res, 2000, true)).trim();
     } catch (e) {
-        return `(${(e as Error).message})`;
+        return `(${errorText(e)})`;
     }
 }
 

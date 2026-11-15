@@ -21,6 +21,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { SIGN_IN_REQUIRED, type BrainState, type Harness, type LoginPrompt } from "../contract";
 import { errorText } from "../lib/failure";
+import { writeAtomic } from "./writeAtomic";
 import { LOGOUT_COMMAND, STATUS_COMMAND, callbackAddress, loginCommand, loginEnv, loginTail, outputTail, readLoginOutput, readStatus, type LoginMethod } from "./brainLogin";
 import type { PackageHost, StartOptions } from "./browser";
 import { findExistingBrain, PROGRAMS, versionFrom } from "./existingBrains";
@@ -363,9 +364,7 @@ export class Brains {
     }
 
     private writeChoices(choices: Partial<Record<Harness, string>>) {
-        const tmp = `${this.choicesFile}.tmp`;
-        fs.writeFileSync(tmp, JSON.stringify(choices));
-        fs.renameSync(tmp, this.choicesFile);
+        writeAtomic(this.choicesFile, JSON.stringify(choices));
     }
 
     /** What is installed and whether it's signed in. `error` is why a look follows a failure, shown with what was found. */

@@ -14,6 +14,7 @@ import type { ToolResult } from "./computerMcp";
 import type { ToolSpec } from "./computerTools";
 import { type HomeFolder, SHELL_HOME } from "./homeFolder";
 import type { Toolset } from "./toolsets";
+import { errorText } from "../lib/failure";
 
 /** what one command may print before the rest is cut, so a big `cat` can't flood the conversation */
 export const OUTPUT_CHARS = 30_000;
@@ -121,7 +122,7 @@ export function shellToolset(home: HomeFolder): Toolset {
                 return { text: shellOutput(await bash.exec(args.command)) };
             } catch (e) {
                 // a command the shell couldn't run at all (a limit hit, a script it can't parse) is the agent's to fix
-                return { text: e instanceof Error ? e.message : String(e), isError: true };
+                return { text: errorText(e), isError: true };
             }
         },
     };

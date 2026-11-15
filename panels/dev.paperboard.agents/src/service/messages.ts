@@ -6,6 +6,7 @@
 import type { ToolResult } from "./computerMcp";
 import type { ToolSpec } from "./computerTools";
 import { USER_TURN, type Toolset } from "./toolsets";
+import { errorText } from "../lib/failure";
 
 // How the agent texts is in the core of its instructions (harness.ts); this is only the tool.
 
@@ -71,7 +72,7 @@ export function messagesToolset(texter: Texter): Toolset {
                 return { text: `sent [${id}]` };
             } catch (e) {
                 // a refused message is the model's to fix (a wrong id, no text), never silently dropped
-                return { text: e instanceof Error ? e.message : String(e), isError: true };
+                return { text: errorText(e), isError: true };
             }
         },
     };

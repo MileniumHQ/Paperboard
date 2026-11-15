@@ -20,6 +20,7 @@ import { PANEL_ID } from "../contract";
 import type { ToolResult } from "./computerMcp";
 import type { ToolSpec } from "./computerTools";
 import type { Toolset } from "./toolsets";
+import { errorText } from "../lib/failure";
 
 /**
  * Panels whose actions the agent never gets. Chippy lives in its own computer; the terminal panel
@@ -146,8 +147,8 @@ export function actionsToolset(deps: ActionsToolsetDeps): Toolset {
             try {
                 panels = [...new Set((await listed()).map((a) => a.panelId))].sort();
             } catch (e) {
-                console.error("[agents] couldn't list other panels' actions:", message(e));
-                return "Other Paperboard panels' actions: the list isn't available right now (" + message(e) + ").";
+                console.error("[agents] couldn't list other panels' actions:", errorText(e));
+                return "Other Paperboard panels' actions: the list isn't available right now (" + errorText(e) + ").";
             }
             const named = panels.slice(0, MAX_PANEL_NAMES).join(", ") + (panels.length > MAX_PANEL_NAMES ? `, and ${panels.length - MAX_PANEL_NAMES} more` : "");
             if (!panels.length) return "Other Paperboard panels offer no actions right now.";
@@ -161,8 +162,8 @@ export function actionsToolset(deps: ActionsToolsetDeps): Toolset {
             try {
                 return name === "list_actions" ? await list(args) : await run(args);
             } catch (e) {
-                console.error(`[agents] ${name} failed:`, message(e));
-                return fault(message(e));
+                console.error(`[agents] ${name} failed:`, errorText(e));
+                return fault(errorText(e));
             }
         },
     };
@@ -264,4 +265,3 @@ function describe(a: ActionEntry, descriptionChars: number) {
 
 const cut = (s: string, n: number) => (s.length > n ? s.slice(0, n - 1) + "…" : s);
 const fault = (text: string): ToolResult => ({ isError: true, text });
-const message = (e: unknown) => (e instanceof Error ? e.message : String(e));

@@ -10,6 +10,7 @@ import { LIMITS, type PromptEntry, type PromptField } from "../contract";
 import type { ToolResult } from "./computerMcp";
 import type { ToolSpec } from "./computerTools";
 import type { Toolset } from "./toolsets";
+import { errorText } from "../lib/failure";
 
 const L = LIMITS.prompt;
 
@@ -70,7 +71,6 @@ export interface PromptDeps {
 }
 
 const fault = (text: string): ToolResult => ({ isError: true, text });
-const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
 const text = (v: unknown) => (typeof v === "string" ? v.trim() : "");
 /** what the user typed, after its prefix; a value they pasted with the prefix already on keeps just the one */
 const withPrefix = (value: string, prefix?: string) => (!prefix || value.toLowerCase().startsWith(prefix.toLowerCase()) ? value : prefix + value);
@@ -92,8 +92,8 @@ export class Prompts {
                 try {
                     return this.ask(args);
                 } catch (e) {
-                    console.warn(`[agents] ${name} failed:`, message(e));
-                    return fault(message(e));
+                    console.warn(`[agents] ${name} failed:`, errorText(e));
+                    return fault(errorText(e));
                 }
             },
         };
@@ -160,10 +160,10 @@ export class Prompts {
             try {
                 await this.deps.saveSecret(f.secret.server, f.secret.name, withPrefix(answers[i]!.trim(), f.secret.prefix));
             } catch (e) {
-                const error = `${f.label} wasn't saved: ${message(e)}`;
+                const error = `${f.label} wasn't saved: ${errorText(e)}`;
                 this.finish({ status: "failed", error });
                 this.tell(
-                    `The user answered "${p.entry.title}", but ${f.secret.name} for ${f.secret.server} couldn't be saved: ${message(e)}.` +
+                    `The user answered "${p.entry.title}", but ${f.secret.name} for ${f.secret.server} couldn't be saved: ${errorText(e)}.` +
                         (saved.length ? ` Saved before it: ${saved.join(", ")}.` : "") +
                         " Nothing else from the form was used; fix what's wrong and ask again.",
                 );
@@ -220,7 +220,7 @@ export class Prompts {
             this.deps.notice(text);
         } catch (e) {
             // the card already shows the answer; the agent hears of it when it's next asked
-            console.error("[agents] couldn't tell the agent about its request:", message(e));
+            console.error("[agents] couldn't tell the agent about its request:", errorText(e));
         }
     }
 }
