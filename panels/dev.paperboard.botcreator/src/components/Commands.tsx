@@ -375,9 +375,8 @@ export default function Commands(props: { bot: () => BotSummary }) {
                             value={name()}
                             invalid={wrong("name", !isCommandNameValid(name()) || isDuplicate())}
                             onBlur={() => touch("name")}
-                            // case is validated, never silently rewritten:
-                            // typing "Ping" shows the requirement instead of
-                            // turning into "ping" under the author's hands
+                            // "/Ping" is accepted and saved as "ping": the
+                            // list shows the name as Discord has it
                             onInput={(e) => (touch("name"), setName(e.currentTarget.value))}
                         />
                         <PaperInput

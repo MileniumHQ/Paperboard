@@ -317,8 +317,9 @@ export function isCommandOptionType(value: unknown): value is CommandOptionType 
     );
 }
 
-// the UI's placeholder invites "/command-name"; the leading slash is
-// optional input decoration and is stripped wherever the name is used
+// a name as it is typed in Discord: a leading slash is stripped and the
+// case folded, since Discord names are lowercase, so "/Ping" is "ping"
+// wherever the name is used (the form, Blocks, the saved list)
 export function normalizeCommandName(name: string): string {
     return name.trim().replace(/^\/+/, "").toLowerCase();
 }
