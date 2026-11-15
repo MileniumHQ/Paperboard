@@ -21,12 +21,12 @@ afterEach(async () => {
 type States = Record<Harness, BrainState>;
 
 /** The brains, each installed from a package of fake brains, signed out. */
-async function brains(o: { installed?: Harness[]; root?: string; find?: (harness: Harness) => string | null; downloads?: Record<string, string> } = {}) {
+async function brains(o: { installed?: Harness[]; root?: string; find?: (harness: Harness) => string | null; downloads?: Record<string, string>; arch?: string } = {}) {
     const root = o.root ?? tempDir("brains");
     const host = new TestHost(fakeEnv(root));
     const installed = Object.fromEntries((o.installed ?? ["codex", "claude-code", "opencode"]).map((h) => [h, brainPackage(root, h)]));
     const states = new Recorder<States>();
-    const b = new Brains({ host: { ...host, packages: packageHost(installed, o.downloads) } as never, dir: path.join(root, "storage", "brains"), find: o.find ?? (() => null), onState: states.push });
+    const b = new Brains({ host: { ...host, packages: packageHost(installed, o.downloads) } as never, dir: path.join(root, "storage", "brains"), find: o.find ?? (() => null), onState: states.push, arch: o.arch });
     cleanups.push(async () => {
         await b.shutdown();
         await host.close();
@@ -177,6 +177,22 @@ describe("brains already on the computer", () => {
         expect(b.snapshot().codex).toMatchObject({ phase: "failed", installed: true, version: "9.8.7", existing: own });
         fs.rmSync(path.join(root, "plan.json"));
         await b.install("codex");
+        expect(b.snapshot().codex).toMatchObject({ phase: "installed", existing: own, error: null });
+    }, SLOW);
+
+    test("asking for its own copy where there's no build for the computer is refused to the asker, and the chosen one keeps running", async () => {
+        const root = tempDir("own-brains");
+        const own = ownProgram(root, "codex");
+        const { b } = await brains({ installed: [], root, find: found(own), arch: "ia32" });
+        await b.useFound("codex");
+        // refused as it's asked, not in a promise nobody waits on: the download itself is followed through state
+        let refused: unknown = null;
+        try {
+            void b.installOwn("codex").catch(() => undefined);
+        } catch (e) {
+            refused = e;
+        }
+        expect(String(refused)).toContain("Codex has no build for this computer");
         expect(b.snapshot().codex).toMatchObject({ phase: "installed", existing: own, error: null });
     }, SLOW);
 

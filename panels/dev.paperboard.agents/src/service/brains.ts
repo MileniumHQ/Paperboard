@@ -160,6 +160,9 @@ export class Brains {
 
     /** Install the package even for a brain that runs a program on the computer; once it's in, it's the brain. */
     installOwn(harness: Harness): Promise<void> {
+        // a brain running a program on the computer keeps running it: no build for this computer is refused to the
+        // asker now, since its state has nothing to show (the download is followed through state, not answered)
+        if (!this.supported && this.existing[harness]) throw new Error(this.unbuildable(harness));
         return this.busy[harness].run(() => this.download(harness));
     }
 
@@ -175,12 +178,8 @@ export class Brains {
     }
 
     private async download(harness: Harness): Promise<void> {
-        if (!this.supported) {
-            const message = `${HARNESS_NAMES[harness]} has no build for this computer (${this.platform}, ${this.deps.arch ?? process.arch}).`;
-            // a brain running a program on the computer keeps running it: the refusal is the asker's, not the brain's state
-            if (this.existing[harness]) throw new Error(message);
-            throw this.fail(harness, message, "unsupported");
-        }
+        // one chosen meanwhile keeps running: installOwn refuses that case before it gets here
+        if (!this.supported) throw this.existing[harness] ? new Error(this.unbuildable(harness)) : this.fail(harness, this.unbuildable(harness), "unsupported");
         this.set(harness, { phase: "installing", percent: 0, error: null });
         try {
             await this.deps.host.packages.download(BRAIN_PACKAGES[harness], (p) => {
@@ -327,6 +326,10 @@ export class Brains {
         return new Error(message);
     }
 
+    private unbuildable(harness: Harness): string {
+        return `${HARNESS_NAMES[harness]} has no build for this computer (${this.platform}, ${this.deps.arch ?? process.arch}).`;
+    }
+
     private found(harness: Harness): string | null {
         return (this.deps.find ?? findExistingBrain)(harness);
     }
@@ -465,7 +468,8 @@ export class Brains {
 
     private stop(harness: Harness, login: Login, failure: string) {
         login.failure ??= failure;
-        this.deps.host.kill(loginProcessId(harness), "SIGTERM").catch((e) => console.error(`[agents] couldn't stop the ${HARNESS_NAMES[harness]} sign-in: ${errorText(e)}`));
+        // one that won't stop never ends on its own: the person is shown why it's still there
+        this.deps.host.kill(loginProcessId(harness), "SIGTERM").catch((e) => this.fail(harness, `${failure}, and it couldn't be stopped: ${errorText(e)}`));
     }
 
     private async cancel(harness: Harness) {

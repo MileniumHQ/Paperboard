@@ -255,13 +255,7 @@ export class SseWire implements McpWire {
     }
 
     private deliver(raw: string) {
-        let m: any;
-        try {
-            m = JSON.parse(raw);
-        } catch (e) {
-            console.warn("[agents] a tool server sent an event that isn't JSON:", errorText(e));
-            return;
-        }
+        const m = eventJson(raw);
         for (const one of Array.isArray(m) ? m : [m]) {
             if (typeof one?.id !== "number" || one.method !== undefined) continue;
             const w = this.waiting.get(one.id);
@@ -418,12 +412,7 @@ async function readEvents(res: Response, id: number): Promise<any> {
                     .map((l) => l.slice(5).replace(/^ /, ""))
                     .join("\n");
                 if (!data) continue;
-                let m: any;
-                try {
-                    m = JSON.parse(data);
-                } catch {
-                    continue;
-                }
+                const m = eventJson(data);
                 if (m?.id === id && m.method === undefined) return m;
             }
         }
@@ -431,4 +420,14 @@ async function readEvents(res: Response, id: number): Promise<any> {
         await discard(reader);
     }
     throw new Error("the server's stream ended without an answer");
+}
+
+/** An event's data, or undefined (warned of) when it isn't JSON: one bad event never ends the stream. */
+function eventJson(raw: string): any {
+    try {
+        return JSON.parse(raw);
+    } catch (e) {
+        console.warn("[agents] a tool server sent an event that isn't JSON:", errorText(e));
+        return undefined;
+    }
 }
