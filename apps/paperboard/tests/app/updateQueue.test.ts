@@ -97,6 +97,18 @@ describe("update queue", () => {
         ]);
     });
 
+    test("a refresh that finds the same holds, or a change that changes nothing, tells no shell", () => {
+        const { q, published } = queue();
+        const hold: UpdateHold = { key: "package:local:java", kind: "package", computerId: "local", computerName: null, id: "java", name: "java", version: "21", sha256: null, users: ["Minecraft"] };
+        q.setHolds("packages", [hold]);
+        const after = published.length;
+        q.setHolds("packages", [{ ...hold }]);
+        q.setHoldsError(null);
+        q.setChecking(false);
+        expect(published.length).toBe(after);
+        expect(q.snapshot().holds).toEqual([hold]);
+    });
+
     test("a failure found outside the queue is listed once", () => {
         const { q } = queue();
         const failed = { ...identity("p"), kind: "package" as const, status: "failed" as const, stage: null, percent: null, bytesLoaded: null, bytesTotal: null, error: "rename failed" };

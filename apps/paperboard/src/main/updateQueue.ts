@@ -91,7 +91,10 @@ export class UpdateQueue {
         }));
         this.commit({ items: [...this.state.items.filter((i) => !keys.has(i.key)), ...items] });
         // the holds it answers are no longer waiting: they are in the list now
-        for (const key of keys) this.dropHold(key);
+        for (const source of ["panels", "packages"] as const) {
+            this.holds[source] = this.holds[source].filter((h) => !keys.has(h.key));
+        }
+        this.commit({ holds: [...this.holds.panels, ...this.holds.packages] });
         this.jobs.push(job);
         void this.work();
         return settled;
@@ -131,7 +134,7 @@ export class UpdateQueue {
     }
 
     setHoldsError(holdsError: string | null): void {
-        if (holdsError !== this.state.holdsError) this.commit({ holdsError });
+        this.commit({ holdsError });
     }
 
     hold(key: string): UpdateHold | undefined {
@@ -142,13 +145,6 @@ export class UpdateQueue {
     idle(): Promise<void> {
         if (!this.working && this.jobs.length === 0) return Promise.resolve();
         return new Promise((resolve) => this.idleWaiters.push(resolve));
-    }
-
-    private dropHold(key: string): void {
-        for (const source of ["panels", "packages"] as const) {
-            this.holds[source] = this.holds[source].filter((h) => h.key !== key);
-        }
-        this.commit({ holds: [...this.holds.panels, ...this.holds.packages] });
     }
 
     // a new batch starts when nothing is left to do: what finished before
@@ -205,7 +201,11 @@ export class UpdateQueue {
         this.commit({ items: this.state.items.map((item) => (item.key === key ? { ...item, ...change } : item)) });
     }
 
+    // a change that changes nothing notifies no shell
     private commit(change: Partial<UpdateQueueState>): void {
+        const same = (Object.keys(change) as (keyof UpdateQueueState)[])
+            .every((key) => JSON.stringify(change[key]) === JSON.stringify(this.state[key]));
+        if (same) return;
         this.state = { ...this.state, ...change, revision: this.state.revision + 1 };
         this.publish(this.state);
     }
