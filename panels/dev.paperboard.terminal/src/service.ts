@@ -11,6 +11,7 @@ import {
     errorMessage,
     problemsApi,
     SerialQueue,
+    KeyedQueue,
 } from "@mileniumhq/paperapi";
 import * as fs from "node:fs";
 import { SCROLLBACK_CHARS, applyScrollbackCap, readWholeLines } from "./lib/scrollback";
@@ -237,8 +238,15 @@ function isValidTerminalSize(cols: unknown, rows: unknown): boolean {
 // throws with the daemon's reason when the session could not be probed or
 // created: a shell that failed to start must reach the viewer, never pass as
 // an empty scrollback, and a probe that failed is not a shell that is gone
-// (taking it for one would wipe a live shell's scrollback)
-async function ensureSession(id: string, cols?: number, rows?: number): Promise<void> {
+// (taking it for one would wipe a live shell's scrollback). One session's
+// probe and start run one at a time: a page opening a tab while a block
+// types into it would otherwise both find no shell and both start one.
+const sessionStarts = new KeyedQueue();
+function ensureSession(id: string, cols?: number, rows?: number): Promise<void> {
+    return sessionStarts.run(id, () => startSession(id, cols, rows));
+}
+
+async function startSession(id: string, cols?: number, rows?: number): Promise<void> {
     if (await terminalApi.exists(id)) {
         // an existing session keeps whatever size its pty was spawned or
         // last set to: a viewer returning with a different size (window
