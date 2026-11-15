@@ -1,52 +1,20 @@
 import { AsyncLocalStorage } from "node:async_hooks";
-import type { BlocksProjectHandle, ServiceContext } from "@mileniumhq/paperapi";
-import type { StoredServer } from "../servers";
-import type { GameServerState } from "./types";
-export interface ServerScope {
-    server: StoredServer;
-    legacy: boolean;
-    processIds: readonly string[];
-    ctx: ServiceContext<GameServerState>;
-    /** whether the server is a backup source, once its setup has made it one */
-    backupSource?: true;
-    /** the server's Blocks project, once its setup has made it */
-    blocks?: BlocksProjectHandle;
-    /** maps the saved settings in the panel's write queue; gives what was saved */
-    updateSettings(change: (current: Record<string, unknown>) => Record<string, unknown>): Promise<Record<string, unknown>>;
-    /** a game event the server's blocks fire for: `output` is what the game saw */
-    trigger(id: string, output: unknown): void;
-    locals: Map<symbol, unknown>;
-    activeOperations: number;
-    removing: boolean;
-    unsubscribe: Array<() => void>;
-}
-const storage = new AsyncLocalStorage<ServerScope>();
-const scopes = new WeakMap<object, ServerScope>();
-/** Says which server a context belongs to; a game's events find their server through it. */
-export function bindScope(ctx: object, scope: ServerScope): void {
-    scopes.set(ctx, scope);
-}
-/** The server a context belongs to; `what` names what asked, for the error when it belongs to none. */
-export function serverOf(ctx: object, what: string): ServerScope {
-    const scope = scopes.get(ctx);
-    if (!scope) throw new Error(`${what} came from a context that belongs to no server`);
-    return scope;
-}
-/** A game event (a join, a chat line, the server starting) for the server the context belongs to. */
-export function emitTrigger(ctx: object, id: string, output: unknown): void {
-    serverOf(ctx, `The event ${id}`).trigger(id, output);
-}
+import type { Server } from "./server";
+const storage = new AsyncLocalStorage<Server>();
+const locals = new WeakMap<Server, Map<symbol, unknown>>();
 export const currentServer = () => storage.getStore();
-export const inServer = <T>(scope: ServerScope, work: () => T): T => storage.run(scope, work);
+export const inServer = <T>(server: Server, work: () => T): T => storage.run(server, work);
 /** Mutable module state belongs to the current server, including timers and callbacks. */
 export function serverLocal<T>(initial: () => T): () => T {
     const key = Symbol();
     // Unscoped pure/unit callers retain their own isolated module instance.
     const standalone = initial();
     return () => {
-        const scope = currentServer();
-        if (!scope) return standalone;
-        if (!scope.locals.has(key)) scope.locals.set(key, initial());
-        return scope.locals.get(key) as T;
+        const server = currentServer();
+        if (!server) return standalone;
+        let own = locals.get(server);
+        if (!own) locals.set(server, (own = new Map()));
+        if (!own.has(key)) own.set(key, initial());
+        return own.get(key) as T;
     };
 }

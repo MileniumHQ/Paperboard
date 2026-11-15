@@ -1,4 +1,5 @@
-import { files as fileApi, type ServiceContext, errorMessage } from "./api";
+import type { Server } from "./server";
+import { files as fileApi, errorMessage } from "./api";
 import { listDirectory } from "./filesystem";
 import {
     parsePlayerStats,
@@ -86,7 +87,7 @@ async function resolveStatsDir(level: string): Promise<string | null> {
 }
 
 export async function listPlayerStats(
-    _ctx: ServiceContext<GameServerState>,
+    _ctx: Server,
 ): Promise<PlayerStatSummary[]> {
     const level = await resolveLevelName();
     const names = await resolvePlayerIdentities();

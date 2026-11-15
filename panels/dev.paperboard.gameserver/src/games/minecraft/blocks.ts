@@ -1,6 +1,7 @@
 // Minecraft's own blocks, beside the ones every game shares (service/blocks.ts).
 // Each runs what the matching call runs, from calls.ts.
-import type { BlockCommandDefinition, BlockSet, BlockTypeDefinition, BlockValueDefinition, ServiceContext } from "../../service/api";
+import type { Server } from "../../service/server";
+import type { BlockCommandDefinition, BlockSet, BlockTypeDefinition, BlockValueDefinition } from "../../service/api";
 import type { GameServerState } from "../../service/types";
 import { needsCall, playerEvents, runGameCall } from "../../service/blocks";
 import { listRoster } from "../../service/playerLists";
@@ -28,7 +29,6 @@ import {
 } from "./calls";
 import { resetWorldFiles } from "../../service/diagnostics";
 
-type Context = ServiceContext<GameServerState>;
 
 /** Minecraft's types, beside the shared ones; the panel registers them. */
 export const minecraftBlockTypes: BlockTypeDefinition[] = [
@@ -111,7 +111,7 @@ const statisticsValue = (stats: PlayerStatSummary) => ({
 const player = { type: "player", name: "Player" } as const;
 
 /** Commands that do one thing to one player. */
-function playerCommands(ctx: Context): BlockCommandDefinition[] {
+function playerCommands(ctx: Server): BlockCommandDefinition[] {
     const simple = (id: string, name: string, icon: string, text: string, run: (player: string) => Promise<void>): BlockCommandDefinition => ({
         id, name, category: "Players", icon, text, inputs: { player }, run: ({ player }: { player: string }) => run(player),
     });
@@ -142,7 +142,7 @@ function playerCommands(ctx: Context): BlockCommandDefinition[] {
 }
 
 /** The game rule blocks; the dropdown asks for the rules of the version the server has when it opens. */
-function gameruleBlocks(ctx: Context): { command: BlockCommandDefinition; value: BlockValueDefinition } {
+function gameruleBlocks(ctx: Server): { command: BlockCommandDefinition; value: BlockValueDefinition } {
     const rule = {
         type: "text",
         name: "Game Rule",
@@ -179,7 +179,7 @@ function gameruleBlocks(ctx: Context): { command: BlockCommandDefinition; value:
     };
 }
 
-export function minecraftBlocks(ctx: Context): BlockSet {
+export function minecraftBlocks(ctx: Server): BlockSet {
     const world = { type: "text", name: "World" } as const;
     const roster = (id: string, name: string, icon: string, flag: "whitelisted" | "op" | "banned"): BlockValueDefinition => ({
         id, name, category: "Players", icon, type: "list<player>",

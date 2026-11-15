@@ -1,4 +1,5 @@
-import { config, files as fileApi, updateSettings, type ServiceContext } from "../../service/api";
+import type { Server } from "../../service/server";
+import { config, files as fileApi, updateSettings } from "../../service/api";
 import { PANEL_ID, type GameServerState } from "../../service/types";
 import { parseProperties, stringifyServerProperties } from "../../core/properties";
 import { applyRuntimeProperties } from "../../service/runtimeProperties";
@@ -6,7 +7,6 @@ import { validateOptions } from "../options";
 import { fromProperty, minecraftOptions, RAM_OPTION, toProperty } from "./options";
 import { loadConfigAndProperties } from "./config";
 
-type Context = ServiceContext<GameServerState>;
 
 // a missing file is empty; a failed read throws, so an unreadable file is never shown as defaults and saved over
 async function readProperties(): Promise<Record<string, string>> {
@@ -20,7 +20,7 @@ async function settings(): Promise<Record<string, unknown>> {
 }
 
 /** Every option this version has, from server.properties and the server's settings; a key not in the file reads as its default. */
-export async function readGameOptions(ctx: Context): Promise<Record<string, unknown>> {
+export async function readGameOptions(ctx: Server): Promise<Record<string, unknown>> {
     const properties = await readProperties();
     const saved = await settings();
     const values: Record<string, unknown> = {};
@@ -37,7 +37,7 @@ export async function readGameOptions(ctx: Context): Promise<Record<string, unkn
  * difficulty and game mode reach a running server at once (offline, they wait
  * for its next start), the rest apply when it starts.
  */
-export async function writeGameOptions(ctx: Context, patch: unknown): Promise<Record<string, unknown>> {
+export async function writeGameOptions(ctx: Server, patch: unknown): Promise<Record<string, unknown>> {
     if (!patch || typeof patch !== "object" || Array.isArray(patch)) throw new Error("Options patch is required");
     const fields = minecraftOptions(ctx.state.serverVersion);
     const checked = validateOptions(fields, "Minecraft", patch as Record<string, unknown>);

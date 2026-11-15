@@ -1,9 +1,9 @@
+import type { Server } from "../../service/server";
 import { errorMessage } from "@mileniumhq/paperapi";
 import { exists } from "../../service/failures";
 import { serverLocal } from "../../service/scope";
 import * as nodeFs from "node:fs/promises";
 import * as nodePath from "node:path";
-import type { ServiceContext } from "../../service/api";
 import type { FileDownloadProgress } from "../../service/api";
 import { SOFTWARE, type ServerSoftwareType } from "../../software/catalog";
 import { providerFor } from "./providers";
@@ -85,7 +85,7 @@ export async function withInstallLock<T>(work: () => Promise<T>): Promise<T> {
 }
 
 export function installServerSoftware(
-    ctx: ServiceContext<GameServerState>,
+    ctx: Server,
     software: ServerSoftwareType,
     version: string,
     deps: InstallDeps,
@@ -96,7 +96,7 @@ export function installServerSoftware(
 
 /** installServerSoftware for a caller already inside withInstallLock (a modpack install). */
 export async function installServerSoftwareLocked(
-    ctx: ServiceContext<GameServerState>,
+    ctx: Server,
     software: ServerSoftwareType,
     version: string,
     deps: InstallDeps,
@@ -107,7 +107,7 @@ export async function installServerSoftwareLocked(
 }
 
 async function install(
-    ctx: ServiceContext<GameServerState>,
+    ctx: Server,
     software: ServerSoftwareType,
     version: string,
     deps: InstallDeps,

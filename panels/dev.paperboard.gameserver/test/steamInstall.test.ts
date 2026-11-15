@@ -106,13 +106,13 @@ describe("Steam and Terraria installs", () => {
     test("a second install while one downloads joins it instead of starting another", async () => {
         const steam = fakeSteamcmd({ install: { [PALWORLD_APP_ID]: { mode: "ok", build: "25247047", files: { "DefaultPalWorldSettings.ini": DEFAULT_INI, "PalServer.sh": "#!/bin/sh\n" } } } });
         const server = gameServer("palworld", { state: palworldService.initialState() });
-        await server.run(() => palworldService.initialize(server.scope.ctx, false));
-        const [first, second] = server.run(() => [palworldService.installUpdate!(server.scope.ctx), palworldService.installUpdate!(server.scope.ctx)]);
+        await server.run(() => palworldService.initialize(server.server, false));
+        const [first, second] = server.run(() => [palworldService.installUpdate!(server.server), palworldService.installUpdate!(server.server)]);
         expect(second).toBe(first);
         await Promise.all([first, second]);
         expect(appUpdates(steam.runs())).toHaveLength(1);
-        expect(server.scope.server.settings).toMatchObject({ configured: true, build: "25247047" });
-        expect(server.scope.ctx.state.installProgress).toEqual({ stage: "completed", percent: 100 });
+        expect(server.server.settings).toMatchObject({ configured: true, build: "25247047" });
+        expect(server.server.state.installProgress).toEqual({ stage: "completed", percent: 100 });
         // the game's own setup ran after the download: its settings file exists, with no password in it
         expect(readTree(path.join(server.dir, "saved"))["Config/LinuxServer/PalWorldSettings.ini"]).toContain('AdminPassword=""');
     });

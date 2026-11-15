@@ -1,5 +1,6 @@
-import { emitTrigger, serverLocal } from "./scope";
-import { processApi, type ServiceContext, errorMessage } from "./api";
+import type { Server } from "./server";
+import { serverLocal } from "./scope";
+import { processApi, errorMessage } from "./api";
 import { currentGame, currentGameService } from "../games/service";
 import { assertRecoverySettled } from "./recoveryState";
 import { prepareGamePorts } from "./ports";
@@ -21,7 +22,7 @@ export function cancelReadiness(): void {
     if (local().readinessDeadline) clearTimeout(local().readinessDeadline!);
     local().readinessDeadline = null;
 }
-function monitorReadiness(ctx: ServiceContext<GameServerState>): void {
+function monitorReadiness(ctx: Server): void {
     cancelReadiness();
     const readiness = currentGameService().readiness;
     if (!readiness) return;
@@ -46,7 +47,7 @@ function monitorReadiness(ctx: ServiceContext<GameServerState>): void {
             if (Date.now() >= deadline) throw new Error("Startup deadline exceeded");
             const ready = await readiness.probe(ctx);
             if (!active()) { clearTimeout(expired); return; }
-            if (ready) { clearTimeout(expired); cancelReadiness(); ctx.setState({ serverStatus: "online" }); emitTrigger(ctx, TRIGGER_IDS.serverStarted, true); return; }
+            if (ready) { clearTimeout(expired); cancelReadiness(); ctx.setState({ serverStatus: "online" }); ctx.trigger(TRIGGER_IDS.serverStarted, true); return; }
             local().readinessTimer = setTimeout(() => void poll(), 100);
             local().readinessTimer?.unref?.();
         } catch (err) { await fail(err); }
@@ -66,7 +67,7 @@ function cancelStopForceKill(): void {
 // stacking a second timer. The timers are unref'd so a pending kill never
 // holds the service process open.
 function scheduleStopForceKill(
-    ctx: ServiceContext<GameServerState>,
+    ctx: Server,
     delayMs: number = 15000,
     confirmMs: number = 10000,
 ): void {
@@ -90,7 +91,7 @@ function scheduleStopForceKill(
  * again so Stop can be pressed again. Offline is never written over a live
  * process.
  */
-async function confirmForceKill(ctx: ServiceContext<GameServerState>): Promise<void> {
+async function confirmForceKill(ctx: Server): Promise<void> {
     local().killDeadline = null;
     let reason: string;
     try {
@@ -116,7 +117,7 @@ export const __lifecycleTest = {
  * Tells the game its server's process is gone. A failure is shown in the
  * console, never dropped; undefined when the game has nothing to take back.
  */
-function releaseServer(ctx: ServiceContext<GameServerState>): Promise<void> | undefined {
+function releaseServer(ctx: Server): Promise<void> | undefined {
     const afterStop = currentGameService().afterStop;
     if (!afterStop) return undefined;
     return afterStop(ctx).catch((err) => {
@@ -131,7 +132,7 @@ function releaseServer(ctx: ServiceContext<GameServerState>): Promise<void> | un
 }
 
 /** The system's count of programs it ended for memory, or null where it keeps none; a count it can't read is said. */
-function readOomKills(ctx: ServiceContext<GameServerState>): number | null {
+function readOomKills(ctx: Server): number | null {
     try {
         return oomKillCount();
     } catch (err) {
@@ -142,7 +143,7 @@ function readOomKills(ctx: ServiceContext<GameServerState>): number | null {
 
 /** `carry`: lines the fresh console opens with, as why the server is starting again. */
 export async function startServerInstance(
-    ctx: ServiceContext<GameServerState>,
+    ctx: Server,
     carry: GameServerState["serverEntries"] = [],
 ): Promise<void> {
     if (ctx.state.serverStatus !== "offline") return;
@@ -227,7 +228,7 @@ export async function startServerInstance(
 }
 
 export async function stopServerInstance(
-    ctx: ServiceContext<GameServerState>,
+    ctx: Server,
 ): Promise<void> {
     cancelReadiness();
     const curr = ctx.state.serverStatus;
@@ -258,7 +259,7 @@ export async function stopServerInstance(
 }
 
 export async function restartServerInstance(
-    ctx: ServiceContext<GameServerState>,
+    ctx: Server,
 ): Promise<void> {
     if (ctx.state.serverStatus !== "online") return;
     cancelReadiness();
@@ -284,7 +285,7 @@ export async function restartServerInstance(
 }
 
 export async function sendServerCommand(
-    ctx: ServiceContext<GameServerState>,
+    ctx: Server,
     cmd: string,
 ): Promise<void> {
     // every console write passes this boundary: a multi-line value is a
@@ -333,20 +334,20 @@ export async function sendServerCommand(
 }
 
 /** Log viewing is available even when a game has no command control. */
-export function handleProcessData(ctx: ServiceContext<GameServerState>, chunk: string): void {
+export function handleProcessData(ctx: Server, chunk: string): void {
     local().lineBuffer += chunk;
     const lines = local().lineBuffer.split("\n");
     local().lineBuffer = lines.pop() ?? "";
     for (const line of lines) currentGameService().observeLine(ctx, line);
     if (local().lineBuffer) currentGameService().observePartialLine?.(ctx, local().lineBuffer);
 }
-export function sendChatMessage(ctx: ServiceContext<GameServerState>, msg: string): Promise<void> {
+export function sendChatMessage(ctx: Server, msg: string): Promise<void> {
     const game = currentGameService();
     if (!game.sendChat) throw new Error("This game does not support chat");
     return game.sendChat(ctx, msg);
 }
 
-export function handleProcessExit(ctx: ServiceContext<GameServerState>, exitCode?: number): void {
+export function handleProcessExit(ctx: Server, exitCode?: number): void {
     cancelStopForceKill();
     cancelReadiness();
 
@@ -388,9 +389,9 @@ export function handleProcessExit(ctx: ServiceContext<GameServerState>, exitCode
                 content: "[Server] Process stopped.",
             }),
         });
-        emitTrigger(ctx, TRIGGER_IDS.serverStopped, true);
+        ctx.trigger(TRIGGER_IDS.serverStopped, true);
         if (exit.kind === "crashed") {
-            emitTrigger(ctx, TRIGGER_IDS.serverCrashed, exitCode ?? null);
+            ctx.trigger(TRIGGER_IDS.serverCrashed, exitCode ?? null);
             // SIGKILL, while the system's count of programs it ended for
             // memory went up: the system ran out and chose the server
             const baseline = local().oomBaseline;

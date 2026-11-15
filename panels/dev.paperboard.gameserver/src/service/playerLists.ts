@@ -9,8 +9,9 @@
 // accounts Mojang does not know: the vanilla `whitelist` cannot find them,
 // so a running server whitelists them through Floodgate's `fwhitelist`, and
 // a stopped one gets the uuid Floodgate derives from their XUID written in.
+import type { Server } from "./server";
 import { createHash } from "node:crypto";
-import { files as fileApi, type ServiceContext, errorMessage, SerialQueue } from "./api";
+import { files as fileApi, errorMessage, SerialQueue } from "./api";
 import { serverLocal } from "./scope";
 import { report } from "../games/serviceKit";
 import { resolvePlayerIdentities } from "./playerStats";
@@ -156,7 +157,7 @@ export async function listRoster(): Promise<RosterEntry[]> {
  * hour is answered from memory. An offline-mode server's Java uuids come
  * from the name itself, so there is nothing to look up for those.
  */
-export async function currentPlayerNames(ctx: ServiceContext<GameServerState>, rawUuids: unknown, naming: BedrockNaming | null): Promise<Record<string, string>> {
+export async function currentPlayerNames(ctx: Server, rawUuids: unknown, naming: BedrockNaming | null): Promise<Record<string, string>> {
     if (!Array.isArray(rawUuids)) throw new Error("uuids must be a list");
     const valid = [...new Set(rawUuids.map((u) => String(u ?? "").trim().toLowerCase()))]
         .filter((u) => UUID_RE.test(u))
@@ -357,7 +358,7 @@ async function bedrockFlagCommand(
  * name with its prefix is a Bedrock player then.
  */
 export async function setPlayerFlag(
-    ctx: ServiceContext<GameServerState>,
+    ctx: Server,
     send: (command: string) => Promise<void>,
     naming: BedrockNaming | null,
     flag: PlayerFlag,

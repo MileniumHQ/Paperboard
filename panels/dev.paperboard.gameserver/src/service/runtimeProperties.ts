@@ -1,4 +1,5 @@
-import { processApi, updateSettings, type ServiceContext } from "./api";
+import type { Server } from "./server";
+import { processApi, updateSettings } from "./api";
 import { PANEL_ID, SERVER_PROC_ID, type GameServerState } from "./types";
 import { applyPendingEdits } from "./pendingEdits";
 
@@ -56,7 +57,7 @@ export function runtimeCommandsFor(values: Record<string, string>): string[] {
 // runtime subset now. Offline: an existing world ignores server.properties
 // for difficulty/gamemode, so park the commands and replay them on boot.
 export async function applyRuntimeProperties(
-    ctx: ServiceContext<GameServerState>,
+    ctx: Server,
     values: Record<string, string>,
 ): Promise<void> {
     const commands = runtimeCommandsFor(values);

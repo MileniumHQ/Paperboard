@@ -3,27 +3,27 @@
  * console, chat, waits, one operation at a time, offline backups and links.
  * Game modules keep only what is theirs; nothing here names a game.
  */
+import type { Server } from "../service/server";
 import { exists, unlessMissing } from "../service/failures";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { randomBytes } from "node:crypto";
-import { files, processApi, readSettings, updateSettings, type ServiceContext } from "../service/api";
+import { files, processApi, readSettings, updateSettings } from "../service/api";
 import { fileApi as rawFiles, problemsApi, secretsApi, errorMessage } from "@mileniumhq/paperapi";
-import { currentServer, emitTrigger, serverLocal, serverOf } from "../service/scope";
+import { currentServer, serverLocal } from "../service/scope";
 import { TRIGGER_IDS } from "../service/contract";
 import { appendCapped, PANEL_ID, type ChatMessage, type ConsoleLine, type GameServerState } from "../service/types";
 import { chatId } from "../lib/logs";
 import type { GameDefinition, GameOptions } from "./types";
 import type { GameService, PortSpec } from "./serviceTypes";
 
-export type Context = ServiceContext<GameServerState>;
 
 /** The current server's folder. */
 export const serverRoot = () => files.getPath("", PANEL_ID);
 export { exists, readSettings, unlessMissing, updateSettings };
 
 function serverId(game: string): string {
-    const id = currentServer()?.server.id;
+    const id = currentServer()?.id;
     if (!id) throw new Error(`${game} requires a server scope`);
     return id;
 }
@@ -73,18 +73,17 @@ export const hostSupportHere = (game: GameDefinition, options: GameOptions = { s
  * server's console, and the panel's problem under the server's name until
  * the same work reports again or clears it (settle).
  */
-export function report(ctx: Context, what: string, err: unknown) {
+export function report(ctx: Server, what: string, err: unknown) {
     const message = errorMessage(err);
-    const { server } = serverOf(ctx, what);
     ctx.setState((prev) => ({ serverEntries: appendCapped(prev.serverEntries, { type: "error", content: `[Paperboard] ${what}: ${message}` }) }));
-    problemsApi.report(PANEL_ID, { key: `${server.id}:${what}`, title: `${server.name}: ${what}`, message });
+    problemsApi.report(PANEL_ID, { key: `${ctx.id}:${what}`, title: `${ctx.name}: ${what}`, message });
 }
 /** The work `report` said failed (the same `what`) has worked since: its problem goes. */
-export function settle(ctx: Context, what: string) {
-    problemsApi.clear(PANEL_ID, `${serverOf(ctx, what).server.id}:${what}`);
+export function settle(ctx: Server, what: string) {
+    problemsApi.clear(PANEL_ID, `${ctx.id}:${what}`);
 }
 /** Adds a message to the chat and returns it as triggers send it. */
-export function pushChat(ctx: Context, message: Omit<ChatMessage, "id" | "timestamp">): ChatMessage {
+export function pushChat(ctx: Server, message: Omit<ChatMessage, "id" | "timestamp">): ChatMessage {
     const entry = { ...message, id: chatId(), timestamp: new Date().toTimeString().slice(0, 8) };
     ctx.setState((prev) => ({ chatMessages: appendCapped(prev.chatMessages, entry) }));
     return entry;
@@ -110,7 +109,7 @@ export function playerPoller<P extends { name: string }>(spec: {
 }) {
     const local = serverLocal(() => ({ timer: null as ReturnType<typeof setInterval> | null, online: [] as P[], baseline: false, error: "", latest: 0, asking: false }));
     /** Asks now; resolves once the answer is in the state (or dropped). */
-    async function poll(ctx: Context): Promise<void> {
+    async function poll(ctx: Server): Promise<void> {
         if (ctx.state.serverStatus !== "online") return;
         const state = local();
         const asked = ++state.latest;
@@ -142,11 +141,11 @@ export function playerPoller<P extends { name: string }>(spec: {
         else {
             for (const [id, p] of now) if (!before.has(id)) {
                 pushChat(ctx, { event: "join", sender: p.name, text: `${p.name} joined the game` });
-                emitTrigger(ctx, TRIGGER_IDS.playerJoined, p.name);
+                ctx.trigger(TRIGGER_IDS.playerJoined, p.name);
             }
             for (const [id, p] of before) if (!now.has(id)) {
                 pushChat(ctx, { event: "leave", sender: p.name, text: `${p.name} left the game` });
-                emitTrigger(ctx, TRIGGER_IDS.playerLeft, p.name);
+                ctx.trigger(TRIGGER_IDS.playerLeft, p.name);
             }
         }
         spec.remember(players).catch((err) => report(ctx, `Could not record ${spec.game}'s players`, err));
@@ -161,7 +160,7 @@ export function playerPoller<P extends { name: string }>(spec: {
         online: (): readonly P[] => local().online,
         poll,
         /** `baseline`: the first answer is who was already there (a reattach), not who joined */
-        start(ctx: Context, baseline = false) {
+        start(ctx: Server, baseline = false) {
             const state = local();
             if (state.timer) return;
             state.baseline = baseline;
@@ -198,13 +197,13 @@ export async function writePrivate(file: string, text: string) {
 /** The per-server flag that keeps a game's long operations from overlapping. */
 export interface BusyFlag { busy: boolean }
 /** Runs work while the server is stopped and nothing else of the game's is running. */
-export async function exclusive<T>(ctx: Context, flag: BusyFlag, game: string, work: () => Promise<T>): Promise<T> {
+export async function exclusive<T>(ctx: Server, flag: BusyFlag, game: string, work: () => Promise<T>): Promise<T> {
     if (flag.busy || ctx.state.serverStatus !== "offline") throw new Error(`Stop ${game} and wait for the current operation to finish`);
     flag.busy = true;
     try { return await work(); } finally { flag.busy = false; }
 }
 /** True when online, false when offline; starting or stopping refuses. */
-export function settled(ctx: Context, game: string): boolean {
+export function settled(ctx: Server, game: string): boolean {
     const status = ctx.state.serverStatus;
     if (status !== "online" && status !== "offline") throw new Error(`Wait for ${game} to finish starting or stopping`);
     return status === "online";
@@ -260,7 +259,7 @@ export class ConsoleBuffer {
     private pending: string[] = [];
     private timer: ReturnType<typeof setTimeout> | null = null;
     constructor(private readonly isError: (line: string) => boolean) {}
-    push(ctx: Context, line: string) {
+    push(ctx: Server, line: string) {
         // a game's first line can start with byte order marks (Terraria writes one each start): they are no text
         line = line.replace(/^\uFEFF+/, "");
         if (!line) return;
@@ -302,7 +301,7 @@ export function settingPort(spec: { name: string; label: string; protocol: PortS
 const resumeMarker = (gameId: string) => rawFiles.getPath(`.${gameId}-resume/${serverId(gameId)}`, PANEL_ID);
 
 /** Starts a server an offline backup stopped, once Paperboard is back. */
-export async function resumeAfterBackup(ctx: Context, gameId: string, running: boolean) {
+export async function resumeAfterBackup(ctx: Server, gameId: string, running: boolean) {
     const marker = await resumeMarker(gameId);
     if (!(await exists(marker))) return;
     // lifecycle reaches every game's service, which import this module
@@ -316,9 +315,9 @@ export interface OfflineBackupSpec {
     processId: string;
     flag: () => BusyFlag;
     /** Tells players the server is going down. */
-    announce(ctx: Context): Promise<void>;
+    announce(ctx: Server): Promise<void>;
     /** Saves the world and resolves once it is on disk. */
-    save(ctx: Context): Promise<void>;
+    save(ctx: Server): Promise<void>;
     /** Takes passwords out of files before they are copied; runs while stopped. */
     clean(): Promise<void>;
     /** When the game saves on exit, the stamp that must change for the exit to count. */
@@ -331,8 +330,8 @@ export interface OfflineBackupSpec {
  */
 export function offlineBackup(spec: OfflineBackupSpec): GameService["backup"] {
     /** Starts the server again when this backup stopped it, and drops the marker. */
-    const recover = async (ctx: Context) => resumeAfterBackup(ctx, spec.gameId, await processApi.exists(spec.processId));
-    async function before(ctx: Context) {
+    const recover = async (ctx: Server) => resumeAfterBackup(ctx, spec.gameId, await processApi.exists(spec.processId));
+    async function before(ctx: Server) {
         const flag = spec.flag();
         if (flag.busy) throw new Error(`Wait for the ${spec.name} operation to finish`);
         if (ctx.state.serverStatus === "offline") { await spec.clean(); return; }

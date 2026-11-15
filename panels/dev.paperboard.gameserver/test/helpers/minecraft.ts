@@ -11,7 +11,7 @@ import { javaPackageFor } from "../../src/lib/versionProfile";
 import { PANEL_ID } from "../../src/servers";
 import type { GameServerState } from "../../src/service/types";
 import { installFakeJava } from "./fakeJava";
-import { testScope, type TestScope } from "./scope";
+import { testServer, type TestServer } from "./scope";
 import { writeTree } from "./tmp";
 import { onDaemonStop } from "./crane";
 
@@ -20,7 +20,7 @@ import { onDaemonStop } from "./crane";
 const created: McServer[] = [];
 onDaemonStop(async () => {
     for (const mc of created.splice(0)) {
-        for (const id of mc.scope.processIds) {
+        for (const id of mc.server.game.processIds) {
             if (!(await mc.run(() => processApi.exists(id)))) continue;
             const exit = id === "mc-server" ? mc.nextExit() : null;
             await mc.run(() => processApi.kill(id, "SIGKILL"));
@@ -32,7 +32,7 @@ onDaemonStop(async () => {
 let counter = 0;
 
 export interface McServer {
-    scope: TestScope;
+    server: TestServer;
     /** the server folder on disk */
     dir: string;
     run<T>(work: () => T): T;
@@ -61,17 +61,17 @@ export function minecraftServer(opts: {
     const pkg = javaPackageFor(version);
     if (!pkg) throw new Error(`No Java package for ${version}`);
     installFakeJava(pkg);
-    const scope = testScope(
+    const server = testServer(
         { id, directory, settings: { configured: true, software, version, ...opts.settings } },
         { serverSoftware: software as GameServerState["serverSoftware"], serverVersion: version, ramAllocation: 1, ...opts.state },
     );
-    const run = <T>(work: () => T): T => inServer(scope, work);
+    const run = <T>(work: () => T): T => inServer(server, work);
     const exits: ((code: number | undefined) => void)[] = [];
     run(() => {
-        scope.unsubscribe.push(processApi.onData("mc-server", (chunk) => handleProcessData(scope.ctx, chunk)));
-        scope.unsubscribe.push(
+        server.unsubscribe.push(processApi.onData("mc-server", (chunk) => handleProcessData(server, chunk)));
+        server.unsubscribe.push(
             processApi.onExit("mc-server", (code) => {
-                handleProcessExit(scope.ctx, code);
+                handleProcessExit(server, code);
                 for (const waiter of exits.splice(0)) waiter(code);
             }),
         );
@@ -80,20 +80,20 @@ export function minecraftServer(opts: {
         const file = path.join(dir, "commands.log");
         return fs.existsSync(file) ? fs.readFileSync(file, "utf8").split("\n").filter(Boolean) : [];
     };
-    const server: McServer = {
-        scope,
+    const made: McServer = {
+        server,
         dir,
         run,
         nextExit: () => new Promise((resolve) => exits.push(resolve)),
         commands,
         received: async (command, after = 0) => {
             const line = `[fake] received: ${command}`;
-            await scope.waitFor(
+            await server.waitFor(
                 (s) => s.serverEntries.filter((e) => e.content === line).length > after,
                 `the server to receive ${JSON.stringify(command)}`,
             );
         },
     };
-    created.push(server);
-    return server;
+    created.push(made);
+    return made;
 }

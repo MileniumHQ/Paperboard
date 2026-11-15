@@ -1,6 +1,7 @@
 // Game Server's blocks for the Blocks panel. Each server is
 // a Blocks project of its own; what every game shares is here, and a game
 // adds its own through its service's blocks().
+import type { Server } from "./server";
 import type {
     BlockCommandDefinition,
     BlockEventDefinition,
@@ -12,18 +13,16 @@ import type {
 } from "@mileniumhq/paperapi";
 import type { BackupEnded, BackupRecord } from "@mileniumhq/paperapi";
 import { MAX_BUFFERED_ENTRIES, type ChatMessage, type GameServerState } from "./types";
-import type { ServerScope } from "./scope";
-import { currentServer, inServer } from "./scope";
+import { inServer } from "./scope";
 import { TRIGGER_IDS, type CallName, type TriggerId } from "./contract";
 import { restartServerInstance, sendServerCommand, startServerInstance, stopServerInstance } from "./lifecycle";
 import { waitUntil } from "../games/serviceKit";
 import { listLogFiles, readLogFile } from "./logs";
-import { sayInChat, serverBackups } from "./calls";
+import { sayInChat } from "./calls";
 import { automationView, readAutomation, writeAutomation } from "./automation";
 import { currentGameService } from "../games/service";
-import { assertGameCall, gameFor } from "../games";
+import { assertGameCall } from "../games";
 
-type Context = ServiceContext<GameServerState>;
 
 /**
  * A player, by the name the server knows them by. The panel's own type.
@@ -118,7 +117,7 @@ const DAILY_RESTART_CHOICES = [
 ];
 
 /** Stops a server, as Stop the Server does: done once it is offline, so a Start after it starts it. */
-export async function stopFromBlocks(ctx: Context): Promise<void> {
+export async function stopFromBlocks(ctx: Server): Promise<void> {
     if (ctx.state.serverStatus === "restarting") throw new Error("The server is restarting; stop it once it is online");
     await stopServerInstance(ctx);
     // the game's own stop wait, then the force-kill and its confirmation
@@ -126,7 +125,7 @@ export async function stopFromBlocks(ctx: Context): Promise<void> {
 }
 
 /** Restarts a server that is online, as Restart the Server does. */
-export async function restartFromBlocks(ctx: Context): Promise<void> {
+export async function restartFromBlocks(ctx: Server): Promise<void> {
     if (ctx.state.serverStatus !== "online") throw new Error("The server is not online, so it can't restart");
     await restartServerInstance(ctx);
 }
@@ -139,7 +138,7 @@ function backupId(backup: unknown): string {
 }
 
 /** What every server has, whatever its game. */
-export function sharedBlocks(ctx: Context): BlockSet {
+export function sharedBlocks(ctx: Server): BlockSet {
     return {
         values: [
             {
@@ -177,7 +176,7 @@ export function sharedBlocks(ctx: Context): BlockSet {
                 icon: "backup",
                 description: "The server's backups, newest first",
                 type: "list<backup>",
-                read: () => serverBackups().list(),
+                read: () => ctx.backups.list(),
             },
             {
                 id: "log-files",
@@ -288,7 +287,7 @@ export function sharedBlocks(ctx: Context): BlockSet {
                 text: "Back up the server as {name}",
                 inputs: { name: { type: "text", name: "Name", optional: true, maxLength: 128 } },
                 output: "backup",
-                run: ({ name }: { name?: string }) => serverBackups().create(name ? { label: name } : {}),
+                run: ({ name }: { name?: string }) => ctx.backups.create(name ? { label: name } : {}),
             },
             {
                 id: "restore-backup",
@@ -299,7 +298,7 @@ export function sharedBlocks(ctx: Context): BlockSet {
                 text: "Restore {backup}",
                 inputs: { backup: { type: "backup", name: "Backup" } },
                 output: "backup",
-                run: ({ backup }: { backup: unknown }) => serverBackups().restore(backupId(backup)),
+                run: ({ backup }: { backup: unknown }) => ctx.backups.restore(backupId(backup)),
             },
             {
                 id: "delete-backup",
@@ -310,7 +309,7 @@ export function sharedBlocks(ctx: Context): BlockSet {
                 text: "Delete {backup}",
                 inputs: { backup: { type: "backup", name: "Backup" } },
                 run: async ({ backup }: { backup: unknown }) => {
-                    await serverBackups().delete(backupId(backup));
+                    await ctx.backups.delete(backupId(backup));
                 },
             },
             needsCall(ctx, "writeAutomation", {
@@ -433,9 +432,9 @@ export function playerEvents(): BlockEventDefinition[] {
 }
 
 /** Runs one of the game's calls the way its tab does, so a block is checked as the tab's edit is. */
-export async function runGameCall<T>(ctx: Context, id: CallName, inputs: Record<string, unknown>): Promise<T> {
+export async function runGameCall<T>(ctx: Server, id: CallName, inputs: Record<string, unknown>): Promise<T> {
     const call = (await currentGameService().calls())[id];
-    if (!call) throw new Error(`${gameFor(currentServer()!.server.game).name} has no "${id}" call`);
+    if (!call) throw new Error(`${ctx.definition.name} has no "${id}" call`);
     return (await call(ctx, inputs)) as T;
 }
 
@@ -497,11 +496,9 @@ export function mergeBlocks(...sets: (BlockSet | undefined)[]): BlockSet {
  * A block that only works where the game offers the call it shares its
  * work with, such as plugins on a server software that has them.
  */
-export function needsCall<T extends BlockCommandDefinition | BlockValueDefinition>(ctx: Context, call: CallName, def: T): T {
+export function needsCall<T extends BlockCommandDefinition | BlockValueDefinition>(ctx: Server, call: CallName, def: T): T {
     const check = () => {
-        const scope = currentServer();
-        if (!scope) throw new Error(`${def.name} needs a server`);
-        assertGameCall(gameFor(scope.server.game), { settings: ctx.state.gameSettings, software: ctx.state.serverSoftware, version: ctx.state.serverVersion }, call);
+        assertGameCall(ctx.definition, { settings: ctx.state.gameSettings, software: ctx.state.serverSoftware, version: ctx.state.serverVersion }, call);
     };
     if ("run" in def) {
         const run = def.run;
@@ -511,21 +508,21 @@ export function needsCall<T extends BlockCommandDefinition | BlockValueDefinitio
     return { ...def, read: (inputs: unknown, block: unknown) => (check(), read(inputs, block as never)) };
 }
 
-const live = (scope: ServerScope) => {
-    if (scope.removing) throw new Error("This server was removed or is being removed");
+const live = (server: Server) => {
+    if (server.removing) throw new Error("This server was removed or is being removed");
 };
 
 /**
  * Runs work as one of the server's operations: in its scope, refused once
  * it is being removed, and counted while it runs (removal waits for it).
  */
-export async function serverOperation<T>(scope: ServerScope, work: () => T | Promise<T>): Promise<T> {
-    live(scope);
-    scope.activeOperations++;
+export async function serverOperation<T>(server: Server, work: () => T | Promise<T>): Promise<T> {
+    live(server);
+    server.activeOperations++;
     try {
-        return await inServer(scope, work);
+        return await inServer(server, work);
     } finally {
-        scope.activeOperations--;
+        server.activeOperations--;
     }
 }
 
@@ -533,7 +530,7 @@ export async function serverOperation<T>(scope: ServerScope, work: () => T | Pro
  * The set as it runs for one server: a command is one of its operations,
  * and a value is read in its scope, refused once it is being removed.
  */
-export function bindBlocks(scope: ServerScope, set: BlockSet): BlockSet {
+export function bindBlocks(scope: Server, set: BlockSet): BlockSet {
     // choices worked out on demand are asked in the server too
     const inputs = <T extends { inputs?: BlockCommandDefinition["inputs"] }>(def: T): T => {
         if (!def.inputs) return def;

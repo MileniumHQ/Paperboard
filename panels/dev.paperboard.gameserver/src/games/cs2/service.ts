@@ -1,7 +1,8 @@
+import type { Server } from "../../service/server";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { processApi, errorCode } from "../../service/api";
-import { emitTrigger, serverLocal } from "../../service/scope";
+import { serverLocal } from "../../service/scope";
 import { initialServerState } from "../../service/initialState";
 import { appendCapped } from "../../service/types";
 import { TRIGGER_IDS } from "../../service/contract";
@@ -11,7 +12,7 @@ import { steamInstall, steamInstallCalls, steamUpdateStatus, type SteamInstallSp
 import type { GameService } from "../serviceTypes";
 import {
     ConsoleBuffer, assertHost, exists, linkFolder, pushChat, readSettings, redact, report,
-    serverRoot, serverSecret, settingPort, settled, singleLine, updateSettings, writePrivate, type Context,
+    serverRoot, serverSecret, settingPort, settled, singleLine, updateSettings, writePrivate,
 } from "../serviceKit";
 import { SOURCE_CALLS, type SourceMetrics } from "../source";
 import { cvarValue, mapName, optionValue } from "../source/config";
@@ -57,7 +58,7 @@ const loginToken = serverSecret(CS2.id, "login-token");
 const vaulted = [["password", joinPassword], ["token", loginToken]] as const;
 
 function roster() { const r = local().roster; if (!r) throw new Error("Counter-Strike 2's player list is not ready"); return r; }
-const online = (ctx: Context) => settled(ctx, CS2.name);
+const online = (ctx: Server) => settled(ctx, CS2.name);
 /** One console command, written to the server's input. */
 const send = (command: string) => processApi.write(PROC, `${singleLine(command, "Command")}\n`);
 
@@ -79,7 +80,7 @@ export async function installedMaps(game: string): Promise<string[]> {
 }
 const mapAvailable = async (map: string) => (await installedMaps(await gameDir())).includes(map);
 
-async function loadOptions(ctx: Context) {
+async function loadOptions(ctx: Server) {
     const saved = await readSettings();
     const values: Record<string, unknown> = {};
     for (const option of options) {
@@ -124,7 +125,7 @@ async function writeConfigs() {
 const removeSecrets = async () => fs.rm(await secretsFile(), { force: true });
 const linkLogs = async () => linkFolder(path.join(await gameDir(), "logs"), path.join(await serverRoot(), "logs"));
 
-function setOnline(ctx: Context) {
+function setOnline(ctx: Server) {
     const humans = [...local().online.values()].filter((p) => p.steamId !== "BOT" && p.name);
     ctx.setState((prev) => ({
         onlinePlayers: humans.map((p) => p.name),
@@ -154,7 +155,7 @@ async function saveStats() {
     try { await roster().addStats(stats); }
     catch (err) { mergeStats(local().unsaved, stats); throw err; }
 }
-function bump(ctx: Context, userId: number, key: "kills" | "deaths" | "assists") {
+function bump(ctx: Server, userId: number, key: "kills" | "deaths" | "assists") {
     const player = local().online.get(userId);
     if (!player) return;
     player.stats[key] += 1;
@@ -171,13 +172,13 @@ function bump(ctx: Context, userId: number, key: "kills" | "deaths" | "assists")
  * `banid` prints nothing and lists nothing, so whether it holds can't be
  * seen; Paperboard's list is what bans.
  */
-async function enforceBan(ctx: Context, player: { userId: number; steamId: string; name: string }) {
+async function enforceBan(ctx: Server, player: { userId: number; steamId: string; name: string }) {
     if (!(await roster().bans()).some((ban) => ban.steamId === player.steamId)) return;
     await send(`kickid ${player.userId} Banned from this server`);
     ctx.setState((prev) => ({ serverEntries: appendCapped(prev.serverEntries, { type: "warn", content: `[Paperboard] ${player.name} is banned and was put out as they joined.` }) }));
 }
 
-function observeEvent(ctx: Context, event: SourceLogEvent) {
+function observeEvent(ctx: Server, event: SourceLogEvent) {
     const players = local().online;
     switch (event.kind) {
         case "connected": {
@@ -188,7 +189,7 @@ function observeEvent(ctx: Context, event: SourceLogEvent) {
             setOnline(ctx);
             if (isSteamId(p.steamId)) {
                 pushChat(ctx, { event: "join", sender: p.name, text: `${p.name} joined the game` });
-                emitTrigger(ctx, TRIGGER_IDS.playerJoined, p.name);
+                ctx.trigger(TRIGGER_IDS.playerJoined, p.name);
                 roster().remember(p.steamId, p.name).catch((err) => report(ctx, `Could not record ${p.name}`, err));
                 enforceBan(ctx, p).catch((err) => report(ctx, `Could not put the banned player ${p.name} out`, err));
             }
@@ -204,7 +205,7 @@ function observeEvent(ctx: Context, event: SourceLogEvent) {
             const name = p.name || known?.name || "";
             if (isSteamId(p.steamId) && name) {
                 pushChat(ctx, { event: "leave", sender: name, text: `${name} left the game` });
-                emitTrigger(ctx, TRIGGER_IDS.playerLeft, name);
+                ctx.trigger(TRIGGER_IDS.playerLeft, name);
                 roster().remember(p.steamId, name).catch((err) => report(ctx, `Could not record ${name} leaving`, err));
                 saveStats().catch((err) => report(ctx, `Could not save ${name}'s stats`, err));
             }
@@ -220,7 +221,7 @@ function observeEvent(ctx: Context, event: SourceLogEvent) {
             const p = event.player;
             if (p.steamId === "BOT") return;
             const text = event.team ? `(Team) ${event.text}` : event.text;
-            emitTrigger(ctx, TRIGGER_IDS.chatMessage, pushChat(ctx, { sender: p.name, content: text, text: `<${p.name}> ${text}` }));
+            ctx.trigger(TRIGGER_IDS.chatMessage, pushChat(ctx, { sender: p.name, content: text, text: `<${p.name}> ${text}` }));
             return;
         }
         default: return;
@@ -228,7 +229,7 @@ function observeEvent(ctx: Context, event: SourceLogEvent) {
 }
 
 /** A `status` answer's player rows: who is on by the server's own count, for a server Paperboard found running or just started. */
-function applyStatus(ctx: Context, rows: readonly string[]) {
+function applyStatus(ctx: Server, rows: readonly string[]) {
     const listed = parseStatusPlayers(rows);
     const players = local().online;
     const now = Date.now();

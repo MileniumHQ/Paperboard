@@ -1,6 +1,7 @@
+import type { Server } from "../../service/server";
 import fs from "node:fs/promises";
 import path from "node:path";
-import { emitTrigger, serverLocal } from "../../service/scope";
+import { serverLocal } from "../../service/scope";
 import { initialServerState } from "../../service/initialState";
 import { appendCapped } from "../../service/types";
 import { TRIGGER_IDS } from "../../service/contract";
@@ -12,7 +13,7 @@ import { steamInstall, steamInstallCalls, steamUpdateStatus, type SteamInstallSp
 import type { GameService } from "../serviceTypes";
 import {
     ConsoleBuffer, assertHost, exists, fileStamp, hostSupportHere, linkFolder, offlineBackup, playerPoller, pushChat, readSettings, redact, report,
-    resumeAfterBackup, serverRoot, serverSecret, settingPort, settled, singleLine, updateSettings, waitUntil, writePrivate, type Context,
+    resumeAfterBackup, serverRoot, serverSecret, settingPort, settled, singleLine, updateSettings, waitUntil, writePrivate,
 } from "../serviceKit";
 import { palworld, options, PALWORLD_APP_ID } from "./index";
 import { decode, encode, parseOptionSettings, writeOptionSettings, type IniEntry } from "./ini";
@@ -106,7 +107,7 @@ const linkSaved = async () => linkFolder(path.join(await installDir(), "Pal", "S
 const displayVersion = (saved: Record<string, unknown>) =>
     saved.version ? String(saved.version) : saved.build ? `Build ${saved.build}` : "";
 
-async function loadOptions(ctx: Context) {
+async function loadOptions(ctx: Server) {
     const saved = await readSettings();
     const values: Record<string, unknown> = { port: saved.port ?? DEFAULT_PORT, community: saved.community ?? false };
     const file = await iniFileHere();
@@ -152,7 +153,7 @@ export const worldStamp = async () => {
 };
 
 /** Saves through the REST API and waits for Level.sav to change; an answer alone is not a save. */
-export async function save(ctx: Context) {
+export async function save(ctx: Server) {
     if (ctx.state.serverStatus !== "online") throw new Error("Start Palworld before saving");
     const before = await worldStamp();
     await rest().save();
@@ -339,7 +340,7 @@ export const palworldService: GameService = {
         })().catch((err) => report(ctx, "Could not record Palworld's version", err));
         try {
             const said = parseChat(line, players.online().map((p) => p.name));
-            if (said) emitTrigger(ctx, TRIGGER_IDS.chatMessage, pushChat(ctx, { sender: said.sender, content: said.content, text: `<${said.sender}> ${said.content}` }));
+            if (said) ctx.trigger(TRIGGER_IDS.chatMessage, pushChat(ctx, { sender: said.sender, content: said.content, text: `<${said.sender}> ${said.content}` }));
         } catch (err) { report(ctx, "Could not read a chat message", err); }
         local().console.push(ctx, line);
     },

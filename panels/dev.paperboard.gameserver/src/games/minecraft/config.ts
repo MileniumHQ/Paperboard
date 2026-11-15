@@ -1,8 +1,8 @@
+import type { Server } from "../../service/server";
 import {
     config,
     updateSettings,
     files as fileApi,
-    type ServiceContext,
 } from "../../service/api";
 import { parseProperties, extractServerPort } from "../../core/properties";
 import { DEFAULT_MOTD } from "../../core/motd";
@@ -13,7 +13,7 @@ import { PANEL_ID } from "../../service/types";
 export { parseProperties };
 
 export async function loadConfigAndProperties(
-    ctx: ServiceContext<GameServerState>,
+    ctx: Server,
 ): Promise<void> {
     const saved = await config.get<any>(PANEL_ID);
     const patch: Partial<GameServerState> = {};
@@ -42,7 +42,7 @@ export async function loadConfigAndProperties(
 }
 
 export async function updatePanelConfig(
-    ctx: ServiceContext<GameServerState>,
+    ctx: Server,
     patch: Record<string, unknown>,
 ): Promise<void> {
     await updateSettings(patch);

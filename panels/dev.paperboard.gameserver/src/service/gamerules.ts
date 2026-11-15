@@ -1,5 +1,6 @@
+import type { Server } from "./server";
 import { minecraftSoftware } from "../games/minecraft/index";
-import { processApi, updateSettings, type ServiceContext } from "./api";
+import { processApi, updateSettings } from "./api";
 import {
     assertGameruleName,
     assertGameruleValue,
@@ -25,12 +26,12 @@ const MAX_GAMERULE_WRITES = 100;
 
 // pre-1.21.11 servers spell gamerules in camelCase and invert the `disable*`
 // rules; every console write and query is translated through the profile.
-function profileFor(ctx: ServiceContext<GameServerState>): VersionProfile {
+function profileFor(ctx: Server): VersionProfile {
     return resolveVersionProfile(minecraftSoftware(ctx.state.serverSoftware), ctx.state.serverVersion);
 }
 
 export async function setGamerule(
-    ctx: ServiceContext<GameServerState>,
+    ctx: Server,
     rawName: string,
     rawValue: string,
 ): Promise<boolean> {
@@ -69,7 +70,7 @@ async function persistPendingGamerule(name: string, value: string): Promise<void
 // view is not flooded with command entries. The UI supplies the names it
 // displays (version-filtered); every name is re-validated here.
 export async function queryGamerules(
-    ctx: ServiceContext<GameServerState>,
+    ctx: Server,
     names: string[],
 ): Promise<boolean> {
     if (ctx.state.serverStatus !== "online") return false;
@@ -83,7 +84,7 @@ export async function queryGamerules(
 }
 
 /** Sends the gamerule edits made while the server was offline; throws why they were not. */
-export function applyPendingGamerules(ctx: ServiceContext<GameServerState>): Promise<void> {
+export function applyPendingGamerules(ctx: Server): Promise<void> {
     const profile = profileFor(ctx);
     return applyPendingEdits("pendingGamerules", (pending) => {
         const entries = Object.entries(pending);

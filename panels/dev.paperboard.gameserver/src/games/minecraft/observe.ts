@@ -1,6 +1,7 @@
+import type { Server } from "../../service/server";
 import { minecraftSoftware } from "./index";
 import stripAnsi from "strip-ansi";
-import { processApi, type ServiceContext } from "../../service/api";
+import { processApi } from "../../service/api";
 import { chatId, parseChatMessage, parseLogLine } from "../../lib/logs";
 import { parseGameruleValue } from "../../core/gamerules";
 import { resolveVersionProfile } from "../../lib/versionProfile";
@@ -14,7 +15,7 @@ import { observeSavingLine } from "./saving";
 import { type GameServerState, SERVER_PROC_ID, appendCapped } from "../../service/types";
 import { TRIGGER_IDS } from "../../service/contract";
 import { noteCrashReport } from "../../service/automation";
-import { emitTrigger, serverLocal } from "../../service/scope";
+import { serverLocal } from "../../service/scope";
 /** What Minecraft prints when it crashes: its crash report, and its watchdog giving up on a frozen server. */
 const CRASH_LINES = ["This crash report has been saved to", "Considering it crashed, server will forcibly shutdown"];
 
@@ -38,7 +39,7 @@ function takeAsked(kind: QueryKind): boolean {
 }
 
 export async function sendChatMessage(
-    ctx: ServiceContext<GameServerState>,
+    ctx: Server,
     msg: string,
 ): Promise<void> {
     const trimmed = msg.trim();
@@ -67,7 +68,7 @@ export async function sendChatMessage(
 // query responses keep the UI honest, write confirmations converge an
 // online edit on server truth. Returns whether the line was consumed.
 function handleGameruleResponse(
-    ctx: ServiceContext<GameServerState>,
+    ctx: Server,
     clean: string,
 ): boolean {
     const profile = resolveVersionProfile(
@@ -82,7 +83,7 @@ function handleGameruleResponse(
     return true;
 }
 
-export function onReady(ctx: ServiceContext<GameServerState>): void {
+export function onReady(ctx: Server): void {
     // one `list` so the player cap is known from the start
     queryOnlinePlayers(ctx);
     // boot-time truth: offline gamerule and property edits re-apply. One
@@ -94,7 +95,7 @@ export function onReady(ctx: ServiceContext<GameServerState>): void {
     })();
 }
 
-export function observeLine(ctx: ServiceContext<GameServerState>, line: string, final = false): void {
+export function observeLine(ctx: Server, line: string, final = false): void {
     // The old exit path only flushed chat and the last log entry.
     if (final) {
         const chat = parseChatMessage(line);
@@ -119,7 +120,7 @@ export function observeLine(ctx: ServiceContext<GameServerState>, line: string, 
     const ready = clean.includes("Done (") || clean.includes("Done in") || clean.includes('For help, type "help"') || clean.includes("Started server");
     if (ready && ctx.state.serverStatus !== "online") {
         ctx.setState({ serverStatus: "online" });
-        emitTrigger(ctx, TRIGGER_IDS.serverStarted, true);
+        ctx.trigger(TRIGGER_IDS.serverStarted, true);
         onReady(ctx);
     } else if (!ready && (clean.includes("Stopping server") || clean.includes("Saving players"))) {
         ctx.setState({ serverStatus: "stopping" });
@@ -134,7 +135,7 @@ export function observeLine(ctx: ServiceContext<GameServerState>, line: string, 
         });
         // only player messages emit the chat-message trigger
         if (chat.sender && !chat.event) {
-            emitTrigger(ctx, TRIGGER_IDS.chatMessage, chat);
+            ctx.trigger(TRIGGER_IDS.chatMessage, chat);
         }
     }
 

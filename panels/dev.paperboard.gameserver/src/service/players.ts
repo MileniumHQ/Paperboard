@@ -1,5 +1,6 @@
-import { emitTrigger, serverLocal } from "./scope";
-import { files as fileApi, type ServiceContext } from "./api";
+import type { Server } from "./server";
+import { serverLocal } from "./scope";
+import { files as fileApi } from "./api";
 import { writeServerLineBestEffort } from "./serverConsole";
 import {
     type GameServerState,
@@ -94,7 +95,7 @@ function capEntries<T>(
 }
 
 export function trackPlayerActivity(
-    ctx: ServiceContext<GameServerState>,
+    ctx: Server,
     clean: string,
 ): void {
     const ts = consoleTimeToSeconds(clean);
@@ -115,7 +116,7 @@ export function trackPlayerActivity(
                 : [...prev.onlinePlayers, key];
             return { seenPlayers: seen, onlinePlayers: online };
         });
-        emitTrigger(ctx, TRIGGER_IDS.playerJoined, joined);
+        ctx.trigger(TRIGGER_IDS.playerJoined, joined);
         return;
     }
 
@@ -136,7 +137,7 @@ export function trackPlayerActivity(
             playtime[key] = (playtime[key] ?? 0) + sessionSeconds;
             return { onlinePlayers: online, playerPlaytime: capEntries(playtime) };
         });
-        emitTrigger(ctx, TRIGGER_IDS.playerLeft, left);
+        ctx.trigger(TRIGGER_IDS.playerLeft, left);
         return;
     }
 
@@ -167,7 +168,7 @@ export function trackPlayerActivity(
 }
 
 export function handleStatResponse(
-    ctx: ServiceContext<GameServerState>,
+    ctx: Server,
     clean: string,
 ): boolean {
     const reply = extractStatReply(clean);
@@ -188,14 +189,14 @@ export function handleStatResponse(
     return true;
 }
 
-export function queryOnlinePlayers(ctx: ServiceContext<GameServerState>): void {
+export function queryOnlinePlayers(ctx: Server): void {
     if (ctx.state.serverStatus === "online") {
         writeServerLineBestEffort("list\n");
     }
 }
 
 export function queryPlayerStats(
-    ctx: ServiceContext<GameServerState>,
+    ctx: Server,
     name: string,
 ): void {
     if (ctx.state.serverStatus !== "online") return;
@@ -220,7 +221,7 @@ type PendingStatQuery = { player: string; field: keyof PlayerStatData; path: str
 // the normal bridge sync.
 type PendingPositionQuery = { player: string; kind: "pos" | "dim" };
 
-export function queryPlayerPositions(ctx: ServiceContext<GameServerState>): void {
+export function queryPlayerPositions(ctx: Server): void {
     if (ctx.state.serverStatus !== "online") return;
     const players = ctx.state.onlinePlayers;
     if (players.length === 0) {
@@ -260,7 +261,7 @@ export function queryPlayerPositions(ctx: ServiceContext<GameServerState>): void
 }
 
 export function handlePositionResponse(
-    ctx: ServiceContext<GameServerState>,
+    ctx: Server,
     clean: string,
 ): boolean {
     const pos = extractPosition(clean);
@@ -286,7 +287,7 @@ export function handlePositionResponse(
 }
 
 export function forgetPlayerData(
-    ctx: ServiceContext<GameServerState>,
+    ctx: Server,
     name: string,
 ): void {
     const key = normalizePlayerKey(assertPlayerName(name));
@@ -316,7 +317,7 @@ const UUID_RE = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0
 // the server's actual level-name — never a hardcoded "world". The uuid is
 // asserted, not trusted: it reaches shell paths.
 export async function deletePlayerData(
-    ctx: ServiceContext<GameServerState>,
+    ctx: Server,
     playerName: string,
     uuid?: string,
 ): Promise<void> {
@@ -363,7 +364,7 @@ const DISCONNECT_TIMEOUT_MS = 15_000;
 // them out: deleting earlier hands the files straight back. The leave line
 // is printed before that save in the same tick, so a save-all answered
 // after it (commands run on a later tick) is the point the files are done.
-async function disconnectBeforeDelete(ctx: ServiceContext<GameServerState>, name: string): Promise<void> {
+async function disconnectBeforeDelete(ctx: Server, name: string): Promise<void> {
     const status = ctx.state.serverStatus;
     if (status === "offline") return;
     if (status !== "online") {

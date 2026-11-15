@@ -1,3 +1,4 @@
+import type { Server } from "./server";
 import { unlessMissing } from "./failures";
 import { serverLocal } from "./scope";
 import * as nodeFs from "node:fs/promises";
@@ -5,7 +6,7 @@ import * as nodePath from "node:path";
 import { randomUUID } from "node:crypto";
 import type { UnzipFile } from "fflate";
 import { loadZip } from "../core/lazy";
-import { files as fileApi, type ServiceContext, errorMessage } from "./api";
+import { files as fileApi, errorMessage } from "./api";
 import {
     DIMENSION_SUFFIXES,
     MAX_WORLD_EXPORT_BYTES,
@@ -75,7 +76,7 @@ async function listFiles(root: string, folder: string): Promise<string[]> {
  * and returns that file's name. A running server's saving is paused for
  * the copy when it is the world being played.
  */
-export function exportWorld(ctx: ServiceContext<GameServerState>, levelName: unknown): Promise<{ file: string; bytes: number }> {
+export function exportWorld(ctx: Server, levelName: unknown): Promise<{ file: string; bytes: number }> {
     return exclusive(async () => {
         const name = assertShellSafeLevelName(levelName);
         const root = await serverDir();

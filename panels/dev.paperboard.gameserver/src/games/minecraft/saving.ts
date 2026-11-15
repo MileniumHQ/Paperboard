@@ -1,5 +1,6 @@
+import type { Server } from "../../service/server";
 import { serverLocal } from "../../service/scope";
-import { files as fileApi, processApi, type ServiceContext, errorMessage } from "../../service/api";
+import { files as fileApi, processApi, errorMessage } from "../../service/api";
 import { PANEL_ID, SERVER_PROC_ID, type GameServerState } from "../../service/types";
 
 const local = serverLocal(() => ({ waiters: new Set<Waiter>(), pausing: false }));
@@ -72,7 +73,7 @@ export async function send(command: string, confirm: (line: string) => boolean, 
  * an offline server writes nothing, so `work` just runs. Saving is turned
  * back on however `work` ends.
  */
-export async function withSavingPaused<T>(ctx: ServiceContext<GameServerState>, work: () => Promise<T>): Promise<T> {
+export async function withSavingPaused<T>(ctx: Server, work: () => Promise<T>): Promise<T> {
     if (ctx.state.serverStatus === "offline") return work();
     if (ctx.state.serverStatus !== "online") throw new Error("Wait until the server has finished starting or stopping");
     if (local().pausing) throw new Error("Saving is already paused for another copy");
@@ -105,7 +106,7 @@ export async function withSavingPaused<T>(ctx: ServiceContext<GameServerState>, 
 }
 
 /** Save world: everything in memory is written out, confirmed by the server's "Saved the game". */
-export async function saveWorld(ctx: ServiceContext<GameServerState>): Promise<void> {
+export async function saveWorld(ctx: Server): Promise<void> {
     if (ctx.state.serverStatus !== "online") throw new Error("Start the server before saving");
     await send("save-all flush", flushed, FLUSH_TIMEOUT_MS, "that the world is saved");
 }
@@ -124,7 +125,7 @@ async function pauseSaving(): Promise<void> {
  * the marker and turns saving back on (recoverPausedSaving). When the
  * server cannot pause, saving is turned back on and the backup refused.
  */
-export async function pauseSavingForBackup(ctx: ServiceContext<GameServerState>): Promise<void> {
+export async function pauseSavingForBackup(ctx: Server): Promise<void> {
     if (ctx.state.serverStatus === "offline") return;
     if (ctx.state.serverStatus !== "online") throw new Error("The server is starting or stopping; back it up when it has finished");
     if (local().pausing) throw new Error("A world download is copying the world; back up when it has finished");

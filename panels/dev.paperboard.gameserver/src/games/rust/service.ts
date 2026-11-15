@@ -1,7 +1,8 @@
+import type { Server } from "../../service/server";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { randomInt } from "node:crypto";
-import { emitTrigger, serverLocal } from "../../service/scope";
+import { serverLocal } from "../../service/scope";
 import { initialServerState } from "../../service/initialState";
 import { TRIGGER_IDS } from "../../service/contract";
 import { validateOptions } from "../options";
@@ -10,7 +11,7 @@ import { steamInstall, steamInstallCalls, steamUpdateStatus, type SteamInstallSp
 import type { GameService } from "../serviceTypes";
 import {
     ConsoleBuffer, assertHost, exclusive, exists, fileStamp, linkFolder, offlineBackup, playerPoller, pushChat, readSettings, redact, report,
-    resumeAfterBackup, serverRoot, serverSecret, settingPort, settled, singleLine, unlessMissing, updateSettings, waitUntil, type Context,
+    resumeAfterBackup, serverRoot, serverSecret, settingPort, settled, singleLine, unlessMissing, updateSettings, waitUntil,
 } from "../serviceKit";
 import { trashDirName } from "../../service/trash";
 import { rust, options, RUST_APP_ID, type RustMapView, type RustOption } from "./index";
@@ -80,7 +81,7 @@ async function settings(): Promise<Record<string, unknown>> {
 
 const displayVersion = (saved: Record<string, unknown>) => (saved.version ? String(saved.version) : saved.build ? `Build ${saved.build}` : "");
 
-async function loadOptions(ctx: Context) {
+async function loadOptions(ctx: Server) {
     const saved = await settings();
     const values: Record<string, unknown> = {};
     for (const option of options) {
@@ -101,14 +102,14 @@ function roster() { const r = local().roster; if (!r) throw new Error("Rust's pl
 const info = async (): Promise<RustInfo> => parseInfo(await rcon().exec("serverinfo"));
 
 /** A chat line the server pushed: a player's, or one said from the console. */
-function observeChat(ctx: Context, chat: RustChat) {
+function observeChat(ctx: Server, chat: RustChat) {
     if (chat.UserId === "0") { pushChat(ctx, { event: "server", content: chat.Message, text: `<Server> ${chat.Message}` }); return; }
     const text = chat.Channel === 1 ? `(Team) ${chat.Message}` : chat.Message;
-    emitTrigger(ctx, TRIGGER_IDS.chatMessage, pushChat(ctx, { sender: chat.Username, content: text, text: `<${chat.Username}> ${text}` }));
+    ctx.trigger(TRIGGER_IDS.chatMessage, pushChat(ctx, { sender: chat.Username, content: text, text: `<${chat.Username}> ${text}` }));
 }
 
 /** Connects the remote console a start or a reattach uses, with the chat it pushes going to the server's chat. */
-function connect(ctx: Context, port: number, password: string) {
+function connect(ctx: Server, port: number, password: string) {
     local().rcon?.close();
     const client = new RustRcon(port, password);
     client.onChat = (chat) => observeChat(ctx, chat);
@@ -138,7 +139,7 @@ export async function saveStamp(): Promise<string | null> {
 }
 
 /** Saves over the remote console and waits for the save file to change; an answer alone is not a save. */
-export async function save(ctx: Context) {
+export async function save(ctx: Server) {
     if (ctx.state.serverStatus !== "online") throw new Error("Start Rust before saving");
     const before = await saveStamp();
     await rcon().exec("server.save", { until: (message) => message.startsWith("Saving complete"), timeoutMs: 120_000 });
@@ -190,7 +191,7 @@ const drawing = new Map<string, Promise<string>>();
  * of it (see mapPicture.ts). Rust names the render after the map it is on,
  * which is the one kept: the settings may already name the next.
  */
-async function drawMap(ctx: Context): Promise<string> {
+async function drawMap(ctx: Server): Promise<string> {
     if (ctx.state.serverStatus !== "online") throw new Error("Start Rust to draw its map");
     const root = await serverRoot();
     const pending = drawing.get(root) ?? (async () => {
@@ -236,7 +237,7 @@ async function wipe(blueprints: boolean): Promise<RustMapView> {
 }
 
 /** The bans: the running server's own list, or the file it keeps them in while it is stopped. */
-async function bans(ctx: Context): Promise<RustBan[]> {
+async function bans(ctx: Server): Promise<RustBan[]> {
     if (ctx.state.serverStatus === "online") return parseBanList(await rcon().exec("banlistex"));
     const file = path.join(await identityDir(), "cfg", "bans.cfg");
     return (await exists(file)) ? parseBansCfg(await fs.readFile(file, "utf8")) : [];

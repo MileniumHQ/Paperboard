@@ -31,20 +31,20 @@ const quoteText = (page: Page, title: string) => page.evaluate<string>(`${quote(
 describe("failures are shown", () => {
     test("a console command or chat line sent while offline rejects and says so in the console and chat", async () => {
         const mc = minecraftServer();
-        await expect(mc.run(() => sendServerCommand(mc.scope.ctx, "list"))).rejects.toThrow("Cannot execute command: server is offline.");
-        expect(mc.scope.ctx.state.serverEntries.map((e) => [e.type, e.content])).toEqual([
+        await expect(mc.run(() => sendServerCommand(mc.server, "list"))).rejects.toThrow("Cannot execute command: server is offline.");
+        expect(mc.server.state.serverEntries.map((e) => [e.type, e.content])).toEqual([
             ["command", "list"],
             ["error", "Cannot execute command: server is offline."],
         ]);
-        await expect(mc.run(() => minecraftService.sendChat!(mc.scope.ctx, "hello"))).rejects.toThrow("Cannot send message: server is offline.");
-        expect(mc.scope.ctx.state.chatMessages.map((m) => m.text)).toEqual(["Cannot send message: server is offline."]);
+        await expect(mc.run(() => minecraftService.sendChat!(mc.server, "hello"))).rejects.toThrow("Cannot send message: server is offline.");
+        expect(mc.server.state.chatMessages.map((m) => m.text)).toEqual(["Cannot send message: server is offline."]);
     });
 
     test("a start whose server jar can't be checked says why instead of sending the user to reinstall", async () => {
         const mc = minecraftServer({ files: { "elsewhere/server.jar": "jar" } });
         fs.rmSync(path.join(mc.dir, "server.jar"));
         fs.symlinkSync(path.join(mc.dir, "elsewhere", "server.jar"), path.join(mc.dir, "server.jar"));
-        const failure = await mc.run(() => startServerInstance(mc.scope.ctx)).catch((err: Error) => err);
+        const failure = await mc.run(() => startServerInstance(mc.server)).catch((err: Error) => err);
         expect(String(failure)).toContain("symbolic link");
         expect(String(failure)).not.toContain("reinstall");
     });
@@ -52,16 +52,16 @@ describe("failures are shown", () => {
     test("a server that failed to start and then could not be ended says so in the console, and as the panel's problem", async () => {
         const server = gameServer("palworld", { settings: { port: await freePort(), restPort: await freePort() }, state: palworldService.initialState() });
         installPalworld(server.dir, { refuse: { info: "broken world" } });
-        await server.run(() => palworldService.initialize(server.scope.ctx, false));
+        await server.run(() => palworldService.initialize(server.server, false));
         const kill = rawProcess.kill;
         rawProcess.kill = (async () => { throw new Error("the supervisor did not answer"); }) as typeof kill;
         try {
-            await server.run(() => startServerInstance(server.scope.ctx));
-            await server.scope.waitFor((s) => s.serverEntries.some((e) => String(e.content).includes("could not be ended")), "the failed kill to be reported");
+            await server.run(() => startServerInstance(server.server));
+            await server.server.waitFor((s) => s.serverEntries.some((e) => String(e.content).includes("could not be ended")), "the failed kill to be reported");
         } finally {
             rawProcess.kill = kill;
         }
-        expect(server.scope.ctx.state.serverEntries.map((e) => String(e.content))).toContain("[Paperboard] The server that failed to start could not be ended: the supervisor did not answer");
+        expect(server.server.state.serverEntries.map((e) => String(e.content))).toContain("[Paperboard] The server that failed to start could not be ended: the supervisor did not answer");
         // the console only shows while its page is open: Paperboard shows the problem by the panel's name
         let off = () => {};
         const problem = await new Promise<PanelProblem>((resolve, reject) => {
@@ -70,7 +70,7 @@ describe("failures are shown", () => {
                 if (found) resolve(found);
             }, reject);
         }).finally(() => off());
-        expect(problem).toMatchObject({ title: `${server.scope.server.name}: The server that failed to start could not be ended`, message: "the supervisor did not answer" });
+        expect(problem).toMatchObject({ title: `${server.server.name}: The server that failed to start could not be ended`, message: "the supervisor did not answer" });
         const exit = server.nextExit();
         await server.run(() => processApi.kill(palworldService.primaryProcessId, "SIGKILL"));
         await exit;
@@ -79,20 +79,20 @@ describe("failures are shown", () => {
     test("a Palworld settings file that can't be read when the server stops is reported in the console", async () => {
         const server = gameServer("palworld", { settings: { port: await freePort(), restPort: await freePort() }, state: palworldService.initialState() });
         installPalworld(server.dir);
-        await server.run(() => palworldService.initialize(server.scope.ctx, false));
-        await server.run(() => startServerInstance(server.scope.ctx));
-        await server.scope.waitFor((s) => s.serverStatus === "online", "Palworld to answer its REST API");
+        await server.run(() => palworldService.initialize(server.server, false));
+        await server.run(() => startServerInstance(server.server));
+        await server.server.waitFor((s) => s.serverStatus === "online", "Palworld to answer its REST API");
         const ini = path.join(server.dir, ...INI.split("/"));
         fs.chmodSync(ini, 0o000);
         try {
             const exit = server.nextExit();
-            await server.run(() => stopServerInstance(server.scope.ctx));
+            await server.run(() => stopServerInstance(server.server));
             expect(await exit).toBe(0);
-            await server.scope.waitFor((s) => s.serverEntries.some((e) => e.content.startsWith("[Server] Could not clean up after the server stopped:")), "the failed cleanup to be reported");
+            await server.server.waitFor((s) => s.serverEntries.some((e) => e.content.startsWith("[Server] Could not clean up after the server stopped:")), "the failed cleanup to be reported");
         } finally {
             fs.chmodSync(ini, 0o600);
         }
-        const line = server.scope.ctx.state.serverEntries.find((e) => e.content.startsWith("[Server] Could not clean up"))!;
+        const line = server.server.state.serverEntries.find((e) => e.content.startsWith("[Server] Could not clean up"))!;
         expect(line.type).toBe("error");
         expect(line.content).toMatch(/EACCES|permission denied/i);
     });

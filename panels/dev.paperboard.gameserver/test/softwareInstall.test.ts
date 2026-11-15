@@ -44,9 +44,9 @@ function paperServer(installerPlan: Record<string, unknown>, overrides: Partial<
             runs.push(run);
             return runInstallerProcess(run);
         },
-        readConfig: async () => mc.scope.server.settings,
+        readConfig: async () => mc.server.settings,
         writeConfig: async (patch) => {
-            await mc.scope.updateSettings((current) => ({ ...current, ...patch }));
+            await mc.server.updateSettings((current) => ({ ...current, ...patch }));
         },
         provider: () => ({
             ...neoforgeProvider,
@@ -57,7 +57,7 @@ function paperServer(installerPlan: Record<string, unknown>, overrides: Partial<
         }),
         ...overrides,
     };
-    const install = () => mc.run(() => installServerSoftware(mc.scope.ctx, "neoforge", "1.21.1", deps));
+    const install = () => mc.run(() => installServerSoftware(mc.server, "neoforge", "1.21.1", deps));
     return { mc, deps, runs, install };
 }
 
@@ -78,7 +78,7 @@ describe("software installs", () => {
         expect(tree["server.jar"]).toBeUndefined();
         expect(tree["libraries/net/neoforged/neoforge/21.1.256/unix_args.txt"]).toBeDefined();
         expect(stagingLeft(mc)).toEqual([]);
-        const record = mc.scope.server.settings[INSTALL_RECORD_KEY] as Record<string, unknown>;
+        const record = mc.server.settings[INSTALL_RECORD_KEY] as Record<string, unknown>;
         expect(record).toMatchObject({
             software: "neoforge",
             version: "1.21.1",
@@ -90,7 +90,7 @@ describe("software installs", () => {
             },
             files: ["libraries", "run.bat", "run.sh", "user_jvm_args.txt"],
         });
-        expect(mc.scope.server.settings.software).toBe("neoforge");
+        expect(mc.server.settings.software).toBe("neoforge");
     });
 
     test("an installer that exits non-zero fails with its output and leaves the old server as it was", async () => {
@@ -98,7 +98,7 @@ describe("software installs", () => {
         const before = readTree(mc.dir);
         await expect(install()).rejects.toThrow(/installer failed \(exit code 1\):[\s\S]*There was an error during installation/);
         expect(readTree(mc.dir)).toEqual(before);
-        expect(mc.scope.server.settings[INSTALL_RECORD_KEY]).toBeUndefined();
+        expect(mc.server.settings[INSTALL_RECORD_KEY]).toBeUndefined();
     });
 
     test("an installer that exits 0 but leaves nothing launchable fails and leaves the old server as it was", async () => {
@@ -125,9 +125,9 @@ describe("software installs", () => {
         const holding = mc.run(() => withInstallLock(() => new Promise<void>((resolve) => (release = resolve))));
         await expect(install()).rejects.toThrow("A server install is already running");
         // a refused Minecraft start fails its call, as every game's does, and says why in the console
-        await expect(mc.run(() => startServerInstance(mc.scope.ctx))).rejects.toThrow("A server install is running");
-        expect(mc.scope.ctx.state.serverStatus).toBe("offline");
-        expect(mc.scope.ctx.state.serverEntries.at(-1)).toEqual({
+        await expect(mc.run(() => startServerInstance(mc.server))).rejects.toThrow("A server install is running");
+        expect(mc.server.state.serverStatus).toBe("offline");
+        expect(mc.server.state.serverEntries.at(-1)).toEqual({
             type: "error",
             content: "[Server] Failed to launch: A server install is running; start the server once it finishes.",
         });

@@ -9,7 +9,8 @@ import { MINECRAFT_CALLS, SERVERS_CALLS, TRIGGER_IDS, gameServerContract } from 
 import { minecraftCalls } from "../src/games/minecraft/calls";
 import { playerEvents, sharedBlocks } from "../src/service/blocks";
 import { assertGameCall, gameFor, games } from "../src/games";
-import { gameServiceFor } from "../src/games/service";
+import { gameModuleFor } from "../src/games/service";
+import { testServer } from "./helpers/scope";
 import { PANEL_ID, readServersConfig } from "../src/servers";
 
 let daemon: TestDaemon;
@@ -31,7 +32,7 @@ describe("call and game contracts", () => {
     test("every game's calls can be made over blocks without clashing, and what a game describes it also answers", async () => {
         const everyone = new Map<string, string>();
         for (const game of games) {
-            const service = gameServiceFor(game.id);
+            const service = testServer({ game: game.id, directory: "" }).game;
             const names = Object.keys(await service.calls());
             for (const name of names) {
                 // each call is an internal block: its name must make a valid, unclashing id
@@ -48,7 +49,7 @@ describe("call and game contracts", () => {
 
     test("every call on the panel's contract is answered: by the panel, or by a game", async () => {
         const answered = new Set<string>(SERVERS_CALLS);
-        for (const game of games) for (const name of Object.keys(await gameServiceFor(game.id).calls())) answered.add(name);
+        for (const game of games) for (const name of Object.keys(await testServer({ game: game.id, directory: "" }).game.calls())) answered.add(name);
         expect(Object.keys(gameServerContract.calls).filter((name) => !answered.has(name))).toEqual([]);
     });
 
@@ -59,16 +60,16 @@ describe("call and game contracts", () => {
 
     test("an empty value is a valid edit for a file write, and a setting still needs its name", async () => {
         const mc = minecraftServer({ files: { "a.txt": "text" } });
-        const read: { version: string } = await mc.run(() => minecraftCalls.readServerFile!(mc.scope.ctx, { path: "a.txt" }) as Promise<{ version: string }>);
-        await mc.run(() => minecraftCalls.writeServerFile!(mc.scope.ctx, { path: "a.txt", text: "", version: read.version }));
+        const read: { version: string } = await mc.run(() => minecraftCalls.readServerFile!(mc.server, { path: "a.txt" }) as Promise<{ version: string }>);
+        await mc.run(() => minecraftCalls.writeServerFile!(mc.server, { path: "a.txt", text: "", version: read.version }));
         expect(fs.readFileSync(path.join(mc.dir, "a.txt"), "utf8")).toBe("");
-        await expect(mc.run(() => minecraftCalls.writeLoaderSetting!(mc.scope.ctx, { id: "", value: "x" }))).rejects.toThrow();
+        await expect(mc.run(() => minecraftCalls.writeLoaderSetting!(mc.server, { id: "", value: "x" }))).rejects.toThrow();
     });
 
     test("unknown games throw instead of falling back to Minecraft", () => {
         for (const id of ["factorio", "__proto__", "constructor", ""]) {
             expect(() => gameFor(id)).toThrow("Unsupported game");
-            expect(() => gameServiceFor(id)).toThrow("Unsupported game");
+            expect(() => gameModuleFor(id)).toThrow("Unsupported game");
         }
         const stored = { version: 2, serversDirectory: "servers-0123456789ab", servers: [{ id: "s-1", name: "F", game: "factorio", directory: "servers-0123456789ab/s-1", createdAt: 0, settings: {} }] };
         expect(() => readServersConfig(stored)).toThrow();

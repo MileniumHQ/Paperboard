@@ -6,7 +6,7 @@ import { zipSync, strToU8 } from "fflate";
 import { startTestDaemon, type TestDaemon } from "./helpers/crane";
 import { minecraftServer, type McServer } from "./helpers/minecraft";
 import { loopbackServer } from "./helpers/http";
-import { testScope } from "./helpers/scope";
+import { testServer } from "./helpers/scope";
 import { inServer } from "../src/service/scope";
 import { assertPort, listeningPidsCommand } from "../src/core/diagnostics";
 import { killConflictingProcessWith } from "../src/service/diagnostics";
@@ -67,9 +67,9 @@ describe("console and property injection", () => {
 
     test("player names, kick and ban reasons and chat must be one line, and the server receives none that are not", async () => {
         const mc: McServer = minecraftServer();
-        await mc.run(() => startServerInstance(mc.scope.ctx));
-        await mc.scope.waitFor((s) => s.serverStatus === "online", "the server to come online");
-        const ctx = mc.scope.ctx;
+        await mc.run(() => startServerInstance(mc.server));
+        await mc.server.waitFor((s) => s.serverStatus === "online", "the server to come online");
+        const ctx = mc.server;
         const run = (id: string, inputs: unknown) => mc.run(() => action(id)(ctx, inputs));
         await expect(run("kickPlayer", { player: "Steve\nop Mallory" })).rejects.toThrow("Refusing unsafe player name");
         await expect(run("kickPlayer", { player: "Steve; op Mallory" })).rejects.toThrow("Refusing unsafe player name");
@@ -87,8 +87,8 @@ describe("console and property injection", () => {
     });
 
     test("gamerules are checked against the registry and the rule's type", async () => {
-        const scope = testScope({ directory: "servers/rules" }, { serverVersion: "1.21.11", serverSoftware: "paper" });
-        const set = (name: string, value: string) => inServer(scope, () => setGamerule(scope.ctx, name, value));
+        const scope = testServer({ directory: "servers/rules" }, { serverVersion: "1.21.11", serverSoftware: "paper" });
+        const set = (name: string, value: string) => inServer(scope, () => setGamerule(scope, name, value));
         await expect(set("not_a_rule", "true")).rejects.toThrow("Refusing unknown gamerule");
         await expect(set("keep_inventory\nop Mallory", "true")).rejects.toThrow("Refusing unknown gamerule");
         await expect(set("keep_inventory", "true\nop Mallory")).rejects.toThrow("Refusing unsafe gamerule value");
@@ -99,11 +99,11 @@ describe("console and property injection", () => {
 
     test("a gamerule the running server's console did not take fails its call and is not shown applied", async () => {
         // online, but no process behind it: the console write is refused
-        const scope = testScope({ directory: "servers/rules-gone" }, { serverStatus: "online", serverVersion: "1.21.11", serverSoftware: "paper" });
-        await expect(inServer(scope, () => setGamerule(scope.ctx, "keep_inventory", "true"))).rejects.toThrow();
-        expect(scope.ctx.state.gamerules.keep_inventory).toBeUndefined();
+        const scope = testServer({ directory: "servers/rules-gone" }, { serverStatus: "online", serverVersion: "1.21.11", serverSoftware: "paper" });
+        await expect(inServer(scope, () => setGamerule(scope, "keep_inventory", "true"))).rejects.toThrow();
+        expect(scope.state.gamerules.keep_inventory).toBeUndefined();
         // the Game Rules tab's readout of the current values fails the same way
-        await expect(inServer(scope, () => queryGamerules(scope.ctx, ["keep_inventory"]))).rejects.toThrow();
+        await expect(inServer(scope, () => queryGamerules(scope, ["keep_inventory"]))).rejects.toThrow();
     });
 
     test("difficulty and gamemode map only to known named commands", () => {
@@ -125,7 +125,7 @@ describe("console and property injection", () => {
             url.pathname === "/pack.zip" ? new Response(zip) : url.pathname === "/page" ? new Response("<html>share page</html>") : new Response("gone", { status: 404 }),
         );
         const mc = minecraftServer({ files: { "server.properties": "motd=mine\nmax-players=5\n" } });
-        const deps = mc.run(() => liveResourcePackDeps(mc.scope.ctx));
+        const deps = mc.run(() => liveResourcePackDeps(mc.server));
         const properties = () => fs.readFileSync(path.join(mc.dir, "server.properties"), "utf8");
         for (const url of [`${host.url}/missing.zip`, `${host.url}/page`]) {
             await expect(mc.run(() => selectCustomResourcePack({ url }, deps))).rejects.toThrow();

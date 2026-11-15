@@ -3,7 +3,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { startTestDaemon, type TestDaemon } from "./helpers/crane";
 import { minecraftServer, type McServer } from "./helpers/minecraft";
-import { testScope } from "./helpers/scope";
+import { testServer } from "./helpers/scope";
 import { tempDir, writeTree } from "./helpers/tmp";
 import { PANEL_ID } from "../src/servers";
 import { liveResourcePackDeps } from "../src/service/resourcepackDeps";
@@ -36,7 +36,7 @@ const restore = (mc: McServer) => fs.chmodSync(path.join(mc.dir, "server.propert
 describe("user config files", () => {
     test("server.properties edits merge into the current file and write non-ASCII as \\uXXXX", async () => {
         const mc = minecraftServer({ files: { "server.properties": ORIGINAL } });
-        const deps = mc.run(() => liveResourcePackDeps(mc.scope.ctx));
+        const deps = mc.run(() => liveResourcePackDeps(mc.server));
         await mc.run(() => deps.writeProperties({ "resource-pack": "https://x.example/p.zip", motd: "§bHé ✓" }));
         const written = props(mc);
         expect(written).toContain("max-players=5");
@@ -45,7 +45,7 @@ describe("user config files", () => {
         expect(written).toMatch(/^[\x00-\x7f]*$/);
 
         // the Worlds tab's level-name switch is an edit of the same file
-        await mc.run(() => setActiveWorld(mc.scope.ctx, "survival"));
+        await mc.run(() => setActiveWorld(mc.server, "survival"));
         const switched = props(mc);
         expect(switched).toContain("level-name=survival");
         expect(switched).toContain("max-players=5");
@@ -54,11 +54,11 @@ describe("user config files", () => {
 
     test("an unreadable server.properties fails the edit and is not written", async () => {
         const mc = minecraftServer({ files: { "server.properties": ORIGINAL } });
-        const deps = mc.run(() => liveResourcePackDeps(mc.scope.ctx));
+        const deps = mc.run(() => liveResourcePackDeps(mc.server));
         unreadable(mc);
         try {
             await expect(mc.run(() => deps.writeProperties({ "resource-pack": "https://x.example/p.zip" }))).rejects.toThrow();
-            await expect(mc.run(() => setActiveWorld(mc.scope.ctx, "survival"))).rejects.toThrow();
+            await expect(mc.run(() => setActiveWorld(mc.server, "survival"))).rejects.toThrow();
         } finally {
             restore(mc);
         }
@@ -70,7 +70,7 @@ describe("user config files", () => {
         const file = path.join(daemon.dataDir, "configs", `${PANEL_ID}.json`);
         fs.mkdirSync(path.dirname(file), { recursive: true });
         fs.writeFileSync(file, "{\"software\": \"paper\", ");
-        const ctx = testScope({ directory: "" }).ctx;
+        const ctx = testServer({ directory: "" });
         await expect(applyRuntimeProperties(ctx, { difficulty: "hard" })).rejects.toThrow("JSON Parse error");
         expect(fs.readFileSync(file, "utf8")).toBe("{\"software\": \"paper\", ");
         fs.rmSync(file);
@@ -78,28 +78,28 @@ describe("user config files", () => {
 
     test("a saved server software Paperboard doesn't run fails loading instead of showing the server as another software", async () => {
         const mc = minecraftServer({ settings: { software: "spigot" } });
-        await expect(mc.run(() => loadConfigAndProperties(mc.scope.ctx))).rejects.toThrow('"spigot", which Paperboard doesn\'t run');
-        expect(mc.scope.ctx.state.serverSoftware).toBe("vanilla");
+        await expect(mc.run(() => loadConfigAndProperties(mc.server))).rejects.toThrow('"spigot", which Paperboard doesn\'t run');
+        expect(mc.server.state.serverSoftware).toBe("vanilla");
     });
 
     test("offline property and gamerule edits are kept as pending and applied once on the next boot", async () => {
         const mc = minecraftServer({ version: "1.21.1", software: "paper" });
-        await mc.run(() => applyRuntimeProperties(mc.scope.ctx, { difficulty: "3", gamemode: "creative", "force-gamemode": "true" }));
-        await mc.run(() => setGamerule(mc.scope.ctx, "keep_inventory", "true"));
-        const settings = () => mc.scope.server.settings as Record<string, Record<string, string>>;
-        await mc.scope.waitFor(() => settings().pendingGamerules?.keep_inventory === "true", "the gamerule edit to be saved");
+        await mc.run(() => applyRuntimeProperties(mc.server, { difficulty: "3", gamemode: "creative", "force-gamemode": "true" }));
+        await mc.run(() => setGamerule(mc.server, "keep_inventory", "true"));
+        const settings = () => mc.server.settings as Record<string, Record<string, string>>;
+        await mc.server.waitFor(() => settings().pendingGamerules?.keep_inventory === "true", "the gamerule edit to be saved");
         expect(settings().pendingProperties).toEqual({ difficulty: "3", gamemode: "creative", "force-gamemode": "true" });
 
-        await mc.run(() => startServerInstance(mc.scope.ctx));
+        await mc.run(() => startServerInstance(mc.server));
         await mc.received("gamemode creative @a");
         await mc.received("gamerule keepInventory true");
         const commands = mc.commands();
         for (const command of ["difficulty hard", "defaultgamemode creative", "gamemode creative @a", "gamerule keepInventory true"]) {
             expect(commands.filter((c) => c === command)).toHaveLength(1);
         }
-        await mc.scope.waitFor(() => Object.keys(settings().pendingProperties ?? {}).length === 0 && Object.keys(settings().pendingGamerules ?? {}).length === 0, "the applied edits to be cleared", 5_000).catch((err) => { throw new Error(`${err.message}\nsettings: ${JSON.stringify({ pendingProperties: settings().pendingProperties, pendingGamerules: settings().pendingGamerules })}`); });
+        await mc.server.waitFor(() => Object.keys(settings().pendingProperties ?? {}).length === 0 && Object.keys(settings().pendingGamerules ?? {}).length === 0, "the applied edits to be cleared", 5_000).catch((err) => { throw new Error(`${err.message}\nsettings: ${JSON.stringify({ pendingProperties: settings().pendingProperties, pendingGamerules: settings().pendingGamerules })}`); });
         const exit = mc.nextExit();
-        await mc.run(() => stopServerInstance(mc.scope.ctx));
+        await mc.run(() => stopServerInstance(mc.server));
         await exit;
     });
 
@@ -130,9 +130,9 @@ describe("user config files", () => {
         const mc = minecraftServer({ settings: { pluginInstalls: { "Old.jar": record("old"), "Kept.jar": record("kept") } } });
         // an update replaces Old.jar with New.jar; Kept.jar is no part of it
         await mc.run(() => recordPluginInstalls({ set: { "New.jar": record("new") }, remove: ["Old.jar"] }));
-        expect(mc.scope.server.settings.pluginInstalls).toEqual({ "Kept.jar": record("kept"), "New.jar": record("new") });
+        expect(mc.server.settings.pluginInstalls).toEqual({ "Kept.jar": record("kept"), "New.jar": record("new") });
         await expect(mc.run(() => recordPluginInstalls({ set: { "../escape.jar": record("x") } }))).rejects.toThrow();
         await expect(mc.run(() => recordPluginInstalls({ set: { "Bad.jar": { projectId: 1 } } }))).rejects.toThrow("not one Paperboard writes");
-        expect(Object.keys(mc.scope.server.settings.pluginInstalls as object)).toEqual(["Kept.jar", "New.jar"]);
+        expect(Object.keys(mc.server.settings.pluginInstalls as object)).toEqual(["Kept.jar", "New.jar"]);
     });
 });

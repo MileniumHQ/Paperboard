@@ -28,13 +28,13 @@ const WORLD = {
 };
 
 async function online(mc: McServer): Promise<void> {
-    await mc.run(() => startServerInstance(mc.scope.ctx));
-    await mc.scope.waitFor((s) => s.serverStatus === "online", "the server to come online");
+    await mc.run(() => startServerInstance(mc.server));
+    await mc.server.waitFor((s) => s.serverStatus === "online", "the server to come online");
 }
 
 async function offline(mc: McServer): Promise<void> {
     const exit = mc.nextExit();
-    await mc.run(() => stopServerInstance(mc.scope.ctx));
+    await mc.run(() => stopServerInstance(mc.server));
     expect(await exit).toBe(0);
 }
 
@@ -53,7 +53,7 @@ describe("world transfer", () => {
     test("exporting the world being played pauses saving around the copy, and re-importing it is byte for byte", async () => {
         const mc = minecraftServer({ files: WORLD });
         await online(mc);
-        const exported = await mc.run(() => exportWorld(mc.scope.ctx, "world"));
+        const exported = await mc.run(() => exportWorld(mc.server, "world"));
         expect(exported.file).toBe("world.zip");
         await mc.received("save-on");
         expect(saveCommands(mc)).toEqual(["save-off", "save-all flush", "save-on"]);
@@ -75,7 +75,7 @@ describe("world transfer", () => {
         await online(mc);
         let markerDuringCopy = false;
         await mc.run(() =>
-            withSavingPaused(mc.scope.ctx, async () => {
+            withSavingPaused(mc.server, async () => {
                 markerDuringCopy = fs.existsSync(path.join(mc.dir, MARKER));
             }),
         );
@@ -86,7 +86,7 @@ describe("world transfer", () => {
         const locked = path.join(mc.dir, "world", "region", "r.0.0.mca");
         fs.chmodSync(locked, 0o000);
         try {
-            await expect(mc.run(() => exportWorld(mc.scope.ctx, "world"))).rejects.toThrow(/EACCES|permission denied/i);
+            await expect(mc.run(() => exportWorld(mc.server, "world"))).rejects.toThrow(/EACCES|permission denied/i);
         } finally {
             fs.chmodSync(locked, 0o644);
         }
@@ -106,18 +106,18 @@ describe("world transfer", () => {
         await mc.received("save-on");
         expect(fs.existsSync(path.join(mc.dir, MARKER))).toBe(false);
 
-        await mc.run(() => exportWorld(mc.scope.ctx, "other"));
+        await mc.run(() => exportWorld(mc.server, "other"));
         expect(saveCommands(mc)).toEqual(["save-on"]);
         await offline(mc);
     });
 
     test("a starting or stopping server refuses the copy, and only one transfer runs at a time", async () => {
         const mc = minecraftServer({ files: WORLD, state: { serverStatus: "starting" } });
-        await expect(mc.run(() => exportWorld(mc.scope.ctx, "world"))).rejects.toThrow("Wait until the server has finished starting or stopping");
+        await expect(mc.run(() => exportWorld(mc.server, "world"))).rejects.toThrow("Wait until the server has finished starting or stopping");
         expect(fs.existsSync(path.join(mc.dir, WORLD_TRANSFER_DIR, "world.zip"))).toBe(false);
 
-        mc.scope.ctx.setState({ serverStatus: "offline" });
-        const first = mc.run(() => exportWorld(mc.scope.ctx, "world"));
+        mc.server.setState({ serverStatus: "offline" });
+        const first = mc.run(() => exportWorld(mc.server, "world"));
         await expect(mc.run(() => importWorld("world.zip", "second"))).rejects.toThrow("Another world upload or download is running");
         await first;
         expect(worldFolders(mc)).toEqual(["eula.txt", "server.jar", "server.properties", "world", "world_nether", "world_the_end"]);

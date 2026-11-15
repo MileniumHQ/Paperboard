@@ -66,7 +66,7 @@ describe("modpack contents", () => {
             "mods/bad.jar does not match its sha512",
         );
         expect(liveTree(mc)).toEqual(before);
-        expect(mc.scope.server.settings.modpack).toBeUndefined();
+        expect(mc.server.settings.modpack).toBeUndefined();
     });
 
     test("an override that inflates past 64 MiB refuses the pack with nothing moved", async () => {

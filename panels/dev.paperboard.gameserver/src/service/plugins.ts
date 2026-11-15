@@ -1,3 +1,4 @@
+import type { Server } from "./server";
 import { errorMessage } from "@mileniumhq/paperapi";
 import * as nodePath from "node:path";
 import { minecraftSoftware } from "../games/minecraft/index";
@@ -7,7 +8,6 @@ import {
     files as fileApi,
     config,
     updateSettings,
-    type ServiceContext,
 } from "./api";
 import { sanitizeFileName, tryListDirectory, listDirectory } from "./filesystem";
 import {
@@ -69,7 +69,7 @@ export async function recordPluginInstalls(input: { set?: unknown; remove?: unkn
 }
 
 export async function listInstalledPlugins(
-    ctx: ServiceContext<GameServerState>,
+    ctx: Server,
 ): Promise<{ plugins: InstalledPlugin[]; warning?: string }> {
     const dirName = pluginDirName(minecraftSoftware(ctx.state.serverSoftware));
     // a missing directory means "nothing installed yet", not an error: the
@@ -115,7 +115,7 @@ async function describeJar(jarPath: string, mod: boolean): Promise<NonNullable<I
 }
 
 export async function deletePlugin(
-    ctx: ServiceContext<GameServerState>,
+    ctx: Server,
     filename: string,
 ): Promise<void> {
     const safe = validatePluginFilename(sanitizeFileName(filename) ?? filename);
@@ -138,7 +138,7 @@ export async function deletePlugin(
 const ALL_PLUGIN_DIRS = [...new Set(SOFTWARE_IDS.map((id) => pluginDirName(id)))];
 
 export async function uninstallAllPlugins(
-    ctx: ServiceContext<GameServerState>,
+    ctx: Server,
 ): Promise<number> {
     const paths: string[] = [];
     for (const dir of ALL_PLUGIN_DIRS) {

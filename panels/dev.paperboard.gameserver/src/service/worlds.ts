@@ -1,4 +1,5 @@
-import { config, files as fileApi, updateSettings, type ServiceContext, errorMessage } from "./api";
+import type { Server } from "./server";
+import { config, files as fileApi, updateSettings, errorMessage } from "./api";
 import { sanitizeFileName, listDirectory } from "./filesystem";
 import {
     buildWorldInfos,
@@ -52,7 +53,7 @@ export async function listWorldDirs(): Promise<string[]> {
 }
 
 export async function deleteActiveWorldDirs(
-    ctx: ServiceContext<GameServerState>,
+    ctx: Server,
     levelName: string,
 ): Promise<void> {
     // enforce offline here, at the owner, not only in the action that calls it
@@ -69,7 +70,7 @@ export async function deleteActiveWorldDirs(
 // switch or delete issued while running either silently no-ops or eats
 // the fresh generation. The boundary is here, not the component — the UI
 // disables the buttons too, but a forged bridge call still refuses.
-export function assertServerOffline(ctx: ServiceContext<GameServerState>): void {
+export function assertServerOffline(ctx: Server): void {
     if (ctx.state.serverStatus !== "offline") {
         throw new Error("Stop the server before managing worlds");
     }
@@ -134,7 +135,7 @@ export interface SetActiveWorldResult {
 // createOnly refuses an existing name outright: the New World flow must
 // never degrade into a silent switch when its listing was stale.
 export async function setActiveWorld(
-    ctx: ServiceContext<GameServerState>,
+    ctx: Server,
     levelName: string,
     seed?: string,
     createOnly = false,

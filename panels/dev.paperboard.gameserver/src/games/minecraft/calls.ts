@@ -1,7 +1,8 @@
+import type { Server } from "../../service/server";
 import { minecraftSoftware } from "./index";
 import { sharedCalls, type ServerCalls } from "../../service/calls";
 import type { GameContractCalls } from "../serviceTypes";
-import { files as fileApi, type ServiceContext, errorMessage } from "../../service/api";
+import { files as fileApi, errorMessage } from "../../service/api";
 import { sendServerCommand } from "../../service/lifecycle";
 import { waitForLine } from "./saving";
 import {
@@ -69,7 +70,7 @@ import { gamerulesFor } from "../../core/gamerules";
 const loaderDeps = { serverDir: () => fileApi.getPath("", PANEL_ID) };
 
 // how Floodgate names Bedrock players here; null when it is not installed
-const bedrockNaming = (ctx: ServiceContext<GameServerState>) =>
+const bedrockNaming = (ctx: Server) =>
     readBedrockNaming(minecraftSoftware(ctx.state.serverSoftware), loaderDeps);
 
 // What the calls and the blocks of a Minecraft server both run.
@@ -83,7 +84,7 @@ const BAN_ANSWER_MS = 15_000;
 const BAN_LIST_POLL_MS = 250;
 const BAN_REFUSED = /Nothing changed|That player does not exist|Unknown player|No player was found|Could not (un)?ban/i;
 
-async function banCommand(ctx: ServiceContext<GameServerState>, verb: "ban" | "pardon", name: string, command: string): Promise<void> {
+async function banCommand(ctx: Server, verb: "ban" | "pardon", name: string, command: string): Promise<void> {
     const done = new RegExp(`\\b${verb === "ban" ? "Banned" : "Unbanned"} (player )?${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i");
     const recorded = async () => (await isBanned(name)) === (verb === "ban");
     // a list that already shows it can only be refused, and the refusal says why
@@ -116,7 +117,7 @@ async function banCommand(ctx: ServiceContext<GameServerState>, verb: "ban" | "p
 }
 
 /** Kicks or bans a player, with the reason they see when one is given; a ban resolves once the server has recorded it. */
-export async function punishPlayer(ctx: ServiceContext<GameServerState>, verb: "kick" | "ban", player: unknown, reason?: unknown): Promise<void> {
+export async function punishPlayer(ctx: Server, verb: "kick" | "ban", player: unknown, reason?: unknown): Promise<void> {
     const name = assertPlayerName(player);
     const why = reason ? assertSingleLine(String(reason).trim(), `${verb} reason`) : "";
     const command = why ? `${verb} ${name} ${why}` : `${verb} ${name}`;
@@ -125,38 +126,38 @@ export async function punishPlayer(ctx: ServiceContext<GameServerState>, verb: "
 }
 
 /** Pardons or kills a player; a pardon resolves once the server has recorded it. */
-export async function playerCommand(ctx: ServiceContext<GameServerState>, verb: "pardon" | "kill", player: unknown): Promise<void> {
+export async function playerCommand(ctx: Server, verb: "pardon" | "kill", player: unknown): Promise<void> {
     const name = assertPlayerName(player);
     if (verb === "pardon") await banCommand(ctx, "pardon", name, `pardon ${name}`);
     else await sendServerCommand(ctx, `kill ${name}`);
 }
 
 /** Makes a player an operator or whitelisted, or takes it back; edits the lists' files while offline. */
-export async function flagPlayer(ctx: ServiceContext<GameServerState>, flag: PlayerFlag, player: unknown, on: boolean, uuid?: string): Promise<void> {
+export async function flagPlayer(ctx: Server, flag: PlayerFlag, player: unknown, on: boolean, uuid?: string): Promise<void> {
     await setPlayerFlag(ctx, (cmd) => sendServerCommand(ctx, cmd), await bedrockNaming(ctx), flag, player, on, uuid);
 }
 
 /** Makes a world the one the server starts with; a new name is made on the next start. */
-export async function activateWorld(ctx: ServiceContext<GameServerState>, levelName: unknown, seed?: string, createOnly = false): Promise<SetActiveWorldResult> {
+export async function activateWorld(ctx: Server, levelName: unknown, seed?: string, createOnly = false): Promise<SetActiveWorldResult> {
     if (!levelName || typeof levelName !== "string") throw new Error("World name is required");
     const result = await setActiveWorld(ctx, levelName, seed, createOnly);
     return result;
 }
 
 /** Moves a world's folders to the trash. */
-export async function removeWorld(ctx: ServiceContext<GameServerState>, levelName: unknown): Promise<void> {
+export async function removeWorld(ctx: Server, levelName: unknown): Promise<void> {
     if (!levelName || typeof levelName !== "string") throw new Error("World name is required");
     await deleteActiveWorldDirs(ctx, levelName);
 }
 
 /** Moves one plugin's jar to the trash. */
-export async function removePlugin(ctx: ServiceContext<GameServerState>, filename: unknown): Promise<void> {
+export async function removePlugin(ctx: Server, filename: unknown): Promise<void> {
     if (!filename || typeof filename !== "string") throw new Error("Filename is required");
     await deletePlugin(ctx, filename);
 }
 
 /** Installs a server software for a Minecraft version over the stopped server. */
-export async function installVersion(ctx: ServiceContext<GameServerState>, rawSoftware: unknown, rawVersion: unknown) {
+export async function installVersion(ctx: Server, rawSoftware: unknown, rawVersion: unknown) {
     if (!isServerSoftware(rawSoftware)) {
         throw new Error(`Unknown server software: ${JSON.stringify(rawSoftware)}`);
     }
@@ -209,29 +210,29 @@ export const modpackCalls: Pick<GameContractCalls, "readModpack" | "listModpackV
 
 export const minecraftCalls: ServerCalls = {
     ...sharedCalls,
-    setActiveWorld: (ctx: ServiceContext<GameServerState>, inputs: { levelName: string; seed?: string; createOnly?: boolean }) =>
+    setActiveWorld: (ctx: Server, inputs: { levelName: string; seed?: string; createOnly?: boolean }) =>
         activateWorld(ctx, inputs?.levelName, inputs?.seed, inputs?.createOnly === true),
-    setGamerule: (ctx: ServiceContext<GameServerState>, inputs: { name?: string; value?: string }) => {
+    setGamerule: (ctx: Server, inputs: { name?: string; value?: string }) => {
         if (!inputs?.name || !inputs?.value) throw new Error("Game rule name and value are required");
         return setGamerule(ctx, inputs.name, inputs.value);
     },
-    deleteWorld: async (ctx: ServiceContext<GameServerState>, inputs: { levelName: string }) => {
+    deleteWorld: async (ctx: Server, inputs: { levelName: string }) => {
         await removeWorld(ctx, inputs?.levelName);
         return true;
     },
-    deletePlugin: async (ctx: ServiceContext<GameServerState>, inputs: { filename: string }) => {
+    deletePlugin: async (ctx: Server, inputs: { filename: string }) => {
         await removePlugin(ctx, inputs?.filename);
         return true;
     },
     kickPlayer: async (
-        ctx: ServiceContext<GameServerState>,
+        ctx: Server,
         inputs: { player: string; reason?: string },
     ) => {
         await punishPlayer(ctx, "kick", inputs?.player, inputs?.reason);
         return true;
     },
     banPlayer: async (
-        ctx: ServiceContext<GameServerState>,
+        ctx: Server,
         inputs: { player: string; reason?: string },
     ) => {
         await punishPlayer(ctx, "ban", inputs?.player, inputs?.reason);
@@ -242,56 +243,56 @@ export const minecraftCalls: ServerCalls = {
     // kick/ban above set the pattern; op/deop/whitelist/pardon/kill follow it.
     // Op and whitelist also work while the server is stopped: setPlayerFlag
     // edits ops.json / whitelist.json then.
-    opPlayer: async (ctx: ServiceContext<GameServerState>, inputs: { player: string; uuid?: string }) => {
+    opPlayer: async (ctx: Server, inputs: { player: string; uuid?: string }) => {
         // uuid is an optional input for the panel's own roster
         await flagPlayer(ctx, "op", inputs?.player, true, inputs?.uuid);
         return true;
     },
-    deopPlayer: async (ctx: ServiceContext<GameServerState>, inputs: { player: string; uuid?: string }) => {
+    deopPlayer: async (ctx: Server, inputs: { player: string; uuid?: string }) => {
         // uuid is an optional input for the panel's own roster
         await flagPlayer(ctx, "op", inputs?.player, false, inputs?.uuid);
         return true;
     },
-    whitelistPlayer: async (ctx: ServiceContext<GameServerState>, inputs: { player: string; uuid?: string }) => {
+    whitelistPlayer: async (ctx: Server, inputs: { player: string; uuid?: string }) => {
         // uuid is an optional input for the panel's own roster
         await flagPlayer(ctx, "whitelist", inputs?.player, true, inputs?.uuid);
         return true;
     },
-    unwhitelistPlayer: async (ctx: ServiceContext<GameServerState>, inputs: { player: string; uuid?: string }) => {
+    unwhitelistPlayer: async (ctx: Server, inputs: { player: string; uuid?: string }) => {
         // uuid is an optional input for the panel's own roster
         await flagPlayer(ctx, "whitelist", inputs?.player, false, inputs?.uuid);
         return true;
     },
-    pardonPlayer: async (ctx: ServiceContext<GameServerState>, inputs: { player: string }) => {
+    pardonPlayer: async (ctx: Server, inputs: { player: string }) => {
         await playerCommand(ctx, "pardon", inputs?.player);
         return true;
     },
-    killPlayer: async (ctx: ServiceContext<GameServerState>, inputs: { player: string }) => {
+    killPlayer: async (ctx: Server, inputs: { player: string }) => {
         await playerCommand(ctx, "kill", inputs?.player);
         return true;
     },
     // every call on the panel's contract is answered here, so a missing
     // one is a contract-test failure, not a silent no-op
     killConflictingProcess: async (
-        ctx: ServiceContext<GameServerState>,
+        ctx: Server,
         inputs: { port?: string },
     ) => {
         // a failed kill throws why
         await killConflictingProcess(ctx, inputs?.port);
     },
-    resetWorldFiles: (ctx: ServiceContext<GameServerState>) => resetWorldFiles(ctx),
-    clearActiveIssue: async (ctx: ServiceContext<GameServerState>) => {
+    resetWorldFiles: (ctx: Server) => resetWorldFiles(ctx),
+    clearActiveIssue: async (ctx: Server) => {
         clearActiveIssue(ctx);
         return true;
     },
-    retryRecovery: async (ctx: ServiceContext<GameServerState>) => {
+    retryRecovery: async (ctx: Server) => {
         if (isInstallRunning()) throw new Error("An install is running; retry when it finishes.");
         const settled = await settleInterruptedWork(ctx);
         if (!settled) throw new Error(ctx.state.recoveryBlock ?? "The interrupted work could not be cleaned up.");
         return true;
     },
     updatePanelConfig: async (
-        ctx: ServiceContext<GameServerState>,
+        ctx: Server,
         inputs: { patch?: Record<string, unknown> },
     ) => {
         const patch = inputs?.patch ?? {};
@@ -319,7 +320,7 @@ export const minecraftCalls: ServerCalls = {
         return listWorlds();
     },
     installServerVersion: async (
-        ctx: ServiceContext<GameServerState>,
+        ctx: Server,
         inputs: { software: string; version: string },
     ) => {
         return installVersion(ctx, inputs?.software, inputs?.version);
@@ -327,22 +328,22 @@ export const minecraftCalls: ServerCalls = {
     // fetched here, not in the panel page: upstream indexes such as
     // files.minecraftforge.net send no CORS headers, and the service
     // already owns every other call to these hosts
-    listSoftwareVersions: async (_ctx: ServiceContext<GameServerState>, inputs: { software?: string }) => {
+    listSoftwareVersions: async (_ctx: Server, inputs: { software?: string }) => {
         const software = inputs?.software;
         if (!isServerSoftware(software)) {
             throw new Error(`Unknown server software: ${JSON.stringify(software)}`);
         }
         return providerFor(software).listVersions();
     },
-    readLoaderSettings: async (ctx: ServiceContext<GameServerState>) =>
+    readLoaderSettings: async (ctx: Server) =>
         readLoaderSettings(minecraftSoftware(ctx.state.serverSoftware), loaderDeps),
-    writeLoaderSetting: async (ctx: ServiceContext<GameServerState>, inputs: { id?: string; value?: string }) => {
+    writeLoaderSetting: async (ctx: Server, inputs: { id?: string; value?: string }) => {
         if (isInstallRunning()) {
             throw new Error("A server install is running; change loader settings once it finishes.");
         }
         return writeLoaderSetting(minecraftSoftware(ctx.state.serverSoftware), inputs?.id, inputs?.value, loaderDeps);
     },
-    readCrossplay: async (ctx: ServiceContext<GameServerState>) => {
+    readCrossplay: async (ctx: Server) => {
         const software = minecraftSoftware(ctx.state.serverSoftware);
         // a Geyser set up before Paperboard let RakNet clients in shows,
         // and gets on its next start, the setup it would get today
@@ -351,13 +352,13 @@ export const minecraftCalls: ServerCalls = {
         }
         return readCrossplay(software, loaderDeps);
     },
-    writeCrossplaySetting: async (ctx: ServiceContext<GameServerState>, inputs: { id?: string; value?: string }) => {
+    writeCrossplaySetting: async (ctx: Server, inputs: { id?: string; value?: string }) => {
         if (isInstallRunning()) {
             throw new Error("A server install is running; change crossplay settings once it finishes.");
         }
         return writeCrossplaySetting(minecraftSoftware(ctx.state.serverSoftware), inputs?.id, inputs?.value, loaderDeps);
     },
-    prepareCrossplay: async (ctx: ServiceContext<GameServerState>) => {
+    prepareCrossplay: async (ctx: Server) => {
         if (isInstallRunning()) {
             throw new Error("A server install is running; turn crossplay on once it finishes.");
         }
@@ -371,13 +372,13 @@ export const minecraftCalls: ServerCalls = {
         await removeServerIcon(loaderDeps);
         return true;
     },
-    locateAddonConfig: async (ctx: ServiceContext<GameServerState>, inputs: { filename?: string }) =>
+    locateAddonConfig: async (ctx: Server, inputs: { filename?: string }) =>
         locateAddonConfig(inputs?.filename, minecraftSoftware(ctx.state.serverSoftware), loaderDeps),
-    listMapRegions: async (ctx: ServiceContext<GameServerState>) => {
+    listMapRegions: async (ctx: Server) => {
         return listMapRegions(ctx);
     },
     renderMapTile: async (
-        ctx: ServiceContext<GameServerState>,
+        ctx: Server,
         inputs: { dimension: string; rx: number; rz: number; since?: number },
     ) => {
         return renderMapTile(
@@ -388,24 +389,24 @@ export const minecraftCalls: ServerCalls = {
             typeof inputs?.since === "number" ? inputs.since : undefined,
         );
     },
-    listInstalledPlugins: async (ctx: ServiceContext<GameServerState>) => {
+    listInstalledPlugins: async (ctx: Server) => {
         return listInstalledPlugins(ctx);
     },
-    recordPluginInstalls: async (_ctx: ServiceContext<GameServerState>, inputs: { set?: unknown; remove?: unknown }) => {
+    recordPluginInstalls: async (_ctx: Server, inputs: { set?: unknown; remove?: unknown }) => {
         await recordPluginInstalls(inputs);
         return true;
     },
-    previewPluginInstall: (ctx: ServiceContext<GameServerState>, inputs: Parameters<typeof previewPluginInstall>[0]) =>
+    previewPluginInstall: (ctx: Server, inputs: Parameters<typeof previewPluginInstall>[0]) =>
         previewPluginInstall(inputs ?? {}, pluginTarget(ctx.state), livePluginInstallDeps),
-    installPluginVersion: (ctx: ServiceContext<GameServerState>, inputs: Parameters<typeof installPluginVersion>[0]) =>
+    installPluginVersion: (ctx: Server, inputs: Parameters<typeof installPluginVersion>[0]) =>
         installPluginVersion(inputs ?? {}, pluginTarget(ctx.state), livePluginInstallDeps),
-    uninstallAllPlugins: async (ctx: ServiceContext<GameServerState>) => {
+    uninstallAllPlugins: async (ctx: Server) => {
         return uninstallAllPlugins(ctx);
     },
-    listDatapacks: async (ctx: ServiceContext<GameServerState>) => listDatapacks(liveDatapackDeps(ctx)),
-    listDatapackVersions: async (ctx: ServiceContext<GameServerState>, inputs: { projectId?: string }) =>
+    listDatapacks: async (ctx: Server) => listDatapacks(liveDatapackDeps(ctx)),
+    listDatapackVersions: async (ctx: Server, inputs: { projectId?: string }) =>
         listDatapackVersions(inputs?.projectId, ctx.state.serverVersion, liveDatapackDeps(ctx)),
-    installDatapack: async (ctx: ServiceContext<GameServerState>, inputs: { projectId?: string; versionId?: string }) => {
+    installDatapack: async (ctx: Server, inputs: { projectId?: string; versionId?: string }) => {
         if (!versionSupports(ctx.state.serverVersion, "datapacks")) {
             throw new Error("Datapacks need Minecraft 1.13 or newer.");
         }
@@ -415,15 +416,15 @@ export const minecraftCalls: ServerCalls = {
             liveDatapackDeps(ctx),
         );
     },
-    removeDatapack: async (ctx: ServiceContext<GameServerState>, inputs: { name?: string }) => {
+    removeDatapack: async (ctx: Server, inputs: { name?: string }) => {
         await removeDatapack(inputs?.name, liveDatapackDeps(ctx));
         return true;
     },
-    readResourcePack: async (ctx: ServiceContext<GameServerState>) => readResourcePack(liveResourcePackDeps(ctx)),
-    listResourcePackVersions: async (ctx: ServiceContext<GameServerState>, inputs: { projectId?: string }) =>
+    readResourcePack: async (ctx: Server) => readResourcePack(liveResourcePackDeps(ctx)),
+    listResourcePackVersions: async (ctx: Server, inputs: { projectId?: string }) =>
         listResourcePackVersions(inputs?.projectId, ctx.state.serverVersion, liveResourcePackDeps(ctx)),
     selectResourcePack: async (
-        ctx: ServiceContext<GameServerState>,
+        ctx: Server,
         inputs: { projectId?: string; versionId?: string; url?: string },
     ) => {
         const deps = liveResourcePackDeps(ctx);
@@ -435,36 +436,36 @@ export const minecraftCalls: ServerCalls = {
             deps,
         );
     },
-    removeResourcePack: async (ctx: ServiceContext<GameServerState>) => {
+    removeResourcePack: async (ctx: Server) => {
         await removeResourcePack(liveResourcePackDeps(ctx));
         return true;
     },
     // the contract's calls, here too for the panel's blocks
-    readModpack: (ctx: ServiceContext<GameServerState>) => modpackCalls.readModpack(undefined, ctx),
-    listModpackVersions: (ctx: ServiceContext<GameServerState>, inputs: { projectId: string }) => modpackCalls.listModpackVersions(inputs, ctx),
-    installModpack: (ctx: ServiceContext<GameServerState>, inputs: { projectId: string; versionId: string }) => modpackCalls.installModpack(inputs, ctx),
-    removeModpack: (ctx: ServiceContext<GameServerState>) => modpackCalls.removeModpack(undefined, ctx),
-    uploadPlugins: async (ctx: ServiceContext<GameServerState>, inputs: { stage?: string }) =>
+    readModpack: (ctx: Server) => modpackCalls.readModpack(undefined, ctx),
+    listModpackVersions: (ctx: Server, inputs: { projectId: string }) => modpackCalls.listModpackVersions(inputs, ctx),
+    installModpack: (ctx: Server, inputs: { projectId: string; versionId: string }) => modpackCalls.installModpack(inputs, ctx),
+    removeModpack: (ctx: Server) => modpackCalls.removeModpack(undefined, ctx),
+    uploadPlugins: async (ctx: Server, inputs: { stage?: string }) =>
         withInstallLock(() => uploadPlugins(inputs?.stage, minecraftSoftware(ctx.state.serverSoftware), liveUploadDeps(ctx))),
-    uploadDatapacks: async (ctx: ServiceContext<GameServerState>, inputs: { stage?: string }) => {
+    uploadDatapacks: async (ctx: Server, inputs: { stage?: string }) => {
         if (!versionSupports(ctx.state.serverVersion, "datapacks")) {
             throw new Error("Datapacks need Minecraft 1.13 or newer.");
         }
         return withInstallLock(() => uploadDatapacks(inputs?.stage, liveUploadDeps(ctx)));
     },
-    uploadModpack: async (ctx: ServiceContext<GameServerState>, inputs: { stage?: string }) => {
+    uploadModpack: async (ctx: Server, inputs: { stage?: string }) => {
         if (ctx.state.serverStatus !== "offline") {
             throw new Error("Stop the server before installing a modpack");
         }
         const outcome = await withInstallLock(() => uploadModpack(inputs?.stage, minecraftSoftware(ctx.state.serverSoftware), liveModpackDeps(ctx)));
         return outcome;
     },
-    discardAddonUpload: async (ctx: ServiceContext<GameServerState>, inputs: { stage?: string }) => {
+    discardAddonUpload: async (ctx: Server, inputs: { stage?: string }) => {
         await discardUpload(inputs?.stage, liveUploadDeps(ctx));
         return true;
     },
     deletePlayerData: async (
-        ctx: ServiceContext<GameServerState>,
+        ctx: Server,
         // uuid stays an optional input for the panel's own player
         // list; flow authors only ever name a player
         inputs: { player: string; uuid?: string },
@@ -473,7 +474,7 @@ export const minecraftCalls: ServerCalls = {
         return true;
     },
     getPlayerSkin: async (
-        ctx: ServiceContext<GameServerState>,
+        ctx: Server,
         inputs: { player?: string; uuid?: string; size?: number },
     ) => {
         return getHeadDataUrl({
@@ -484,44 +485,44 @@ export const minecraftCalls: ServerCalls = {
         });
     },
     forgetPlayerData: async (
-        ctx: ServiceContext<GameServerState>,
+        ctx: Server,
         inputs: { player: string },
     ) => {
         forgetPlayerData(ctx, inputs?.player);
         return true;
     },
     queryPlayerStats: async (
-        ctx: ServiceContext<GameServerState>,
+        ctx: Server,
         inputs: { player: string },
     ) => {
         queryPlayerStats(ctx, inputs?.player);
         return true;
     },
-    queryOnlinePlayers: async (ctx: ServiceContext<GameServerState>) => {
+    queryOnlinePlayers: async (ctx: Server) => {
         queryOnlinePlayers(ctx);
         return true;
     },
-    queryPlayerPositions: async (ctx: ServiceContext<GameServerState>) => {
+    queryPlayerPositions: async (ctx: Server) => {
         queryPlayerPositions(ctx);
         return true;
     },
     listRoster: async () => listRoster(),
-    currentPlayerNames: async (ctx: ServiceContext<GameServerState>, inputs: { uuids?: unknown }) =>
+    currentPlayerNames: async (ctx: Server, inputs: { uuids?: unknown }) =>
         currentPlayerNames(ctx, inputs?.uuids, await bedrockNaming(ctx)),
-    readBedrockNaming: async (ctx: ServiceContext<GameServerState>) => bedrockNaming(ctx),
-    listPlayerStats: async (ctx: ServiceContext<GameServerState>) => {
+    readBedrockNaming: async (ctx: Server) => bedrockNaming(ctx),
+    listPlayerStats: async (ctx: Server) => {
         return listPlayerStats(ctx);
     },
     // game rules: the service owns the console and the config, so the UI
     // never writes gamerule commands itself — offline edits persist and
     // re-apply at next boot instead of looking applied and vanishing
-    queryGamerules: async (ctx: ServiceContext<GameServerState>) => {
+    queryGamerules: async (ctx: Server) => {
         const names = gameruleNameOptions(ctx.state.serverVersion).map(
             (option) => option.value,
         );
         return queryGamerules(ctx, names);
     },
-    readGameOptions: (ctx: ServiceContext<GameServerState>) => readGameOptions(ctx),
-    writeGameOptions: (ctx: ServiceContext<GameServerState>, inputs: { patch?: unknown }) => writeGameOptions(ctx, inputs?.patch),
+    readGameOptions: (ctx: Server) => readGameOptions(ctx),
+    writeGameOptions: (ctx: Server, inputs: { patch?: unknown }) => writeGameOptions(ctx, inputs?.patch),
 };
 

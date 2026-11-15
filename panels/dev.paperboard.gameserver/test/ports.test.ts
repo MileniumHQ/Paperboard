@@ -37,7 +37,7 @@ async function holdPort(): Promise<{ port: number; release: () => Promise<void> 
 }
 
 const claims = async (mc: McServer) =>
-    Object.fromEntries((await mc.run(() => portApi.list(PANEL_ID))).filter((c) => c.name.startsWith(`${mc.scope.server.id}-`)).map((c) => [c.name.slice(mc.scope.server.id.length + 1), c.port]));
+    Object.fromEntries((await mc.run(() => portApi.list(PANEL_ID))).filter((c) => c.name.startsWith(`${mc.server.id}-`)).map((c) => [c.name.slice(mc.server.id.length + 1), c.port]));
 const property = (mc: McServer, key: string) => fs.readFileSync(path.join(mc.dir, "server.properties"), "utf8").match(new RegExp(`^${key}=(.*)$`, "m"))?.[1];
 
 // Port conflicts are moved or refused and written where the server reads them.
@@ -46,16 +46,16 @@ describe("ports", () => {
         const held = await holdPort();
         try {
             const mc = minecraftServer({ files: { "server.properties": `#Minecraft server properties\nmotd=\\u00A7aHi\nserver-port=${held.port}\nmax-players=7\n` } });
-            await mc.run(() => startServerInstance(mc.scope.ctx));
-            await mc.scope.waitFor((s) => s.serverStatus === "online", "the server to come online");
+            await mc.run(() => startServerInstance(mc.server));
+            await mc.server.waitFor((s) => s.serverStatus === "online", "the server to come online");
             const moved = Number(property(mc, "server-port"));
             expect(moved).toBeGreaterThan(held.port);
             expect(moved).toBeLessThanOrEqual(held.port + 100);
             expect(await claims(mc)).toEqual({ [JAVA_PORT_NAME]: moved });
-            expect(mc.scope.ctx.state.serverEntries.map((e) => e.content)).toContain(`[Server] Port ${held.port} is taken, so Game Server (Java) uses ${moved}.`);
+            expect(mc.server.state.serverEntries.map((e) => e.content)).toContain(`[Server] Port ${held.port} is taken, so Game Server (Java) uses ${moved}.`);
             expect([property(mc, "motd"), property(mc, "max-players")]).toEqual(["\\u00A7aHi", "7"]);
             const exit = mc.nextExit();
-            await mc.run(() => stopServerInstance(mc.scope.ctx));
+            await mc.run(() => stopServerInstance(mc.server));
             await exit;
         } finally {
             await held.release();
@@ -68,13 +68,13 @@ describe("ports", () => {
         const mc = minecraftServer({ files: { "server.properties": original } });
         await portSettingsApi.setPolicy("refuse");
         try {
-            await expect(mc.run(() => startServerInstance(mc.scope.ctx))).rejects.toThrow(`can't use port ${held.port}`);
+            await expect(mc.run(() => startServerInstance(mc.server))).rejects.toThrow(`can't use port ${held.port}`);
         } finally {
             await portSettingsApi.setPolicy("next-free");
             await held.release();
         }
-        expect(mc.scope.ctx.state.serverStatus).toBe("offline");
-        expect(mc.scope.ctx.state.serverEntries.map((e) => e.content).join("\n")).toContain(`Game Server (Java) can't use port ${held.port}`);
+        expect(mc.server.state.serverStatus).toBe("offline");
+        expect(mc.server.state.serverEntries.map((e) => e.content).join("\n")).toContain(`Game Server (Java) can't use port ${held.port}`);
         expect(fs.existsSync(path.join(mc.dir, "runs.log"))).toBe(false);
         expect(fs.readFileSync(path.join(mc.dir, "server.properties"), "utf8")).toBe(original);
         expect(await claims(mc)).toEqual({});

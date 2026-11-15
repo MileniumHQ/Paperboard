@@ -4,7 +4,6 @@ import {
     blocksApi,
     config,
     fileApi,
-    type ServiceContext,
     type CallHandlers,
     type ContractContext,
     type StateOf,
@@ -21,31 +20,31 @@ import {
     type StoredServer,
 } from "./servers";
 import * as nodeFs from "node:fs/promises";
-import { bindScope, inServer, type ServerScope } from "./service/scope";
+import { inServer } from "./service/scope";
+import { Server } from "./service/server";
 import type { ServerCalls } from "./service/calls";
 import { announceChanges, bindBlocks, fireBackupEnded, fireTrigger, mergeBlocks, serverOperation, sharedBlocks, sharedTypes } from "./service/blocks";
 import { SERVER_EVENTS, serverType, serversBlocks, type ServersBlocksHost } from "./service/serversBlocks";
-import { processApi as scopedProcess, errorMessage } from "./service/api";
+import { errorMessage } from "@mileniumhq/paperapi";
 import { type GameServerState, appendCapped } from "./service/types";
 import { SERVERS_CALLS, gameServerContract, type CallName, type ServerSummary } from "./service/contract";
 import type { GameContractCalls } from "./games/serviceTypes";
 import { pictureCall } from "./service/pictures";
 import { handleProcessData, handleProcessExit, stopServerInstance, cancelReadiness, restartServerInstance, startServerInstance } from "./service/lifecycle";
 import { cancelAutomation, readAutomation, scheduleDailyRestart, scheduleUpdateChecks } from "./service/automation";
-import { historyWriter, onlineSinceAfter, readHistory } from "./service/history";
+import { historyWriter, readHistory } from "./service/history";
 
-import { currentGameService, gameServiceFor } from "./games/service";
+import { gameModuleFor } from "./games/service";
 import { settingsBlocks } from "./service/settingsBlocks";
 import { assertGameCall, gameFor, games } from "./games";
 import { loadServerOptions } from "./service/options";
-import { livePortDeps } from "./service/portDeps";
 import { report, waitUntil } from "./games/serviceKit";
 export * from "./service/types";
 
 export type { ServerSummary };
 /** The saved servers, as the pages mirror them; each server's own state is the contract's keyed state. */
 export type ServersState = StateOf<typeof gameServerContract>;
-const entries = new Map<string, ServerScope>();
+const entries = new Map<string, Server>();
 let saved: ServersConfig = readServersConfig(null);
 let rootContext: ContractContext<typeof gameServerContract>;
 // server changes, and the config writes inside them, one at a time
@@ -58,16 +57,15 @@ function updateSaved(change: (current: ServersConfig) => ServersConfig): Promise
         saved = next;
         for (const server of saved.servers) {
             const entry = entries.get(server.id);
-            if (entry) entry.server = server;
+            if (entry) entry.stored = server;
         }
     });
 }
-const icons = new Map<string, string | null>();
 /** A server as the Blocks Library shows it: as the server list does, by its own icon or else its game's. */
-const blocksProject = (server: StoredServer) => ({
-    name: server.name,
-    icon: gameFor(server.game).icon,
-    image: icons.get(server.id) ?? gameFor(server.game).art.icon,
+const blocksProject = (server: Server, name = server.name) => ({
+    name,
+    icon: server.definition.icon,
+    image: server.icon ?? server.definition.art.icon,
 });
 // the panel's own blocks, once registered: before then nothing listens
 let panelBlocks: BlocksHandle | null = null;
@@ -84,15 +82,14 @@ function fireServerEvent(id: string, server: string, failed: (what: string, err:
     if (!panelBlocks || !SERVER_EVENTS.includes(id)) return;
     panelBlocks.fire(id, { server }).catch((err) => failed(`${id} did not reach Blocks`, err));
 }
-// each server's console and chat, kept on disk so a service restart (an
+// each server's console and chat are kept on disk so a service restart (an
 // update, a crash, a reboot) opens with what was last said
-const histories = new Map<string, ReturnType<typeof historyWriter>>();
 const historyFile = (id: string) => fileApi.getPath(`${saved.serversDirectory}/history/${id}.json`, PANEL_ID);
-function publish(changed?: ServerScope): void {
+function publish(changed?: Server): void {
     const servers = saved.servers.map((server): ServerSummary => {
-        const scope = entries.get(server.id);
-        if (!scope) throw new Error(`Server scope is missing: ${server.id}`);
-        const state = scope.ctx.state;
+        const entry = entries.get(server.id);
+        if (!entry) throw new Error(`Server is missing: ${server.id}`);
+        const state = entry.state;
         return {
             id: server.id,
             name: server.name,
@@ -100,7 +97,7 @@ function publish(changed?: ServerScope): void {
             directory: server.directory,
             createdAt: server.createdAt,
             configured: server.settings.configured === true,
-            icon: icons.get(server.id) ?? null,
+            icon: entry.icon,
             state: {
                 serverStatus: state.serverStatus,
                 serverSoftware: state.serverSoftware,
@@ -120,104 +117,78 @@ function publish(changed?: ServerScope): void {
     if (rootContext.state.legacyServer !== legacyServer)
         patch.legacyServer = legacyServer;
     if (Object.keys(patch).length > 0) rootContext.setState(patch);
-    for (const scope of changed ? [changed] : entries.values())
-        rootContext.keyed.server.set(scope.server.id, scope.ctx.state);
+    for (const server of changed ? [changed] : entries.values())
+        rootContext.keyed.server.set(server.id, server.state);
     announceServers();
 }
-function requireServer(id: unknown): ServerScope {
+function requireServer(id: unknown): Server {
     if (rootContext.state.serversError) throw new Error(rootContext.state.serversError);
     const entry = typeof id === "string" ? entries.get(id) : undefined;
     if (!entry) throw new Error("Choose a server that has not been removed");
     return entry;
 }
 /** A server that could not be set up runs nothing until setting it up again succeeds. */
-function requireInitialized(scope: ServerScope): ServerScope {
-    const failure = scope.ctx.state.initFailure;
-    if (failure !== null) throw new Error(`${scope.server.name} could not be set up (${failure}). Try again from its Overview tab.`);
-    return scope;
+function requireInitialized(server: Server): Server {
+    const failure = server.state.initFailure;
+    if (failure !== null) throw new Error(`${server.name} could not be set up (${failure}). Try again from its Overview tab.`);
+    return server;
 }
-/** Every game's calls, by game; a server answers the ones its game does. */
-const gameCalls = new Map<string, ServerCalls>(await Promise.all(games.map(async (game): Promise<[string, ServerCalls]> => [game.id, await gameServiceFor(game.id).calls()])));
 // what a server's icon call changes in the lists that show it
 const ICON_CALLS: readonly CallName[] = ["setServerIcon", "removeServerIcon"];
 /** Runs one of a server's calls, as the server's game answers it, with the call's own input. */
-function serverCall(name: CallName, input: unknown, server: string | undefined): Promise<unknown> {
-    return onServer(server, name, (scope) => {
-        const found = gameCalls.get(scope.server.game)?.[name];
-        if (!found) throw new Error(`${gameFor(scope.server.game).name} has no call "${name}"`);
-        return found(scope.ctx, input ?? {});
+function serverCall(name: CallName, input: unknown, id: string | undefined): Promise<unknown> {
+    return onServer(id, name, async (server) => {
+        const found = (await server.game.calls())[name];
+        if (!found) throw new Error(`${server.definition.name} has no call "${name}"`);
+        return found(server, input ?? {});
     });
 }
 /** One of the contract's calls, answered by the game of the server the page is open on. */
 function contractCall<K extends keyof GameContractCalls>(name: K) {
-    return (input: Parameters<GameContractCalls[K]>[0], _ctx: unknown, { server }: { server?: string }) =>
-        onServer(server, name, async (scope) => {
-            const answer = (await gameServiceFor(scope.server.game).contractCalls?.())?.[name];
-            if (!answer) throw new Error(`${gameFor(scope.server.game).name} has no call "${name}"`);
-            return answer(input, scope.ctx);
+    return (input: Parameters<GameContractCalls[K]>[0], _ctx: unknown, { server: id }: { server?: string }) =>
+        onServer(id, name, async (server) => {
+            const answer = (await server.game.contractCalls?.())?.[name];
+            if (!answer) throw new Error(`${server.definition.name} has no call "${name}"`);
+            return answer(input, server);
         });
 }
 /** Runs work for one server's call: the server must be set up and its game must answer the call. */
-async function onServer<T>(server: unknown, name: CallName, work: (scope: ServerScope) => T | Promise<T>): Promise<Awaited<T>> {
-    const scope = requireInitialized(requireServer(server));
-    if (scope.removing) throw new Error("This server was removed or is being removed");
-    assertGameCall(gameFor(scope.server.game), {
-        settings: scope.ctx.state.gameSettings,
-        software: scope.ctx.state.serverSoftware,
-        version: scope.ctx.state.serverVersion,
+async function onServer<T>(id: unknown, name: CallName, work: (server: Server) => T | Promise<T>): Promise<Awaited<T>> {
+    const server = requireInitialized(requireServer(id));
+    if (server.removing) throw new Error("This server was removed or is being removed");
+    assertGameCall(server.definition, {
+        settings: server.state.gameSettings,
+        software: server.state.serverSoftware,
+        version: server.state.serverVersion,
     }, name);
-    scope.activeOperations++;
+    server.activeOperations++;
     try {
-        const result = await inServer(scope, () => work(scope));
+        const result = await inServer(server, () => work(server));
         if (ICON_CALLS.includes(name)) {
-            icons.set(
-                scope.server.id,
-                await inServer(scope, () => gameServiceFor(scope.server.game).readIcon?.() ?? null),
-            );
+            server.icon = await inServer(server, () => server.game.readIcon?.() ?? null);
             publish();
-            await scope.blocks?.update(blocksProject(scope.server));
+            await server.blocks?.update(blocksProject(server));
         }
         return result;
     } finally {
-        scope.activeOperations--;
+        server.activeOperations--;
     }
 }
-function createScope(server: StoredServer): ServerScope {
-    const game = gameServiceFor(server.game);
-    let state = game.initialState();
-    const scope: ServerScope = {
-        server,
-        processIds: game.processIds,
-        legacy: saved.legacyServer === server.id,
-        locals: new Map(),
-        activeOperations: 0,
-        removing: false,
-        unsubscribe: [],
-        ctx: {
-            get state() {
-                return state;
-            },
-            setState(patch) {
-                const before = state;
-                state = { ...state, ...(typeof patch === "function" ? patch(state) : patch) };
-                state.onlineSince = onlineSinceAfter(before, state);
-                announceChanges(scope.blocks, before, state, server.name);
-                publish(scope);
-                histories.get(server.id)?.changed(state);
-            },
-            // the panel's contract declares no events: a server's page hears its state
-            emit: (event: string): void => {
-                throw new Error(`${server.name} has no event "${event}" to tell its page`);
-            },
-            // a server's state is itself one key of the panel's keyed state
-            keyed: {},
-        } as ServiceContext<GameServerState>,
-        trigger(id, output) {
-            const failed = (what: string, err: unknown) => report(scope.ctx, what, err);
-            fireTrigger(scope.blocks, id, output, failed);
+function createServer(stored: StoredServer): Server {
+    const history = historyWriter(() => historyFile(stored.id), (err) => report(server, "The console history could not be saved", err));
+    const server: Server = new Server(stored, {
+        history,
+        changed(server, before) {
+            announceChanges(server.blocks, before, server.state, server.name);
+            publish(server);
+            history.changed(server.state);
+        },
+        trigger(server, id, output) {
+            const failed = (what: string, err: unknown) => report(server, what, err);
+            fireTrigger(server.blocks, id, output, failed);
             fireServerEvent(id, server.id, failed);
         },
-        updateSettings: async (change) => {
+        async updateSettings(server, change) {
             let next: Record<string, unknown> = {};
             await updateSaved((current) => {
                 requireServer(server.id);
@@ -231,11 +202,9 @@ function createScope(server: StoredServer): ServerScope {
             publish();
             return next;
         },
-    };
-    bindScope(scope.ctx, scope);
-    entries.set(server.id, scope);
-    histories.set(server.id, historyWriter(() => historyFile(server.id), (err) => report(scope.ctx, "The console history could not be saved", err)));
-    return scope;
+    }, saved.legacyServer === stored.id);
+    entries.set(stored.id, server);
+    return server;
 }
 // Player heads were kept on disk beside the servers until they were looked
 // up fresh each time; the stale copies go. Never a server's own folder.
@@ -250,97 +219,94 @@ async function removeOldHeadStore(): Promise<void> {
     }
 }
 
-async function initialize(scope: ServerScope): Promise<ServerScope> {
-    const { server } = scope;
-    const game = gameServiceFor(server.game);
+async function initialize(server: Server): Promise<Server> {
+    const { game } = server;
     try {
         await backupApi.defineSource(PANEL_ID, {
             id: server.id,
-            directory: server.directory,
+            directory: server.stored.directory,
             config: ["servers", { id: server.id }, "settings"],
-            processes: game.processIds.map((id) => scope.legacy ? id : `${server.id}-${id}`),
-            ...(scope.legacy ? { legacy: true } : {}),
-            ...(scope.legacy || game.backupExclude ? { exclude: [...(scope.legacy ? [saved.serversDirectory] : []), ...(game.backupExclude ?? [])] } : {}),
+            processes: game.processIds.map((id) => server.processId(id)),
+            ...(server.legacy ? { legacy: true } : {}),
+            ...(server.legacy || game.backupExclude ? { exclude: [...(server.legacy ? [saved.serversDirectory] : []), ...(game.backupExclude ?? [])] } : {}),
             ...(game.backupSkip ? { skip: [...game.backupSkip] } : {}),
         });
-        scope.backupSource = true;
-        await nodeFs.mkdir(await fileApi.getPath(server.directory, PANEL_ID), { recursive: true });
-        scope.blocks = await blocksApi.defineProject({ id: server.id, ...blocksProject(server) }, PANEL_ID);
-        const blocks = scope.blocks;
-        await inServer(scope, async () => blocks.register(bindBlocks(scope, mergeBlocks(sharedBlocks(scope.ctx), settingsBlocks(scope.ctx), await game.blocks?.(scope.ctx)))));
+        server.backupSource = true;
+        await nodeFs.mkdir(await fileApi.getPath(server.stored.directory, PANEL_ID), { recursive: true });
+        server.blocks = await blocksApi.defineProject({ id: server.id, ...blocksProject(server) }, PANEL_ID);
+        const blocks = server.blocks;
+        await inServer(server, async () => blocks.register(bindBlocks(server, mergeBlocks(sharedBlocks(server), settingsBlocks(server), await game.blocks?.(server)))));
         let wasRunning = false;
         let onlineSince: number | null = null;
         try {
             const history = await readHistory(await historyFile(server.id));
             wasRunning = history.running;
             onlineSince = history.onlineSince;
-            histories.get(server.id)!.loaded(history);
-            scope.ctx.setState({ serverEntries: history.serverEntries, chatMessages: history.chatMessages });
+            server.history!.loaded(history);
+            server.setState({ serverEntries: history.serverEntries, chatMessages: history.chatMessages });
         } catch (err) {
             console.error(`[gameserver] the console history of ${server.name} could not be read:`, err);
-            scope.ctx.setState({ serverEntries: [{ type: "error", content: `[Server] The saved console history could not be read: ${errorMessage(err)}` }] });
+            server.setState({ serverEntries: [{ type: "error", content: `[Server] The saved console history could not be read: ${errorMessage(err)}` }] });
         }
-        await inServer(scope, async () => {
+        await inServer(server, async () => {
             // A server left running keeps its identity and directory on migration.
             // Recovery must never modify that running process's files.
-            const running = await scopedProcess.exists(game.primaryProcessId);
+            const running = await server.process.exists(game.primaryProcessId);
             // a server left running has been online since its history says; one whose history
             // predates that record counts from now
-            if (running) scope.ctx.setState({ serverStatus: "online", ...(onlineSince === null ? {} : { onlineSince }) });
-            scope.unsubscribe.push(
-                scopedProcess.onData(game.primaryProcessId, (chunk) =>
-                    handleProcessData(scope.ctx, chunk),
-                ),
+            if (running) server.setState({ serverStatus: "online", ...(onlineSince === null ? {} : { onlineSince }) });
+            server.unsubscribe.push(
+                server.process.onData(game.primaryProcessId, (chunk) => inServer(server, () => handleProcessData(server, chunk))),
+                server.process.onExit(game.primaryProcessId, (code) => inServer(server, () => handleProcessExit(server, code))),
             );
-            scope.unsubscribe.push(
-                scopedProcess.onExit(game.primaryProcessId, (code) => handleProcessExit(scope.ctx, code)),
-            );
-            await loadServerOptions(scope.ctx);
+            await loadServerOptions(server);
             const automation = await readAutomation();
-            scheduleDailyRestart(scope.ctx, restartServerInstance);
-            scheduleUpdateChecks(scope.ctx, restartServerInstance);
-            await game.initialize(scope.ctx, running);
-            icons.set(server.id, (await game.readIcon?.()) ?? null);
+            scheduleDailyRestart(server, restartServerInstance);
+            scheduleUpdateChecks(server, restartServerInstance);
+            await game.initialize(server, running);
+            server.icon = (await game.readIcon?.()) ?? null;
             // the server runs either way; only the Blocks Library keeps the game's art
-            if (icons.get(server.id)) {
-                await blocks.update(blocksProject(server)).catch((err) => report(scope.ctx, "The Blocks Library can't show this server's icon", err));
+            if (server.icon) {
+                await blocks.update(blocksProject(server)).catch((err) => report(server, "The Blocks Library can't show this server's icon", err));
             }
             // the server was running when this service last saw it and nobody
             // stopped it: it went down while Paperboard was not watching (the
             // computer restarted, or the system ended it), which is a crash
             if (wasRunning && !running) {
                 const restart = automation.restartAfterCrash;
-                scope.ctx.setState((prev) => ({ serverEntries: appendCapped(prev.serverEntries, { type: "warn", content: `[Server] The server stopped while Paperboard was not running.${restart ? " Starting it again." : ""}` }) }));
+                server.setState((prev) => ({ serverEntries: appendCapped(prev.serverEntries, { type: "warn", content: `[Server] The server stopped while Paperboard was not running.${restart ? " Starting it again." : ""}` }) }));
                 // quiet: startServerInstance puts its own failure in the console
-                if (restart) void startServerInstance(scope.ctx).catch((err) => console.error(`[gameserver] ${server.name} could not start again:`, err));
+                if (restart) void startServerInstance(server).catch((err) => console.error(`[gameserver] ${server.name} could not start again:`, err));
             }
         });
-        return scope;
+        return server;
     } catch (err) {
-        scope.ctx.setState((prev) => ({
+        server.setState((prev) => ({
             initFailure: errorMessage(err),
             serverEntries: appendCapped(prev.serverEntries, { type: "error", content: `[Server] The server could not be set up: ${errorMessage(err)}` }),
         }));
         throw err;
     }
 }
+/** Ends what a server's setup started: its subscriptions, timers and its game's own work. */
+async function dispose(server: Server): Promise<void> {
+    for (const off of server.unsubscribe.splice(0)) off();
+    await inServer(server, async () => { cancelReadiness(); cancelAutomation(); await server.game.dispose(); });
+}
 /** Sets up a server whose setup failed again, from nothing: what the failed setup started is undone first. */
 function retryInitialize(id: unknown): Promise<void> {
     return serial(async () => {
-        const scope = requireServer(id);
-        if (scope.ctx.state.initFailure === null) throw new Error(`${scope.server.name} is already set up`);
-        for (const off of scope.unsubscribe.splice(0)) off();
-        await inServer(scope, async () => { cancelReadiness(); cancelAutomation(); await currentGameService().dispose(); });
-        scope.ctx.setState({ initFailure: null });
-        await initialize(scope);
+        const server = requireServer(id);
+        if (server.state.initFailure === null) throw new Error(`${server.name} is already set up`);
+        await dispose(server);
+        server.setState({ initFailure: null });
+        await initialize(server);
         publish();
     });
 }
 /** The servers that run any of these processes (their ids as the daemon knows them). */
-function serversRunning(processes: string[]): ServerScope[] {
-    return [...entries.values()].filter((scope) =>
-        gameServiceFor(scope.server.game).processIds.some((id) => processes.includes(scope.legacy ? id : `${scope.server.id}-${id}`)),
-    );
+function serversRunning(processes: string[]): Server[] {
+    return [...entries.values()].filter((server) => server.game.processIds.some((id) => processes.includes(server.processId(id))));
 }
 /** Makes a server, as New server does; gives its id. */
 function addServer(name: unknown, game: unknown): Promise<string> {
@@ -363,68 +329,63 @@ function addServer(name: unknown, game: unknown): Promise<string> {
             ...current,
             servers: [...current.servers, server],
         }));
-        await initialize(createScope(server));
+        await initialize(createServer(server));
         publish();
         return id;
     });
 }
-function renameServer(server: unknown, name: unknown): Promise<void> {
+function renameServer(id: unknown, name: unknown): Promise<void> {
     return serial(async () => {
-        const scope = requireServer(server);
-        const renamed = { ...scope.server, name: serverName(name) };
+        const server = requireServer(id);
+        const renamed = serverName(name);
         // a server whose setup failed has no project yet: setting it up again names it
-        await scope.blocks?.update(blocksProject(renamed));
+        await server.blocks?.update(blocksProject(server, renamed));
         await updateSaved((current) => ({
             ...current,
             servers: current.servers.map((s) =>
-                s.id === renamed.id ? { ...s, name: renamed.name } : s,
+                s.id === server.id ? { ...s, name: renamed } : s,
             ),
         }));
         publish();
     });
 }
 /** Stops the server and removes its entry; its directory and backups are kept. */
-function removeServer(server: unknown): Promise<void> {
+function removeServer(id: unknown): Promise<void> {
     return serial(async () => {
-        const scope = requireServer(server);
-        const id = scope.server.id;
-        if (scope.activeOperations)
+        const server = requireServer(id);
+        if (server.activeOperations)
             throw new Error(
                 "Wait for this server's current operation to finish before removing it",
             );
-        scope.removing = true;
+        server.removing = true;
         try {
-            await inServer(scope, async () => {
-                await currentGameService().beforeRemove();
-                await stopServerInstance(scope.ctx);
-                await waitUntil(async () => !(await scopedProcess.exists(currentGameService().primaryProcessId)), 40_000, "the server to stop; its files and entry were kept");
+            await inServer(server, async () => {
+                await server.game.beforeRemove();
+                await stopServerInstance(server);
+                await waitUntil(async () => !(await server.process.exists(server.game.primaryProcessId)), 40_000, "the server to stop; its files and entry were kept");
                 // Keep its directory and backups; removal never deletes user data.
-                for (const name of currentGameService().portNames)
-                    await livePortDeps().ports.release(name);
+                for (const name of server.game.portNames) await server.ports.release(name);
             });
             // a setup that failed may have made neither
-            if (scope.backupSource) await backupApi.forSource(PANEL_ID, id).setSchedule(null);
-            await scope.blocks?.remove();
+            if (server.backupSource) await server.backups.setSchedule(null);
+            await server.blocks?.remove();
             await updateSaved((current) => {
                 const next = {
                     ...current,
-                    servers: current.servers.filter((s) => s.id !== id),
+                    servers: current.servers.filter((s) => s.id !== server.id),
                 };
-                if (next.legacyServer === id) delete next.legacyServer;
+                if (next.legacyServer === server.id) delete next.legacyServer;
                 return next;
             });
-            await inServer(scope, async () => { cancelReadiness(); cancelAutomation(); await currentGameService().dispose(); });
+            await dispose(server);
             // the history is the server's console, not its files: it goes with the entry
-            await histories.get(id)!.stop();
-            histories.delete(id);
-            await nodeFs.rm(await historyFile(id), { force: true });
-            for (const off of scope.unsubscribe) off();
-            entries.delete(id);
-            icons.delete(id);
-            rootContext.keyed.server.delete(id);
+            await server.history!.stop();
+            await nodeFs.rm(await historyFile(server.id), { force: true });
+            entries.delete(server.id);
+            rootContext.keyed.server.delete(server.id);
             publish();
         } catch (err) {
-            scope.removing = false;
+            server.removing = false;
             throw err;
         }
     });
@@ -436,16 +397,16 @@ const serversHost: ServersBlocksHost = {
         return saved.servers.map((server) => server.id);
     },
     server: (id) => {
-        const scope = requireServer(id);
-        return { name: scope.server.name, game: gameFor(scope.server.game).name, status: scope.ctx.state.serverStatus };
+        const server = requireServer(id);
+        return { name: server.name, game: server.definition.name, status: server.state.serverStatus };
     },
     games: () => games.map((game) => ({ label: game.name, value: game.id })),
     create: addServer,
     rename: renameServer,
     remove: removeServer,
     operate: (id, work) => {
-        const scope = requireInitialized(requireServer(id));
-        return serverOperation(scope, () => work(scope.ctx));
+        const server = requireInitialized(requireServer(id));
+        return serverOperation(server, () => work(server));
     },
 };
 /** The sections the panel's and its servers' blocks sit in; registered first, so every server's blocks find them. */
@@ -471,11 +432,11 @@ const serversCalls: Pick<Handlers, (typeof SERVERS_CALLS)[number]> = {
     addServer: async ({ name, game }) => ({ id: await addServer(name, game) }),
     renameServer: async ({ name }, _ctx, { server }) => (await renameServer(server, name), true),
     removeServer: async (_input, _ctx, { server }) => {
-        const id = requireServer(server).server.id;
+        const id = requireServer(server).id;
         await removeServer(id);
         return { removed: id };
     },
-    readServerConfig: (_input, _ctx, { server }) => requireServer(server).server.settings,
+    readServerConfig: (_input, _ctx, { server }) => requireServer(server).settings,
     retryInitialize: async (_input, _ctx, { server }) => (await retryInitialize(server), true),
     servedPicture: (input) => pictureCall(input),
 };
@@ -503,18 +464,18 @@ export const gameServerService = definePanelService({
     // Home's gallery: each widget's "Server" dropdown offers the servers whose game shows that widget
     widgetChoices: Object.fromEntries(["status", "players", "console", "motd"].map((widgetId) => [widgetId, {
         server: () => saved.servers.filter((server) => {
-            const state = entries.get(server.id)!.ctx.state;
+            const state = entries.get(server.id)!.state;
             return gameFor(server.game).describe({ software: state.serverSoftware, version: state.serverVersion, settings: state.gameSettings }).widgets.includes(widgetId);
         }).map((s) => ({ value: s.id, label: s.name })),
     }])),
     async onInit(ctx) {
         rootContext = ctx;
         try {
-            const gameTypes = await Promise.all(games.map((g) => gameServiceFor(g.id).blockTypes?.() ?? []));
-            const onlinePlayers = (server: string) => {
-                const scope = entries.get(server);
-                if (!scope) throw new Error(`There is no server "${server}"`);
-                return scope.ctx.state.onlinePlayers;
+            const gameTypes = await Promise.all(games.map((g) => gameModuleFor(g.id).blockTypes?.() ?? []));
+            const onlinePlayers = (id: string) => {
+                const server = entries.get(id);
+                if (!server) throw new Error(`There is no server "${id}"`);
+                return server.state.onlinePlayers;
             };
             const handle = blocksApi.panel(PANEL_ID);
             await handle.register({ categories: BLOCK_CATEGORIES, types: [...sharedTypes(onlinePlayers, () => serversHost.ids()), ...gameTypes.flat(), serverType(serversHost)], ...serversBlocks(serversHost) });
@@ -524,13 +485,12 @@ export const gameServerService = definePanelService({
             // keys become settings of the migrated server in one atomic write.
             await config.set(saved, PANEL_ID);
             await removeOldHeadStore();
-            const scopes = saved.servers.map(createScope);
-            for (const scope of scopes) {
+            for (const server of saved.servers.map(createServer)) {
                 try {
-                    await initialize(scope);
+                    await initialize(server);
                 } catch (err) {
                     // quiet: initialize puts its failure on the server's page (initFailure) and in its console
-                    console.error(`[gameserver] ${scope.server.name} could not initialize:`, err);
+                    console.error(`[gameserver] ${server.name} could not initialize:`, err);
                 }
             }
             // the list as Blocks first reads it; changes from here on are announced
@@ -546,53 +506,47 @@ export const gameServerService = definePanelService({
     // stops each server in its way the way Stop does, saving the world,
     // and starts it again once the update ends
     async beforeUpdate(_ctx, { processes }) {
-        for (const scope of serversRunning(processes)) {
-            await inServer(scope, async () => {
-                if (scope.ctx.state.serverStatus === "restarting")
-                    throw new Error(`${scope.server.name} is restarting; update once it's back online`);
-                scope.ctx.setState((prev) => ({ serverEntries: appendCapped(prev.serverEntries, { type: "info", content: "[Server] Stopping for an update..." }) }));
-                await stopServerInstance(scope.ctx);
-                await waitUntil(async () => !(await scopedProcess.exists(currentGameService().primaryProcessId)), 90_000, `${scope.server.name} to stop`);
-            });
+        for (const server of serversRunning(processes)) {
+            if (server.state.serverStatus === "restarting")
+                throw new Error(`${server.name} is restarting; update once it's back online`);
+            server.setState((prev) => ({ serverEntries: appendCapped(prev.serverEntries, { type: "info", content: "[Server] Stopping for an update..." }) }));
+            await inServer(server, () => stopServerInstance(server));
+            await waitUntil(async () => !(await server.process.exists(server.game.primaryProcessId)), 90_000, `${server.name} to stop`);
         }
     },
     async afterUpdate(_ctx, { processes, ok, error }) {
-        for (const scope of serversRunning(processes)) {
+        for (const server of serversRunning(processes)) {
             const why = ok
                 ? { type: "info" as const, content: "[Server] Updated. Starting again." }
                 : { type: "warn" as const, content: `[Server] The update failed, so nothing changed: ${error ?? "no reason given"}. Starting again.` };
             // quiet: startServerInstance puts its own failure in the console
-            await inServer(scope, () => startServerInstance(scope.ctx, [why])).catch((err) =>
-                console.error(`[gameserver] ${scope.server.name} could not start again after the update:`, err),
+            await inServer(server, () => startServerInstance(server, [why])).catch((err) =>
+                console.error(`[gameserver] ${server.name} could not start again after the update:`, err),
             );
         }
     },
     async beforeRestore(_ctx, { sourceId }) {
         const selected = sourceId === undefined ? [...entries.values()] : [requireServer(sourceId)];
-        for (const entry of selected) await inServer(entry, async () => {
-            if (currentGameService().backup.mode === "offline") await currentGameService().backup.before(entry.ctx);
-        });
+        for (const server of selected)
+            if (server.game.backup.mode === "offline") await inServer(server, () => server.game.backup.before(server));
     },
     // a server's backup fires its Blocks events; a backup of the whole panel is no one server's
     afterBackup(_ctx, ended) {
-        const scope = ended.sourceId === undefined ? undefined : entries.get(ended.sourceId);
-        if (scope) fireBackupEnded(scope.blocks, ended, (what, err) => report(scope.ctx, what, err));
+        const server = ended.sourceId === undefined ? undefined : entries.get(ended.sourceId);
+        if (server) fireBackupEnded(server.blocks, ended, (what, err) => report(server, what, err));
     },
     async beforeBackup(_ctx, { sourceId }) {
-        const paused: ServerScope[] = [];
+        const paused: Server[] = [];
         try {
             const selected = sourceId === undefined ? [...entries.values()] : [requireServer(sourceId)];
-            for (const entry of selected) {
-                await inServer(entry, () => {
-                    const policy = currentGameService().backup;
-                    return policy.before(entry.ctx);
-                });
-                paused.push(entry);
+            for (const server of selected) {
+                await inServer(server, () => server.game.backup.before(server));
+                paused.push(server);
             }
         } catch (err) {
-            for (const entry of paused) {
-                await inServer(entry, () => currentGameService().backup.recover(entry.ctx)).catch((recoverErr) =>
-                    inServer(entry, () => report(entry.ctx, "Could not undo the preparation for the refused backup", recoverErr)));
+            for (const server of paused) {
+                await inServer(server, () => server.game.backup.recover(server)).catch((recoverErr) =>
+                    report(server, "Could not undo the preparation for the refused backup", recoverErr));
             }
             throw err;
         }

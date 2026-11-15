@@ -1,6 +1,6 @@
+import type { Server } from "./server";
 import { errorMessage } from "@mileniumhq/paperapi";
 import { serverLocal } from "./scope";
-import type { ServiceContext } from "./api";
 import { recoverInterruptedInstall } from "../games/minecraft/softwareInstall";
 import { liveRecoveryDeps } from "./softwareInstallDeps";
 import { recoverInterruptedModpack } from "./modpacks";
@@ -30,7 +30,7 @@ const liveSteps: RecoverySteps = {
  * a pack change may depend on it. Resolves true when everything is settled.
  */
 export function settleInterruptedWork(
-    ctx: ServiceContext<GameServerState>,
+    ctx: Server,
     steps: RecoverySteps = liveSteps,
 ): Promise<boolean> {
     if (local().settling) return local().settling!;
@@ -40,7 +40,7 @@ export function settleInterruptedWork(
     return local().settling!;
 }
 
-async function run(ctx: ServiceContext<GameServerState>, steps: RecoverySteps): Promise<boolean> {
+async function run(ctx: Server, steps: RecoverySteps): Promise<boolean> {
     for (const [what, step] of [
         ["install", steps.install],
         ["modpack change", steps.modpack],

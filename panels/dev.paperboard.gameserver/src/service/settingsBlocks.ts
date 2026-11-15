@@ -2,21 +2,21 @@
 // call the Options and Files tabs run, so a block is checked exactly
 // as an edit there is: the game's own rules, a busy server, a file the game
 // keeps to itself.
-import type { BlockSet, ServiceContext } from "@mileniumhq/paperapi";
+import type { Server } from "./server";
+import type { BlockSet } from "@mileniumhq/paperapi";
 import type { GameServerState } from "./types";
 import { currentGame } from "../games/service";
 import { runGameCall } from "./blocks";
 import type { GameOption } from "../games/types";
 
-type Context = ServiceContext<GameServerState>;
 
 /** The options a block can read and set: every one the Options tab edits, its secrets left out. */
-function editableOptions(ctx: Context): GameOption[] {
+function editableOptions(ctx: Server): GameOption[] {
     const features = currentGame().describe({ software: ctx.state.serverSoftware, version: ctx.state.serverVersion, settings: ctx.state.gameSettings });
     return features.options.filter((option) => option.kind !== "secret");
 }
 
-function optionNamed(ctx: Context, id: string): GameOption {
+function optionNamed(ctx: Server, id: string): GameOption {
     const option = editableOptions(ctx).find((o) => o.id === id);
     if (!option) throw new Error(`${currentGame().name} has no option "${id}" that blocks can change`);
     return option;
@@ -42,7 +42,7 @@ export function optionValue(option: GameOption, value: unknown): unknown {
     }
 }
 
-export function settingsBlocks(ctx: Context): BlockSet {
+export function settingsBlocks(ctx: Server): BlockSet {
     const option = {
         type: "text",
         name: "Option",

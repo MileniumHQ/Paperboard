@@ -1,5 +1,6 @@
+import type { Server } from "../../service/server";
 import { minecraftSoftware } from "./index";
-import { config, files as fileApi, packages as packageApi, system, type ServiceContext } from "../../service/api";
+import { config, files as fileApi, packages as packageApi, system } from "../../service/api";
 import type { GameServerState } from "../../service/types";
 import { PANEL_ID, appendCapped } from "../../service/types";
 import { heapFit } from "../../service/memory";
@@ -15,7 +16,7 @@ import { minecraft } from "./index";
 import type { PreparedLaunch } from "../serviceTypes";
 import { unlessMissing } from "../../service/failures";
 
-export async function prepareLaunch(ctx: ServiceContext<GameServerState>): Promise<PreparedLaunch> {
+export async function prepareLaunch(ctx: Server): Promise<PreparedLaunch> {
     const saved = await config.get<Record<string, unknown>>(PANEL_ID);
     let version = ctx.state.serverVersion;
     if (!version && typeof saved?.version === "string" && saved.version) {

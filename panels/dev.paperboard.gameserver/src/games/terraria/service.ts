@@ -1,14 +1,15 @@
+import type { Server } from "../../service/server";
 import fs from "node:fs/promises";
 import path from "node:path";
 import net from "node:net";
 import { packages as packageApi, processApi, updateSettings } from "../../service/api";
-import { emitTrigger, serverLocal } from "../../service/scope";
+import { serverLocal } from "../../service/scope";
 import { initialServerState } from "../../service/initialState";
 import { appendCapped, PANEL_ID } from "../../service/types";
 import type { GameService } from "../serviceTypes";
 import {
     ConsoleBuffer, assertHost, exclusive, exists, fileStamp, hostSupportHere, offlineBackup, pushChat, readSettings, redact, report,
-    resumeAfterBackup, serverRoot, serverSecret, settingPort, settled, singleLine, unlessMissing, waitUntil, writePrivate, type Context,
+    resumeAfterBackup, serverRoot, serverSecret, settingPort, settled, singleLine, unlessMissing, waitUntil, writePrivate,
 } from "../serviceKit";
 import { terraria } from "./index";
 import { configText, validateOptions, worldName } from "./config";
@@ -57,12 +58,12 @@ async function generate(password: string) {
     const existing = await unlessMissing(fs.readFile(file, "utf8"), "");
     await writePrivate(file, configText(directory, await settings(), password, existing));
 }
-async function loadOptions(ctx: Context) {
+async function loadOptions(ctx: Server) {
     const saved = await settings();
     ctx.setState({ serverSoftware: softwareOf(saved), serverVersion: String(saved.version ?? ""), serverPort: String(saved.port ?? 7777), serverMotd: String(saved.motd ?? ""), gameSettings: { ...saved, password: await joinPassword.found() } });
 }
 const worldStamp = async () => fileStamp(path.join(await root(), "worlds", `${worldName((await settings()).world ?? "World")}.wld`), "Terraria's world file");
-export async function save(ctx: Context) {
+export async function save(ctx: Server) {
     if (ctx.state.serverStatus !== "online") throw new Error("Start Terraria before saving");
     const before = await worldStamp();
     const prompts = local().prompts;
@@ -76,16 +77,16 @@ export async function save(ctx: Context) {
 function store() { const s = local().store; if (!s) throw new Error("Terraria's player roster is not ready"); return s; }
 const sameName = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
 /** Asks the server who is connected; the answer is read back by observeLine and kept out of the console. */
-function queryPlayers(ctx: Context) {
+function queryPlayers(ctx: Server) {
     local().queries++;
     processApi.write(PROC, "playing\n").catch(err => { local().queries = Math.max(0, local().queries - 1); report(ctx, "Could not list Terraria's players", err); });
 }
 /** The online player's name as Terraria spells it; kick and ban match it exactly. */
-function onlineName(ctx: Context, name: string) {
+function onlineName(ctx: Server, name: string) {
     return settled(ctx, "Terraria") ? ctx.state.onlinePlayers.find(p => sameName(p, name)) : undefined;
 }
 /** Applies a console line to the roster and chat. Returns true for an answer to Paperboard's own `playing`. */
-function observePlayers(ctx: Context, event: ConsoleEvent): boolean {
+function observePlayers(ctx: Server, event: ConsoleEvent): boolean {
     switch (event.kind) {
         case "join": {
             ctx.setState(prev => ({
@@ -93,7 +94,7 @@ function observePlayers(ctx: Context, event: ConsoleEvent): boolean {
                 seenPlayers: prev.seenPlayers.some(p => sameName(p, event.name)) ? prev.seenPlayers : appendCapped(prev.seenPlayers, event.name),
             }));
             pushChat(ctx, { event: "join", sender: event.name, text: `${event.name} has joined.` });
-            emitTrigger(ctx, TRIGGER_IDS.playerJoined, event.name);
+            ctx.trigger(TRIGGER_IDS.playerJoined, event.name);
             // the join line has no address; `playing` lists it for bans
             queryPlayers(ctx);
             return false;
@@ -102,11 +103,11 @@ function observePlayers(ctx: Context, event: ConsoleEvent): boolean {
             store().remember(event.name).catch(err => report(ctx, `Could not record ${event.name} leaving`, err));
             ctx.setState(prev => ({ onlinePlayers: prev.onlinePlayers.filter(p => !sameName(p, event.name)) }));
             pushChat(ctx, { event: "leave", sender: event.name, text: `${event.name} has left.` });
-            emitTrigger(ctx, TRIGGER_IDS.playerLeft, event.name);
+            ctx.trigger(TRIGGER_IDS.playerLeft, event.name);
             return false;
         }
         case "chat": {
-            emitTrigger(ctx, TRIGGER_IDS.chatMessage, pushChat(ctx, { sender: event.sender, content: event.content, text: `<${event.sender}> ${event.content}` }));
+            ctx.trigger(TRIGGER_IDS.chatMessage, pushChat(ctx, { sender: event.sender, content: event.content, text: `<${event.sender}> ${event.content}` }));
             return false;
         }
         case "server": {
@@ -131,7 +132,7 @@ function observePlayers(ctx: Context, event: ConsoleEvent): boolean {
         }
     }
 }
-async function onServerStarted(ctx: Context) {
+async function onServerStarted(ctx: Server) {
     const max = Number((await settings()).maxplayers ?? 8);
     ctx.setState({ maxPlayers: max });
     queryPlayers(ctx);
@@ -169,13 +170,13 @@ async function launchTmodloader(directory: string, installDir: string, version: 
         inputEncoding: consoleInput(process.platform),
     } };
 }
-async function modStore(ctx: Context) {
+async function modStore(ctx: Server) {
     const saved = await settings();
     if (softwareOf(saved) !== "tmodloader" || !saved.version) throw new Error("Mods need a tModLoader server");
     return new ModStore({ root: await root(), tmodloaderVersion: String(saved.version), onLine: line => { if (/Downloading|Update|ERROR/i.test(line)) ctx.setState(prev => ({ serverEntries: appendCapped(prev.serverEntries, { type: /ERROR/.test(line) ? "error" : "info", content: `[SteamCMD] ${line}` }) })); } });
 }
 /** one mod change at a time per server; the result says whether a running server must restart */
-async function modChange<T>(ctx: Context, work: (store: ModStore) => Promise<T>): Promise<{ result: T; restart: boolean }> {
+async function modChange<T>(ctx: Server, work: (store: ModStore) => Promise<T>): Promise<{ result: T; restart: boolean }> {
     if (local().modsBusy) throw new Error("Wait for the current mod change to finish");
     local().modsBusy = true;
     try { const result = await work(await modStore(ctx)); return { result, restart: ctx.state.serverStatus !== "offline" }; }

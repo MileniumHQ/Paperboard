@@ -4,7 +4,7 @@ import * as nodeFs from "node:fs/promises";
 import * as path from "node:path";
 import { startTestDaemon, type TestDaemon } from "./helpers/crane";
 import { minecraftServer } from "./helpers/minecraft";
-import { testScope } from "./helpers/scope";
+import { testServer } from "./helpers/scope";
 import { readTree, tempDir, writeTree } from "./helpers/tmp";
 import { PANEL_ID } from "../src/servers";
 import { trashRemovePathsWith, type TrashFs } from "../src/service/trash";
@@ -83,36 +83,36 @@ describe("world deletion", () => {
             ["world", true, true],
             ["other", false, false],
         ]);
-        const running = testScope({ directory: mc.scope.server.directory }, { serverStatus: "online" });
-        await expect(deleteActiveWorldDirs(running.ctx, "world")).rejects.toThrow("Stop the server before managing worlds");
-        await mc.run(() => deleteActiveWorldDirs(mc.scope.ctx, "world"));
+        const running = testServer({ directory: mc.server.stored.directory }, { serverStatus: "online" });
+        await expect(deleteActiveWorldDirs(running, "world")).rejects.toThrow("Stop the server before managing worlds");
+        await mc.run(() => deleteActiveWorldDirs(mc.server, "world"));
         expect(trashed(mc.dir)).toEqual(["world/level.dat", "world/region/r.0.0.mca", "world_nether/level.dat", "world_the_end/level.dat"]);
         expect(fs.readFileSync(path.join(mc.dir, "other", "level.dat"), "utf8")).toBe("o");
     });
 
     test("a created world that never started is forgotten when deleted", async () => {
         const mc = minecraftServer({ files: { "server.properties": "level-name=world\n", "world/level.dat": "w" } });
-        expect(await mc.run(() => setActiveWorld(mc.scope.ctx, "fresh", "12345"))).toEqual({ activated: "fresh", created: true });
+        expect(await mc.run(() => setActiveWorld(mc.server, "fresh", "12345"))).toEqual({ activated: "fresh", created: true });
         expect((await mc.run(() => listWorlds())).map((w) => [w.name, w.generated])).toEqual([
             ["fresh", false],
             ["world", true],
         ]);
-        await mc.run(() => deleteActiveWorldDirs(mc.scope.ctx, "fresh"));
+        await mc.run(() => deleteActiveWorldDirs(mc.server, "fresh"));
         expect((await mc.run(() => listWorlds())).map((w) => w.name)).toEqual(["world"]);
     });
 
     test("a name matching an existing folder in another case switches to it instead of forking a new world", async () => {
         const mc = minecraftServer({ files: { "server.properties": "level-name=other\n", "Survival/level.dat": "s", "other/level.dat": "o" } });
-        expect(await mc.run(() => setActiveWorld(mc.scope.ctx, "survival"))).toEqual({ activated: "Survival", created: false });
+        expect(await mc.run(() => setActiveWorld(mc.server, "survival"))).toEqual({ activated: "Survival", created: false });
         expect(fs.readFileSync(path.join(mc.dir, "server.properties"), "utf8")).toContain("level-name=Survival");
-        await expect(mc.run(() => setActiveWorld(mc.scope.ctx, "OTHER", "42"))).rejects.toThrow("\"other\" already exists — a seed only applies to a new world");
-        await expect(mc.run(() => setActiveWorld(mc.scope.ctx, "OTHER", undefined, true))).rejects.toThrow('A world named "other" already exists');
+        await expect(mc.run(() => setActiveWorld(mc.server, "OTHER", "42"))).rejects.toThrow("\"other\" already exists — a seed only applies to a new world");
+        await expect(mc.run(() => setActiveWorld(mc.server, "OTHER", undefined, true))).rejects.toThrow('A world named "other" already exists');
     });
 
     test("an unreadable server.properties refuses a reset instead of trashing the \"world\" folders", async () => {
         // a folder where the file should be: present, but no read succeeds
         const mc = minecraftServer({ files: { "server.properties/.keep": "", "world/level.dat": "w", "survival/level.dat": "s" } });
-        await expect(mc.run(() => resetWorldFiles(mc.scope.ctx))).rejects.toThrow("Couldn't read server.properties to find the active world");
+        await expect(mc.run(() => resetWorldFiles(mc.server))).rejects.toThrow("Couldn't read server.properties to find the active world");
         await expect(mc.run(() => listWorlds())).rejects.toThrow("Couldn't read server.properties to find the active world");
         expect(trashed(mc.dir)).toEqual([]);
         expect(fs.readFileSync(path.join(mc.dir, "world", "level.dat"), "utf8")).toBe("w");
@@ -122,7 +122,7 @@ describe("world deletion", () => {
         const file = path.join(daemon.dataDir, "configs", `${PANEL_ID}.json`);
         fs.mkdirSync(path.dirname(file), { recursive: true });
         fs.writeFileSync(file, "{\"software\": \"paper\",");
-        const ctx = testScope({ directory: "" }).ctx;
+        const ctx = testServer({ directory: "" });
         await expect(setActiveWorld(ctx, "brandnew")).rejects.toThrow("JSON Parse error");
         expect(fs.readFileSync(file, "utf8")).toBe("{\"software\": \"paper\",");
         fs.rmSync(file);
@@ -133,7 +133,7 @@ describe("world deletion", () => {
         fs.symlinkSync(path.join(mc.dir, "elsewhere"), path.join(mc.dir, "world_nether"));
         fs.symlinkSync(path.join(mc.dir, "logs", "old.log"), path.join(mc.dir, "logs", "latest.log"));
         await expect(mc.run(() => listWorlds())).rejects.toThrow("symbolic link");
-        await expect(mc.run(() => listPlayerStats(mc.scope.ctx))).rejects.toThrow();
-        await expect(mc.run(() => listLogFiles(mc.scope.ctx))).rejects.toThrow("symbolic link");
+        await expect(mc.run(() => listPlayerStats(mc.server))).rejects.toThrow();
+        await expect(mc.run(() => listLogFiles(mc.server))).rejects.toThrow("symbolic link");
     });
 });

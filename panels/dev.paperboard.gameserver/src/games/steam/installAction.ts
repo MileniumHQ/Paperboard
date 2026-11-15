@@ -1,5 +1,6 @@
+import type { Server } from "../../service/server";
 import { installApp, installedBuild, latestBuild } from "./steamcmd";
-import { assertHost, exclusive, hostSupportHere, readSettings, updateSettings, type BusyFlag, type Context } from "../serviceKit";
+import { assertHost, exclusive, hostSupportHere, readSettings, updateSettings, type BusyFlag } from "../serviceKit";
 import type { ServerCalls } from "../../service/calls";
 import type { GameDefinition } from "../types";
 
@@ -12,7 +13,7 @@ export interface SteamInstallSpec {
     flag(): BusyFlag;
     /** The game's own setup after each download, such as links and generated settings. */
     afterInstall(): Promise<void>;
-    loadOptions(ctx: Context): Promise<void>;
+    loadOptions(ctx: Server): Promise<void>;
     /**
      * Whether setup asks something after the download (a Source game's
      * mode and map). The server is set up once that is answered, not when
@@ -22,7 +23,7 @@ export interface SteamInstallSpec {
 }
 
 /** Downloads one Steam app with the install's progress in state; any failure shows as an error stage, then throws. */
-export async function installWithProgress(ctx: Context, appId: number, dir: string, after: () => Promise<void>, branch?: string): Promise<string> {
+export async function installWithProgress(ctx: Server, appId: number, dir: string, after: () => Promise<void>, branch?: string): Promise<string> {
     // SteamCMD updates itself and signs in before it says anything about the app
     ctx.setState({ installProgress: { stage: "preparing", percent: 0 } });
     let last = "";
@@ -69,7 +70,7 @@ export async function steamUpdateStatus(spec: Pick<SteamInstallSpec, "appId" | "
 const running = new WeakMap<BusyFlag, Promise<void>>();
 
 /** Installs the newest build, or the first one; the Updates tab's install and an automatic update both run it. */
-export function steamInstall(spec: SteamInstallSpec): (ctx: Context) => Promise<void> {
+export function steamInstall(spec: SteamInstallSpec): (ctx: Server) => Promise<void> {
     const name = spec.game.name;
     return (ctx) => {
         const flag = spec.flag();

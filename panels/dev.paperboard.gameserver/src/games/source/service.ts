@@ -1,7 +1,8 @@
+import type { Server } from "../../service/server";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { packages as packageApi, processApi } from "../../service/api";
-import { emitTrigger, serverLocal } from "../../service/scope";
+import { serverLocal } from "../../service/scope";
 import { initialServerState } from "../../service/initialState";
 import { appendCapped } from "../../service/types";
 import { TRIGGER_IDS } from "../../service/contract";
@@ -10,7 +11,7 @@ import { installedBuild, steamClientLibrary } from "../steam/steamcmd";
 import { steamInstall, steamInstallCalls, steamUpdateStatus, type SteamInstallSpec } from "../steam/installAction";
 import {
     ConsoleBuffer, assertHost, exists, isLinked, keptFile, linkFolder, offlineBackup, pushChat, readSettings, redact, report,
-    resumeAfterBackup, serverRoot, serverSecret, settingPort, settled, singleLine, unlinkFolder, updateSettings, writePrivate, type Context,
+    resumeAfterBackup, serverRoot, serverSecret, settingPort, settled, singleLine, unlinkFolder, updateSettings, writePrivate,
 } from "../serviceKit";
 import type { GameDefinition } from "../types";
 import type { GameService } from "../serviceTypes";
@@ -98,7 +99,7 @@ export function sourceService(spec: SourceGameSpec, game: GameDefinition): GameS
     }
     function roster() { const r = local().roster; if (!r) throw new Error(`${spec.name}'s player list is not ready`); return r; }
 
-    async function loadOptions(ctx: Context) {
+    async function loadOptions(ctx: Server) {
         const saved = await settings();
         const values: Record<string, unknown> = {};
         for (const option of options) {
@@ -138,14 +139,14 @@ export function sourceService(spec: SourceGameSpec, game: GameDefinition): GameS
         return [...(await installedMaps(await gameDir())), ...(await workshopLibrary()).map((m) => workshopName(m.id))];
     }
     /** Why a Steam Workshop map can't be removed from the server now, or null: it is the map the server starts on, one it cycles through, or the one it is playing. */
-    function workshopHeldBy(ctx: Context, saved: Record<string, unknown>, map: SourceWorkshopMap): string | null {
+    function workshopHeldBy(ctx: Server, saved: Record<string, unknown>, map: SourceWorkshopMap): string | null {
         const name = workshopName(map.id);
         if (saved.map === name) return "The server starts on it. Choose another map on the Overview first.";
         if (Array.isArray(saved.mapCycle) && saved.mapCycle.includes(name)) return "It is in the map rotation. Remove it there first.";
         if (ctx.state.serverStatus !== "offline" && ctx.state.serverLevel && canonicalMap(ctx.state.serverLevel) === name) return "The server is playing it now. Change the map first.";
         return null;
     }
-    async function mapCycleView(ctx: Context): Promise<SourceMapCycle> {
+    async function mapCycleView(ctx: Server): Promise<SourceMapCycle> {
         const game = await gameDir();
         const workshop = await workshopLibrary();
         const installed = [...(await installedMaps(game)), ...workshop.map((m) => workshopName(m.id))];
@@ -169,7 +170,7 @@ export function sourceService(spec: SourceGameSpec, game: GameDefinition): GameS
         if (overriddenBy) throw new Error(`server.cfg in the server folder sets mapcyclefile to ${overriddenBy}, which the server follows over this page. Remove that line to set the rotation here.`);
     }
     /** Saves the rotation (null: the game's own map cycle) with anything saved beside it, and gives it to a running server. */
-    async function setRotation(ctx: Context, rotation: string[] | null, also: Record<string, unknown> = {}) {
+    async function setRotation(ctx: Server, rotation: string[] | null, also: Record<string, unknown> = {}) {
         await updateSettings({ ...also, mapCycle: rotation });
         if (await exists(await installDir())) await writeConfigs();
         // a running server reads the cycle file again when it changes, and the variable once
@@ -205,12 +206,12 @@ export function sourceService(spec: SourceGameSpec, game: GameDefinition): GameS
     const mods = async () => new SourceMod(await root());
     const modsOn = async () => !!spec.sourcemod && (await settings()).sourcemod === true;
     function supportsMods() { if (!spec.sourcemod) throw new Error(`SourceMod does not run on ${spec.name}`); }
-    async function modsView(ctx: Context): Promise<SourceModView> {
+    async function modsView(ctx: Server): Promise<SourceModView> {
         supportsMods();
         const on = await modsOn();
         return { on, active: local().modsActive && ctx.state.serverStatus === "online", ...(await (await mods()).view(on)) };
     }
-    async function modChange(ctx: Context, work: (sm: SourceMod) => Promise<void>): Promise<SourceModView> {
+    async function modChange(ctx: Server, work: (sm: SourceMod) => Promise<void>): Promise<SourceModView> {
         supportsMods();
         if (local().modsBusy) throw new Error("Wait for the current SourceMod change to finish");
         local().modsBusy = true;
@@ -218,11 +219,11 @@ export function sourceService(spec: SourceGameSpec, game: GameDefinition): GameS
         return modsView(ctx);
     }
     /** A console command for SourceMod on the running server, when it loaded there. */
-    async function smLive(ctx: Context, command: string): Promise<string | null> {
+    async function smLive(ctx: Server, command: string): Promise<string | null> {
         if (!local().modsActive || ctx.state.serverStatus !== "online") return null;
         return rcon().exec(command);
     }
-    async function loadPlugin(ctx: Context, file: string) {
+    async function loadPlugin(ctx: Server, file: string) {
         const reply = await smLive(ctx, `sm plugins load ${file}`);
         if (reply !== null && !/Loaded plugin|already loaded/i.test(reply)) throw new Error(`SourceMod did not load ${file}: ${reply.replace(/^\[SM\]\s*/, "").trim()}`);
     }
@@ -276,7 +277,7 @@ export function sourceService(spec: SourceGameSpec, game: GameDefinition): GameS
         return folders;
     }
 
-    function setOnline(ctx: Context) {
+    function setOnline(ctx: Server) {
         const humans = [...local().online.values()].filter((p) => p.steamId !== "BOT" && p.name);
         ctx.setState((prev) => ({
             onlinePlayers: humans.map((p) => p.name),
@@ -285,7 +286,7 @@ export function sourceService(spec: SourceGameSpec, game: GameDefinition): GameS
     }
     const isPlayer = (id: string) => isSteamId(id, spec.steamIds);
 
-    function observeEvent(ctx: Context, event: SourceLogEvent) {
+    function observeEvent(ctx: Server, event: SourceLogEvent) {
         const online = local().online;
         switch (event.kind) {
             case "map": ctx.setState({ serverLevel: event.map }); return;
@@ -297,7 +298,7 @@ export function sourceService(spec: SourceGameSpec, game: GameDefinition): GameS
                 setOnline(ctx);
                 if (isPlayer(p.steamId)) {
                     pushChat(ctx, { event: "join", sender: p.name, text: `${p.name} joined the game` });
-                    emitTrigger(ctx, TRIGGER_IDS.playerJoined, p.name);
+                    ctx.trigger(TRIGGER_IDS.playerJoined, p.name);
                     roster().remember(p.steamId, p.name).catch((err) => report(ctx, `Could not record ${p.name}`, err));
                 }
                 return;
@@ -312,7 +313,7 @@ export function sourceService(spec: SourceGameSpec, game: GameDefinition): GameS
                 const name = p.name || known?.name || "";
                 if (isPlayer(p.steamId) && name) {
                     pushChat(ctx, { event: "leave", sender: name, text: `${name} left the game` });
-                    emitTrigger(ctx, TRIGGER_IDS.playerLeft, name);
+                    ctx.trigger(TRIGGER_IDS.playerLeft, name);
                     roster().remember(p.steamId, name).catch((err) => report(ctx, `Could not record ${name} leaving`, err));
                     saveStats().catch((err) => report(ctx, `Could not save ${name}'s stats`, err));
                 }
@@ -348,14 +349,14 @@ export function sourceService(spec: SourceGameSpec, game: GameDefinition): GameS
                 if (p.steamId === "Console") { pushChat(ctx, { event: "server", content: event.text, text: `<Server> ${event.text}` }); return; }
                 if (p.steamId === "BOT") return;
                 const text = event.team ? `(Team) ${event.text}` : event.text;
-                emitTrigger(ctx, TRIGGER_IDS.chatMessage, pushChat(ctx, { sender: p.name, content: text, text: `<${p.name}> ${text}` }));
+                ctx.trigger(TRIGGER_IDS.chatMessage, pushChat(ctx, { sender: p.name, content: text, text: `<${p.name}> ${text}` }));
                 return;
             }
         }
     }
 
     /** Counts one stat for an online player; a person's goes to the roster soon after. */
-    function bump(ctx: Context, userId: number, key: Exclude<keyof SourceStats, "playtime">) {
+    function bump(ctx: Server, userId: number, key: Exclude<keyof SourceStats, "playtime">) {
         const player = local().online.get(userId);
         if (!player) return;
         player.stats[key] += 1;
@@ -392,7 +393,7 @@ export function sourceService(spec: SourceGameSpec, game: GameDefinition): GameS
     }
 
     /** Learns who is on, which map and the player cap from `status`: on start and when reattaching. */
-    async function readStatus(ctx: Context) {
+    async function readStatus(ctx: Server) {
         const status = parseStatus(await rcon().exec("status"));
         const online = local().online;
         const now = Date.now();
@@ -411,7 +412,7 @@ export function sourceService(spec: SourceGameSpec, game: GameDefinition): GameS
         setOnline(ctx);
     }
 
-    const online = (ctx: Context) => settled(ctx, spec.name);
+    const online = (ctx: Server) => settled(ctx, spec.name);
     const steam: SteamInstallSpec = {
         game, appId: spec.appId, branch: spec.branch,
         installDir, flag: local, loadOptions,

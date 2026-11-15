@@ -5,13 +5,13 @@
 //
 // What the blocks do is the service's: the same code the home screen and
 // each server's own blocks run. This file only says what they take and give.
-import type { BlockChoice, BlockEventDefinition, BlockSet, BlockTypeDefinition, ServiceContext } from "@mileniumhq/paperapi";
+import type { Server } from "./server";
+import type { BlockChoice, BlockEventDefinition, BlockSet, BlockTypeDefinition } from "@mileniumhq/paperapi";
 import type { GameServerState } from "./types";
 import { TRIGGER_IDS } from "./contract";
 import { startServerInstance } from "./lifecycle";
 import { restartFromBlocks, stopFromBlocks } from "./blocks";
 
-type Context = ServiceContext<GameServerState>;
 
 /** One server as the panel's own blocks read it. */
 export interface ServerView {
@@ -34,7 +34,7 @@ export interface ServersBlocksHost {
     rename(id: string, name: string): Promise<void>;
     remove(id: string): Promise<void>;
     /** runs work on the server as one of its operations, as its own blocks run */
-    operate(id: string, work: (ctx: Context) => Promise<void>): Promise<void>;
+    operate(id: string, work: (ctx: Server) => Promise<void>): Promise<void>;
 }
 
 /** The ones the panel's events fire, with the server they happened to. */

@@ -1,8 +1,8 @@
+import type { Server } from "./server";
 import {
     files as fileApi,
     processApi,
     system,
-    type ServiceContext,
 } from "./api";
 import { type GameServerState, PANEL_ID } from "./types";
 import {
@@ -62,7 +62,7 @@ export async function killConflictingProcessWith(
 }
 
 export function checkLogForIssues(
-    ctx: ServiceContext<GameServerState>,
+    ctx: Server,
     cleanLine: string,
 ): void {
     coreCheckLogForIssues(
@@ -74,13 +74,13 @@ export function checkLogForIssues(
     );
 }
 
-export function clearActiveIssue(ctx: ServiceContext<GameServerState>): void {
+export function clearActiveIssue(ctx: Server): void {
     ctx.setState({ activeIssue: null });
 }
 
 /** Ends what holds the server's port; a kill that failed throws why. */
 export async function killConflictingProcess(
-    ctx: ServiceContext<GameServerState>,
+    ctx: Server,
     port?: string,
 ): Promise<void> {
     // boundary: the port arrives from UI action input — validated here, and
@@ -92,7 +92,7 @@ export async function killConflictingProcess(
 
 /** Moves the active world's folders to the trash; a move that failed throws why. */
 export async function resetWorldFiles(
-    ctx: ServiceContext<GameServerState>,
+    ctx: Server,
 ): Promise<void> {
     // reset deletes live world dirs: same offline rule as the world manager
     assertServerOffline(ctx);

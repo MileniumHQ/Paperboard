@@ -29,22 +29,22 @@ async function rustServer(plan?: Record<string, unknown>): Promise<GameServer & 
         state: rustService.initialState(),
     });
     // the port the server was given: a start moves it when another program took it meanwhile
-    const rconPort = () => Number(server.scope.server.settings.rconPort);
+    const rconPort = () => Number(server.server.settings.rconPort);
     allowLoopbackSocket(rconPort);
     installRust(server.dir, plan);
-    await server.run(() => rustService.initialize(server.scope.ctx, false));
+    await server.run(() => rustService.initialize(server.server, false));
     return Object.defineProperty(server as GameServer & { readonly rconPort: number }, "rconPort", { get: rconPort });
 }
-const call = async (server: GameServer, id: string, input: unknown = {}) => server.run(async () => (await rustService.calls())[id]!(server.scope.ctx, input));
-const vault = async (server: GameServer) => (await secretsApi.get(`${server.scope.server.id}-rust-rcon-password`, PANEL_ID)).value ?? "";
-const consoleOf = (server: GameServer) => server.scope.ctx.state.serverEntries.map((e) => String(e.content)).join("\n");
+const call = async (server: GameServer, id: string, input: unknown = {}) => server.run(async () => (await rustService.calls())[id]!(server.server, input));
+const vault = async (server: GameServer) => (await secretsApi.get(`${server.server.id}-rust-rcon-password`, PANEL_ID)).value ?? "";
+const consoleOf = (server: GameServer) => server.server.state.serverEntries.map((e) => String(e.content)).join("\n");
 const online = async (server: GameServer) => {
-    await server.run(() => startServerInstance(server.scope.ctx));
-    await server.scope.waitFor((s) => s.serverStatus === "online", "Rust to finish starting");
+    await server.run(() => startServerInstance(server.server));
+    await server.server.waitFor((s) => s.serverStatus === "online", "Rust to finish starting");
 };
 const stop = async (server: GameServer) => {
     const exit = server.nextExit();
-    await server.run(() => stopServerInstance(server.scope.ctx));
+    await server.run(() => stopServerInstance(server.server));
     expect(await exit).toBe(0);
 };
 const BANNED = "76561198000000001";
@@ -64,12 +64,12 @@ describe("Rust", () => {
         // an empty description has no argument to be
         expect(started).not.toContain("+server.description");
         // the server prints its command line; the console shows it without the password
-        await server.scope.waitFor((s) => s.serverEntries.some((e) => String(e.content).startsWith("Command Line:")), "Rust's command line in the console");
+        await server.server.waitFor((s) => s.serverEntries.some((e) => String(e.content).startsWith("Command Line:")), "Rust's command line in the console");
         expect(consoleOf(server)).toContain('"+rcon.password" "[redacted]"');
         expect(consoleOf(server)).not.toContain(password);
-        expect(JSON.stringify(server.scope.server.settings)).not.toContain(password);
-        expect(server.scope.ctx.state.maxPlayers).toBe(20);
-        expect(server.scope.ctx.state.serverVersion).toBe("2636.290.1");
+        expect(JSON.stringify(server.server.settings)).not.toContain(password);
+        expect(server.server.state.maxPlayers).toBe(20);
+        expect(server.server.state.serverVersion).toBe("2636.290.1");
         // the map and saves are the server folder's, linked into the install
         expect(fs.lstatSync(path.join(server.dir, "install", "server")).isSymbolicLink()).toBe(true);
 
@@ -88,13 +88,13 @@ describe("Rust", () => {
         expect((await call(server, "rustMetrics") as { MaxPlayers: number }).MaxPlayers).toBe(12);
 
         // the console: an answer is shown, a command Rust doesn't know fails out loud, and Stop's own commands are refused
-        await server.run(() => sendServerCommand(server.scope.ctx, "status"));
-        await server.scope.waitFor((s) => s.serverEntries.some((e) => String(e.content) === "hostname: My Rust"), "the status answer in the console");
-        await expect(server.run(() => sendServerCommand(server.scope.ctx, "quit"))).rejects.toThrow("use Options, Stop and Restart");
-        await expect(server.run(() => sendServerCommand(server.scope.ctx, "rcon.password stolen"))).rejects.toThrow("Paperboard manages the RCON password");
-        await expect(server.run(() => sendServerCommand(server.scope.ctx, "status\nquit"))).rejects.toThrow();
-        await expect(server.run(() => rustService.assertFileAccess!(server.scope.ctx, "server/paperboard/cfg/users.cfg", true))).rejects.toThrow("Stop Rust before editing its files");
-        await expect(server.run(() => rustService.assertFileAccess!(server.scope.ctx, "install/RustDedicated", true))).rejects.toThrow("Installed Rust files are managed by Updates");
+        await server.run(() => sendServerCommand(server.server, "status"));
+        await server.server.waitFor((s) => s.serverEntries.some((e) => String(e.content) === "hostname: My Rust"), "the status answer in the console");
+        await expect(server.run(() => sendServerCommand(server.server, "quit"))).rejects.toThrow("use Options, Stop and Restart");
+        await expect(server.run(() => sendServerCommand(server.server, "rcon.password stolen"))).rejects.toThrow("Paperboard manages the RCON password");
+        await expect(server.run(() => sendServerCommand(server.server, "status\nquit"))).rejects.toThrow();
+        await expect(server.run(() => rustService.assertFileAccess!(server.server, "server/paperboard/cfg/users.cfg", true))).rejects.toThrow("Stop Rust before editing its files");
+        await expect(server.run(() => rustService.assertFileAccess!(server.server, "install/RustDedicated", true))).rejects.toThrow("Installed Rust files are managed by Updates");
 
         await stop(server);
         // stopped: the ban list is read from the file the server keeps, and changing it waits for the server
@@ -141,7 +141,7 @@ describe("Rust", () => {
         const wiped = await call(server, "rustWipe", { blueprints: false }) as { seed: number; made: boolean; blueprints: boolean };
         expect(wiped).toMatchObject({ size: 1000, made: false, blueprints: true });
         expect(wiped.seed).not.toBe(12345);
-        expect(server.scope.server.settings.seed).toBe(wiped.seed);
+        expect(server.server.settings.seed).toBe(wiped.seed);
         const left = () => fs.readdirSync(identity).filter((name) => name !== "cfg").sort();
         // who the players are, their blueprints and the ban list stay
         expect(left()).toEqual(["player.blueprints.19.db", "player.blueprints.19.db-wal", "player.identities.19.db", "player.tokens.db"]);
@@ -157,7 +157,7 @@ describe("Rust", () => {
         // the next start is on the new seed
         await online(server);
         const started = JSON.parse(fs.readFileSync(path.join(server.dir, "install", "started-with.json"), "utf8")).args as string[];
-        expect(started[started.indexOf("+server.seed") + 1]).toBe(String(server.scope.server.settings.seed));
+        expect(started[started.indexOf("+server.seed") + 1]).toBe(String(server.server.settings.seed));
         await stop(server);
     });
 
@@ -178,15 +178,15 @@ describe("Rust", () => {
     test("a backup refused after Rust stopped for it starts Rust again and drops its resume marker", async () => {
         const server = await rustServer();
         await online(server);
-        const marker = path.join(process.env.PAPERBOARD_DIR!, "files", PANEL_ID, ".rust-resume", server.scope.server.id);
+        const marker = path.join(process.env.PAPERBOARD_DIR!, "files", PANEL_ID, ".rust-resume", server.server.id);
         const exit = server.nextExit();
-        await server.run(() => rustService.backup.before(server.scope.ctx));
+        await server.run(() => rustService.backup.before(server.server));
         expect(await exit).toBe(0);
-        expect(server.scope.ctx.state.serverStatus).toBe("offline");
+        expect(server.server.state.serverStatus).toBe("offline");
         expect(fs.existsSync(marker)).toBe(true);
         // the panel's backup is refused (another server would not stop): this one is put back as it was
-        await server.run(() => rustService.backup.recover(server.scope.ctx));
-        await server.scope.waitFor((s) => s.serverStatus === "online", "Rust to start again");
+        await server.run(() => rustService.backup.recover(server.server));
+        await server.server.waitFor((s) => s.serverStatus === "online", "Rust to start again");
         expect(fs.existsSync(marker)).toBe(false);
         await stop(server);
     });
@@ -229,11 +229,11 @@ describe("Rust", () => {
         for (const bad of ["short", "has space 1", "slash/inpath1", "x".repeat(65), "quote\"1234", 12345678]) expect(() => rconPasswordRule(bad)).toThrow("8 to 64");
 
         const server = await rustServer();
-        const before = JSON.stringify(server.scope.server.settings);
+        const before = JSON.stringify(server.server.settings);
         for (const patch of [{ hostname: 'x" +rcon.password "y' }, { description: "-nographics" }, { rconPassword: "short" }, { gamemode: "creative" }, { worldsize: 1250 }, { seed: -1 }, { maxplayers: 0 }]) {
             await expect(call(server, "writeGameOptions", { patch })).rejects.toThrow();
         }
-        expect(JSON.stringify(server.scope.server.settings)).toBe(before);
+        expect(JSON.stringify(server.server.settings)).toBe(before);
         expect(await vault(server)).toBe("");
 
         expect(steamId(BANNED)).toBe(BANNED);
@@ -251,15 +251,15 @@ describe("Rust", () => {
         const players = playerPoller({ game: "Rust", id: (p: { steamId: string; name: string }) => p.steamId, list: () => new Promise((resolve) => answers.push(resolve)), remember: async () => {} });
         const ann = { steamId: BANNED, name: "Ann" };
         // a slow poll is out when a kick asks again; the kick's answer comes first
-        const slow = server.run(() => players.poll(server.scope.ctx));
-        const fresh = server.run(() => players.poll(server.scope.ctx));
+        const slow = server.run(() => players.poll(server.server));
+        const fresh = server.run(() => players.poll(server.server));
         answers[1]!([ann]);
         await fresh;
         answers[0]!([]);
         await slow;
-        expect(server.scope.ctx.state.onlinePlayers).toEqual(["Ann"]);
-        expect(server.scope.ctx.state.chatMessages.map((m) => m.text)).toEqual(["Ann joined the game"]);
-        expect(server.scope.triggers.map((t) => t.id)).toEqual([TRIGGER_IDS.playerJoined]);
+        expect(server.server.state.onlinePlayers).toEqual(["Ann"]);
+        expect(server.server.state.chatMessages.map((m) => m.text)).toEqual(["Ann joined the game"]);
+        expect(server.server.triggers.map((t) => t.id)).toEqual([TRIGGER_IDS.playerJoined]);
         server.run(() => players.stop());
     });
 });

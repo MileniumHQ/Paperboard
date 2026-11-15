@@ -1,10 +1,11 @@
+import type { Server } from "./server";
 import { minecraftSoftware } from "../games/minecraft/index";
 import { serverLocal } from "./scope";
 import * as fs from "node:fs";
 import { gunzipSync, inflateSync } from "node:zlib";
 import type { PNG as Png } from "pngjs";
 import { loadNbt, loadPng } from "../core/lazy";
-import { files as fileApi, type ServiceContext, errorMessage, SerialQueue } from "./api";
+import { files as fileApi, errorMessage, SerialQueue } from "./api";
 import { tryListDirectory } from "./filesystem";
 import { resolveVersionProfile, worldPathsFor, type VersionProfile } from "../lib/versionProfile";
 import {
@@ -132,12 +133,12 @@ async function resolveRegionDir(
 
 const DIMENSION_ORDER = MAP_DIMENSIONS;
 
-function profileOf(ctx: ServiceContext<GameServerState>): VersionProfile {
+function profileOf(ctx: Server): VersionProfile {
     return resolveVersionProfile(minecraftSoftware(ctx.state.serverSoftware), ctx.state.serverVersion);
 }
 
 export async function listMapRegions(
-    ctx: ServiceContext<GameServerState>,
+    ctx: Server,
 ): Promise<MapRegionsResult> {
     const levelName = await resolveLevelName();
     const profile = profileOf(ctx);
@@ -306,7 +307,7 @@ export interface RenderedTile {
 }
 
 export async function renderMapTile(
-    ctx: ServiceContext<GameServerState>,
+    ctx: Server,
     dimension: MapDimension,
     rx: number,
     rz: number,

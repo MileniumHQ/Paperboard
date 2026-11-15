@@ -1,6 +1,7 @@
+import type { Server } from "./server";
 import * as fs from "node:fs";
 import { gunzipSync } from "node:zlib";
-import { files as fileApi, type ServiceContext, errorCode } from "./api";
+import { files as fileApi, errorCode } from "./api";
 import { listDirectory } from "./filesystem";
 import { isLogFileName, tailChars } from "../core/logs";
 import { type GameServerState, PANEL_ID } from "./types";
@@ -25,7 +26,7 @@ export interface LogFileContent {
 }
 
 export async function listLogFiles(
-    _ctx: ServiceContext<GameServerState>,
+    _ctx: Server,
 ): Promise<LogFileInfo[]> {
     const entries = await listDirectory("logs");
     const files: LogFileInfo[] = [];
@@ -60,7 +61,7 @@ function readTail(path: string, maxBytes: number): Buffer {
 }
 
 export async function readLogFile(
-    _ctx: ServiceContext<GameServerState>,
+    _ctx: Server,
     name: string,
 ): Promise<LogFileContent> {
     // boundary: the name reaches the filesystem — validated here, not in UI

@@ -1,10 +1,11 @@
+import type { Server } from "../../service/server";
 import { exists } from "../../service/failures";
 import { PANEL_ID } from "../../service/contract";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { createHash } from "node:crypto";
 import { loadZip } from "../../core/lazy";
-import { files, type ServiceContext } from "../../service/api";
+import { files } from "../../service/api";
 import type { GameServerState } from "../../service/types";
 import { archiveFor, entrypoint, releaseFor, tmodloaderReleaseFor, TMODLOADER_ENTRYPOINT, type TerrariaSoftware } from "./catalog";
 
@@ -68,7 +69,7 @@ export async function activateRelease(staging: string, target: string): Promise<
     catch (err) { if (replacing) await fs.rename(previous, target); throw err; }
     if (replacing) await fs.rm(previous, { recursive: true });
 }
-export async function install(ctx: ServiceContext<GameServerState>, software: TerrariaSoftware, version: string): Promise<void> {
+export async function install(ctx: Server, software: TerrariaSoftware, version: string): Promise<void> {
     const release = archiveFor(software, version);
     const root = await files.getPath("", PANEL_ID);
     const archive = ".terraria-download.zip";

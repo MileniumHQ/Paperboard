@@ -51,7 +51,7 @@ describe("modpack transactions", () => {
         expect(tree["config/a.toml"]).toBe("server a");
         expect(tree["mods/old.jar"]).toBeUndefined();
         expect(trashed(mc)).toEqual(["mods/old.jar"]);
-        const settings = mc.scope.server.settings;
+        const settings = mc.server.settings;
         expect((settings.modpack as { files: string[]; uploaded: boolean }).files).toEqual(["config/a.toml", "config/shared.toml", "mods/sodium.jar"]);
         expect((settings.modpack as { uploaded: boolean }).uploaded).toBe(true);
         expect(settings.modpackStaging).toMatch(/^\.modpack-/);
@@ -84,7 +84,7 @@ describe("modpack transactions", () => {
         // a block names the project by the name in its Modrinth address
         await installModpack({ projectId: "test-pack", versionId: "VERSION1" }, "neoforge", deps);
         expect(live(mc)["mods/sodium.jar"]).toBe("sodium");
-        expect(mc.scope.server.settings.modpack).toMatchObject({ projectId: "PROJECT1", versionId: "VERSION1", slug: "test-pack" });
+        expect(mc.server.settings.modpack).toMatchObject({ projectId: "PROJECT1", versionId: "VERSION1", slug: "test-pack" });
     });
 
     test("the loader is reinstalled only when the pack's build differs, in the same write as the pack record", async () => {
@@ -139,7 +139,7 @@ describe("modpack transactions", () => {
         expect(tree["mods/c.jar"]).toBeUndefined();
         expect(tree["config/user.toml"]).toBe("mine");
         for (const [file, content] of Object.entries(USER)) expect(tree[file]).toBe(content);
-        expect(mc.scope.server.settings.modpack).toBeNull();
+        expect(mc.server.settings.modpack).toBeNull();
     });
 
     test("a failed loader switch or a refused config write puts every old file back and records nothing", async () => {
@@ -165,7 +165,7 @@ describe("modpack transactions", () => {
             ).rejects.toThrow("The previous mods were put back");
             expect(live(mc)).toEqual(before);
             expect(trashed(mc)).toEqual([]);
-            expect(mc.scope.server.settings.modpack).toBeUndefined();
+            expect(mc.server.settings.modpack).toBeUndefined();
             expect(fs.readdirSync(mc.dir).filter((e) => e.startsWith(".modpack-"))).toEqual([]);
         }
     });

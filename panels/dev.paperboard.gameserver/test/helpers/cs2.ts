@@ -21,8 +21,8 @@ export async function cs2Server(): Promise<GameServer> {
         "install/game/csgo/maps/lobby_mapveto.vpk": "", "install/game/csgo/maps/graphics_settings.vpk": "", "install/game/csgo/cfg/server.cfg": "// the game's own\n",
     });
     placeStandIn("fakeCs2", path.join(server.dir, "install", "game", "bin", "linuxsteamrt64", "cs2"));
-    await server.run(() => cs2Service.initialize(server.scope.ctx, false));
+    await server.run(() => cs2Service.initialize(server.server, false));
     return server;
 }
 /** one of the game's calls, made for `server` */
-export const cs2Call = async (server: GameServer, id: string, input: unknown = {}) => server.run(async () => (await cs2Service.calls())[id]!(server.scope.ctx, input));
+export const cs2Call = async (server: GameServer, id: string, input: unknown = {}) => server.run(async () => (await cs2Service.calls())[id]!(server.server, input));

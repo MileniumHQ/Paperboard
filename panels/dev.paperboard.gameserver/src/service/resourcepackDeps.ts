@@ -1,4 +1,5 @@
-import { files as fileApi, readSettings, type ServiceContext } from "./api";
+import type { Server } from "./server";
+import { files as fileApi, readSettings } from "./api";
 import { parseProperties, stringifyServerProperties } from "../core/properties";
 import { apiFetch } from "../lib/userAgent";
 import { fetchJson } from "../software/http";
@@ -7,7 +8,7 @@ import { PANEL_ID, type GameServerState } from "./types";
 import type { ResourcePackDeps } from "./resourcepack";
 
 /** The daemon-backed dependencies of the resource pack service. */
-export function liveResourcePackDeps(ctx: ServiceContext<GameServerState>): ResourcePackDeps {
+export function liveResourcePackDeps(ctx: Server): ResourcePackDeps {
     // a missing file is empty; a failed read throws, so nothing treats an
     // unreadable file as empty and writes over it
     const readProperties = async () => {

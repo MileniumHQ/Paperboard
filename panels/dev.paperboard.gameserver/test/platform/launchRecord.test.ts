@@ -11,7 +11,7 @@ import { heapFit, oomKillCount } from "../../src/service/memory";
 import { afterCrash } from "../../src/service/automation";
 import { startServerInstance, stopServerInstance } from "../../src/service/lifecycle";
 import { minecraftCalls } from "../../src/games/minecraft/calls";
-import { testScope } from "../helpers/scope";
+import { testServer } from "../helpers/scope";
 import { inServer } from "../../src/service/scope";
 
 let daemon: TestDaemon;
@@ -34,10 +34,10 @@ const record = (launch: unknown, files: string[] = ["libraries"]) => ({
 const argv = (mc: McServer): string[] => JSON.parse(fs.readFileSync(path.join(mc.dir, "argv.json"), "utf8"));
 
 async function launchOnce(mc: McServer): Promise<string[]> {
-    await mc.run(() => startServerInstance(mc.scope.ctx));
-    await mc.scope.waitFor((s) => s.serverStatus === "online", "the server to come online");
+    await mc.run(() => startServerInstance(mc.server));
+    await mc.server.waitFor((s) => s.serverStatus === "online", "the server to come online");
     const exit = mc.nextExit();
-    await mc.run(() => stopServerInstance(mc.scope.ctx));
+    await mc.run(() => stopServerInstance(mc.server));
     await exit;
     return argv(mc);
 }
@@ -64,9 +64,9 @@ describe("the launch record", () => {
 
     test("the generic config patch cannot set what an install records", async () => {
         const call = minecraftCalls.updatePanelConfig!;
-        const scope = testScope({ directory: "servers/patch" });
+        const scope = testServer({ directory: "servers/patch" });
         for (const key of ["software", "version", "install"]) {
-            await expect(inServer(scope, () => call(scope.ctx, { patch: { [key]: "forge" } }))).rejects.toThrow(
+            await expect(inServer(scope, () => call(scope, { patch: { [key]: "forge" } }))).rejects.toThrow(
                 `"${key}" is set by installing a server version`,
             );
         }
@@ -101,18 +101,18 @@ describe("the launch record", () => {
             software: "neoforge",
             settings: { install: record({ type: "argfile", unix: `${NEO}/unix_args.txt`, windows: `${NEO}/win_args.txt` }) },
         });
-        await expect(mc.run(() => startServerInstance(mc.scope.ctx))).rejects.toThrow(/args\.txt is missing in the server folder/);
-        expect(mc.scope.ctx.state.serverStatus).toBe("offline");
-        expect(mc.scope.ctx.state.serverEntries.at(-1)?.content).toMatch(/args\.txt is missing in the server folder/);
+        await expect(mc.run(() => startServerInstance(mc.server))).rejects.toThrow(/args\.txt is missing in the server folder/);
+        expect(mc.server.state.serverStatus).toBe("offline");
+        expect(mc.server.state.serverEntries.at(-1)?.content).toMatch(/args\.txt is missing in the server folder/);
         expect(fs.existsSync(path.join(mc.dir, "argv.json"))).toBe(false);
     });
 
     test("a heap that cannot fit the machine is refused before Java starts", async () => {
         const total = os.totalmem() / 1024 ** 3;
         const mc = minecraftServer({ state: { ramAllocation: Math.ceil(total) + 1 } });
-        await expect(mc.run(() => startServerInstance(mc.scope.ctx))).rejects.toThrow("Lower Memory Allocation in Options to");
-        expect(mc.scope.ctx.state.serverStatus).toBe("offline");
-        expect(mc.scope.ctx.state.serverEntries.at(-1)?.content).toContain("Lower Memory Allocation in Options to");
+        await expect(mc.run(() => startServerInstance(mc.server))).rejects.toThrow("Lower Memory Allocation in Options to");
+        expect(mc.server.state.serverStatus).toBe("offline");
+        expect(mc.server.state.serverEntries.at(-1)?.content).toContain("Lower Memory Allocation in Options to");
         expect(fs.existsSync(path.join(mc.dir, "argv.json"))).toBe(false);
         // just below the machine: starts, with a warning
         expect(heapFit(4, 4.9 * 1024 ** 3)).toEqual({ warn: expect.stringContaining("may end the server when memory runs out") });
@@ -124,9 +124,9 @@ describe("the launch record", () => {
     });
 
     test("an exit-137 kill counted by the system as out of memory is named as such", () => {
-        const scope = testScope({ directory: "servers/oom" });
-        inServer(scope, () => afterCrash(scope.ctx, { whileStarting: false, exitCode: 137, outOfMemory: true }, async () => undefined));
-        expect(scope.ctx.state.serverEntries[0]?.content).toBe(
+        const scope = testServer({ directory: "servers/oom" });
+        inServer(scope, () => afterCrash(scope, { whileStarting: false, exitCode: 137, outOfMemory: true }, async () => undefined));
+        expect(scope.state.serverEntries[0]?.content).toBe(
             "[Server] The computer ran out of memory, so the system ended the server (exit code 137). Give the server less memory or close other programs.",
         );
         if (process.platform === "linux") {

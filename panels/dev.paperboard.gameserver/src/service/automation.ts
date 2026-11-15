@@ -1,4 +1,5 @@
-import { config, updateSettings, type ServiceContext, errorMessage } from "./api";
+import type { Server } from "./server";
+import { config, updateSettings, errorMessage } from "./api";
 import { serverLocal } from "./scope";
 import { currentGameService } from "../games/service";
 import { appendCapped, type GameServerState, PANEL_ID } from "./types";
@@ -67,7 +68,7 @@ export function automationView(settings: AutomationSettings): AutomationView {
     return { ...settings, timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone, canUpdate: Boolean(game.updateStatus && game.installUpdate) };
 }
 
-export async function writeAutomation(ctx: ServiceContext<GameServerState>, patch: Record<string, unknown>, restart: (ctx: ServiceContext<GameServerState>) => Promise<void>): Promise<AutomationSettings> {
+export async function writeAutomation(ctx: Server, patch: Record<string, unknown>, restart: (ctx: Server) => Promise<void>): Promise<AutomationSettings> {
     const next = validateAutomation({ ...(await readAutomation()), ...patch });
     await updateSettings({ [KEY]: next });
     local().settings = next;
@@ -111,7 +112,7 @@ function describeExitCode(code: number): string {
  * CRASH_LIMIT times inside CRASH_WINDOW_MS. A crash while starting never
  * restarts: the next start fails the same way. Says in the console either way.
  */
-export function afterCrash(ctx: ServiceContext<GameServerState>, exit: { whileStarting: boolean; exitCode: number | undefined; outOfMemory?: boolean }, start: (ctx: ServiceContext<GameServerState>, carry: GameServerState["serverEntries"]) => Promise<void>, now = Date.now()): void {
+export function afterCrash(ctx: Server, exit: { whileStarting: boolean; exitCode: number | undefined; outOfMemory?: boolean }, start: (ctx: Server, carry: GameServerState["serverEntries"]) => Promise<void>, now = Date.now()): void {
     const code = exit.exitCode === undefined ? "" : ` (exit code ${describeExitCode(exit.exitCode)})`;
     const say = (type: "error" | "warn" | "info", content: string) => ctx.setState((prev) => ({ serverEntries: appendCapped(prev.serverEntries, { type, content }) }));
     if (exit.outOfMemory) say("error", `[Server] The computer ran out of memory, so the system ended the server${exit.whileStarting ? " while it was starting" : ""}${code}. Give the server less memory or close other programs.`);
@@ -165,7 +166,7 @@ export function cancelAutomation(): void {
  * Arms the daily restart: players are warned RESTART_WARNINGS minutes ahead,
  * then a running server restarts. A server that is not running is left alone.
  */
-export function scheduleDailyRestart(ctx: ServiceContext<GameServerState>, restart: (ctx: ServiceContext<GameServerState>) => Promise<void>, now = new Date()): void {
+export function scheduleDailyRestart(ctx: Server, restart: (ctx: Server) => Promise<void>, now = new Date()): void {
     cancelDailyRestart();
     const hour = local().settings?.dailyRestart;
     if (!hour) return;
@@ -198,14 +199,14 @@ export function scheduleDailyRestart(ctx: ServiceContext<GameServerState>, resta
 }
 
 type Say = (type: "error" | "warn" | "info", content: string) => void;
-const consoleSay = (ctx: ServiceContext<GameServerState>): Say => (type, content) => ctx.setState((prev) => ({ serverEntries: appendCapped(prev.serverEntries, { type, content }) }));
+const consoleSay = (ctx: Server): Say => (type, content) => ctx.setState((prev) => ({ serverEntries: appendCapped(prev.serverEntries, { type, content }) }));
 
 /**
  * Before a start, installs a newer build when the game can update itself and
  * the setting is on. A check Steam can't answer is said and the server starts
  * as it is; a failed install fails the start.
  */
-export async function updateBeforeStart(ctx: ServiceContext<GameServerState>): Promise<void> {
+export async function updateBeforeStart(ctx: Server): Promise<void> {
     const game = currentGameService();
     if (!game.updateStatus || !game.installUpdate) return;
     const settings = local().settings ?? await readAutomation();
@@ -229,7 +230,7 @@ export async function updateBeforeStart(ctx: ServiceContext<GameServerState>): P
  * When one is, an empty server restarts for it at once; players get
  * UPDATE_WARNING_MS of warning first. The restart's start installs it.
  */
-export function scheduleUpdateChecks(ctx: ServiceContext<GameServerState>, restart: (ctx: ServiceContext<GameServerState>) => Promise<void>, every = UPDATE_CHECK_MS): void {
+export function scheduleUpdateChecks(ctx: Server, restart: (ctx: Server) => Promise<void>, every = UPDATE_CHECK_MS): void {
     if (local().updateTimer) clearTimeout(local().updateTimer!);
     local().updateTimer = null;
     const game = currentGameService();
