@@ -1,4 +1,5 @@
 import * as nodeFs from "node:fs/promises";
+import { SerialQueue } from "@mileniumhq/paperapi";
 import { writeFileAtomic } from "@mileniumhq/paperapi/fs";
 import type { ChatMessage, GameServerState } from "./types";
 import { unlessMissing } from "./failures";
@@ -79,7 +80,7 @@ export function historyWriter(file: () => Promise<string>, onError: (err: unknow
     let last: ServerHistory | null = null;
     let pending: ServerHistory | null = null;
     let timer: ReturnType<typeof setTimeout> | null = null;
-    let writing: Promise<void> = Promise.resolve();
+    const writes = new SerialQueue();
     let failed = false;
     let stopped = false;
     const flush = (): Promise<void> => {
@@ -87,8 +88,8 @@ export function historyWriter(file: () => Promise<string>, onError: (err: unknow
         timer = null;
         const next = pending;
         pending = null;
-        if (!next) return writing;
-        writing = writing.then(async () => {
+        if (!next) return writes.settled();
+        return writes.run(async () => {
             try {
                 await writeHistory(await file(), next);
                 failed = false;
@@ -97,7 +98,6 @@ export function historyWriter(file: () => Promise<string>, onError: (err: unknow
                 failed = true;
             }
         });
-        return writing;
     };
     return {
         /** The history the server opened with, so it is not written straight back. */
@@ -114,6 +114,6 @@ export function historyWriter(file: () => Promise<string>, onError: (err: unknow
         },
         flush,
         /** Ends the writes, as when the server is removed. */
-        async stop() { stopped = true; pending = null; if (timer) clearTimeout(timer); timer = null; await writing; },
+        async stop() { stopped = true; pending = null; if (timer) clearTimeout(timer); timer = null; await writes.settled(); },
     };
 }
