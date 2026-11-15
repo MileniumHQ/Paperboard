@@ -170,7 +170,9 @@ describe("failures are shown", () => {
             expect(await page.evaluate<unknown>("window.copied")).toBeUndefined();
 
             await runBlock("type-in-tab", { tab: "tab1", text: "echo copied-$((2+3))\n" });
-            await page.waitFor(screenShows(0, "copied-5"), "the command's output");
+            // the output shows before the shell marks the command's end; the
+            // end mark comes just before the next prompt, so wait for that
+            await page.waitFor(`/copied-5\\s*\\n\\$/.test((${screens})[0] ?? "")`, "the command to end at a new prompt");
             await menuItem("Copy Last Output");
             await page.waitFor(`window.copied?.trim() === "copied-5"`, "the last output on the clipboard");
             expect(page.exceptions).toEqual([]);
