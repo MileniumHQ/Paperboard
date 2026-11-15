@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { Client } from "discord.js";
-import { resolveMember, searchMembers } from "../src/discordOps";
+import { findMembers, MAX_FOUND_MEMBERS, MEMBER_SEARCH_TIMEOUT_MS, resolveMember, searchMembers } from "../src/discordOps";
 
 describe("member search", () => {
     test("a page of members that never arrives ends in an error that says why", async () => {
@@ -19,6 +19,23 @@ describe("member search", () => {
         );
         // the wait Discord is given is the one the message names
         expect(asked).toEqual([{ query: "ada", limit: 25, time: 4_000 }]);
+    });
+
+    test("Find Members gives Discord the same bounded wait, and says so when it runs out", async () => {
+        const asked: unknown[] = [];
+        const guild = {
+            id: "1",
+            name: "Home",
+            members: {
+                fetch: async (options: unknown) => {
+                    asked.push(options);
+                    throw Object.assign(new Error("Members didn't arrive in time."), { code: "GuildMembersTimeout" });
+                },
+            },
+        };
+        const bot = { guilds: { cache: new Map([["1", guild]]) } } as unknown as Client;
+        await expect(findMembers(bot, "@ada")).rejects.toThrow(`Discord didn't send the members within ${MEMBER_SEARCH_TIMEOUT_MS / 1000} seconds`);
+        expect(asked).toEqual([{ query: "ada", limit: MAX_FOUND_MEMBERS, time: MEMBER_SEARCH_TIMEOUT_MS }]);
     });
 
     test("any other failure is Discord's own reason, not a timeout", async () => {

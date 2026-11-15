@@ -100,7 +100,7 @@ export async function resolveGuild(
     const guilds = [...bot.guilds.cache.values()];
     if (guilds.length === 1) return guilds[0];
     throw new Error(
-        "This bot is in more than one server; provide the Server ID",
+        "This bot is in more than one server; say which one in Server",
     );
 }
 
@@ -145,7 +145,7 @@ export async function findMembers(bot: Client, query: string, guildId?: string):
     if (!guilds.length) throw new Error("This bot isn't in any server yet");
     const found = new Map<string, FoundMember>();
     for (const guild of guilds) {
-        const members = await guild.members.fetch({ query: q, limit: MAX_FOUND_MEMBERS });
+        const members = await searchMembers(guild, q, MAX_FOUND_MEMBERS);
         for (const member of members.values()) {
             if (found.has(member.id)) continue;
             found.set(member.id, {
