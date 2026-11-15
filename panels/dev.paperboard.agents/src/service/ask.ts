@@ -20,7 +20,7 @@ import { lineReader } from "./lines";
 /** under the 30 s a flow gives an action, so the ask fails with its own reason first */
 export const ASK_MS = 28_000;
 /** questions answered at once; past this, an ask is refused rather than queued past its flow's deadline */
-export const MAX_ASKING = 4;
+const MAX_ASKING = 4;
 const MAX_LINE = 16 * 1024 * 1024;
 
 export interface AskDeps {

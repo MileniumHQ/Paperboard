@@ -22,8 +22,8 @@ import type { ToolSpec } from "./computerTools";
 import type { McpServers } from "./mcpServers";
 import type { Toolset } from "./toolsets";
 
-export const DIRECT_MAX = 12;
-export const MAX_FOUND = 10;
+const DIRECT_MAX = 12;
+const MAX_FOUND = 10;
 // the harness prefixes `mcp__paperboard__` and caps a full tool name at 64
 const MAX_DIRECT_NAME = 46;
 const MAX_DIRECT_DESCRIPTION = 500;
@@ -31,8 +31,8 @@ const MAX_DIRECT_SCHEMA = 4000;
 const MAX_FOUND_SCHEMA = 4000;
 const MAX_FOUND_DESCRIPTION = 300;
 
-export const FIND_TOOLS = "mcp_find_tools";
-export const USE_TOOL = "mcp_use_tool";
+const FIND_TOOLS = "mcp_find_tools";
+const USE_TOOL = "mcp_use_tool";
 
 const META: ToolSpec[] = [
     {

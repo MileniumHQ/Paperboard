@@ -820,7 +820,7 @@ export function replyPayload(message: MessageReceived): Record<string, unknown> 
 }
 
 /** A Message as Blocks holds it: its conversation's id and its own. A message id is unique only in its conversation. */
-export function messageValue(conversation: string, id: string): string {
+function messageValue(conversation: string, id: string): string {
     return `${conversation}.${id}`;
 }
 

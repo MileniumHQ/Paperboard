@@ -12,10 +12,10 @@ import type { ToolSpec } from "./computerTools";
 import type { Toolset } from "./toolsets";
 import { errorText } from "../lib/failure";
 
-export const SIGN_IN_INSTRUCTIONS = `**Signing in:** when a site needs the user's account, open its sign-in page, \`look\`, then \`ask_to_sign_in\`. Never type a password, code or other sign-in detail yourself, even one from the chat: ask them to use the sign-in card instead.`;
-export const SIGN_IN_FLOW_INSTRUCTIONS = `**Signing in:** use only sites you're already signed in to. If one needs a sign-in, say so in your reply.`;
+const SIGN_IN_INSTRUCTIONS = `**Signing in:** when a site needs the user's account, open its sign-in page, \`look\`, then \`ask_to_sign_in\`. Never type a password, code or other sign-in detail yourself, even one from the chat: ask them to use the sign-in card instead.`;
+const SIGN_IN_FLOW_INSTRUCTIONS = `**Signing in:** use only sites you're already signed in to. If one needs a sign-in, say so in your reply.`;
 
-export const SIGN_IN_TOOLS: ToolSpec[] = [
+const SIGN_IN_TOOLS: ToolSpec[] = [
     {
         name: "ask_to_sign_in",
         description:

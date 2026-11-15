@@ -19,7 +19,7 @@ import { errorText } from "../lib/failure";
 /** what one command may print before the rest is cut, so a big `cat` can't flood the conversation */
 export const OUTPUT_CHARS = 30_000;
 /** how long one command may run */
-export const COMMAND_MS = 60_000;
+const COMMAND_MS = 60_000;
 
 type JustBash = typeof import("just-bash");
 
@@ -59,9 +59,9 @@ const DEFENSE: DefenseInDepthConfig = {
 // loopback and the local network out even with full internet access
 const NETWORK: NetworkConfig = { dangerouslyAllowFullInternetAccess: true, denyPrivateRanges: true };
 
-export const SHELL_INSTRUCTIONS = `**Shell:** \`bash\` for files, data and quick scripts in your home folder (~), which your browser and file tools share. It's not a whole computer: no installing, and no node, npm, python or git.`;
+const SHELL_INSTRUCTIONS = `**Shell:** \`bash\` for files, data and quick scripts in your home folder (~), which your browser and file tools share. It's not a whole computer: no installing, and no node, npm, python or git.`;
 
-export const SHELL_TOOLS: ToolSpec[] = [
+const SHELL_TOOLS: ToolSpec[] = [
     {
         name: "bash",
         description:
@@ -79,7 +79,7 @@ export const SHELL_TOOLS: ToolSpec[] = [
 ];
 
 /** What a command printed, as the agent reads it: output, then errors, then a failing exit code, cut to OUTPUT_CHARS. */
-export function shellOutput(r: { stdout: string; stderr: string; exitCode: number }): string {
+function shellOutput(r: { stdout: string; stderr: string; exitCode: number }): string {
     let text = r.stdout;
     if (r.stderr) text += `${text && !text.endsWith("\n") ? "\n" : ""}${r.stderr}`;
     if (r.exitCode !== 0) text += `${text && !text.endsWith("\n") ? "\n" : ""}[exit code ${r.exitCode}]`;

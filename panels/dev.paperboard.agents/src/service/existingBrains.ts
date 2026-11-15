@@ -18,7 +18,7 @@ export interface FindEnv {
     home: string;
 }
 
-export const currentFindEnv = (): FindEnv => ({ platform: process.platform, pathEnv: process.env.PATH ?? "", home: os.homedir() });
+const currentFindEnv = (): FindEnv => ({ platform: process.platform, pathEnv: process.env.PATH ?? "", home: os.homedir() });
 
 /** where a harness's own installer puts it, besides PATH */
 function installerDirs(harness: Harness, { platform, home }: FindEnv): string[] {

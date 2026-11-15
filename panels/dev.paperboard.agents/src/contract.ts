@@ -296,12 +296,12 @@ export interface RoutinesState {
     error: string | null;
 }
 
-export interface PagesState {
+interface PagesState {
     /** counts every change to the pages (made, shown, retitled, deleted), so open lists know to read again */
     revision: number;
 }
 
-export interface MemoryState {
+interface MemoryState {
     /** counts every change, the agent's and the user's, so open windows know to read again */
     revision: number;
     /** memory can't be read or written (an unreadable index is never replaced by an empty one) */
@@ -321,7 +321,7 @@ export interface BrainModel {
  * Where a brain stands on this computer. Each is a package Paperboard installs (codex, claude-code,
  * opencode); its sign-in is the harness's own login, kept in a folder only this panel uses.
  */
-export type BrainPhase =
+type BrainPhase =
     | "none" // not installed
     | "unsupported" // no build for this computer (see error)
     | "installing"

@@ -8,7 +8,7 @@ import { writeAtomic } from "./writeAtomic";
 
 export const TRANSCRIPT = "transcript.jsonl";
 /** the latest entries kept in memory; the file keeps every one */
-export const KEEP_IN_MEMORY = 500;
+const KEEP_IN_MEMORY = 500;
 const COMPACT_AT_BYTES = 4 * 1024 * 1024;
 
 /** A text in a conversation: the user's or the agent's, not an error or a card. */

@@ -10,7 +10,7 @@ import type { Mark } from "./pageScripts";
 import { errorText } from "../lib/failure";
 
 const LOAD_MS = 15_000;
-export const MAX_TABS = 16;
+const MAX_TABS = 16;
 const BUTTON_BITS = { left: 1, right: 2, middle: 4 } as const;
 
 /** A refusal the agent reads as the tool's answer. */

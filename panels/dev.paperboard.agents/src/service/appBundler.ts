@@ -135,7 +135,7 @@ function asFile(files: AppFiles, base: string): string | null {
 type Target = string | null | Target[] | { [condition: string]: Target };
 
 /** A package's `exports` for one subpath (".", "./client"), with the first condition that applies. */
-export function fromExports(exports: Target, sub: string, conditions: string[]): string | null {
+function fromExports(exports: Target, sub: string, conditions: string[]): string | null {
     const pick = (t: Target, star?: string): string | null => {
         if (typeof t === "string") return star === undefined ? t : t.replaceAll("*", star);
         if (Array.isArray(t)) {

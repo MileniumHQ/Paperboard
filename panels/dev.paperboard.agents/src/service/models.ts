@@ -21,7 +21,7 @@ import type { TurnHost } from "./conversation";
 import { lineReader } from "./lines";
 
 /** far past any real catalog; a file this big isn't one */
-export const MAX_CATALOG_BYTES = 4 * 1024 * 1024;
+const MAX_CATALOG_BYTES = 4 * 1024 * 1024;
 
 export interface HarnessHomes {
     /** Claude's config folder (CLAUDE_CONFIG_DIR) */

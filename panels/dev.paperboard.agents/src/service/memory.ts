@@ -24,7 +24,7 @@ const KEY = /^[a-z0-9][a-z0-9-]*$/;
 const INDEX_VERSION = 1;
 
 /** A refusal the agent and the user can read and act on. */
-export class MemoryError extends Error {}
+class MemoryError extends Error {}
 
 interface Index {
     version: number;
@@ -239,7 +239,7 @@ export class Memory {
     }
 }
 
-export const MEMORY_INSTRUCTIONS = `**Memory:** shared with the user, who can read and edit it. \`remember\` short, lasting facts about them and their world; \`save_note\` anything long or only sometimes needed; \`forget\` what's stale. Never store passwords, tokens or keys.`;
+const MEMORY_INSTRUCTIONS = `**Memory:** shared with the user, who can read and edit it. \`remember\` short, lasting facts about them and their world; \`save_note\` anything long or only sometimes needed; \`forget\` what's stale. Never store passwords, tokens or keys.`;
 
 function oneLine(v: unknown, what: string, max: number): string {
     if (typeof v !== "string") throw new MemoryError(`${what} must be text`);
@@ -257,7 +257,7 @@ function parseKey(v: unknown): string {
     return v;
 }
 
-export const MEMORY_TOOLS: ToolSpec[] = [
+const MEMORY_TOOLS: ToolSpec[] = [
     {
         name: "remember",
         description: `Remember a short durable fact (one line, at most ${L.factChars} characters). It will be in your context every turn.`,

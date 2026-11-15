@@ -294,7 +294,7 @@ function fieldsOf(form: RawField[] | undefined): ProviderField[] | null {
     return out;
 }
 
-export function toProvider(raw: RawIntegration): ProviderInfo {
+function toProvider(raw: RawIntegration): ProviderInfo {
     const id = String(raw.id);
     const connections = (raw.connections ?? []).filter((c) => c.type === "credential" && str(c.id)).map((c) => ({ id: String(c.id), label: str(c.label) ?? "API key" }));
     const methods: ProviderMethod[] = [];

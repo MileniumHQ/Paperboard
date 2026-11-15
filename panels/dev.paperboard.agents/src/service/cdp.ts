@@ -9,7 +9,7 @@ type Json = Record<string, any>;
 
 const MAX_WAITING = 256;
 
-export class CdpError extends Error {}
+class CdpError extends Error {}
 
 export class Cdp {
     private next = 0;

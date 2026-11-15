@@ -169,7 +169,7 @@ export const aiService = definePanelService({
     },
 });
 
-// the daemon gives a stopping service a few seconds: the VM and any running
+// the daemon gives a stopping service a few seconds: the browser and any running
 // turn are stopped and observed gone before the process exits
 for (const signal of ["SIGTERM", "SIGINT"] as const) {
     process.once(signal, () => {

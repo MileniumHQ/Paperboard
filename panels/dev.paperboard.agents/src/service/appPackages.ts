@@ -36,7 +36,7 @@ interface Packument {
 }
 
 /** "react", "react@19", "@tanstack/react-query@^5": its name and the version, range or tag asked for. */
-export function parseSpec(spec: unknown): { name: string; range: string | null } {
+function parseSpec(spec: unknown): { name: string; range: string | null } {
     if (typeof spec !== "string" || !spec.trim()) throw new Error("give a package, e.g. react or react@19");
     const s = spec.trim();
     const at = s.indexOf("@", s.startsWith("@") ? 1 : 0);

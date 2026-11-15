@@ -29,7 +29,7 @@ import { findExistingBrain, PROGRAMS, versionFrom } from "./existingBrains";
 import { SerialQueue } from "./serialQueue";
 import { HARNESS_NAMES } from "./harness";
 
-export const BRAIN_PACKAGES: Record<Harness, string> = { codex: "codex", "claude-code": "claude-code", opencode: "opencode" };
+const BRAIN_PACKAGES: Record<Harness, string> = { codex: "codex", "claude-code": "claude-code", opencode: "opencode" };
 
 /** the daemon's packages, plus what the brains need to know about them */
 export interface BrainPackages extends PackageHost {

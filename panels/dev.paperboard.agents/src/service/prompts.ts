@@ -14,9 +14,9 @@ import { errorText } from "../lib/failure";
 
 const L = LIMITS.prompt;
 
-export const PROMPT_INSTRUCTIONS = `**Asking:** \`ask_user\` for what only the user knows (a choice, an address, an API key), everything at once. A key, token or password goes in a secret field, never plain chat; a site's sign-in is \`ask_to_sign_in\`.`;
+const PROMPT_INSTRUCTIONS = `**Asking:** \`ask_user\` for what only the user knows (a choice, an address, an API key), everything at once. A key, token or password goes in a secret field, never plain chat; a site's sign-in is \`ask_to_sign_in\`.`;
 
-export const PROMPT_TOOLS: ToolSpec[] = [
+const PROMPT_TOOLS: ToolSpec[] = [
     {
         name: "ask_user",
         description:

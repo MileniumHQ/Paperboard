@@ -16,10 +16,10 @@ import { errorText } from "../lib/failure";
 const TEXT_BYTES = 64 * 1024;
 
 const FILES_WHEN = `**Files:** files the user sends show as [file <id>]. \`open_file\` to look at one, \`put_file_on_computer\` to work on it.`;
-export const FILES_INSTRUCTIONS = `${FILES_WHEN} To send a file, \`share_file\` it first if it's on your computer (you don't need to read it), then either pass its id in send_message's \`files\`, where it shows under the text for them to open, or put it in the text: \`![a short caption](attachment:<id>)\` on its own line shows it there, and \`[its name](attachment:<id>)\` in a sentence is a chip they press to open it. Images, video, audio, markdown, code and text files all open in the chat. An https image, or a YouTube link, shows the same way as a file.`;
-export const FILES_FLOW_INSTRUCTIONS = FILES_WHEN;
+const FILES_INSTRUCTIONS = `${FILES_WHEN} To send a file, \`share_file\` it first if it's on your computer (you don't need to read it), then either pass its id in send_message's \`files\`, where it shows under the text for them to open, or put it in the text: \`![a short caption](attachment:<id>)\` on its own line shows it there, and \`[its name](attachment:<id>)\` in a sentence is a chip they press to open it. Images, video, audio, markdown, code and text files all open in the chat. An https image, or a YouTube link, shows the same way as a file.`;
+const FILES_FLOW_INSTRUCTIONS = FILES_WHEN;
 
-export const FILE_TOOLS: ToolSpec[] = [
+const FILE_TOOLS: ToolSpec[] = [
     {
         name: "open_file",
         description: "Look at one of the conversation's files: an image is shown to you, a text file is read out. Anything else, put on your computer.",

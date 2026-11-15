@@ -10,14 +10,14 @@ import { errorText } from "../lib/failure";
 import { stopChild } from "./stopChild";
 import { lineReader } from "./lines";
 
-export const PROTOCOL_VERSION = "2025-06-18";
+const PROTOCOL_VERSION = "2025-06-18";
 export const MAX_MESSAGE = 4 * 1024 * 1024;
 const MAX_PENDING = 32;
 const MAX_TOOLS = 500;
 const MAX_PAGES = 10;
 const STDERR_KEEP = 2000;
 
-export const TIMEOUTS = { initialize: 20_000, list: 15_000, call: 120_000 } as const;
+const TIMEOUTS = { initialize: 20_000, list: 15_000, call: 120_000 } as const;
 
 export interface McpTool {
     name: string;
@@ -35,7 +35,7 @@ export interface McpWire {
     onEnd(cb: (reason: string) => void): void;
 }
 
-export class McpRpcError extends Error {
+class McpRpcError extends Error {
     constructor(
         message: string,
         readonly code: number,

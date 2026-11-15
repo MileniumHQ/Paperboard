@@ -36,7 +36,7 @@ const TIME = /^([01]\d|2[0-3]):([0-5]\d)$/;
 const STAMP = /^(\d{4})-(\d{2})-(\d{2})[T ]([01]\d|2[0-3]):([0-5]\d)$/;
 
 /** A refusal the agent and the user can read and act on. */
-export class RoutineError extends Error {}
+class RoutineError extends Error {}
 
 type Stored = Omit<Routine, "next">;
 
@@ -291,7 +291,7 @@ export class Routines {
     }
 }
 
-export const ROUTINE_INSTRUCTIONS = `**Routines:** \`add_routine\` when the user wants something done later or regularly ("text me at 9 every weekday"); when one is due, you get a turn that says so. \`remove_routine\` to stop one.`;
+const ROUTINE_INSTRUCTIONS = `**Routines:** \`add_routine\` when the user wants something done later or regularly ("text me at 9 every weekday"); when one is due, you get a turn that says so. \`remove_routine\` to stop one.`;
 
 const line = (r: Routine) =>
     `- [${r.id}] ${describeSchedule(r.schedule)}${r.next ? `, next ${localStamp(r.next)}` : ""}: ${r.what.length > 120 ? r.what.slice(0, 119) + "…" : r.what}` +
@@ -378,7 +378,7 @@ export function parseSchedule(a: Record<string, unknown>, now: number): RoutineS
     return { kind: "every", minutes };
 }
 
-export const ROUTINE_TOOLS: ToolSpec[] = [
+const ROUTINE_TOOLS: ToolSpec[] = [
     {
         name: "add_routine",
         description:

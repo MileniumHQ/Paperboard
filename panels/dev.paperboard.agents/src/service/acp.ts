@@ -12,7 +12,7 @@ import { errorText } from "../lib/failure";
 export type AcpEvent = TurnEvent | { type: "done" };
 
 /** OpenCode retries a provider that refuses (a rate limit) with growing waits, as long as it takes; past this, the turn fails with the provider's reason */
-export const RETRY_MS = 60_000;
+const RETRY_MS = 60_000;
 const RETRY_META = "opencode/retry";
 /** how long a cancelled prompt gets to end before the turn ends without it */
 const CANCEL_MS = 10_000;

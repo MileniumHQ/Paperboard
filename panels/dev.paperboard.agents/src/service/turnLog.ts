@@ -15,7 +15,7 @@ import path from "node:path";
 import type { Harness } from "../contract";
 import { errorText } from "../lib/failure";
 
-export const TURN_LOG_ENV = "PAPERBOARD_AGENT_LOG";
+const TURN_LOG_ENV = "PAPERBOARD_AGENT_LOG";
 
 /** The tokens and cost a harness reported for a turn, as far as it reports them. */
 export interface TurnUsage {
@@ -124,7 +124,7 @@ export function openTurnLog(dir: string, env: NodeJS.ProcessEnv = process.env): 
  * What one harness event says about the turn's tokens and cost, added to what's known. Claude Code's result is
  * the whole turn's; Codex reports each turn's usage when it completes; OpenCode (over ACP) its running cost.
  */
-export function addUsage(harness: Harness, ev: Record<string, any>, into: TurnUsage) {
+function addUsage(harness: Harness, ev: Record<string, any>, into: TurnUsage) {
     const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : undefined);
     const add = (k: keyof TurnUsage, v: unknown) => {
         const n = num(v);

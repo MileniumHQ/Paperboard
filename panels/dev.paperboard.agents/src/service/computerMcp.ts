@@ -21,7 +21,7 @@ const MAX_CONNECTIONS = 16;
 const REQUEST_TIMEOUT_MS = 15 * 60_000; // past the longest tool call (a sign-in waits for the user)
 
 /** the image types the agent can see */
-export const IMAGE_TYPES = ["image/png", "image/jpeg", "image/gif", "image/webp"] as const;
+const IMAGE_TYPES = ["image/png", "image/jpeg", "image/gif", "image/webp"] as const;
 export type ImageType = (typeof IMAGE_TYPES)[number];
 export const isImageType = (t: unknown): t is ImageType => (IMAGE_TYPES as readonly unknown[]).includes(t);
 

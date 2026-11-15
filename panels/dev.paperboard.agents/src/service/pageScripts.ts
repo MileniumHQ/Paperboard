@@ -12,7 +12,7 @@ export interface Mark {
     h: number;
 }
 
-export const MAX_MARKS = 120;
+const MAX_MARKS = 120;
 
 /**
  * What can be used on the page: its controls (by tag, role and editability), and elements that only look
@@ -120,7 +120,7 @@ export const MARKS_JS = String.raw`(() => {
     if (i < 0) kept.push(m);
     else if (kept[i].el.contains(m.el)) kept[i] = { ...m, name: m.name || kept[i].name, kind: m.kind === 'clickable' ? kept[i].kind : m.kind };
   }
-  const marks = kept.map(({ el, ...m }) => m).sort((a, b) => Math.floor(a.y / 12) - Math.floor(b.y / 12) || a.x - b.x).slice(0, ${120});
+  const marks = kept.map(({ el, ...m }) => m).sort((a, b) => Math.floor(a.y / 12) - Math.floor(b.y / 12) || a.x - b.x).slice(0, ${MAX_MARKS});
   return { marks, crossFrames, width: vw, height: vh, url: location.href, title: document.title };
 })()`;
 

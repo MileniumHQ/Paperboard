@@ -50,7 +50,7 @@ const TOOLS_SETTLE_MS = 300; // OpenCode reloads its tools 100 ms after they cha
 const QUOTE_CHARS = 80;
 const SHORT_ID = 6;
 /** tokens of context a thread can fill before it's compacted; or 3/4 of the model's window, if that's less */
-export const CONTEXT_BUDGET = 100_000;
+const CONTEXT_BUDGET = 100_000;
 const WINDOW_SHARE = 0.75;
 /** the latest messages a compacted conversation carries as they were */
 const CARRY_MESSAGES = 10;

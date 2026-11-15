@@ -18,9 +18,9 @@ import { errorText } from "../lib/failure";
 import { writeAtomic } from "./writeAtomic";
 
 /** how many are kept; past that the oldest go */
-export const KEPT = 100;
+const KEPT = 100;
 /** a file bigger than this isn't kept, and the checkpoint says so */
-export const FILE_BYTES = 100 * 1024 * 1024;
+const FILE_BYTES = 100 * 1024 * 1024;
 const NOTE_CHARS = 200;
 /** how many paths a summary names before it counts the rest */
 const NAMED = 20;
@@ -49,9 +49,9 @@ interface Changes {
     removed: string[];
 }
 
-export const CHECKPOINT_INSTRUCTIONS = `**Checkpoints:** \`checkpoint\` before a change that could go wrong, and once something works. \`restore\` undoes back to one.`;
+const CHECKPOINT_INSTRUCTIONS = `**Checkpoints:** \`checkpoint\` before a change that could go wrong, and once something works. \`restore\` undoes back to one.`;
 
-export const CHECKPOINT_TOOLS: ToolSpec[] = [
+const CHECKPOINT_TOOLS: ToolSpec[] = [
     {
         name: "checkpoint",
         description: "Keep what every file in your home folder is now, with a note, so it can be restored later. node_modules isn't kept; `add_package` reinstalls it.",

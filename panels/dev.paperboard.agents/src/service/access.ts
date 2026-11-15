@@ -38,13 +38,13 @@ const LIST_ENTRIES = 500;
 /** folders a search doesn't go into unless it's asked to start there */
 const SEARCH_SKIPS = new Set([".git", "node_modules"]);
 
-export const ACCESS_INSTRUCTIONS = `**The user's computer:** yours is for your work; theirs is only for when they want something on it fixed or changed (their files, projects or programs), with the \`user_computer_\` tools. \`request_access\` once per task, for everything it needs at the smallest scope that works (a project's folder, not their home), then end your turn: their answer starts the next. Use what's already allowed without asking again, and never ask again for something they refused unless they bring it up.`;
+const ACCESS_INSTRUCTIONS = `**The user's computer:** yours is for your work; theirs is only for when they want something on it fixed or changed (their files, projects or programs), with the \`user_computer_\` tools. \`request_access\` once per task, for everything it needs at the smallest scope that works (a project's folder, not their home), then end your turn: their answer starts the next. Use what's already allowed without asking again, and never ask again for something they refused unless they bring it up.`;
 
 /**
  * The user's computer as the agent needs to know it: which system, which version and which processor, since
  * commands, downloads and paths all depend on them. Read when asked, from what the system itself says.
  */
-export function describeComputer(platform: NodeJS.Platform = process.platform, arch: string = process.arch, read: (file: string) => string = (f) => fs.readFileSync(f, "utf8")): string {
+function describeComputer(platform: NodeJS.Platform = process.platform, arch: string = process.arch, read: (file: string) => string = (f) => fs.readFileSync(f, "utf8")): string {
     const cpu = ({ x64: "x86-64", arm64: "ARM64", ia32: "x86 (32-bit)", arm: "ARM (32-bit)" } as Record<string, string>)[arch] ?? arch;
     let system: string;
     if (platform === "linux") {
@@ -65,7 +65,7 @@ export function describeComputer(platform: NodeJS.Platform = process.platform, a
     return `The user's computer runs ${system} on ${cpu}. Pick commands, programs and downloads for it.`;
 }
 
-export const ACCESS_TOOLS: ToolSpec[] = [
+const ACCESS_TOOLS: ToolSpec[] = [
     {
         name: "request_access",
         description:

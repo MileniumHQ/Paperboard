@@ -26,7 +26,7 @@ const START_MS = 20_000;
 /** tool names told back per server */
 const NAMES_TOLD = 20;
 
-export const SERVER_INSTRUCTIONS = `**Tool servers (MCP):** when the user asks you to connect a service, find its official MCP server in the service's own docs and \`add_tool_server\`, saying which server, whose it is and what it lets you do. Prefer a hosted \`url\`; a \`command\` runs on their computer. Add only what they asked for, and change or remove one only when they ask.`;
+const SERVER_INSTRUCTIONS = `**Tool servers (MCP):** when the user asks you to connect a service, find its official MCP server in the service's own docs and \`add_tool_server\`, saying which server, whose it is and what it lets you do. Prefer a hosted \`url\`; a \`command\` runs on their computer. Add only what they asked for, and change or remove one only when they ask.`;
 
 const VALUES = {
     type: "object",
@@ -46,7 +46,7 @@ const SERVER_FIELDS = {
     reason: { type: "string", description: `With command: what it is and why you're adding it, for the card the user allows it on. Up to ${L.reasonChars} characters.` },
 };
 
-export const SERVER_TOOLS: ToolSpec[] = [
+const SERVER_TOOLS: ToolSpec[] = [
     {
         name: "list_tool_servers",
         description: "List your tool servers: how each is reached, the secrets it names (and whether they're saved), and how it's doing.",

@@ -10,7 +10,7 @@ import { errorText } from "../lib/failure";
 
 // How the agent texts is in the core of its instructions (harness.ts); this is only the tool.
 
-export const MESSAGE_TOOLS: ToolSpec[] = [
+const MESSAGE_TOOLS: ToolSpec[] = [
     {
         name: "send_message",
         description: "Text the user: adds one bubble to the conversation right away. A short heads-up before long work is its own message; the answer itself goes in one message, never split across several.",

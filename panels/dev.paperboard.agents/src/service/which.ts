@@ -38,7 +38,7 @@ function isProgram(file: string, platform: NodeJS.Platform): boolean {
  * global package's shim, %~dp0\node_modules\npm\bin\npx-cli.js in npm's own npx.cmd and npm.cmd,
  * where the script it runs is the last one named.
  */
-export function scriptFromCmdShim(shim: string, shimDir: string): string | undefined {
+function scriptFromCmdShim(shim: string, shimDir: string): string | undefined {
     const scripts = [...shim.matchAll(/%~?dp0%?\\([^"%\r\n]+?\.[cm]?js)\b/gi)];
     const script = scripts.at(-1)?.[1];
     return script ? path.join(shimDir, ...script.split("\\")) : undefined;

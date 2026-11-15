@@ -27,10 +27,10 @@ import { errorText } from "../lib/failure";
  * runs shell commands on this one as the user, which would step straight past that boundary.
  * A hard-coded panel id, which the repo rules discourage; the owner chose it.
  */
-export const WITHHELD_PANELS: ReadonlySet<string> = new Set(["dev.paperboard.terminal"]);
+const WITHHELD_PANELS: ReadonlySet<string> = new Set(["dev.paperboard.terminal"]);
 
 /** the most actions, or projects, one list shows */
-export const MAX_LISTED = 100;
+const MAX_LISTED = 100;
 // a list cuts descriptions short; one action asked for by name shows its
 // whole description: a program-facing action spells out its input format there
 const MAX_DESCRIPTION = 300;
@@ -82,7 +82,7 @@ export interface ActionsToolsetDeps {
     now?(): number;
 }
 
-export const ACTION_TOOLS: ToolSpec[] = [
+const ACTION_TOOLS: ToolSpec[] = [
     {
         name: "list_actions",
         description:

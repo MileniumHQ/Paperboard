@@ -119,12 +119,12 @@ const HEADERS = {
 };
 
 const PAGES_WHEN = `**Pages:** when the user would rather look at, use or keep something than read it in a text, make a page: an \`app\` to use (a planner, a tracker, a page of results) or a \`document\` to read, print or keep (a birthday card, a letter, a flyer, a report). \`start_page\`, write its files with \`bash\`, and open it in your browser to check it looks right.`;
-export const PAGES_INSTRUCTIONS = `${PAGES_WHEN} Then \`show_page\`, and again after a change worth seeing. Never write a page's address. \`delete_page\` only when the user asks or it's been replaced.`;
-export const PAGES_FLOW_INSTRUCTIONS = `${PAGES_WHEN} Name it by its title in your reply; the user opens it from their pages. \`delete_page\` only when the user asks or it's been replaced.`;
+const PAGES_INSTRUCTIONS = `${PAGES_WHEN} Then \`show_page\`, and again after a change worth seeing. Never write a page's address. \`delete_page\` only when the user asks or it's been replaced.`;
+const PAGES_FLOW_INSTRUCTIONS = `${PAGES_WHEN} Name it by its title in your reply; the user opens it from their pages. \`delete_page\` only when the user asks or it's been replaced.`;
 
 const PAGE_ARG = { page: { type: "string", description: "The page's name." } };
 
-export const PAGE_TOOLS: ToolSpec[] = [
+const PAGE_TOOLS: ToolSpec[] = [
     {
         name: "start_page",
         description:
