@@ -14,7 +14,7 @@ export default function UtilitiesDoc() {
             <PaperText preset="body" as="p">
                 PaperUI exports helper functions, two contexts, and its stylesheet entry points besides its components.
                 Reach for them when a panel needs a design token in code, a clipboard call that reports failure, bounded polling, or the layout and panel state that components share.
-                Everything on this page imports from <PaperCode>@mileniumhq/paperui</PaperCode> except the stylesheets.
+                Everything on this page imports from <PaperCode>@mileniumhq/paperui</PaperCode> except the stylesheets and the headless entry.
             </PaperText>
 
             <PaperText preset="subheader" as="h2" id="entry-points">Stylesheet entry points</PaperText>
@@ -46,6 +46,16 @@ import "@mileniumhq/paperui/panel.css";`}
             <PaperText preset="body" as="p">
                 A page that isn't a Solid app, such as one the host writes as plain HTML, can still look like PaperUI with the tokens alone. <PaperCode>@mileniumhq/paperui/colors.css</PaperCode> defines the color tokens for light and dark, and <PaperCode>@mileniumhq/paperui/tokens.css</PaperCode> every other token and the document rules, with no fonts and no component styles. <PaperCode>@mileniumhq/paperui/fonts/NunitoSans.woff2</PaperCode> is the body font, for the page's own <PaperCode>@font-face</PaperCode>.
             </PaperText>
+
+            <PaperText preset="subheader" as="h2" id="headless">Headless entry point</PaperText>
+            <PaperText preset="body" as="p">
+                <PaperCode>@mileniumhq/paperui/headless</PaperCode> loads without a page: no component and no CSS, only Solid.
+                It holds the <PaperLink href="/docs/paperui/state/">state helpers</PaperLink> and the <PaperLink href="#haptics">haptics</PaperLink>, for code a Bun test runs, such as a page's store or a launcher's logic.
+                Both entries share the same modules, so a value made through one is the value the other sees.
+            </PaperText>
+            <PaperCode block language="tsx">
+{`import { createRead, createSavedValue, haptic } from "@mileniumhq/paperui/headless";`}
+            </PaperCode>
 
             <PaperText preset="subheader" as="h2" id="theme-helpers">Theme helpers</PaperText>
             <PaperText preset="subheader" as="h3" id="getvarcss">getVarCss</PaperText>

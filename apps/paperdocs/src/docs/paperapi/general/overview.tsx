@@ -25,12 +25,41 @@ export default function PaperApiOverviewDoc() {
 {`bun add @mileniumhq/paperapi`}
             </PaperCode>
             <PaperText preset="body" as="p">
-                Every export comes from the package root. Each API has a long name and a short alias that point at the same object: <PaperCode>configApi</PaperCode> and <PaperCode>config</PaperCode>, <PaperCode>secretsApi</PaperCode> and <PaperCode>secrets</PaperCode>.
+                Each API has a long name and a short alias that point at the same object: <PaperCode>configApi</PaperCode> and <PaperCode>config</PaperCode>, <PaperCode>secretsApi</PaperCode> and <PaperCode>secrets</PaperCode>.
                 The short alias <PaperCode>process</PaperCode> shadows Node's global <PaperCode>process</PaperCode>, so import <PaperCode>processApi</PaperCode> in a service.
             </PaperText>
             <PaperCode block language="tsx">
 {`import { configApi, secretsApi, processApi } from "@mileniumhq/paperapi";`}
             </PaperCode>
+
+            <PaperText preset="subheader" as="h2" id="entry-points">Entry points</PaperText>
+            <PaperText preset="body" as="p">
+                The APIs come from the package root. Code that needs Node's network or file system modules has an entry of its own, so a page never bundles them.
+            </PaperText>
+            <PaperTable>
+                <thead>
+                    <tr>
+                        <th>Import</th>
+                        <th>Runs in</th>
+                        <th>What it holds</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr><td><PaperCode>@mileniumhq/paperapi</PaperCode></td><td>Page, service, widget</td><td>Every API on this page, the contract and the <PaperLink href="/docs/paperapi/helpers/">helpers</PaperLink>.</td></tr>
+                    <tr><td><PaperCode>@mileniumhq/paperapi/net</PaperCode></td><td>Service</td><td><PaperLink href="/docs/paperapi/public-fetch/">fetchPublic</PaperLink> and <PaperCode>createPictureFetch</PaperCode>: fetches of untrusted addresses under the public-address rule.</td></tr>
+                    <tr><td><PaperCode>@mileniumhq/paperapi/fs</PaperCode></td><td>Service</td><td><PaperLink href="/docs/paperapi/helpers/#write-file-atomic">writeFileAtomic</PaperLink>: replacing a file whole or not at all.</td></tr>
+                    <tr><td><PaperCode>@mileniumhq/paperapi/protocol</PaperCode></td><td>Anywhere</td><td>The <PaperLink href="/docs/paperapi/connection/#transport">wire protocol</PaperLink>: each daemon method's params and answer, and each event's payload.</td></tr>
+                </tbody>
+            </PaperTable>
+            <PaperCode block language="tsx">
+{`import { problemsApi } from "@mileniumhq/paperapi";
+import { fetchPublic } from "@mileniumhq/paperapi/net";
+import { writeFileAtomic } from "@mileniumhq/paperapi/fs";
+import { RPC, readResult } from "@mileniumhq/paperapi/protocol";`}
+            </PaperCode>
+            <PaperText preset="body" as="p">
+                The package also exports modules by name, such as <PaperCode>@mileniumhq/paperapi/panelPath</PaperCode>. They are Paperboard's own: its daemon, app and Origami import them from source. A panel doesn't, and they change without notice.
+            </PaperText>
 
             <PaperText preset="subheader" as="h2" id="contexts">Where code runs</PaperText>
             <PaperText preset="body" as="p">
