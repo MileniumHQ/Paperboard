@@ -33,27 +33,8 @@ export interface RawModrinthProject {
     project_type?: unknown;
 }
 
-export interface ModrinthFile {
-    url: string;
-    filename: string;
-    size: number | null;
-    sha1: string;
-    sha512: string;
-}
-
-export interface ModrinthVersion {
-    id: string;
-    projectId: string;
-    versionNumber: string;
-    name: string;
-    versionType: string;
-    loaders: string[];
-    gameVersions: string[];
-    datePublished: string;
-    files: ModrinthFile[];
-    /** the file Modrinth marks primary, else the first; null when none is verifiable */
-    primary: ModrinthFile | null;
-}
+export type { ModrinthFile, ModrinthVersion } from "../service/contract";
+import type { ModrinthFile, ModrinthVersion } from "../service/contract";
 
 export interface ModrinthProjectMeta {
     projectId: string;

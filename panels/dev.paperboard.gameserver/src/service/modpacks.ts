@@ -69,17 +69,8 @@ export interface ModpackDeps {
     fs?: PackFs;
 }
 
-export interface ModpackInstallOutcome {
-    title: string;
-    versionNumber: string;
-    mcVersion: string;
-    loaderVersion: string;
-    /** whether the server software was switched to the pack's versions */
-    switchedServer: boolean;
-    /** pack paths Paperboard keeps as they are (server.properties, the world) */
-    kept: string[];
-    warning?: string;
-}
+export type { ModpackInstallOutcome } from "./contract";
+import type { ModpackInstallOutcome } from "./contract";
 
 function fsOf(deps: ModpackDeps): PackFs {
     return deps.fs ?? (nodeFs as unknown as PackFs);

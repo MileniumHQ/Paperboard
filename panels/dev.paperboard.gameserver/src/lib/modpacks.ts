@@ -1,10 +1,9 @@
 import { minecraftSoftware } from "../games/minecraft/index";
-import { serverBridge, serverSoftware } from "./server";
-import { CALLS } from "../service/contract";
+import { serverSoftware } from "./server";
+import { serverCalls } from "./api";
 import { searchProjects, type ModrinthHit } from "./modrinth";
 import { MODPACK_LOADER, type ModpackRecord } from "../core/modpack";
-import type { ModpackInstallOutcome } from "../service/modpacks";
-import type { ModrinthVersion } from "../core/modrinth";
+import type { ModpackInstallOutcome, ModrinthVersion } from "../service/contract";
 
 export type { ModpackInstallOutcome, ModpackRecord, ModrinthHit, ModrinthVersion };
 
@@ -27,15 +26,12 @@ export async function searchModpacks(query: string, signal?: AbortSignal): Promi
     });
 }
 
-export const readModpack = () => serverBridge.call<{ modpack: ModpackRecord | null }>(CALLS.readModpack);
+export const readModpack = async () => serverCalls().readModpack();
 
-export const listModpackVersions = (projectId: string) =>
-    serverBridge.call<ModrinthVersion[]>(CALLS.listModpackVersions, { projectId });
+export const listModpackVersions = async (projectId: string) => serverCalls().listModpackVersions({ projectId });
 
-// downloading and placing a pack runs for minutes: the call is waited out,
-// not cut off at the bridge's 30 s default (progress arrives through state)
-export const installModpack = (projectId: string, versionId: string) =>
-    serverBridge.call<ModpackInstallOutcome>(CALLS.installModpack, { projectId, versionId }, { timeoutMs: null });
+// downloading and placing a pack runs for minutes: the contract waits it out
+// (progress arrives through state)
+export const installModpack = async (projectId: string, versionId: string) => serverCalls().installModpack({ projectId, versionId });
 
-export const removeModpack = () =>
-    serverBridge.call<{ removed: number; forgotten?: true }>(CALLS.removeModpack, {}, { timeoutMs: null });
+export const removeModpack = async () => serverCalls().removeModpack();

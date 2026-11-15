@@ -2,10 +2,11 @@
 // service and the panel UI import from here so a rename can never silently
 // break the other half of the bridge.
 //
-// Every UI→service call goes through serverBridge.call(CALLS.*), never a
-// bare string. A name used by the UI that is missing here is a compile
-// error, not a silent failure at runtime (which is how eight
-// working-looking buttons did nothing).
+// The calls moved onto the panel's contract (gameServerContract) are typed
+// on both sides and checked before their handler runs; the rest still go
+// through serverBridge.call(CALLS.*) until they move too.
+import { defineContract, shape, type Infer } from "@mileniumhq/paperapi";
+import { parseModpackRecord } from "../core/modpack";
 
 export const PANEL_ID = "dev.paperboard.gameserver";
 
@@ -123,3 +124,56 @@ export const TRIGGER_IDS = {
 } as const;
 
 export type TriggerId = (typeof TRIGGER_IDS)[keyof typeof TRIGGER_IDS];
+
+const modrinthFile = shape.object({
+    url: shape.text(),
+    filename: shape.text(),
+    size: shape.nullable(shape.number()),
+    sha1: shape.text(),
+    sha512: shape.text(),
+});
+export type ModrinthFile = Infer<typeof modrinthFile>;
+
+const modrinthVersion = shape.object({
+    id: shape.text(),
+    projectId: shape.text(),
+    versionNumber: shape.text(),
+    name: shape.text(),
+    versionType: shape.text(),
+    loaders: shape.list(shape.text()),
+    gameVersions: shape.list(shape.text()),
+    datePublished: shape.text(),
+    files: shape.list(modrinthFile),
+    /** the file Modrinth marks primary, else the first; null when none is verifiable */
+    primary: shape.nullable(modrinthFile),
+});
+export type ModrinthVersion = Infer<typeof modrinthVersion>;
+
+const modpackInstallOutcome = shape.object({
+    title: shape.text(),
+    versionNumber: shape.text(),
+    mcVersion: shape.text(),
+    loaderVersion: shape.text(),
+    /** whether the server software was switched to the pack's versions */
+    switchedServer: shape.boolean(),
+    /** pack paths Paperboard keeps as they are (server.properties, the world) */
+    kept: shape.list(shape.text()),
+    warning: shape.optional(shape.text()),
+});
+export type ModpackInstallOutcome = Infer<typeof modpackInstallOutcome>;
+
+/**
+ * The page's calls that are on the contract: each is about the server the
+ * page is open on, which its client is made with. Installing a pack and
+ * removing one run for minutes; their progress arrives through the server's
+ * state (modpackProgress).
+ */
+export const gameServerContract = defineContract(PANEL_ID, {
+    scope: { server: shape.text() },
+    calls: {
+        readModpack: { output: shape.object({ modpack: shape.read(parseModpackRecord) }) },
+        listModpackVersions: { input: shape.object({ projectId: shape.text() }), output: shape.list(modrinthVersion) },
+        installModpack: { input: shape.object({ projectId: shape.text(), versionId: shape.text() }), output: modpackInstallOutcome, timeoutMs: null },
+        removeModpack: { output: shape.object({ removed: shape.number(), forgotten: shape.optional(shape.oneOf(true)) }), timeoutMs: null },
+    },
+});

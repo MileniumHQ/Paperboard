@@ -1,5 +1,6 @@
 import { minecraftSoftware } from "./index";
 import { sharedCalls, type ServerCalls } from "../../service/calls";
+import type { GameContractCalls } from "../serviceTypes";
 import { files as fileApi, type ServiceContext, errorMessage } from "../../service/api";
 import { sendServerCommand } from "../../service/lifecycle";
 import { waitForLine } from "./saving";
@@ -186,6 +187,25 @@ export async function playerForUuid(uuid: unknown): Promise<string> {
 export function gameruleNameOptions(version: string): { label: string; value: string }[] {
     return gamerulesFor(version).map((rule) => ({ label: rule.name, value: rule.name }));
 }
+
+/** A Minecraft server's modpack: what the page's Modpacks tab asks, through the panel's contract. */
+export const modpackCalls: Pick<GameContractCalls, "readModpack" | "listModpackVersions" | "installModpack" | "removeModpack"> = {
+    readModpack: async (_input, ctx) => ({ modpack: await readModpack(liveModpackDeps(ctx)) }),
+    listModpackVersions: ({ projectId }, ctx) => listModpackVersions(projectId, minecraftSoftware(ctx.state.serverSoftware), liveModpackDeps(ctx)),
+    installModpack: async ({ projectId, versionId }, ctx) => {
+        // checked and claimed with no await between: a start cannot slip in
+        if (ctx.state.serverStatus !== "offline") {
+            throw new Error("Stop the server before installing a modpack");
+        }
+        return withInstallLock(() => installModpack({ projectId, versionId }, minecraftSoftware(ctx.state.serverSoftware), liveModpackDeps(ctx)));
+    },
+    removeModpack: async (_input, ctx) => {
+        if (ctx.state.serverStatus !== "offline") {
+            throw new Error("Stop the server before removing the modpack");
+        }
+        return withInstallLock(() => removeModpack(liveModpackDeps(ctx)));
+    },
+};
 
 export const minecraftCalls: ServerCalls = {
     ...sharedCalls,
@@ -420,29 +440,11 @@ export const minecraftCalls: ServerCalls = {
         await removeResourcePack(liveResourcePackDeps(ctx));
         return true;
     },
-    [CALLS.readModpack]: async (ctx: ServiceContext<GameServerState>) => ({ modpack: await readModpack(liveModpackDeps(ctx)) }),
-    [CALLS.listModpackVersions]: async (ctx: ServiceContext<GameServerState>, inputs: { projectId?: string }) =>
-        listModpackVersions(inputs?.projectId, minecraftSoftware(ctx.state.serverSoftware), liveModpackDeps(ctx)),
-    [CALLS.installModpack]: async (ctx: ServiceContext<GameServerState>, inputs: { projectId?: string; versionId?: string }) => {
-        // checked and claimed with no await between: a start cannot slip in
-        if (ctx.state.serverStatus !== "offline") {
-            throw new Error("Stop the server before installing a modpack");
-        }
-        const outcome = await withInstallLock(() =>
-            installModpack(
-                { projectId: inputs?.projectId, versionId: inputs?.versionId },
-                minecraftSoftware(ctx.state.serverSoftware),
-                liveModpackDeps(ctx),
-            ),
-        );
-        return outcome;
-    },
-    [CALLS.removeModpack]: async (ctx: ServiceContext<GameServerState>) => {
-        if (ctx.state.serverStatus !== "offline") {
-            throw new Error("Stop the server before removing the modpack");
-        }
-        return withInstallLock(() => removeModpack(liveModpackDeps(ctx)));
-    },
+    // the contract's calls, here too for the panel's blocks
+    [CALLS.readModpack]: (ctx: ServiceContext<GameServerState>) => modpackCalls.readModpack(undefined, ctx),
+    [CALLS.listModpackVersions]: (ctx: ServiceContext<GameServerState>, inputs: { projectId: string }) => modpackCalls.listModpackVersions(inputs, ctx),
+    [CALLS.installModpack]: (ctx: ServiceContext<GameServerState>, inputs: { projectId: string; versionId: string }) => modpackCalls.installModpack(inputs, ctx),
+    [CALLS.removeModpack]: (ctx: ServiceContext<GameServerState>) => modpackCalls.removeModpack(undefined, ctx),
     [CALLS.uploadPlugins]: async (ctx: ServiceContext<GameServerState>, inputs: { stage?: string }) =>
         withInstallLock(() => uploadPlugins(inputs?.stage, minecraftSoftware(ctx.state.serverSoftware), liveUploadDeps(ctx))),
     [CALLS.uploadDatapacks]: async (ctx: ServiceContext<GameServerState>, inputs: { stage?: string }) => {

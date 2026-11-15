@@ -5,6 +5,9 @@ import {
     config,
     fileApi,
     type ServiceContext,
+    type CallHandlers,
+    type ContractContext,
+    callBlockId,
     type BlocksHandle,
     SerialQueue,
 } from "@mileniumhq/paperapi";
@@ -25,7 +28,8 @@ import { announceChanges, bindBlocks, fireBackupEnded, fireTrigger, mergeBlocks,
 import { SERVER_EVENTS, serverType, serversBlocks, type ServersBlocksHost } from "./service/serversBlocks";
 import { processApi as scopedProcess, errorMessage } from "./service/api";
 import { type GameServerState, appendCapped } from "./service/types";
-import { CALLS, PICTURE_CALL, SETUP_CALLS } from "./service/contract";
+import { CALLS, PICTURE_CALL, SETUP_CALLS, gameServerContract } from "./service/contract";
+import type { GameContractCalls } from "./games/serviceTypes";
 import { pictureCall } from "./service/pictures";
 import { handleProcessData, handleProcessExit, stopServerInstance, cancelReadiness, restartServerInstance, startServerInstance } from "./service/lifecycle";
 import { cancelAutomation, readAutomation, scheduleDailyRestart, scheduleUpdateChecks } from "./service/automation";
@@ -54,7 +58,7 @@ export interface ServersState extends Record<string, unknown> {
 }
 const entries = new Map<string, ServerScope>();
 let saved: ServersConfig = readServersConfig(null);
-let rootContext: ServiceContext<ServersState>;
+let rootContext: ContractContext<typeof gameServerContract, ServersState>;
 // server changes, and the config writes inside them, one at a time
 const serial = new SerialQueue().run;
 const configWrites = new SerialQueue().run;
@@ -150,6 +154,24 @@ const ICON_CALLS: readonly string[] = [CALLS.setServerIcon, CALLS.removeServerIc
 async function serverCall(name: string, input: unknown): Promise<unknown> {
     if (!input || typeof input !== "object" || Array.isArray(input)) throw new Error(`${name} needs the server it is for`);
     const { server, ...rest } = input as Record<string, unknown>;
+    const call = (scope: ServerScope) => {
+        const found = gameCalls.get(scope.server.game)?.[name];
+        if (!found) throw new Error(`${gameFor(scope.server.game).name} has no call "${name}"`);
+        return found(scope.ctx, rest);
+    };
+    return onServer(server, name, call);
+}
+/** One of the contract's calls, answered by the game of the server the page is open on. */
+function contractCall<K extends keyof GameContractCalls>(name: K, id: string) {
+    return (input: Parameters<GameContractCalls[K]>[0], _ctx: unknown, { server }: { server: string }) =>
+        onServer(server, id, async (scope) => {
+            const answer = (await gameServiceFor(scope.server.game).contractCalls?.())?.[name];
+            if (!answer) throw new Error(`${gameFor(scope.server.game).name} has no call "${id}"`);
+            return answer(input, scope.ctx);
+        });
+}
+/** Runs work for one server's call: the server must be set up and its game must answer the call. */
+async function onServer<T>(server: unknown, name: string, work: (scope: ServerScope) => T | Promise<T>): Promise<Awaited<T>> {
     const scope = requireInitialized(requireServer(server));
     if (scope.removing) throw new Error("This server was removed or is being removed");
     assertGameCall(gameFor(scope.server.game), {
@@ -157,11 +179,9 @@ async function serverCall(name: string, input: unknown): Promise<unknown> {
         software: scope.ctx.state.serverSoftware,
         version: scope.ctx.state.serverVersion,
     }, name);
-    const call = gameCalls.get(scope.server.game)?.[name];
-    if (!call) throw new Error(`${gameFor(scope.server.game).name} has no call "${name}"`);
     scope.activeOperations++;
     try {
-        const result = await inServer(scope, () => call(scope.ctx, rest));
+        const result = await inServer(scope, () => work(scope));
         if (ICON_CALLS.includes(name)) {
             icons.set(
                 scope.server.id,
@@ -198,7 +218,10 @@ function createScope(server: StoredServer): ServerScope {
                 publish(scope);
                 histories.get(server.id)?.changed(state);
             },
-            emit: (event, payload) => rootContext.emit(event, { server: server.id, payload }),
+            // the panel's contract declares no events: a server's page hears its state
+            emit: (event: string): void => {
+                throw new Error(`${server.name} has no event "${event}" to tell its page`);
+            },
         } as ServiceContext<GameServerState>,
         trigger(id, output) {
             const failed = (what: string, err: unknown) => report(scope.ctx, what, err);
@@ -463,15 +486,24 @@ const managementCalls: RootCalls = {
     [SETUP_CALLS.retryInitialize]: async (_ctx, { server }) => (await retryInitialize(server), true),
     [PICTURE_CALL]: (_ctx, input) => pictureCall(input),
 };
-/** One root call for each name any game answers, which asks the server in its input. */
-const callNames = [...new Set([...gameCalls.values()].flatMap((calls) => Object.keys(calls)))];
+/** The calls on the panel's contract: typed, and checked before they run. */
+const contractCalls: CallHandlers<typeof gameServerContract> = {
+    readModpack: contractCall("readModpack", CALLS.readModpack),
+    listModpackVersions: contractCall("listModpackVersions", CALLS.listModpackVersions),
+    installModpack: contractCall("installModpack", CALLS.installModpack),
+    removeModpack: contractCall("removeModpack", CALLS.removeModpack),
+};
+const onContract = new Set<string>(Object.keys(gameServerContract.calls).map(callBlockId));
+/** TRANSITIONAL (contract): one untyped root call for each name any game answers that is not on the contract yet. */
+const callNames = [...new Set([...gameCalls.values()].flatMap((calls) => Object.keys(calls)))].filter((name) => !onContract.has(callBlockId(name)));
 for (const name of callNames) {
     if (Object.hasOwn(managementCalls, name)) throw new Error(`The call "${name}" is both a server's and a management call`);
 }
 export const gameServerService = definePanelService({
-    id: PANEL_ID,
+    contract: gameServerContract,
     state: { servers: [], serversError: null } as ServersState,
-    calls: {
+    calls: contractCalls,
+    untypedCalls: {
         ...managementCalls,
         ...Object.fromEntries(callNames.map((name): [string, RootCalls[string]] => [name, (_ctx, input) => serverCall(name, input)])),
     },

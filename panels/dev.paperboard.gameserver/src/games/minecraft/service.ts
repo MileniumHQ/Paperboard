@@ -18,6 +18,7 @@ export const minecraftService: GameService = {
     primaryProcessId: "mc-server",
     initialState: initialServerState,
     calls: async () => (await import("./calls")).minecraftCalls,
+    contractCalls: async () => (await import("./calls")).modpackCalls,
     blocks: async (ctx) => (await import("./blocks")).minecraftBlocks(ctx),
     blockTypes: async () => (await import("./blocks")).minecraftBlockTypes,
     async initialize(ctx, running) {

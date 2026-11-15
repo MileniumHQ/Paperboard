@@ -177,7 +177,7 @@ describe("software installs", () => {
         installFakeJava("java-21");
         const { serverBridge } = await import("../src/lib/server");
         const { createInstallRun } = await import("../src/lib/installRun");
-        const modpacks = await import("../src/lib/modpacks");
+        const { gameServerContract } = await import("../src/service/contract");
         const calls: { action: string; options: unknown }[] = [];
         // the bridge's one entry point, recorded: what each call asks of the transport
         serverBridge.call = (async (action: string, _params?: unknown, options?: unknown) => {
@@ -188,12 +188,9 @@ describe("software installs", () => {
             await createInstallRun().run("neoforge", "1.21.1");
             dispose();
         });
-        await modpacks.installModpack("AANobbMI", "abc123");
-        await modpacks.removeModpack();
-        expect(calls).toEqual([
-            { action: CALLS.installServerVersion, options: { timeoutMs: null } },
-            { action: CALLS.installModpack, options: { timeoutMs: null } },
-            { action: CALLS.removeModpack, options: { timeoutMs: null } },
-        ]);
+        expect(calls).toEqual([{ action: CALLS.installServerVersion, options: { timeoutMs: null } }]);
+        // the modpack calls are on the contract, which the page's client waits out
+        expect(gameServerContract.calls.installModpack.timeoutMs).toBeNull();
+        expect(gameServerContract.calls.removeModpack.timeoutMs).toBeNull();
     });
 });

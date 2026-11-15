@@ -5,6 +5,8 @@ import { sameData } from "@mileniumhq/paperui/headless";
 import {
     createPanelBridge as rawBridge,
     serviceApi,
+    serviceClient,
+    type ServiceCalls,
     type BlockCallOptions,
     fileApi as rawFiles,
     config as rawConfig,
@@ -19,6 +21,7 @@ import {
 } from "../core/portNames";
 import { scopedFiles } from "../scopedFiles";
 import { PANEL_ID, serverStateKey, serverStateOf } from "../servers";
+import { gameServerContract } from "../service/contract";
 import type { ServersState, ServerSummary } from "../service";
 export const selectedServerId =
     typeof window === "undefined" ? null : new URL(window.location.href).searchParams.get("server");
@@ -66,6 +69,12 @@ export const portApi: typeof rawPorts = {
         return (await rawPorts.list(panel, scope)).filter((claim) => names.includes(claim.name));
     },
 };
+const selectedService = selectedServerId ? serviceClient(gameServerContract, { server: selectedServerId }) : null;
+/** The selected server's calls on the panel's contract: each tells the service which server it is for. */
+export function serverCalls(): ServiceCalls<typeof gameServerContract> {
+    if (!selectedService) throw new Error("Choose a server first");
+    return selectedService.calls;
+}
 /** One of the selected server's calls: the service is told which server it is for. */
 function callServer<T>(name: string, input?: Record<string, unknown>, options?: BlockCallOptions): Promise<T> {
     if (!selectedServerId) return Promise.reject(new Error("Choose a server first"));
