@@ -102,7 +102,7 @@ export function flowActions(host: FlowHost, conversations: ConversationChoice[])
             name: "Send Message to Agent",
             category: CATEGORY,
             description:
-                "Texts the agent in its current conversation and goes on without waiting. Its reply starts When Agent Replies, as text and a list of files. Answering a flow, the agent can't sign in anywhere or show apps, and it waits for anything you're already asking it in the chat.",
+                "Texts the agent in its current conversation and goes on without waiting. Its reply starts When Agent Replies, as text and a list of files. Answering a flow, the agent can't sign in anywhere or show pages, and it waits for anything you're already asking it in the chat.",
             template: "Text the agent {text}",
             inputs: {
                 text: { type: "string", label: "Message", required: true, placeholder: "Message", maxLength: LIMITS.message, multiline: true },

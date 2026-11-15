@@ -80,8 +80,8 @@ export async function startComputerMcp(tools: Pick<Toolbox, "list" | "call">): P
                     const err = e as Error & { code?: number };
                     reply(res, 200, rpcError(msg.id, err.code ?? -32603, err.message));
                 }
-            })
-            .catch((e: Error) => reply(res, 413, { error: e.message }));
+            }, (e: Error) => reply(res, e instanceof TooLarge ? 413 : 400, { error: e.message }))
+            .catch((e: Error) => reply(res, 500, { error: errorText(e) }));
     });
     server.maxConnections = MAX_CONNECTIONS;
     server.requestTimeout = REQUEST_TIMEOUT_MS;
@@ -138,6 +138,8 @@ async function handle(msg: Json, tools: Pick<Toolbox, "list" | "call">): Promise
     }
 }
 
+class TooLarge extends Error {}
+
 function readBody(req: IncomingMessage): Promise<string> {
     return new Promise((ok, fail) => {
         const chunks: Buffer[] = [];
@@ -146,7 +148,7 @@ function readBody(req: IncomingMessage): Promise<string> {
             size += c.length;
             if (size > MAX_BODY) {
                 req.destroy();
-                fail(new Error("request too large"));
+                fail(new TooLarge("request too large"));
                 return;
             }
             chunks.push(c);
