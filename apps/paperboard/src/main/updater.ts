@@ -184,25 +184,22 @@ export async function checkForUpdatesNow(): Promise<void> {
 // every paired computer's panels, packages and system, eight at a time; a
 // computer that doesn't answer all three is counted, and said
 async function pingComputers(): Promise<{ reached: ComputerUpdateState[]; unavailable: number }> {
-    const computers = connectionPool.listAll();
     const reached: ComputerUpdateState[] = [];
     let unavailable = 0;
-    for (let offset = 0; offset < computers.length; offset += 8) {
-        await Promise.all(computers.slice(offset, offset + 8).map(async ({ id, name }) => {
-            try {
-                const client = connectionPool.getClient(id);
-                const [panels, packages, sysInfo] = await Promise.all([
-                    withTimeout(client.listPanels(), PING_TIMEOUT_MS),
-                    withTimeout(client.getPackageIndex(), PING_TIMEOUT_MS),
-                    withTimeout(client.getSystemInfo(), PING_TIMEOUT_MS),
-                ]);
-                reached.push({ id, name, isLocal: id === "local", panels, packages, sysInfo });
-            } catch (err) {
-                unavailable++;
-                logger.warn(`[Updater] could not reach ${name} (${id}) to check for updates:`, err);
-            }
-        }));
-    }
+    await connectionPool.forEachComputer(async ({ id, name }) => {
+        try {
+            const client = connectionPool.getClient(id);
+            const [panels, packages, sysInfo] = await Promise.all([
+                withTimeout(client.listPanels(), PING_TIMEOUT_MS),
+                withTimeout(client.getPackageIndex(), PING_TIMEOUT_MS),
+                withTimeout(client.getSystemInfo(), PING_TIMEOUT_MS),
+            ]);
+            reached.push({ id, name, isLocal: id === "local", panels, packages, sysInfo });
+        } catch (err) {
+            unavailable++;
+            logger.warn(`[Updater] could not reach ${name} (${id}) to check for updates:`, err);
+        }
+    });
     return { reached, unavailable };
 }
 

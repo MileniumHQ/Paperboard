@@ -56,8 +56,6 @@ const panelTask: UpdateTask = {
     computerId: "local",
     id: "test.server",
     version: "2.0.0",
-    downloadUrl: "https://registry.example/test.server.zip",
-    label: "Game Server 2.0.0",
     name: "Game Server",
     computerName: null,
     sha256: "a".repeat(64),

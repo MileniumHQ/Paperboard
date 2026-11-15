@@ -219,6 +219,14 @@ export class ConnectionPool extends EventEmitter {
         return Array.from(this.computers.values()).map(({ id, name }) => ({ id, name }));
     }
 
+    // the updater's fan-out: `visit` on every paired computer, eight at a time
+    public async forEachComputer(visit: (computer: { id: string; name: string }) => Promise<void>): Promise<void> {
+        const computers = this.listAll();
+        for (let offset = 0; offset < computers.length; offset += 8) {
+            await Promise.all(computers.slice(offset, offset + 8).map(visit));
+        }
+    }
+
     // port arrives as typed, so a bad one is an answer, not a quiet default
     public async probe(
         host: string,

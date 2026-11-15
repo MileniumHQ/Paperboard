@@ -3,9 +3,9 @@
 // is using them (then the job ends held), and Paperboard Server replaces
 // itself and must report the new version back.
 import connectionPool from "./communication/papercrane/ConnectionPool";
-import { withTimeout } from "../../papercrane/util";
 import { logger } from "../../papercrane/logger";
 import { validSha256, type UpdateTask } from "./updatePlan";
+import { packageHolderNames } from "./packageUpdates";
 import { PartialUpdateError, type UpdateJob, type UpdateProgress } from "./updateQueue";
 import type { UpdateHold, UpdateItem } from "../shared/updateQueue";
 
@@ -169,7 +169,7 @@ async function installPackage(task: UpdateTask, key: string, onProgress: OnProgr
         name: task.name,
         version: task.version,
         sha256: null,
-        users: await packageUserNames(task.computerId, outcome.waiting.blockedBy),
+        users: await packageHolderNames(task.computerId, outcome.waiting.blockedBy),
     };
 }
 
@@ -182,6 +182,7 @@ async function updateServer(task: UpdateTask, report: (progress: UpdateProgress)
     if (typeof task.signature !== "string" || !task.signature) {
         throw new Error(`Install refused for Paperboard Server update on ${task.computerId}: the release is not signed`);
     }
+    if (!task.downloadUrl) throw new Error(`Install refused for Paperboard Server update on ${task.computerId}: the release has no download address`);
     report({ stage: "installing", percent: null });
     await connectionPool.getClient(task.computerId).updateCrane(task.version, task.downloadUrl, task.sha256, task.signature);
     // confirm before recording: system:update only initiates (the daemon
@@ -196,13 +197,4 @@ async function updateServer(task: UpdateTask, report: (progress: UpdateProgress)
     } catch (err) {
         logger.warn(`[Updater] failed to persist crane_version on ${task.computerId}:`, err);
     }
-}
-
-// the panels whose important or long-running processes hold a package back, by name
-async function packageUserNames(computerId: string, blockedBy: Array<{ owner: string | null; holds: boolean }>): Promise<string[]> {
-    const owners = [...new Set(blockedBy.filter((b) => b.holds).map((b) => b.owner))];
-    if (owners.every((o) => o === null)) return ["Paperboard"];
-    const panels = await withTimeout(connectionPool.getClient(computerId).listPanels(), PING_TIMEOUT_MS);
-    const names = new Map(panels.map((p) => [p.id, p.name || p.id]));
-    return owners.map((o) => (o === null ? "Paperboard" : names.get(o) ?? o));
 }

@@ -29,44 +29,42 @@ export interface PackageUpdatesState {
 }
 
 const QUERY_TIMEOUT_MS = 5_000;
-const BATCH = 8;
+
+type PackageHolders = Array<{ owner: string | null; holds: boolean }>;
+
+/** The display names of what holds a package update back: only important
+ * or long-running processes hold it, a panel's by its name, the app's own
+ * as "Paperboard". Empty when what uses it can stop for it. */
+export async function packageHolderNames(computerId: string, blockedBy: PackageHolders): Promise<string[]> {
+    const owners = [...new Set(blockedBy.filter((b) => b.holds).map((b) => b.owner))];
+    const panels = owners.some((o) => o !== null) ? await withTimeout(connectionPool.getClient(computerId).listPanels(), QUERY_TIMEOUT_MS) : [];
+    const names = new Map(panels.map((p) => [p.id, p.name || p.id]));
+    return [...new Set(owners.map((o) => (o === null ? "Paperboard" : names.get(o) ?? o)))];
+}
 
 export async function collectPackageUpdates(): Promise<PackageUpdatesState> {
     const state: PackageUpdatesState = { notices: [], failures: [] };
-    const computers = connectionPool.listAll();
-    for (let offset = 0; offset < computers.length; offset += BATCH) {
-        await Promise.all(computers.slice(offset, offset + BATCH).map(async ({ id, name }) => {
-            const client = connectionPool.getClient(id);
-            // an offline computer is the rail's to report; it has nothing
-            // to say about its packages until it is back
-            if (!client.getStatus().connected) return;
-            try {
-                const updates = await withTimeout(client.pendingPackageUpdates(), QUERY_TIMEOUT_MS);
-                if (updates.length === 0) return;
-                const names = new Map<string, string>();
-                if (updates.some((u) => u.blockedBy.some((b) => b.owner && b.holds))) {
-                    for (const panel of await withTimeout(client.listPanels(), QUERY_TIMEOUT_MS)) {
-                        names.set(panel.id, panel.name || panel.id);
-                    }
-                }
-                for (const update of updates) {
-                    // only important or long-running processes hold it;
-                    // with none, the updater stops the rest and updates
-                    const panels = [...new Set(update.blockedBy.filter((b) => b.holds).map((b) => (b.owner ? names.get(b.owner) ?? b.owner : "Paperboard")))];
-                    state.notices.push({
-                        computerId: id,
-                        computerName: name,
-                        packageName: update.name,
-                        version: update.version,
-                        panels,
-                        ...(update.error ? { error: update.error } : {}),
-                    });
-                }
-            } catch (err) {
-                logger.warn(`[PackageUpdates] could not read waiting package updates on ${name}:`, err);
-                state.failures.push({ computerId: id, computerName: name, error: err instanceof Error ? err.message : String(err) });
+    await connectionPool.forEachComputer(async ({ id, name }) => {
+        const client = connectionPool.getClient(id);
+        // an offline computer is the rail's to report; it has nothing
+        // to say about its packages until it is back
+        if (!client.getStatus().connected) return;
+        try {
+            const updates = await withTimeout(client.pendingPackageUpdates(), QUERY_TIMEOUT_MS);
+            for (const update of updates) {
+                state.notices.push({
+                    computerId: id,
+                    computerName: name,
+                    packageName: update.name,
+                    version: update.version,
+                    panels: await packageHolderNames(id, update.blockedBy),
+                    ...(update.error ? { error: update.error } : {}),
+                });
             }
-        }));
-    }
+        } catch (err) {
+            logger.warn(`[PackageUpdates] could not read waiting package updates on ${name}:`, err);
+            state.failures.push({ computerId: id, computerName: name, error: err instanceof Error ? err.message : String(err) });
+        }
+    });
     return state;
 }

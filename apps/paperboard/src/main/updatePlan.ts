@@ -17,8 +17,9 @@ export interface UpdateTask {
     computerId: string;
     id?: string;
     version: string;
-    downloadUrl: string;
-    label: string;
+    // the binary's address, for a Paperboard Server update; panels and
+    // packages install by id and the daemon finds their release itself
+    downloadUrl?: string;
     // what the update list calls it, and where (null: this computer)
     name: string;
     computerName: string | null;
@@ -124,10 +125,6 @@ export async function planUpdateTasks(
                 computerId: comp.id,
                 id: panel.id,
                 version: reg.version,
-                downloadUrl:
-                    reg.downloadUrl ??
-                    `${opts.registryUrl}/panel/${panel.id}/download`,
-                label: `Updating panel ${panel.name || panel.id}${comp.isLocal ? "" : ` on ${comp.name}`}`,
                 name: panel.name || panel.id,
                 computerName: comp.isLocal ? null : comp.name,
                 sha256: reg.sha256,
@@ -157,8 +154,6 @@ export async function planUpdateTasks(
                 computerId: comp.id,
                 id: pkgId,
                 version: reg.version,
-                downloadUrl: platformData.url,
-                label: `Updating ${pkgId}${comp.isLocal ? "" : ` on ${comp.name}`}`,
                 name: typeof reg.name === "string" && reg.name ? reg.name : pkgId,
                 computerName: comp.isLocal ? null : comp.name,
                 sha256: pkgSha256,
@@ -199,7 +194,6 @@ export async function planUpdateTasks(
                         downloadUrl:
                             craneEntry.downloadUrl ??
                             `${opts.registryUrl}/paperdl/crane/${target}/download`,
-                        label: `Updating Paperboard Server on ${comp.name}`,
                         name: "Paperboard Server",
                         computerName: comp.name,
                         sha256: craneEntry.sha256,
