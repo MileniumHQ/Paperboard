@@ -3,7 +3,7 @@
 // with the clip, pasted or dropped wait in a tray above it. Everything else
 // (the model, the computer) lives in the menu and settings.
 
-import { For, Show, createEffect, createSignal, onCleanup } from "solid-js";
+import { For, Show, createEffect, createSignal, on, onCleanup } from "solid-js";
 import { PaperButton, PaperEffect, PaperIcon, PaperQuote, haptic } from "@mileniumhq/paperui";
 import { LIMITS, type ChatEntry } from "../contract";
 import type { Agent } from "../lib/agent";
@@ -32,27 +32,35 @@ export default function Composer(props: {
     let picker!: HTMLInputElement;
 
     const tray = () => props.tray;
-    const ready = () => !tray().uploading() && !tray().failed() && (!!props.draft.trim() || tray().ids().length > 0);
+    const ready = () => !tray().uploading() && !tray().failed() && (!!props.draft.trim() || tray().sendable().length > 0);
     const attach = (files: File[]) => {
         if (!files.length) return;
         const refused = tray().add(files);
         setError(refused ? { title: "Not every file added", message: refused } : null);
     };
 
+    // One message leaves at a time: a second press (a double tap, Ctrl+Enter held) while one is on its way sends nothing.
+    // What was sent is taken off the box once the service has it; what was typed or added meanwhile stays.
+    let sending = false;
     const send = async () => {
-        if (!ready()) return;
-        const text = props.draft.trim();
+        if (sending || !ready()) return;
+        sending = true;
+        const draft = props.draft;
+        const reply = props.replyTo;
+        const sent = tray().sendable();
         setError(null);
         // felt as the message leaves, not once the service has it
         haptic("send");
         props.onSend();
         try {
-            await props.agent.send(text, props.replyTo?.id, tray().ids());
-            props.onDraft("");
-            tray().clear();
-            props.onCancelReply();
+            await props.agent.send(draft.trim(), reply?.id, sent.map((c) => c.id));
+            props.onDraft(props.draft.startsWith(draft) ? props.draft.slice(draft.length).trimStart() : props.draft);
+            for (const c of sent) tray().remove(c.key);
+            if (props.replyTo === reply) props.onCancelReply();
         } catch (e) {
             setError(failure("Message not sent", e));
+        } finally {
+            sending = false;
         }
     };
 
@@ -67,10 +75,7 @@ export default function Composer(props: {
         // typing at the end keeps the end in view, once the field is as tall as it gets
         if (field.selectionEnd === field.value.length) field.scrollTop = field.scrollHeight;
     };
-    createEffect(() => {
-        void props.draft;
-        queueMicrotask(resize);
-    });
+    createEffect(on(() => props.draft, () => queueMicrotask(resize)));
     // A button pressed beside the box leaves the cursor in it, so a phone's keyboard stays up.
     // The cursor moves on mousedown, and a finger's tap makes one too; stopping pointerdown only holds it for a mouse.
     const keepFocus = (e: MouseEvent) => {
@@ -93,9 +98,7 @@ export default function Composer(props: {
     };
     onCleanup(() => window.removeEventListener("focus", resume));
     // choosing to reply puts the cursor in the box
-    createEffect(() => {
-        if (props.replyTo) field.focus();
-    });
+    createEffect(on(() => props.replyTo, (to) => to && field.focus()));
 
     return (
         <div class={styles.Composer}>

@@ -4,9 +4,9 @@
 // Agent messages show files through markdown: `![caption](attachment:<id>)`
 // on its own line, or `[name](attachment:<id>)` in a sentence, a chip that
 // opens it. They can show web images and YouTube thumbnails the same way. A
-// web image comes through the service (webImage.ts), which fetches it under the
-// agent's network rule: a message, written by the model or by a page it read,
-// never gets this page to ask a host of its choosing for anything.
+// web image, a thumbnail too, comes through the service (webImage.ts), which
+// fetches it under the agent's network rule: a message, written by the model or
+// by a page it read, never gets this page to ask a host for anything.
 
 import { createContext, createMemo, createResource, createSignal, For, Match, Switch, useContext, type JSX, type ParentProps } from "solid-js";
 import {
@@ -24,10 +24,9 @@ import {
 import { ATTACHMENT_ID, ATTACHMENT_SCHEME, type Attachment } from "../contract";
 import type { Files } from "../lib/files";
 import { sizeText } from "../lib/files";
+import { errorText } from "../lib/failure";
 import { youTubeId } from "../lib/youtube";
 import styles from "./Media.module.css";
-
-const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
 /** The icon for a file, by how it shows. */
 function iconFor(file: Attachment): string {
@@ -102,14 +101,14 @@ export function MediaProvider(props: ParentProps<{ files: Files }>) {
                 name={file()?.file.name ?? shown()?.name ?? ""}
                 type={file()?.file.type}
                 src={file()?.url}
-                error={read.error ? `${shown()?.name ?? "The file"} couldn't be read: ${message(read.error)}` : (saveError() ?? undefined)}
+                error={read.error ? `${shown()?.name ?? "The file"} couldn't be read: ${errorText(read.error)}` : (saveError() ?? undefined)}
                 actions={
                     <PaperButton
                         size="small"
                         disabled={!file()}
                         onClick={() => {
                             const f = file();
-                            if (f) media.save(f.file.id).catch((e) => setSaveError(`${f.file.name} couldn't be saved: ${message(e)}`));
+                            if (f) media.save(f.file.id).catch((e) => setSaveError(`${f.file.name} couldn't be saved: ${errorText(e)}`));
                         }}
                     >
                         <PaperIcon zeroHeight>download</PaperIcon>
@@ -129,7 +128,7 @@ function FileCard(props: { file: Attachment }) {
     const press = () => {
         setFailed(null);
         if (canPreview()) media.open(props.file.id, props.file.name);
-        else media.save(props.file.id).catch((e) => setFailed(message(e)));
+        else media.save(props.file.id).catch((e) => setFailed(errorText(e)));
     };
     return (
         <button
@@ -158,7 +157,7 @@ function PlayedFile(props: { file: Attachment; caption?: string }) {
     return (
         <Switch>
             <Match when={read.error}>
-                <Missing caption={name()} why={message(read.error)} />
+                <Missing caption={name()} why={errorText(read.error)} />
             </Match>
             <Match when={read.loading || !read()}>
                 <span class={styles.loading} classList={{ [styles.loadingAudio!]: props.file.kind === "audio" }} aria-label={`Loading ${name()}`} />
@@ -197,7 +196,7 @@ function WebImage(props: { url: string; alt: string; title?: string }) {
     return (
         <Switch>
             <Match when={read.error}>
-                <Missing caption={name()} why={message(read.error)} />
+                <Missing caption={name()} why={errorText(read.error)} />
             </Match>
             <Match when={read.loading || !read()}>
                 <span class={styles.loading} aria-label={`Loading ${name()}`} />
@@ -219,7 +218,7 @@ export function FileView(props: { id: string; caption?: string }) {
     return (
         <Switch>
             <Match when={info.error}>
-                <Missing caption={props.caption || "A file"} why={message(info.error)} />
+                <Missing caption={props.caption || "A file"} why={errorText(info.error)} />
             </Match>
             <Match when={info.loading || !info()}>
                 <span class={styles.loading} aria-label={`Loading ${props.caption || "a file"}`} />
@@ -245,13 +244,13 @@ export function FileChip(props: { id: string; label: string }) {
     // a resource read while it's failed throws: the chip shows the failure instead
     const file = () => (info.state === "ready" ? info() : undefined);
     const label = () => props.label.trim() || file()?.name || "A file";
-    const problem = () => failed() ?? (info.error ? `${label()} couldn't be found: ${message(info.error)}` : null);
+    const problem = () => failed() ?? (info.error ? `${label()} couldn't be found: ${errorText(info.error)}` : null);
     const press = () => {
         const file = info.state === "ready" ? info() : undefined;
         if (!file) return;
         setFailed(null);
         if (previewable(file)) media.open(file.id, file.name);
-        else media.save(file.id).catch((e) => setFailed(`${file.name} couldn't be saved: ${message(e)}`));
+        else media.save(file.id).catch((e) => setFailed(`${file.name} couldn't be saved: ${errorText(e)}`));
     };
     return (
         <PaperInlineChip
@@ -290,7 +289,7 @@ export function renderAgentImage(img: MarkdownImage): JSX.Element | undefined {
     if (video) {
         return (
             <PaperLink href={`https://www.youtube.com/watch?v=${video}`} class={styles.youtube} title={img.alt || "Watch on YouTube"}>
-                <img class={styles.media} src={`https://i.ytimg.com/vi/${video}/hqdefault.jpg`} alt={img.alt || "A YouTube video"} />
+                <WebImage url={`https://i.ytimg.com/vi/${video}/hqdefault.jpg`} alt={img.alt || "A YouTube video"} />
                 <span class={styles.play} aria-hidden="true">
                     <PaperIcon>play_arrow</PaperIcon>
                 </span>

@@ -1,7 +1,8 @@
 // The SDK as the chat fixture sees it: everything real except the two things
 // that need a daemon. The panel's bridge holds a settled state, and the
 // actions are a service that has a conversation and nothing else, so the
-// fixture decides what the chat is told and when. Any other call fails.
+// fixture decides what the chat is told and when. Any other call fails,
+// unless the fixture answers it (answers).
 import { DEFAULT_STATE, UI_ACTION_IDS, type ChatEntry } from "../../src/contract";
 
 export * from "../../../../packages/paperapi/dist/paperapi.es.js";
@@ -16,8 +17,13 @@ export function emit(event: string, payload: unknown): void {
     for (const cb of listeners.get(event) ?? []) cb(structuredClone(payload));
 }
 
+/** Actions a fixture answers itself, by id: what the page asked is in `inputs`. */
+export const answers = new Map<string, (inputs: Record<string, unknown>) => Promise<unknown>>();
+
 export const actionsApi = {
-    call: async <T>(_panelId: string, id: string): Promise<T> => {
+    call: async <T>(_panelId: string, id: string, inputs: Record<string, unknown> = {}): Promise<T> => {
+        const answer = answers.get(id);
+        if (answer) return (await answer(inputs)) as T;
         if (id === UI_ACTION_IDS.history) return structuredClone(conversation) as T;
         if (id === UI_ACTION_IDS.pages) return [] as T;
         throw new Error(`the fixture's service has no action "${id}"`);

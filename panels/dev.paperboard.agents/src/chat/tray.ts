@@ -1,12 +1,12 @@
 // The files waiting to go with the next message: each uploads as soon as
 // it's picked, pasted or dropped, shows its progress, and can be taken off
-// (which stops its upload). Sending takes the finished ones; a message
-// taken back puts its files back here.
+// (which stops its upload). Sending takes the finished ones off.
 
 import { onCleanup } from "solid-js";
 import { createStore } from "solid-js/store";
 import { LIMITS, type Attachment } from "../contract";
 import type { Agent } from "../lib/agent";
+import { errorText } from "../lib/failure";
 
 export interface Chip {
     key: string;
@@ -53,7 +53,7 @@ export function createTray(agent: Agent) {
                     .upload(f, (progress) => update(key, { progress }), abort.signal)
                     .then(
                         (file) => update(key, { file, progress: 1 }),
-                        (e) => !abort.signal.aborted && update(key, { error: e instanceof Error ? e.message : String(e) }),
+                        (e) => !abort.signal.aborted && update(key, { error: errorText(e) }),
                     )
                     .finally(() => aborts.delete(key));
             }
@@ -66,7 +66,8 @@ export function createTray(agent: Agent) {
         },
         uploading: () => chips().some((c) => !c.file && !c.error),
         failed: () => chips().some((c) => c.error),
-        ids: () => chips().flatMap((c) => (c.file ? [c.file.id] : [])),
+        /** the uploaded files, by chip: what a message takes, and what is taken off once it has gone */
+        sendable: () => chips().flatMap((c) => (c.file ? [{ key: c.key, id: c.file.id }] : [])),
         clear() {
             for (const c of chips()) release(c);
             setChips([]);
