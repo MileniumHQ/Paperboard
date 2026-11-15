@@ -310,7 +310,7 @@ export class PaperCraneConnection extends EventEmitter {
         } catch (err) {
             this.embeddedServer?.stop();
             this.embeddedServer = null;
-            throw new Error("Failed to start and verify the embedded daemon", { cause: err });
+            throw new Error(`Paperboard Server couldn't start on this computer: ${err instanceof Error ? err.message : String(err)}`, { cause: err });
         }
     }
 
@@ -327,25 +327,42 @@ export class PaperCraneConnection extends EventEmitter {
         this.token = token;
         this.cert = cert;
 
+        // a connection that fails before it has a socket: the rail shows why
+        // this computer is offline
+        const failBeforeSocket = (err: unknown, retry: boolean): never => {
+            if (gen === this.generation) {
+                this.lastError = err instanceof Error ? err.message : String(err);
+                this.emit("status", this.getStatus());
+                if (retry) this.scheduleReconnect();
+            }
+            throw err;
+        };
+
         const isLocal = isLoopback(host);
-        if (!isLocal && !cert && !this.trustOnFirstUse) {
-            const error = this.missingCertMessage();
-            this.lastError = error;
-            this.emit("status", this.getStatus());
-            throw new Error(error);
+        if (!isLocal && !cert && !this.trustOnFirstUse) failBeforeSocket(new Error(this.missingCertMessage()), false);
+
+        let localSocket: WebSocket | undefined;
+        if (isLocal && !token) {
+            // a daemon that didn't start may start on the next try
+            try { localSocket = await this.localDaemonSocket(gen); }
+            catch (err) { failBeforeSocket(err, true); }
         }
 
-        const localSocket = isLocal && !token ? await this.localDaemonSocket(gen) : undefined;
-
         this.localIdentityVerified = localSocket !== undefined;
-        return new Promise((resolve, reject) => {
+        let ws: WebSocket;
+        try {
             const Socket = pinnableWebSocket();
-            const ws = localSocket ?? (isLocal
+            ws = localSocket ?? (isLocal
                 ? new Socket(`ws://${host}:${this.port}`)
                 : new Socket(
                       `wss://${bracketHost(host)}:${this.port}`,
                       cert ? pinnedTlsOptions(cert) : { rejectUnauthorized: false },
                   ));
+        } catch (err) {
+            // an unreadable pinned certificate fails the same way every time
+            failBeforeSocket(new Error(`Cannot connect to ${bracketHost(host)}:${this.port}: ${err instanceof Error ? err.message : String(err)}`, { cause: err }), false);
+        }
+        return new Promise((resolve, reject) => {
             this.ws = ws;
             let settled = false;
             const current = () => gen === this.generation && this.ws === ws;

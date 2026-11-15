@@ -62,10 +62,11 @@ export function createShellInvokeHandlers(
     deps: ShellHandlerDeps,
 ): Record<SharedShellInvokeChannel, ShellInvokeHandler> {
     return {
-        // throws retryable CRANE_NOT_READY until the local daemon is verified
+        // throws until the local daemon is verified: why it isn't, once known
         "crane-credentials": () => {
-            const creds = connectionPool.getClient("local").getLocalCredentials();
-            if (!creds) throw new Error("CRANE_NOT_READY");
+            const local = connectionPool.getClient("local");
+            const creds = local.getLocalCredentials();
+            if (!creds) throw new Error(local.getStatus().error ?? "Paperboard Server isn't ready yet. Try again in a moment.");
             return { ...creds, computerId: "local" };
         },
 
