@@ -12,6 +12,10 @@ definePanelService({
     },
     onInit: () => {
         problemsApi.report(PANEL, { key: "forecast", title: "The forecast couldn't be read", message: "api.weather.example answered 503 Service Unavailable" });
-        problemsApi.report(PANEL, { key: "readings", title: "Yesterday's readings weren't saved", message: "ENOSPC: no space left on device, write 'readings/2026-11-14.json'" });
+        problemsApi.report(PANEL, {
+            key: "readings",
+            title: "Yesterday's readings weren't saved to the station's history, so this week's chart is missing a day",
+            message: "EACCES: permission denied, open '/var/lib/weather-station/history/readings/2026-11-14.json.8cf067e8f3d1c5a7.tmp'",
+        });
     },
 });

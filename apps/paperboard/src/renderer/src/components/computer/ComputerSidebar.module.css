@@ -23,3 +23,10 @@
     border-right: none;
     overflow-y: auto;
 }
+
+/* a panel's problem count: the badge is the whole control, with no
+ * button padding around it, so the row keeps its height and the panel's
+ * name keeps its room (doubled to outweigh the tiny button's padding) */
+.problems.problems {
+    padding: 0;
+}
