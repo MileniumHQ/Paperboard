@@ -120,6 +120,8 @@ function SavedCommandsModal(props: {
     const now = createAgoClock(() => props.open);
     const [label, setLabel] = createSignal("");
     const [command, setCommand] = createSignal("");
+    // a row's buttons never wait on another call: the service orders them,
+    // and the row's run state is what says a command is already going
     const { busy, error, run } = createAction();
     const call = (title: string, name: string, input: Record<string, unknown>) => run(title, () => serviceApi.call(PANEL_ID, name, input));
 
@@ -180,7 +182,7 @@ function SavedCommandsModal(props: {
                                                 <PaperButton
                                                     size="small"
                                                     icon
-                                                    disabled={busy() || props.runs[saved.id]?.state === "running"}
+                                                    disabled={props.runs[saved.id]?.state === "running"}
                                                     title={`Run ${saved.command}`}
                                                     aria-label={`Run ${saved.label}`}
                                                     onClick={() => void call("Command not started", "run-saved-command", { id: saved.id })}
@@ -191,7 +193,6 @@ function SavedCommandsModal(props: {
                                                     size="small"
                                                     variant="text"
                                                     icon
-                                                    disabled={busy()}
                                                     title={`Remove ${saved.label}`}
                                                     aria-label={`Remove ${saved.label}`}
                                                     onClick={() => void call("Command not removed", "remove-saved-command", { id: saved.id })}
