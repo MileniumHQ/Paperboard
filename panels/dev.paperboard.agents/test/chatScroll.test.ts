@@ -6,19 +6,12 @@
 // Chrome over a service with a conversation and nothing else
 // (fixtures/paperapiStub.ts); the fixture changes the sizes and reports where
 // the chat was left.
-//
-// Without Chrome the suite is skipped with a visible reason; CI must have it.
 import { describe, expect, test } from "bun:test";
-import { findChrome, runBrowserFixture, type FixtureResults } from "./browserFixture";
-
-const chrome = findChrome();
-if (!chrome && process.env.CI) throw new Error("CI has no Chrome, so the chat's scroll tests can't run: install it or set PAPERBOARD_CHROME");
-const scrollTest = chrome ? test : test.skip;
-const named = (name: string) => (chrome ? `${name} (headless Chrome)` : `${name} (skipped: no Chrome)`);
+import { runBrowserFixture, type FixtureResults } from "./browserFixture";
 
 let results: Promise<FixtureResults> | undefined;
 const fixture = async () => {
-    results ??= runBrowserFixture(chrome!, "test/fixtures/chatFixture.html", { "@mileniumhq/paperapi": "test/fixtures/paperapiStub.ts" });
+    results ??= runBrowserFixture("test/fixtures/chatFixture.html", { "@mileniumhq/paperapi": "test/fixtures/paperapiStub.ts" });
     const { checks, error } = await results;
     expect(error, "the fixture threw").toBe("");
     return checks;
@@ -29,8 +22,8 @@ const ROUNDING = 2;
 const TIMEOUT = 180_000;
 
 describe("the chat's scroll", () => {
-    scrollTest(
-        named("a long conversation opens at its end"),
+    test(
+        "a long conversation opens at its end",
         async () => {
             const { opened } = await fixture();
             expect(opened.overflows, "the conversation has to be long for this to mean anything").toBe(true);
@@ -39,8 +32,8 @@ describe("the chat's scroll", () => {
         TIMEOUT,
     );
 
-    scrollTest(
-        named("the chat stays at its end when a bubble arrives, a tall one too"),
+    test(
+        "the chat stays at its end when a bubble arrives, a tall one too",
         async () => {
             const { arrivedShort, arrivedTall } = await fixture();
             for (const arrived of [arrivedShort, arrivedTall]) {
@@ -51,8 +44,8 @@ describe("the chat's scroll", () => {
         TIMEOUT,
     );
 
-    scrollTest(
-        named("the chat stays at its end when the message box grows and shrinks"),
+    test(
+        "the chat stays at its end when the message box grows and shrinks",
         async () => {
             const { grown, cleared } = await fixture();
             expect(grown.listShrankBy, "the message box did not grow").toBeGreaterThan(20);
@@ -63,8 +56,8 @@ describe("the chat's scroll", () => {
         TIMEOUT,
     );
 
-    scrollTest(
-        named("a reader who scrolled up stays on the same row when a bubble arrives, and when the message box grows"),
+    test(
+        "a reader who scrolled up stays on the same row when a bubble arrives, and when the message box grows",
         async () => {
             const { whileArriving, whileGrowing } = await fixture();
             expect(whileArriving.away, "the reader was taken to the end").toBeGreaterThan(200);
@@ -76,8 +69,8 @@ describe("the chat's scroll", () => {
         TIMEOUT,
     );
 
-    scrollTest(
-        named("older rows drawn above a reader who reached the top leave them on the same row"),
+    test(
+        "older rows drawn above a reader who reached the top leave them on the same row",
         async () => {
             const { reachedTop } = await fixture();
             expect(reachedTop.olderRowsDrawn, "no older rows were drawn").toBeGreaterThan(0);
@@ -86,8 +79,8 @@ describe("the chat's scroll", () => {
         TIMEOUT,
     );
 
-    scrollTest(
-        named("a reader who scrolls back to the end is held there again, and nothing fails unseen"),
+    test(
+        "a reader who scrolls back to the end is held there again, and nothing fails unseen",
         async () => {
             const { returned, uncaught } = await fixture();
             expect(returned.fromEnd).toBeLessThanOrEqual(ROUNDING);

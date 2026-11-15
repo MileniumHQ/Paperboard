@@ -1,29 +1,18 @@
-// Runs one of the panel's browser fixtures (the same as the Blocks panel's): bundles its page with Vite,
-// serves it, opens it in headless Chrome and waits for the JSON the fixture
-// posts back to /result. The page runs in real time, as Blockly draws on
-// animation frames.
-//
-// Chrome is discovered via PAPERBOARD_CHROME / CHROME_BIN or PATH.
+// Runs one of the panel's browser fixtures (test/fixtures/*.html): a page of
+// the panel's own components over a stubbed SDK, with no service behind it.
+// It bundles the page with Vite, serves it, opens it in headless Chrome
+// (scripts/testing/chrome.ts, which finds Chrome and says how to install it
+// when there is none) and waits for the JSON the fixture posts back to
+// /result (fixtures/chatPage.tsx `report`).
 import { existsSync, mkdtempSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { openChrome, type Page } from "../../../scripts/testing/chrome";
+import { allowTestPort } from "./hermetic";
 
 const panelDir = resolve(import.meta.dir, "..");
-/** How long a fixture gets, from Chrome starting to its result. */
+/** How long a fixture gets, from its page loading to its result. */
 const FIXTURE_TIMEOUT_MS = 90_000;
-
-export function findChrome(): string | null {
-    const candidates = [process.env.PAPERBOARD_CHROME, process.env.CHROME_BIN, "google-chrome-stable", "google-chrome", "chromium", "chromium-browser"].filter((c): c is string => Boolean(c));
-    for (const candidate of candidates) {
-        if (candidate.includes("/")) {
-            if (existsSync(candidate)) return candidate;
-            continue;
-        }
-        const found = Bun.which(candidate);
-        if (found) return found;
-    }
-    return null;
-}
 
 export interface FixtureResults {
     checks: Record<string, any>;
@@ -53,11 +42,12 @@ async function buildFixture(page: string, alias: Record<string, string>, outDir:
  * `page` is the fixture's HTML, relative to the panel; `alias` swaps a
  * package for a panel file, e.g. the SDK for one with no daemon behind it.
  */
-export async function runBrowserFixture(chrome: string, page: string, alias: Record<string, string>): Promise<FixtureResults> {
-    const dir = mkdtempSync(join(tmpdir(), "paperboard-agents-fixture-"));
+export async function runBrowserFixture(page: string, alias: Record<string, string>): Promise<FixtureResults> {
+    const dir = mkdtempSync(join(tmpdir(), "pb-agents-fixture-"));
     const dist = join(dir, "dist");
     let server: ReturnType<typeof Bun.serve> | undefined;
-    let proc: ReturnType<typeof Bun.spawn> | undefined;
+    let chrome: Page | undefined;
+    const disallow: (() => void)[] = [];
     try {
         await buildFixture(page, alias, dist);
         let report!: (results: FixtureResults) => void;
@@ -76,37 +66,19 @@ export async function runBrowserFixture(chrome: string, page: string, alias: Rec
                 return new Response(Bun.file(file));
             },
         });
-        proc = Bun.spawn(
-            [
-                chrome,
-                "--headless=new",
-                "--disable-gpu",
-                "--no-sandbox",
-                "--disable-dev-shm-usage",
-                "--disable-background-networking",
-                "--no-first-run",
-                "--window-size=1400,900",
-                `--user-data-dir=${join(dir, "chrome")}`,
-                `http://127.0.0.1:${server.port}/${page}`,
-            ],
-            { stdout: "ignore", stderr: "pipe" },
-        );
-        const stderr = new Response(proc.stderr as ReadableStream).text();
+        chrome = await openChrome(`http://127.0.0.1:${server.port}/${page}`, { onPort: (port) => disallow.push(allowTestPort(port)) });
+        const loaded = chrome;
         let timer: ReturnType<typeof setTimeout> | undefined;
         const outcome = await Promise.race([
             reported,
-            proc.exited.then((code) => `headless Chrome exited (${code}) before the fixture reported`),
             new Promise<string>((late) => (timer = setTimeout(() => late(`the fixture did not report within ${FIXTURE_TIMEOUT_MS / 1000}s`), FIXTURE_TIMEOUT_MS))),
         ]);
         clearTimeout(timer);
-        if (typeof outcome === "string") {
-            proc.kill();
-            throw new Error(`${outcome}: ${(await stderr).slice(0, 400)}`);
-        }
+        if (typeof outcome === "string") throw new Error(`${outcome}: ${JSON.stringify({ exceptions: loaded.exceptions, consoleErrors: loaded.consoleErrors }).slice(0, 800)}`);
         return outcome;
     } finally {
-        proc?.kill();
-        await proc?.exited;
+        await chrome?.close();
+        for (const undo of disallow) undo();
         server?.stop(true);
         rmSync(dir, { recursive: true, force: true });
     }
