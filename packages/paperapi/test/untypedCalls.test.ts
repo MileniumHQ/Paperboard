@@ -20,8 +20,6 @@ const STILL_UNTYPED = [
     "panels/dev.paperboard.actions/src/projects/state.ts",
     "panels/dev.paperboard.actions/src/widgets.tsx",
     "panels/dev.paperboard.actions/test/fixtures/canvasSyncApi.ts",
-    "panels/dev.paperboard.agents/src/lib/agent.ts",
-    "panels/dev.paperboard.agents/test/fixtures/paperapiStub.ts",
     "panels/dev.paperboard.ai/src/lib/state.ts",
     "panels/dev.paperboard.ai/src/widget/state.ts",
     "panels/dev.paperboard.gameserver/scripts/scenarioDaemon.ts",
