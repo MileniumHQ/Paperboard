@@ -8,15 +8,9 @@ interface PistonManifest {
     versions?: { id: string; type: string; url: string; releaseTime?: string }[];
 }
 
-// manifest cached in-memory per session
-let pistonManifestCache: PistonManifest | null = null;
-
-async function getPistonManifest(): Promise<PistonManifest> {
-    if (!pistonManifestCache) {
-        pistonManifestCache = await fetchJson<PistonManifest>(PISTON_META_URL);
-    }
-    return pistonManifestCache;
-}
+// read fresh each time: the service runs for weeks, and a release Mojang
+// publishes meanwhile must show up in Versions
+const getPistonManifest = () => fetchJson<PistonManifest>(PISTON_META_URL);
 
 export const vanillaProvider: SoftwareProvider = {
     id: "vanilla",

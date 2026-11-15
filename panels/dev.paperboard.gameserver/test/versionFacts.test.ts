@@ -3,6 +3,8 @@ import { isSupportedMcVersion, javaPackageFor, resolveVersionProfile, worldPaths
 import { groupNeoForgeBuilds, neoForgeInstallerUrl, parseNeoForgeVersion, pickNeoForgeBuild } from "../src/games/minecraft/providers/neoforge";
 import { forgeInstallerUrl, forgeMcVersions, pickForgeBuild } from "../src/games/minecraft/providers/forge";
 import { pickFabricLoader } from "../src/games/minecraft/providers/fabric";
+import { vanillaProvider } from "../src/games/minecraft/providers/vanilla";
+import { loopbackServer, routeHost } from "./helpers/http";
 
 // Version facts pick the right Java, loader build and world paths.
 describe("version facts", () => {
@@ -26,6 +28,15 @@ describe("version facts", () => {
             "1.20.5-rc1": "java-21",
         };
         for (const [version, pkg] of Object.entries(java)) expect([version, javaPackageFor(version)]).toEqual([version, pkg]);
+    });
+
+    test("a release Mojang publishes while the service runs is listed in Versions", async () => {
+        const versions = [{ id: "1.21.1", type: "release", url: "https://piston-meta.mojang.com/v1/1.21.1.json" }];
+        const mojang = loopbackServer(() => Response.json({ versions }));
+        routeHost("piston-meta.mojang.com", mojang);
+        expect((await vanillaProvider.listVersions()).map((v) => v.id)).toEqual(["1.21.1"]);
+        versions.unshift({ id: "1.21.2", type: "release", url: "https://piston-meta.mojang.com/v1/1.21.2.json" });
+        expect((await vanillaProvider.listVersions()).map((v) => v.id)).toEqual(["1.21.2", "1.21.1"]);
     });
 
     test("versions below 1.12.2 are unsupported", () => {

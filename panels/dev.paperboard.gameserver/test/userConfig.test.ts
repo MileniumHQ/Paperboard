@@ -13,6 +13,7 @@ import { setGamerule } from "../src/service/gamerules";
 import { startServerInstance, stopServerInstance } from "../src/service/lifecycle";
 import { readServerFile, writeServerFile } from "../src/service/serverFiles";
 import { recordPluginInstalls } from "../src/service/plugins";
+import { loadConfigAndProperties } from "../src/games/minecraft/config";
 
 let daemon: TestDaemon;
 beforeAll(async () => {
@@ -73,6 +74,12 @@ describe("user config files", () => {
         await expect(applyRuntimeProperties(ctx, { difficulty: "hard" })).rejects.toThrow("JSON Parse error");
         expect(fs.readFileSync(file, "utf8")).toBe("{\"software\": \"paper\", ");
         fs.rmSync(file);
+    });
+
+    test("a saved server software Paperboard doesn't run fails loading instead of showing the server as another software", async () => {
+        const mc = minecraftServer({ settings: { software: "spigot" } });
+        await expect(mc.run(() => loadConfigAndProperties(mc.scope.ctx))).rejects.toThrow('"spigot", which Paperboard doesn\'t run');
+        expect(mc.scope.ctx.state.serverSoftware).toBe("vanilla");
     });
 
     test("offline property and gamerule edits are kept as pending and applied once on the next boot", async () => {
