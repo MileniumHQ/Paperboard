@@ -316,7 +316,7 @@ async function registerBlocks(entry: BotEntry): Promise<void> {
     entry.blocks = blocks;
     await blocks.register(botBlocks(blocksHost(entry)));
     if (entry.stored.commands.length) await blocks.register({ events: entry.stored.commands.map(commandEvent) });
-    entry.blocksChanged = valueChanges(blocks, blocksHost(entry), entry.stored.name);
+    entry.blocksChanged = valueChanges(blocks, blocksHost(entry), (text) => entry.session.noteProblem(text));
     entry.blocksError = null;
 }
 

@@ -788,7 +788,7 @@ export function botBlocks(bot: BotBlocksHost): BlockSet {
  * Tells Blocks which of the bot's changing values changed, each time the
  * session says something about it did: call the result then.
  */
-export function valueChanges(blocks: BlocksProjectHandle, bot: BotBlocksHost, label: string): () => void {
+export function valueChanges(blocks: BlocksProjectHandle, bot: BotBlocksHost, noteProblem: (text: string) => void): () => void {
     const read = () => ({ connected: bot.connected(), status: bot.status(), servers: serversOf(bot) });
     let last = read();
     return () => {
@@ -801,7 +801,7 @@ export function valueChanges(blocks: BlocksProjectHandle, bot: BotBlocksHost, la
         ];
         last = next;
         for (const value of changed) {
-            blocks.changed(value).catch((err) => console.error(`[DiscordService] ${label}: the change to ${value} did not reach Blocks:`, errorToMessage(err)));
+            blocks.changed(value).catch((err) => noteProblem(`The change to ${value} did not reach Blocks: ${errorToMessage(err)}`));
         }
     };
 }

@@ -570,7 +570,7 @@ export function parseMoment(value: unknown, what: string): Date {
 /** How long Discord gets to send the members a search asks for; its own wait is two minutes, far past a person's. */
 export const MEMBER_SEARCH_TIMEOUT_MS = 10_000;
 
-/** One bounded page of members, asked of the gateway. A page that doesn't arrive is an error that says so. */
+/** One bounded page of members, asked of the gateway. A page that doesn't arrive says so; any other failure is Discord's own. */
 export async function searchMembers(
     guild: { members: { fetch(options: { query?: string; limit: number; time: number }): Promise<{ values(): Iterable<any> }> } },
     query: string,
@@ -581,6 +581,8 @@ export async function searchMembers(
         // one bounded page; member search is a gateway request, never a full member download
         return await guild.members.fetch({ query: query || undefined, limit, time: timeoutMs });
     } catch (err) {
-        throw new Error(`Discord didn't send the members within ${Math.round(timeoutMs / 1000)} seconds. The bot may have lost its connection to Discord; try again. (${errorToMessage(err)})`);
+        // discord.js's code for a page that never came
+        if ((err as { code?: unknown } | null)?.code !== "GuildMembersTimeout") throw err;
+        throw new Error(`Discord didn't send the members within ${Math.round(timeoutMs / 1000)} seconds. The bot may have lost its connection to Discord; try again.`);
     }
 }

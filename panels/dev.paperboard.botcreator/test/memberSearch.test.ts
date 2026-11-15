@@ -10,15 +10,20 @@ describe("member search", () => {
                 // discord.js rejects like this when the gateway never answers
                 fetch: async (options: unknown) => {
                     asked.push(options);
-                    throw new Error("Members didn't arrive in time.");
+                    throw Object.assign(new Error("Members didn't arrive in time."), { code: "GuildMembersTimeout" });
                 },
             },
         };
         await expect(searchMembers(guild, "ada", 25, 4_000)).rejects.toThrow(
-            "Discord didn't send the members within 4 seconds. The bot may have lost its connection to Discord; try again. (Members didn't arrive in time.)",
+            "Discord didn't send the members within 4 seconds. The bot may have lost its connection to Discord; try again.",
         );
         // the wait Discord is given is the one the message names
         expect(asked).toEqual([{ query: "ada", limit: 25, time: 4_000 }]);
+    });
+
+    test("any other failure is Discord's own reason, not a timeout", async () => {
+        const guild = { members: { fetch: () => Promise.reject(Object.assign(new Error("Missing Permissions"), { code: 50013 })) } };
+        await expect(searchMembers(guild, "ada", 25)).rejects.toThrow(/^Missing Permissions$/);
     });
 
     test("an empty search asks for the first page, and the members come back as found", async () => {
