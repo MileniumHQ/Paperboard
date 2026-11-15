@@ -17,6 +17,21 @@ const SOURCE = path.join(REPO_DIR, "panels", PANEL);
 const APP_ID = "111111111111111111";
 const tokenFor = (appId: string) => `${Buffer.from(appId).toString("base64").replace(/=+$/, "")}.GhIjKl.${"x".repeat(27)}`;
 
+// a Discord on loopback that takes command lists: a deleted bot's commands
+// are cleared here, never on discord.com
+const commandPuts: string[] = [];
+const discord = Bun.serve({
+	port: 0,
+	hostname: "127.0.0.1",
+	async fetch(req) {
+		const url = new URL(req.url);
+		if (req.method !== "PUT" || !url.pathname.endsWith("/commands")) return new Response("Not found", { status: 404 });
+		commandPuts.push(`${url.pathname} ${await req.text()}`);
+		return Response.json([]);
+	},
+});
+const previousDiscordApi = process.env.BOTCREATOR_DISCORD_API;
+
 let daemon: InProcessDaemon;
 let host: Rpc;
 let botId: string;
@@ -54,6 +69,7 @@ beforeAll(async () => {
 			theme: "kept",
 		}),
 	);
+	process.env.BOTCREATOR_DISCORD_API = `http://127.0.0.1:${discord.port}/api`;
 	daemon = await startDaemon({ dataDir: dir });
 	host = await daemon.rpc();
 	await waitFor("Bot Creator to migrate its legacy bot", () => {
@@ -67,6 +83,9 @@ beforeAll(async () => {
 afterAll(async () => {
 	await host?.close();
 	await daemon?.stop();
+	discord.stop(true);
+	if (previousDiscordApi === undefined) delete process.env.BOTCREATOR_DISCORD_API;
+	else process.env.BOTCREATOR_DISCORD_API = previousDiscordApi;
 });
 
 // Bot Creator migrates its legacy bot and guards tokens and files.
@@ -105,11 +124,12 @@ describe("Bot Creator through the daemon", () => {
 		}
 	});
 
-	test("deleteBot removes its project, its blocks and its vaulted token", async () => {
+	test("deleteBot clears its commands with its token though it is off, and removes its project, its blocks and its vaulted token", async () => {
 		await host.ok("secrets:set", { name: `bot-token.${botId}`, value: tokenFor(APP_ID), panelId: PANEL });
 		const answer = await call("deleteBot", { bot: botId });
 		expect(answer.error ?? null).toBeNull();
 		expect(answer.result).toEqual({ result: { deleted: botId } });
+		expect(commandPuts).toEqual([`/api/v10/applications/${APP_ID}/commands []`]);
 		expect((await listed()).filter((b) => b.entry.startsWith(`${botId}/`))).toEqual([]);
 		expect((await host.ok("blocks:projects", { panelId: PANEL })).projects.map((p: { id: string }) => p.id)).not.toContain(botId);
 		expect(await vaulted(`bot-token.${botId}`)).toBe(false);
