@@ -1,4 +1,4 @@
-import { createStateSignal, createLatest } from "@mileniumhq/paperui";
+import { createStateSignal, createLatest } from "@mileniumhq/paperui/headless";
 import { batch, createEffect, createSignal, on, onCleanup, type Accessor } from "solid-js";
 import { errorMessage } from "../../lib/failure";
 import { versionLabel } from "../../lib/addons/presentation";

@@ -1,5 +1,5 @@
 import { createMemo, type Accessor } from "solid-js";
-import { sameData } from "@mileniumhq/paperui";
+import { sameData } from "@mileniumhq/paperui/headless";
 
 // A game's describe() builds fresh tab objects on every call, and it reruns
 // whenever the server's settings change. Rendering tabs from those objects

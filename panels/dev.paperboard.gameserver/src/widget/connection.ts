@@ -2,7 +2,7 @@
 // while the widget can be seen: hidden, it is disposed and nothing arrives;
 // shown again, it re-reads the state. "unavailable" is the service failing to
 // answer, never an empty server.
-import { createStateSignal, createLatest } from "@mileniumhq/paperui";
+import { createStateSignal, createLatest } from "@mileniumhq/paperui/headless";
 import { createSignal, onCleanup, type Accessor } from "solid-js";
 import { createPanelBridge, serviceApi, type WidgetContext } from "@mileniumhq/paperapi";
 import { gameFor } from "../games";

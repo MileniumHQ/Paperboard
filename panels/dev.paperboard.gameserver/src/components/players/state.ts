@@ -2,7 +2,7 @@
 // everyone with data in this world), the names players have now, who is
 // banned, which player is open, and every change to them. The tab draws it;
 // every failure lands in `feedback`.
-import { keepUnchanged, createLatest } from "@mileniumhq/paperui";
+import { keepUnchanged, createLatest } from "@mileniumhq/paperui/headless";
 import { batch, createEffect, createMemo, createSignal, on, onCleanup, onMount } from "solid-js";
 import {
     forgetPlayerData,

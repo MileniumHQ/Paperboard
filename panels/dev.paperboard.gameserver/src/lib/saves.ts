@@ -1,4 +1,4 @@
-import { createSavedValue, type SavedValue } from "@mileniumhq/paperui";
+import { createSavedValue, type SavedValue } from "@mileniumhq/paperui/headless";
 import { SerialQueue } from "@mileniumhq/paperapi";
 import { createSignal, type Accessor } from "solid-js";
 

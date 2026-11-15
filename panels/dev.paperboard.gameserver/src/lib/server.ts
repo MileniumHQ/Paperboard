@@ -1,4 +1,4 @@
-import { createStateSignal } from "@mileniumhq/paperui";
+import { createStateSignal } from "@mileniumhq/paperui/headless";
 import { PANEL_ID, CALLS } from "../service/contract";
 import { createSignal } from "solid-js";
 import { createPanelBridge, errorMessage } from "./api";

@@ -1,7 +1,7 @@
 // Each server page is a document of its own. Reloading on selection also
 // tears down pending renderer work, so an old dialog cannot edit a new server.
 export * from "@mileniumhq/paperapi";
-import { sameData } from "@mileniumhq/paperui";
+import { sameData } from "@mileniumhq/paperui/headless";
 import {
     createPanelBridge as rawBridge,
     serviceApi,
