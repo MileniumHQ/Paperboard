@@ -62,6 +62,20 @@ export default function Tools(props: { agent: Agent }) {
     );
 }
 
+/** A switch's state: what it was last pressed to, until that press's save is done, then what the service says. */
+function asked(saved: () => boolean) {
+    const [pressed, setPressed] = createSignal<boolean | null>(null);
+    let presses = 0;
+    return {
+        checked: () => pressed() ?? saved(),
+        ask(on: boolean, save: Promise<unknown>) {
+            const press = ++presses;
+            setPressed(on);
+            return save.finally(() => press === presses && setPressed(null));
+        },
+    };
+}
+
 // a control inside a list item answers for itself, and doesn't choose the item
 const own = (e: Event) => e.stopPropagation();
 
@@ -85,10 +99,11 @@ function List(props: { tools: ToolsClient; name: string }) {
     const full = () => view().config.servers.length >= TOOL_LIMITS.servers;
 
     // finished or ended elsewhere (its card in the chat): the sign-in steps go
-    createEffect(() => {
-        const s = signingIn();
-        if (s && !view().signIns[s]) setSigningIn(null);
-    });
+    createEffect(
+        on([signingIn, () => view().signIns], ([s, signIns]) => {
+            if (s && !signIns[s]) setSigningIn(null);
+        }),
+    );
 
     const act = async (title: string, fn: () => Promise<unknown>) => {
         setBusy(true);
@@ -106,7 +121,17 @@ function List(props: { tools: ToolsClient; name: string }) {
             await props.tools.signIn(s.name);
             setSigningIn(s.name);
         });
-    const setActions = (on: boolean) => act("Panel access not changed", () => props.tools.setActions(on));
+    // A switch flips at once and its save waits for the ones before it; a refused save puts it back and says why.
+    // It isn't held for its save, and neither is anything else on the page.
+    let saves: Promise<unknown> = Promise.resolve();
+    const saveSwitch = (title: string, save: () => Promise<unknown>) => {
+        setError(null);
+        const run = saves.then(save).catch((e) => setError(failure(title, e)));
+        saves = run;
+        return run;
+    };
+    const actionsAsked = asked(() => view().config.actions);
+    const setActions = (on: boolean) => actionsAsked.ask(on, saveSwitch("Panel access not changed", () => props.tools.setActions(on)));
     const remove = async (s: ServerSpec) => {
         setBusy(true);
         setRemoveError(null);
@@ -122,7 +147,7 @@ function List(props: { tools: ToolsClient; name: string }) {
 
     const choose = (value: string) => {
         if (value === NEW) return setForm(blankForm());
-        if (value === ACTIONS) return void setActions(!view().config.actions);
+        if (value === ACTIONS) return void setActions(!actionsAsked.checked());
         const s = view().config.servers.find((x) => rowOf(x.name) === value);
         if (s) setForm(formFromSpec(s));
     };
@@ -160,11 +185,12 @@ function List(props: { tools: ToolsClient; name: string }) {
                                 server={server}
                                 state={stateOf(view(), server)}
                                 busy={busy() || locked()}
+                                locked={locked()}
                                 onSignIn={() => void signIn(server)}
                                 onShowSignIn={() => setSigningIn(server.name)}
                                 onEdit={() => setForm(formFromSpec(server))}
                                 onRestart={(title) => void act(title, () => props.tools.restart(server.name))}
-                                onSwitch={(on) => void act(on ? "Server not switched on" : "Server not switched off", () => props.tools.save({ ...server, enabled: on }))}
+                                onSwitch={(on) => saveSwitch(on ? "Server not switched on" : "Server not switched off", () => props.tools.save({ ...server, enabled: on }))}
                                 onRemove={() => {
                                     setRemoveError(null);
                                     setRemoving(server);
@@ -188,7 +214,7 @@ function List(props: { tools: ToolsClient; name: string }) {
                         description={`${props.name} can look up what your other panels can do, like start a game server, and run it`}
                         actions={
                             <PaperFlex onPointerDown={own} onClick={own}>
-                                <PaperToggle aria-label="Let it use your other panels" checked={view().config.actions} disabled={busy() || locked()} onChange={(v) => void setActions(v)} />
+                                <PaperToggle aria-label="Let it use your other panels" checked={actionsAsked.checked()} disabled={locked()} onChange={setActions} />
                             </PaperFlex>
                         }
                     >
@@ -247,15 +273,17 @@ function ServerRow(props: {
     server: ServerSpec;
     state: ServerState;
     busy: boolean;
+    locked: boolean;
     onSignIn(): void;
     onShowSignIn(): void;
     onEdit(): void;
     onRestart(title: string): void;
-    onSwitch(on: boolean): void;
+    onSwitch(on: boolean): Promise<unknown>;
     onRemove(): void;
 }) {
     const s = () => props.server;
     const restart = () => RESTART[props.state.kind];
+    const enabled = asked(() => s().enabled);
     return (
         <PaperListItem
             value={rowOf(s().name)}
@@ -301,7 +329,7 @@ function ServerRow(props: {
                     </PaperButton>
                     {/* last: every row's switch is on the list's right edge, under the one for the other panels */}
                     <PaperFlex onPointerDown={own} onClick={own}>
-                        <PaperToggle aria-label={`${s().name} on`} checked={s().enabled} disabled={props.busy} onChange={(on) => props.onSwitch(on)} />
+                        <PaperToggle aria-label={`${s().name} on`} checked={enabled.checked()} disabled={props.locked} onChange={(on) => enabled.ask(on, props.onSwitch(on))} />
                     </PaperFlex>
                 </PaperFlex>
             }

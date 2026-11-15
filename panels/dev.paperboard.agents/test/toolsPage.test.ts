@@ -93,13 +93,19 @@ describe("the tool server editor", () => {
 });
 
 describe("a server's switch", () => {
-    test("is the same switch through its own save and the status the service pushes, and ends on and usable", async () => {
+    test("flips at once and stays usable through its own save, as does the rest of the page; is the same switch through the status the service pushes; and ends on", async () => {
         const page = await toolsPage();
         const toggle = `[role=switch][aria-label="notes on"]`;
+        const others = `[role=switch][aria-label="Let it use your other panels"]`;
         await page.waitFor(`document.querySelector('${toggle}')?.getAttribute("aria-checked") === "false"`, "the server's switch, off");
         expect(await markNodes(page, toggle, "before")).toBe(1);
-        await page.click(toggle);
-        await page.waitFor(`document.querySelector('${toggle}').getAttribute("aria-checked") === "true"`, "the switch to be on");
+        // pressed, and looked at in the same moment: the save has only just left
+        const pressed = await page.evaluate<{ checked: string | null; disabled: string | null; othersDisabled: string | null }>(`(() => {
+            document.querySelector('${toggle}').click();
+            const at = (s) => document.querySelector(s);
+            return { checked: at('${toggle}').getAttribute("aria-checked"), disabled: at('${toggle}').getAttribute("aria-disabled"), othersDisabled: at('${others}').getAttribute("aria-disabled") };
+        })()`);
+        expect(pressed).toEqual({ checked: "true", disabled: null, othersDisabled: null });
         // the service saves it and pushes the servers' status with it on
         await page.received((f) => f.includes(":tools-changed") && f.includes('"enabled":true'), "the servers' status, pushed with the server on");
         await page.settled();
