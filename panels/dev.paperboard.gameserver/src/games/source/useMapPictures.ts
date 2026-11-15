@@ -1,4 +1,4 @@
-import { createEffect, createSignal, onMount } from "solid-js";
+import { createEffect, createSignal, on, onMount } from "solid-js";
 import { serverBridge } from "../../lib/server";
 import { errorMessage } from "../../lib/failure";
 import { sourceCalls, type SourceGameSpec, type SourceMapPictures } from "./index";
@@ -25,14 +25,15 @@ export interface MapPicturesState {
  * during the download, so the cards that show them later draw at once.
  */
 export function preloadMapPictures(state: MapPicturesState): void {
-    const held: HTMLImageElement[] = [];
-    createEffect(() => {
-        for (const url of state.all()) {
+    // each picture is held until it is drawn; a newer list replaces the last
+    let held: HTMLImageElement[] = [];
+    createEffect(on(state.all, (urls) => {
+        held = urls.map((url) => {
             const image = new Image();
             image.src = url;
-            held.push(image);
-        }
-    });
+            return image;
+        });
+    }));
 }
 
 // A picture from the game's install is asked for when a card first shows its

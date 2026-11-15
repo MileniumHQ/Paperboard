@@ -1,10 +1,10 @@
 import type { InstallProgress } from "../core/state";
 
 // Progress relay for the downloads inside installServerVersion.
-// The UI cannot subscribe mid-action (bridge calls are request/response),
+// The UI cannot subscribe mid-call (panel calls are request/response),
 // so the service publishes throttled progress through service state, which
 // already syncs to the UI. Pure mapping + throttle live here for tests;
-// the action owns the setState calls.
+// the call owns the setState calls.
 export type { InstallProgress };
 
 // Daemon payloads carry more stages ("starting", "checking") and raw
