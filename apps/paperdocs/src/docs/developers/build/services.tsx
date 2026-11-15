@@ -51,7 +51,7 @@ export const DEFAULT_STATE: WeatherState = {
 
 export const API_KEY_SECRET = "openweather-key";`;
 
-const SERVICE_TS = `import { configApi, definePanelService, secretsApi, type ServiceContext } from "@mileniumhq/paperapi";
+const SERVICE_TS = `import { configApi, definePanelService, errorMessage, secretsApi, type ServiceContext } from "@mileniumhq/paperapi";
 import { cityName, currentWeatherUrl, readCurrentWeather } from "./lib/openWeather";
 import { API_KEY_SECRET, DEFAULT_SETTINGS, DEFAULT_STATE, PANEL_ID, type WeatherSettings, type WeatherState } from "./panel";
 
@@ -75,7 +75,7 @@ async function refreshCity(ctx: Ctx, city: string): Promise<void> {
         const { [city]: _cleared, ...failures } = ctx.state.failures;
         ctx.setState((prev) => ({ forecasts: { ...prev.forecasts, [city]: forecast }, failures }));
     } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
+        const message = errorMessage(err);
         console.error(\`[weather] \${city} not refreshed:\`, message);
         ctx.setState((prev) => ({ failures: { ...prev.failures, [city]: message } }));
     }
@@ -106,7 +106,7 @@ export default definePanelService({
             ctx.setState({ settings: { ...DEFAULT_SETTINGS, ...saved }, hasKey: stored.found });
         } catch (err) {
             // keep running, so the page can say what is wrong
-            const message = err instanceof Error ? err.message : String(err);
+            const message = errorMessage(err);
             console.error("[weather] settings not loaded:", message);
             ctx.setState({ loadError: message });
             return;
@@ -128,11 +128,7 @@ const [state, setState] = createSignal<WeatherState>(bridge.getState());
 bridge.onStateChange((_patch, full) => setState({ ...full }));
 
 /** The service's state, updated on every change it sends. */
-export const weather = state;
-
-export function errorMessage(err: unknown): string {
-    return err instanceof Error ? err.message : String(err);
-}`;
+export const weather = state;`;
 
 const PAGE_USE = `import { For } from "solid-js";
 import { PaperStatTile } from "@mileniumhq/paperui";

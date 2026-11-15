@@ -62,7 +62,7 @@ const FOLLOW_RUN = `followCity: async (ctx: Ctx, input?: { city?: string }) => {
     return true;
 },`;
 
-const PAGE_CALL = `import { showToast } from "@mileniumhq/paperui";
+const PAGE_CALL = `import { errorMessage, showToast } from "@mileniumhq/paperui";
 
 const follow = async () => {
     setBusy(true);
@@ -87,7 +87,7 @@ const REFRESH_CITY = `async function refreshCity(ctx: Ctx, city: string): Promis
             await weatherBlocks.fire("freezing", { city, temperature: forecast.temperature });
         }
     } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
+        const message = errorMessage(err);
         console.error(\`[weather] \${city} not refreshed:\`, message);
         ctx.setState((prev) => ({ failures: { ...prev.failures, [city]: message } }));
     }
@@ -108,7 +108,7 @@ const ON_INIT = `async onInit(ctx: Ctx) {
         ctx.setState({ settings: { ...DEFAULT_SETTINGS, ...saved }, hasKey: stored.found });
     } catch (err) {
         // keep running, so the page can say what is wrong instead of a dead panel
-        const message = err instanceof Error ? err.message : String(err);
+        const message = errorMessage(err);
         console.error("[weather] settings not loaded:", message);
         ctx.setState({ loadError: message });
         return;

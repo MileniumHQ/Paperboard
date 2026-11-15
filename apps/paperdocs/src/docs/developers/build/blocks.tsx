@@ -95,7 +95,7 @@ const REFRESH_CITY = `async function refreshCity(ctx: Ctx, city: string): Promis
             await weatherBlocks.fire("freezing", { city, temperature: forecast.temperature });
         }
     } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
+        const message = errorMessage(err);
         console.error(\`[weather] \${city} not refreshed:\`, message);
         ctx.setState((prev) => ({ failures: { ...prev.failures, [city]: message } }));
     }
