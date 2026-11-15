@@ -2,7 +2,7 @@
 // line up with every other widget on Home. Every one reads the panel's own
 // service through useWidgetServer, so what they show is what the service
 // holds: a service that doesn't answer is "unavailable", never an empty server.
-import { createEffect, createMemo, createSignal, mapArray, Match, on, onCleanup, Show, Switch, type JSX } from "solid-js";
+import { batch, createEffect, createMemo, createSignal, mapArray, Match, on, onCleanup, Show, Switch, type JSX } from "solid-js";
 import { type WidgetContext } from "@mileniumhq/paperapi";
 import {
     PaperButton,
@@ -16,12 +16,12 @@ import {
 } from "@mileniumhq/paperui";
 import { CALLS } from "../service/contract";
 import { getStatusBadge } from "../core/statusBadge";
-import { SOFTWARE_NAMES } from "../lib/software";
 import type { HeadFetch } from "../lib/skins";
 import HeadAvatar from "../components/HeadAvatar";
+import PlayerAvatar from "../components/PlayerAvatar";
 import { MotdPreview } from "../components/MotdPreview";
 import { useWidgetServer, type ServerView, type WidgetServer } from "./connection";
-import { consoleTail, playerCount, rosterRows, softwareLabel } from "./view";
+import { consoleTail, playerCount, rosterRows } from "./view";
 import styles from "./widgets.module.css";
 import { errorMessage } from "../lib/failure";
 
@@ -104,7 +104,7 @@ function askForCap(server: WidgetServer) {
     );
     createEffect(on([server.connection, server.visible], ([c, shown]) => {
         if (asked || !shown || c.phase !== "ready") return;
-        if (c.server.supportsPlayers === false) return;
+        if (!c.server.supportsPlayers) return;
         if (c.server.serverStatus !== "online" || c.server.maxPlayers !== null) return;
         asked = true;
         server.call(CALLS.queryOnlinePlayers).catch((err) =>
@@ -142,7 +142,7 @@ export function StatusWidget(props: Props) {
                 const online = () => status() === "online";
                 const busy = () => pending() || status() === "stopping" || status() === "restarting";
                 const address = () => `${s().localIp}:${s().serverPort}`;
-                const players = () => s().supportsPlayers === false ? { ...playerCount(0, null), short: "Unavailable", long: "Player count unavailable", online: "—" } : playerCount(s().onlinePlayers.length, s().maxPlayers);
+                const players = () => !s().supportsPlayers ? { ...playerCount(0, null), short: "Unavailable", long: "Player count unavailable", online: "—" } : playerCount(s().onlinePlayers.length, s().maxPlayers);
                 // what the one button does now; a server with nothing installed
                 // can't start, so it opens the panel to set up
                 const control = () =>
@@ -174,7 +174,7 @@ export function StatusWidget(props: Props) {
                         title={SERVER_TITLE}
                         // a 2x1 header holds the version and the button; the icon would cut the title
                         icon={tall() ? "dns" : undefined}
-                        detail={installed() ? s().softwareLabel ?? softwareLabel(s().serverSoftware, s().serverVersion, SOFTWARE_NAMES) : "Not set up"}
+                        detail={installed() ? s().softwareLabel : "Not set up"}
                         action={!tall() && canControl() ? button(false) : undefined}
                         footer={
                             tall() && canControl() ? (
@@ -240,30 +240,39 @@ export function StatusWidget(props: Props) {
 
 // ── Players online (2x2) ────────────────────────────────────────────────
 
-/** names as players typed them, from the server's own cache; the roster is lowercase keys */
+/**
+ * Names as players typed them, for a game that lists its online players in
+ * lower case: read from the file its definition names, once per showing.
+ */
 function useNameCasing(server: WidgetServer) {
     const [names, setNames] = createSignal<Map<string, string>>(new Map());
+    const [error, setError] = createSignal("");
+    // a push that leaves the book where it was is no reason to read it again
+    const book = createMemo(() => {
+        const c = server.connection();
+        return c.phase === "ready" ? c.server.nameBook : undefined;
+    });
     createEffect(
-        on(server.visible, (shown) => {
-            if (!shown) return;
-            server.call<{ kind: string; text?: string }>(CALLS.readServerFile, { path: "usercache.json" })
+        on([server.visible, book], ([shown, path]) => {
+            if (!shown || !path) return;
+            server.call<{ kind: string; text?: string; reason?: string }>(CALLS.readServerFile, { path })
                 .then((file) => {
-                    if (file.kind !== "text") throw new Error("The player cache is not text");
-                    const raw = file.text;
+                    if (file.kind !== "text") throw new Error(file.reason ?? `${path} is not text`);
+                    const parsed: unknown = file.text ? JSON.parse(file.text) : [];
+                    if (!Array.isArray(parsed)) throw new Error(`${path} is not a list of players`);
                     const next = new Map<string, string>();
-                    const parsed: unknown = raw ? JSON.parse(raw) : [];
-                    if (Array.isArray(parsed)) {
-                        for (const entry of parsed.slice(0, 1000)) {
-                            if (typeof entry?.name === "string") next.set(entry.name.toLowerCase(), entry.name);
-                        }
+                    for (const entry of parsed.slice(0, 1000)) {
+                        if (typeof entry?.name === "string") next.set(entry.name.toLowerCase(), entry.name);
                     }
-                    setNames(next);
+                    batch(() => {
+                        setNames(next);
+                        setError("");
+                    });
                 })
-                // casing only: the roster's own names stand without it
-                .catch((err) => console.warn("[gameserver widget] usercache.json unreadable:", errorMessage(err)));
+                .catch((err) => setError(errorMessage(err)));
         }),
     );
-    return (key: string) => names().get(key) ?? key;
+    return { nameOf: (key: string) => names().get(key) ?? key, error };
 }
 
 const ROSTER_ROWS = 6;
@@ -271,7 +280,8 @@ const ROSTER_ROWS = 6;
 export function PlayersWidget(props: Props) {
     const server = useWidgetServer(props.widget);
     askForCap(server);
-    const nameOf = useNameCasing(server);
+    const casing = useNameCasing(server);
+    const nameOf = casing.nameOf;
     const loadHead: HeadFetch = (request) =>
         server.call<string | null>(CALLS.getPlayerSkin, { player: request.name, size: request.size });
 
@@ -289,7 +299,9 @@ export function PlayersWidget(props: Props) {
                             id: key,
                             label: (
                                 <span class={styles.player}>
-                                    <HeadAvatar name={nameOf(key)} loadHead={loadHead} size="small" alt="" class={styles.head} />
+                                    <Show when={s().heads} fallback={<PlayerAvatar name={nameOf(key)} size="small" />}>
+                                        <HeadAvatar name={nameOf(key)} loadHead={loadHead} size="small" alt="" class={styles.head} />
+                                    </Show>
                                     <span class={styles.playerName}>{nameOf(key)}</span>
                                 </span>
                             ),
@@ -300,10 +312,12 @@ export function PlayersWidget(props: Props) {
                 const moreRow = createMemo((): PaperWidgetRow | null =>
                     more() > 0 ? { id: "more", label: `and ${more()} more`, ariaLabel: `${more()} more players: open Game Server`, onClick: () => props.widget.openPanel() } : null,
                 );
-                const rows = createMemo((): PaperWidgetRow[] => {
-                    const extra = moreRow();
-                    return extra ? [...playerRows(), extra] : playerRows();
-                });
+                // names as typed are only how they're spelled: the roster stands
+                // without them, first saying why they're missing
+                const namesRow = createMemo((): PaperWidgetRow | null =>
+                    casing.error() ? { id: "names", label: `Names as typed not read: ${casing.error()}`, tone: "danger", ariaLabel: `Names as typed not read: ${casing.error()}. Open Game Server`, onClick: () => props.widget.openPanel() } : null,
+                );
+                const rows = createMemo((): PaperWidgetRow[] => [namesRow(), ...playerRows(), moreRow()].filter((row): row is PaperWidgetRow => row !== null));
                 return (
                     <PaperWidget
                         title="Players"

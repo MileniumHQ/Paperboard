@@ -24,11 +24,6 @@ export function playerCount(online: number, max: number | null): PlayerCount {
     };
 }
 
-export function softwareLabel(software: string, version: string, names: Readonly<Record<string, string>>): string {
-    const name = names[software] ?? software;
-    return version ? `${name} ${version}` : name;
-}
-
 /** the first `limit` players, or one fewer and a "more" row when they don't all fit */
 export function rosterRows(players: readonly string[], limit: number): { shown: string[]; more: number } {
     if (players.length <= limit) return { shown: [...players], more: 0 };

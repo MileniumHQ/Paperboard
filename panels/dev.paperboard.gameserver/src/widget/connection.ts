@@ -6,7 +6,7 @@ import { createSignal, onCleanup, type Accessor } from "solid-js";
 import { createPanelBridge, serviceApi, type WidgetContext } from "@mileniumhq/paperapi";
 import { gameFor } from "../games";
 import { serverStateOf } from "../servers";
-import { PANEL_ID } from "../service/contract";
+import { CALLS, PANEL_ID } from "../service/contract";
 import type { ServersState } from "../service";
 import type { GameServerState } from "../service/types";
 import { createLatest, createStateSignal } from "../core/state";
@@ -26,32 +26,20 @@ export type ServerView = Pick<
     | "localIp"
     | "serverPort"
     | "activeIssue"
+    | "maxPlayers"
 > & {
-    /** null while unknown: offline, not yet answered, or an older service */
-    maxPlayers: number | null;
-    supportsPlayers?: boolean;
-    softwareLabel?: string;
+    supportsPlayers: boolean;
+    softwareLabel: string;
+    /** the game draws its players' heads (get-player-skin), else a plain figure */
+    heads: boolean;
+    /** the game's file of names as typed, when it lists players in lower case */
+    nameBook?: string;
 };
 
 export type Connection =
     | { phase: "loading" }
     | { phase: "ready"; server: ServerView }
     | { phase: "unavailable"; message: string };
-
-export function viewOf(state: Partial<GameServerState>): ServerView {
-    return {
-        serverStatus: state.serverStatus ?? "offline",
-        serverSoftware: state.serverSoftware ?? "paper",
-        serverVersion: state.serverVersion ?? "",
-        onlinePlayers: Array.isArray(state.onlinePlayers) ? state.onlinePlayers : [],
-        maxPlayers: typeof state.maxPlayers === "number" ? state.maxPlayers : null,
-        serverMotd: state.serverMotd ?? "",
-        serverEntries: Array.isArray(state.serverEntries) ? state.serverEntries.slice(-TAIL_ENTRIES) : [],
-        localIp: state.localIp ?? "",
-        serverPort: state.serverPort ?? "",
-        activeIssue: state.activeIssue ?? null,
-    };
-}
 
 /** The option is explicit; only widgets from before several servers use the legacy server. */
 export function selectedWidgetServer(state: ServersState, option: string | undefined, widgetId?: string): { id: string; view: ServerView } {
@@ -60,11 +48,29 @@ export function selectedWidgetServer(state: ServersState, option: string | undef
     const server = state.servers.find((s) => s.id === id);
     if (!server) throw new Error("No server is chosen, or it was removed. Choose a Server in the widget options.");
     const game = gameFor(server.game);
-    if (widgetId && !game.describe({ software: server.state.serverSoftware, version: server.state.serverVersion, settings: serverStateOf(state, server.id).gameSettings }).widgets.includes(widgetId))
-        throw new Error(`${game.name} does not support the ${widgetId} widget`);
     const snapshot = serverStateOf(state, server.id);
-    const features = game.describe({ software: snapshot.serverSoftware, version: snapshot.serverVersion, settings: snapshot.gameSettings });
-    return { id: server.id, view: { ...viewOf(snapshot), supportsPlayers: features.widgets.includes("players"), softwareLabel: game.softwareLabel({ software: snapshot.serverSoftware, version: snapshot.serverVersion, settings: snapshot.gameSettings }) } };
+    const options = { software: snapshot.serverSoftware, version: snapshot.serverVersion, settings: snapshot.gameSettings };
+    const features = game.describe(options);
+    if (widgetId && !features.widgets.includes(widgetId)) throw new Error(`${game.name} does not support the ${widgetId} widget`);
+    return {
+        id: server.id,
+        view: {
+            serverStatus: snapshot.serverStatus,
+            serverSoftware: snapshot.serverSoftware,
+            serverVersion: snapshot.serverVersion,
+            onlinePlayers: snapshot.onlinePlayers,
+            maxPlayers: snapshot.maxPlayers,
+            serverMotd: snapshot.serverMotd,
+            serverEntries: snapshot.serverEntries.slice(-TAIL_ENTRIES),
+            localIp: snapshot.localIp,
+            serverPort: snapshot.serverPort,
+            activeIssue: snapshot.activeIssue,
+            supportsPlayers: features.widgets.includes("players"),
+            softwareLabel: game.softwareLabel(options),
+            heads: features.calls.includes(CALLS.getPlayerSkin),
+            nameBook: features.nameBook,
+        },
+    };
 }
 
 export interface WidgetServer {

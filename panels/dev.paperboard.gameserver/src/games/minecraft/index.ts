@@ -71,6 +71,7 @@ export const minecraft: GameDefinition = {
             calls: Object.values(CALLS).filter((id) => !unavailable.has(id)),
             widgets: ["status", "players", "console", "motd"],
             packages: java ? [{ id: java, purpose: "Minecraft Java runtime" }] : [],
+            nameBook: "usercache.json",
         };
     },
 };

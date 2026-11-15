@@ -83,6 +83,12 @@ export interface GameFeatures {
     calls: readonly string[];
     widgets: readonly string[];
     packages: readonly PackageRequirement[];
+    /**
+     * For a game that lists its online players in lower case: the server
+     * file (a JSON list of `{ name }`) that holds each name as the player
+     * typed it.
+     */
+    nameBook?: string;
 }
 /** Art under public/assets/games/<id>/, fetched once by scripts/fetch-game-art.ts. */
 export interface GameArt {
