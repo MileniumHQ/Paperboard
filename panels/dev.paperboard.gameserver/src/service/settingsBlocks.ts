@@ -59,7 +59,7 @@ export function settingsBlocks(ctx: Server): BlockSet {
                 type: "any",
                 read: async ({ option: id }: { option: string }) => {
                     const checked = optionNamed(ctx, id);
-                    const values = await runGameCall<Record<string, unknown>>(ctx, "readGameOptions", {});
+                    const values = await runGameCall(ctx, "readGameOptions", undefined);
                     if (!Object.hasOwn(values, checked.id)) throw new Error(`${checked.label} has no value yet`);
                     return values[checked.id];
                 },
@@ -74,7 +74,7 @@ export function settingsBlocks(ctx: Server): BlockSet {
                 inputs: { folder: { type: "text", name: "Folder", optional: true } },
                 type: "list<text>",
                 read: async ({ folder }: { folder?: string }) => {
-                    const listing = await runGameCall<{ entries: { path: string; kind: "file" | "folder" }[]; note?: string }>(ctx, "listServerFiles", {
+                    const listing = await runGameCall(ctx, "listServerFiles", {
                         path: folder ?? "",
                     });
                     return listing.entries.map((entry) => (entry.kind === "folder" ? `${entry.path}/` : entry.path));
@@ -90,7 +90,7 @@ export function settingsBlocks(ctx: Server): BlockSet {
                 inputs: { file },
                 type: "text",
                 read: async ({ file: path }: { file: string }) => {
-                    const content = await runGameCall<{ kind: string; text?: string; reason?: string }>(ctx, "readServerFile", { path });
+                    const content = await runGameCall(ctx, "readServerFile", { path });
                     if (content.kind === "unavailable") throw new Error(content.reason ?? `${path} can't be read as text`);
                     if (content.kind !== "text" || content.text === undefined) throw new Error(`${path} is not a text file`);
                     return content.text;
@@ -120,7 +120,7 @@ export function settingsBlocks(ctx: Server): BlockSet {
                 text: "Write {text} to {file}",
                 inputs: { text: { type: "text", name: "Text" }, file },
                 run: async ({ text, file: path }: { text: string; file: string }) => {
-                    const content = await runGameCall<{ kind: string; version?: string; reason?: string }>(ctx, "readServerFile", { path });
+                    const content = await runGameCall(ctx, "readServerFile", { path });
                     if (content.kind === "unavailable") throw new Error(content.reason ?? `${path} can't be written as text`);
                     if (content.kind !== "text" || !content.version) throw new Error(`${path} is not a text file`);
                     await runGameCall(ctx, "writeServerFile", { path, text, version: content.version });

@@ -3,9 +3,9 @@
 // adds its own through its service's blocks().
 import type { Server } from "./server";
 import type { BlockCommandDefinition, BlockEventDefinition, BlockSet, BlockTypeDefinition, BlockValueDefinition, BlocksProjectHandle } from "@mileniumhq/paperapi";
-import type { BackupEnded, BackupRecord } from "@mileniumhq/paperapi";
+import type { BackupEnded, BackupRecord, CallInput, CallsOf } from "@mileniumhq/paperapi";
 import { MAX_BUFFERED_ENTRIES, type ChatMessage, type GameServerState } from "./types";
-import { TRIGGER_IDS, type CallName, type TriggerId } from "./contract";
+import { TRIGGER_IDS, type CallName, type TriggerId, type gameServerContract } from "./contract";
 import { restartServerInstance, sendServerCommand, startServerInstance, stopServerInstance } from "./lifecycle";
 import { waitUntil } from "../games/serviceKit";
 import { listLogFiles, readLogFile } from "./logs";
@@ -421,10 +421,10 @@ export function playerEvents(): BlockEventDefinition[] {
 }
 
 /** Runs one of the game's calls the way its tab does, so a block is checked as the tab's edit is. */
-export async function runGameCall<T>(ctx: Server, id: CallName, inputs: Record<string, unknown>): Promise<T> {
+export async function runGameCall<K extends CallName>(ctx: Server, id: K, input: CallInput<CallsOf<typeof gameServerContract>[K]>) {
     const call = (await ctx.game.calls())[id];
     if (!call) throw new Error(`${ctx.definition.name} has no "${id}" call`);
-    return (await call(ctx, inputs)) as T;
+    return call(ctx, input);
 }
 
 /** How a game kicks, bans and unbans a player by the name Blocks knows them by, and who it has banned. */

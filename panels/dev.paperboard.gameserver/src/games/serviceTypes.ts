@@ -1,10 +1,7 @@
 /** Service-only module contract. Never imported as a value by renderers. */
-import type { Server } from "../service/server";
 import type { ServerCalls } from "../service/calls";
 import type { GameServerState } from "../service/types";
 import type { PortDeps } from "../service/ports";
-import type { CallInput, CallOutput } from "@mileniumhq/paperapi";
-import type { gameServerContract } from "../service/contract";
 export interface LaunchCommand {
     executable: string;
     args: string[];
@@ -23,20 +20,11 @@ export interface PortSpec {
     preferred: number | null;
     write(port: number): Promise<void>;
 }
-/** The calls of the panel's contract a game answers, each given the call's checked input and its server. */
-export type GameContractCalls = {
-    [K in keyof (typeof gameServerContract)["calls"]]: (
-        input: CallInput<(typeof gameServerContract)["calls"][K]>,
-        ctx: Server,
-    ) => Promise<CallOutput<(typeof gameServerContract)["calls"][K]>>;
-};
 /** One server's part of its game, made for that server alone (GameModule.create): it knows its server. */
 export interface GameService {
     initialState(): GameServerState;
     /** The contract's calls the game answers, and its blocks run; each is handed the server and the call's own input. */
     calls(): Promise<ServerCalls>;
-    /** The contract's calls the game answers; a call it leaves out is refused for its servers. */
-    contractCalls?(): Promise<Partial<GameContractCalls>>;
     /** The game's own blocks for the Blocks panel, beside the ones every game shares; its joins, leaves and chat among them. */
     blocks?(): Promise<import("@mileniumhq/paperapi").BlockSet>;
     initialize(running: boolean): Promise<void>;

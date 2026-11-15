@@ -5,6 +5,8 @@ import {
     config,
     fileApi,
     type CallHandlers,
+    type CallInput,
+    type CallsOf,
     type ContractContext,
     type StateOf,
     type BlocksHandle,
@@ -26,7 +28,6 @@ import { SERVER_EVENTS, serverType, serversBlocks, type ServersBlocksHost } from
 import { errorMessage } from "@mileniumhq/paperapi";
 import { appendCapped } from "./service/types";
 import { SERVERS_CALLS, gameServerContract, type CallName, type ServerSummary } from "./service/contract";
-import type { GameContractCalls } from "./games/serviceTypes";
 import { pictureCall } from "./service/pictures";
 import { handleProcessData, handleProcessExit, stopServerInstance, cancelReadiness, restartServerInstance, startServerInstance } from "./service/lifecycle";
 import { cancelAutomation, readAutomation, scheduleDailyRestart, scheduleUpdateChecks } from "./service/automation";
@@ -133,21 +134,13 @@ function requireInitialized(server: Server): Server {
 }
 // what a server's icon call changes in the lists that show it
 const ICON_CALLS: readonly CallName[] = ["setServerIcon", "removeServerIcon"];
-/** Runs one of a server's calls, as the server's game answers it, with the call's own input. */
-function serverCall(name: CallName, input: unknown, id: string | undefined): Promise<unknown> {
-    return onServer(id, name, async (server) => {
-        const found = (await server.game.calls())[name];
-        if (!found) throw new Error(`${server.definition.name} has no call "${name}"`);
-        return found(server, input ?? {});
-    });
-}
-/** One of the contract's calls, answered by the game of the server the page is open on. */
-function contractCall<K extends keyof GameContractCalls>(name: K) {
-    return (input: Parameters<GameContractCalls[K]>[0], _ctx: unknown, { server: id }: { server?: string }) =>
+/** One of a server's calls, as the server's game answers it, with the input the contract checked. */
+function game<K extends ServerCallName>(name: K) {
+    return (input: CallInput<Calls[K]>, _ctx: unknown, { server: id }: { server?: string }) =>
         onServer(id, name, async (server) => {
-            const answer = (await server.game.contractCalls?.())?.[name];
-            if (!answer) throw new Error(`${server.definition.name} has no call "${name}"`);
-            return answer(input, server);
+            const call = (await server.game.calls())[name];
+            if (!call) throw new Error(`${server.definition.name} has no call "${name}"`);
+            return call(server, input);
         });
 }
 /** Runs work for one server's call: the server must be set up and its game must answer the call. */
@@ -422,9 +415,12 @@ const BLOCK_CATEGORIES = [
     { name: "Automation", icon: "autorenew" },
     { name: "Logs", icon: "receipt_long" },
 ];
+type Calls = CallsOf<typeof gameServerContract>;
 type Handlers = CallHandlers<typeof gameServerContract>;
+type ServersCallName = (typeof SERVERS_CALLS)[number];
+type ServerCallName = Exclude<CallName, ServersCallName>;
 /** The calls about the saved servers, and the pictures every page shows: the panel's own, not any game's. */
-const serversCalls: Pick<Handlers, (typeof SERVERS_CALLS)[number]> = {
+const serversCalls: Pick<Handlers, ServersCallName> = {
     addServer: async ({ name, game }) => ({ id: await addServer(name, game) }),
     renameServer: async ({ name }, _ctx, { server }) => (await renameServer(server, name), true),
     removeServer: async (_input, _ctx, { server }) => {
@@ -436,26 +432,60 @@ const serversCalls: Pick<Handlers, (typeof SERVERS_CALLS)[number]> = {
     retryInitialize: async (_input, _ctx, { server }) => (await retryInitialize(server), true),
     servedPicture: (input) => pictureCall(input),
 };
-/**
- * Every other call is about one server, and its game answers it. The
- * games' calls take their input untyped until they answer the contract
- * themselves, as the modpack calls do; each answer is checked against the
- * contract before it leaves.
- */
-const serverCalls = Object.fromEntries(
-    (Object.keys(gameServerContract.calls) as CallName[])
-        .filter((name) => !(SERVERS_CALLS as readonly CallName[]).includes(name))
-        .map((name) => [name, (input: unknown, _ctx: unknown, { server }: { server?: string }) => serverCall(name, input, server)]),
-) as Omit<Handlers, (typeof SERVERS_CALLS)[number]>;
+/** Every other call is about one server, and its game answers it. */
+const serverCalls: Omit<Handlers, ServersCallName> = {
+    // every game's
+    readAutomation: game("readAutomation"), writeAutomation: game("writeAutomation"), runCommand: game("runCommand"), saveWorld: game("saveWorld"), startServer: game("startServer"),
+    stopServer: game("stopServer"), restartServer: game("restartServer"), loadConfig: game("loadConfig"), sayChat: game("sayChat"), listServerFiles: game("listServerFiles"),
+    readServerFile: game("readServerFile"), writeServerFile: game("writeServerFile"), listLogFiles: game("listLogFiles"), readLogFile: game("readLogFile"),
+    readGameOptions: game("readGameOptions"), writeGameOptions: game("writeGameOptions"),
+    // Minecraft's
+    killConflictingProcess: game("killConflictingProcess"), resetWorldFiles: game("resetWorldFiles"), clearActiveIssue: game("clearActiveIssue"),
+    retryRecovery: game("retryRecovery"), updatePanelConfig: game("updatePanelConfig"), listWorldDirs: game("listWorldDirs"), listWorlds: game("listWorlds"),
+    setActiveWorld: game("setActiveWorld"), deleteWorld: game("deleteWorld"), exportWorld: game("exportWorld"), importWorld: game("importWorld"),
+    discardWorldTransfer: game("discardWorldTransfer"), installServerVersion: game("installServerVersion"), listSoftwareVersions: game("listSoftwareVersions"),
+    readLoaderSettings: game("readLoaderSettings"), writeLoaderSetting: game("writeLoaderSetting"), readCrossplay: game("readCrossplay"),
+    writeCrossplaySetting: game("writeCrossplaySetting"), prepareCrossplay: game("prepareCrossplay"), readServerIcon: game("readServerIcon"), setServerIcon: game("setServerIcon"),
+    removeServerIcon: game("removeServerIcon"), locateAddonConfig: game("locateAddonConfig"), listMapRegions: game("listMapRegions"), renderMapTile: game("renderMapTile"),
+    listInstalledPlugins: game("listInstalledPlugins"), recordPluginInstalls: game("recordPluginInstalls"), previewPluginInstall: game("previewPluginInstall"),
+    installPluginVersion: game("installPluginVersion"), deletePlugin: game("deletePlugin"), uninstallAllPlugins: game("uninstallAllPlugins"), listDatapacks: game("listDatapacks"),
+    listDatapackVersions: game("listDatapackVersions"), installDatapack: game("installDatapack"), removeDatapack: game("removeDatapack"), readResourcePack: game("readResourcePack"),
+    listResourcePackVersions: game("listResourcePackVersions"), selectResourcePack: game("selectResourcePack"), removeResourcePack: game("removeResourcePack"),
+    readModpack: game("readModpack"), listModpackVersions: game("listModpackVersions"), installModpack: game("installModpack"), removeModpack: game("removeModpack"),
+    uploadPlugins: game("uploadPlugins"), uploadDatapacks: game("uploadDatapacks"), uploadModpack: game("uploadModpack"), discardAddonUpload: game("discardAddonUpload"),
+    kickPlayer: game("kickPlayer"), banPlayer: game("banPlayer"), opPlayer: game("opPlayer"), deopPlayer: game("deopPlayer"), whitelistPlayer: game("whitelistPlayer"),
+    unwhitelistPlayer: game("unwhitelistPlayer"), pardonPlayer: game("pardonPlayer"), killPlayer: game("killPlayer"), deletePlayerData: game("deletePlayerData"),
+    forgetPlayerData: game("forgetPlayerData"), getPlayerSkin: game("getPlayerSkin"), queryPlayerStats: game("queryPlayerStats"), queryOnlinePlayers: game("queryOnlinePlayers"),
+    queryPlayerPositions: game("queryPlayerPositions"), listRoster: game("listRoster"), currentPlayerNames: game("currentPlayerNames"), readBedrockNaming: game("readBedrockNaming"),
+    listPlayerStats: game("listPlayerStats"), queryGamerules: game("queryGamerules"), setGamerule: game("setGamerule"),
+    // Steam games'
+    steamInfo: game("steamInfo"), steamLatest: game("steamLatest"), steamInstall: game("steamInstall"),
+    // Source games'
+    sourceMetrics: game("sourceMetrics"), sourcePlayers: game("sourcePlayers"), sourceKick: game("sourceKick"), sourceBan: game("sourceBan"), sourceUnban: game("sourceUnban"),
+    sourceChangeMap: game("sourceChangeMap"), sourceMaps: game("sourceMaps"), sourceMapPictures: game("sourceMapPictures"), sourceMapPicture: game("sourceMapPicture"),
+    sourceMapCycle: game("sourceMapCycle"), sourceMapCycleSet: game("sourceMapCycleSet"), sourcePlay: game("sourcePlay"), sourceWorkshopMaps: game("sourceWorkshopMaps"),
+    sourceWorkshopFind: game("sourceWorkshopFind"), sourceWorkshopAdd: game("sourceWorkshopAdd"), sourceWorkshopRemove: game("sourceWorkshopRemove"),
+    sourceSourcemod: game("sourceSourcemod"), sourceSourcemodSet: game("sourceSourcemodSet"), sourcePlugin: game("sourcePlugin"), sourcePluginRemove: game("sourcePluginRemove"),
+    sourcePluginUpload: game("sourcePluginUpload"), sourceAdmin: game("sourceAdmin"),
+    // Terraria's
+    terrariaVersions: game("terrariaVersions"), terrariaInstall: game("terrariaInstall"), terrariaWorlds: game("terrariaWorlds"), terrariaWorld: game("terrariaWorld"),
+    terrariaWorldDelete: game("terrariaWorldDelete"), terrariaWorldInspect: game("terrariaWorldInspect"), terrariaWorldImport: game("terrariaWorldImport"),
+    terrariaWorldDiscard: game("terrariaWorldDiscard"), terrariaMods: game("terrariaMods"), terrariaModSearch: game("terrariaModSearch"), terrariaModItems: game("terrariaModItems"),
+    terrariaModInstall: game("terrariaModInstall"), terrariaModUpdates: game("terrariaModUpdates"), terrariaModRemove: game("terrariaModRemove"),
+    terrariaModUpload: game("terrariaModUpload"), terrariaPlayers: game("terrariaPlayers"), terrariaKick: game("terrariaKick"), terrariaBan: game("terrariaBan"),
+    terrariaUnban: game("terrariaUnban"), terrariaMotd: game("terrariaMotd"),
+    // Palworld's
+    palworldMetrics: game("palworldMetrics"), palworldPlayers: game("palworldPlayers"), palworldKick: game("palworldKick"), palworldBan: game("palworldBan"),
+    palworldUnban: game("palworldUnban"),
+    // Rust's
+    rustMetrics: game("rustMetrics"), rustMap: game("rustMap"), rustMapPicture: game("rustMapPicture"), rustMapDraw: game("rustMapDraw"), rustWipe: game("rustWipe"),
+    rustPlayers: game("rustPlayers"), rustKick: game("rustKick"), rustBan: game("rustBan"), rustUnban: game("rustUnban"),
+};
 export const gameServerService = definePanelService({
     contract: gameServerContract,
     calls: {
         ...serverCalls,
         ...serversCalls,
-        readModpack: contractCall("readModpack"),
-        listModpackVersions: contractCall("listModpackVersions"),
-        installModpack: contractCall("installModpack"),
-        removeModpack: contractCall("removeModpack"),
     },
     // Home's gallery: each widget's "Server" dropdown offers the servers whose game shows that widget
     widgetChoices: Object.fromEntries(["status", "players", "console", "motd"].map((widgetId) => [widgetId, {

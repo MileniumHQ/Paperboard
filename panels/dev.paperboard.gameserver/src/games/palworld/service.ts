@@ -207,8 +207,8 @@ export function palworldService(ctx: Server): GameService {
                 const raw: Record<string, string> = {};
                 for (const option of options) if (option.ini && Object.hasOwn(patch, option.id)) raw[option.ini.key] = encode(patch[option.id], option.ini.type, option.label);
                 if (Object.keys(raw).length > 0) await updateIni(raw);
-                if (Object.hasOwn(patch, "password")) await joinPassword.set(patch.password);
-                if (Object.hasOwn(patch, "adminPassword")) await adminPassword.set(patch.adminPassword);
+                if (Object.hasOwn(patch, "password")) await joinPassword.set(String(patch.password));
+                if (Object.hasOwn(patch, "adminPassword")) await adminPassword.set(String(patch.adminPassword));
                 const panel: Record<string, unknown> = {};
                 for (const id of ["port", "community"]) if (Object.hasOwn(patch, id)) panel[id] = patch[id];
                 if (Object.keys(panel).length > 0) await ctx.updateSettings(panel);
@@ -217,7 +217,7 @@ export function palworldService(ctx: Server): GameService {
             },
             ...steamInstallCalls(steam, install),
             palworldMetrics: () => rest().metrics(),
-            palworldPlayers: async () => ({ seen: await roster().seen(), bans: await roster().bans(), online: players.online() }),
+            palworldPlayers: async () => ({ seen: await roster().seen(), bans: await roster().bans(), online: [...players.online()] }),
             palworldKick: async (ctx, { userId: id }) => {
                 const checked = userId(id);
                 if (!settled(ctx, "Palworld") || !players.online().some((p) => p.userId === checked)) throw new Error("That player is not online");

@@ -307,7 +307,7 @@ export function rustService(ctx: Server): GameService {
                 await loadOptions();
                 return view;
             }),
-            rustPlayers: async (ctx) => ({ seen: await roster().seen(), bans: await bans(), online: players.online() }),
+            rustPlayers: async (ctx) => ({ seen: await roster().seen(), bans: await bans(), online: [...players.online()] }),
             rustKick: async (ctx, { steamId: raw }) => {
                 const id = steamId(raw);
                 if (!settled(ctx, "Rust") || !players.online().some((p) => p.steamId === id)) throw new Error("That player is not online");

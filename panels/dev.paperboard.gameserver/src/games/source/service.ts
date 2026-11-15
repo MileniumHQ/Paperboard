@@ -435,7 +435,7 @@ export function sourceService(spec: SourceGameSpec, game: GameDefinition): (ctx:
                 const nameOf = (p: { name: string }) => p.name;
                 const steamOf = (p: { steamId: string }) => p.steamId;
                 return mergeBlocks({ events: playerEvents() }, rosterBlocks({
-                    kick: (name) => runGameCall(ctx, ids.kick, { userId: onlyIdNamed(name, [...local.online.values()], nameOf, (p) => String(p.userId), "online") }),
+                    kick: (name) => runGameCall(ctx, ids.kick, { userId: Number(onlyIdNamed(name, [...local.online.values()], nameOf, (p) => String(p.userId), "online")) }),
                     ban: async (name) => runGameCall(ctx, ids.ban, { steamId: onlyIdNamed(name, [...people(), ...await roster().seen()], nameOf, steamOf, "on this server") }),
                     unban: async (name) => {
                         const bans = await roster().bans();
@@ -464,7 +464,7 @@ export function sourceService(spec: SourceGameSpec, game: GameDefinition): (ctx:
                         if (option.cvar) live.push(`${option.cvar} ${cvarValue(patch[option.id], option.label)}`);
                         if (option.id === "password") live.push(`sv_password ${cvarValue(patch.password, option.label)}`);
                     }
-                    for (const [id, secret] of vaulted) if (Object.hasOwn(patch, id)) await secret.set(patch[id]);
+                    for (const [id, secret] of vaulted) if (Object.hasOwn(patch, id)) await secret.set(String(patch[id]));
                     await ctx.updateSettings(next);
                     if (ctx.state.serverStatus === "online") {
                         if (Object.hasOwn(patch, "password")) local.secrets = [...local.secrets, String(patch.password)].filter(Boolean);
@@ -482,7 +482,7 @@ export function sourceService(spec: SourceGameSpec, game: GameDefinition): (ctx:
                 },
                 [ids.kick]: async (ctx, { userId }) => {
                     if (!online()) throw new Error(`${spec.name} is not running`);
-                    const player = local.online.get(Number(userId));
+                    const player = local.online.get(userId);
                     if (!player) throw new Error("That player is not online");
                     const reply = await rcon().exec(`kickid ${player.userId} Kicked by the server admin`);
                     if (/not found/.test(reply)) throw new Error(`${spec.name} did not find that player: ${reply.trim()}`);

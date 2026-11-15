@@ -21,7 +21,6 @@ export function minecraftService(server: Server): GameService & { minecraft: Min
         primaryProcessId: SERVER_PROC_ID,
         initialState: initialServerState,
         calls: async () => (await import("./calls")).minecraftCalls,
-        contractCalls: async () => (await import("./calls")).modpackCalls,
         blocks: async () => (await import("./blocks")).minecraftBlocks(server),
         async initialize(running) {
             if (!running) await settleInterruptedWork(server);

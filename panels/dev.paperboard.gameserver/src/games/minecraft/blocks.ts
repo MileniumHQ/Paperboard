@@ -7,9 +7,6 @@ import { listRoster } from "../../service/playerLists";
 import { listPlayerStats } from "../../service/playerStats";
 import { listWorlds, resolveLevelName } from "../../service/worlds";
 import { installLatestPlugin, listInstalledPlugins, livePluginInstallDeps, pluginTarget, uninstallAllPlugins } from "../../service/plugins";
-import type { DatapackListing } from "../../service/datapacks";
-import type { ModpackRecord } from "../../core/modpack";
-import type { ModrinthVersion } from "../../core/modrinth";
 import { deletePlayerData } from "../../service/players";
 import { setGamerule } from "../../service/gamerules";
 import type { PlayerStatSummary } from "../../core/playerStats";
@@ -292,8 +289,8 @@ export function minecraftBlocks(ctx: Server): BlockSet {
                 inputs: { datapack: { type: "text", name: "Modrinth Project", description: "Its id or the name in its Modrinth address, such as terralith" } },
                 output: "datapack",
                 run: async ({ datapack }: { datapack: string }) => {
-                    const installed = await runGameCall<{ name: string }>(ctx, "installDatapack", { projectId: datapack });
-                    const listing = await runGameCall<DatapackListing>(ctx, "listDatapacks", {});
+                    const installed = await runGameCall(ctx, "installDatapack", { projectId: datapack });
+                    const listing = await runGameCall(ctx, "listDatapacks", undefined);
                     const pack = listing.packs.find((p) => p.name === installed.name);
                     if (!pack) throw new Error(`${installed.name} was installed, but the active world doesn't list it`);
                     return { name: pack.name, title: pack.record?.title ?? "", version: pack.record?.version ?? "" };
@@ -309,7 +306,7 @@ export function minecraftBlocks(ctx: Server): BlockSet {
                 inputs: { datapack: { type: "text", name: "Datapack", description: "Its name, as Datapacks lists it" } },
                 run: async ({ datapack }: { datapack: string }) => {
                     // the tab removes what it listed; a block can name anything, so it is checked first
-                    const listing = await runGameCall<DatapackListing>(ctx, "listDatapacks", {});
+                    const listing = await runGameCall(ctx, "listDatapacks", undefined);
                     if (!listing.packs.some((p) => p.name === datapack)) throw new Error(`The active world has no datapack named ${datapack}`);
                     await runGameCall(ctx, "removeDatapack", { name: datapack });
                 },
@@ -326,7 +323,7 @@ export function minecraftBlocks(ctx: Server): BlockSet {
                     version: { type: "text", name: "Version", optional: true, description: "A version number Modrinth lists for it" },
                 },
                 run: async ({ modpack, version }: { modpack: string; version?: string }) => {
-                    const versions = await runGameCall<ModrinthVersion[]>(ctx, "listModpackVersions", { projectId: modpack });
+                    const versions = await runGameCall(ctx, "listModpackVersions", { projectId: modpack });
                     const chosen = version ? versions.find((v) => v.versionNumber === version || v.id === version) : versions[0];
                     if (!chosen) throw new Error(version ? `${modpack} has no version ${version} for this server's software` : `${modpack} has no version for this server's software`);
                     await runGameCall(ctx, "installModpack", { projectId: modpack, versionId: chosen.id });
@@ -339,7 +336,7 @@ export function minecraftBlocks(ctx: Server): BlockSet {
                 icon: "delete",
                 description: "Moves the modpack's files to the trash, keeping the server software, while the server is stopped",
                 run: async () => {
-                    await runGameCall(ctx, "removeModpack", {});
+                    await runGameCall(ctx, "removeModpack", undefined);
                 },
             }),
         ],
@@ -353,7 +350,7 @@ export function minecraftBlocks(ctx: Server): BlockSet {
                 description: "The datapacks in the active world",
                 type: "list<datapack>",
                 read: async () => {
-                    const listing = await runGameCall<DatapackListing>(ctx, "listDatapacks", {});
+                    const listing = await runGameCall(ctx, "listDatapacks", undefined);
                     return listing.packs.map((pack) => ({ name: pack.name, title: pack.record?.title ?? "", version: pack.record?.version ?? "" }));
                 },
             }),
@@ -365,7 +362,7 @@ export function minecraftBlocks(ctx: Server): BlockSet {
                 description: "The modpack the server runs; a server without one fails",
                 type: "modpack",
                 read: async () => {
-                    const { modpack } = await runGameCall<{ modpack: ModpackRecord | null }>(ctx, "readModpack", {});
+                    const { modpack } = await runGameCall(ctx, "readModpack", undefined);
                     if (!modpack) throw new Error("This server has no modpack");
                     return { title: modpack.title, version: modpack.versionNumber, minecraft: modpack.mcVersion };
                 },

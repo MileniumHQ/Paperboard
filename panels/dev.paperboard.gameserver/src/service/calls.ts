@@ -1,7 +1,8 @@
 import type { Server } from "./server";
 import { assertSingleLine } from "../core/players";
 
-import { type CallName } from "./contract";
+import type { CallInput, CallOutput } from "@mileniumhq/paperapi";
+import type { CallName, gameServerContract } from "./contract";
 import { startServerInstance, stopServerInstance, restartServerInstance, sendServerCommand, sendChatMessage } from "./lifecycle";
 import { listServerFiles, readServerFile, writeServerFile } from "./serverFiles";
 import { listLogFiles, readLogFile } from "./logs";
@@ -15,13 +16,15 @@ export async function sayInChat(ctx: Server, message: unknown): Promise<string> 
     await sendChatMessage(ctx, msg);
     return msg;
 }
+type Calls = (typeof gameServerContract)["calls"];
 /**
- * What a server's game answers of the panel's contract, and what its blocks
- * run: each is handed the server's context and the call's own input, which
- * the contract checked when a page made the call.
+ * One of the contract's calls, as a server's game answers it and its blocks
+ * run it: handed the server and the call's input, which the contract checked
+ * when a page made the call, and giving the contract's answer.
  */
-export type ServerCall = (ctx: Server, input: any) => unknown;
-export type ServerCalls = Partial<Record<CallName, ServerCall>>;
+export type ServerCall<K extends CallName> = (ctx: Server, input: CallInput<Calls[K]>) => CallOutput<Calls[K]> | Promise<CallOutput<Calls[K]>>;
+/** The calls a server's game answers; a call it leaves out is refused for its servers. */
+export type ServerCalls = { [K in CallName]?: ServerCall<K> };
 
 export const sharedCalls: ServerCalls = {
     readAutomation: async (ctx) => automationView(ctx, readAutomation(ctx)),

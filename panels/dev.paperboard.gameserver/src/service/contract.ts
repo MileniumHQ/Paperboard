@@ -429,7 +429,7 @@ const minecraftCalls = {
     },
     listDatapackVersions: { input: shape.object({ projectId: shape.text() }), output: modrinthVersions },
     installDatapack: {
-        input: shape.object({ projectId: shape.text(), versionId: shape.text() }),
+        input: shape.object({ projectId: shape.text(), versionId: shape.optional(shape.text()) }),
         output: shape.object({ name: shape.text(), world: shape.text(), version: shape.text() }),
     },
     removeDatapack: { input: shape.object({ name: shape.text() }), output: done },

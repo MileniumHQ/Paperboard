@@ -204,7 +204,7 @@ export function terrariaService(ctx: Server): GameService {
                 if (Object.hasOwn(patch, "password")) await joinPassword.set(singleLine(patch.password, "Join password"));
                 await ctx.updateSettings((current) => validateOptions(patch, current)); await generate(""); await loadOptions(); return ctx.state.gameSettings;
             }),
-            terrariaVersions: () => ({ releases, tmodloaderReleases, host: hostFor("vanilla"), hosts: { vanilla: hostFor("vanilla"), tmodloader: hostFor("tmodloader") } }),
+            terrariaVersions: () => ({ releases: [...releases], tmodloaderReleases: [...tmodloaderReleases], host: hostFor("vanilla"), hosts: { vanilla: hostFor("vanilla"), tmodloader: hostFor("tmodloader") } }),
             terrariaInstall: (ctx, { software: rawSoftware, version }) => exclusive(ctx, local, "Terraria", async () => {
                 const software = terrariaSoftware(rawSoftware ?? "vanilla");
                 host(software); const release = archiveFor(software, version);
@@ -237,10 +237,10 @@ export function terrariaService(ctx: Server): GameService {
             terrariaWorldImport: async (_ctx, { file, name }) => { await importUpload(await ctx.root(), file, name); return true; },
             terrariaWorldDiscard: async (_ctx, { file }) => { await discardUpload(await ctx.root(), file); return true; },
             terrariaMods: async ctx => ({ mods: await (await modStore()).list(), tmodloader: String(ctx.settings.version) }),
-            terrariaModSearch: async (_ctx, { query, page, sort }) => {
+            terrariaModSearch: async (_ctx, { query, sort }) => {
                 if (typeof query !== "string") throw new Error("Search text is required");
                 if (sort !== undefined && !SORTS.includes(sort)) throw new Error(`Sort is one of ${SORTS.join(", ")}`);
-                return searchWorkshop("tmodloader", query, { page: page ?? 1, sort });
+                return searchWorkshop("tmodloader", query, { sort });
             },
             terrariaModItems: async (_ctx, { ids }) => {
                 if (!Array.isArray(ids)) throw new Error("Workshop ids are required");
