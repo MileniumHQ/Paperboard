@@ -29,6 +29,8 @@ interface ActiveSession {
     cert: string;
     mainToken: string;
     davUser: string;
+    // kept in memory to make a panel's folder in an open session
+    davPass: string;
     mount: string; // drive "Z:", /Volumes/Name, or "" (linux)
     relay: DavRelay | null; // loopback relay to the remote daemon
     timer: NodeJS.Timeout | null;
@@ -201,6 +203,55 @@ function launch(cmd: string, args: string[]): Promise<void> {
     });
 }
 
+// the panel's folder is made on the remote first; 405 means it is already
+// there. Answers why it couldn't be, or null.
+async function makeSubDir(origin: string, cert: string, user: string, pass: string, subDir: string): Promise<string | null> {
+    const basic = "Basic " + Buffer.from(`${user}:${pass}`).toString("base64");
+    let prefix = "";
+    for (const seg of subDir.split("/").filter(Boolean)) {
+        prefix += `/${encodeURIComponent(seg)}`;
+        let status: number;
+        try {
+            ({ status } = await pinnedRequest(`${origin}/dav${prefix}`, cert, {
+                method: "MKCOL",
+                headers: { Authorization: basic },
+                timeoutMs: 10_000,
+            }));
+        } catch (err: any) {
+            return `The panel's folder couldn't be made on that computer: ${err?.message ?? String(err)}`;
+        }
+        if (status !== 201 && status !== 405) return `The panel's folder couldn't be made on that computer (HTTP ${status}).`;
+    }
+    return null;
+}
+
+// opens a window on the mounted folder (or, on Linux, the relay's URL).
+// Answers why it couldn't, or null.
+async function showFolder(rec: ActiveSession, subDir: string): Promise<string | null> {
+    if (process.platform === "linux") {
+        const opened = await openWithDesktop(relayFolderUrl(process.env.XDG_CURRENT_DESKTOP, rec.relay!.port, subDir));
+        return opened ? null : "No file manager opened the folder.";
+    }
+    const windows = process.platform === "win32";
+    const target = windows
+        ? `${rec.mount}\\${subDir ? `${subDir.split("/").join("\\")}\\` : ""}`
+        : subDir ? `${rec.mount}/${subDir}` : rec.mount;
+    // Explorer and Finder open somewhere else for a path that isn't there,
+    // so a missing folder is an error here, not a wrong window. Async: the
+    // drive is served by the relay in this very process, and a sync check
+    // would block the loop that has to answer it.
+    if (!(await fs.promises.access(target).then(() => true, () => false))) {
+        return `${windows ? "Windows" : "macOS"} mounted the folder, but ${target} isn't in it.`;
+    }
+    try {
+        if (windows) await launch("explorer", [target]);
+        else await execAsync("open", [target], 20_000);
+    } catch (err: any) {
+        return `${windows ? "Explorer" : "Finder"} couldn't open ${target}: ${err?.stderr?.trim() || err?.message || err}`;
+    }
+    return null;
+}
+
 export async function openRemoteFolder(
     computerId: string,
     panelId?: string,
@@ -217,6 +268,16 @@ export async function openRemoteFolder(
     const cert = client.getCert();
     if (!cert) return { ok: false, error: "This computer isn't paired. Pair it again from its settings." };
     const origin = `https://${bracketHost(host)}:${port}`;
+    // subdir ensured server-side so explorer lands somewhere real
+    const subDir = panelId ? `files/${panelFilesDirName(panelId)}` : "";
+
+    // a folder already open for this computer opens another window on it:
+    // remounting would cut off a copy still running in the first window
+    const open = active.get(computerId);
+    if (open?.relay && (open.mount || process.platform === "linux") && open.host === host && open.port === port && open.cert === cert && open.mainToken === mainToken) {
+        const error = (subDir ? await makeSubDir(origin, cert, open.davUser, open.davPass, subDir) : null) ?? (await showFolder(open, subDir));
+        return error ? { ok: false, error } : { ok: true };
+    }
 
     await closeRemoteFolder(computerId);
 
@@ -242,6 +303,7 @@ export async function openRemoteFolder(
         cert,
         mainToken,
         davUser: session.user,
+        davPass: session.pass,
         mount: "",
         relay: null,
         timer: null,
@@ -250,38 +312,14 @@ export async function openRemoteFolder(
         deadline: Date.now() + GRACE_MS,
     };
 
-    // subdir ensured server-side so explorer lands somewhere real
-    const subDir = panelId ? `files/${panelFilesDirName(panelId)}` : "";
-
     const fail = async (error: string) => {
         active.set(computerId, rec);
         await closeRemoteFolder(computerId);
         return { ok: false, error };
     };
 
-    // the panel's folder is made first; 405 means it is already there
-    if (subDir) {
-        const basic =
-            "Basic " +
-            Buffer.from(`${session.user}:${session.pass}`).toString("base64");
-        let prefix = "";
-        for (const seg of subDir.split("/").filter(Boolean)) {
-            prefix += `/${encodeURIComponent(seg)}`;
-            let status: number;
-            try {
-                ({ status } = await pinnedRequest(`${origin}/dav${prefix}`, cert, {
-                    method: "MKCOL",
-                    headers: { Authorization: basic },
-                    timeoutMs: 10_000,
-                }));
-            } catch (err: any) {
-                return await fail(`The panel's folder couldn't be made on that computer: ${err?.message ?? String(err)}`);
-            }
-            if (status !== 201 && status !== 405) {
-                return await fail(`The panel's folder couldn't be made on that computer (HTTP ${status}).`);
-            }
-        }
-    }
+    const madeSubDir = subDir ? await makeSubDir(origin, cert, session.user, session.pass, subDir) : null;
+    if (madeSubDir) return await fail(madeSubDir);
 
     try {
         // linux file managers get a credential-free URL and the relay checks
@@ -314,27 +352,7 @@ export async function openRemoteFolder(
                 return await fail("Windows mounted the folder but didn't say which drive it used.");
             }
             rec.mount = drive;
-            active.set(computerId, rec);
-            const target = subDir
-                ? `${drive}\\${subDir.split("/").join("\\")}\\`
-                : `${drive}\\`;
-            // Explorer opens Documents for a path it can't find, so a
-            // folder that isn't there is an error here, not a wrong window.
-            // Async: the drive is served by the relay in this very process,
-            // and a sync check would block the loop that has to answer it.
-            if (!(await fs.promises.access(target).then(() => true, () => false))) {
-                return await fail(`Windows mapped ${drive}, but ${target} isn't in it.`);
-            }
-            try {
-                await launch("explorer", [target]);
-            } catch (err: any) {
-                return await fail(`Explorer couldn't open ${target}: ${err?.message ?? err}`);
-            }
-            startWatcher(rec, () => windowsHasWindow(drive));
-            return { ok: true };
-        }
-
-        if (process.platform === "darwin") {
+        } else if (process.platform === "darwin") {
             const safeId = computerId.replace(/[^A-Za-z0-9-]/g, "-").slice(0, 32) || "remote";
             const mountPoint = `/Volumes/Paperboard-${safeId}`;
             fs.mkdirSync(mountPoint, { recursive: true });
@@ -354,24 +372,13 @@ export async function openRemoteFolder(
                 }
             }
             rec.mount = mountPoint;
-            active.set(computerId, rec);
-            const target = subDir ? `${mountPoint}/${subDir}` : mountPoint;
-            // Finder opens somewhere else for a path that isn't there
-            if (!(await fs.promises.access(target).then(() => true, () => false))) {
-                return await fail(`macOS mounted the folder, but ${target} isn't in it.`);
-            }
-            try {
-                await execAsync("open", [target], 20_000);
-            } catch (err: any) {
-                return await fail(`Finder couldn't open ${target}: ${err?.stderr?.trim() || err?.message || err}`);
-            }
-            startWatcher(rec, () => macHasWindow(mountPoint));
-            return { ok: true };
         }
 
+        const shown = await showFolder(rec, subDir);
+        if (shown) return await fail(shown);
         // linux: no window API to watch, so the relay's own idle timer ends it
-        const opened = await openWithDesktop(relayFolderUrl(process.env.XDG_CURRENT_DESKTOP, rec.relay.port, subDir));
-        if (!opened) return await fail("No file manager opened the folder.");
+        if (process.platform === "win32") startWatcher(rec, () => windowsHasWindow(rec.mount));
+        else if (process.platform === "darwin") startWatcher(rec, () => macHasWindow(rec.mount));
         return { ok: true };
     } catch (err: any) {
         logger.warn("[RemoteFolder] open failed:", err?.message ?? err);

@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, setDefaultTimeout, test } from "
 import { spawnSync } from "node:child_process";
 import * as fs from "node:fs";
 import * as http from "node:http";
+import * as https from "node:https";
 import * as net from "node:net";
 import * as path from "node:path";
 import { createTlsIdentity } from "../../../papercrane/tlsIdentity";
@@ -137,6 +138,58 @@ describe("DAV relay", () => {
 		expect((await ask(peer.port, { path: "/dav/files/test.relay/hello.txt", headers: { Host: `localhost:${peer.port}` } })).status).toBe(421);
 		expect((await ask(peer.port, { path: "/dav/files/test.relay/hello.txt", headers: { Host: `rebound.example:${peer.port}` } })).status).toBe(421);
 		expect((await ask(peer.port, { path: "/dav/files/test.relay/hello.txt", headers: { Host: `127.0.0.1:${peer.port}`, Origin: `http://127.0.0.1:${peer.port}` } })).status).toBe(421);
+	});
+
+	test("a download that streams longer than the quiet time is not cut off, and the relay closes once it ends", async () => {
+		const identity = createTlsIdentity();
+		let finish!: () => void;
+		const released = new Promise<void>((resolve) => (finish = resolve));
+		const slow = https.createServer({ key: identity.key, cert: identity.cert }, (_req, res) => {
+			res.writeHead(200, { "Content-Type": "application/octet-stream" });
+			res.write("first part,");
+			void released.then(() => res.end("last part"));
+		});
+		await new Promise<void>((resolve) => slow.listen(0, "127.0.0.1", resolve));
+		let idled!: () => void;
+		const wentIdle = new Promise<void>((resolve) => (idled = resolve));
+		let idleDuringCopy = false;
+		let streaming = true;
+		const copy = await startDavRelay({
+			upstream: `https://127.0.0.1:${(slow.address() as net.AddressInfo).port}`,
+			cert: identity.cert,
+			user: "u",
+			pass: "p",
+			clientAuth: "basic",
+			idleMs: 50,
+			onIdle: () => {
+				if (streaming) idleDuringCopy = true;
+				idled();
+			},
+		});
+		try {
+			const body = await new Promise<string>((resolve, reject) => {
+				const req = http.request({ host: "127.0.0.1", port: copy.port, path: "/dav/big.bin", headers: { Authorization: `Basic ${Buffer.from("u:p").toString("base64")}` }, agent: false }, (res) => {
+					let received = "";
+					res.on("data", (chunk) => {
+						// the copy keeps streaming for many times the quiet time
+						if (!received) setTimeout(() => finish(), 500);
+						received += chunk;
+					});
+					res.on("end", () => resolve(received));
+					res.on("error", reject);
+				});
+				req.on("error", reject);
+				req.end();
+			});
+			streaming = false;
+			expect(idleDuringCopy).toBe(false);
+			expect(body).toBe("first part,last part");
+			await wentIdle;
+		} finally {
+			await copy.close();
+			slow.closeAllConnections();
+			await new Promise<void>((resolve) => slow.close(() => resolve()));
+		}
 	});
 
 	test("basic mode refuses a request without the session credential", async () => {

@@ -134,10 +134,13 @@ export function startDavRelay(opts: DavRelayOptions): Promise<DavRelay> {
     const prefix = opts.clientAuth === "path" ? `/${randomBytes(24).toString("hex")}` : "";
     const sockets = new Set<net.Socket>();
     let idleTimer: NodeJS.Timeout | null = null;
+    // requests still answering: a long copy keeps the relay open however
+    // long it streams, and the quiet time starts once the last one ends
+    let active = 0;
     let closed = false;
     let port = 0;
 
-    const touch = () => {
+    const armIdle = () => {
         if (idleTimer) clearTimeout(idleTimer);
         idleTimer = setTimeout(() => {
             logger.info("[DavRelay] idle; closing");
@@ -147,7 +150,12 @@ export function startDavRelay(opts: DavRelayOptions): Promise<DavRelay> {
     };
 
     const httpServer = http.createServer((req, res) => {
-        touch();
+        active++;
+        if (idleTimer) clearTimeout(idleTimer);
+        idleTimer = null;
+        res.once("close", () => {
+            if (--active === 0 && !closed) armIdle();
+        });
         // peer mode adds the credential itself, and the user's own browser
         // passes the socket owner check: a page that rebinds its hostname
         // to 127.0.0.1 would ride that credential. File managers address
@@ -306,7 +314,7 @@ export function startDavRelay(opts: DavRelayOptions): Promise<DavRelay> {
         gate.listen(0, "127.0.0.1", () => {
             const address = gate.address();
             port = typeof address === "object" && address ? address.port : 0;
-            touch();
+            armIdle();
             resolve(relay);
         });
     });
