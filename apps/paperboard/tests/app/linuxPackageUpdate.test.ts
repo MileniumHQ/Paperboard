@@ -18,15 +18,20 @@ let base: string;
 let sums: string;
 let feedVersion: string;
 let dir: string;
+let packageRequests: number;
 
 beforeEach(async () => {
     dir = tempDir("package-update");
     feedVersion = "9.0.0";
+    packageRequests = 0;
     sums = `${crypto.createHash("sha256").update(PACKAGE).digest("hex")}  ${FILE}\n`;
     server = http.createServer((req, res) => {
         if (req.url === "/pb/latest-linux.yml") return void res.end(`version: ${feedVersion}\npath: x\nsha512: x\nfiles: []\n`);
         if (req.url === "/pb/SHA256SUMS") return void res.end(sums);
-        if (req.url === `/pb/latest/${FILE}`) return void res.end(PACKAGE);
+        if (req.url === `/pb/latest/${FILE}`) {
+            packageRequests++;
+            return void res.end(PACKAGE);
+        }
         res.writeHead(404);
         res.end();
     });
@@ -60,6 +65,25 @@ describe("a .deb or .rpm Paperboard updates itself", () => {
         await (await u.checkForUpdates()).downloadPromise;
         expect(events).toEqual(["update-available", "update-downloaded"]);
         expect(fs.readFileSync(path.join(dir, "downloads", FILE), "utf8")).toBe(PACKAGE);
+    });
+
+    test("a release already downloaded is not downloaded again by the next check", async () => {
+        const { updater: u, events } = updater();
+        await (await u.checkForUpdates()).downloadPromise;
+        expect((await u.checkForUpdates()).downloadPromise).toBeNull();
+        expect(packageRequests).toBe(1);
+        expect(events).toEqual(["update-available", "update-downloaded", "update-downloaded"]);
+        // a newer release than the one waiting downloads
+        feedVersion = "9.1.0";
+        await (await u.checkForUpdates()).downloadPromise;
+        expect(packageRequests).toBe(2);
+    });
+
+    test("a checksum list is read up to 64 KiB of bytes, not characters", async () => {
+        // 40,000 three-byte characters: under the cap as characters, far over it as bytes
+        sums = "€".repeat(40_000);
+        const { downloadPromise } = await updater().updater.checkForUpdates();
+        await expect(downloadPromise!).rejects.toThrow("larger than 64 KiB");
     });
 
     test("a package that doesn't match its checksum is thrown away, never installed", async () => {

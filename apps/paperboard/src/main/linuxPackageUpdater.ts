@@ -13,10 +13,9 @@ import { createHash } from "node:crypto";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { pipeline } from "node:stream/promises";
-import { gt, valid } from "semver";
-import { parseUpdateInfo } from "electron-updater/out/providers/Provider";
+import { readCappedText, readUpdateFeed } from "./manualAppUpdater";
 
-const MAX_TEXT_BYTES = 64 * 1024;
+const MAX_STDERR_CHARS = 64 * 1024;
 const MAX_PACKAGE_BYTES = 1024 * 1024 * 1024;
 
 export type PackageType = "deb" | "rpm";
@@ -54,14 +53,6 @@ export function onPath(cmd: string, pathVar: string = process.env.PATH ?? ""): b
     });
 }
 
-async function readText(url: string, signal: AbortSignal): Promise<string> {
-    const response = await fetch(url, { signal });
-    if (!response.ok) throw new Error(`Could not check app updates: ${url} answered HTTP ${response.status}`);
-    const text = await response.text();
-    if (text.length > MAX_TEXT_BYTES) throw new Error(`${url} is larger than it can be`);
-    return text;
-}
-
 export interface LinuxPackageUpdaterOptions {
     currentVersion: string;
     feedUrl: string;
@@ -91,24 +82,37 @@ export class LinuxPackageUpdater extends EventEmitter {
     async checkForUpdates(): Promise<{ downloadPromise: Promise<void> | null }> {
         const controller = new AbortController();
         this.request = controller;
-        const signal = AbortSignal.any([controller.signal, AbortSignal.timeout(10_000)]);
-        const info = parseUpdateInfo(await readText(this.opts.feedUrl, signal), path.basename(this.opts.feedUrl), new URL(this.opts.feedUrl));
-        if (!valid(info.version) || !valid(this.opts.currentVersion)) throw new Error("The app update version is invalid");
-        if (!gt(info.version, this.opts.currentVersion)) {
-            this.request = null;
+        const settle = () => {
+            if (this.request === controller) this.request = null;
+        };
+        let feed: Awaited<ReturnType<typeof readUpdateFeed>>;
+        try {
+            feed = await readUpdateFeed(this.opts.feedUrl, this.opts.currentVersion, AbortSignal.any([controller.signal, AbortSignal.timeout(10_000)]));
+        } catch (err) {
+            settle();
+            throw err;
+        }
+        const { info, newer } = feed;
+        if (!newer) {
+            settle();
             this.emit("update-not-available", info);
             return { downloadPromise: null };
         }
+        // a release already downloaded and waiting for "Restart to update"
+        // is not downloaded again
+        const downloaded = this.downloaded;
+        if (downloaded?.version === info.version && fs.existsSync(downloaded.file)) {
+            settle();
+            this.emit("update-downloaded", { version: info.version });
+            return { downloadPromise: null };
+        }
         this.emit("update-available", info);
-        const downloadPromise = this.download(info.version, controller).finally(() => {
-            if (this.request === controller) this.request = null;
-        });
-        return { downloadPromise };
+        return { downloadPromise: this.download(info.version, controller).finally(settle) };
     }
 
     private async download(version: string, controller: AbortController): Promise<void> {
         const { downloadBase, file, downloadDir } = this.opts;
-        const sums = await readText(`${downloadBase}/SHA256SUMS`, AbortSignal.any([controller.signal, AbortSignal.timeout(10_000)]));
+        const sums = await readCappedText(`${downloadBase}/SHA256SUMS`, AbortSignal.any([controller.signal, AbortSignal.timeout(10_000)]));
         const expected = sums.split("\n").map((line) => line.trim().split(/\s+/)).find((parts) => parts[1] === file)?.[0];
         if (!expected || !/^[a-f0-9]{64}$/.test(expected)) throw new Error(`The latest release lists no checksum for ${file}`);
 
@@ -159,7 +163,7 @@ export class LinuxPackageUpdater extends EventEmitter {
             const child = spawn(bin, args, { stdio: ["ignore", "ignore", "pipe"] });
             let stderr = "";
             child.stderr.on("data", (chunk: Buffer) => {
-                if (stderr.length < MAX_TEXT_BYTES) stderr += chunk.toString("utf8");
+                if (stderr.length < MAX_STDERR_CHARS) stderr += chunk.toString("utf8");
             });
             child.once("error", (err) => reject(new Error(`The update wasn't installed: couldn't run ${bin} (${err.message})`)));
             child.once("exit", (code) => {
