@@ -135,6 +135,47 @@ async function consoleChecks() {
     };
 }
 
+/** The Paperboard window at its narrowest, as the panel gets it beside the app's sidebar. */
+const NARROWEST = { width: 620, height: 520 };
+
+/**
+ * The console and the Library, with log lines shown: the console is opaque,
+ * so the blocks under it don't show through its lines, and never reaches
+ * over the Library; in the narrowest window the Library leaves the canvas
+ * as much room as it takes.
+ */
+async function layoutChecks() {
+    const panel = document.querySelector<HTMLElement>('[title="Clear Console"]')!.closest<HTMLElement>('[class*="_panel_"]')!;
+    const look = () => {
+        const host = canvas()!.getInjectionDiv().getBoundingClientRect();
+        const library = canvas()!.getFlyout()!.getWorkspace().getParentSvg().getBoundingClientRect();
+        const log = panel.getBoundingClientRect();
+        return {
+            libraryWidth: Math.round(library.width),
+            canvasRoom: Math.round(host.right - library.right),
+            consoleOverLibrary: Math.round(library.right - log.left),
+            consoleOutside: Math.round(log.right - host.right),
+        };
+    };
+    const background = getComputedStyle(panel).backgroundColor;
+    const [, , , alpha] = background.match(/[\d.]+/g)!.map(Number);
+    const wide = look();
+    await shoot("console");
+    await viewport(NARROWEST);
+    await settle();
+    const narrow = look();
+    await viewport(null);
+    await settle();
+    for (const theme of ["light", "dark"]) {
+        document.documentElement.setAttribute("data-paperui-theme", theme);
+        await settle();
+        await fetch("/screenshot", { method: "POST", body: JSON.stringify({ name: `console-narrowest-${theme}`, ...NARROWEST }) });
+    }
+    document.documentElement.removeAttribute("data-paperui-theme");
+    await settle();
+    return { alpha: alpha ?? 1, backdrop: getComputedStyle(panel).backdropFilter, wide, narrow, back: look() };
+}
+
 /** The project list changes under the editor's Rename and Delete dialogs. */
 async function dialogChecks() {
     const menu = async (item: string) => {
@@ -514,6 +555,7 @@ async function run(): Promise<Record<string, unknown>> {
     await railItem("Flow");
     await settle();
     const consoleResult = await consoleChecks();
+    const layout = await layoutChecks();
     const dialogs = await dialogChecks();
     const library = await libraryChecks();
     const createVariable = await createVariableChecks();
@@ -524,7 +566,7 @@ async function run(): Promise<Record<string, unknown>> {
     const opening = await openChecks();
     const unsavedWork = await unsavedChecks();
     const homeScreen = await homeChecks();
-    return { console: consoleResult, dialogs, library, createVariable, toggle, refresh, loadFailure, leaving, opening, unsavedWork, home: homeScreen, uncaught: [...errors] };
+    return { console: consoleResult, layout, dialogs, library, createVariable, toggle, refresh, loadFailure, leaving, opening, unsavedWork, home: homeScreen, uncaught: [...errors] };
 }
 
 run()

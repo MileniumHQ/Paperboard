@@ -19,6 +19,8 @@
     position: relative;
     flex: 1 1 0;
     min-width: 0;
+    /* what's over the canvas sizes itself to it (the console) */
+    container-type: size;
 }
 
 .canvas {
@@ -97,15 +99,23 @@
     opacity: var(--paper-opacity-soft);
 }
 
-/* the console, top right over the canvas */
+/* the console, top right over the canvas, never reaching over the Library */
 .topRight {
     position: absolute;
+    position-anchor: --library-list;
     top: var(--paper-uigap);
     right: var(--paper-uigap);
+    left: calc(anchor(right, 0px) + var(--paper-uigap));
     display: flex;
     flex-direction: column;
     align-items: flex-end;
     gap: var(--paper-uigap-half);
+    /* as wide as the canvas: only what's in it takes the pointer, not the room beside it */
+    pointer-events: none;
+}
+
+.topRight > * {
+    pointer-events: auto;
 }
 
 /* zoom over the trash, bottom right */

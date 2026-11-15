@@ -2,7 +2,9 @@
 // the way Blockly's blocks do, kept open beside the canvas. It sits under
 // the Library's header (the panel's HTML), keeps one size whatever the
 // canvas is zoomed to, and is --library-width wide unless a block needs
-// more. The header takes its width from the list's element (CSS anchors).
+// more; in a narrow window it takes no more than half the canvas, so the
+// canvas keeps room to drop blocks on. The header takes its width from the
+// list's element (CSS anchors).
 import * as Blockly from "blockly";
 import { tokenPixels } from "./tokens";
 
@@ -27,7 +29,13 @@ export function uiGap(): number {
     return tokenPixels("--paper-uigap");
 }
 
+/** The share of the canvas the Library may take, at most, before a block's own width. */
+const MOST_OF_CANVAS = 0.5;
+
 export class LibraryFlyout extends Blockly.VerticalFlyout {
+    /** the width the list was last laid out to */
+    private least = 0;
+
     constructor(options: Blockly.Options) {
         super(options);
         // a gap around and between blocks
@@ -52,8 +60,16 @@ export class LibraryFlyout extends Blockly.VerticalFlyout {
         (this as unknown as { updateDisplay(): void }).updateDisplay();
     }
 
+    /** --library-width, or half the canvas where that is less. */
+    private leastWidth(): number {
+        const host = this.targetWorkspace.getInjectionDiv();
+        return Math.min(cssPixels(host, "--library-width"), Math.floor(host.clientWidth * MOST_OF_CANVAS));
+    }
+
     override position(): void {
         if (!this.isVisible() || !this.targetWorkspace.isVisible()) return;
+        // the window was resized past where the list's width changes: laid out again, which positions it
+        if (this.leastWidth() !== this.least) return this.reflow();
         const view = this.targetWorkspace.getMetricsManager().getViewMetrics();
         this.height_ = Math.max(0, view.height - top);
         // square: it meets the header above and the canvas beside it
@@ -63,10 +79,11 @@ export class LibraryFlyout extends Blockly.VerticalFlyout {
 
     /** As wide as the Library, or the widest block where one won't fit: a block is never cut off. */
     protected override reflowInternal_(): void {
+        // first, as the layout below positions the list, which would lay it out again for a width it hasn't taken yet
+        this.least = this.leastWidth();
         super.reflowInternal_();
-        const least = cssPixels(this.targetWorkspace.getInjectionDiv(), "--library-width");
-        if (this.width_ < least) {
-            this.width_ = least;
+        if (this.width_ < this.least) {
+            this.width_ = this.least;
             this.position();
             this.targetWorkspace.resizeContents();
             this.targetWorkspace.recordDragTargets();

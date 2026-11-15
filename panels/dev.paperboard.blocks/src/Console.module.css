@@ -1,12 +1,12 @@
-/* The run log: a glass panel over the canvas. */
+/* The run log: a card over the canvas, opaque so the blocks under it never show through its lines. */
 
 .panel {
     width: var(--paper-size-split-side);
-    max-height: var(--paper-size-panel-height-small);
+    max-width: 100%;
+    /* the top half of a short canvas at most, clear of the zoom buttons under it */
+    max-height: min(var(--paper-size-panel-height-small), 50cqh);
     border-radius: var(--paper-border-radius);
-    background: color-mix(in srgb, var(--paper-surface) 72%, transparent);
-    backdrop-filter: var(--paper-blur-heavy);
-    -webkit-backdrop-filter: var(--paper-blur-heavy);
+    background: var(--paper-surface);
     border: var(--paper-border-width) solid var(--paper-border);
     display: flex;
     flex-direction: column;
@@ -21,7 +21,7 @@
     justify-content: space-between;
     padding: var(--paper-uigap-onefourth) var(--paper-uigap-half);
     border-bottom: var(--paper-border-width) solid var(--paper-border-subtle);
-    background: color-mix(in srgb, var(--paper-surface-raised) 50%, transparent);
+    background: var(--paper-surface-raised);
 }
 
 .title {
