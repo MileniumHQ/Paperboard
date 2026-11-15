@@ -2,13 +2,16 @@
 // exercise the panel's own components (ActionBlock, VariableMenu, richText),
 // so the shared library only has to be a DOM element with the handlers and
 // class names the panel passes through.
-import type { JSX } from "solid-js";
+import { splitProps, type JSX } from "solid-js";
+import { Dynamic } from "solid-js/web";
 
 function Box(props: any): JSX.Element {
-    const { children, tag, ...rest } = props;
-    if (tag === "span") return <span {...rest}>{children}</span>;
-    if (tag === "button") return <button {...rest}>{children}</button>;
-    return <div {...rest}>{children}</div>;
+    const [own, rest] = splitProps(props, ["children", "tag"]);
+    return (
+        <Dynamic component={own.tag ?? "div"} {...rest}>
+            {own.children}
+        </Dynamic>
+    );
 }
 
 export function PaperFlex(props: any): JSX.Element {
@@ -28,8 +31,8 @@ export function PaperButton(props: any): JSX.Element {
 }
 
 export function PaperSwatch(props: any): JSX.Element {
-    const { color, size: _size, ...rest } = props;
-    return <Box tag="span" {...rest} style={{ background: color }} />;
+    const [own, rest] = splitProps(props, ["color", "size"]);
+    return <Box tag="span" {...rest} style={{ background: own.color }} />;
 }
 
 export function PaperSelectMenu(props: any): JSX.Element {

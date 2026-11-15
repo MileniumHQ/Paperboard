@@ -8,8 +8,9 @@
 // runs the Solid rules alone (the deprecated panels, which nobody changes).
 //
 // Scanned: .ts/.tsx under the given dirs, skipping node_modules, dist, out,
-// build, release, coverage, dot-dirs and `fixtures` dirs (fixtures are test
-// inputs, not product code), and .d.ts files.
+// build, release, coverage, dot-dirs and .d.ts files. Tests and their
+// fixtures are scanned like any code: a fixture is code a test runs, and
+// reaches into other packages and swallows failures as easily.
 //
 // "Prop objects" are the identifiers `props`, every name bound by
 // `const [a, b] = splitProps(...)` and every name bound to `mergeProps(...)`
@@ -114,7 +115,7 @@ try {
     process.exit(2);
 }
 
-const SKIP_DIRS = new Set(["node_modules", "dist", "out", "build", "release", "coverage", "fixtures"]);
+const SKIP_DIRS = new Set(["node_modules", "dist", "out", "build", "release", "coverage"]);
 const EFFECTS = new Set(["createEffect", "createRenderEffect", "createComputed", "onMount"]);
 
 export type Hit = { file: string; line: number; rule: string; message: string };

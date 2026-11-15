@@ -56,15 +56,15 @@ describe("the Solid check flags each mistake and passes its near miss", () => {
         ).toEqual([]);
     });
 
-    test("scanning a directory skips fixtures and node_modules", () => {
+    test("scanning a directory takes in tests and their fixtures, and skips node_modules", () => {
         const root = mkdtempSync(join(tmpdir(), "check-solid-"));
         try {
             const bad = `export const A = ({ a }: { a: string }) => <b>{a}</b>;\n`;
-            for (const dir of ["src", "src/fixtures", "node_modules/x"]) {
+            for (const dir of ["src", "test/fixtures", "node_modules/x"]) {
                 mkdirSync(join(root, dir), { recursive: true });
                 writeFileSync(join(root, dir, "A.tsx"), bad);
             }
-            expect(checkDirs([root]).map((h) => h.file)).toEqual([join(root, "src", "A.tsx")]);
+            expect(checkDirs([root]).map((h) => h.file).sort()).toEqual([join(root, "src", "A.tsx"), join(root, "test", "fixtures", "A.tsx")]);
         } finally {
             rmSync(root, { recursive: true, force: true });
         }
