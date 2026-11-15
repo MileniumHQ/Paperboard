@@ -170,19 +170,21 @@ function Scenes(props: {
     const brainReady = () => brain()?.phase === "ready";
     // each brain is installed and signed in once per visit to the step; stopping a sign-in doesn't start another by itself
     const started = new Set<string>();
-    createEffect(() => {
-        const h = props.harness();
-        const b = brain();
-        if (!h || !b || wizard.currentStep() !== STEP.signIn) return;
-        // one already on the computer is the person's to choose or pass over: its buttons are on this step
-        if (b.phase === "none" && !b.found && !started.has(`install:${h}`)) {
-            started.add(`install:${h}`);
-            void actions.install(h);
-        } else if (b.phase === "installed" && !started.has(`sign-in:${h}`)) {
-            started.add(`sign-in:${h}`);
-            void actions.signIn(h);
-        }
-    });
+    // An install that finishes moves the brain to "installed", which is what starts its sign-in: the phase is a trigger, and
+    // `started` keeps each from running twice.
+    createEffect(
+        on([props.harness, wizard.currentStep, () => brain()?.phase, () => !!brain()?.found], ([h, step, phase, found]) => {
+            if (!h || !phase || step !== STEP.signIn) return;
+            // one already on the computer is the person's to choose or pass over: its buttons are on this step
+            if (phase === "none" && !found && !started.has(`install:${h}`)) {
+                started.add(`install:${h}`);
+                void actions.install(h);
+            } else if (phase === "installed" && !started.has(`sign-in:${h}`)) {
+                started.add(`sign-in:${h}`);
+                void actions.signIn(h);
+            }
+        }),
+    );
 
     // the chosen brain's own models; a model belongs to its harness, so another brain is chosen afresh
     const models = createModels(props.agent, () => (brainReady() ? props.harness() : undefined));
@@ -228,10 +230,8 @@ function Scenes(props: {
                 return true;
         }
     };
-    createEffect(() => {
-        wizard.setOptionsShown(revealed());
-        wizard.setCanProceed(ready());
-    });
+    createEffect(on(revealed, (shown) => wizard.setOptionsShown(shown)));
+    createEffect(on(ready, (can) => wizard.setCanProceed(can)));
 
     const scenes: Record<number, () => Promise<boolean>> = {
         [STEP.name]: () =>

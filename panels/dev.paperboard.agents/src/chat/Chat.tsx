@@ -58,7 +58,7 @@ export default function Chat(props: { agent: Agent; face: FaceController; pages:
     const name = () => props.agent.state.settings?.name ?? "Your agent";
 
     // thinking while the agent is on it, working or writing
-    createEffect(() => props.face.ponder(props.agent.state.chat.busy));
+    createEffect(on(() => props.agent.state.chat.busy, (busy) => props.face.ponder(busy)));
 
     const status = () => {
         const c = props.agent.state.computer;
@@ -124,11 +124,13 @@ export default function Chat(props: { agent: Agent; face: FaceController; pages:
     const draftOf = (id: string) => drafts.get(id) ?? drafts.set(id, { values: [], image: null }).get(id)!;
 
     // another conversation became current: a reply or a sign-in draft from the last one has nothing to point at
-    createEffect(() => {
-        const r = replyTo();
-        if (r && !props.agent.entries.some((e) => e.id === r.id)) setReplyTo(null);
-        for (const id of drafts.keys()) if (!props.agent.entries.some((e) => e.id === id)) drafts.delete(id);
-    });
+    const entryIds = createMemo(() => new Set(props.agent.entries.map((e) => e.id)));
+    createEffect(
+        on([replyTo, entryIds], ([r, ids]) => {
+            if (r && !ids.has(r.id)) setReplyTo(null);
+            for (const id of drafts.keys()) if (!ids.has(id)) drafts.delete(id);
+        }),
+    );
 
     // Old transcripts held tool-call entries; only messages, errors, the agent's requests and pages are shown.
     const rows = createMemo<Row[]>(() => {
@@ -194,12 +196,13 @@ export default function Chat(props: { agent: Agent; face: FaceController; pages:
 
     // a reply that arrives while the chat is open is felt once, like a text coming in; a conversation loading (every id new) is not a reply
     let known = new Set<string>();
-    createEffect(() => {
-        const ids = props.agent.entries.map((e) => e.id);
-        const fresh = props.agent.entries.filter((e) => !known.has(e.id));
-        if (known.size > 0 && fresh.length < ids.length && fresh.some((e) => e.kind === "agent")) haptic("receive");
-        known = new Set(ids);
-    });
+    createEffect(
+        on(entryIds, (ids) => {
+            const fresh = props.agent.entries.filter((e) => !known.has(e.id));
+            if (known.size > 0 && fresh.length < ids.size && fresh.some((e) => e.kind === "agent")) haptic("receive");
+            known = ids;
+        }),
+    );
 
     // Whatever changes size (a bubble arriving or leaving, a picture loading in one, the message box growing, the keyboard rising,
     // older rows drawn above) the chat is put back in its place before the frame is painted: the end stays at the bottom,

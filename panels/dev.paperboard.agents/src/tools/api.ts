@@ -7,6 +7,7 @@ import { actionsApi } from "@mileniumhq/paperapi";
 import { createSignal, onCleanup } from "solid-js";
 import { createStore, reconcile } from "solid-js/store";
 import { PANEL_ID } from "../contract";
+import { errorText } from "../lib/failure";
 import { TOOLS_ACTION_IDS, TOOLS_EVENT, type ServerSpec, type ToolsView } from "../toolsContract";
 
 export type ToolsLoad = "loading" | "ready" | "failed";
@@ -39,7 +40,7 @@ function openTools() {
             await call(TOOLS_ACTION_IDS.get);
             setLoad("ready");
         } catch (e) {
-            setLoadError(e instanceof Error ? e.message : String(e));
+            setLoadError(errorText(e));
             setLoad("failed");
         }
     };

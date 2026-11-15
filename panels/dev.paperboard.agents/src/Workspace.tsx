@@ -3,7 +3,7 @@
 // beside the page. A page opened from a card or the Pages page slides in from
 // the right, and the chat steps aside to a column, or all the way off to the left.
 
-import { For, Show, createEffect, createSignal, onCleanup, untrack } from "solid-js";
+import { For, Show, createEffect, createSignal, on, onCleanup, untrack } from "solid-js";
 import { PAPER_PANEL_COMPACT_WIDTH, PaperFlex, PaperMenu, PaperMenuItem, PaperModal } from "@mileniumhq/paperui";
 import Access from "./access/Access";
 import Pages from "./pages/Pages";
@@ -60,13 +60,14 @@ export default function Workspace(props: { agent: Agent }) {
     // the page stays drawn while it slides away, and goes once it's off screen
     const [drawn, setDrawn] = createSignal<OpenPage | null>(null);
     let pagePane!: HTMLDivElement;
-    createEffect(() => {
-        const s = pages.shown();
-        if (s) return void setDrawn(s);
-        setExtended(false);
-        // the slide away, if there is one (none when motion is reduced); a slide cut short ends it too
-        void Promise.allSettled(pagePane.getAnimations().map((a) => a.finished)).then(() => !pages.shown() && setDrawn(null));
-    });
+    createEffect(
+        on(pages.shown, (s) => {
+            if (s) return void setDrawn(s);
+            setExtended(false);
+            // the slide away, if there is one (none when motion is reduced); a slide cut short ends it too
+            void Promise.allSettled(pagePane.getAnimations().map((a) => a.finished)).then(() => !pages.shown() && setDrawn(null));
+        }),
+    );
 
     const view = (p: Section) => {
         switch (p) {

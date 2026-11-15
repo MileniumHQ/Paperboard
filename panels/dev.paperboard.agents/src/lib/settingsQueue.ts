@@ -4,6 +4,7 @@
 // as they then stand, and says what to write (or that there's nothing to).
 
 import type { Settings } from "../contract";
+import { errorText } from "./failure";
 
 export interface SettingsQueueOptions {
     /** the settings as they stand now; null until they're loaded */
@@ -29,7 +30,7 @@ export function createSettingsQueue(options: SettingsQueueOptions) {
             try {
                 await options.refresh();
             } catch (e) {
-                throw new Error(`The settings were saved, but couldn't be read back: ${e instanceof Error ? e.message : String(e)}`, { cause: e });
+                throw new Error(`The settings were saved, but couldn't be read back: ${errorText(e)}`, { cause: e });
             }
         };
         // a failed save is the caller's to show; the next one in line still runs

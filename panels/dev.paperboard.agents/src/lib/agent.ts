@@ -5,6 +5,7 @@
 import { actionsApi, createPanelBridge } from "@mileniumhq/paperapi";
 import { createSignal } from "solid-js";
 import { createStore, reconcile } from "solid-js/store";
+import { errorText } from "./failure";
 import { createFiles } from "./files";
 import { createSettingsQueue } from "./settingsQueue";
 import {
@@ -63,7 +64,7 @@ export function createAgent() {
         files.clear();
         loadHistory().catch((e) => {
             // shown with a way to retry, rather than an empty conversation that isn't
-            setError(e instanceof Error ? e.message : String(e));
+            setError(errorText(e));
             setHydration("failed");
         });
     });
@@ -87,7 +88,7 @@ export function createAgent() {
             await loadHistory();
             setHydration("ready");
         } catch (e) {
-            setError(e instanceof Error ? e.message : String(e));
+            setError(errorText(e));
             setHydration("failed");
         }
     };

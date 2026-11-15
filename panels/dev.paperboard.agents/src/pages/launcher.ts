@@ -6,6 +6,7 @@ import { createEffect, createSignal, on } from "solid-js";
 import { createStore, reconcile } from "solid-js/store";
 import type { PageInfo, PageKind } from "../contract";
 import type { Agent } from "../lib/agent";
+import { errorText } from "../lib/failure";
 
 export interface OpenPage {
     name: string;
@@ -44,7 +45,7 @@ export function createLauncher(agent: Agent) {
                 if (s && !pages.some((a) => a.name === s.name)) setShown(null);
             },
             (e) => {
-                if (mine === generation) setListError(e instanceof Error ? e.message : String(e));
+                if (mine === generation) setListError(errorText(e));
             },
         );
     };

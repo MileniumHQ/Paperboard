@@ -1,4 +1,4 @@
-import { For, Match, Show, Switch, createEffect, createSignal } from "solid-js";
+import { For, Match, Show, Switch, createEffect, createSignal, on } from "solid-js";
 import { PaperButton, PaperCard, PaperFlex, PaperIcon, PaperInput, PaperLoader, PaperQuote, PaperText } from "@mileniumhq/paperui";
 import { LIMITS, type PromptEntry } from "../contract";
 import type { Agent } from "../lib/agent";
@@ -39,11 +39,16 @@ export default function Prompt(props: { agent: Agent; entry: PromptEntry; name: 
         ).finally(() => setBusy(false));
     };
     // however it ended (sent, declined, lapsed, failed), what was typed goes with it
-    createEffect(() => {
-        if (e().status === "waiting") return;
-        setValues(e().fields.map(() => ""));
-        props.onDone();
-    });
+    createEffect(
+        on(
+            () => e().status,
+            (status) => {
+                if (status === "waiting") return;
+                setValues(e().fields.map(() => ""));
+                props.onDone();
+            },
+        ),
+    );
 
     return (
         <PaperFlex direction="row">

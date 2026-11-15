@@ -9,7 +9,7 @@ import { SIGN_IN_REQUIRED, type BrainState, type Harness } from "../contract";
 import type { Agent } from "../lib/agent";
 import { harnessName } from "../lib/brains";
 import { submitOnPaste } from "../lib/paste";
-import { failure, type Failure } from "../lib/failure";
+import { errorText, failure, type Failure } from "../lib/failure";
 
 /** Who a brain is signed in as. An email is who; anything else (ChatGPT, a provider's name) is how. */
 export function signedInLine(b: BrainState): string {
@@ -155,7 +155,7 @@ export function SignInSteps(props: { agent: Agent; harness: Harness; actions: Br
                         if (stop.signal.aborted) return;
                         setForward("paste");
                         // no listener here (a web browser) is why there's a field, not a failure
-                        if (!(e instanceof LoopbackRedirectError && e.code === "unavailable")) setForwardError(e instanceof Error ? e.message : String(e));
+                        if (!(e instanceof LoopbackRedirectError && e.code === "unavailable")) setForwardError(errorText(e));
                     },
                 );
             },

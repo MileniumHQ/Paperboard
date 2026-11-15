@@ -167,15 +167,7 @@ export function Face(props: {
         raf = requestAnimationFrame(tick);
     };
     // what moves the face: where it looks, how it feels, whether it talks or shakes, how big it draws
-    createEffect(() => {
-        props.face.orientation();
-        props.face.expression();
-        props.face.pondering();
-        props.face.shaking();
-        props.face.talking();
-        weight();
-        wake();
-    });
+    createEffect(on([props.face.orientation, props.face.expression, props.face.pondering, props.face.shaking, props.face.talking, weight], wake));
 
     onMount(() => {
         scheduleBlink();
