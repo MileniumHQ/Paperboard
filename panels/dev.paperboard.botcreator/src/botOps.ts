@@ -107,8 +107,13 @@ function uploadLimit(channel: { guild?: Guild }): number {
  * public-address rule (never this computer or its network) and no bigger than
  * the channel takes, then hands discord.js the bytes.
  */
-export async function sendFile(bot: Client, inputs: { channel: string; url: unknown; name?: unknown; content?: string }): Promise<Message> {
-    const channel = await sendableChannel(bot, inputs.channel);
+export async function sendFile(bot: () => Client, inputs: { channel: string; url: unknown; name?: unknown; content?: string }): Promise<Message> {
+    // a refused address is refused whether or not the bot is on: `bot` is asked for after
+    const url = typeof inputs.url === "string" && URL.canParse(inputs.url.trim()) ? new URL(inputs.url.trim()) : null;
+    if (url?.protocol !== "http:" && url?.protocol !== "https:") {
+        throw new Error(`Send File needs a web address (http or https), not "${String(inputs.url ?? "").slice(0, 200)}".`);
+    }
+    const channel = await sendableChannel(bot(), inputs.channel);
     let file: PublicFetchResponse;
     try {
         file = await fetchPublic(inputs.url, { maxBytes: uploadLimit(channel), trustedOrigins: discordOrigins() });
