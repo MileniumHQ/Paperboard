@@ -2,13 +2,13 @@
 // run one: its files written, started, handed its message, its output read as events until it exits or runs
 // past its time. What the run was for (a reply, an answer) is the caller's to make of the outcome.
 
+import { errorMessage } from "@mileniumhq/paperapi";
 import { AcpTurn, type AcpEvent, type AcpTurnOptions } from "./acp";
 import { feed, HARNESS_NAMES, parseTurnLine, writeRunFiles, type AskLaunch } from "./harness";
 import type { TurnHost } from "./conversation";
 import type { Harness } from "../contract";
 import { writeLine } from "./mcpClient";
 import { lineReader } from "./lines";
-import { errorText } from "../lib/failure";
 
 const MAX_LINE = 16 * 1024 * 1024; // one event can carry a screenshot
 
@@ -50,7 +50,7 @@ export async function runHarness(o: HarnessRun): Promise<HarnessOutcome> {
         if (ev.type === "failed") out.failures.push(ev.message);
         else if (ev.type === "done") {
             out.answered = true;
-            void o.stop().catch((e) => console.error(`[agents] couldn't stop ${HARNESS_NAMES[o.harness]} after its answer (its time limit still will): ${errorText(e)}`));
+            void o.stop().catch((e) => console.error(`[agents] couldn't stop ${HARNESS_NAMES[o.harness]} after its answer (its time limit still will): ${errorMessage(e)}`));
         }
         o.onEvent(ev);
     };
@@ -120,6 +120,6 @@ export function harnessFailure(r: HarnessOutcome, harness: Harness, who: string,
     if (r.failures.length) return r.failures[r.failures.length - 1]!;
     const stderr = r.stderr.trim();
     if (r.code !== 0 && !r.answered) return `${who} ended with exit ${r.code ?? "?"}${stderr ? `: ${stderr.split("\n").slice(-3).join(" ").slice(0, 400)}` : ""}`;
-    if (r.unfed) return `${HARNESS_NAMES[harness]} ended before it took the ${what}: ${errorText(r.unfed)}`;
+    if (r.unfed) return `${HARNESS_NAMES[harness]} ended before it took the ${what}: ${errorMessage(r.unfed)}`;
     return null;
 }

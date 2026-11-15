@@ -8,11 +8,11 @@
 
 import { randomUUID } from "node:crypto";
 import fs from "node:fs";
+import { errorMessage } from "@mileniumhq/paperapi";
 import { LIMITS, PANEL_ID, type Harness, type Settings } from "../contract";
 import { askInstructions, askLaunch, HARNESS_NAMES, removeLeftRunFiles, runFilesDir } from "./harness";
 import type { TurnLog } from "./turnLog";
 import type { TurnHost } from "./conversation";
-import { errorText } from "../lib/failure";
 import { harnessFailure, runHarness } from "./harnessRun";
 
 /** under the 30 s a flow gives an action, so the ask fails with its own reason first */
@@ -72,7 +72,7 @@ export class Asker {
             log?.ask({ harness: settings.harness, model: settings.model, question: text, instructions: askInstructions(settings.name, custom), answer, ms: Date.now() - started, lines });
             return answer;
         } catch (e) {
-            log?.ask({ harness: settings.harness, model: settings.model, question: text, instructions: askInstructions(settings.name, custom), error: errorText(e), ms: Date.now() - started, lines });
+            log?.ask({ harness: settings.harness, model: settings.model, question: text, instructions: askInstructions(settings.name, custom), error: errorMessage(e), ms: Date.now() - started, lines });
             throw e;
         } finally {
             this.running.delete(id);
@@ -104,7 +104,7 @@ export class Asker {
                 if (ev.type === "message") messages.push(ev.text);
             },
             stop: () => host.kill(id, "SIGKILL"),
-            unstopped: (e) => console.error(`[agents] couldn't stop a question past its time: ${errorText(e)}`),
+            unstopped: (e) => console.error(`[agents] couldn't stop a question past its time: ${errorMessage(e)}`),
             line: lines
                 ? (stream, text) => {
                       if (stream === "stdout") lines.push(text);

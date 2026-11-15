@@ -6,11 +6,11 @@
 // context, not on disk. The next sign-in asks again.
 
 import crypto from "node:crypto";
+import { errorMessage } from "@mileniumhq/paperapi";
 import { LIMITS, type SignInEntry } from "../contract";
 import type { ToolResult } from "./computerMcp";
 import type { ToolSpec } from "./computerTools";
 import { fault, type Toolset } from "./toolsets";
-import { errorText } from "../lib/failure";
 
 const SIGN_IN_INSTRUCTIONS = `**Signing in:** when a site needs the user's account, open its sign-in page, \`look\`, then \`ask_to_sign_in\`. Never type a password, code or other sign-in detail yourself, even one from the chat: ask them to use the sign-in card instead.`;
 const SIGN_IN_FLOW_INSTRUCTIONS = `**Signing in:** use only sites you're already signed in to. If one needs a sign-in, say so in your reply.`;
@@ -157,7 +157,7 @@ export class SignIns {
         try {
             await this.deps.fill({ id: p.entry.id, values: values as string[] });
         } catch (e) {
-            const error = errorText(e);
+            const error = errorMessage(e);
             this.finish(p, { status: "failed", error });
             this.deps.tell(`The sign-in on ${site} couldn't be filled in: ${error}. Look at window ${p.window} and ask again if it still needs one.`);
             throw new Error(`Couldn't sign in: ${error}`);

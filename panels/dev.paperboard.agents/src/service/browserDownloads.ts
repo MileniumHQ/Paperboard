@@ -5,9 +5,9 @@
 
 import fs from "node:fs";
 import path from "node:path";
+import { errorMessage } from "@mileniumhq/paperapi";
 import type { Cdp } from "./cdp";
 import type { HomeFolder } from "./homeFolder";
-import { errorText } from "../lib/failure";
 
 const MAX_DOWNLOADS = 8;
 const DOWNLOAD_MAX_BYTES = 2 * 1024 * 1024 * 1024;
@@ -44,7 +44,7 @@ export class Downloads {
             if (this.going.size >= MAX_DOWNLOADS) {
                 void cdp.send("Browser.cancelDownload", { guid: p.guid }).then(
                     () => this.deps.note(`A download of ${String(p.suggestedFilename)} was refused: ${MAX_DOWNLOADS} are already going.`),
-                    (e) => this.deps.note(`A download of ${String(p.suggestedFilename)} is past the limit of ${MAX_DOWNLOADS} at once and couldn't be stopped: ${errorText(e)}`),
+                    (e) => this.deps.note(`A download of ${String(p.suggestedFilename)} is past the limit of ${MAX_DOWNLOADS} at once and couldn't be stopped: ${errorMessage(e)}`),
                 );
                 return;
             }
@@ -65,7 +65,7 @@ export class Downloads {
                     fs.rmSync(temp, { force: true });
                     this.deps.note(`The download of ${name} was stopped: it's bigger than ${limit}.`);
                 },
-                (e) => this.deps.note(`The download of ${name} is bigger than ${limit} and couldn't be stopped: ${errorText(e)}`),
+                (e) => this.deps.note(`The download of ${name} is bigger than ${limit} and couldn't be stopped: ${errorMessage(e)}`),
             );
             return;
         }
@@ -77,7 +77,7 @@ export class Downloads {
                 this.deps.note(`Downloaded ${name} to ${this.deps.home.shown(to)}.`);
             } catch (e) {
                 fs.rmSync(temp, { force: true });
-                this.deps.note(`The download of ${name} finished but couldn't be kept: ${errorText(e)}`);
+                this.deps.note(`The download of ${name} finished but couldn't be kept: ${errorMessage(e)}`);
             }
         } else if (p.state === "canceled") {
             this.going.delete(p.guid);

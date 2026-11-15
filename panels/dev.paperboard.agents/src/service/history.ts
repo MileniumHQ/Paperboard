@@ -4,10 +4,10 @@
 import { randomUUID } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
+import { errorMessage } from "@mileniumhq/paperapi";
+import { writeFileAtomicSync } from "@mileniumhq/paperapi/fs";
 import type { ChatEntry, PastConversation } from "../contract";
-import { errorText } from "../lib/failure";
 import { readTranscript, said, TRANSCRIPT, type Said } from "./transcript";
-import { writeAtomic } from "./writeAtomic";
 
 export const THREADS = "threads.json";
 export const ATTACHMENTS = "attachments";
@@ -47,7 +47,7 @@ export class History {
             if (!fs.existsSync(path.join(this.pastDir(), id))) return id;
         }
         const id = randomUUID().replace(/-/g, "").slice(0, 12);
-        writeAtomic(file, id);
+        writeFileAtomicSync(file, id);
         return id;
     }
 
@@ -66,7 +66,7 @@ export class History {
                     return JSON.parse(fs.readFileSync(file, "utf8")) as PastConversation;
                 } catch (e) {
                     // unreadable isn't "not there": say which one, so it can be deleted
-                    throw new Error(`${file} can't be read: ${errorText(e)}`);
+                    throw new Error(`${file} can't be read: ${errorMessage(e)}`);
                 }
             })
             .sort((a, b) => b.endedAt - a.endedAt);
@@ -118,12 +118,12 @@ export class History {
             const from = path.join(dir, name);
             const to = path.join(this.dir, name);
             if (fs.existsSync(from)) fs.renameSync(from, to);
-            else writeAtomic(to, empty);
+            else writeFileAtomicSync(to, empty);
         }
         // a carry is only there if it was compacted and not yet carried on
         const carry = path.join(dir, CARRY);
         if (fs.existsSync(carry)) fs.renameSync(carry, path.join(this.dir, CARRY));
-        writeAtomic(path.join(this.dir, ID), id as string);
+        writeFileAtomicSync(path.join(this.dir, ID), id as string);
         fs.rmSync(dir, { recursive: true });
     }
 

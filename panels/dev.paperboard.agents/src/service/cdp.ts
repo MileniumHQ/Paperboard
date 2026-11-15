@@ -3,7 +3,7 @@
 // session. Every command has a deadline and the waiting ones are bounded;
 // when the socket closes, everything still waiting fails with it.
 
-import { errorText } from "../lib/failure";
+import { errorMessage } from "@mileniumhq/paperapi";
 
 type Json = Record<string, any>;
 
@@ -87,7 +87,7 @@ export class Cdp {
         try {
             m = JSON.parse(raw);
         } catch (e) {
-            console.warn("[agents] the browser's DevTools connection sent something unreadable:", errorText(e));
+            console.warn("[agents] the browser's DevTools connection sent something unreadable:", errorMessage(e));
             this.end("the browser sent something unreadable");
             this.ws.close();
             return;

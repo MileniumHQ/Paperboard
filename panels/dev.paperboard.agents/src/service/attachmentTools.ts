@@ -5,13 +5,13 @@
 // ![caption](attachment:<id>), or is named in a sentence with
 // [name](attachment:<id>), a chip the user presses to open it.
 
+import { errorMessage } from "@mileniumhq/paperapi";
 import { LIMITS } from "../contract";
 import type { Attachments } from "./attachments";
 import { sizeText } from "../lib/files";
 import { isImageType, type ToolResult } from "./computerMcp";
 import type { ToolSpec } from "./computerTools";
 import { USER_TURN, type Toolset, type TurnMode } from "./toolsets";
-import { errorText } from "../lib/failure";
 
 const TEXT_BYTES = 64 * 1024;
 
@@ -92,7 +92,7 @@ export function filesToolset(deps: FilesDeps): Toolset {
                 return await run(name, args, mode);
             } catch (e) {
                 // a missing file, a full conversation, a computer that's off: the model reads why and can fix it
-                return { isError: true, text: errorText(e) };
+                return { isError: true, text: errorMessage(e) };
             }
         },
     };

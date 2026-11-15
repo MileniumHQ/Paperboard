@@ -19,14 +19,13 @@
 
 import fs from "node:fs";
 import path from "node:path";
+import { errorMessage, SerialQueue } from "@mileniumhq/paperapi";
+import { writeFileAtomicSync } from "@mileniumhq/paperapi/fs";
 import { SIGN_IN_REQUIRED, type BrainState, type Harness, type LoginPrompt } from "../contract";
-import { errorText } from "../lib/failure";
-import { writeAtomic } from "./writeAtomic";
 import { LOGOUT_COMMAND, STATUS_COMMAND, callbackAddress, loginCommand, loginEnv, loginTail, outputTail, readLoginOutput, readStatus, type LoginMethod } from "./brainLogin";
 import type { StartOptions } from "./browser";
 import type { PackageHost } from "./browserSetup";
 import { findExistingBrain, PROGRAMS, versionFrom } from "./existingBrains";
-import { SerialQueue } from "./serialQueue";
 import { HARNESS_NAMES } from "./harness";
 
 const BRAIN_PACKAGES: Record<Harness, string> = { codex: "codex", "claude-code": "claude-code", opencode: "opencode" };
@@ -148,7 +147,7 @@ export class Brains {
         // a look that fails is in the brain's state; one brain's trouble doesn't stop the service
         await Promise.all(
             (Object.keys(this.state) as Harness[]).map((h) =>
-                this.busy[h].run(() => this.look(h)).catch((e) => console.error(`[agents] couldn't look at ${HARNESS_NAMES[h]}: ${errorText(e)}`)),
+                this.busy[h].run(() => this.look(h)).catch((e) => console.error(`[agents] couldn't look at ${HARNESS_NAMES[h]}: ${errorMessage(e)}`)),
             ),
         );
     }
@@ -187,7 +186,7 @@ export class Brains {
             });
         } catch (e) {
             // a failed update leaves the build that was there; a failed first install leaves nothing
-            await this.look(harness, `${HARNESS_NAMES[harness]} didn't install: ${errorText(e)}`);
+            await this.look(harness, `${HARNESS_NAMES[harness]} didn't install: ${errorMessage(e)}`);
             throw e;
         }
         await this.look(harness);
@@ -228,7 +227,7 @@ export class Brains {
             } catch (e) {
                 for (const off of offs) off();
                 this.logins.delete(harness);
-                throw this.fail(harness, `${HARNESS_NAMES[harness]}'s sign-in didn't start: ${errorText(e)}`);
+                throw this.fail(harness, `${HARNESS_NAMES[harness]}'s sign-in didn't start: ${errorMessage(e)}`);
             }
             void this.finishLogin(harness, login, () => out);
         });
@@ -265,7 +264,7 @@ export class Brains {
                 unreachable = e;
             }
         }
-        if (!reply) throw new Error(`${HARNESS_NAMES[harness]} isn't listening for the sign-in anymore: ${errorText(unreachable)}`);
+        if (!reply) throw new Error(`${HARNESS_NAMES[harness]} isn't listening for the sign-in anymore: ${errorMessage(unreachable)}`);
         // a redirect is the harness's "done" page; anything 400 or above is it refusing the answer
         if (reply.status >= 400) {
             const said = outputTail((await reply.text().catch(() => "")).replace(/<[^>]+>/g, " "), 2);
@@ -363,7 +362,7 @@ export class Brains {
     }
 
     private writeChoices(choices: Partial<Record<Harness, string>>) {
-        writeAtomic(this.choicesFile, JSON.stringify(choices));
+        writeFileAtomicSync(this.choicesFile, JSON.stringify(choices));
     }
 
     /** What is installed and whether it's signed in. `error` is why a look follows a failure, shown with what was found. */
@@ -411,7 +410,7 @@ export class Brains {
             const ready = signedIn || !SIGN_IN_REQUIRED[harness];
             this.set(harness, { phase: error ? "failed" : ready ? "ready" : "installed", installed: true, version, signedIn, account, percent: null, login: null, error, updateWaiting, existing: null, found: null });
         } catch (e) {
-            this.set(harness, { phase: "failed", installed: this.resolve(harness) !== null, existing: this.existing[harness] ?? null, percent: null, login: null, error: error ?? errorText(e) });
+            this.set(harness, { phase: "failed", installed: this.resolve(harness) !== null, existing: this.existing[harness] ?? null, percent: null, login: null, error: error ?? errorMessage(e) });
             if (!error) throw e;
         }
     }
@@ -461,15 +460,15 @@ export class Brains {
             await this.busy[harness].run(() => this.look(harness));
             if (!this.state[harness].signedIn) throw new Error(`The ${HARNESS_NAMES[harness]} sign-in finished, but ${HARNESS_NAMES[harness]} still says it isn't signed in.`);
         } catch (e) {
-            this.fail(harness, errorText(e));
-            console.error("[agents]", errorText(e));
+            this.fail(harness, errorMessage(e));
+            console.error("[agents]", errorMessage(e));
         }
     }
 
     private stop(harness: Harness, login: Login, failure: string) {
         login.failure ??= failure;
         // one that won't stop never ends on its own: the person is shown why it's still there
-        this.deps.host.kill(loginProcessId(harness), "SIGTERM").catch((e) => this.fail(harness, `${failure}, and it couldn't be stopped: ${errorText(e)}`));
+        this.deps.host.kill(loginProcessId(harness), "SIGTERM").catch((e) => this.fail(harness, `${failure}, and it couldn't be stopped: ${errorMessage(e)}`));
     }
 
     private async cancel(harness: Harness) {

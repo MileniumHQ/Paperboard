@@ -10,6 +10,7 @@
 // in the chat to sign in from; their sign-in starts the agent's next turn.
 
 import crypto from "node:crypto";
+import { errorMessage } from "@mileniumhq/paperapi";
 import { LIMITS, type ToolServerEntry, type ToolSignInEntry } from "../contract";
 import { OAUTH_SECRET, type ServerSpec, type ServerStatus, type ServerValue, type ToolsView } from "../toolsContract";
 import type { ToolResult } from "./computerMcp";
@@ -18,7 +19,6 @@ import { parseServer, secretNames } from "./mcpConfig";
 import type { McpServers } from "./mcpServers";
 import type { Launch } from "./which";
 import { fault, type Toolset } from "./toolsets";
-import { errorText } from "../lib/failure";
 
 const L = LIMITS.toolServers;
 /** how long a tool waits for a server it just added to come up, before it says it's still starting */
@@ -130,8 +130,8 @@ export class ServerTools {
                     }
                     return fault(`unknown tool ${name}`);
                 } catch (e) {
-                    console.warn(`[agents] ${name} failed:`, errorText(e));
-                    return fault(errorText(e));
+                    console.warn(`[agents] ${name} failed:`, errorMessage(e));
+                    return fault(errorMessage(e));
                 }
             },
         };
@@ -311,7 +311,7 @@ export class ServerTools {
             if (!p.entry.change && exists) throw new Error(`a server called ${name} was added meanwhile`);
             await this.servers.save(p.spec);
         } catch (e) {
-            const error = errorText(e);
+            const error = errorMessage(e);
             this.finish({ status: "failed", error });
             this.deps.tell(`The user allowed ${name}, but it couldn't be saved: ${error}.`);
             throw new Error(`Not saved: ${error}`);
@@ -320,7 +320,7 @@ export class ServerTools {
         // the click is answered now; starting can take a while (a package to download), and the agent hears how it went
         void this.bringUp(name).then(
             (how) => this.deps.tell(`The user allowed ${name} to run on their computer, and it's ${p.entry.change ? "changed" : "added"}. ${how}`),
-            (e) => this.deps.tell(`The user allowed ${name}, and it's saved, but it couldn't be started: ${errorText(e)}.`),
+            (e) => this.deps.tell(`The user allowed ${name}, and it's saved, but it couldn't be started: ${errorMessage(e)}.`),
         );
         return { status: "allowed" };
     }

@@ -30,6 +30,8 @@ import fs from "node:fs";
 import http from "node:http";
 import type { AddressInfo } from "node:net";
 import path from "node:path";
+import { errorMessage, SerialQueue } from "@mileniumhq/paperapi";
+import { writeFileAtomicSync } from "@mileniumhq/paperapi/fs";
 import { BuildError, bundle, forgetBuilds, SCRIPT } from "./appBundler";
 import { installPackages, REGISTRY } from "./appPackages";
 import { LIMITS, PAGE_KINDS, type PageEntry, type PageInfo, type PageKind } from "../contract";
@@ -37,9 +39,6 @@ import type { ToolResult } from "./computerMcp";
 import type { ToolSpec } from "./computerTools";
 import type { HomeFolder } from "./homeFolder";
 import type { Toolset } from "./toolsets";
-import { errorText } from "../lib/failure";
-import { writeAtomic } from "./writeAtomic";
-import { SerialQueue } from "./serialQueue";
 
 const PAGES = "~/Pages";
 /** where pages were before they were called pages */
@@ -256,7 +255,7 @@ export class Pages {
                     }
                     return { text: `unknown tool ${name}`, isError: true };
                 } catch (e) {
-                    return { text: errorText(e), isError: true };
+                    return { text: errorMessage(e), isError: true };
                 }
             },
         };
@@ -319,7 +318,7 @@ export class Pages {
         try {
             image = await this.o.picture(this.url(name));
         } catch (e) {
-            throw new Error(`${name} wasn't shown: its picture couldn't be taken (${errorText(e)})`);
+            throw new Error(`${name} wasn't shown: its picture couldn't be taken (${errorMessage(e)})`);
         }
         fs.mkdirSync(this.o.picturesDir, { recursive: true });
         fs.writeFileSync(path.join(this.o.picturesDir, `${name}.jpg`), Buffer.from(image, "base64"));
@@ -441,12 +440,12 @@ export class Pages {
             return JSON.parse(raw).apps ?? {};
         } catch (e) {
             // never replaced by an empty list: every page's title would go
-            throw new Error(`the pages' titles can't be read (${this.o.infoFile}): ${errorText(e)}`);
+            throw new Error(`the pages' titles can't be read (${this.o.infoFile}): ${errorMessage(e)}`);
         }
     }
 
     private writeInfo(pages: Record<string, Info>) {
-        writeAtomic(this.o.infoFile, JSON.stringify({ apps: pages }));
+        writeFileAtomicSync(this.o.infoFile, JSON.stringify({ apps: pages }));
     }
 
     /**
@@ -485,7 +484,7 @@ export class Pages {
                 this.handle(req, res).catch((e) => {
                     console.error("[agents] a page's request failed:", e);
                     if (!res.headersSent) res.writeHead(500, { "Content-Type": "text/plain; charset=utf-8" });
-                    res.end(`The pages' server failed: ${errorText(e)}`);
+                    res.end(`The pages' server failed: ${errorMessage(e)}`);
                 });
             });
             const listen = (port: number) =>
@@ -508,7 +507,7 @@ export class Pages {
             }
             const port = (server.address() as AddressInfo).port;
             try {
-                writeAtomic(this.o.portFile, JSON.stringify({ port }));
+                writeFileAtomicSync(this.o.portFile, JSON.stringify({ port }));
             } catch (e) {
                 // not kept, so not used: the next start opens a server of its own
                 await new Promise<void>((ok) => server.close(() => ok()));

@@ -20,18 +20,17 @@
 
 import fs from "node:fs";
 import path from "node:path";
+import { errorMessage, SerialQueue } from "@mileniumhq/paperapi";
 import { LIMITS, PANEL_ID, SETUP_STEPS, type ComputerState, type SetupStep, type SetupStepId } from "../contract";
 import { Cdp } from "./cdp";
 import { chromiumMajor, heliumSupported, userAgent } from "./helium";
 import type { HomeFolder } from "./homeFolder";
 import { WEBRTC_CANDIDATES_JS } from "./pageScripts";
 import { startProxy, type Proxy } from "./proxy";
-import { errorText } from "../lib/failure";
 import { stopChild } from "./stopChild";
 import { NO_RECORD, RECORD_FILE, executable, fetchHelium, readRecord, seedPreferences, writeRecord, type BrowserRecord, type PackageHost } from "./browserSetup";
 import { ToolError, Windows } from "./browserWindows";
 import { Downloads } from "./browserDownloads";
-import { SerialQueue } from "./serialQueue";
 
 export const BROWSER_PROC_ID = `${PANEL_ID}.browser`;
 
@@ -142,7 +141,7 @@ export class BrowserComputer {
         try {
             this.record = readRecord(this.deps.dir);
         } catch (e) {
-            this.set({ phase: "failed", error: errorText(e) });
+            this.set({ phase: "failed", error: errorMessage(e) });
             return;
         }
         if (!this.supported) {
@@ -194,7 +193,7 @@ export class BrowserComputer {
         try {
             return await fn();
         } catch (e) {
-            this.set({ phase: "failed", error: `${what}: ${errorText(e)}` });
+            this.set({ phase: "failed", error: `${what}: ${errorMessage(e)}` });
             throw e;
         }
     }
@@ -242,7 +241,7 @@ export class BrowserComputer {
         } catch (e) {
             await this.kill();
             if (current) step(current, { status: "failed" });
-            this.set({ phase: "failed", installed: this.record.installed, error: errorText(e) });
+            this.set({ phase: "failed", installed: this.record.installed, error: errorMessage(e) });
             throw e;
         } finally {
             if (this.abort === abort) this.abort = null;
@@ -264,7 +263,7 @@ export class BrowserComputer {
             this.set({ phase: "ready" });
         } catch (e) {
             await this.kill();
-            this.set({ phase: "failed", error: errorText(e) });
+            this.set({ phase: "failed", error: errorMessage(e) });
             throw e;
         } finally {
             if (this.abort === abort) this.abort = null;
@@ -389,7 +388,7 @@ export class BrowserComputer {
             try {
                 await this.kill();
             } catch (e) {
-                stuck = `. It couldn't be stopped either: ${errorText(e)}`;
+                stuck = `. It couldn't be stopped either: ${errorMessage(e)}`;
             }
             this.set({ phase: "failed", error: `Lost the browser: ${why}${stuck}` });
         });

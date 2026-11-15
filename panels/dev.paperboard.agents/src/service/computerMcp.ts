@@ -11,8 +11,8 @@
 import { randomBytes, timingSafeEqual } from "node:crypto";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
+import { errorMessage } from "@mileniumhq/paperapi";
 import type { Toolbox } from "./toolsets";
-import { errorText } from "../lib/failure";
 
 export const MCP_TOKEN_ENV = "PAPERBOARD_COMPUTER_MCP_TOKEN";
 const MAX_BODY = 1 << 20;
@@ -67,7 +67,7 @@ export async function startComputerMcp(tools: Pick<Toolbox, "list" | "call">): P
                 try {
                     msg = JSON.parse(raw);
                 } catch (e) {
-                    return reply(res, 400, rpcError(null, -32700, `parse error: ${errorText(e)}`));
+                    return reply(res, 400, rpcError(null, -32700, `parse error: ${errorMessage(e)}`));
                 }
                 if (Array.isArray(msg) || typeof msg !== "object" || msg === null) {
                     return reply(res, 400, rpcError(null, -32600, "one JSON-RPC message per request"));
@@ -81,7 +81,7 @@ export async function startComputerMcp(tools: Pick<Toolbox, "list" | "call">): P
                     reply(res, 200, rpcError(msg.id, err.code ?? -32603, err.message));
                 }
             }, (e: Error) => reply(res, e instanceof TooLarge ? 413 : 400, { error: e.message }))
-            .catch((e: Error) => reply(res, 500, { error: errorText(e) }));
+            .catch((e: Error) => reply(res, 500, { error: errorMessage(e) }));
     });
     server.maxConnections = MAX_CONNECTIONS;
     server.requestTimeout = REQUEST_TIMEOUT_MS;

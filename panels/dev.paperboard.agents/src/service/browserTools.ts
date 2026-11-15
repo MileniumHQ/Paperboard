@@ -3,12 +3,12 @@
 // (browserWindows.ts) on one of its windows, answered with what changed.
 
 import fs from "node:fs";
+import { errorMessage } from "@mileniumhq/paperapi";
 import { LIMITS, type ComputerPhase } from "../contract";
 import type { BrowserComputer } from "./browser";
 import { ToolError, dialogNote, type Tab } from "./browserWindows";
 import type { ToolResult } from "./computerMcp";
 import { MARKS_JS, REMOVE_OVERLAY_JS, overlayJs, type Mark } from "./pageScripts";
-import { errorText } from "../lib/failure";
 
 const SETTLE_MS = 400; // after an action, for what it opens or changes to show
 export const SCROLL_PX = 60;
@@ -39,7 +39,7 @@ export async function browserTool(c: BrowserComputer, name: string, args: Record
     try {
         return await tool(c, args ?? {});
     } catch (e) {
-        return { isError: true, text: errorText(e) };
+        return { isError: true, text: errorMessage(e) };
     } finally {
         c.release();
     }

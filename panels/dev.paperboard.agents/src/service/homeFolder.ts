@@ -7,8 +7,8 @@
 
 import fs from "node:fs";
 import path from "node:path";
+import { writeFileAtomicSync } from "@mileniumhq/paperapi/fs";
 import { LIMITS } from "../contract";
-import { writeAtomic } from "./writeAtomic";
 
 /** Where the home folder is in the agent's shell: its $HOME. */
 export const SHELL_HOME = "/home/user";
@@ -68,7 +68,7 @@ export class HomeFolder {
         if (fs.lstatSync(full, { throwIfNoEntry: false })?.isSymbolicLink()) throw new Error(`${this.shown(full)} is a link; pick another name`);
         fs.mkdirSync(path.dirname(full), { recursive: true });
         this.resolve(p); // the folders just made are still inside
-        writeAtomic(full, data);
+        writeFileAtomicSync(full, data);
         return this.shown(full);
     }
 

@@ -12,12 +12,12 @@
 import { randomUUID } from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
+import { errorMessage, SerialQueue } from "@mileniumhq/paperapi";
+import { writeFileAtomicSync } from "@mileniumhq/paperapi/fs";
 import { LIMITS, type MemoryFact, type MemoryList, type MemoryNoteInfo } from "../contract";
 import type { ToolResult } from "./computerMcp";
 import type { ToolSpec } from "./computerTools";
 import type { Toolset } from "./toolsets";
-import { errorText } from "../lib/failure";
-import { writeAtomic } from "./writeAtomic";
 
 const L = LIMITS.memory;
 const KEY = /^[a-z0-9][a-z0-9-]*$/;
@@ -38,7 +38,8 @@ export interface MemoryChange {
 }
 
 export class Memory {
-    private queue: Promise<unknown> = Promise.resolve();
+    /** one operation at a time, in order; one failing doesn't stop the next */
+    private queue = new SerialQueue();
     private revision = 0;
 
     constructor(private deps: { dir: string; onChange: (c: MemoryChange) => void }) {}
@@ -50,26 +51,15 @@ export class Memory {
         return path.join(this.deps.dir, "notes", `${key}.md`);
     }
 
-    /** One operation at a time, in order; one failing doesn't stop the next. */
-    private serial<T>(run: () => Promise<T>): Promise<T> {
-        const next = this.queue.then(run, run);
-        // the caller gets the failure from `next`; the queue only waits for it to settle
-        this.queue = next.then(
-            () => undefined,
-            () => undefined,
-        );
-        return next;
-    }
-
     /** Run a read or a change, and tell the UI what became of it. */
     private async track<T>(change: boolean, run: () => Promise<T>): Promise<T> {
         try {
-            const out = await this.serial(run);
+            const out = await this.queue.run(run);
             if (change) this.revision++;
             this.deps.onChange({ revision: this.revision, error: null });
             return out;
         } catch (e) {
-            this.deps.onChange({ revision: this.revision, error: errorText(e) });
+            this.deps.onChange({ revision: this.revision, error: errorMessage(e) });
             throw e;
         }
     }
@@ -80,14 +70,14 @@ export class Memory {
             raw = await fs.readFile(this.indexPath, "utf8");
         } catch (e) {
             if ((e as NodeJS.ErrnoException).code === "ENOENT") return { version: INDEX_VERSION, facts: [], notes: [] };
-            throw new MemoryError(`memory can't be read (${this.indexPath}): ${errorText(e)}`);
+            throw new MemoryError(`memory can't be read (${this.indexPath}): ${errorMessage(e)}`);
         }
         const bad = (why: string) => new MemoryError(`memory's index is unreadable (${why}); it was left as it is: ${this.indexPath}`);
         let doc: any;
         try {
             doc = JSON.parse(raw);
         } catch (e) {
-            throw bad(errorText(e));
+            throw bad(errorMessage(e));
         }
         if (!doc || doc.version !== INDEX_VERSION || !Array.isArray(doc.facts) || !Array.isArray(doc.notes)) throw bad("not a memory index of this version");
         const keys = new Set<string>();
@@ -104,7 +94,7 @@ export class Memory {
     }
 
     private writeIndex(index: Index) {
-        writeAtomic(this.indexPath, JSON.stringify(index, null, 2), 0o600);
+        writeFileAtomicSync(this.indexPath, JSON.stringify(index, null, 2), { mode: 0o600 });
     }
 
     // ------------------------------------------------------------- reading
@@ -124,7 +114,7 @@ export class Memory {
             try {
                 return { key: k, when: note.when, body: await fs.readFile(this.notePath(k), "utf8") };
             } catch (e) {
-                throw new MemoryError(`note ${k} is listed but its file can't be read: ${errorText(e)}`);
+                throw new MemoryError(`note ${k} is listed but its file can't be read: ${errorMessage(e)}`);
             }
         });
     }
@@ -175,7 +165,7 @@ export class Memory {
             const exists = index.notes.some((n) => n.key === k);
             if (!exists && index.notes.length >= L.notes) throw new MemoryError(`memory holds ${L.notes} notes already: forget some first`);
             // body first: a crash between the two leaves an index that still points at a complete file
-            writeAtomic(this.notePath(k), body, 0o600);
+            writeFileAtomicSync(this.notePath(k), body, { mode: 0o600 });
             const info = { key: k, when: w };
             this.writeIndex({ ...index, notes: exists ? index.notes.map((n) => (n.key === k ? info : n)) : [...index.notes, info] });
             return info;
@@ -231,7 +221,7 @@ export class Memory {
         try {
             list = await this.list();
         } catch (e) {
-            return `Your memory is unavailable right now (${errorText(e)}). Tell the user if it matters; don't pretend to remember.`;
+            return `Your memory is unavailable right now (${errorMessage(e)}). Tell the user if it matters; don't pretend to remember.`;
         }
         const facts = list.facts.length ? list.facts.map((f) => `- [${f.id}] ${f.text}`).join("\n") : "(nothing yet)";
         const notes = list.notes.length ? list.notes.map((n) => `- ${n.key}: ${n.when}`).join("\n") : "(none yet)";

@@ -1,7 +1,7 @@
 // An MCP server run on this computer as a daemon-owned child: one JSON-RPC
 // message per line on its stdin and stdout.
 
-import { errorText } from "../lib/failure";
+import { errorMessage } from "@mileniumhq/paperapi";
 import { stopChild } from "./stopChild";
 import { lineReader } from "./lines";
 import { MAX_MESSAGE, MAX_PENDING, McpRpcError, writeLine, type McpWire } from "./mcpClient";
@@ -42,7 +42,7 @@ export class StdioWire implements McpWire {
     static async start(host: ProcessHost, o: { id: string; command: string; args: string[]; env?: Record<string, string> }): Promise<StdioWire> {
         // a child the last service generation left behind is not ours to talk to
         await stopChild(host, o.id).catch((e) => {
-            throw new Error(`an earlier copy of this server is still running and won't stop: ${errorText(e)}`);
+            throw new Error(`an earlier copy of this server is still running and won't stop: ${errorMessage(e)}`);
         });
         const wire = new StdioWire(host, o.id);
         wire.offs.push(
@@ -101,7 +101,7 @@ export class StdioWire implements McpWire {
     /** End it from this side: what was waiting, and whoever follows its end, get `reason`. */
     private fail(reason: string) {
         this.failure = reason;
-        this.close().catch((e) => this.finish(`${reason}, and it couldn't be stopped: ${errorText(e)}`));
+        this.close().catch((e) => this.finish(`${reason}, and it couldn't be stopped: ${errorMessage(e)}`));
     }
 
     async request(method: string, params: unknown, timeoutMs: number): Promise<unknown> {

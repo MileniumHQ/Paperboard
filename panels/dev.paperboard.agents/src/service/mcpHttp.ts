@@ -2,7 +2,7 @@
 // with JSON or an event stream), and the older SSE transport (a stream the
 // server answers on, and a POST address it names).
 
-import { errorText } from "../lib/failure";
+import { errorMessage } from "@mileniumhq/paperapi";
 import { MAX_MESSAGE, MAX_PENDING, McpRpcError, PROTOCOL_VERSION, TIMEOUTS, type McpWire } from "./mcpClient";
 
 export interface HttpWireOptions {
@@ -353,7 +353,7 @@ async function errorDetail(res: Response): Promise<string> {
     try {
         return (await readCapped(res, 2000, true)).trim();
     } catch (e) {
-        return `(${errorText(e)})`;
+        return `(${errorMessage(e)})`;
     }
 }
 
@@ -427,7 +427,7 @@ function eventJson(raw: string): any {
     try {
         return JSON.parse(raw);
     } catch (e) {
-        console.warn("[agents] a tool server sent an event that isn't JSON:", errorText(e));
+        console.warn("[agents] a tool server sent an event that isn't JSON:", errorMessage(e));
         return undefined;
     }
 }

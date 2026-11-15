@@ -16,14 +16,13 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { errorMessage, isRecord } from "@mileniumhq/paperapi";
+import { writeFileAtomicSync } from "@mileniumhq/paperapi/fs";
 import { LIMITS, type AccessEntry, type AccessGrant, type AccessItem, type AccessView } from "../contract";
 import type { ToolResult } from "./computerMcp";
 import type { ToolSpec } from "./computerTools";
 import type { Launch } from "./which";
 import { fault, type Toolset } from "./toolsets";
-import { errorText } from "../lib/failure";
-import { writeAtomic } from "./writeAtomic";
-import { isRecord } from "./mcpConfig";
 import { OUTPUT_CHARS } from "./shell";
 
 const L = LIMITS.access;
@@ -181,7 +180,7 @@ export class Access {
         try {
             this.described ??= describeComputer();
         } catch (e) {
-            return `Which system the user's computer runs couldn't be read (${errorText(e)}). Check before running anything that depends on it.`;
+            return `Which system the user's computer runs couldn't be read (${errorMessage(e)}). Check before running anything that depends on it.`;
         }
         return this.described;
     }
@@ -193,7 +192,7 @@ export class Access {
             this.error = null;
         } catch (e) {
             this.stored = { folders: [], commands: [] };
-            this.error = `${this.deps.file} can't be read (${errorText(e)}). Nothing in it is allowed; fix or delete the file.`;
+            this.error = `${this.deps.file} can't be read (${errorMessage(e)}). Nothing in it is allowed; fix or delete the file.`;
         }
     }
 
@@ -210,13 +209,13 @@ export class Access {
         try {
             this.deps.onChange(this.view());
         } catch (e) {
-            console.error("[agents] couldn't publish what's allowed:", errorText(e));
+            console.error("[agents] couldn't publish what's allowed:", errorMessage(e));
         }
     }
 
     private save() {
         if (this.error) throw new Error(this.error);
-        writeAtomic(this.deps.file, JSON.stringify(this.stored, null, 2));
+        writeFileAtomicSync(this.deps.file, JSON.stringify(this.stored, null, 2));
     }
 
     /** a turn ended: grants for this time that were used up lapse */
@@ -314,8 +313,8 @@ export class Access {
                     }
                     return fault(`unknown tool ${name}`);
                 } catch (e) {
-                    console.warn(`[agents] ${name} failed:`, errorText(e));
-                    return fault(errorText(e));
+                    console.warn(`[agents] ${name} failed:`, errorMessage(e));
+                    return fault(errorMessage(e));
                 }
             },
         };
@@ -334,7 +333,7 @@ export class Access {
                 try {
                     stat = fs.statSync(item.path);
                 } catch (e) {
-                    return fault((e as NodeJS.ErrnoException).code === "ENOENT" ? `${item.path} doesn't exist on the user's computer` : `${item.path} can't be looked at: ${errorText(e)}`);
+                    return fault((e as NodeJS.ErrnoException).code === "ENOENT" ? `${item.path} doesn't exist on the user's computer` : `${item.path} can't be looked at: ${errorMessage(e)}`);
                 }
                 if (!stat.isDirectory()) return fault(`${item.path} is a file; ask for the folder it's in`);
             }
@@ -376,7 +375,7 @@ export class Access {
                 this.save();
             } catch (e) {
                 this.stored = prev;
-                throw new Error(`Not saved: ${errorText(e)}`);
+                throw new Error(`Not saved: ${errorMessage(e)}`);
             }
         }
         if (how === "once") {
@@ -429,7 +428,7 @@ export class Access {
             try {
                 return `${e.name}  ${fs.statSync(path.join(dir, e.name)).size} bytes`;
             } catch (err) {
-                console.warn(`[agents] couldn't read the size of ${path.join(dir, e.name)}:`, errorText(err));
+                console.warn(`[agents] couldn't read the size of ${path.join(dir, e.name)}:`, errorMessage(err));
                 return `${e.name}  (size unreadable)`;
             }
         });

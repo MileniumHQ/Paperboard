@@ -4,9 +4,9 @@
 
 import fs from "node:fs";
 import path from "node:path";
+import { writeFileAtomicSync } from "@mileniumhq/paperapi/fs";
 import type { SetupStep, SetupStepId } from "../contract";
 import { HELIUM_PACKAGE, findExecutable } from "./helium";
-import { writeAtomic } from "./writeAtomic";
 
 export const RECORD_FILE = "browser.json";
 const RECORD_VERSION = 1;
@@ -45,7 +45,7 @@ export function readRecord(dir: string): BrowserRecord {
 }
 
 export function writeRecord(dir: string, record: BrowserRecord) {
-    writeAtomic(path.join(dir, RECORD_FILE), JSON.stringify(record, null, 2));
+    writeFileAtomicSync(path.join(dir, RECORD_FILE), JSON.stringify(record, null, 2));
 }
 
 /** the browser's program in the helium package, or null while it isn't installed */
@@ -111,5 +111,5 @@ function editSettings(file: string, edit: (settings: Record<string, any>) => voi
         }
     }
     edit(settings);
-    writeAtomic(file, JSON.stringify(settings));
+    writeFileAtomicSync(file, JSON.stringify(settings));
 }

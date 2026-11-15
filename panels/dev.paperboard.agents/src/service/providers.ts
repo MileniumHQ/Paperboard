@@ -10,8 +10,8 @@
 
 import crypto from "node:crypto";
 import net from "node:net";
+import { errorMessage } from "@mileniumhq/paperapi";
 import type { ProviderAttempt, ProviderAttemptStatus, ProviderField, ProviderInfo, ProviderMethod } from "../contract";
-import { errorText } from "../lib/failure";
 import type { BrainsHost } from "./brains";
 import { stopChild } from "./stopChild";
 
@@ -146,7 +146,7 @@ export class Providers {
             this.idle = null;
             void this.quiet().then(
                 (down) => down || this.arm(),
-                (e) => console.error(`[agents] couldn't stop OpenCode's provider server: ${errorText(e)}`),
+                (e) => console.error(`[agents] couldn't stop OpenCode's provider server: ${errorMessage(e)}`),
             );
         }, this.deps.idleMs ?? IDLE_MS);
     }
@@ -203,7 +203,7 @@ export class Providers {
         } catch (e) {
             this.unsubscribe();
             await stopChild(this.deps.host, SERVER_PROCESS_ID).catch((k) => {
-                throw new ProviderError(`${errorText(e)}; and it couldn't be closed: ${errorText(k)}`);
+                throw new ProviderError(`${errorMessage(e)}; and it couldn't be closed: ${errorMessage(k)}`);
             });
             throw e;
         }

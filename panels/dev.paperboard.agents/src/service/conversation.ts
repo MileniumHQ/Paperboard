@@ -24,6 +24,8 @@
 import { randomUUID } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
+import { errorMessage } from "@mileniumhq/paperapi";
+import { writeFileAtomicSync } from "@mileniumhq/paperapi/fs";
 import { CURRENT_CONVERSATION, LIMITS, PANEL_ID, type AccessEntry, type PageEntry, type PromptEntry, type ToolServerEntry, type ToolSignInEntry, type Attachment, type ChatEntry, type ChatState, type Harness, type PastConversation, type Settings, type SignInEntry, type WaitingMessage } from "../contract";
 import type { StartOptions } from "./browser";
 import { Attachments } from "./attachments";
@@ -31,11 +33,9 @@ import { sizeText } from "../lib/files";
 import { HARNESS_NAMES, codexContext, instructions, removeLeftRunFiles, runFilesDir, turnLaunch, type TurnLaunch } from "./harness";
 import { harnessFailure, runHarness } from "./harnessRun";
 import type { TurnLog } from "./turnLog";
-import { writeAtomic } from "./writeAtomic";
 import { stopChild } from "./stopChild";
 import { ATTACHMENTS, CARRY, History, summary, THREADS } from "./history";
 import { said, Transcript, TRANSCRIPT, type Said } from "./transcript";
-import { errorText } from "../lib/failure";
 import type { Sections, TurnMode } from "./toolsets";
 
 export const TURN_PROC_ID = `${PANEL_ID}.turn`;
@@ -172,7 +172,7 @@ export class Conversation {
         const codexHome = this.deps.env("codex").CODEX_HOME;
         if (codexHome) removeLeftRunFiles(codexHome);
         // a turn the last service generation left running is not ours to finish
-        void stopChild(this.deps.host, TURN_PROC_ID).catch((e) => console.error("[agents] couldn't stop a turn left from before:", errorText(e)));
+        void stopChild(this.deps.host, TURN_PROC_ID).catch((e) => console.error("[agents] couldn't stop a turn left from before:", errorMessage(e)));
     }
 
     /** The current conversation and what goes with it, read from its files. */
@@ -191,7 +191,7 @@ export class Conversation {
         try {
             return JSON.parse(fs.readFileSync(file, "utf8")) as T;
         } catch (e) {
-            throw new Error(`${file} can't be read (${errorText(e)}); fix or delete it`);
+            throw new Error(`${file} can't be read (${errorMessage(e)}); fix or delete it`);
         }
     }
 
@@ -299,7 +299,7 @@ export class Conversation {
             this.threads = {};
             this.setCarry(null);
             fs.rmSync(path.join(this.deps.dir, ATTACHMENTS), { recursive: true, force: true });
-            writeAtomic(path.join(this.deps.dir, THREADS), "{}");
+            writeFileAtomicSync(path.join(this.deps.dir, THREADS), "{}");
         });
         return { cleared: true };
     }
@@ -488,7 +488,7 @@ export class Conversation {
                 try {
                     this.deps.onTurnEnd?.();
                 } catch (e) {
-                    console.error("[agents] a turn's end couldn't be handled:", errorText(e));
+                    console.error("[agents] a turn's end couldn't be handled:", errorMessage(e));
                 }
                 this.pump();
             });
@@ -573,7 +573,7 @@ export class Conversation {
             await this.launched(settings, launch, mcp, message);
             log.end({ outcome: this.stopRequested ? "stopped" : "done", context: { used: this.context?.used ?? null, size: this.context?.size ?? null } });
         } catch (e) {
-            log.end({ outcome: "failed", error: errorText(e), context: { used: this.context?.used ?? null, size: this.context?.size ?? null } });
+            log.end({ outcome: "failed", error: errorMessage(e), context: { used: this.context?.used ?? null, size: this.context?.size ?? null } });
             throw e;
         }
     }
@@ -615,7 +615,7 @@ export class Conversation {
                 else if (ev.type === "working") this.working();
             },
             stop: () => this.killTurn(),
-            unstopped: (e) => this.put({ id: this.newId(), at: Date.now(), kind: "error", title: "Not stopped", text: `The turn ran past ${minutes(turnMs)} and couldn't be stopped: ${errorText(e)}` }),
+            unstopped: (e) => this.put({ id: this.newId(), at: Date.now(), kind: "error", title: "Not stopped", text: `The turn ran past ${minutes(turnMs)} and couldn't be stopped: ${errorMessage(e)}` }),
             line: log ? (stream, text) => log.line(stream, text) : undefined,
         }).finally(() => {
             offListed();
@@ -628,7 +628,7 @@ export class Conversation {
             try {
                 Object.assign(context, codexContext(this.deps.codexHome, codexThread));
             } catch (e) {
-                unmeasured = errorText(e);
+                unmeasured = errorMessage(e);
             }
         }
         if (this.stopRequested) return;
@@ -665,7 +665,7 @@ export class Conversation {
                 at: Date.now(),
                 kind: "error",
                 title: "Conversation not compacted",
-                text: `Couldn't summarize the conversation to save space: ${errorText(e)}. It tries again after the next reply; if this keeps happening, set Compaction to Forget in settings.`,
+                text: `Couldn't summarize the conversation to save space: ${errorMessage(e)}. It tries again after the next reply; if this keeps happening, set Compaction to Forget in settings.`,
             });
         } finally {
             this.compactingNow = false;
@@ -688,7 +688,7 @@ export class Conversation {
         const texts = said(this.entries);
         this.setCarry({ summary, from: texts[Math.max(0, texts.length - CARRY_MESSAGES)]?.id ?? null });
         this.threads = {};
-        writeAtomic(path.join(this.deps.dir, THREADS), "{}");
+        writeFileAtomicSync(path.join(this.deps.dir, THREADS), "{}");
     }
 
     /** What a fresh thread starts with: the summary, then the latest messages as they were (not the ones it's about to read). */
@@ -707,14 +707,14 @@ export class Conversation {
     private setCarry(carry: Carry | null) {
         this.carry = carry;
         const file = path.join(this.deps.dir, CARRY);
-        if (carry) writeAtomic(file, JSON.stringify(carry));
+        if (carry) writeFileAtomicSync(file, JSON.stringify(carry));
         else fs.rmSync(file, { force: true });
     }
 
     private dropThread(harness: Harness) {
         const { [harness]: _, ...rest } = this.threads;
         this.threads = rest;
-        writeAtomic(path.join(this.deps.dir, THREADS), JSON.stringify(this.threads));
+        writeFileAtomicSync(path.join(this.deps.dir, THREADS), JSON.stringify(this.threads));
     }
 
     private killTurn() {
@@ -736,7 +736,7 @@ export class Conversation {
     private saveThread(harness: Harness, id: string) {
         if (this.threads[harness] === id) return;
         this.threads = { ...this.threads, [harness]: id };
-        writeAtomic(path.join(this.deps.dir, THREADS), JSON.stringify(this.threads));
+        writeFileAtomicSync(path.join(this.deps.dir, THREADS), JSON.stringify(this.threads));
     }
 
     /** A message as the agent reads it: its id first, so it can reply to it; what it answers is quoted. */

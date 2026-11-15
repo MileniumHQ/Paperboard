@@ -5,6 +5,7 @@
 // shell line), and a secret never lives in the config, only the name of the
 // vault entry that holds it.
 
+import { isRecord } from "@mileniumhq/paperapi";
 import { DEFAULT_TOOLS, OAUTH_SECRET, TOOL_LIMITS as L, type ServerSpec, type ServerValue, type ToolsConfig } from "../toolsContract";
 
 const NAME = /^[a-z][a-z0-9-]*$/;
@@ -25,9 +26,6 @@ const SECRETISH_QUERY = /^(token|access_token|api_?key|key|secret|password|auth|
 const fail = (m: string): never => {
     throw new Error(m);
 };
-
-/** a JSON object: not null, not a list */
-export const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
 
 function exactKeys(o: Record<string, unknown>, allowed: string[], what: string) {
     for (const k of Object.keys(o)) if (!allowed.includes(k)) fail(`${what}: "${k}" isn't a setting`);

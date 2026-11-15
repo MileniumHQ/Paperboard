@@ -2,11 +2,9 @@
 // library offers. The conversation dropdown lists the history as it is now,
 // so these are built again (and registered again) whenever it changes.
 
-import { defineAction, type ActionDefinition } from "@mileniumhq/paperapi";
+import { defineAction, type ActionDefinition, errorMessage, SerialQueue } from "@mileniumhq/paperapi";
 import { ACTION_IDS, LIMITS, TRIGGER_IDS } from "../contract";
 import { ASK_MS } from "./ask";
-import { errorText } from "../lib/failure";
-import { SerialQueue } from "./serialQueue";
 
 /** One conversation in the dropdown: its title, valued by its id. */
 export interface ConversationChoice {
@@ -190,13 +188,13 @@ export class FlowActionsPublisher {
                     await this.deps.register(def);
                 } catch (e) {
                     this.published = "";
-                    console.error(`[agents] couldn't update the "${def.id}" action:`, errorText(e));
+                    console.error(`[agents] couldn't update the "${def.id}" action:`, errorMessage(e));
                 }
             }
         }).catch((e) => {
             // the queue goes on: the next change publishes again
             this.published = "";
-            console.error("[agents] the flow actions couldn't be published:", errorText(e));
+            console.error("[agents] the flow actions couldn't be published:", errorMessage(e));
         });
     }
 }

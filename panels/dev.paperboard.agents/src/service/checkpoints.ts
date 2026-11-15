@@ -9,13 +9,13 @@
 import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
+import { errorMessage, SerialQueue } from "@mileniumhq/paperapi";
+import { writeFileAtomicSync } from "@mileniumhq/paperapi/fs";
 import { localStamp } from "../routineText";
 import type { ToolResult } from "./computerMcp";
 import type { ToolSpec } from "./computerTools";
 import type { HomeFolder } from "./homeFolder";
 import type { Toolset } from "./toolsets";
-import { errorText } from "../lib/failure";
-import { writeAtomic } from "./writeAtomic";
 
 /** how many are kept; past that the oldest go */
 const KEPT = 100;
@@ -114,7 +114,8 @@ function describe(c: Changes, words: { changed: string; added: string; removed: 
 const SINCE = { changed: "changed", added: "new", removed: "removed" };
 
 export class Checkpoints {
-    private queue: Promise<unknown> = Promise.resolve();
+    /** one at a time: each reads the whole folder, and a restore changes it */
+    private queue = new SerialQueue();
     private loaded = new Map<number, Checkpoint>();
     /** what each file hashed to when last read, so an unchanged file isn't read again */
     private hashes = new Map<string, Entry>();
@@ -128,24 +129,17 @@ export class Checkpoints {
             id: "checkpoints",
             tools: () => CHECKPOINT_TOOLS,
             instructions: () => CHECKPOINT_INSTRUCTIONS,
-            call: (name, args) => this.serial(async (): Promise<ToolResult> => {
+            call: (name, args) => this.queue.run(async (): Promise<ToolResult> => {
                 try {
                     if (name === "checkpoint") return { text: await this.make(args.note) };
                     if (name === "checkpoints") return { text: await this.list(args.checkpoint) };
                     if (name === "restore") return { text: await this.restore(args.checkpoint, args.path) };
                     return { text: `unknown tool ${name}`, isError: true };
                 } catch (e) {
-                    return { text: errorText(e), isError: true };
+                    return { text: errorMessage(e), isError: true };
                 }
             }),
         };
-    }
-
-    /** One at a time: each reads the whole folder, and a restore changes it. */
-    private serial<T>(run: () => Promise<T>): Promise<T> {
-        const next = this.queue.then(run, run);
-        this.queue = next;
-        return next;
     }
 
     private erase() {
@@ -207,7 +201,7 @@ export class Checkpoints {
                     } else {
                         const data = await fs.promises.readFile(full);
                         entry = { hash: createHash("sha256").update(data).digest("hex"), size: st.size, mtime: st.mtimeMs };
-                        if (keep && !fs.existsSync(this.blob(entry.hash))) writeAtomic(this.blob(entry.hash), data);
+                        if (keep && !fs.existsSync(this.blob(entry.hash))) writeFileAtomicSync(this.blob(entry.hash), data);
                         this.hashes.set(r, entry);
                     }
                     out.files[r] = entry;
@@ -221,7 +215,7 @@ export class Checkpoints {
     private save(scan: Scan, note: string): Checkpoint {
         const ids = this.ids();
         const c: Checkpoint = { id: (ids.at(-1) ?? 0) + 1, note, at: (this.o.now ?? Date.now)(), files: scan.files, dirs: scan.dirs };
-        writeAtomic(path.join(this.o.dir, `${c.id}.json`), JSON.stringify(c));
+        writeFileAtomicSync(path.join(this.o.dir, `${c.id}.json`), JSON.stringify(c));
         this.loaded.set(c.id, c);
         this.prune();
         return c;
@@ -327,7 +321,7 @@ export class Checkpoints {
                 home.write(`~/${p}`, fs.readFileSync(blob));
             }
         } catch (e) {
-            throw new Error(`${shownScope} is only partly back to ${this.name(target)}, and checkpoint ${kept.id} has how it was: ${errorText(e)}`);
+            throw new Error(`${shownScope} is only partly back to ${this.name(target)}, and checkpoint ${kept.id} has how it was: ${errorMessage(e)}`);
         }
 
         const parts = describe({ changed: undo.changed, added: undo.added, removed: undo.removed }, { changed: "changed back", added: "removed", removed: "brought back" });

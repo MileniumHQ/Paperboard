@@ -14,7 +14,6 @@ import { BrowserComputer, type ComputerHost } from "./browser";
 import { browserTool } from "./browserTools";
 import { browserView } from "./browserView";
 import { Brains, type BrainPackages } from "./brains";
-import { errorText } from "../lib/failure";
 import { Providers } from "./providers";
 import type { LoginMethod } from "./brainLogin";
 import { startComputerMcp, type ComputerMcp } from "./computerMcp";
@@ -41,7 +40,7 @@ import { Asker } from "./ask";
 import { FlowActionsPublisher, flowActions, type ConversationChoice, type FlowHost, type MessageReceived } from "./flowActions";
 import { BlocksSync } from "./blocksSync";
 import { flowBlocks, replyPayload, type ConversationFacts } from "./flowBlocks";
-import type { ActionDefinition, BlocksHandle } from "@mileniumhq/paperapi";
+import { type ActionDefinition, type BlocksHandle, errorMessage } from "@mileniumhq/paperapi";
 export { findProgram } from "./which";
 import type { Launch } from "./which";
 import { openTurnLog, type TurnLog } from "./turnLog";
@@ -280,7 +279,7 @@ export class AiApp {
                     this.turnLog.tool({ name, args, result, ms: Date.now() - started, isError: result.isError === true });
                     return result;
                 } catch (e) {
-                    this.turnLog.tool({ name, args, result: { thrown: errorText(e) }, ms: Date.now() - started, isError: true });
+                    this.turnLog.tool({ name, args, result: { thrown: errorMessage(e) }, ms: Date.now() - started, isError: true });
                     throw e;
                 }
             },
@@ -396,7 +395,7 @@ export class AiApp {
         try {
             return parseSettings(saved);
         } catch (e) {
-            throw new Error(`the agent's settings can't be read (${errorText(e)}); they were left as they are`);
+            throw new Error(`the agent's settings can't be read (${errorMessage(e)}); they were left as they are`);
         }
     }
 
@@ -447,7 +446,7 @@ export class AiApp {
             return this.brains.useFound(harness).then(
                 () => ({ accepted: true }),
                 (e) => {
-                    if (this.brains.snapshot()[harness].error !== errorText(e)) throw e;
+                    if (this.brains.snapshot()[harness].error !== errorMessage(e)) throw e;
                     console.error(`[agents] ${HARNESS_NAMES[harness]} on this computer wasn't used:`, String(e));
                     return { accepted: true };
                 },

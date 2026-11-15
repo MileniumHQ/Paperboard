@@ -2,9 +2,9 @@
 // a cap (only superseded copies go). An entry that changes is appended again and the latest copy wins.
 
 import fs from "node:fs";
+import { errorMessage } from "@mileniumhq/paperapi";
+import { writeFileAtomicSync } from "@mileniumhq/paperapi/fs";
 import type { ChatEntry } from "../contract";
-import { errorText } from "../lib/failure";
-import { writeAtomic } from "./writeAtomic";
 
 export const TRANSCRIPT = "transcript.jsonl";
 /** the latest entries kept in memory; the file keeps every one */
@@ -55,7 +55,7 @@ export class Transcript {
     /** Forget it: the file is emptied. */
     clear() {
         this.forget();
-        writeAtomic(this.file, "");
+        writeFileAtomicSync(this.file, "");
     }
 
     /** Forget what's in memory: the file was moved into the history. */
@@ -89,13 +89,13 @@ export class Transcript {
             try {
                 id = JSON.parse(line).id;
             } catch (err) {
-                throw new Error(`${this.file} line ${n + 1} is unreadable: ${errorText(err)}`);
+                throw new Error(`${this.file} line ${n + 1} is unreadable: ${errorMessage(err)}`);
             }
             if (typeof id !== "string") throw new Error(`${this.file} line ${n + 1} has no id`);
             latest.delete(id); // re-insert so a changed entry keeps its newest position
             latest.set(id, line);
         });
-        writeAtomic(this.file, [...latest.values()].join("\n") + "\n");
+        writeFileAtomicSync(this.file, [...latest.values()].join("\n") + "\n");
         this.compactAt = Math.max(COMPACT_AT_BYTES, fs.statSync(this.file).size * 2);
     }
 }
@@ -123,7 +123,7 @@ export function readTranscript(file: string): { entries: ChatEntry[]; ids: Set<s
                 torn = Buffer.byteLength(lines.slice(0, n).map((l) => `${l}\n`).join(""));
                 return;
             }
-            throw new Error(`${file} line ${n + 1} is unreadable: ${errorText(err)}`);
+            throw new Error(`${file} line ${n + 1} is unreadable: ${errorMessage(err)}`);
         }
         if (typeof e.id === "string") ids.add(e.id);
         // transcripts from before the chat was only a chat hold tool-call entries: not messages, not shown

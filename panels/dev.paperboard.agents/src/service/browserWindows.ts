@@ -3,11 +3,11 @@
 // which knows that a page paused on a JavaScript dialog answers nothing until
 // the dialog is answered. Starting and stopping the browser is browser.ts.
 
+import { errorMessage } from "@mileniumhq/paperapi";
 import type { PageDialog } from "../contract";
 import type { Cdp } from "./cdp";
 import { chord } from "./keys";
 import type { Mark } from "./pageScripts";
-import { errorText } from "../lib/failure";
 
 const LOAD_MS = 15_000;
 const MAX_TABS = 16;
@@ -116,7 +116,7 @@ export class Windows {
         if (this.tabs.size >= MAX_TABS) {
             void (async () => this.deps.connection().send("Target.closeTarget", { targetId: info.targetId }))().then(
                 () => this.deps.note(`A new window was closed: ${MAX_TABS} are open already. Close some first.`),
-                (e) => this.deps.note(`A new window is past the limit of ${MAX_TABS} and couldn't be closed: ${errorText(e)}`),
+                (e) => this.deps.note(`A new window is past the limit of ${MAX_TABS} and couldn't be closed: ${errorMessage(e)}`),
             );
             return;
         }
@@ -140,7 +140,7 @@ export class Windows {
         this.byId.set(tab.id, info.targetId);
         // attached at once, so a dialog or a file picker it opens before anyone looks is still seen; a failure
         // here is tried again, and reported, by the window's next use
-        void this.session(tab).catch((e) => console.warn(`[agents] couldn't attach to window ${tab.id} yet:`, errorText(e)));
+        void this.session(tab).catch((e) => console.warn(`[agents] couldn't attach to window ${tab.id} yet:`, errorMessage(e)));
     }
 
     untrack(targetId: string) {
@@ -220,7 +220,7 @@ export class Windows {
                 return r.result?.value;
             } catch (e) {
                 // the page navigated: its world went with it
-                if (attempt === 0 && !(e instanceof ToolError) && /context/i.test(errorText(e))) {
+                if (attempt === 0 && !(e instanceof ToolError) && /context/i.test(errorMessage(e))) {
                     tab.world = null;
                     continue;
                 }
@@ -256,7 +256,7 @@ export class Windows {
         }
         // still waiting on the dialog: its answer comes with the dialog's, or its failure is the browser's
         sent.catch((e) => {
-            if (this.tabs.has(tab.targetId)) this.deps.note(`Window ${tab.id} didn't take an input after its dialog: ${errorText(e)}`);
+            if (this.tabs.has(tab.targetId)) this.deps.note(`Window ${tab.id} didn't take an input after its dialog: ${errorMessage(e)}`);
         });
     }
 
@@ -385,7 +385,7 @@ export class Windows {
         try {
             await this.closeWindow(tab);
         } catch (closing) {
-            throw new ToolError(`${errorText(failure)} Its window ${tab.id} couldn't be closed: ${errorText(closing)}`);
+            throw new ToolError(`${errorMessage(failure)} Its window ${tab.id} couldn't be closed: ${errorMessage(closing)}`);
         }
     }
 }

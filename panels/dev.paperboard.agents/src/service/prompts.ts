@@ -6,11 +6,11 @@
 // only that it was saved: not in its context, not in the transcript.
 
 import crypto from "node:crypto";
+import { errorMessage } from "@mileniumhq/paperapi";
 import { LIMITS, type PromptEntry, type PromptField } from "../contract";
 import type { ToolResult } from "./computerMcp";
 import type { ToolSpec } from "./computerTools";
 import { fault, type Toolset } from "./toolsets";
-import { errorText } from "../lib/failure";
 
 const L = LIMITS.prompt;
 
@@ -96,8 +96,8 @@ export class Prompts {
                 try {
                     return this.ask(args);
                 } catch (e) {
-                    console.warn(`[agents] ${name} failed:`, errorText(e));
-                    return fault(errorText(e));
+                    console.warn(`[agents] ${name} failed:`, errorMessage(e));
+                    return fault(errorMessage(e));
                 }
             },
         };
@@ -164,10 +164,10 @@ export class Prompts {
             try {
                 await this.deps.saveSecret(f.secret.server, f.secret.name, withPrefix(answers[i]!.trim(), f.secret.prefix));
             } catch (e) {
-                const error = `${f.label} wasn't saved: ${errorText(e)}`;
+                const error = `${f.label} wasn't saved: ${errorMessage(e)}`;
                 this.finish(p, { status: "failed", error });
                 this.deps.tell(
-                    `The user answered "${p.entry.title}", but ${f.secret.name} for ${f.secret.server} couldn't be saved: ${errorText(e)}.` +
+                    `The user answered "${p.entry.title}", but ${f.secret.name} for ${f.secret.server} couldn't be saved: ${errorMessage(e)}.` +
                         (saved.length ? ` Saved before it: ${saved.join(", ")}.` : "") +
                         " Nothing else from the form was used; fix what's wrong and ask again.",
                 );

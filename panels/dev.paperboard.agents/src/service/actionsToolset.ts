@@ -16,11 +16,11 @@
 // in WITHHELD_PANELS. Events are listed, with the fields they carry, because
 // they're what a flow starts from, but never run: they aren't callable.
 
+import { errorMessage } from "@mileniumhq/paperapi";
 import { PANEL_ID } from "../contract";
 import type { ToolResult } from "./computerMcp";
 import type { ToolSpec } from "./computerTools";
 import { fault, type Toolset } from "./toolsets";
-import { errorText } from "../lib/failure";
 
 /**
  * Panels whose actions the agent never gets. Chippy lives in its own computer; the terminal panel
@@ -147,8 +147,8 @@ export function actionsToolset(deps: ActionsToolsetDeps): Toolset {
             try {
                 panels = [...new Set((await listed()).map((a) => a.panelId))].sort();
             } catch (e) {
-                console.error("[agents] couldn't list other panels' actions:", errorText(e));
-                return "Other Paperboard panels' actions: the list isn't available right now (" + errorText(e) + ").";
+                console.error("[agents] couldn't list other panels' actions:", errorMessage(e));
+                return "Other Paperboard panels' actions: the list isn't available right now (" + errorMessage(e) + ").";
             }
             const named = panels.slice(0, MAX_PANEL_NAMES).join(", ") + (panels.length > MAX_PANEL_NAMES ? `, and ${panels.length - MAX_PANEL_NAMES} more` : "");
             if (!panels.length) return "Other Paperboard panels offer no actions right now.";
@@ -162,8 +162,8 @@ export function actionsToolset(deps: ActionsToolsetDeps): Toolset {
             try {
                 return name === "list_actions" ? await list(args) : await run(args);
             } catch (e) {
-                console.error(`[agents] ${name} failed:`, errorText(e));
-                return fault(errorText(e));
+                console.error(`[agents] ${name} failed:`, errorMessage(e));
+                return fault(errorMessage(e));
             }
         },
     };

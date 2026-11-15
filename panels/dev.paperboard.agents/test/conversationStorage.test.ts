@@ -2,8 +2,8 @@ import { afterEach, describe, expect, mock, test } from "bun:test";
 import * as crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
+import { writeFileAtomicSync } from "@mileniumhq/paperapi/fs";
 import { LIMITS } from "../src/contract";
-import { writeAtomic } from "../src/service/writeAtomic";
 import { conversationRig, said, settled, turnId, type Rig } from "./support/rig";
 import { release, SLOW, tempDir } from "./support/host";
 
@@ -252,7 +252,7 @@ describe("writing a file", () => {
         const dir = tempDir("write");
         try {
             // the file's name fits; its temp file's is too long to open, and so to remove
-            expect(() => writeAtomic(path.join(dir, "a".repeat(245)), "x")).toThrow(expect.objectContaining({ code: "ENAMETOOLONG", syscall: "open" }));
+            expect(() => writeFileAtomicSync(path.join(dir, "a".repeat(245)), "x")).toThrow(expect.objectContaining({ code: "ENAMETOOLONG", syscall: "open" }));
         } finally {
             fs.rmSync(dir, { recursive: true, force: true });
         }

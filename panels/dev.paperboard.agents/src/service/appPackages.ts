@@ -11,7 +11,7 @@ import fs from "node:fs";
 import path from "node:path";
 import zlib from "node:zlib";
 import type Semver from "semver";
-import { errorText } from "../lib/failure";
+import { errorMessage } from "@mileniumhq/paperapi";
 
 export const REGISTRY = "https://registry.npmjs.org";
 const MAX_PACKAGES = 500;
@@ -63,7 +63,7 @@ async function get(url: string, accept: string): Promise<Response> {
     try {
         res = await fetch(url, { headers: { accept }, signal: AbortSignal.timeout(FETCH_MS) });
     } catch (e) {
-        throw new Error(`couldn't reach the npm registry (${errorText(e)})`);
+        throw new Error(`couldn't reach the npm registry (${errorMessage(e)})`);
     }
     return res;
 }

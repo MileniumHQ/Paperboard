@@ -2,9 +2,8 @@
 // (each told only when it reads differently from the last time) and the events
 // flows start from. Nothing is told before the blocks are registered.
 
-import type { BlocksHandle } from "@mileniumhq/paperapi";
+import { type BlocksHandle, errorMessage } from "@mileniumhq/paperapi";
 import type { MemoryList } from "../contract";
-import { errorText } from "../lib/failure";
 
 export interface BlocksSyncDeps {
     blocks: BlocksHandle;
@@ -81,7 +80,7 @@ export class BlocksSync {
         this.deps.blocks.changed(value).catch((e) => {
             // not told, so not announced: the next change to it tells Blocks again
             if (this.announced.get(value) === next) this.announced.delete(value);
-            console.error(`[agents] the change to ${value} didn't reach Blocks:`, errorText(e));
+            console.error(`[agents] the change to ${value} didn't reach Blocks:`, errorMessage(e));
         });
     }
 }

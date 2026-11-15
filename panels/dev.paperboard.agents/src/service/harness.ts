@@ -22,11 +22,11 @@
 import { randomUUID } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
+import { errorMessage } from "@mileniumhq/paperapi";
 import { characterOf, type Character, type Harness } from "../contract";
 import type { Sections } from "./toolsets";
 import { MCP_TOKEN_ENV } from "./computerMcp";
 import { writeLine } from "./mcpClient";
-import { errorText } from "../lib/failure";
 
 export const HARNESS_NAMES: Record<Harness, string> = { codex: "Codex", "claude-code": "Claude", opencode: "OpenCode" };
 
@@ -194,7 +194,7 @@ export function writeRunFiles(files: RunFile[]): () => void {
         }
     } catch (e) {
         remove();
-        throw new Error(`Couldn't write the agent's instructions for its brain: ${errorText(e)}`);
+        throw new Error(`Couldn't write the agent's instructions for its brain: ${errorMessage(e)}`);
     }
     return remove;
 }

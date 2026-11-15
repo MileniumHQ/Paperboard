@@ -17,14 +17,13 @@
 
 import { randomUUID } from "node:crypto";
 import fs from "node:fs/promises";
+import { errorMessage, SerialQueue } from "@mileniumhq/paperapi";
+import { writeFileAtomicSync } from "@mileniumhq/paperapi/fs";
 import { LIMITS, type Routine, type RoutineSchedule, type RoutinesState } from "../contract";
 import { DAY_NAMES, describeSchedule, localStamp } from "../routineText";
 import type { ToolResult } from "./computerMcp";
 import type { ToolSpec } from "./computerTools";
 import type { Toolset } from "./toolsets";
-import { writeAtomic } from "./writeAtomic";
-import { errorText } from "../lib/failure";
-import { SerialQueue } from "./serialQueue";
 
 const L = LIMITS.routines;
 const VERSION = 1;
@@ -69,7 +68,7 @@ export class Routines {
             this.items = await this.read();
             this.broken = null;
         } catch (e) {
-            this.broken = errorText(e);
+            this.broken = errorMessage(e);
             console.error("[agents] routines are unreadable:", this.broken);
         }
         const now = this.now();
@@ -138,7 +137,7 @@ export class Routines {
                 r.lastRun = now;
                 r.lastError = null;
             } catch (e) {
-                r.lastError = errorText(e);
+                r.lastError = errorMessage(e);
                 console.error(`[agents] routine ${r.id} couldn't run:`, r.lastError);
             }
             if (r.schedule.kind === "once" && r.lastError === null) {
@@ -153,7 +152,7 @@ export class Routines {
             await this.save();
         } catch (e) {
             // what ran is on disk as not having run: none run again until the file is right, and the user sees why
-            this.broken = `the routines couldn't be saved after one ran, so none run until the agent is restarted (${this.deps.file}): ${errorText(e)}`;
+            this.broken = `the routines couldn't be saved after one ran, so none run until the agent is restarted (${this.deps.file}): ${errorMessage(e)}`;
             console.error("[agents]", this.broken);
             this.changed();
         }
@@ -195,14 +194,14 @@ export class Routines {
             raw = await fs.readFile(this.deps.file, "utf8");
         } catch (e) {
             if ((e as NodeJS.ErrnoException).code === "ENOENT") return [];
-            throw new RoutineError(`the routines can't be read (${this.deps.file}): ${errorText(e)}`);
+            throw new RoutineError(`the routines can't be read (${this.deps.file}): ${errorMessage(e)}`);
         }
         const bad = (why: string) => new RoutineError(`the routines file is unreadable (${why}); it was left as it is: ${this.deps.file}`);
         let doc: any;
         try {
             doc = JSON.parse(raw);
         } catch (e) {
-            throw bad(errorText(e));
+            throw bad(errorMessage(e));
         }
         if (!doc || doc.version !== VERSION || !Array.isArray(doc.routines)) throw bad("not a routines file of this version");
         const ids = new Set<string>();
@@ -229,14 +228,14 @@ export class Routines {
         } catch (e) {
             undo();
             this.changed();
-            throw new RoutineError(`the routines couldn't be saved, so nothing changed: ${errorText(e)}`);
+            throw new RoutineError(`the routines couldn't be saved, so nothing changed: ${errorMessage(e)}`);
         }
     }
 
     /** Write the routines as they are now; writes run one at a time, in order. */
     private save(): Promise<void> {
         const data = JSON.stringify({ version: VERSION, routines: this.items }, null, 2);
-        return this.writes.run(async () => writeAtomic(this.deps.file, data)).finally(() => this.changed());
+        return this.writes.run(async () => writeFileAtomicSync(this.deps.file, data)).finally(() => this.changed());
     }
 
     private newId(): string {

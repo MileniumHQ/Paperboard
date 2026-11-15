@@ -17,8 +17,7 @@
 import crypto from "node:crypto";
 import http from "node:http";
 import type { AddressInfo } from "node:net";
-import { errorText } from "../lib/failure";
-import { isRecord } from "./mcpConfig";
+import { errorMessage, isRecord } from "@mileniumhq/paperapi";
 
 /** what is kept in the vault for a signed-in server */
 export interface Tokens {
@@ -92,7 +91,7 @@ async function getMetadata(f: typeof fetch, url: string): Promise<Record<string,
     try {
         res = await f(url, { headers: { Accept: "application/json", "MCP-Protocol-Version": "2025-06-18" }, signal: AbortSignal.timeout(REQUEST_MS) });
     } catch (e) {
-        throw new Error(`couldn't reach ${new URL(url).host}: ${errorText(e)}`);
+        throw new Error(`couldn't reach ${new URL(url).host}: ${errorMessage(e)}`);
     }
     if (!res.ok) {
         await res.body?.cancel();
@@ -132,7 +131,7 @@ export async function discover(f: typeof fetch, serverUrl: string): Promise<Disc
         challenge = res.status === 401 ? bearerChallenge(res.headers.get("www-authenticate")) : null;
         await res.body?.cancel();
     } catch (e) {
-        throw new Error(`couldn't reach ${server.host}: ${errorText(e)}`);
+        throw new Error(`couldn't reach ${server.host}: ${errorMessage(e)}`);
     }
     let resourceMeta: Record<string, unknown> | null = null;
     if (challenge?.resource_metadata) resourceMeta = await getMetadata(f, checkEndpoint(challenge.resource_metadata, "resource metadata address"));
@@ -191,7 +190,7 @@ export async function register(f: typeof fetch, d: Discovered, redirectUri: stri
             signal: AbortSignal.timeout(REQUEST_MS),
         });
     } catch (e) {
-        throw new Error(`couldn't register with ${new URL(d.registrationEndpoint).host}: ${errorText(e)}`);
+        throw new Error(`couldn't register with ${new URL(d.registrationEndpoint).host}: ${errorMessage(e)}`);
     }
     const host = new URL(d.registrationEndpoint).host;
     // 401 and 403 here mean the server only lets in apps it has approved; no request Paperboard makes changes that
@@ -245,7 +244,7 @@ async function tokenRequest(f: typeof fetch, t: Pick<Tokens, "tokenEndpoint" | "
     try {
         res = await f(t.tokenEndpoint, { method: "POST", redirect: "error", headers, body, signal: AbortSignal.timeout(REQUEST_MS) });
     } catch (e) {
-        throw new Error(`couldn't reach ${host}: ${errorText(e)}`);
+        throw new Error(`couldn't reach ${host}: ${errorMessage(e)}`);
     }
     const got = await readJson(res).catch((e: Error) => {
         throw new Error(`${host} answered ${res.status}: ${e.message}`);

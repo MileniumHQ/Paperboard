@@ -5,9 +5,9 @@
 // ACP doesn't say when), sends the prompt, and reports `done` when the prompt
 // is answered. The conversation then stops the process.
 
+import { errorMessage } from "@mileniumhq/paperapi";
 import type { TurnEvent } from "./harness";
 import { MCP_SERVER } from "./harness";
-import { errorText } from "../lib/failure";
 
 export type AcpEvent = TurnEvent | { type: "done" };
 
@@ -63,7 +63,7 @@ export class AcpTurn {
             else if (result?.stopReason === "refusal") this.o.emit({ type: "failed", message: "the model refused to answer" });
         } catch (e) {
             this.flush();
-            this.o.emit({ type: "failed", message: this.gaveUp ?? (errorText(e)) });
+            this.o.emit({ type: "failed", message: this.gaveUp ?? (errorMessage(e)) });
         }
         this.close();
         this.o.emit({ type: "done" });

@@ -12,8 +12,8 @@
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
+import { errorMessage } from "@mileniumhq/paperapi";
 import type { Harness } from "../contract";
-import { errorText } from "../lib/failure";
 
 const TURN_LOG_ENV = "PAPERBOARD_AGENT_LOG";
 
@@ -58,7 +58,7 @@ export function openTurnLog(dir: string, env: NodeJS.ProcessEnv = process.env): 
             fs.appendFileSync(file, `${JSON.stringify({ at: new Date().toISOString(), ...record })}\n`);
         } catch (e) {
             // the log is a developer's: a full disk or a removed folder is said, and the turn goes on
-            console.error(`[agents] the turn log couldn't be written (${file}):`, errorText(e));
+            console.error(`[agents] the turn log couldn't be written (${file}):`, errorMessage(e));
         }
     };
     console.log(`[agents] logging every turn to ${file} (${TURN_LOG_ENV}=1)`);
