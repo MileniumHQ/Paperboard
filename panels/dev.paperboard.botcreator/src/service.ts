@@ -374,7 +374,14 @@ async function migrateLegacyBot(saved: Record<string, unknown>, legacy: { applic
         createdAt: Date.now(),
     };
     bots.set(id, createEntry(stored, Boolean(token)));
-    await saveBots();
+    try {
+        await saveBots();
+    } catch (err) {
+        // the next start moves it again, under a new id: this one's token copy goes
+        bots.delete(id);
+        if (token) await secretsApi.delete(tokenName(id), PANEL_ID).catch(logFailure("forgetting the unsaved moved token failed"));
+        throw err;
+    }
     if (token) await secretsApi.delete(LEGACY_TOKEN_NAME, PANEL_ID);
     console.log(`[DiscordService] moved the bot from before several bots into ${id}`);
 }
