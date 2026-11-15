@@ -39,6 +39,15 @@ describe("failures are shown", () => {
         expect(mc.scope.ctx.state.chatMessages.map((m) => m.text)).toEqual(["Cannot send message: server is offline."]);
     });
 
+    test("a start whose server jar can't be checked says why instead of sending the user to reinstall", async () => {
+        const mc = minecraftServer({ files: { "elsewhere/server.jar": "jar" } });
+        fs.rmSync(path.join(mc.dir, "server.jar"));
+        fs.symlinkSync(path.join(mc.dir, "elsewhere", "server.jar"), path.join(mc.dir, "server.jar"));
+        const failure = await mc.run(() => startServerInstance(mc.scope.ctx)).catch((err: Error) => err);
+        expect(String(failure)).toContain("symbolic link");
+        expect(String(failure)).not.toContain("reinstall");
+    });
+
     test("a Palworld settings file that can't be read when the server stops is reported in the console", async () => {
         const server = gameServer("palworld", { settings: { port: await freePort(), restPort: await freePort() }, state: palworldService.initialState() });
         installPalworld(server.dir);

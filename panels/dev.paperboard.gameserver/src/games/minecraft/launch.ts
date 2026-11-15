@@ -34,8 +34,7 @@ export async function prepareLaunch(ctx: ServiceContext<GameServerState>): Promi
             `Could not determine the Minecraft version (got ${JSON.stringify(version)}) — complete Setup before starting the server.`,
         );
     }
-    const isInstalled = await packageApi.isInstalled(javaPkg).catch(() => false);
-    if (!isInstalled) {
+    if (!(await packageApi.isInstalled(javaPkg))) {
         throw new Error(
             `Required Java package "${javaPkg}" is not installed. Please run Setup or install it in Packages.`,
         );
@@ -51,8 +50,7 @@ export async function prepareLaunch(ctx: ServiceContext<GameServerState>): Promi
     const entry = launchEntryFile(launch, isWin);
     const softwareName = SOFTWARE_NAMES[minecraftSoftware(ctx.state.serverSoftware)];
     // fail here instead of a confusing "unable to access jarfile" exit
-    const hasEntry = await fileApi.exists(entry, PANEL_ID).catch(() => false);
-    if (!hasEntry) {
+    if (!(await fileApi.exists(entry, PANEL_ID))) {
         throw new Error(
             `${entry} is missing in the server folder — reinstall ${softwareName} ${version || ""} from Versions (or run Setup) before starting.`,
         );
