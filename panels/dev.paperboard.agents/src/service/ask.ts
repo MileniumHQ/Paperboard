@@ -15,6 +15,7 @@ import type { TurnLog } from "./turnLog";
 import { writeLine } from "./mcpClient";
 import type { TurnHost } from "./conversation";
 import { errorText } from "../lib/failure";
+import { lineReader } from "./lines";
 
 /** under the 30 s a flow gives an action, so the ask fails with its own reason first */
 export const ASK_MS = 28_000;
@@ -95,7 +96,6 @@ export class Asker {
         let answered = false;
         let timedOut = false;
         let stderr = "";
-        let buf = "";
         const onEvent = (ev: AcpEvent) => {
             if (ev.type === "message") messages.push(ev.text);
             else if (ev.type === "failed") failures.push(ev.message);
@@ -123,18 +123,12 @@ export class Asker {
             if (acp) acp.line(line);
             else for (const ev of parseTurnLine(settings.harness, line)) onEvent(ev);
         };
+        const stdout = lineReader(MAX_LINE, onLine, () => failures.push(`${HARNESS_NAMES[settings.harness]} printed a line over ${MAX_LINE / 1024 / 1024} MB, which couldn't be read`));
         // every listener goes when the run is over, whether or not it ever started
         const offs: (() => void)[] = [];
         const exited = new Promise<number | undefined>((ok) => {
             offs.push(
-                host.onStdout(id, (data) => {
-                    buf += data;
-                    for (let i = buf.indexOf("\n"); i >= 0; i = buf.indexOf("\n")) {
-                        onLine(buf.slice(0, i));
-                        buf = buf.slice(i + 1);
-                    }
-                    if (buf.length > MAX_LINE) buf = "";
-                }),
+                host.onStdout(id, stdout.push),
                 host.onStderr(id, (data) => {
                     stderr = (stderr + data).slice(-4000);
                 }),
@@ -170,7 +164,7 @@ export class Asker {
             const driven = acp?.run();
             code = await exited;
             await fed;
-            if (buf.trim()) onLine(buf);
+            stdout.end();
             acp?.close();
             await driven;
         } finally {

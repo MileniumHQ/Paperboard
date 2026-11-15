@@ -8,6 +8,7 @@
 import { isImageType, type ToolImage, type ToolResult } from "./computerMcp";
 import { errorText } from "../lib/failure";
 import { stopChild } from "./stopChild";
+import { lineReader } from "./lines";
 
 export const PROTOCOL_VERSION = "2025-06-18";
 export const MAX_MESSAGE = 4 * 1024 * 1024;
@@ -153,7 +154,7 @@ type Pending = { resolve: (v: unknown) => void; reject: (e: Error) => void; time
 export class StdioWire implements McpWire {
     private pending = new Map<number, Pending>();
     private next = 1;
-    private buf = "";
+    private stdout = lineReader(MAX_MESSAGE, (line) => this.onLine(line), () => this.fail("the server sent a message past the size limit"));
     private stderr = "";
     private offs: (() => void)[] = [];
     private ended: string | null = null;
@@ -175,7 +176,7 @@ export class StdioWire implements McpWire {
         });
         const wire = new StdioWire(host, o.id);
         wire.offs.push(
-            host.onStdout(o.id, (d) => wire.onData(d)),
+            host.onStdout(o.id, (d) => wire.stdout.push(d)),
             host.onStderr(o.id, (d) => (wire.stderr = (wire.stderr + d).slice(-STDERR_KEEP))),
             host.onExit(o.id, (code) => wire.onExit(code)),
         );
@@ -188,20 +189,9 @@ export class StdioWire implements McpWire {
         return wire;
     }
 
-    private onData(d: string) {
-        this.buf += d;
-        for (let i = this.buf.indexOf("\n"); i >= 0; i = this.buf.indexOf("\n")) {
-            const line = this.buf.slice(0, i).trim();
-            this.buf = this.buf.slice(i + 1);
-            if (line) this.onLine(line);
-        }
-        if (this.buf.length > MAX_MESSAGE) {
-            this.buf = "";
-            this.fail("the server sent a message past the size limit");
-        }
-    }
-
-    private onLine(line: string) {
+    private onLine(raw: string) {
+        const line = raw.trim();
+        if (!line) return;
         let m: any;
         try {
             m = JSON.parse(line);

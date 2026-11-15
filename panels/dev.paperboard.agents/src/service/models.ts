@@ -18,6 +18,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { PANEL_ID, type BrainModel, type Harness } from "../contract";
 import type { TurnHost } from "./conversation";
+import { lineReader } from "./lines";
 
 /** far past any real catalog; a file this big isn't one */
 export const MAX_CATALOG_BYTES = 4 * 1024 * 1024;
@@ -133,7 +134,6 @@ const MAX_ANSWER = 16 * 1024 * 1024;
 export async function askClaudeModels(host: TurnHost, launch: ClaudeLaunch): Promise<unknown> {
     const id = `${PANEL_ID}.models.${randomUUID()}`;
     const request = randomUUID();
-    let buf = "";
     let stderr = "";
     let settle!: { ok: (v: unknown) => void; fail: (e: Error) => void };
     const answered = new Promise<unknown>((ok, fail) => (settle = { ok, fail }));
@@ -152,14 +152,7 @@ export async function askClaudeModels(host: TurnHost, launch: ClaudeLaunch): Pro
         else settle.ok(ev.response.response?.models);
     };
     const offs = [
-        host.onStdout(id, (data) => {
-            buf += data;
-            for (let i = buf.indexOf("\n"); i >= 0; i = buf.indexOf("\n")) {
-                onLine(buf.slice(0, i));
-                buf = buf.slice(i + 1);
-            }
-            if (buf.length > MAX_ANSWER) settle.fail(new Error("Claude's answer is too big to be a model list"));
-        }),
+        host.onStdout(id, lineReader(MAX_ANSWER, onLine, () => settle.fail(new Error("Claude's answer is too big to be a model list"))).push),
         host.onStderr(id, (data) => {
             stderr = (stderr + data).slice(-2000);
         }),

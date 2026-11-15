@@ -37,6 +37,7 @@ import { ATTACHMENTS, CARRY, History, summary, THREADS } from "./history";
 import { said, Transcript, TRANSCRIPT, type Said } from "./transcript";
 import { errorText } from "../lib/failure";
 import type { Sections, TurnMode } from "./toolsets";
+import { lineReader } from "./lines";
 
 export const TURN_PROC_ID = `${PANEL_ID}.turn`;
 const RUN = "run";
@@ -549,9 +550,6 @@ export class Conversation {
     /** A turn whose harness is ready to start, run until it's over. */
     private async launched(settings: Settings, launch: TurnLaunch, mcp: ReturnType<ConversationDeps["mcp"]>, message: string) {
         const log = this.deps.log ?? null;
-        let buf = "";
-        /** the rest of a line past MAX_LINE is still coming: it's skipped, not read as a line of its own */
-        let overlong = false;
         let stderr = "";
         const failures: string[] = [];
         const plain = this.plain;
@@ -613,24 +611,13 @@ export class Conversation {
             if (acp) acp.line(line);
             else for (const ev of parseTurnLine(settings.harness, line)) onEvent(ev);
         };
+        // a line past the cap is dropped to its end, and the turn says so
+        const stdout = lineReader(MAX_LINE, onLine, () => failures.push(`${HARNESS_NAMES[settings.harness]} printed a line over ${MAX_LINE / 1024 / 1024} MB, which couldn't be read`));
         // every listener goes when the run is over, whether or not it ever started
         const offs: (() => void)[] = [];
         const exited = new Promise<number | undefined>((ok) => {
             offs.push(
-                this.deps.host.onStdout(TURN_PROC_ID, (data) => {
-                    buf += data;
-                    for (let i = buf.indexOf("\n"); i >= 0; i = buf.indexOf("\n")) {
-                        if (overlong) overlong = false;
-                        else onLine(buf.slice(0, i));
-                        buf = buf.slice(i + 1);
-                    }
-                    // a line past the cap isn't buffered forever: it's dropped to its end, and the turn says so
-                    if (buf.length > MAX_LINE) {
-                        if (!overlong) failures.push(`${HARNESS_NAMES[settings.harness]} printed a line over ${MAX_LINE / 1024 / 1024} MB, which couldn't be read`);
-                        overlong = true;
-                        buf = "";
-                    }
-                }),
+                this.deps.host.onStdout(TURN_PROC_ID, stdout.push),
                 this.deps.host.onStderr(TURN_PROC_ID, (data) => {
                     log?.line("stderr", data);
                     stderr = (stderr + data).slice(-4000);
@@ -667,7 +654,7 @@ export class Conversation {
             const driven = acp?.run();
             code = await exited;
             await fed;
-            if (buf.trim() && !overlong) onLine(buf);
+            stdout.end();
             acp?.close();
             await driven;
         } finally {
