@@ -138,9 +138,9 @@ function listenProgress(scope: string | undefined, panelId: string, sourceId: st
         if (sourceId !== undefined && (change.sourceId ?? null) !== sourceId) return;
         listener({ panelId: change.panelId, sourceId: change.sourceId ?? null, progress: change.progress ?? null });
     });
-    // the event flows only to a connected socket that declared it
-    // quiet: the transport's status tells the page it is offline, and its next connect declares the event again
-    transport.ensureConnected().catch((err) => console.error("[paperapi] backup progress could not connect:", err));
+    // the event flows only to a connected socket that declared it: one that
+    // can't connect yet says why on its status and keeps trying
+    transport.keepConnected();
     return off;
 }
 

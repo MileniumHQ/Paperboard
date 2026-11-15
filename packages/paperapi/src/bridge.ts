@@ -3,6 +3,10 @@ import { getPanelId } from "./ipc";
 import { STATE_EVENT, STATE_VALUE, serviceApi } from "./serviceCalls";
 import { registerPanelHydrator } from "./panelHydration";
 import { errorMessage } from "./errors";
+import { problemsApi } from "./problems";
+
+// the key of the problem a failed first read reports
+const STATE_PROBLEM = "paperapi:state";
 
 export interface PanelBridgeOptions<TState extends Record<string, any>> {
     panelId?: string;
@@ -26,6 +30,8 @@ export function createPanelBridge<
     let latestRead = 0;
     let appliedRead = 0;
     const patchedDuring = new Map<number, Set<string>>();
+    // whether the first read's failure is shown as the panel's problem
+    let problemShown = false;
 
     // the subscription is tearable: createPanelBridge returns dispose()
     const unsubscribeSync = blocksApi.onEvent(panelId, STATE_EVENT, (payload: any) => {
@@ -47,6 +53,10 @@ export function createPanelBridge<
             if (fetched && typeof fetched === "object" && read > appliedRead) {
                 appliedRead = read;
                 status = { ready: true };
+                if (problemShown) {
+                    problemShown = false;
+                    problemsApi.clear(panelId, STATE_PROBLEM);
+                }
                 const fresh = Object.fromEntries(Object.entries(fetched).filter(([key]) => !patched.has(key))) as Partial<TState>;
                 localState = { ...localState, ...fresh };
                 for (const cb of listeners) {
@@ -65,8 +75,15 @@ export function createPanelBridge<
     };
 
     const unregisterHydrator = registerPanelHydrator(panelId, refreshState);
-    // quiet: refreshState already put the failure in the bridge's status, which the page shows
-    void refreshState().catch((err) => console.error(`[bridge:${panelId}] initial hydration failed; retry via refreshState:`, err));
+    // no button waits for the first read: a failure is the panel's problem,
+    // shown by its name until a later read (the shell's readiness check, a
+    // refresh) gets the state
+    void refreshState().catch((err) => {
+        // a later read that got the state already answered it
+        if (appliedRead > 0) return;
+        problemShown = true;
+        problemsApi.report(panelId, { key: STATE_PROBLEM, title: "The panel couldn't read its service's state", message: errorMessage(err) });
+    });
 
     const onStateChange = (
         cb: (patch: Partial<TState>, full: TState) => void,

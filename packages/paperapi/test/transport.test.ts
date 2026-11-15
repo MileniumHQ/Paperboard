@@ -1,9 +1,10 @@
 import { afterEach, beforeEach, describe, expect, jest, setDefaultTimeout, test } from "bun:test";
 import { actionsApi } from "../src/actions";
+import { backupApi } from "../src/backups";
 import { createPanelBridge } from "../src/bridge";
 import { fileApi } from "../src/file";
 import { terminalApi } from "../src/index";
-import { closeTransport, getTransport, initPaperApi, invoke, on, RPC_ROUTES } from "../src/ipc";
+import { closeTransport, configureHostConnection, getTransport, initPaperApi, invoke, on, RPC_ROUTES } from "../src/ipc";
 import { processApi } from "../src/process";
 import { definePanelService } from "../src/service";
 import { TransportRegistry } from "../src/transport/registry";
@@ -643,6 +644,65 @@ describe("a panel bridge keeps the newest state", () => {
             offPatch();
             reads[2]({ players: 2, map: "tundra" });
             expect(await later).toEqual({ players: 3, map: "tundra" });
+        } finally {
+            bridge.dispose();
+        }
+    });
+});
+
+// A backup progress listener has no caller to tell when it can't connect.
+describe("a backup progress listener that can't connect yet", () => {
+    test("says why on the transport's status, keeps trying, and hears progress once it connects", async () => {
+        let refusals = 1;
+        const release = configureHostConnection(async () => {
+            if (refusals-- > 0) throw new Error("the host has no credential yet");
+            return { port: server.port, token: server.token };
+        });
+        const statuses: { connected: boolean; error?: string }[] = [];
+        const connected = deferred();
+        const errors: string[] = [];
+        const consoleError = console.error;
+        console.error = (...args: unknown[]) => void errors.push(args.map(String).join(" "));
+        try {
+            getTransport("local").onStatus((s) => {
+                statuses.push(s);
+                if (s.connected) connected.resolve(null);
+            });
+            const heard = deferred<unknown>();
+            const off = backupApi.onProgress("dev.test.backups", (change) => heard.resolve(change), "local");
+            await connected.promise;
+            expect(statuses[0]).toEqual({ connected: false, error: "the host has no credential yet" });
+            await server.next("the progress announcement", (f) => f.msg?.action === "events:subscribe" && f.msg.params.events.includes("backup:progress"));
+            await getTransport("local").subscriptionsSettled();
+            server.emit("backup:progress", { panelId: "dev.test.backups", sourceId: null, progress: null });
+            expect(await heard.promise).toEqual({ panelId: "dev.test.backups", sourceId: null, progress: null });
+            off();
+        } finally {
+            console.error = consoleError;
+            release();
+        }
+        expect(errors.some((l) => l.includes("the host has no credential yet"))).toBe(true);
+    });
+});
+
+// A bridge's first read has no button waiting for it: a failure is shown as the panel's problem.
+describe("a panel bridge's first read that fails reaches the person", () => {
+    test("it is reported as the panel's problem, and cleared once a read gets the state", async () => {
+        await initPaperApi({ port: server.port, token: server.token });
+        let refusals = 1;
+        server.answer = (action) => {
+            if (action === "blocks:call" && refusals-- > 0) throw new Error("the service is not running");
+            return action === "blocks:call" ? { result: { players: 4 } } : {};
+        };
+        const bridge = createPanelBridge<{ players: number }>({ panelId: "dev.test.unread", defaultState: { players: 0 } });
+        try {
+            const reported = await server.next("the problem report", (f) => f.msg?.action === "problems:report");
+            expect(reported.msg.params).toMatchObject({ panelId: "dev.test.unread", key: "paperapi:state", message: "the service is not running" });
+            expect(await bridge.refreshState()).toEqual({ players: 4 });
+            const cleared = await server.next("the problem cleared", (f) => f.msg?.action === "problems:clear");
+            expect(cleared.msg.params).toMatchObject({ panelId: "dev.test.unread", key: "paperapi:state" });
+            // the daemon answers in order on one connection: once a later read is answered, so was the clear
+            await bridge.refreshState();
         } finally {
             bridge.dispose();
         }

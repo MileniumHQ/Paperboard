@@ -240,13 +240,17 @@ export class CraneTransport {
         this.reconnectAttempts++;
         this.reconnectTimer = setTimeout(() => {
             this.reconnectTimer = null;
-            this.reconnectNow();
+            this.keepConnected();
         }, delay);
     }
 
-    // a dropped reconnect must be recorded, not just retried: debugErr is
-    // always visible, the debug trace is not, and status listeners hear why
-    private reconnectNow(): void {
+    /**
+     * Connects now if it isn't connected, for what no caller waits on (an
+     * event subscription): a failure is recorded, told to the status
+     * listeners with why, and tried again until it connects or is closed.
+     * debugErr is always visible, the debug trace is not.
+     */
+    public keepConnected(): void {
         if (this.closedByUser) return;
         this.ensureConnected().catch((err) => {
             debugErr(`reconnect to ${this.computerId} failed`, err);
@@ -389,7 +393,7 @@ export class CraneTransport {
         if (msg.type === "tunnel-closed" && msg.id === this.tunnelId) {
             this.tunnelId = null;
             this.emitStatus(false, `The tunnel to ${this.computerId} closed`);
-            this.reconnectNow();
+            this.keepConnected();
             return;
         }
 

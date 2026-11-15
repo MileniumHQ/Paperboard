@@ -618,7 +618,7 @@ interface ServiceClient {
                 </tbody>
             </PaperTable>
             <PaperText preset="body" as="p">
-                A mirror's first read that fails is logged to the console and kept in <PaperCode>state.error()</PaperCode>. Read it there to show why the state is missing.
+                A mirror's first read that fails is shown as one of the panel's problems (see <PaperCode>problemsApi</PaperCode>), under the key <PaperCode>paperapi:state</PaperCode>, and kept in <PaperCode>state.error()</PaperCode>. The problem goes away once a later read gets the state.
             </PaperText>
 
             <PaperText preset="subheader" as="h2" id="deprecated">Deprecated</PaperText>
