@@ -99,9 +99,11 @@ export function useComputerSelection(options: ComputerSelectionOptions) {
         await selectComputer(newComp.id);
     };
 
-    // a failed forget rejects with why; the dialog stays open showing it
-    const forgetComputer = async (compId: string) => {
-        if (!(await computersApi.remove(compId))) throw new Error("Paperboard doesn't know this computer anymore.");
+    // a failed forget rejects with why, and a computer that couldn't be told
+    // answers why; the dialog stays open showing either
+    const forgetComputer = async (compId: string, evenIfUntold: boolean): Promise<string | null> => {
+        const untold = await computersApi.remove(compId, evenIfUntold);
+        if (untold !== null) return untold;
         forgetPanels(compId);
         await refreshComputers();
         // forgetting another computer leaves you where you are
@@ -110,6 +112,7 @@ export function useComputerSelection(options: ComputerSelectionOptions) {
         if (options.appSettings().startOn === compId) {
             await options.onAppSettingsChange({ ...options.appSettings(), startOn: START_ON_HOME });
         }
+        return null;
     };
 
     // a panel list that failed is fetched again once its computer reconnects;

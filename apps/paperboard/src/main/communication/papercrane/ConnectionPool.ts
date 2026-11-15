@@ -49,7 +49,7 @@ export function classifyProbeError(err: any): string {
 }
 
 const LOCAL_COMPUTER_NAME = "This Computer";
-export const COMPUTER_NAME_MAX = 64;
+const COMPUTER_NAME_MAX = 64;
 
 // a name is shown on the rail and in every header; blank or huge is refused
 export function checkComputerName(name: unknown): string {
@@ -304,10 +304,9 @@ export class ConnectionPool extends EventEmitter {
         // the next session's loader silently skipped it
         if (
             updates.port !== undefined &&
-            (!Number.isFinite(updates.port) || updates.port < 1 || updates.port > 65535)
+            (!Number.isInteger(updates.port) || updates.port < 1 || updates.port > 65535)
         ) {
-            logger.warn(`[ConnectionPool] refusing invalid port ${JSON.stringify(updates.port)} for ${id}`);
-            return false;
+            throw new Error(`A port is a whole number from 1 to 65535, not ${JSON.stringify(updates.port)}.`);
         }
         // an absent field is not a change: assigning undefined would drop
         // it from the saved record, and a record without its port is skipped
@@ -348,43 +347,43 @@ export class ConnectionPool extends EventEmitter {
         this.emit("change");
     }
 
-    public async unpairComputer(id: string): Promise<boolean> {
-        if (id === "local") return false;
+    /**
+     * Forgets a paired computer, first asking it to forget this one's key.
+     * Resolves to why it couldn't be asked, with nothing forgotten: it would
+     * keep trusting a key nobody here remembers, so forgetting it anyway is
+     * the person's call (`evenIfUntold`). Null once it's forgotten.
+     */
+    public async unpairComputer(id: string, evenIfUntold = false): Promise<string | null> {
+        if (id === "local") throw new Error("This computer can't be forgotten.");
         const comp = this.computers.get(id);
-        // best-effort remote forget; local forget always proceeds
-        if (comp?.token) {
+        if (!comp) throw new Error("Paperboard doesn't know this computer anymore.");
+        const client = this.clients.get(id);
+        if (comp.token && !evenIfUntold) {
             try {
-                const client = this.clients.get(id);
-                if (client) {
-                    await client.call("auth:revoke-self", {}, 5000);
-                }
+                if (!client) throw new Error("it isn't connected");
+                await client.call("auth:revoke-self", {}, 5000);
             } catch (err) {
-                logger.debug("[ConnectionPool] best-effort remote forget failed:", err);
+                logger.warn(`[ConnectionPool] ${id} wasn't told it is forgotten:`, err);
+                return err instanceof Error ? err.message : String(err);
             }
         }
-        const client = this.clients.get(id);
         if (client) {
             client.disconnect();
             this.clients.delete(id);
         }
-        const removedRecord = this.computers.get(id);
-        const removed = this.computers.delete(id);
-        if (removed) {
-            const previousActive = this.activeId;
-            if (this.activeId === id) {
-                this.activeId = "local";
-            }
-            try { this.saveConfig(); }
-            catch (err) {
-                // disk still lists it: memory must too, or it reappears on
-                // the next launch without anyone having been told
-                this.computers.set(id, removedRecord!);
-                this.activeId = previousActive;
-                throw err;
-            }
-            this.emit("change");
+        this.computers.delete(id);
+        const previousActive = this.activeId;
+        if (this.activeId === id) this.activeId = "local";
+        try { this.saveConfig(); }
+        catch (err) {
+            // disk still lists it: memory must too, or it reappears on
+            // the next launch without anyone having been told
+            this.computers.set(id, comp);
+            this.activeId = previousActive;
+            throw err;
         }
-        return removed;
+        this.emit("change");
+        return null;
     }
 
     // the machine woke or the network changed: recheck every computer now

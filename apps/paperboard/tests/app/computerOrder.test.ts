@@ -76,10 +76,11 @@ describe("computer order and names", () => {
         expect((await openPool()).getComputer("local")?.name).toBe("Workstation");
     });
 
-    test("a blank or overlong name is refused and the old one kept", async () => {
+    test("a blank or overlong name, or a port that isn't one, is refused with why and the old one kept", async () => {
         const pool = await openPool();
         expect(() => pool.updateComputer("remote-a", { name: "   " })).toThrow("A computer needs a name.");
         expect(() => pool.updateComputer("remote-a", { name: "x".repeat(65) })).toThrow("at most 64 characters");
-        expect(stored().computers.find((c) => c.id === "remote-a")?.name).toBe("remote-a");
+        expect(() => pool.updateComputer("remote-a", { port: 70000 })).toThrow("A port is a whole number from 1 to 65535, not 70000.");
+        expect(stored().computers.find((c) => c.id === "remote-a")).toMatchObject({ name: "remote-a", port: 45464 });
     });
 });

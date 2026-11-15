@@ -149,8 +149,10 @@ export const computersApi = {
     ): Promise<boolean> =>
         requireIpc().invoke<boolean>("computer-update", { id, ...updates }),
 
-    remove: (id: string): Promise<boolean> =>
-        requireIpc().invoke<boolean>("computer-remove", id),
+    /** null once forgotten; otherwise why the computer couldn't be told, and
+     * nothing was forgotten unless `evenIfUntold` */
+    remove: (id: string, evenIfUntold = false): Promise<string | null> =>
+        requireIpc().invoke<string | null>("computer-remove", { id, evenIfUntold }),
 
     switch: (id: string): Promise<boolean> =>
         requireIpc().invoke<boolean>("computer-switch", id),

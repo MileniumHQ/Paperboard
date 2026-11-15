@@ -115,3 +115,24 @@ test("a failed forget shows why, the dialog opens clean the next time, and forge
     expect(await page.evaluate(`document.querySelector(${JSON.stringify(LOCAL)}).getAttribute("aria-checked")`)).toBe("false");
     expect(page.exceptions).toEqual([]);
 });
+
+// Inventory: Security — a computer that couldn't be told it's forgotten keeps trusting this one, so forgetting it says so first.
+test("forgetting a computer that can't be reached warns that it wasn't told, and forgets it here only when asked again", async () => {
+    const { page } = shell;
+    const shed = await shell.pairComputer("Shed");
+    const SHED = rail("Shed (127.0.0.2)");
+    await page.waitFor(`document.querySelector(${JSON.stringify(SHED)})`, "Shed on the rail");
+    await shed.daemon.stop();
+
+    await page.click(SHED, "right");
+    await page.waitFor(`document.querySelector("[data-context-item='Forget Computer']")`, "Shed's menu");
+    await page.click("[data-context-item='Forget Computer']");
+    await page.waitFor(`document.querySelector("[role=dialog]")?.innerText.includes("forget Shed")`, "the Forget Computer dialog for Shed");
+    await clickText(page, "[role=dialog] button", "Forget Computer");
+    await page.waitFor(`document.querySelector("[role=dialog] [role=alert]")?.innerText.includes("Shed wasn't told")`, "the warning that Shed wasn't told");
+    expect(await page.evaluate(`!!document.querySelector(${JSON.stringify(SHED)})`)).toBe(true);
+
+    await clickText(page, "[role=dialog] button", "Forget Anyway");
+    await page.waitFor(`!document.querySelector(${JSON.stringify(SHED)}) && !document.querySelector("[role=dialog]")`, "Shed gone from the rail");
+    expect(page.exceptions).toEqual([]);
+});

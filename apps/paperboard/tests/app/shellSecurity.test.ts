@@ -3,7 +3,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { isRefusedFrame, PANEL_IPC_REFUSED } from "../../src/main/communication/shellGuard";
 import { readShellFile } from "../../src/main/shellAssets";
-import { isListingFilePath } from "../../src/main/communication/shellHandlers";
+import { isListingFilePath } from "../../src/shared/listingFile";
 import { buildCraneCredentialPayload, buildPanelCsp, remotePanelHtmlCsp, resolveLocalPanelFile, PANEL_TRAVERSAL_VECTORS } from "../../src/main/panelAssets";
 import { buildPanelCsp as daemonPanelCsp } from "../../papercrane/panelNet";
 import { parseLibraryMessage } from "../../src/renderer/src/lib/libraryFrame";

@@ -11,7 +11,7 @@ export interface ComputerDialogsOptions {
     mayLeaveComputer: (compId: string) => Promise<boolean>;
     openComputerInfo: (compId: string) => void;
     /** rejects with why it couldn't; the dialog stays open showing it */
-    forgetComputer: (compId: string) => Promise<void>;
+    forgetComputer: (compId: string, evenIfUntold: boolean) => Promise<string | null>;
 }
 
 // A computer's right-click menu on the rail, and the Change Name and Forget

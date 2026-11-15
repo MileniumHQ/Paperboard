@@ -1,5 +1,5 @@
 import { type Component, Show, createEffect, createSignal, on } from "solid-js";
-import { PaperButton, PaperModal, PaperText } from "@mileniumhq/paperui";
+import { PaperButton, PaperModal, PaperQuote, PaperText } from "@mileniumhq/paperui";
 import { logToMain, type ComputerInfo } from "../../lib/shell";
 import { errorMessage } from "../../lib/errorMessage";
 
@@ -7,8 +7,10 @@ export interface ForgetComputerModalProps {
     /** the computer being forgotten; undefined closes the dialog */
     computer?: ComputerInfo;
     onClose: () => void;
-    /** forgets it; a rejection keeps the dialog open with why */
-    onForget: (computerId: string) => Promise<void>;
+    /** forgets it; a rejection keeps the dialog open with why, and so does
+     * an answer: why the computer couldn't be told, with nothing forgotten
+     * unless `evenIfUntold` */
+    onForget: (computerId: string, evenIfUntold: boolean) => Promise<string | null>;
 }
 
 // The one Forget Computer dialog, from the rail's menu, the can't-reach
@@ -16,8 +18,14 @@ export interface ForgetComputerModalProps {
 const ForgetComputerModal: Component<ForgetComputerModalProps> = (props) => {
     const [forgetting, setForgetting] = createSignal(false);
     const [error, setError] = createSignal<string | null>(null);
+    // why the computer couldn't be told to forget this one; the next press
+    // forgets it here anyway
+    const [untold, setUntold] = createSignal<string | null>(null);
 
-    createEffect(on(() => props.computer?.id, () => setError(null)));
+    createEffect(on(() => props.computer?.id, () => {
+        setError(null);
+        setUntold(null);
+    }));
 
     const close = () => {
         if (!forgetting()) props.onClose();
@@ -29,8 +37,9 @@ const ForgetComputerModal: Component<ForgetComputerModalProps> = (props) => {
         setForgetting(true);
         setError(null);
         try {
-            await props.onForget(computer.id);
-            props.onClose();
+            const why = await props.onForget(computer.id, untold() !== null);
+            if (why === null) props.onClose();
+            else setUntold(why);
         } catch (err) {
             logToMain("error", "Failed to remove computer:", err);
             setError(`Couldn't forget this computer: ${errorMessage(err)}`);
@@ -51,7 +60,7 @@ const ForgetComputerModal: Component<ForgetComputerModalProps> = (props) => {
                         Cancel
                     </PaperButton>
                     <PaperButton variant="danger" disabled={forgetting()} onClick={() => void forget()}>
-                        {forgetting() ? "Removing..." : "Forget Computer"}
+                        {forgetting() ? "Removing..." : untold() !== null ? "Forget Anyway" : "Forget Computer"}
                     </PaperButton>
                 </>
             }
@@ -59,6 +68,13 @@ const ForgetComputerModal: Component<ForgetComputerModalProps> = (props) => {
             <PaperText preset="text">
                 Are you sure you want to forget <strong>{props.computer?.name ?? "this computer"}</strong>? This will disconnect all panels on this machine.
             </PaperText>
+            <Show when={untold()}>
+                {(why) => (
+                    <PaperQuote variant="warning" icon="warning" title={`${props.computer?.name ?? "That computer"} wasn't told`} role="alert">
+                        Paperboard couldn't reach it to take back this computer's access: {why()}. If you forget it anyway, {props.computer?.name ?? "it"} keeps trusting this computer until you remove its access there.
+                    </PaperQuote>
+                )}
+            </Show>
             <Show when={error()}>
                 <PaperText preset="error">{error()}</PaperText>
             </Show>

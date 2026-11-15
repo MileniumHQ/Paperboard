@@ -16,7 +16,6 @@ import type { LaunchOptions } from "../../shared/launchOptions";
 import type { Graphics } from "../../shared/graphics";
 import { isListingFilePath, LISTING_FILE_MAX_BYTES } from "../../shared/listingFile";
 
-export { isListingFilePath } from "../../shared/listingFile";
 export interface ShellHandlerDeps {
     appVersion: () => string;
     launchOptions: () => LaunchOptions;
@@ -105,7 +104,7 @@ export function createShellInvokeHandlers(
         },
 
         // renderer input is validated here, not trusted from the caller's types
-        "computer-remove": (id) => connectionPool.unpairComputer(requireString(id, "id")),
+        "computer-remove": (args) => connectionPool.unpairComputer(requireString(field(args, "id"), "id"), field(args, "evenIfUntold") === true),
 
         "computer-switch": (id) => connectionPool.setActive(requireString(id, "id")),
 
