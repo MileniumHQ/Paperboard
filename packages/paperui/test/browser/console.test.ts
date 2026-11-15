@@ -86,6 +86,23 @@ describe("PaperConsole windowing", () => {
         expect(after.mounted).toBeLessThan(200);
     });
 
+    test("a console that shrinks before its own scroll event arrives keeps following the tail", async () => {
+        page = await browser.open("console", { query: "lines=200" });
+        await showing("line 199");
+        // in one task, as a window that isn't painting does it: the console
+        // moves to its newest line (its scroll event waits for the next
+        // frame), then its box shrinks by the height of readouts above it
+        await page.eval(`(() => {
+            const out = document.querySelector('${OUTPUT}');
+            out.scrollTop -= 1;
+            out.scrollTop = out.scrollHeight;
+            document.querySelector("#console").style.height = "220px";
+        })()`);
+        await page.frames();
+        await page.eval("t.append(5)");
+        await showing("line 204");
+    });
+
     test("a row whose height flickers by a sub-pixel settles instead of re-measuring forever", async () => {
         page = await browser.open("console", { query: "lines=0&flicker=1" });
         await page.eval(`t.set(["flicker", ...Array.from({ length: 300 }, (_, i) => "line " + i)])`);

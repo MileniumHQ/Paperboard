@@ -328,6 +328,12 @@ export function PaperConsole(props: ParentProps<PaperConsoleProps>) {
         if (!el) return;
         setScrollTop(el.scrollTop);
         if (local.autoScroll === false) return;
+        // A frame sends scroll events before resize observations: the event
+        // for the console's own move to the bottom can arrive after its box
+        // shrank (a page's readouts appeared above it) and before the
+        // observer below has heard. That gap is the resize's, not the
+        // reader's; the observer puts the tail back in view.
+        if (stuck() && (el.clientHeight !== viewportHeight() || el.clientWidth !== viewportWidth)) return;
         const distance = el.scrollHeight - el.clientHeight - el.scrollTop;
         setStuck(distance <= estimate() / 2);
     };
