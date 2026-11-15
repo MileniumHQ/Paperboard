@@ -1,4 +1,4 @@
-import { PaperFlex, playHaptic, swipeFromFrame } from "@mileniumhq/paperui";
+import { dismissToast, PaperFlex, playHaptic, showToast, swipeFromFrame } from "@mileniumhq/paperui";
 import { backupApi, backupProgressFraction, backupProgressText, type BackupProgress, errorMessage } from "@mileniumhq/paperapi";
 import { type Component, type JSX, createEffect, createMemo, createSignal, For, on, Show, onCleanup, onMount } from "solid-js";
 import { recordUse, liveKeys, recordAway, withoutIdle, MAX_LIVE_IFRAMES, IDLE_UNLOAD_MS } from "./panelLru";
@@ -48,6 +48,22 @@ interface PanelFrameProps {
     failed: () => void;
 }
 
+// Every open frame of a computer follows its backups over the one
+// connection to it: while that is lost, one notice says so, until it is back
+// or no frame follows any more.
+const lostFrames = new Map<string, { frames: Set<string>; toast: string }>();
+function progressLost(computerId: string, frameKey: string, why: string | null): void {
+    const lost = lostFrames.get(computerId);
+    if (why !== null) {
+        if (lost) lost.frames.add(frameKey);
+        else lostFrames.set(computerId, { frames: new Set([frameKey]), toast: showToast({ variant: "warning", key: `backup-progress:${computerId}`, title: "Can't follow backups", message: `${why}. Paperboard keeps trying.`, duration: null }) });
+        return;
+    }
+    if (!lost?.frames.delete(frameKey) || lost.frames.size > 0) return;
+    lostFrames.delete(computerId);
+    dismissToast(lost.toast);
+}
+
 const PanelFrame: Component<PanelFrameProps> = (props) => {
     // the frame is keyed by its panel (PanelView's <For> over the keys), so these name one panel for its life
     const computerId = () => props.panelKey.split("::")[0];
@@ -79,17 +95,18 @@ const PanelFrame: Component<PanelFrameProps> = (props) => {
             if (change.progress) next[change.sourceId ?? ""] = change.progress;
             else delete next[change.sourceId ?? ""];
             return next;
-        }), computerId());
-        onCleanup(off);
+        }), computerId(), (why) => {
+            progressLost(computerId(), props.panelKey, why === null ? null : `${props.computerName}: ${why}`);
+            // what changed while it was lost (a backup's end) is read again
+            if (why === null) void refreshBackups();
+        });
+        onCleanup(() => {
+            off();
+            progressLost(computerId(), props.panelKey, null);
+        });
         void refreshBackups();
     });
     const isHeld = () => held() !== null;
-    // a socket that dropped meanwhile misses the end: look again while held
-    createEffect(on(isHeld, (holding) => {
-        if (!holding) return;
-        const timer = setInterval(() => void refreshBackups(), 5_000);
-        onCleanup(() => clearInterval(timer));
-    }));
     // the service is back: a page that lost it while held loads again. Only
     // the hold ending triggers it, not the reload it starts.
     createEffect(on(isHeld, (holding, wasHolding) => {
