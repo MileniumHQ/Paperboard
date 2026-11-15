@@ -49,9 +49,19 @@ export function brainLine(harness: Harness, b: BrainState): string {
 export function createBrainActions(agent: Agent) {
     const { run } = createAction();
     const [errors, setErrors] = createStore<Partial<Record<Harness, Failure | null>>>({});
-    const act = (h: Harness, title: string, fn: () => Promise<unknown>) => run(title, fn, (f) => setErrors(h, f));
+    // how many of a brain's actions are out: its buttons take no second press until the service answers the first
+    const [running, setRunning] = createStore<Partial<Record<Harness, number>>>({});
+    const act = async (h: Harness, title: string, fn: () => Promise<unknown>) => {
+        setRunning(h, (n) => (n ?? 0) + 1);
+        try {
+            return await run(title, fn, (f) => setErrors(h, f));
+        } finally {
+            setRunning(h, (n) => n! - 1);
+        }
+    };
     return {
         error: (h: Harness) => errors[h] ?? null,
+        busy: (h: Harness) => (running[h] ?? 0) > 0,
         install: (h: Harness) => act(h, `${harnessName(h)} not installed`, () => agent.installBrain(h)),
         useFound: (h: Harness) => act(h, `${harnessName(h)} not used`, () => agent.installBrain(h, "computer")),
         installOwn: (h: Harness) => act(h, `${harnessName(h)} not installed`, () => agent.installBrain(h, "package")),
@@ -312,7 +322,7 @@ export function SignInModal(props: { agent: Agent; harness: Harness | null; acti
                                     {b()!.error}
                                 </PaperQuote>
                                 <PaperFlex direction="row" gap="half">
-                                    <PaperButton variant="primary" onClick={() => void props.actions.signIn(h())}>
+                                    <PaperButton variant="primary" disabled={props.actions.busy(h())} onClick={() => void props.actions.signIn(h())}>
                                         Try again
                                     </PaperButton>
                                 </PaperFlex>
@@ -337,25 +347,26 @@ export function BrainButtons(props: { agent: Agent; harness: Harness; actions: B
     const signIn = () => (props.onSignIn ? props.onSignIn(props.harness) : void props.actions.signIn(props.harness));
     const b = () => props.agent.state.brains[props.harness];
     // signed in (or needing no sign-in) and ready: nothing left to set up
+    const busy = () => props.actions.busy(props.harness);
     const usable = () => b().phase === "ready" && (b().signedIn || !SIGN_IN_REQUIRED[props.harness]);
     return (
         <PaperFlex direction="row" gap="half" align="center" wrap>
             <Switch>
                 <Match when={(b().phase === "none" || b().phase === "unsupported") && b().found}>
-                    <PaperButton variant="primary" onClick={() => void props.actions.useFound(props.harness)}>
+                    <PaperButton variant="primary" disabled={busy()} onClick={() => void props.actions.useFound(props.harness)}>
                         <PaperIcon>check</PaperIcon> Use it
                     </PaperButton>
                 </Match>
                 <Match when={b().phase === "none" || (b().phase === "failed" && !b().installed)}>
-                    <PaperButton variant="primary" onClick={() => void props.actions.install(props.harness)}>
+                    <PaperButton variant="primary" disabled={busy()} onClick={() => void props.actions.install(props.harness)}>
                         <PaperIcon>download</PaperIcon> {b().phase === "failed" ? "Try again" : "Install"}
                     </PaperButton>
                 </Match>
                 <Match when={b().phase === "failed" && b().installed && !SIGN_IN_REQUIRED[props.harness]}>
-                    <PaperButton onClick={() => void props.actions.install(props.harness)}>Try again</PaperButton>
+                    <PaperButton disabled={busy()} onClick={() => void props.actions.install(props.harness)}>Try again</PaperButton>
                 </Match>
                 <Match when={b().phase === "installed" || (b().phase === "failed" && b().installed && SIGN_IN_REQUIRED[props.harness])}>
-                    <PaperButton variant="primary" onClick={signIn}>
+                    <PaperButton variant="primary" disabled={busy()} onClick={signIn}>
                         <PaperIcon>login</PaperIcon> Sign in
                     </PaperButton>
                 </Match>
@@ -369,7 +380,7 @@ export function BrainButtons(props: { agent: Agent; harness: Harness; actions: B
                         </PaperButton>
                     </Show>
                     <Show when={SIGN_IN_REQUIRED[props.harness]}>
-                        <PaperButton variant="text" onClick={() => void props.actions.signOut(props.harness)}>
+                        <PaperButton variant="text" disabled={busy()} onClick={() => void props.actions.signOut(props.harness)}>
                             Sign out
                         </PaperButton>
                     </Show>
@@ -377,7 +388,7 @@ export function BrainButtons(props: { agent: Agent; harness: Harness; actions: B
             </Switch>
             {/* the package, with the version Paperboard pins, stays a click away from a program on the computer: one offered, or one the brain runs, until it's signed in and in use */}
             <Show when={!usable() && ((b().existing && b().phase !== "installing" && b().phase !== "signing-in") || (b().phase === "none" && b().found))}>
-                <PaperButton variant="text" onClick={() => void props.actions.installOwn(props.harness)}>
+                <PaperButton variant="text" disabled={busy()} onClick={() => void props.actions.installOwn(props.harness)}>
                     Install its own copy
                 </PaperButton>
             </Show>

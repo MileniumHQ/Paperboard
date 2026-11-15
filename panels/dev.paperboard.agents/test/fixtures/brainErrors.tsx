@@ -3,7 +3,7 @@
 // agent is a stand-in that holds each request until the fixture answers it.
 // A refusal for one brain is told under that brain only, and a code the
 // service took stays taken even when the other brain's request fails while
-// the code is on its way.
+// the code is on its way. A brain's button pressed twice is sent once.
 import { For } from "solid-js";
 import { createStore } from "solid-js/store";
 import { render } from "solid-js/web";
@@ -25,7 +25,8 @@ const [brains] = createStore<Record<Harness, BrainState>>({
 
 const held: Record<string, { resolve: () => void; reject: (e: Error) => void }> = {};
 const hold = (name: string) => new Promise<void>((resolve, reject) => (held[name] = { resolve, reject }));
-const agent = { state: { brains }, installBrain: () => hold("install"), brainCode: () => hold("code") } as unknown as Agent;
+let installs = 0;
+const agent = { state: { brains }, installBrain: () => (installs++, hold("install")), brainCode: () => hold("code") } as unknown as Agent;
 
 const region = (h: Harness) => document.querySelector<HTMLElement>(`[data-brain="${h}"]`)!;
 const alerts = (h: Harness) => [...region(h).querySelectorAll<HTMLElement>("[role=alert]")].map((a) => a.innerText);
@@ -54,8 +55,11 @@ async function run(): Promise<Record<string, unknown>> {
     code.dispatchEvent(paste);
     await until("the code to be on its way", () => !region("claude-code").querySelector("input"));
 
-    // meanwhile Codex's install is tried again and refused
-    [...region("codex").querySelectorAll<HTMLButtonElement>("button")].find((b) => b.innerText.includes("Try again"))!.click();
+    // meanwhile Codex's install is tried again, pressed twice before the service answers, and refused
+    const again = [...region("codex").querySelectorAll<HTMLButtonElement>("button")].find((b) => b.innerText.includes("Try again"))!;
+    again.click();
+    await frame();
+    again.click();
     held.install!.reject(new Error("No space left on the disk"));
     await until("Codex's refusal", () => alerts("codex").some((a) => a.includes("Codex not installed")));
 
@@ -67,6 +71,7 @@ async function run(): Promise<Record<string, unknown>> {
         codex: alerts("codex"),
         claude: alerts("claude-code"),
         // taken: Claude Code waits for its sign-in to finish, with no field to paste in again
+        installs,
         codeField: Boolean(region("claude-code").querySelector("input")),
         uncaught: [...errors],
     };
