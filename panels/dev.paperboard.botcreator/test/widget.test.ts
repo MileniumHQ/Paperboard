@@ -111,6 +111,43 @@ describe("the Bot status widget", () => {
         }
     });
 
+    test("a Connect that failed stops being the tile's message once the bot has been online", async () => {
+        const fake = discord.addBot({ username: "Recovered" });
+        const unknown = `${Buffer.from(fake.appId).toString("base64url")}.AAAAAA.${"x".repeat(27)}`;
+        await savedBots([{ stored: storedBot("b-recovered", fake.appId, { name: "Recovered", enabled: false }), token: unknown }]);
+        await startService({ discordApi: discord.api });
+        const served = await servePanel();
+        const page = await browser.open(widget(served.url, "bot-status", 1, 1, "b-recovered"));
+        /** Home scrolls the tile away and back, and it reads the service again */
+        const reread = async () => {
+            const read = readAnswered(page, "call-get-widget-status");
+            await page.evaluate(`window.showWidget(false)`);
+            await page.evaluate(`window.showWidget(true)`);
+            await within("the widget to read its status again", read);
+        };
+        try {
+            await page.waitFor(`${shown}.includes("Offline")`, "the 1x1 tile to say the bot is offline");
+            await press(page, "Connect");
+            await page.waitFor(`${shown}.includes("Couldn't connect")`, "the refused login on the tile");
+
+            // the bot is put right and turned on in Bot Creator, not from the tile
+            await secretsApi.set(tokenName("b-recovered"), fake.token, PANEL_ID);
+            await call("connectBot", { bot: "b-recovered" });
+            await reread();
+            await page.waitFor(`${shown}.includes("server")`, "the tile to show the bot online");
+
+            // and turned off again: it's off, not failing
+            await call("disconnectBot", { bot: "b-recovered" });
+            await reread();
+            await page.waitFor(`${shown}.includes("Offline")`, "the tile to say the bot is offline");
+            expect(await page.evaluate<string>(shown)).not.toContain("Couldn't connect");
+            expect(page.exceptions).toEqual([]);
+        } finally {
+            await page.close();
+            served.stop();
+        }
+    });
+
     test("a status that can't be read says so, and Retry reads it again", async () => {
         await savedBots([]);
         await startService({ discordApi: discord.api });

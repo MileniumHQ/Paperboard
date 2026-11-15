@@ -278,7 +278,7 @@ export default function Commands(props: { bot: () => BotSummary }) {
 
             <Show when={actionError()}>
                 {(problem) => (
-                    <PaperQuote variant="danger" icon="warning" title={problem().title}>
+                    <PaperQuote variant="danger" icon="warning" title={problem().title} onDismiss={() => setActionError(null)}>
                         {problem().message}
                     </PaperQuote>
                 )}

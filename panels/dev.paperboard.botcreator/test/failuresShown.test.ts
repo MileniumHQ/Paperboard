@@ -135,7 +135,7 @@ describe("failures are shown, never guessed", () => {
         }
     });
 
-    test("an offline bot's last server command that Discord won't clear says it is still on Discord", async () => {
+    test("an offline bot's last server command that Discord won't clear says it is still on Discord, until it is dismissed", async () => {
         const home = guild("Home");
         const fake = discord.addBot({ username: "Napper", guilds: [home] });
         const revoked = `${fake.token.slice(0, -1)}${fake.token.endsWith("x") ? "y" : "x"}`;
@@ -154,6 +154,9 @@ describe("failures are shown, never guessed", () => {
             await clickText(page, "[role=dialog] button", "Delete");
             await page.waitFor(quoteShows("/hello is still on Discord", "401: Unauthorized"), "the kept command");
             expect(await body(page)).toContain("/hello stays on Discord.");
+            // read, it can be put away
+            await page.click(`button[aria-label="Dismiss"]`);
+            await page.waitFor(`!document.body.innerText.includes("/hello is still on Discord")`, "the notice to go");
             expect(page.exceptions).toEqual([]);
         } finally {
             await page.close();

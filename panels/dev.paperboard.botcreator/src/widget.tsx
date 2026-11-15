@@ -7,7 +7,7 @@ import "@mileniumhq/paperui/style.css";
 import "@mileniumhq/paperui/panel.css";
 import "./widget.css";
 import { render } from "solid-js/web";
-import { createMemo, createSignal, onCleanup, Show, type JSX } from "solid-js";
+import { createEffect, createMemo, createSignal, on, onCleanup, Show, type JSX } from "solid-js";
 import {
     PaperAvatar,
     PaperButton,
@@ -111,7 +111,11 @@ function BotStatus(props: { widget: WidgetContext }) {
     const wide = () => size().w > 1;
     const { ready, failed, refresh } = createPolledRead(props.widget, STATUS_POLL_MS, () => readStatus(props.widget));
     const [connecting, setConnecting] = createSignal(false);
+    // why the last Connect press failed, until the bot is seen online
     const [connectError, setConnectError] = createSignal<string | null>(null);
+    createEffect(on(() => ready()?.connected, (connected) => {
+        if (connected) setConnectError(null);
+    }));
     const open = () => props.widget.openPanel();
 
     // the service owns the session: the widget asks it to connect the vault

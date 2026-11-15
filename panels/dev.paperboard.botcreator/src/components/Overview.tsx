@@ -1,4 +1,4 @@
-import { createEffect, createSignal, on, onMount, onCleanup, Show, For } from "solid-js";
+import { createEffect, createSignal, on, onCleanup, Show, For } from "solid-js";
 import { createStore, reconcile } from "solid-js/store";
 import {
     PaperFlex,
@@ -13,6 +13,7 @@ import {
     PaperListItem,
     PaperCopyButton,
     PaperToggle,
+    createPolling,
 } from "@mileniumhq/paperui";
 import { serviceApi } from "@mileniumhq/paperapi";
 import { PANEL_ID, type BotSummary } from "../bots";
@@ -94,12 +95,8 @@ export default function Overview(props: OverviewProps) {
         }
     };
 
-    onMount(() => {
-        void loadBotInfo();
-        void loadHealth();
-        const poll = setInterval(() => void loadHealth(), HEALTH_POLL_MS);
-        onCleanup(() => clearInterval(poll));
-    });
+    void loadBotInfo();
+    createPolling(loadHealth, HEALTH_POLL_MS, { immediate: true });
 
     // a bot that comes online has a tag and a fresh session to show
     createEffect(on(connected, (now, before) => {
@@ -139,7 +136,6 @@ export default function Overview(props: OverviewProps) {
             if (flip === flips) setToggleError(errorToMessage(err));
         }
     };
-
 
     const pingText = () => {
         const h = health();
