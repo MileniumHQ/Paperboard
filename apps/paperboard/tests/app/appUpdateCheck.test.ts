@@ -1,4 +1,4 @@
-import { afterEach, beforeAll, describe, expect, test } from "bun:test";
+import { afterEach, beforeAll, describe, expect, jest, test } from "bun:test";
 import * as crypto from "node:crypto";
 import * as fs from "node:fs";
 import * as path from "node:path";
@@ -92,23 +92,30 @@ describe("desktop app update checks", () => {
     });
 
     test("a download that keeps making progress outlives the time limit, which counts only quiet time", async () => {
+        let finish!: () => void;
         class SlowLink extends EventEmitter {
             async checkForUpdates() {
                 this.emit("update-available", { version: NEWER });
-                const downloadPromise = (async () => {
-                    // twice the limit in all, never quiet for a tenth of it
-                    for (let step = 1; step <= 20; step++) {
-                        await new Promise((r) => setTimeout(r, 30));
-                        this.emit("download-progress", { percent: step * 5 });
-                    }
-                    this.emit("update-downloaded", { version: NEWER });
-                })();
-                return { downloadPromise };
+                return { downloadPromise: new Promise<void>((resolve) => (finish = resolve)) };
             }
         }
-        const session = new AppUpdateSession(new SlowLink(), () => undefined, 300);
-        expect(await session.check()).toMatchObject({ status: "ready", version: NEWER, error: null });
-        session.dispose();
+        jest.useFakeTimers();
+        try {
+            const link = new SlowLink();
+            const session = new AppUpdateSession(link, () => undefined, 300);
+            const result = session.check();
+            // four times the limit in all, never quiet for the whole of it
+            for (let step = 1; step <= 5; step++) {
+                jest.advanceTimersByTime(250);
+                link.emit("download-progress", { percent: step * 20 });
+            }
+            link.emit("update-downloaded", { version: NEWER });
+            finish();
+            expect(await result).toMatchObject({ status: "ready", version: NEWER, error: null });
+            session.dispose();
+        } finally {
+            jest.useRealTimers();
+        }
     });
 
     test("a native activation error after the download stays failed", async () => {
