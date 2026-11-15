@@ -13,6 +13,8 @@ export const FIXTURE_PANEL_NAME = "Fixture Panel";
 /** the panel that starts offering a block part way (role "late") */
 export const LATE_PANEL = "dev.test.late";
 export const LATE_PANEL_NAME = "Late Panel";
+/** why the Late Panel's dropdown has no choices */
+export const LATE_NOT_SET_UP = "the Late Panel isn't set up yet";
 
 /** a call the page makes while it is refused goes for this project, which the service doesn't have */
 export const REFUSED_PROJECT = "p-refused";

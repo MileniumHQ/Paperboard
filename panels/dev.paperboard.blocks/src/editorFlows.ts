@@ -107,14 +107,17 @@ export function createEditorFlows(options: {
     // change that leaves the canvas as it is stored is not an edit, so it saves nothing
     let stored: string | null = null;
 
-    /** Defines every block the registry and `saved` name, and keeps what the Library shows. */
-    async function defineBlocks(saved: Schemas): Promise<void> {
+    /**
+     * Defines every block the registry and `saved` name, and keeps what the Library shows.
+     * `shown` holds the schemas of the blocks the canvas shows (or is about to).
+     */
+    async function defineBlocks(saved: Schemas, shown: Schemas): Promise<void> {
         const [entries, panelList, projects] = await Promise.all([blocksApi.list(), panelsApi.list(), blocksApi.projects()]);
         // ask for every dropdown's choices now, so the canvas and the Library show them. One on the canvas that
         // fails says so here; one only in the Library says so when its dropdown is opened, which asks again,
         // so a panel that isn't set up yet doesn't warn in every project
         // (a type's values, when its panel has a block on the canvas)
-        const onCanvas = new Set(Object.values(saved).flatMap((s) => [`${s.panelId}\u0000${s.entry}`, s.panelId]));
+        const onCanvas = new Set(Object.values(shown).flatMap((s) => [`${s.panelId}\u0000${s.entry}`, s.panelId]));
         await Promise.all(
             choicesSources(entries, projects).map((source) =>
                 refreshChoices(source).catch((err: unknown) => {
@@ -140,24 +143,27 @@ export function createEditorFlows(options: {
         options.onRegistry({ panels: panelList, projects, sections: liveDefs.sections });
     }
 
-    /** Defines the blocks once the refresh before it is done; `saved` is read as it starts. */
-    function refreshBlocks(saved: () => Schemas): Promise<void> {
+    /** Defines the blocks once the refresh before it is done; `saved` and `shown` are read as it starts. */
+    function refreshBlocks(saved: () => Schemas, shown: () => Schemas = saved): Promise<void> {
         // quiet: the earlier refresh's caller got its failure; this only orders the next one
-        const next = refreshing.catch(() => undefined).then(() => defineBlocks(saved()));
+        const next = refreshing.catch(() => undefined).then(() => defineBlocks(saved(), shown()));
         refreshing = next;
         return next;
     }
 
     // a registry change waiting to start: the changes after it are in its answer too
     let changeWaiting = false;
-    /** The registry changed: the blocks are defined again, from what the canvas holds by then. */
+    /**
+     * The registry changed: the blocks are defined again, every one known kept, and
+     * the choices that fail are said for the blocks the canvas holds by then.
+     */
     function registryChanged(): void {
         if (changeWaiting) return;
         changeWaiting = true;
         refreshBlocks(() => {
             changeWaiting = false;
             return schemas;
-        }).then(markAway, fail("The blocks couldn't be updated"));
+        }, canvasSchemas).then(markAway, fail("The blocks couldn't be updated"));
     }
 
     /** Marks the blocks whose panel isn't offering them right now. */
@@ -180,13 +186,17 @@ export function createEditorFlows(options: {
         }
     }
 
+    /** The schemas of the blocks on the canvas, and of what they use. */
+    function canvasSchemas(): Schemas {
+        const used = new Set((options.workspace()?.getAllBlocks(false) ?? []).flatMap((b) => [b.type, ...(uses[b.type] ?? [])]));
+        return Object.fromEntries(Object.entries(schemas).filter(([type]) => used.has(type)));
+    }
+
     /** The canvas as it is now, with the schemas of the blocks on it. */
     function snapshot(): SavedFlows {
         const workspace = canvas();
         if (!loaded()) throw new Error("The flows haven't loaded, so the canvas holds none of them");
-        const saved = Blockly.serialization.workspaces.save(workspace) as SavedWorkspace;
-        const used = new Set(workspace.getAllBlocks(false).flatMap((b) => [b.type, ...(uses[b.type] ?? [])]));
-        return { workspace: saved, schemas: Object.fromEntries(Object.entries(schemas).filter(([type]) => used.has(type))) };
+        return { workspace: Blockly.serialization.workspaces.save(workspace) as SavedWorkspace, schemas: canvasSchemas() };
     }
 
     /**
@@ -291,7 +301,10 @@ export function createEditorFlows(options: {
         const workspace = canvas();
         if (!loaded()) throw new Error("The canvas has not loaded yet, so nothing can be added to it.");
         // the file's blocks take their shape from its schemas where their panel is away
-        await refreshBlocks(() => ({ ...flows.schemas, ...schemas }));
+        await refreshBlocks(
+            () => ({ ...flows.schemas, ...schemas }),
+            () => ({ ...flows.schemas, ...canvasSchemas() }),
+        );
         const below = workspace.getTopBlocks(false).reduce((y, b) => Math.max(y, b.getBoundingRectangle().bottom), -Infinity);
         const fileTop = Math.min(...(flows.workspace.blocks?.blocks ?? []).map((b) => b.y ?? 0));
         const shift = Number.isFinite(below) && Number.isFinite(fileTop) ? below + uiGap() * 4 - fileTop : 0;

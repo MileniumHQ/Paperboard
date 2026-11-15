@@ -4,7 +4,8 @@
 //   fixture  "Fixture Panel" offering blocks: Greet, Count Players, Someone
 //            Joined, and Next Line, a text value that reads the lines the
 //            test queued, one per read ({ do: "lines", lines })
-//   late     "Late Panel" offering Wave
+//   late     "Late Panel" offering Wave, whose To dropdown fails as a panel
+//            not set up yet does
 //   window   another Blocks window: it makes the service's calls
 //            ({ do: "call", name, input }) and reads its state ({ do: "state" })
 //
@@ -12,6 +13,7 @@
 // request the test sends over IPC.
 import { blocksApi, errorMessage, serviceClient, type BlockSet } from "@mileniumhq/paperapi";
 import { blocksContract } from "../../src/panel";
+import { LATE_NOT_SET_UP } from "../fixtures/world";
 
 const role = process.argv[2];
 const panelId = process.env.PAPERBOARD_PANEL_ID!;
@@ -37,7 +39,25 @@ const SETS: Record<string, BlockSet> = {
         ],
         events: [{ id: "joined", name: "Someone Joined", values: { who: { type: "text", name: "Who" } } }],
     },
-    late: { commands: [{ id: "wave", name: "Wave", text: "Wave", run: () => undefined }] },
+    late: {
+        commands: [
+            {
+                id: "wave",
+                name: "Wave",
+                text: "Wave at {to}",
+                inputs: {
+                    to: {
+                        type: "text",
+                        name: "To",
+                        choices: () => {
+                            throw new Error(LATE_NOT_SET_UP);
+                        },
+                    },
+                },
+                run: () => undefined,
+            },
+        ],
+    },
 };
 
 const window = role === "window" ? serviceClient(blocksContract) : null;

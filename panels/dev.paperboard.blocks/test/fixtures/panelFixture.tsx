@@ -14,11 +14,11 @@ import * as Blockly from "blockly";
 import { PaperProvider } from "@mileniumhq/paperui";
 import App from "../../src/App";
 import type { LogEntry } from "../../src/panel";
-import { BUILTIN } from "../../src/lib/names";
 import { NOT_SAVED } from "../../src/editorFlows";
 import { serviceState } from "../../src/bridge";
 import { ask, askLeave, calls, held, holdNextList, holdsUnsaved, refuse, release } from "./wire";
-import { LATE_PANEL_NAME } from "./world";
+import { LATE_PANEL, LATE_PANEL_NAME } from "./world";
+import { BUILTIN, registryBlockType } from "../../src/lib/names";
 
 const errors: string[] = [];
 window.addEventListener("error", (event) => errors.push(event.error instanceof Error ? event.error.message : event.message));
@@ -328,7 +328,26 @@ async function registryChecks() {
             throw new Error(`the newer registry never showed: ${err instanceof Error ? err.message : String(err)}`);
         },
     );
-    return { lateShown };
+    // the Late Panel's dropdown fails, as a panel not set up yet does: that is said in a project with
+    // its block on the canvas, and in no other, however often the registry changes
+    const wave = registryBlockType({ kind: "command", panelId: LATE_PANEL, entry: "command.wave" });
+    const choicesFailed = () => alertSaying(`${LATE_PANEL_NAME}'s choices didn't load`);
+    /** The registry changes, and the blocks are defined again from it (which comes after their choices are asked for). */
+    const redefined = async () => {
+        const before = Blockly.Blocks[wave];
+        await registryChanged();
+        await until("the blocks defined again", () => Blockly.Blocks[wave] !== before);
+        await settle();
+    };
+    await redefined();
+    const offCanvas = choicesFailed()?.textContent ?? null;
+    Blockly.serialization.blocks.append({ type: wave, id: "wave-on-canvas", x: 40, y: 240 }, canvas()!);
+    await redefined();
+    const onCanvas = (await until("the failure for the block on the canvas", choicesFailed))!.textContent ?? "";
+    canvas()!.getBlockById("wave-on-canvas")!.dispose(false);
+    choicesFailed()!.querySelector<HTMLElement>('[aria-label="Dismiss"]')!.click();
+    await settle();
+    return { lateShown, offCanvas, onCanvas };
 }
 
 /** Flows that don't load leave the canvas read-only and say so until they do; Try again loads them. */

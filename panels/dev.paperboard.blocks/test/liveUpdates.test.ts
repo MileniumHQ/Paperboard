@@ -4,7 +4,7 @@
 // (test/fixtures/panelFixture.tsx). A refused call is one the service
 // refuses for real (fixtures/wire.ts). The log's rows are in console.test.ts.
 import { describe, expect, test } from "bun:test";
-import { REFUSAL } from "./fixtures/world";
+import { LATE_NOT_SET_UP, REFUSAL } from "./fixtures/world";
 import { panelFixture } from "./helpers/panelFixture";
 const TIMEOUT = 180_000;
 
@@ -80,6 +80,16 @@ describe("the editor", () => {
         async () => {
             const { refresh } = await panelFixture();
             expect(refresh.lateShown).toBe(true);
+        },
+        TIMEOUT,
+    );
+
+    test(
+        "says a panel's dropdown didn't load only in a project with its block on the canvas, however often the registry changes",
+        async () => {
+            const { refresh } = await panelFixture();
+            expect(refresh.offCanvas).toBeNull();
+            expect(refresh.onCanvas).toContain(LATE_NOT_SET_UP);
         },
         TIMEOUT,
     );
