@@ -1,58 +1,40 @@
 // The project list as every window sees it: the service's state, kept live
 // through the panel bridge, and the changes a person makes to it. Every
 // change goes through the service, which writes the list and announces it.
-import { batch, createSignal, onCleanup } from "solid-js";
-import { createStore, reconcile } from "solid-js/store";
+import { createRead } from "@mileniumhq/paperui";
 import { service, serviceState } from "../bridge";
-import type { PanelState, ProjectSummary } from "../panel";
-import { errorMessage } from "@mileniumhq/paperapi";
+import type { ProjectSummary } from "../panel";
 
 export type ProjectsState = ReturnType<typeof createProjects>;
 
 export function createProjects() {
+    // what the service holds before it first answers
+    const initial = structuredClone(serviceState.current());
     // reconciled by id, so a project keeps its object across announcements and
-    // its card stays mounted: a remounted switch would skip its slide
-    const [state, setState] = createStore<PanelState>(structuredClone(serviceState.current()));
-    // only what the announcement carries: a log line is a patch of the log alone, so
-    // the projects aren't cloned and compared again with it
-    const apply = (patch: Partial<PanelState>) =>
-        batch(() => {
-            for (const [key, value] of Object.entries(patch) as [keyof PanelState, PanelState[keyof PanelState]][]) {
-                setState(key, reconcile(structuredClone(value), { key: "id" }));
-            }
-        });
-    const [ready, setReady] = createSignal(false);
-    const [loadError, setLoadError] = createSignal<string | null>(null);
-    const off = serviceState.subscribe((_state, patch) => apply(patch));
-    onCleanup(off);
-
-    const load = async () => {
-        setLoadError(null);
-        try {
-            apply(await serviceState.refresh());
-            setReady(true);
-        } catch (err) {
-            setLoadError(errorMessage(err));
-        }
-    };
-    void load();
+    // its card stays mounted: a remounted switch would skip its slide. An
+    // announcement is only what it carries (a log line is a patch of the log
+    // alone), and joins a read still out, being newer than it
+    const read = createRead(() => serviceState.refresh().then((full) => structuredClone(full)), {
+        follow: (land) => serviceState.subscribe((_state, patch) => land((prev) => prev && { ...prev, ...structuredClone(patch) })),
+    });
+    const state = () => read.value() ?? initial;
 
     return {
-        state: () => state,
+        state,
         /** the service answered and has read its projects */
-        ready: () => ready() && state.loaded,
-        loadError,
-        load,
+        ready: () => Boolean(read.value()?.loaded),
+        // Try again shows the read going out
+        loadError: () => (read.loading() ? null : read.error()),
+        load: read.reload,
         /** the projects Home shows: a draft is only seen in its editor */
-        kept: () => state.projects.filter((p) => !p.draft),
-        find: (id: string): ProjectSummary | undefined => state.projects.find((p) => p.id === id),
+        kept: () => state().projects.filter((p) => !p.draft),
+        find: (id: string): ProjectSummary | undefined => state().projects.find((p) => p.id === id),
         create: (name?: string) => service.createProject({ name }),
         rename: (project: string, name: string) => service.updateProject({ project, name }),
         /** resolves once the list shows the switch where the service put it: a switch moves when its save is answered */
         setEnabled: async (project: string, enabled: boolean) => {
             const saved = await service.updateProject({ project, enabled });
-            const at = state.projects.findIndex((p) => p.id === saved.id);
-            if (at >= 0) setState("projects", at, reconcile(structuredClone(saved)));
+            read.set((prev) => prev && { ...prev, projects: prev.projects.map((p) => (p.id === saved.id ? structuredClone(saved) : p)) });
             return saved;
         },
         duplicate: (project: string) => service.duplicateProject({ project }),
