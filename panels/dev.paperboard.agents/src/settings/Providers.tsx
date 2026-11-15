@@ -13,9 +13,9 @@ import { errorText, failure } from "../lib/failure";
 
 const POLL_MS = 2_000;
 
-/** A form field is shown unless a field it depends on says otherwise. */
-const shown = (field: ProviderField, answers: Record<string, string>) =>
-    !field.hidden && field.when.every((w) => (w.op === "eq" ? (answers[w.key] ?? "") === w.value : (answers[w.key] ?? "") !== w.value));
+/** A form field is shown unless a field it depends on, as it stands (default included), says otherwise. */
+const shown = (field: ProviderField, values: Record<string, string>) =>
+    !field.hidden && field.when.every((w) => (w.op === "eq" ? (values[w.key] ?? "") === w.value : (values[w.key] ?? "") !== w.value));
 
 export default function Providers(props: { agent: Agent; open: boolean; onClose: () => void }) {
     // reconciled by id, so a re-read (after a connect or a sign-in) changes what differs and every row and form stays the one it was
@@ -62,16 +62,16 @@ export default function Providers(props: { agent: Agent; open: boolean; onClose:
         }),
     );
 
-
-    const answersFor = (method: ProviderMethod): Record<string, string> => {
-        const out: Record<string, string> = {};
-        for (const f of method.fields) {
-            const value = answers()[f.key] ?? f.default ?? "";
-            if (value || f.hidden) out[f.key] = value;
-        }
-        return out;
+    /** each field as it stands: what was answered, else its default */
+    const valuesOf = (method: ProviderMethod) => Object.fromEntries(method.fields.map((f) => [f.key, answers()[f.key] ?? f.default ?? ""]));
+    const answersFor = (method: ProviderMethod) => {
+        const values = valuesOf(method);
+        return Object.fromEntries(method.fields.filter((f) => values[f.key] || f.hidden).map((f) => [f.key, values[f.key]!]));
     };
-    const incomplete = (method: ProviderMethod) => method.fields.some((f) => shown(f, { ...answers() }) && f.required && !(answers()[f.key] ?? f.default));
+    const incomplete = (method: ProviderMethod) => {
+        const values = valuesOf(method);
+        return method.fields.some((f) => shown(f, values) && f.required && !values[f.key]);
+    };
 
     const connectKey = (p: ProviderInfo, m: ProviderMethod) =>
         act(`${p.name} not connected`, async () => {
@@ -179,7 +179,7 @@ export default function Providers(props: { agent: Agent; open: boolean; onClose:
                                                 <PaperText preset="section">
                                                     {m.label}
                                                 </PaperText>
-                                                <For each={m.fields.filter((f) => shown(f, answers()))}>
+                                                <For each={m.fields.filter((f) => shown(f, valuesOf(m)))}>
                                                     {(f) => (
                                                         <Show
                                                             when={f.options}
@@ -188,7 +188,7 @@ export default function Providers(props: { agent: Agent; open: boolean; onClose:
                                                                     label={f.title}
                                                                     fullWidth
                                                                     placeholder={f.placeholder ?? undefined}
-                                                                    value={answers()[f.key] ?? f.default ?? ""}
+                                                                    value={valuesOf(m)[f.key]}
                                                                     onInput={(e) => setAnswers({ ...answers(), [f.key]: e.currentTarget.value })}
                                                                 />
                                                             }
@@ -197,7 +197,7 @@ export default function Providers(props: { agent: Agent; open: boolean; onClose:
                                                                 <PaperSelectMenu
                                                                     name={f.key}
                                                                     aria-label={f.title}
-                                                                    value={answers()[f.key] ?? f.default ?? undefined}
+                                                                    value={valuesOf(m)[f.key] || undefined}
                                                                     onValueChange={(v) => setAnswers({ ...answers(), [f.key]: String(v) })}
                                                                 >
                                                                     <For each={options()}>{(o) => <PaperSelectMenuItem value={o.value} description={o.description ?? undefined}>{o.label}</PaperSelectMenuItem>}</For>

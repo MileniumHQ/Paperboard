@@ -4,7 +4,8 @@
 // to a sign-in that is gone, and must not end the new one. Then a key is
 // connected, and the list read again keeps the provider's forms the ones
 // they were. Last, the modal is closed during a sign-in OpenCode won't stop:
-// it stays open to say so, and closes when asked again.
+// it stays open to say so, and closes when asked again. And a field that
+// depends on another's default is asked for, and needed, from the start.
 import { createSignal, onCleanup } from "solid-js";
 import { render } from "solid-js/web";
 import { PaperProvider } from "@mileniumhq/paperui";
@@ -29,6 +30,26 @@ const ACME: ProviderInfo = {
     unsupported: null,
 };
 
+// its endpoint is asked for only in the EU, which is where it starts
+const REGIONAL: ProviderInfo = {
+    id: "regional",
+    name: "Regional",
+    connected: false,
+    connections: [],
+    methods: [
+        {
+            id: null,
+            kind: "key",
+            label: "Use an API key",
+            fields: [
+                { key: "region", title: "Region", required: true, hidden: false, placeholder: null, default: "eu", options: [{ value: "eu", label: "EU", description: null }, { value: "us", label: "US", description: null }], when: [] },
+                { key: "endpoint", title: "Endpoint", required: true, hidden: false, placeholder: null, default: null, options: null, when: [{ key: "region", op: "eq", value: "eu" }] },
+            ],
+        },
+    ],
+    unsupported: null,
+};
+
 let begun = 0;
 /** each attempt's status questions, and how to answer the first one's */
 const questions: string[] = [];
@@ -36,7 +57,7 @@ let answerFirst!: (status: ProviderAttemptStatus) => void;
 // every read is a fresh copy, as the service's answer is; once a key is in, Acme has it
 let keyed = false;
 answers.set(UI_ACTION_IDS.providers, async () => ({
-    providers: [{ ...structuredClone(ACME), ...(keyed ? { connected: true, connections: [{ id: "key1", label: "Acme key" }] } : {}) }],
+    providers: [{ ...structuredClone(ACME), ...(keyed ? { connected: true, connections: [{ id: "key1", label: "Acme key" }] } : {}) }, structuredClone(REGIONAL)],
 }));
 answers.set(UI_ACTION_IDS.connectKey, async () => void (keyed = true));
 answers.set(UI_ACTION_IDS.beginProvider, async () => ({ id: `attempt${++begun}`, url: "https://acme.example/login", instructions: `Sign-in ${begun}`, mode: "auto" }));
@@ -117,12 +138,24 @@ async function run(): Promise<Record<string, unknown>> {
     await until("the modal again", () => button("Connect") || shows("Asking OpenCode"));
     const staleRefusal = shows("OpenCode is busy");
 
+    // a provider whose endpoint depends on its region's default: asked for, and Connect waits for it
+    document.querySelector<HTMLElement>('[aria-label="Provider"] button, button[aria-label="Provider"]')!.click();
+    (await until("Regional in the menu", () => document.querySelector<HTMLElement>('[role=option][data-select-value="regional"]'))).click();
+    const key = await until("Regional's key field", () => document.querySelector<HTMLInputElement>('input[type="password"]'));
+    key.value = "sk-test";
+    key.dispatchEvent(new InputEvent("input", { bubbles: true }));
+    await until("the key typed", () => button("Connect"));
+    const endpointAsked = [...document.querySelectorAll("label")].some((l) => l.textContent?.includes("Endpoint"));
+    const connectWaits = button("Connect")!.disabled;
+
     return {
         stillSigningIn,
         refused,
         formsKept,
         openAfterRefusal,
         staleRefusal,
+        endpointAsked,
+        connectWaits,
         uncaught: [...errors],
     };
 }
