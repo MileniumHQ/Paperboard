@@ -10,7 +10,9 @@ import { EXPRESSIONS, type Expression } from "../face/expressions";
 //   **word**       bold
 //   \n             line break inside the same bubble
 // Each line swaps the bubble: the old one fades out before the new one types in.
-// The last line stays up.
+// The last line stays up. With reduced motion asked for, nothing is paced:
+// every line is there at once, one paragraph each, the face takes the last
+// expression, and waits end at once.
 
 export type Beat =
     | { kind: "text"; text: string; bold: boolean }
@@ -32,6 +34,8 @@ const BEFORE_FACE_MS = 380;
 const HAPTIC_EVERY = 3;
 /** Matches the bubble's exit transition (half of --paper-medium-transition). */
 const SWAP_MS = 200;
+
+const reduced = () => window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
 export function parse(line: string): Beat[] {
     const beats: Beat[] = [];
@@ -87,9 +91,32 @@ export function createSpeaker(face: FaceController) {
             return [...s, { text, bold }];
         });
 
+    /** All the lines at once, one paragraph each: what reduced motion reads. */
+    const sayAtOnce = (lines: string[]) => {
+        const all: Segment[] = [];
+        let expression: Expression | null = null;
+        lines.forEach((line, i) => {
+            if (i > 0) all.push({ text: "", bold: false, br: true }, { text: "", bold: false, br: true });
+            for (const beat of parse(line)) {
+                if (beat.kind === "face") expression = beat.expression;
+                else if (beat.kind === "br") all.push({ text: "", bold: false, br: true });
+                else if (beat.kind === "text") {
+                    const last = all[all.length - 1];
+                    if (last && !last.br && last.bold === beat.bold) last.text += beat.text;
+                    else all.push({ text: beat.text, bold: beat.bold });
+                }
+            }
+        });
+        if (expression) face.express(expression);
+        setSegments(all);
+        setShown(true);
+        return true;
+    };
+
     /** Speak the lines in order. Resolves true when finished, false if interrupted. */
     const say = async (lines: string[]): Promise<boolean> => {
         stop();
+        if (reduced()) return sayAtOnce(lines);
         const gen = generation;
         setSpeaking(true);
         for (let li = 0; li < lines.length; li++) {
@@ -127,8 +154,8 @@ export function createSpeaker(face: FaceController) {
         return true;
     };
 
-    /** Wait without speaking; false if interrupted. */
-    const wait = (ms: number) => sleep(ms, generation);
+    /** Wait without speaking; false if interrupted. With reduced motion there's nothing to wait for. */
+    const wait = (ms: number) => (reduced() ? Promise.resolve(true) : sleep(ms, generation));
 
     const clear = () => {
         setShown(false);

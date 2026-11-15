@@ -2,8 +2,9 @@
 // (test/support/panel.ts), with Codex on the computer as the fake brain:
 // what is answered is what gets saved, and the chat takes over only once it
 // is: a save the service can't make keeps the meeting open, with why and a
-// way to finish it. The speech plays at its own pace; each step waits for
-// its Next button.
+// way to finish it. The window asks for reduced motion, as a person can, so
+// the speech is there at once instead of typed out; each step still waits
+// for its Next button.
 import { afterEach, describe, expect, setDefaultTimeout, test } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
@@ -46,6 +47,10 @@ async function answerAll(page: Page) {
     await page.waitFor(`document.querySelector('input[placeholder="Name"]')`, "the name step");
     await page.type('input[placeholder="Name"]', "Ada");
     await next(page, "the name step's Next");
+    // with reduced motion every line is up at once, the first one too
+    const said = await page.evaluate<string>(`document.querySelector('[aria-live="polite"]').innerText`);
+    expect(said).toContain("Ada it is!");
+    expect(said).toContain("Pick one and I'll download it.");
     await choose(page, "harness", "codex");
     await next(page, "the brain step's Next");
     await next(page, "Codex ready");
@@ -60,6 +65,9 @@ describe("the first meeting", () => {
     test("saves what was answered, and the chat takes over only once it's saved: a refused save says why and stays", async () => {
         panel = await bootPanel({ codexOnPath: { signedIn: true, chosen: true, plan: MODELS } });
         const page = await panel.open();
+        // asked for before the page starts, so its first words aren't paced either
+        await page.send("Emulation.setEmulatedMedia", { features: [{ name: "prefers-reduced-motion", value: "reduce" }] });
+        await page.navigate(await page.evaluate<string>("location.href"));
         // where the settings go is taken by a folder, so the daemon can't write them
         const blocked = path.join(panel.storage, "..", "..", "configs", `${PANEL_ID}.json`);
         fs.mkdirSync(path.join(blocked, "taken"), { recursive: true });
