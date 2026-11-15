@@ -179,17 +179,23 @@ export default function Plugins(props: {
     const [updateError, setUpdateError] = createSignal("");
     const [failures, setFailures] = createSignal<PluginUpdateCheck[] | null>(null);
     const [uninstallingFailure, setUninstallingFailure] = createSignal<string | null>(null);
+    // said in the result's dialog, where the Uninstall was pressed
+    const [uninstallError, setUninstallError] = createSignal("");
+    // what an update that left nothing to report did
+    const [updated, setUpdated] = createSignal<{ title: string; message: string } | null>(null);
 
     const runUpdateCheck = async () => {
         if (updating()) return;
         setUpdating(true);
         setUpdateError("");
+        setUpdated(null);
         try {
             const checks = await checkPluginUpdates();
             // nothing that was not updated is dropped silently: no compatible
             // build, a lookup or update that failed, and one with nothing to look up
             const failed: PluginUpdateCheck[] = checks.filter((c) => c.status === "incompatible" || c.status === "error" || c.status === "unchecked");
-            for (const check of checks.filter((c) => c.status === "update-available")) {
+            const available = checks.filter((c) => c.status === "update-available");
+            for (const check of available) {
                 try {
                     await updatePlugin(check);
                 } catch (err) {
@@ -198,7 +204,15 @@ export default function Plugins(props: {
                 }
             }
             await browser.reload();
-            if (failed.length > 0) setFailures(failed);
+            if (failed.length > 0) {
+                setUninstallError("");
+                setFailures(failed);
+            } else {
+                const count = available.length;
+                if (checks.length === 0) setUpdated({ title: "Nothing to update", message: `No ${unit()}s are installed.` });
+                else if (count === 0) setUpdated({ title: "Up to date", message: `Every ${unit()} is on its latest build.` });
+                else setUpdated({ title: "Updated", message: `${count} ${count === 1 ? unit() : `${unit()}s`} updated.` });
+            }
         } catch (err) {
             console.error("[Plugins] Update check failed:", err);
             setUpdateError(errorMessage(err));
@@ -209,13 +223,14 @@ export default function Plugins(props: {
 
     const uninstallFailure = async (filename: string) => {
         setUninstallingFailure(filename);
+        setUninstallError("");
         try {
             await uninstallPlugin(filename);
             setFailures((prev) => (prev ?? []).filter((f) => f.filename !== filename));
             await browser.reload();
         } catch (err) {
             console.error(`[Plugins] Failed to uninstall "${filename}":`, err);
-            setUpdateError(errorMessage(err));
+            setUninstallError(errorMessage(err));
         } finally {
             setUninstallingFailure(null);
         }
@@ -299,11 +314,20 @@ export default function Plugins(props: {
                 </PaperEffect>
             }
             notices={
-                <Show when={updateError()}>
-                    <PaperQuote variant="danger" icon="warning" title={`${unit()[0]!.toUpperCase()}${unit().slice(1)}s not updated`}>
-                        {updateError()}
-                    </PaperQuote>
-                </Show>
+                <>
+                    <Show when={updateError()}>
+                        <PaperQuote variant="danger" icon="warning" title={`${unit()[0]!.toUpperCase()}${unit().slice(1)}s not updated`}>
+                            {updateError()}
+                        </PaperQuote>
+                    </Show>
+                    <Show when={updated()}>
+                        {(done) => (
+                            <PaperQuote variant="success" icon="check_circle" title={done().title} onDismiss={() => setUpdated(null)}>
+                                {done().message}
+                            </PaperQuote>
+                        )}
+                    </Show>
+                </>
             }
         >
             <PaperModal
@@ -323,6 +347,11 @@ export default function Plugins(props: {
                 }
             >
                 <PaperFlex direction="column" gap="full">
+                    <Show when={uninstallError()}>
+                        <PaperQuote variant="danger" icon="warning" title="Not uninstalled" onDismiss={() => setUninstallError("")}>
+                            {uninstallError()}
+                        </PaperQuote>
+                    </Show>
                     <Show when={incompatible().length > 0}>
                         <PaperFlex direction="column" gap="half">
                             <PaperText preset="heading">No compatible build</PaperText>

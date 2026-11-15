@@ -101,6 +101,8 @@ export default function TerrariaMods(props: { active: boolean }) {
         } catch (err) {
             console.error("[Mods] Update failed:", err);
             setUpdateError(errorMessage(err));
+            // the mods updated before the failure show as they now are
+            await browser.reload();
         } finally {
             setUpdating(false);
         }

@@ -117,19 +117,24 @@ export default function Crossplay(props: { active: boolean }) {
                             Restart the server so Bedrock players can join and these settings take effect.
                         </PaperQuote>
                     </Show>
-                    <PaperSettingList autoHeight>
-                        <PaperSettingItem
-                            title="Bedrock address"
-                            description="What Bedrock players add under Servers."
-                        >
-                            <PaperFlex direction="row" gap="half" align="center">
-                                <PaperText weight={700}>
-                                    {localIp()}:{bedrockPort()}
-                                </PaperText>
-                                <PaperCopyButton text={`${localIp()}:${bedrockPort()}`} title="Copy Bedrock address" />
-                            </PaperFlex>
-                        </PaperSettingItem>
-                    </PaperSettingList>
+                    {/* the port is Geyser's setting: a config it could not read says why below */}
+                    <Show when={bedrockPort()}>
+                        {(port) => (
+                            <PaperSettingList autoHeight>
+                                <PaperSettingItem
+                                    title="Bedrock address"
+                                    description="What Bedrock players add under Servers."
+                                >
+                                    <PaperFlex direction="row" gap="half" align="center">
+                                        <PaperText weight={700}>
+                                            {localIp()}:{port()}
+                                        </PaperText>
+                                        <PaperCopyButton text={`${localIp()}:${port()}`} title="Copy Bedrock address" />
+                                    </PaperFlex>
+                                </PaperSettingItem>
+                            </PaperSettingList>
+                        )}
+                    </Show>
                     <ConfigSettings
                         groups={view()!.groups}
                         write={(id, value) => serverBridge.call(CALLS.writeCrossplaySetting, { id, value })}

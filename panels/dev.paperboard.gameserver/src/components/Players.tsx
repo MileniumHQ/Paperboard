@@ -158,10 +158,11 @@ export default function Players() {
                 onClose={() => setActionModal(null)}
                 onSubmit={async (reason) => {
                     const player = roster.openPlayer();
-                    if (!player) return;
-                    if (actionModal() === "ban") await roster.setBanned(player.name, true, reason);
-                    else await roster.kick(player.name, reason);
+                    if (!player) throw new Error("No player is open");
+                    const done = actionModal() === "ban" ? await roster.setBanned(player.name, true, reason) : await roster.kick(player.name, reason);
+                    // closed either way: a failure is quoted on the page, under it
                     setActionModal(null);
+                    return done;
                 }}
             />
 

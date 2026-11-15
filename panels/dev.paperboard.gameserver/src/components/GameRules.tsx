@@ -1,4 +1,4 @@
-import { createEffect, createMemo, createSignal, For, Show, on } from "solid-js";
+import { createEffect, createMemo, createSignal, For, onCleanup, Show, on } from "solid-js";
 import {
     PaperCard,
     PaperFlex,
@@ -61,13 +61,16 @@ export default function GameRules() {
     // running server (and re-applies offline edits at boot); responses
     // arrive through the log parser and sync into the gamerules() signal.
     // Until a response lands, the registry default is the honest fallback.
+    // a newer ask (or the server going offline) makes an older answer moot
     createEffect(
         on([isOnline, available], ([online, rules]) => {
+            setSyncError("");
             if (!online) return;
+            let current = true;
+            onCleanup(() => (current = false));
             serverBridge
                 .call(CALLS.queryGamerules, { names: rules.map((rule) => rule.name) })
-                .then(() => setSyncError(""))
-                .catch((err) => setSyncError(errorMessage(err)));
+                .catch((err) => current && setSyncError(errorMessage(err)));
         }),
     );
 

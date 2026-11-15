@@ -92,21 +92,15 @@ export interface PluginCollectDeps {
     exists: (path: string) => Promise<boolean>;
     sanitize: (name: string) => string | null;
     dirName: string;
-    onVerifyError?: (filename: string, err: unknown) => void;
 }
-// install records are primary truth, listing adds untracked jars
+// install records are primary truth, listing adds untracked jars; a record
+// whose jar can't be checked fails the listing, rather than leaving it out
 export async function collectInstalledPlugins(deps: PluginCollectDeps): Promise<InstalledPlugin[]> {
-    const { records, listingEntries, exists, sanitize, dirName, onVerifyError } = deps;
+    const { records, listingEntries, exists, sanitize, dirName } = deps;
     const byFile = new Map<string, InstalledPlugin>();
 
     for (const [filename, record] of Object.entries(records)) {
-        let found = false;
-        try {
-            found = await exists(`${dirName}/${filename}`);
-        } catch (err) {
-            onVerifyError?.(filename, err);
-        }
-        if (!found) continue;
+        if (!(await exists(`${dirName}/${filename}`))) continue;
         byFile.set(filename, { filename, record });
     }
 

@@ -83,9 +83,10 @@ export default function Chat(props: { avatar: (name: string) => JSX.Element }) {
         setInputVal("");
         // what you send is what you want to see
         atEnd = true;
-        // a message that did not go out comes back to the field, with why
+        // a message that did not go out comes back to the field, with why,
+        // unless a newer one is being typed there
         sendChatMessage(text).catch((err) => {
-            setInputVal(text);
+            if (!inputVal()) setInputVal(text);
             setSendError(errorMessage(err));
         });
         setTimeout(scrollToBottom, 0);

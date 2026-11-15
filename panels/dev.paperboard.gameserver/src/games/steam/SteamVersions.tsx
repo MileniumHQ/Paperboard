@@ -1,4 +1,4 @@
-import { createSignal, onMount, Show } from "solid-js";
+import { createSignal, onMount, Show, type JSX } from "solid-js";
 import {
     PaperBadge,
     PaperButton,
@@ -58,6 +58,13 @@ export default function SteamVersions(props: { name: string; infoAction: string;
     };
     onMount(() => { void load(); void check(); });
 
+    /** what the install says, once it is read; until then it is being read, or could not be */
+    const installed = (fact: (read: SteamInstallInfo) => JSX.Element) => (
+        <Show when={info()} fallback={loadFailure() ? "Not read" : <PaperLoader loaderStatus="indeterminate" size="small" label="Reading the install" />}>
+            {(read) => fact(read())}
+        </Show>
+    );
+
     const canUpdate = () => serverStatus() === "offline" && info()?.host.supported === true && !install.running();
     const update = async () => {
         setInstallOpen(true);
@@ -89,11 +96,11 @@ export default function SteamVersions(props: { name: string; infoAction: string;
                         <tbody>
                             <tr>
                                 <th>Version</th>
-                                <td>{info()?.version ?? "Shown after the first start"}</td>
+                                <td>{installed((read) => read.version ?? "Shown after the first start")}</td>
                             </tr>
                             <tr>
                                 <th>Steam build</th>
-                                <td>{info()?.build ?? "Not installed"}</td>
+                                <td>{installed((read) => read.build ?? "Not installed")}</td>
                             </tr>
                             <tr>
                                 <th>Latest build</th>

@@ -59,17 +59,18 @@ export default function ServersHome(props: {
                     name: name(),
                     game: game(),
                 });
+                // the page goes to the new server: the dialog stays busy until it has
                 openServer(added.id);
-            } else {
-                await serversBridge.call(kind === "rename" ? "rename-server" : "remove-server", {
-                    server: target()!.id,
-                    name: name(),
-                });
-                setDialog(null);
+                return;
             }
+            await serversBridge.call(kind === "rename" ? "rename-server" : "remove-server", {
+                server: target()!.id,
+                name: name(),
+            });
+            setDialog(null);
+            setBusy(false);
         } catch (err) {
             setError(errorMessage(err));
-        } finally {
             setBusy(false);
         }
     };

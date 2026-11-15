@@ -42,6 +42,8 @@ export default function Versions(props: { onRequestPluginUpdate?: () => void }) 
     const [switching, setSwitching] = createSignal(false);
     const [error, setError] = createSignal<Outcome | null>(null);
     const [postSwitchOpen, setPostSwitchOpen] = createSignal(false);
+    // said in the dialog where Uninstall all was pressed
+    const [uninstallError, setUninstallError] = createSignal("");
     const [postSwitchCount, setPostSwitchCount] = createSignal(0);
     const [uninstallingAll, setUninstallingAll] = createSignal(false);
     const [confirmSwitchOpen, setConfirmSwitchOpen] = createSignal(false);
@@ -104,6 +106,7 @@ export default function Versions(props: { onRequestPluginUpdate?: () => void }) 
             setPostSwitchCount(previousCount);
             setPostSwitchWarning(outcome.warning ?? "");
             setInstallOpen(false);
+            setUninstallError("");
             setPostSwitchOpen(true);
         } catch (err) {
             const message = errorMessage(err);
@@ -117,6 +120,7 @@ export default function Versions(props: { onRequestPluginUpdate?: () => void }) 
 
     const uninstallAll = async () => {
         setUninstallingAll(true);
+        setUninstallError("");
         try {
             await uninstallAllPlugins();
             setPostSwitchCount(0);
@@ -124,7 +128,7 @@ export default function Versions(props: { onRequestPluginUpdate?: () => void }) 
         } catch (err) {
             const message = errorMessage(err);
             console.error("[Versions] Failed to uninstall plugins:", err);
-            setError({ title: "Couldn't uninstall", message });
+            setUninstallError(message);
         } finally {
             setUninstallingAll(false);
         }
@@ -293,6 +297,11 @@ export default function Versions(props: { onRequestPluginUpdate?: () => void }) 
                     <Show when={postSwitchWarning()}>
                         <PaperQuote variant="warning" icon="warning" title="Cleanup incomplete">
                             {postSwitchWarning()}
+                        </PaperQuote>
+                    </Show>
+                    <Show when={uninstallError()}>
+                        <PaperQuote variant="danger" icon="warning" title="Couldn't uninstall" onDismiss={() => setUninstallError("")}>
+                            {uninstallError()}
                         </PaperQuote>
                     </Show>
                     <Show when={postSwitchCount() > 0}>

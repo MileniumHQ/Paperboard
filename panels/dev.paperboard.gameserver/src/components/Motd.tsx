@@ -23,6 +23,7 @@ import {
     type MotdStyle,
 } from "../core/motd";
 import { errorMessage } from "../lib/failure";
+import { createLatest } from "../core/state";
 import { motdClasses } from "./MotdPreview";
 import styles from "./Motd.module.css";
 
@@ -212,12 +213,16 @@ export function MotdEditor(props: {
         show(entry.doc, entry.caret);
     };
 
+    // the editor opened again replaces a read still on its way
+    const latest = createLatest();
     const load = async () => {
         setLoaded(false);
         setLoadError("");
         setSaveError("");
         try {
-            doc = props.dialect.parse(await props.load());
+            const answer = await latest(props.load);
+            if (!answer) return;
+            doc = props.dialect.parse(answer.value);
             undo.length = 0;
             redo.length = 0;
             pending = null;

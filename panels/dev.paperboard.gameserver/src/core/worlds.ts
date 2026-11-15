@@ -29,23 +29,17 @@ export interface WorldListDeps {
     entries: string[];
     sanitize: (name: string) => string | null;
     exists: (path: string) => Promise<boolean>;
-    onError?: (filename: string, err: unknown) => void;
 }
 
-// a directory is a world if it contains level.dat
+// a directory is a world if it contains level.dat; one that can't be checked
+// fails the listing, rather than looking like no world
 export async function collectWorldDirs(deps: WorldListDeps): Promise<string[]> {
-    const { entries, sanitize, exists, onError } = deps;
+    const { entries, sanitize, exists } = deps;
     const worlds: string[] = [];
     for (const entry of entries) {
         const safe = sanitize(entry);
         if (!safe) continue;
-        try {
-            if (await exists(`${safe}/level.dat`)) {
-                worlds.push(safe);
-            }
-        } catch (err) {
-            onError?.(safe, err);
-        }
+        if (await exists(`${safe}/level.dat`)) worlds.push(safe);
     }
     // Paper and Spigot keep a world's nether and end in <name>_nether and
     // <name>_the_end, each with its own level.dat: those are the world's

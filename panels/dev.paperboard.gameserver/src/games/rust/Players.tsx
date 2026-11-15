@@ -28,7 +28,7 @@ export default function RustPlayers() {
         const byId = new Map<string, Player>();
         const banned = new Map(bans().map((ban) => [ban.steamId, ban]));
         for (const p of seen()) byId.set(p.steamId, { name: p.name, steamId: p.steamId, lastSeen: p.lastSeen, online: false, banned: banned.has(p.steamId), reason: banned.get(p.steamId)?.reason });
-        for (const p of online()) byId.set(p.steamId, { name: p.name, steamId: p.steamId, ping: p.ping, connected: p.connected, lastSeen: byId.get(p.steamId)?.lastSeen, online: true, banned: banned.has(p.steamId) });
+        for (const p of online()) byId.set(p.steamId, { name: p.name, steamId: p.steamId, ping: p.ping, connected: p.connected, lastSeen: byId.get(p.steamId)?.lastSeen, online: true, banned: banned.has(p.steamId), reason: banned.get(p.steamId)?.reason });
         for (const ban of bans()) if (!byId.has(ban.steamId)) byId.set(ban.steamId, { name: ban.name || ban.steamId, steamId: ban.steamId, online: false, banned: true, reason: ban.reason });
         return withUniqueNames([...byId.values()], (p) => p.steamId).sort(byName);
     });

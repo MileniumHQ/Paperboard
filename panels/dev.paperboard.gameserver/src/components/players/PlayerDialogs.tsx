@@ -106,7 +106,8 @@ export function WhitelistDialog(props: {
                             setError("");
                         }}
                         onKeyDown={(e) => {
-                            if (e.key === "Enter") void add();
+                            // Enter adds only when the Add button would
+                            if (e.key === "Enter" && !props.disabled) void add();
                         }}
                     />
                     <Show
@@ -162,18 +163,22 @@ export function ReasonActionDialog(props: {
     title: string;
     confirmLabel: string;
     onClose: () => void;
-    onSubmit: (reason: string) => void | Promise<void>;
+    /** false when the action failed: the reason stays typed for another go */
+    onSubmit: (reason: string) => Promise<boolean>;
 }) {
     const [reason, setReason] = createSignal("");
     // one press sends one action: the button waits for it
     const [sending, setSending] = createSignal(false);
+    const [error, setError] = createSignal("");
 
     const submit = async () => {
         if (!props.open || sending()) return;
         setSending(true);
+        setError("");
         try {
-            await props.onSubmit(reason().trim());
-            setReason("");
+            if (await props.onSubmit(reason().trim())) setReason("");
+        } catch (err) {
+            setError(errorMessage(err));
         } finally {
             setSending(false);
         }
@@ -196,12 +201,19 @@ export function ReasonActionDialog(props: {
                 </>
             }
         >
-            <PaperInput
-                fullWidth
-                label="Reason (optional)"
-                value={reason()}
-                onInput={(e) => setReason(e.currentTarget.value)}
-            />
+            <PaperFlex direction="column" gap="half" fullWidth>
+                <PaperInput
+                    fullWidth
+                    label="Reason (optional)"
+                    value={reason()}
+                    onInput={(e) => setReason(e.currentTarget.value)}
+                />
+                <Show when={error()}>
+                    <PaperText size={2} color="danger">
+                        {error()}
+                    </PaperText>
+                </Show>
+            </PaperFlex>
         </PaperModal>
     );
 }

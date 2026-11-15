@@ -53,8 +53,9 @@ export default function ResourcePack(props: { active: boolean }) {
 
     let saveTimer: ReturnType<typeof setTimeout> | null = null;
 
-    // what server.properties holds replaces the draft whenever it is read again
-    createEffect(on(() => browser.listing()?.meta.settings, (stored) => stored && setSettings({ ...stored })));
+    // what server.properties holds replaces the draft whenever it is read
+    // again, unless typing it is still waiting to be saved
+    createEffect(on(() => browser.listing()?.meta.settings, (stored) => stored && !saveTimer && setSettings({ ...stored })));
 
     const useCustomUrl = async () => {
         if (hashing()) return;
