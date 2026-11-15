@@ -359,7 +359,8 @@ export class Windows {
             if (url !== "about:blank") still = await this.navigate(tab, url);
         } catch (e) {
             // a window that never got its page isn't left behind
-            return this.closeFailed(tab, e);
+            await this.closeAfter(tab, e);
+            throw e;
         }
         await this.refreshInfo(tab);
         return { tab, still };
@@ -372,20 +373,20 @@ export class Windows {
         try {
             done = await job(await this.session(tab));
         } catch (e) {
-            return this.closeFailed(tab, e);
+            await this.closeAfter(tab, e);
+            throw e;
         }
         await this.closeWindow(tab);
         return done;
     }
 
-    /** Close a window whose job failed: that failure stays the one reported, with the window's own if it couldn't be closed. */
-    private async closeFailed(tab: Tab, failure: unknown): Promise<never> {
+    /** Close a window whose job failed: a window that won't close is added to that failure, which stays the one reported. */
+    private async closeAfter(tab: Tab, failure: unknown) {
         try {
             await this.closeWindow(tab);
         } catch (closing) {
             throw new ToolError(`${errorText(failure)} Its window ${tab.id} couldn't be closed: ${errorText(closing)}`);
         }
-        throw failure;
     }
 }
 
