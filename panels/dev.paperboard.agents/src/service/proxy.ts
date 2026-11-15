@@ -30,7 +30,7 @@ export interface Proxy {
 }
 
 /** The address to dial for a host, or why there is none. */
-export async function resolvePublic(host: string, lookup: (h: string) => Promise<{ address: string }[]> = defaultLookup): Promise<string> {
+async function resolvePublic(host: string, lookup: (h: string) => Promise<{ address: string }[]> = defaultLookup): Promise<string> {
     const bare = host.startsWith("[") && host.endsWith("]") ? host.slice(1, -1) : host;
     if (net.isIP(bare)) {
         const why = publicAddressRefusal(bare);

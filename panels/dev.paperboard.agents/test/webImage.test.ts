@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { fetchWebImage, WEB_IMAGE_BYTES, type WebResponse } from "../src/service/webImage";
+import type { PublicFetchAnswer } from "@mileniumhq/paperapi/net";
+import { fetchWebImage, WEB_IMAGE_BYTES } from "../src/service/webImage";
 
 // a 1x1 PNG
 const PNG = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGNgYGD4DwABBAEAwS2OUAAAAABJRU5ErkJggg==", "base64");
@@ -20,13 +21,14 @@ const lookup = async (h: string) => {
 /** A web that answers from `pages` by URL, and records every request: the address dialed and the URL asked for. */
 function web(pages: Record<string, { status?: number; headers?: Record<string, string>; body?: Buffer }>) {
     const asked: { address: string; url: string }[] = [];
-    const get = async (address: string, url: URL): Promise<WebResponse> => {
+    const dial = async (address: string, url: URL): Promise<PublicFetchAnswer> => {
         asked.push({ address, url: url.href });
         const page = pages[url.href];
         if (!page) throw new Error(`the test serves no ${url.href}`);
         const body = page.body ?? Buffer.alloc(0);
         return {
             status: page.status ?? 200,
+            statusText: "",
             headers: { "content-length": String(body.length), ...page.headers },
             body: (async function* () {
                 yield body;
@@ -34,7 +36,7 @@ function web(pages: Record<string, { status?: number; headers?: Record<string, s
             close: () => {},
         };
     };
-    return { asked, deps: { lookup, get } };
+    return { asked, deps: { lookup, dial } };
 }
 
 // A web image an agent's message names is loaded by the service under the browser's network rule, never by the page.
