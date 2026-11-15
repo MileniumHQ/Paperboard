@@ -98,7 +98,10 @@ export class Routines {
         const r: Stored = { id: this.newId(), what: text, schedule, created: now, lastRun: null, lastError: null };
         this.items.push(r);
         this.next.set(r.id, firstRun(r, now));
-        await this.save();
+        await this.saveOr(() => {
+            this.items.splice(this.items.indexOf(r), 1);
+            this.next.delete(r.id);
+        });
         this.arm();
         return this.view(r);
     }
@@ -108,8 +111,12 @@ export class Routines {
         const i = this.items.findIndex((r) => r.id === id);
         if (i < 0) throw new RoutineError(`no routine ${String(id)}`);
         const [gone] = this.items.splice(i, 1);
+        const next = this.next.get(gone!.id)!;
         this.next.delete(gone!.id);
-        await this.save();
+        await this.saveOr(() => {
+            this.items.splice(i, 0, gone!);
+            this.next.set(gone!.id, next);
+        });
         this.arm();
         return { removed: true };
     }
@@ -212,6 +219,17 @@ export class Routines {
                 lastError: typeof r.lastError === "string" ? r.lastError : null,
             };
         });
+    }
+
+    /** Save a change, or take it back when it can't be saved: what runs is what's on disk. */
+    private async saveOr(undo: () => void) {
+        try {
+            await this.save();
+        } catch (e) {
+            undo();
+            this.changed();
+            throw new RoutineError(`the routines couldn't be saved, so nothing changed: ${errorText(e)}`);
+        }
     }
 
     /** Write the routines as they are now; writes run one at a time, in order. */

@@ -100,7 +100,7 @@ describe("routines", () => {
         expect(JSON.parse(fs.readFileSync(file, "utf8")).routines).toEqual([]);
     });
 
-    test("a run that can't be saved is shown, and nothing runs again until it can be", async () => {
+    test("a change that can't be saved is taken back, and a run that can't be is shown and nothing runs again", async () => {
         const dir = temp();
         const file = path.join(dir, "routines.json");
         const clock = { now: Date.UTC(2026, 10, 9, 12, 0) };
@@ -110,10 +110,15 @@ describe("routines", () => {
         closers.push(() => r.shutdown());
         await r.load();
         await r.add("text the user happy birthday", { kind: "once", at: clock.now + 30 * MIN });
-        await r.add("check the forum", { kind: "every", minutes: 15 });
-        // the disk refuses the write after the run: the one-off is still on it
+        const forum = await r.add("check the forum", { kind: "every", minutes: 15 });
+        // the disk refuses every write from here: nothing changes that it didn't take
         fs.chmodSync(dir, 0o500);
         closers.push(() => fs.chmodSync(dir, 0o700));
+        const before = r.list();
+        await expect(r.add("water the plants", { kind: "every", minutes: 60 })).rejects.toThrow("couldn't be saved, so nothing changed");
+        await expect(r.remove(forum.id)).rejects.toThrow("couldn't be saved, so nothing changed");
+        expect(r.list()).toEqual(before);
+        // and the run's own write: the one-off is still on disk
         clock.now += 30 * MIN;
         await r.check();
         expect(runs).toHaveLength(2);
