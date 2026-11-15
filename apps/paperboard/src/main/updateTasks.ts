@@ -41,7 +41,7 @@ export function failedItem(key: string, kind: UpdateItem["kind"], computerId: st
 }
 
 /** the daemon's progress payloads as the update list shows them */
-export function progressReporter(report: (progress: UpdateProgress) => void) {
+function progressReporter(report: (progress: UpdateProgress) => void) {
     return (payload: { stage?: string; percent?: number; bytesLoaded?: number; bytesTotal?: number }) => {
         const stage = payload.stage === "stopping" ? "stopping"
             : payload.stage === "downloading" || payload.stage === "checking" || payload.stage === "starting" ? "downloading"
@@ -85,9 +85,10 @@ export function inUseJob(holds: UpdateHold[]): UpdateJob {
                     packages: holds.filter((h) => h.kind === "package").map((h) => h.id),
                 },
                 (target, payload) => {
+                    // a push has no caller to throw to
                     const key = keyOf.get(target);
-                    if (!key) throw new Error(`Paperboard Server reported progress for ${target}, which it was not asked to update`);
-                    progress.get(key)!(payload);
+                    if (key) progress.get(key)!(payload);
+                    else logger.error(`[Updater] Paperboard Server reported progress for ${target}, which it was not asked to update`);
                 },
             );
             const failed = Object.entries(failures);

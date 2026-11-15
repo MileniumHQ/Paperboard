@@ -77,6 +77,7 @@ export class PaperCraneClient extends PaperCraneConnection {
         const res = await this.call<{
             index: Record<string, PackageInstallInfo>;
         }>("package:getIndex");
+        if (!res?.index || typeof res.index !== "object") throw new Error("Daemon returned no package index");
         return res.index;
     }
 
@@ -109,7 +110,8 @@ export class PaperCraneClient extends PaperCraneConnection {
 
     public async listPanels(): Promise<PanelManifest[]> {
         const res = await this.call<{ panels?: PanelManifest[] }>("panel:list");
-        return res.panels || [];
+        if (!Array.isArray(res?.panels)) throw new Error("Daemon returned no panel list");
+        return res.panels;
     }
 
     /** Running panel services on this computer, for the shell tray summary. */

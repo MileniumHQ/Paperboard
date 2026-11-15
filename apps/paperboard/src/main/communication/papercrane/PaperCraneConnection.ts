@@ -302,10 +302,9 @@ export class PaperCraneConnection extends EventEmitter {
                 staticToken: freshToken,
                 remotesFile: path.join(getLocalDir(), "paired_computers.json"),
             });
-            if (this.embeddedServer?.port) {
-                this.port = this.embeddedServer.port;
-                this.token = freshToken;
-            }
+            if (!this.embeddedServer.port) throw new Error("it started without a port");
+            this.port = this.embeddedServer.port;
+            this.token = freshToken;
             return await verifiedLocalSocket({ port: this.port, token: freshToken });
         } catch (err) {
             this.embeddedServer?.stop();
@@ -647,7 +646,12 @@ export class PaperCraneConnection extends EventEmitter {
                 timer,
                 socket,
             });
-            socket.send(JSON.stringify({ id, action, params: finalParams }));
+            // a frame that couldn't be sent is never answered: fail now, not at the timeout
+            socket.send(JSON.stringify({ id, action, params: finalParams }), (err) => {
+                if (!err || !this.pendingRequests.delete(id)) return;
+                clearTimeout(timer);
+                reject(new Error(`Paperboard Server RPC '${action}' couldn't be sent: ${err.message}`));
+            });
         });
     }
 

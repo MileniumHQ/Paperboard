@@ -47,8 +47,9 @@ export function shouldSkipUpdate(argv: string[]): boolean {
         state = readUpdateState();
     } catch (err) {
         // an unreadable state file is not "no cooldown": don't run the
-        // updater on bookkeeping we cannot trust, and say so loudly
+        // updater on bookkeeping we cannot trust, and say so in the top bar
         logger.warn("[Updater] update state unreadable; skipping this run:", err);
+        updateQueue.setChecking(false, `Paperboard didn't look for updates: ${err instanceof Error ? err.message : String(err)}`);
         return true;
     }
     const { lastUpdate } = state;
@@ -189,7 +190,7 @@ async function pingComputers(): Promise<{ reached: ComputerUpdateState[]; unavai
                     withTimeout(client.getPackageIndex(), PING_TIMEOUT_MS),
                     withTimeout(client.getSystemInfo(), PING_TIMEOUT_MS),
                 ]);
-                reached.push({ id, name, isLocal: id === "local", panels: panels ?? [], packages: packages ?? {}, sysInfo });
+                reached.push({ id, name, isLocal: id === "local", panels, packages, sysInfo });
             } catch (err) {
                 unavailable++;
                 logger.warn(`[Updater] could not reach ${name} (${id}) to check for updates:`, err);
