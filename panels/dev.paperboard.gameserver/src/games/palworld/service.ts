@@ -1,4 +1,3 @@
-import { errorText } from "../../service/failures";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { emitTrigger, serverLocal } from "../../service/scope";
@@ -12,7 +11,7 @@ import { provideWindowsRuntime } from "../windowsRuntimeInstall";
 import { steamInstall, steamInstallCalls, steamUpdateStatus, type SteamInstallSpec } from "../steam/installAction";
 import type { GameService } from "../serviceTypes";
 import {
-    ConsoleBuffer, assertHost, exists, fileStamp, hostSupportHere, linkFolder, offlineBackup, pushChat, readSettings, redact, report,
+    ConsoleBuffer, assertHost, exists, fileStamp, hostSupportHere, linkFolder, offlineBackup, playerPoller, pushChat, readSettings, redact, report,
     resumeAfterBackup, serverRoot, serverSecret, settingPort, settled, singleLine, updateSettings, waitUntil, writePrivate, type Context,
 } from "../serviceKit";
 import { palworld, options, PALWORLD_APP_ID } from "./index";
@@ -27,7 +26,6 @@ const DEFAULT_PORT = 8211;
 const DEFAULT_REST_PORT = 8212;
 // Palworld writes its ban list itself, adding an id only it can derive
 const BANS_ONLINE = "Start the server to ban or unban players; Palworld keeps its own ban list";
-const POLL_MS = 5_000;
 
 /**
  * What differs between the Linux and Windows servers. Windows runs the
@@ -45,11 +43,6 @@ const local = serverLocal(() => ({
     busy: false,
     rest: null as PalworldRest | null,
     roster: null as PalworldRoster | null,
-    poll: null as ReturnType<typeof setInterval> | null,
-    online: [] as PalworldPlayer[],
-    // the first answer after reattaching lists who was already there; they did not just join
-    baseline: false,
-    pollError: "",
     secrets: [] as string[],
     // the settings file is read, changed and written back; two of those at once lose one
     ini: Promise.resolve() as Promise<unknown>,
@@ -139,55 +132,12 @@ function rest(): PalworldRest {
 }
 function roster() { const r = local().roster; if (!r) throw new Error("Palworld's player list is not ready"); return r; }
 
-/** Asks the server who is online; joins and leaves are the difference from the last answer. */
-async function pollPlayers(ctx: Context) {
-    if (ctx.state.serverStatus !== "online") return;
-    let players: PalworldPlayer[];
-    try { players = await rest().players(); }
-    catch (err) {
-        const message = errorText(err);
-        // one notice in the console per failure, not one every few seconds
-        if (message !== local().pollError && ctx.state.serverStatus === "online") report(ctx, "Could not list Palworld's players", err);
-        else console.debug(`[palworld] players poll failed again: ${message}`);
-        local().pollError = message;
-        return;
-    }
-    local().pollError = "";
-    const before = new Map(local().online.map((p) => [p.userId, p]));
-    const now = new Map(players.map((p) => [p.userId, p]));
-    local().online = players;
-    ctx.setState((prev) => ({
-        onlinePlayers: players.map((p) => p.name),
-        seenPlayers: players.reduce((seen, p) => (seen.includes(p.name) ? seen : appendCapped(seen, p.name)), prev.seenPlayers),
-    }));
-    if (local().baseline) local().baseline = false;
-    else {
-        for (const [id, p] of now) if (!before.has(id)) {
-            pushChat(ctx, { event: "join", sender: p.name, text: `${p.name} joined the game` });
-            emitTrigger(ctx, TRIGGER_IDS.playerJoined, p.name);
-        }
-        for (const [id, p] of before) if (!now.has(id)) {
-            pushChat(ctx, { event: "leave", sender: p.name, text: `${p.name} left the game` });
-            emitTrigger(ctx, TRIGGER_IDS.playerLeft, p.name);
-        }
-    }
-    roster().remember(players).catch((err) => report(ctx, "Could not record Palworld's players", err));
-}
-function startPolling(ctx: Context) {
-    if (local().poll) return;
-    local().poll = setInterval(() => {
-        if (ctx.state.serverStatus === "offline") { stopPolling(); return; }
-        void pollPlayers(ctx);
-    }, POLL_MS);
-    void pollPlayers(ctx);
-}
-function stopPolling() {
-    if (local().poll) clearInterval(local().poll!);
-    local().poll = null;
-    local().online = [];
-    local().pollError = "";
-    local().baseline = false;
-}
+const players = playerPoller({
+    game: "Palworld",
+    id: (p: PalworldPlayer) => p.userId,
+    list: async () => rest().players(),
+    remember: (list) => roster().remember(list),
+});
 
 /** The world Palworld runs: GameUserSettings.ini names its folder under SaveGames/0. */
 async function worldDir(): Promise<string> {
@@ -225,11 +175,11 @@ export const palworldService: GameService = {
         const { mergeBlocks, onlyIdNamed, playerEvents, rosterBlocks, runGameCall } = await import("../../service/blocks");
         // Palworld kicks and bans by user id: a block's player name is looked up
         // among the players online, then the ones the server has seen
-        const known = async () => [...local().online, ...await roster().seen()];
+        const known = async () => [...players.online(), ...await roster().seen()];
         const nameOf = (p: { name: string }) => p.name;
         const idOf = (p: { userId: string }) => p.userId;
         return mergeBlocks({ events: playerEvents() }, rosterBlocks({
-            kick: (name) => runGameCall(ctx, "palworld-kick", { userId: onlyIdNamed(name, local().online, nameOf, idOf, "online") }),
+            kick: (name) => runGameCall(ctx, "palworld-kick", { userId: onlyIdNamed(name, players.online(), nameOf, idOf, "online") }),
             ban: async (name) => runGameCall(ctx, "palworld-ban", { userId: onlyIdNamed(name, await known(), nameOf, idOf, "on this server") }),
             unban: async (name) => {
                 const bans = new Set(await roster().bans());
@@ -264,19 +214,19 @@ export const palworldService: GameService = {
         },
         ...steamInstallCalls(steam),
         ["palworld-metrics"]: () => rest().metrics(),
-        ["palworld-players"]: async () => ({ seen: await roster().seen(), bans: await roster().bans(), online: local().online }),
+        ["palworld-players"]: async () => ({ seen: await roster().seen(), bans: await roster().bans(), online: players.online() }),
         ["palworld-kick"]: async (ctx, { userId: id }) => {
             const checked = userId(id);
-            if (!settled(ctx, "Palworld") || !local().online.some((p) => p.userId === checked)) throw new Error("That player is not online");
+            if (!settled(ctx, "Palworld") || !players.online().some((p) => p.userId === checked)) throw new Error("That player is not online");
             await rest().kick(checked);
-            await pollPlayers(ctx);
+            await players.poll(ctx);
             return true;
         },
         ["palworld-ban"]: async (ctx, { userId: id }) => {
             const checked = userId(id);
             if (!settled(ctx, "Palworld")) throw new Error(BANS_ONLINE);
             await rest().ban(checked);
-            await pollPlayers(ctx);
+            await players.poll(ctx);
             return true;
         },
         ["palworld-unban"]: async (ctx, { userId: id }) => {
@@ -296,8 +246,7 @@ export const palworldService: GameService = {
             if (!password) throw new Error("Palworld is running without the admin password Paperboard set; stop it from the computer and start it again here");
             local().rest = new PalworldRest(Number(saved.restPort ?? DEFAULT_REST_PORT), password);
             local().secrets = [password, await joinPassword.value()].filter(Boolean);
-            local().baseline = true;
-            startPolling(ctx);
+            players.start(ctx, true);
             void rest().metrics()
                 .then((metrics) => ctx.setState({ maxPlayers: metrics.maxplayernum }))
                 .catch((err) => report(ctx, "Could not read Palworld's player limit", err));
@@ -306,7 +255,7 @@ export const palworldService: GameService = {
     },
     async beforeRemove() { if (local().busy) throw new Error("Wait for Palworld's current operation"); },
     async dispose() {
-        stopPolling();
+        players.stop();
         local().console.dispose();
     },
     async prepareLaunch() {
@@ -334,7 +283,7 @@ export const palworldService: GameService = {
         });
         local().rest = new PalworldRest(restPort, admin);
         local().secrets = [admin, join].filter(Boolean);
-        stopPolling();
+        players.stop();
         // Linux keeps the game's own files out of the user's home folder
         const env: Record<string, string> = {};
         if (process.platform !== "win32") {
@@ -364,7 +313,7 @@ export const palworldService: GameService = {
         }
         const max = await rest().metrics();
         ctx.setState({ maxPlayers: max.maxplayernum });
-        startPolling(ctx);
+        players.start(ctx);
         return true;
     } },
     saveWorld: save,
@@ -389,7 +338,7 @@ export const palworldService: GameService = {
             ctx.setState({ serverVersion: version });
         })().catch((err) => report(ctx, "Could not record Palworld's version", err));
         try {
-            const said = parseChat(line, local().online.map((p) => p.name));
+            const said = parseChat(line, players.online().map((p) => p.name));
             if (said) emitTrigger(ctx, TRIGGER_IDS.chatMessage, pushChat(ctx, { sender: said.sender, content: said.content, text: `<${said.sender}> ${said.content}` }));
         } catch (err) { report(ctx, "Could not read a chat message", err); }
         local().console.push(ctx, line);

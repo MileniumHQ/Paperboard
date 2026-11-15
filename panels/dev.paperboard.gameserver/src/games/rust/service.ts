@@ -1,17 +1,15 @@
-import { errorText } from "../../service/failures";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { randomInt } from "node:crypto";
 import { emitTrigger, serverLocal } from "../../service/scope";
 import { initialServerState } from "../../service/initialState";
-import { appendCapped } from "../../service/types";
 import { CALLS, TRIGGER_IDS } from "../../service/contract";
 import { validateOptions } from "../options";
 import { installedBuild } from "../steam/steamcmd";
 import { steamInstall, steamInstallCalls, steamUpdateStatus, type SteamInstallSpec } from "../steam/installAction";
 import type { GameService } from "../serviceTypes";
 import {
-    ConsoleBuffer, assertHost, exclusive, exists, fileStamp, linkFolder, offlineBackup, pushChat, readSettings, redact, report,
+    ConsoleBuffer, assertHost, exclusive, exists, fileStamp, linkFolder, offlineBackup, playerPoller, pushChat, readSettings, redact, report,
     resumeAfterBackup, serverRoot, serverSecret, settingPort, settled, singleLine, updateSettings, waitUntil, type Context,
 } from "../serviceKit";
 import { trashDirName } from "../../service/trash";
@@ -28,7 +26,6 @@ const DEFAULT_RCON_PORT = 28016;
 const DEFAULT_APP_PORT = 28082;
 /** the folder under server/ that holds this server's map, saves and lists */
 const IDENTITY = "paperboard";
-const POLL_MS = 5_000;
 /** the line the server prints once its map is loaded and players can join */
 const STARTED = "Server startup complete";
 const BANS_NEED_SERVER = "Start the server to ban or unban players; Rust keeps its own ban list";
@@ -37,11 +34,6 @@ const local = serverLocal(() => ({
     busy: false,
     rcon: null as RustRcon | null,
     roster: null as RustRoster | null,
-    poll: null as ReturnType<typeof setInterval> | null,
-    online: [] as RustPlayer[],
-    // the first answer after reattaching lists who was already there; they did not just join
-    baseline: false,
-    pollError: "",
     /** the server has printed that it finished starting */
     started: false,
     secrets: [] as string[],
@@ -125,55 +117,12 @@ function connect(ctx: Context, port: number, password: string) {
     local().secrets = [password];
 }
 
-/** Asks the server who is online; joins and leaves are the difference from the last answer. */
-async function pollPlayers(ctx: Context) {
-    if (ctx.state.serverStatus !== "online") return;
-    let players: RustPlayer[];
-    try { players = parsePlayers(await rcon().exec("playerlist")); }
-    catch (err) {
-        const message = errorText(err);
-        // one notice in the console per failure, not one every few seconds
-        if (message !== local().pollError && ctx.state.serverStatus === "online") report(ctx, "Could not list Rust's players", err);
-        else console.debug(`[rust] players poll failed again: ${message}`);
-        local().pollError = message;
-        return;
-    }
-    local().pollError = "";
-    const before = new Map(local().online.map((p) => [p.steamId, p]));
-    const now = new Map(players.map((p) => [p.steamId, p]));
-    local().online = players;
-    ctx.setState((prev) => ({
-        onlinePlayers: players.map((p) => p.name),
-        seenPlayers: players.reduce((seen, p) => (seen.includes(p.name) ? seen : appendCapped(seen, p.name)), prev.seenPlayers),
-    }));
-    if (local().baseline) local().baseline = false;
-    else {
-        for (const [id, p] of now) if (!before.has(id)) {
-            pushChat(ctx, { event: "join", sender: p.name, text: `${p.name} joined the game` });
-            emitTrigger(ctx, TRIGGER_IDS.playerJoined, p.name);
-        }
-        for (const [id, p] of before) if (!now.has(id)) {
-            pushChat(ctx, { event: "leave", sender: p.name, text: `${p.name} left the game` });
-            emitTrigger(ctx, TRIGGER_IDS.playerLeft, p.name);
-        }
-    }
-    roster().remember(players).catch((err) => report(ctx, "Could not record Rust's players", err));
-}
-function startPolling(ctx: Context) {
-    if (local().poll) return;
-    local().poll = setInterval(() => {
-        if (ctx.state.serverStatus === "offline") { stopPolling(); return; }
-        void pollPlayers(ctx);
-    }, POLL_MS);
-    void pollPlayers(ctx);
-}
-function stopPolling() {
-    if (local().poll) clearInterval(local().poll!);
-    local().poll = null;
-    local().online = [];
-    local().pollError = "";
-    local().baseline = false;
-}
+const players = playerPoller({
+    game: "Rust",
+    id: (p: RustPlayer) => p.steamId,
+    list: async () => parsePlayers(await rcon().exec("playerlist")),
+    remember: (list) => roster().remember(list),
+});
 
 /** The newest save's stamp; null until Rust first writes one. A map's saves are `<map>.<size>.<seed>.<version>.sav`. */
 export async function saveStamp(): Promise<string | null> {
@@ -312,11 +261,11 @@ export const rustService: GameService = {
         const { mergeBlocks, onlyIdNamed, playerEvents, rosterBlocks, runGameCall } = await import("../../service/blocks");
         // Rust kicks and bans by Steam id: a block's player name is looked up
         // among the players online, then the ones the server has seen
-        const known = async () => [...local().online, ...await roster().seen()];
+        const known = async () => [...players.online(), ...await roster().seen()];
         const nameOf = (p: { name: string }) => p.name;
         const idOf = (p: { steamId: string }) => p.steamId;
         return mergeBlocks({ events: playerEvents() }, rosterBlocks({
-            kick: (name) => runGameCall(ctx, "rust-kick", { steamId: onlyIdNamed(name, local().online, nameOf, idOf, "online") }),
+            kick: (name) => runGameCall(ctx, "rust-kick", { steamId: onlyIdNamed(name, players.online(), nameOf, idOf, "online") }),
             ban: async (name) => runGameCall(ctx, "rust-ban", { steamId: onlyIdNamed(name, await known(), nameOf, idOf, "on this server") }),
             unban: async (name) => {
                 const banned = await bans(ctx);
@@ -357,25 +306,25 @@ export const rustService: GameService = {
             await loadOptions(ctx);
             return view;
         }),
-        ["rust-players"]: async (ctx) => ({ seen: await roster().seen(), bans: await bans(ctx), online: local().online }),
+        ["rust-players"]: async (ctx) => ({ seen: await roster().seen(), bans: await bans(ctx), online: players.online() }),
         ["rust-kick"]: async (ctx, { steamId: raw }) => {
             const id = steamId(raw);
-            if (!settled(ctx, "Rust") || !local().online.some((p) => p.steamId === id)) throw new Error("That player is not online");
+            if (!settled(ctx, "Rust") || !players.online().some((p) => p.steamId === id)) throw new Error("That player is not online");
             const reply = await rcon().exec(`kick ${id} "Kicked by the server admin"`);
             if (/not found/i.test(reply)) throw new Error(`Rust did not find that player: ${reply.trim()}`);
-            await pollPlayers(ctx);
+            await players.poll(ctx);
             return true;
         },
         ["rust-ban"]: async (ctx, { steamId: raw }) => {
             const id = steamId(raw);
             if (!settled(ctx, "Rust")) throw new Error(BANS_NEED_SERVER);
-            const name = [...local().online, ...await roster().seen()].find((p) => p.steamId === id)?.name ?? id;
+            const name = [...players.online(), ...await roster().seen()].find((p) => p.steamId === id)?.name ?? id;
             const reply = await rcon().exec(`banid ${id} "${name.replace(/["\r\n\0]/g, "")}" "Banned by the server admin"`);
             if (!/^Banned User/i.test(reply)) throw new Error(`Rust did not ban that player: ${reply.trim() || "it gave no reason"}`);
             // the ban list is only written to its file when the server is told to, or stops
             await rcon().exec("server.writecfg");
-            if (local().online.some((p) => p.steamId === id)) await rcon().exec(`kick ${id} "Banned by the server admin"`);
-            await pollPlayers(ctx);
+            if (players.online().some((p) => p.steamId === id)) await rcon().exec(`kick ${id} "Banned by the server admin"`);
+            await players.poll(ctx);
             return true;
         },
         ["rust-unban"]: async (ctx, { steamId: raw }) => {
@@ -397,8 +346,7 @@ export const rustService: GameService = {
             if (!password) throw new Error("Rust is running without the RCON password Paperboard set; stop it from the computer and start it again here");
             connect(ctx, Number(saved.rconPort ?? DEFAULT_RCON_PORT), password);
             local().started = true;
-            local().baseline = true;
-            startPolling(ctx);
+            players.start(ctx, true);
             void info()
                 .then((answer) => ctx.setState({ maxPlayers: answer.MaxPlayers }))
                 .catch((err) => report(ctx, "Could not read Rust's player limit", err));
@@ -407,7 +355,7 @@ export const rustService: GameService = {
     },
     async beforeRemove() { if (local().busy) throw new Error("Wait for Rust's current operation"); },
     async dispose() {
-        stopPolling();
+        players.stop();
         local().rcon?.close();
         local().rcon = null;
         local().console.dispose();
@@ -425,7 +373,7 @@ export const rustService: GameService = {
         const rconPort = Number(saved.rconPort ?? DEFAULT_RCON_PORT);
         connect(ctx, rconPort, password);
         local().started = false;
-        stopPolling();
+        players.stop();
 
         const args = [
             "-batchmode", "-nographics", "-logfile", "-",
@@ -464,7 +412,7 @@ export const rustService: GameService = {
         const answer = await info();
         ctx.setState({ maxPlayers: answer.MaxPlayers, serverVersion: answer.Protocol });
         if ((await readSettings()).version !== answer.Protocol) await updateSettings({ version: answer.Protocol });
-        startPolling(ctx);
+        players.start(ctx);
         return true;
     } },
     saveWorld: save,

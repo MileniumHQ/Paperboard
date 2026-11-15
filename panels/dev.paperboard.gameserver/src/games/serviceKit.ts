@@ -9,7 +9,8 @@ import path from "node:path";
 import { randomBytes } from "node:crypto";
 import { files, processApi, readSettings, updateSettings, type ServiceContext } from "../service/api";
 import { fileApi as rawFiles, secretsApi } from "@mileniumhq/paperapi";
-import { currentServer } from "../service/scope";
+import { currentServer, emitTrigger, serverLocal } from "../service/scope";
+import { TRIGGER_IDS } from "../service/contract";
 import type { PaperConsoleEntry } from "@mileniumhq/paperui";
 import { appendCapped, PANEL_ID, type ChatMessage, type GameServerState } from "../service/types";
 import { chatId } from "../lib/logs";
@@ -80,6 +81,88 @@ export function pushChat(ctx: Context, message: Omit<ChatMessage, "id" | "timest
 }
 
 export { singleLine } from "./options";
+
+/** How often a game that is asked for its players is asked while it runs. */
+const PLAYER_POLL_MS = 5_000;
+
+/**
+ * The players of a game that tells who is online only when asked (a REST or
+ * remote console request), asked every few seconds while it runs: joins and
+ * leaves are the difference from the last answer. A tick waits while a
+ * request is still out, and an answer a newer request or a stop replaced is
+ * dropped, so a slow answer never rewinds the list or repeats a join.
+ */
+export function playerPoller<P extends { name: string }>(spec: {
+    game: string;
+    id(player: P): string;
+    list(): Promise<P[]>;
+    remember(players: P[]): Promise<void>;
+}) {
+    const local = serverLocal(() => ({ timer: null as ReturnType<typeof setInterval> | null, online: [] as P[], baseline: false, error: "", latest: 0, asking: false }));
+    /** Asks now; resolves once the answer is in the state (or dropped). */
+    async function poll(ctx: Context): Promise<void> {
+        if (ctx.state.serverStatus !== "online") return;
+        const state = local();
+        const asked = ++state.latest;
+        state.asking = true;
+        let players: P[];
+        try {
+            players = await spec.list();
+        } catch (err) {
+            if (asked !== state.latest) return;
+            state.asking = false;
+            const message = errorText(err);
+            // one notice in the console per failure, not one every few seconds
+            if (message !== state.error && ctx.state.serverStatus === "online") report(ctx, `Could not list ${spec.game}'s players`, err);
+            state.error = message;
+            return;
+        }
+        if (asked !== state.latest) return;
+        state.asking = false;
+        state.error = "";
+        const before = new Map(state.online.map((p) => [spec.id(p), p]));
+        const now = new Map(players.map((p) => [spec.id(p), p]));
+        state.online = players;
+        ctx.setState((prev) => ({
+            onlinePlayers: players.map((p) => p.name),
+            seenPlayers: players.reduce((seen, p) => (seen.includes(p.name) ? seen : appendCapped(seen, p.name)), prev.seenPlayers),
+        }));
+        if (state.baseline) state.baseline = false;
+        else {
+            for (const [id, p] of now) if (!before.has(id)) {
+                pushChat(ctx, { event: "join", sender: p.name, text: `${p.name} joined the game` });
+                emitTrigger(ctx, TRIGGER_IDS.playerJoined, p.name);
+            }
+            for (const [id, p] of before) if (!now.has(id)) {
+                pushChat(ctx, { event: "leave", sender: p.name, text: `${p.name} left the game` });
+                emitTrigger(ctx, TRIGGER_IDS.playerLeft, p.name);
+            }
+        }
+        spec.remember(players).catch((err) => report(ctx, `Could not record ${spec.game}'s players`, err));
+    }
+    function stop() {
+        const state = local();
+        if (state.timer) clearInterval(state.timer);
+        Object.assign(state, { timer: null, online: [], baseline: false, error: "", latest: state.latest + 1, asking: false });
+    }
+    return {
+        /** who answered online last */
+        online: (): readonly P[] => local().online,
+        poll,
+        /** `baseline`: the first answer is who was already there (a reattach), not who joined */
+        start(ctx: Context, baseline = false) {
+            const state = local();
+            if (state.timer) return;
+            state.baseline = baseline;
+            state.timer = setInterval(() => {
+                if (ctx.state.serverStatus === "offline") stop();
+                else if (!local().asking) void poll(ctx);
+            }, PLAYER_POLL_MS);
+            void poll(ctx);
+        },
+        stop,
+    };
+}
 /** Polls until the check passes; the label finishes "Timed out waiting for …". */
 export async function waitUntil(check: () => boolean | Promise<boolean>, ms: number, label: string, pollMs = 100) {
     const deadline = Date.now() + ms;
