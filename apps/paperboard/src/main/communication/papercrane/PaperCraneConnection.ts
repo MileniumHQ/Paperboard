@@ -111,6 +111,9 @@ const AUTH_TIMEOUT_MS = 10_000;
 export interface PaperCraneClientOptions {
     /** ping interval; a socket that misses one pong is treated as dead */
     heartbeatMs?: number;
+    /** a computer whose packets are dropped (firewall, VPN, off the LAN) fails
+     * its connect within this, not at the OS's TCP timeout minutes later */
+    connectTimeoutMs?: number;
     reconnectBaseMs?: number;
     reconnectMaxMs?: number;
 }
@@ -160,6 +163,7 @@ export class PaperCraneConnection extends EventEmitter {
     // a ping is out and no pong came back yet
     private awaitingPong = false;
     private readonly heartbeatMs: number;
+    private readonly connectTimeoutMs: number;
     private readonly reconnectBaseMs: number;
     private readonly reconnectMaxMs: number;
     // progress pushes by download id, while the call they belong to runs
@@ -168,6 +172,7 @@ export class PaperCraneConnection extends EventEmitter {
     constructor(options: PaperCraneClientOptions = {}) {
         super();
         this.heartbeatMs = options.heartbeatMs ?? 15_000;
+        this.connectTimeoutMs = options.connectTimeoutMs ?? 10_000;
         this.reconnectBaseMs = options.reconnectBaseMs ?? 1_000;
         this.reconnectMaxMs = options.reconnectMaxMs ?? 15_000;
     }
@@ -256,10 +261,11 @@ export class PaperCraneConnection extends EventEmitter {
         if (this.connectingPromise) return this.connectingPromise;
         // pairing dials without a credential and must not be retried
         this.target = this.trustOnFirstUse ? null : { host, port, token, cert };
-        this.connectingPromise = this.open(host, port, token, cert).finally(() => {
-            this.connectingPromise = null;
+        const attempt: Promise<TargetStatus> = this.open(host, port, token, cert).finally(() => {
+            if (this.connectingPromise === attempt) this.connectingPromise = null;
         });
-        return this.connectingPromise;
+        this.connectingPromise = attempt;
+        return attempt;
     }
 
     // this data directory's daemon, proven by its handshake; else a fresh
@@ -365,12 +371,23 @@ export class PaperCraneConnection extends EventEmitter {
             this.ws = ws;
             let settled = false;
             const current = () => gen === this.generation && this.ws === ws;
-            const fail = (message: string) => {
-                this.lastError = message;
+            const settleError = (message: string) => {
                 if (settled) return;
                 settled = true;
                 reject(new Error(message));
             };
+            const fail = (message: string) => {
+                this.lastError = message;
+                settleError(message);
+            };
+            // a newer attempt or disconnect() took over: this one still settles,
+            // so nothing waiting on it (connectingPromise, call()) waits forever
+            const superseded = () => settleError("Connection attempt was superseded");
+            const connectTimer = setTimeout(() => {
+                if (!current()) return;
+                fail(`Could not reach ${bracketHost(host)}:${this.port}: no answer within ${this.connectTimeoutMs / 1000} s`);
+                ws.terminate();
+            }, this.connectTimeoutMs);
 
             if (!isLocal && !cert) {
                 // pairing: capture the certificate before any credential is sent
@@ -385,7 +402,8 @@ export class PaperCraneConnection extends EventEmitter {
             }
 
             const onOpen = async () => {
-                if (!current()) return;
+                clearTimeout(connectTimer);
+                if (!current()) return superseded();
                 // An open socket is not an authenticated one. Verify the
                 // credential before reporting connected: the daemon closes
                 // a socket that stays unauthenticated past its handshake
@@ -395,7 +413,7 @@ export class PaperCraneConnection extends EventEmitter {
                     try {
                         await this.request_("auth:verify", {}, AUTH_TIMEOUT_MS, ws);
                     } catch (err) {
-                        if (!current()) return;
+                        if (!current()) return superseded();
                         const reason = err instanceof Error ? err.message : String(err);
                         if (err instanceof DaemonRefusal) {
                             this.credentialRejected = true;
@@ -406,7 +424,7 @@ export class PaperCraneConnection extends EventEmitter {
                         ws.close();
                         return;
                     }
-                    if (!current()) return;
+                    if (!current()) return superseded();
                 }
                 this.isConnected = true;
                 this.lastError = undefined;
@@ -422,7 +440,9 @@ export class PaperCraneConnection extends EventEmitter {
             if (ws.readyState === WebSocket.OPEN) queueMicrotask(onOpen);
 
             ws.on("error", (err: Error) => {
-                if (!current()) return;
+                if (!current()) return superseded();
+                // the connect timed out, and said so
+                if (settled && !this.isConnected) return;
                 fail(
                     `Cannot connect to the Paperboard server daemon at ${bracketHost(host)}:${this.port}` +
                         (err?.message ? `: ${err.message}` : ""),
@@ -433,6 +453,7 @@ export class PaperCraneConnection extends EventEmitter {
             ws.on("message", (raw: RawData) => this.onFrame(ws, raw));
 
             ws.on("close", (code: number, reason: Buffer) => {
+                clearTimeout(connectTimer);
                 // calls sent on this socket can never be answered now
                 for (const [id, pending] of this.pendingRequests) {
                     if (pending.socket !== ws) continue;
@@ -440,7 +461,7 @@ export class PaperCraneConnection extends EventEmitter {
                     clearTimeout(pending.timer);
                     pending.reject(new Error("Paperboard Server connection closed"));
                 }
-                if (!current()) return;
+                if (!current()) return superseded();
                 this.stopHeartbeat();
                 this.ws = null;
                 this.isConnected = false;
@@ -583,6 +604,8 @@ export class PaperCraneConnection extends EventEmitter {
     // the owner is done with this computer: no automatic reconnects
     public disconnect() {
         this.target = null;
+        // the attempt under way settles as superseded; the next connect starts afresh
+        this.connectingPromise = null;
         this.closeSocket();
     }
 

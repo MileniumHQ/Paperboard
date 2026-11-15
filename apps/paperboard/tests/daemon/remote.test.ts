@@ -200,6 +200,25 @@ describe("paired computers", () => {
 		}
 	});
 
+	test("a computer that never answers fails its connect in time, and a disconnect settles an attempt under way", async () => {
+		const silent = await freezableHop(remote.port, REMOTE_HOST);
+		silent.freeze();
+		const client = new PaperCraneClient({ connectTimeoutMs: 300, reconnectBaseMs: 60_000, reconnectMaxMs: 60_000 });
+		try {
+			await expect(client.connect(REMOTE_HOST, silent.port, pairedToken, cert)).rejects.toThrow("no answer within 0.3 s");
+			expect(client.getStatus().error).toContain("no answer within 0.3 s");
+
+			const attempt = client.connect(REMOTE_HOST, silent.port, pairedToken, cert);
+			client.disconnect();
+			await expect(attempt).rejects.toThrow("Connection attempt was superseded");
+			// the next call dials afresh instead of waiting on the abandoned attempt
+			await expect(client.connect(REMOTE_HOST, remote.port, pairedToken, cert)).resolves.toMatchObject({ connected: true });
+		} finally {
+			client.disconnect();
+			await silent.close();
+		}
+	});
+
 	test("a revoked pairing fails with 'pair it again' and is not retried", async () => {
 		const code = remote.instance.auth.startPairing();
 		const pairer = new PaperCraneClient();
