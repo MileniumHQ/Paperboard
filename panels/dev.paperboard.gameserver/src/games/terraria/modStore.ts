@@ -3,6 +3,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { inflateRawSync } from "node:zlib";
 import { trashDirName } from "../../service/trash";
+import { writeFileAtomic } from "../../service/fileWrites";
 import { downloadWorkshopItems, discardWorkshopItems, type Runner } from "../steam/steamcmd";
 import { workshopItems, type WorkshopItem } from "../steam/modscan";
 
@@ -199,9 +200,7 @@ async function readJson<T>(file: string, fallback: T): Promise<T> {
 }
 async function writeJson(file: string, value: unknown) {
     await fs.mkdir(path.dirname(file), { recursive: true });
-    const temp = `${file}.${process.pid}.tmp`;
-    await fs.writeFile(temp, JSON.stringify(value, null, 2));
-    await fs.rename(temp, file);
+    await writeFileAtomic(fs, file, JSON.stringify(value, null, 2));
 }
 
 export interface ModStoreDeps {

@@ -3,6 +3,7 @@
 // keeps of everyone who has joined. Formats are Terraria 1.4.5.8's.
 import fs from "node:fs/promises";
 import path from "node:path";
+import { writeFileAtomic } from "../../service/fileWrites";
 
 export type ConsoleEvent =
     | { kind: "join"; name: string }
@@ -114,7 +115,7 @@ export class PlayerStore {
             const previous = players.find((p) => sameName(p.name, name));
             const next: SeenPlayer = { name, lastSeen: Date.now(), address: address ?? previous?.address };
             const rest = players.filter((p) => p !== previous);
-            await this.writeAtomic(this.seenFile, `${JSON.stringify([...rest, next], null, 2)}\n`);
+            await writeFileAtomic(fs, this.seenFile, `${JSON.stringify([...rest, next], null, 2)}\n`);
         });
     }
 
@@ -139,7 +140,7 @@ export class PlayerStore {
             const address = hostOf(player.address);
             const bans = await this.readBans();
             if (bans.some((ban) => ban.address === address)) throw new Error(`${player.name}'s address is already banned`);
-            await this.writeAtomic(this.banFile, formatBanlist([...bans, { name: player.name, address }]));
+            await writeFileAtomic(fs, this.banFile, formatBanlist([...bans, { name: player.name, address }]));
         });
     }
 
@@ -149,13 +150,7 @@ export class PlayerStore {
             const bans = await this.readBans();
             const kept = bans.filter((ban) => !sameName(ban.name, name));
             if (kept.length === bans.length) throw new Error(`${name} is not banned`);
-            await this.writeAtomic(this.banFile, formatBanlist(kept));
+            await writeFileAtomic(fs, this.banFile, formatBanlist(kept));
         });
-    }
-
-    private async writeAtomic(file: string, text: string): Promise<void> {
-        const temp = `${file}.${process.pid}.tmp`;
-        await fs.writeFile(temp, text);
-        await fs.rename(temp, file);
     }
 }

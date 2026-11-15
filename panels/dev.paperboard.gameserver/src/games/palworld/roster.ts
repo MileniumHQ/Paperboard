@@ -1,5 +1,6 @@
 import fs from "node:fs/promises";
 import path from "node:path";
+import { writeFileAtomic } from "../../service/fileWrites";
 import type { PalworldPlayer } from "./rest";
 
 /** A player Paperboard has seen on the server, keyed by Palworld's user id. */
@@ -50,7 +51,7 @@ export class PalworldRoster {
         return this.serial(async () => {
             const byId = new Map((await this.seen()).map((p) => [p.userId, p]));
             for (const p of players) byId.set(p.userId, { userId: p.userId, name: p.name, accountName: p.accountName, level: p.level, lastSeen: now });
-            await fs.writeFile(this.file, JSON.stringify([...byId.values()], null, 2));
+            await writeFileAtomic(fs, this.file, JSON.stringify([...byId.values()], null, 2));
         });
     }
 

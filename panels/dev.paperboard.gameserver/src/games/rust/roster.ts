@@ -1,5 +1,6 @@
 import fs from "node:fs/promises";
 import path from "node:path";
+import { writeFileAtomic } from "../../service/fileWrites";
 import type { RustPlayer } from "./webrcon";
 
 /** A player Paperboard has seen on the server, keyed by Steam id. */
@@ -64,7 +65,7 @@ export class RustRoster {
         const run = this.queue.then(async () => {
             const byId = new Map((await this.seen()).map((p) => [p.steamId, p]));
             for (const p of players) byId.set(p.steamId, { steamId: p.steamId, name: p.name, lastSeen: now });
-            await fs.writeFile(this.file, JSON.stringify([...byId.values()], null, 2));
+            await writeFileAtomic(fs, this.file, JSON.stringify([...byId.values()], null, 2));
         });
         this.queue = Promise.allSettled([run]);
         return run;
