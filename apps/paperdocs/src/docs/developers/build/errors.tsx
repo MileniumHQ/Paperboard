@@ -62,7 +62,8 @@ const FOLLOW_RUN = `followCity: async (ctx: Ctx, input?: { city?: string }) => {
     return true;
 },`;
 
-const PAGE_CALL = `import { errorMessage, showToast } from "@mileniumhq/paperui";
+const PAGE_CALL = `import { errorMessage } from "@mileniumhq/paperapi";
+import { showToast } from "@mileniumhq/paperui";
 
 const follow = async () => {
     setBusy(true);

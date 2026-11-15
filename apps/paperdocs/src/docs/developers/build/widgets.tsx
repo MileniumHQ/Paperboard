@@ -64,8 +64,8 @@ body {
 const WIDGET_TSX = `// The Forecast widget: one followed city's temperature on Home.
 import { render } from "solid-js/web";
 import { createSignal, onCleanup, Show } from "solid-js";
-import { errorMessage, PaperButton, PaperProvider, PaperWidget, PaperWidgetMessage, PaperWidgetStat } from "@mileniumhq/paperui";
-import { createPanelBridge, defineWidgets, type WidgetContext } from "@mileniumhq/paperapi";
+import { PaperButton, PaperProvider, PaperWidget, PaperWidgetMessage, PaperWidgetStat } from "@mileniumhq/paperui";
+import { createPanelBridge, defineWidgets, errorMessage, type WidgetContext } from "@mileniumhq/paperapi";
 import "@mileniumhq/paperui/style.css";
 import "./widget.css";
 import { DEFAULT_STATE, PANEL_ID, type WeatherState } from "./panel";
