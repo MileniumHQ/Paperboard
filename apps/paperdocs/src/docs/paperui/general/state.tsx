@@ -86,6 +86,7 @@ const worlds = createRead(() => service.calls.listWorlds(), {
                 <li>A push (through <PaperCode>follow</PaperCode>) and a <PaperCode>set</PaperCode> are changes newer than any read still out. A whole value lands like an answer and drops that read: the list a remove answered with, or the state a service pushed. <PaperCode>set(undefined)</PaperCode> forgets the value, as before the first read: a view whose data went away.</li>
                 <li>A function changes the part it knows, such as a row taken out after it went, or a progress line pushed while the list is read. It applies at once, and again to the answer of the read still out, so that answer can't bring back what it changed.</li>
                 <li><PaperCode>follow</PaperCode> is any subscribe function: it gets <PaperCode>land</PaperCode> and returns the function that stops it. The read stops it when the component goes.</li>
+                <li>A service's state pushes only what changed. Follow it as a function, so a push that comes before the first answer joins that answer instead of standing for the whole state: <PaperCode>{"follow: (land) => service.state.subscribe((_state, patch) => land((prev) => prev && { ...prev, ...patch }))"}</PaperCode>.</li>
                 <li>A poll is <PaperLink href="/docs/paperui/utilities/#polling">createPolling</PaperLink> calling <PaperCode>reload</PaperCode>: a tick never starts while the last read is out.</li>
             </PaperTextList>
 
@@ -94,35 +95,40 @@ const worlds = createRead(() => service.calls.listWorlds(), {
 {`createLatest(): Latest;
 
 interface Latest {
-    /** starts a read; current() is true while it is the newest and the view is there */
+    /** starts the work; current() is true while it is the newest and the view is there */
     (): () => boolean;
-    /** drops the read in flight without starting a new one */
+    /** drops the work in flight without starting a new one */
     cancel(): void;
 }`}
             </PaperCode>
             <PaperText preset="body" as="p">
-                Late answers lose, for work that isn't a read: a sign-in that a person can cancel, a probe a newer one replaces. A read uses <PaperCode>createRead</PaperCode>, which does this itself.
-                Each call of the function it returns starts the work and hands back <PaperCode>current()</PaperCode>, which is true while no newer read has started and the component is still there.
+                Late answers lose, for work that isn't a read. <PaperCode>createRead</PaperCode> is for data a view shows, and does this itself; <PaperCode>createLatest</PaperCode> is only for work whose answer starts more work instead of being shown: an action a person can cancel (a sign-in, a message sent from a page they can leave), a probe the caller acts on, or an answer written into something that isn't Solid state, such as a terminal's scrollback or a canvas.
+                Each call of the function it returns starts the work and hands back <PaperCode>current()</PaperCode>, which is true while no newer call has started and the component is still there.
                 Check it after every <PaperCode>await</PaperCode>, before the answer or its failure lands on screen.
             </PaperText>
             <PaperCode block language="tsx">
 {`import { createLatest } from "@mileniumhq/paperui";
 
-const latest = createLatest();
-const load = async () => {
-    const current = latest();
+// a message sent from one server's page is never confirmed on another's
+const sends = createLatest();
+const send = async () => {
+    const current = sends();
     try {
-        const next = await service.calls.listWorlds();
-        if (current()) setWorlds(reconcile(next, { key: "id" }));
+        await service.calls.sendMessage({ channel: channelId(), content: content() });
+        if (current()) setSentTo(channelId());
     } catch (err) {
-        if (current()) setError(errorMessage(err));
+        if (current()) setSendError(errorMessage(err));
     }
+};
+const openServer = (id: string) => {
+    sends.cancel();
+    setServerId(id);
 };`}
             </PaperCode>
             <PaperTextList>
-                <li>A read that a newer one replaced is dropped, whether it answered or failed.</li>
-                <li>Every read is dropped once the component that made it is gone. Made outside a component, only a newer read or <PaperCode>cancel()</PaperCode> replaces one.</li>
-                <li><PaperCode>cancel()</PaperCode> drops the read in flight when nothing replaces it: the person closed the dialog, went back a step, or picked nothing.</li>
+                <li>Work that a newer call replaced is dropped, whether it answered or failed.</li>
+                <li>Every call is dropped once the component that made it is gone. Made outside a component, only a newer call or <PaperCode>cancel()</PaperCode> replaces one.</li>
+                <li><PaperCode>cancel()</PaperCode> drops the work in flight when nothing replaces it: the person closed the dialog, went back a step, or picked nothing.</li>
             </PaperTextList>
 
             <PaperText preset="subheader" as="h2" id="create-action">createAction</PaperText>
