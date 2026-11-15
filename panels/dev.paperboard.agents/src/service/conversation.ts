@@ -19,9 +19,7 @@
 // summary and the latest messages (the carry). Messages sent meanwhile wait.
 //
 // A turn is the harness run as a daemon-supervised child (one at a time, id
-// TURN_PROC_ID). The transcript is an append-only JSONL file in the panel's
-// storage, compacted when it grows past a cap (only superseded copies go); an entry that changes is
-// appended again and the latest copy wins.
+// TURN_PROC_ID). The transcript is transcript.ts's, the history history.ts's.
 
 import { randomUUID } from "node:crypto";
 import fs from "node:fs";
@@ -34,28 +32,18 @@ import { HARNESS_NAMES, codexContext, feed, instructions, parseTurnLine, removeL
 import type { TurnLog } from "./turnLog";
 import { writeLine } from "./mcpClient";
 import { writeAtomic } from "./writeAtomic";
+import { stopChild } from "./stopChild";
+import { ATTACHMENTS, CARRY, History, summary, THREADS } from "./history";
+import { said, Transcript, TRANSCRIPT, type Said } from "./transcript";
 import { errorText } from "../lib/failure";
 import type { Sections, TurnMode } from "./toolsets";
 
 export const TURN_PROC_ID = `${PANEL_ID}.turn`;
-const TRANSCRIPT = "transcript.jsonl";
-const THREADS = "threads.json";
-const ATTACHMENTS = "attachments";
-const PAST = "past";
-const CARRY = "carry.json";
 const RUN = "run";
-const PAST_META = "meta.json";
-/** the current conversation's id: it keeps it through being put away and reopened, so a flow can name it */
-const ID = "id";
-const PAST_ID = /^[a-f0-9]{12}$/;
-const TITLE_CHARS = 80;
-const KEEP_IN_MEMORY = 500;
-const COMPACT_AT_BYTES = 4 * 1024 * 1024;
 const MAX_QUEUED = 20;
 const MAX_NOTICES = 10;
 const MAX_LINE = 16 * 1024 * 1024; // one event can carry a screenshot
 const TURN_MS = 30 * 60_000;
-const STOP_GRACE_MS = 2_000;
 const TOOLS_MS = 30_000; // how long OpenCode gets to connect to the panel's tools
 const TOOLS_SETTLE_MS = 300; // OpenCode reloads its tools 100 ms after they change; then the next step has them
 const QUOTE_CHARS = 80;
@@ -133,9 +121,9 @@ export interface ConversationDeps {
 }
 
 export class Conversation {
-    private entries: ChatEntry[] = [];
-    /** every id in the current transcript, the ones past what memory keeps too: a new entry's id is none of these */
-    private ids = new Set<string>();
+    private transcript: Transcript;
+    /** the conversations put away */
+    private archive: History;
     private threads: Partial<Record<Harness, string>> = {};
     private queue: WaitingMessage[] = [];
     /** the service's notices for the agent's next turn; not the user's, so not in the conversation */
@@ -161,8 +149,6 @@ export class Conversation {
     private context: Context | null = null;
     private carry: Carry | null = null;
     private compactingNow = false;
-    /** how big the transcript file may get before its superseded copies are dropped */
-    private compactAt = COMPACT_AT_BYTES;
     /** the running turn answers a flow's messages */
     private turnFromFlow = false;
     /** and the flow's own instructions for it */
@@ -173,25 +159,31 @@ export class Conversation {
 
     constructor(private deps: ConversationDeps) {
         this.attachments = new Attachments(() => deps.dir);
+        this.transcript = new Transcript(path.join(deps.dir, TRANSCRIPT));
+        this.archive = new History(deps.dir);
     }
 
     init() {
         fs.mkdirSync(this.deps.dir, { recursive: true });
         this.loadCurrent();
-        const threads = path.join(this.deps.dir, THREADS);
-        if (fs.existsSync(threads)) this.threads = JSON.parse(fs.readFileSync(threads, "utf8"));
-        this.carry = this.loadCarry();
         // the instructions files of runs the last service generation didn't see to their end (the questions' too, in Codex's home)
         removeLeftRunFiles(this.runDir());
         const codexHome = this.deps.env("codex").CODEX_HOME;
         if (codexHome) removeLeftRunFiles(codexHome);
         // a turn the last service generation left running is not ours to finish
-        void this.deps.host
-            .exists(TURN_PROC_ID)
-            .then(async (alive) => {
-                if (alive) await this.deps.host.kill(TURN_PROC_ID, "SIGKILL");
-            })
-            .catch((e) => console.error("[agents] couldn't stop a turn left from before:", errorText(e)));
+        void stopChild(this.deps.host, TURN_PROC_ID).catch((e) => console.error("[agents] couldn't stop a turn left from before:", errorText(e)));
+    }
+
+    /** The current conversation and what goes with it, read from its files. */
+    private loadCurrent() {
+        this.transcript.load();
+        const threads = path.join(this.deps.dir, THREADS);
+        this.threads = fs.existsSync(threads) ? JSON.parse(fs.readFileSync(threads, "utf8")) : {};
+        this.carry = this.loadCarry();
+    }
+
+    private get entries(): ChatEntry[] {
+        return this.transcript.entries;
     }
 
     history(limit: number = LIMITS.history): ChatEntry[] {
@@ -279,13 +271,10 @@ export class Conversation {
     async clear() {
         this.notices = [];
         await this.swap(() => {
-            this.entries = [];
-            this.ids = new Set();
-            this.compactAt = COMPACT_AT_BYTES;
+            this.transcript.clear();
             this.threads = {};
             this.setCarry(null);
             fs.rmSync(path.join(this.deps.dir, ATTACHMENTS), { recursive: true, force: true });
-            writeAtomic(path.join(this.deps.dir, TRANSCRIPT), "");
             writeAtomic(path.join(this.deps.dir, THREADS), "{}");
         });
         return { cleared: true };
@@ -295,7 +284,7 @@ export class Conversation {
     newConversation() {
         return this.swap(() => {
             if (this.entries.length === 0) return;
-            if (this.pastIds().length >= LIMITS.pastConversations) {
+            if (this.archive.ids().length >= LIMITS.pastConversations) {
                 throw new Error(`You have ${LIMITS.pastConversations} past conversations; delete some from the history first.`);
             }
             this.putAway();
@@ -307,95 +296,48 @@ export class Conversation {
      * The UI lists it as CURRENT_CONVERSATION; flows name it by this id, which it keeps when it's reopened.
      */
     id(): string {
-        const file = path.join(this.deps.dir, ID);
-        if (fs.existsSync(file)) {
-            const id = fs.readFileSync(file, "utf8").trim();
-            if (!PAST_ID.test(id)) throw new Error(`${file} isn't a conversation's id`);
-            // one the history has already is left from a put-away that was interrupted: it's that one's
-            if (!fs.existsSync(path.join(this.pastDir(), id))) return id;
-        }
-        const id = randomUUID().replace(/-/g, "").slice(0, 12);
-        writeAtomic(file, id);
-        return id;
+        return this.archive.currentId();
     }
 
     /** The conversation going on now, listed with the history; none while it's empty. Its id is no past one's. */
     current(): PastConversation | null {
-        return this.entries.length ? this.summary(CURRENT_CONVERSATION) : null;
+        return this.entries.length ? summary(this.entries, CURRENT_CONVERSATION) : null;
     }
 
     /** The history, newest first. */
     past(): PastConversation[] {
-        return this.pastIds()
-            .map((id) => {
-                const file = path.join(this.pastDir(), id, PAST_META);
-                try {
-                    return JSON.parse(fs.readFileSync(file, "utf8")) as PastConversation;
-                } catch (e) {
-                    // unreadable isn't "not there": say which one, so it can be deleted
-                    throw new Error(`${file} can't be read: ${errorText(e)}`);
-                }
-            })
-            .sort((a, b) => b.endedAt - a.endedAt);
+        return this.archive.list();
     }
 
     /** Make a past conversation the current one, to continue it; the current one goes into the history. */
     async open(id: unknown) {
-        const dir = this.pastEntry(id);
+        this.archive.folder(id); // an id that's no conversation's is refused before the turn is stopped
         await this.swap(() => {
-            if (!fs.existsSync(dir)) throw new Error("That conversation isn't in the history anymore.");
-            if (this.entries.length > 0) this.putAway();
-            // files uploaded and never sent belong to no message: they don't come along
-            else fs.rmSync(path.join(this.deps.dir, ATTACHMENTS), { recursive: true, force: true });
-            const files = path.join(dir, ATTACHMENTS);
-            if (fs.existsSync(files)) fs.renameSync(files, path.join(this.deps.dir, ATTACHMENTS));
-            // it comes back as it was put away; a part that's missing (an interrupted put-away) is empty
-            for (const [name, empty] of [
-                [TRANSCRIPT, ""],
-                [THREADS, "{}"],
-            ] as const) {
-                const from = path.join(dir, name);
-                const to = path.join(this.deps.dir, name);
-                if (fs.existsSync(from)) fs.renameSync(from, to);
-                else writeAtomic(to, empty);
-            }
-            // a carry is only there if it was compacted and not yet carried on
-            const carry = path.join(dir, CARRY);
-            if (fs.existsSync(carry)) fs.renameSync(carry, path.join(this.deps.dir, CARRY));
-            writeAtomic(path.join(this.deps.dir, ID), id as string);
-            fs.rmSync(dir, { recursive: true });
+            this.archive.restore(id, () => {
+                if (this.entries.length > 0) this.putAway();
+                // files uploaded and never sent belong to no message: they don't come along
+                else fs.rmSync(path.join(this.deps.dir, ATTACHMENTS), { recursive: true, force: true });
+            });
             this.loadCurrent();
-            this.compactAt = COMPACT_AT_BYTES;
-            this.threads = JSON.parse(fs.readFileSync(path.join(this.deps.dir, THREADS), "utf8"));
-            this.carry = this.loadCarry();
         });
         return { opened: true };
     }
 
     /** Delete a past conversation for good. The current one is never deleted this way. */
     deletePast(id: unknown) {
-        const dir = this.pastEntry(id);
-        if (!fs.existsSync(dir)) throw new Error("That conversation isn't in the history anymore.");
-        fs.rmSync(dir, { recursive: true });
+        this.archive.delete(id);
         return { deleted: true };
     }
 
     /** A conversation's texts, the user's and the agent's, oldest first: the current one, or one in the history. */
     texts(id: string): Said[] {
-        if (id === this.id()) return said(this.entries);
-        const dir = this.pastEntry(id);
-        if (!fs.existsSync(dir)) throw new Error(`the agent has no conversation "${id}"; it may have been deleted`);
-        return said(this.load(path.join(dir, TRANSCRIPT)).entries.slice(-KEEP_IN_MEMORY));
+        return id === this.id() ? said(this.entries) : this.archive.texts(id);
     }
 
     /** One text by its id: looked for in the current conversation, then in the history. */
     text(messageId: string): Said {
-        const here = said(this.entries).find((e) => e.id === messageId);
-        if (here) return here;
-        for (const id of this.pastIds()) {
-            const found = said(this.load(path.join(this.pastDir(), id, TRANSCRIPT)).entries).find((e) => e.id === messageId);
-            if (found) return found;
-        }
+        const found = said(this.entries).find((e) => e.id === messageId) ?? this.archive.find(messageId);
+        if (found) return found;
         throw new Error(`the agent has no message "${messageId}"; its conversation may have been cleared or deleted`);
     }
 
@@ -433,14 +375,6 @@ export class Conversation {
         this.state();
     }
 
-    /** Stop the running turn; messages waiting for it are dropped with it. Not offered to the user: the agent just chats. */
-    async stop() {
-        this.queue = [];
-        this.stopRequested = true;
-        await this.killTurn();
-        this.state();
-    }
-
     async shutdown() {
         this.closed = true;
         this.queue = [];
@@ -475,59 +409,13 @@ export class Conversation {
         }
     }
 
-    /** The current conversation as the history will list it once it's put away. */
-    private summary(id: string): PastConversation {
-        const texts = said(this.entries);
-        const first = texts.find((e) => e.kind === "user") ?? texts[0];
-        const text = first?.text.replace(/\s+/g, " ").trim() ?? "";
-        return {
-            id,
-            title: text.length > TITLE_CHARS ? `${text.slice(0, TITLE_CHARS - 1).trimEnd()}…` : text || "A conversation",
-            startedAt: this.entries[0]!.at,
-            endedAt: this.entries.at(-1)!.at,
-            messages: texts.length,
-        };
-    }
-
-    /**
-     * Move the current conversation into the history. Its summary goes in first, then the files are moved,
-     * so an interruption at any point leaves every message somewhere, never nowhere.
-     */
+    /** Move the current conversation into the history; what's in memory goes with it. */
     private putAway() {
-        const id = this.id();
-        const meta = this.summary(id);
-        const tmp = path.join(this.pastDir(), `.${id}`);
-        fs.mkdirSync(tmp, { recursive: true });
-        fs.writeFileSync(path.join(tmp, PAST_META), JSON.stringify(meta));
-        const dir = path.join(this.pastDir(), id);
-        fs.renameSync(tmp, dir);
-        for (const name of [TRANSCRIPT, THREADS, ATTACHMENTS, CARRY]) {
-            const from = path.join(this.deps.dir, name);
-            if (fs.existsSync(from)) fs.renameSync(from, path.join(dir, name));
-        }
-        // the next conversation gets an id of its own
-        fs.rmSync(path.join(this.deps.dir, ID), { force: true });
-        this.entries = [];
-        this.ids = new Set();
-        this.compactAt = COMPACT_AT_BYTES;
+        this.archive.putAway(this.entries);
+        this.transcript.forget();
         this.threads = {};
         this.carry = null;
         this.context = null;
-    }
-
-    private pastDir() {
-        return path.join(this.deps.dir, PAST);
-    }
-
-    /** Past conversations' ids; a half-made one (a dot folder from an interrupted put-away) isn't listed. */
-    private pastIds(): string[] {
-        if (!fs.existsSync(this.pastDir())) return [];
-        return fs.readdirSync(this.pastDir()).filter((n) => PAST_ID.test(n));
-    }
-
-    private pastEntry(id: unknown): string {
-        if (typeof id !== "string" || !PAST_ID.test(id)) throw new Error("that isn't a conversation's id");
-        return path.join(this.pastDir(), id);
     }
 
     // ------------------------------------------------------------- turns
@@ -684,13 +572,7 @@ export class Conversation {
             else if (ev.type === "done") {
                 // the prompt is answered; OpenCode would wait for the next one
                 answered = true;
-                const stop = (signal: string) =>
-                    this.deps.host
-                        .exists(TURN_PROC_ID)
-                        .then((alive) => (alive ? this.deps.host.kill(TURN_PROC_ID, signal) : undefined))
-                        .catch((e) => console.warn(`[agents] couldn't stop OpenCode after its answer (the turn's time limit still will): ${errorText(e)}`));
-                void stop("SIGTERM");
-                timers.add(setTimeout(() => void stop("SIGKILL"), STOP_GRACE_MS));
+                void this.killTurn().catch((e) => console.warn(`[agents] couldn't stop OpenCode after its answer (the turn's time limit still will): ${errorText(e)}`));
             }
         };
         // OpenCode connects to the panel's tools in the background: its prompt waits until it has listed them
@@ -897,14 +779,8 @@ export class Conversation {
         writeAtomic(path.join(this.deps.dir, THREADS), JSON.stringify(this.threads));
     }
 
-    private async killTurn() {
-        if (!(await this.deps.host.exists(TURN_PROC_ID))) return;
-        const gone = this.running ?? Promise.resolve();
-        await this.deps.host.kill(TURN_PROC_ID, "SIGTERM");
-        let t: ReturnType<typeof setTimeout> | undefined;
-        const timedOut = await Promise.race([gone.then(() => false), new Promise<boolean>((ok) => (t = setTimeout(() => ok(true), STOP_GRACE_MS)))]);
-        clearTimeout(t);
-        if (timedOut) await this.deps.host.kill(TURN_PROC_ID, "SIGKILL");
+    private killTurn() {
+        return stopChild(this.deps.host, TURN_PROC_ID);
     }
 
     /** An empty folder: no project files and no AGENTS.md or CLAUDE.md for the harness to pick up. */
@@ -943,7 +819,7 @@ export class Conversation {
     private newId(): string {
         for (;;) {
             const id = randomUUID().replace(/-/g, "").slice(0, SHORT_ID);
-            if (!this.ids.has(id) && !this.queue.some((m) => m.id === id)) return id;
+            if (!this.transcript.has(id) && !this.queue.some((m) => m.id === id)) return id;
         }
     }
 
@@ -957,103 +833,10 @@ export class Conversation {
         });
     }
 
-    // ------------------------------------------------------------- transcript
-
     private put(entry: ChatEntry) {
-        const i = this.entries.findIndex((e) => e.id === entry.id);
-        if (i >= 0) this.entries[i] = entry;
-        else this.entries.push(entry);
-        if (this.entries.length > KEEP_IN_MEMORY) this.entries.splice(0, this.entries.length - KEEP_IN_MEMORY);
-        this.ids.add(entry.id);
-        const file = path.join(this.deps.dir, TRANSCRIPT);
-        fs.appendFileSync(file, JSON.stringify(entry) + "\n");
-        if (fs.statSync(file).size > this.compactAt) this.dropSuperseded(file);
+        this.transcript.put(entry);
         this.deps.emit(entry);
     }
-
-    /**
-     * Rewrites the transcript without its superseded copies. Every message stays: only memory is capped, never
-     * what the user's history holds. A transcript still big after that has earned its size, so the next rewrite
-     * waits until it has doubled; otherwise every append past the cap would rewrite the whole file.
-     */
-    private dropSuperseded(file: string) {
-        const latest = new Map<string, string>();
-        const lines = fs.readFileSync(file, "utf8").split("\n");
-        lines.forEach((line, n) => {
-            if (!line.trim()) return;
-            let id: unknown;
-            try {
-                id = JSON.parse(line).id;
-            } catch (err) {
-                throw new Error(`${file} line ${n + 1} is unreadable: ${errorText(err)}`);
-            }
-            if (typeof id !== "string") throw new Error(`${file} line ${n + 1} has no id`);
-            latest.delete(id); // re-insert so a changed entry keeps its newest position
-            latest.set(id, line);
-        });
-        writeAtomic(file, [...latest.values()].join("\n") + "\n");
-        this.compactAt = Math.max(COMPACT_AT_BYTES, fs.statSync(file).size * 2);
-    }
-
-    /**
-     * The current conversation's transcript, read into memory. A torn last line (a crash mid-append) is cut off
-     * the file once the rest has read: the next entry appended after it would join it and be lost.
-     */
-    private loadCurrent() {
-        const file = path.join(this.deps.dir, TRANSCRIPT);
-        const { entries, ids, torn, unended } = this.load(file);
-        if (torn !== null) fs.truncateSync(file, torn);
-        // a whole entry that lost only its newline would join the next one the same way
-        else if (unended) fs.appendFileSync(file, "\n");
-        this.entries = entries.slice(-KEEP_IN_MEMORY);
-        this.ids = ids;
-    }
-
-    /**
-     * A transcript's entries, oldest first: the current conversation's, or one put away in the history. With every
-     * id it holds (entries no longer shown too), the byte a torn last line starts at (or null), and whether the
-     * file's last line has no newline.
-     */
-    private load(file: string): { entries: ChatEntry[]; ids: Set<string>; torn: number | null; unended: boolean } {
-        const ids = new Set<string>();
-        if (!fs.existsSync(file)) return { entries: [], ids, torn: null, unended: false };
-        const byId = new Map<string, ChatEntry>();
-        const text = fs.readFileSync(file, "utf8");
-        const lines = text.split("\n");
-        let torn: number | null = null;
-        lines.forEach((line, n) => {
-            if (!line.trim()) return;
-            let e: ChatEntry;
-            try {
-                e = JSON.parse(line);
-            } catch (err) {
-                // only the last line can be torn (a crash mid-append); anything else is damage to report
-                if (lines.slice(n + 1).every((l) => !l.trim())) {
-                    torn = Buffer.byteLength(lines.slice(0, n).map((l) => `${l}\n`).join(""));
-                    return;
-                }
-                throw new Error(`${file} line ${n + 1} is unreadable: ${errorText(err)}`);
-            }
-            if (typeof e.id === "string") ids.add(e.id);
-            // transcripts from before the chat was only a chat hold tool-call entries: not messages, not shown
-            if (e.kind !== "user" && e.kind !== "agent" && e.kind !== "error" && e.kind !== "sign-in" && e.kind !== "app" && e.kind !== "access" && e.kind !== "prompt" && e.kind !== "tool-server" && e.kind !== "tool-sign-in") return;
-            // a sign-in request lives only as long as the service that asked for it
-            if (e.kind === "sign-in" && (e.status === "waiting" || e.status === "submitting")) e = { ...e, status: "expired" };
-            if (e.kind === "access" && e.status === "waiting") e = { ...e, status: "expired" };
-            if (e.kind === "prompt" && (e.status === "waiting" || e.status === "sending")) e = { ...e, status: "expired" };
-            if (e.kind === "tool-server" && e.status === "waiting") e = { ...e, status: "expired" };
-            byId.delete(e.id); // re-insert so a changed entry keeps its newest position
-            byId.set(e.id, e);
-        });
-        return { entries: [...byId.values()].sort((a, b) => a.at - b.at), ids, torn, unended: text !== "" && !text.endsWith("\n") };
-    }
-}
-
-/** A text in a conversation: the user's or the agent's, not an error or a card. */
-export type Said = Extract<ChatEntry, { kind: "user" | "agent" }>;
-
-function said(entries: ChatEntry[]): Said[] {
-    return entries.filter((e): e is Said => e.kind === "user" || e.kind === "agent");
 }
 
 function minutes(ms: number) {
