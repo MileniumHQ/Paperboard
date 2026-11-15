@@ -31,7 +31,7 @@ export default function TerrariaOverview() {
             software={softwareName(terrariaSoftware(serverSoftware()))}
             stats={overviewStats(
                 uptime(),
-                { icon: "public", label: "World", value: String(gameSettings().world ?? "World") },
+                { icon: "public", label: "Active world", value: String(gameSettings().world ?? "World") },
                 { icon: gameSettings().password ? "lock" : "lock_open", label: "Join password", value: gameSettings().password ? "On" : "Off" },
             )}
         >

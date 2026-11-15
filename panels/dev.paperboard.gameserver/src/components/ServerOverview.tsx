@@ -1,4 +1,4 @@
-import { createSignal, Index, onMount, Show, type JSX } from "solid-js";
+import { createSignal, For, Index, onMount, Show, type JSX } from "solid-js";
 import {
     PaperFlex,
     PaperText,
@@ -15,7 +15,6 @@ import {
     PaperQuote,
     PaperStatTile,
     createAction,
-    createPaperCompact,
 } from "@mileniumhq/paperui";
 import { getStatusBadge, useServer } from "../lib/server";
 import ServerIssueModal from "./ServerIssueModal";
@@ -23,6 +22,7 @@ import RecoveryNotice from "./RecoveryNotice";
 import { errorMessage } from "../lib/failure";
 import type { Control } from "../games/types";
 import type { OverviewStats } from "./overviewStats";
+import { joinPort } from "../core/portNames";
 
 /** What a game's Overview says under the address, beside the button that edits it. */
 export function EditableDetail(props: { edit: string; onEdit(): void; children: JSX.Element }) {
@@ -42,9 +42,9 @@ export function EditableDetail(props: { edit: string; onEdit(): void; children: 
  * avatar, the line under the address, its readouts, extra buttons for a
  * running server and its notices.
  *
- * The console takes what height is left. A phone has none left under the
- * rest, so there the Overview is a page that scrolls as a whole (its tab's
- * compactVariant) and the console keeps a height of its own.
+ * The console takes what height is left, and never less than a height of
+ * its own: a short window or a phone has too little left under the rest,
+ * so there the Overview scrolls as a whole.
  */
 export default function ServerOverview(props: {
     avatar: JSX.Element;
@@ -52,7 +52,7 @@ export default function ServerOverview(props: {
     detail?: JSX.Element;
     /** the software badge beside the version, such as "Paper" or "Vanilla" */
     software: string;
-    /** a running server's readouts, in one row of four equal tiles (two rows of two on a phone) */
+    /** a running server's readouts: one row of four equal tiles, or two rows of two where four don't fit */
     stats?: OverviewStats;
     /** buttons after Restart while the server is online */
     actions?: JSX.Element;
@@ -63,7 +63,7 @@ export default function ServerOverview(props: {
     /** false for a game that keeps no world, which has no Save world */
     world?: boolean;
 }) {
-    const { calls, serverActionError, serverStatus, serverEntries, localIp, serverPort, serverVersion, loadServerConfig, startServer, stopServer, restartServer } = useServer();
+    const { calls, serverActionError, serverStatus, serverEntries, localIp, serverPort, portMoves, serverVersion, loadServerConfig, startServer, stopServer, restartServer } = useServer();
     // loading the config also reads the server's state
     onMount(() => void loadServerConfig());
 
@@ -78,12 +78,11 @@ export default function ServerOverview(props: {
         sent.catch((err) => setCommandError(errorMessage(err)));
     };
 
-    const compact = createPaperCompact();
     const badge = () => getStatusBadge(serverStatus());
-    const address = () => `${localIp()}:${serverPort()}`;
+    const address = () => `${localIp()}:${joinPort({ serverPort: serverPort(), portMoves: portMoves() })}`;
 
     return (
-        <PaperFlex direction="column" gap="full" grow minHeight={0} fullWidth>
+        <PaperFlex direction="column" gap="full" grow minHeight={0} fullWidth overflowY="auto">
             <PaperCard shrink={false} padding="full">
                 <PaperFlex direction="row" gap="threefourths" align="center">
                     {props.avatar}
@@ -137,16 +136,32 @@ export default function ServerOverview(props: {
 
             <Show when={serverStatus() === "online" && props.stats}>
                 {(stats) => (
-                    <PaperGrid columns={compact() ? 2 : 4}>
-                        {/* by position: the uptime's tick makes four new readouts every second, and each tile stays */}
-                        <Index each={stats()}>
-                            {(stat) => <PaperStatTile icon={stat().icon} label={stat().label} value={stat().value} tone={stat().tone} />}
+                    // two pairs: side by side when all four fit, else one over the other, never three and one
+                    <PaperGrid fit min="card-min">
+                        <Index each={[stats().slice(0, 2), stats().slice(2)]}>
+                            {(pair) => (
+                                <PaperGrid columns={2}>
+                                    {/* by position: the uptime's tick makes four new readouts every second, and each tile stays */}
+                                    <Index each={pair()}>
+                                        {(stat) => <PaperStatTile icon={stat().icon} label={stat().label} value={stat().value} tone={stat().tone} />}
+                                    </Index>
+                                </PaperGrid>
+                            )}
                         </Index>
                     </PaperGrid>
                 )}
             </Show>
 
             <RecoveryNotice />
+
+            {/* a taken port moved for this run alone: friends must join on the new one */}
+            <For each={portMoves()}>
+                {(move) => (
+                    <PaperQuote variant="warning" icon="swap_horiz" title={`${move.primary ? "Port" : `${move.label} port`} ${move.from} was taken, so this run uses ${move.to}`}>
+                        {move.primary ? `Players join on ${move.to} until the server stops.` : `It uses ${move.to} until the server stops.`} The next start asks for {move.from} again.
+                    </PaperQuote>
+                )}
+            </For>
 
             <Show when={serverActionError()}>
                 <PaperQuote variant="danger" icon="warning" title="Server action failed">
@@ -172,7 +187,7 @@ export default function ServerOverview(props: {
 
             <PaperSeparator />
 
-            <PaperCard grow={!compact()} shrink={!compact()} minHeight={0} height={compact() ? "panel-height-small" : undefined} padding="full">
+            <PaperCard grow minHeight="panel-height-small" padding="full">
                 <PaperConsole
                     entries={serverEntries()}
                     onCommand={runCommand}

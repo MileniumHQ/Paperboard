@@ -129,7 +129,7 @@ describe("Terraria's Overview", () => {
             await page.waitFor(`${button("Stop")} && ${text("Join password")}`, "the running server's readouts");
             /** a readout's value and label: the smallest element holding a child labelled `label` */
             const readout = (label: string) => `[...document.querySelectorAll("*")].filter((el) => [...el.children].some((c) => c.textContent.trim() === ${JSON.stringify(label)}) && el.textContent.trim() !== ${JSON.stringify(label)}).map((el) => el.textContent).sort((a, b) => a.length - b.length)[0]`;
-            expect(await page.evaluate<string>(readout("World"))).toContain("Island");
+            expect(await page.evaluate<string>(readout("Active world"))).toContain("Island");
             expect(await page.evaluate<string>(readout("Join password"))).toContain("On");
             // the server got the password from the vault, in its working folder
             expect(JSON.parse(fs.readFileSync(path.join(path.dirname(path.join(folder("s-ter"), "install", vanilla.directory, entrypoint(process.platform))), "started-with.json"), "utf8")).password).toBe("hunter2");
