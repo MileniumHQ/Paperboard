@@ -222,10 +222,7 @@ function createScope(server: StoredServer): ServerScope {
     };
     bindScope(scope.ctx, scope);
     entries.set(server.id, scope);
-    histories.set(server.id, historyWriter(() => historyFile(server.id), (err) => {
-        console.error(`[gameserver] the console history of ${server.name} could not be saved:`, err);
-        scope.ctx.setState((prev) => ({ serverEntries: appendCapped(prev.serverEntries, { type: "error", content: `[Server] The console history could not be saved: ${errorMessage(err)}` }) }));
-    }));
+    histories.set(server.id, historyWriter(() => historyFile(server.id), (err) => report(scope.ctx, "The console history could not be saved", err)));
     return scope;
 }
 // Player heads were kept on disk beside the servers until they were looked

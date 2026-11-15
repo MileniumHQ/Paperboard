@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { processApi as rawProcess } from "@mileniumhq/paperapi";
+import { problemsApi, processApi as rawProcess, type PanelProblem } from "@mileniumhq/paperapi";
 import { processApi } from "../src/service/api";
 import { callServer } from "./helpers/serverCall";
 import { startTestDaemon, type TestDaemon } from "./helpers/crane";
@@ -49,7 +49,7 @@ describe("failures are shown", () => {
         expect(String(failure)).not.toContain("reinstall");
     });
 
-    test("a server that failed to start and then could not be ended says so in the console", async () => {
+    test("a server that failed to start and then could not be ended says so in the console, and as the panel's problem", async () => {
         const server = gameServer("palworld", { settings: { port: await freePort(), restPort: await freePort() }, state: palworldService.initialState() });
         installPalworld(server.dir, { refuse: { info: "broken world" } });
         await server.run(() => palworldService.initialize(server.scope.ctx, false));
@@ -62,6 +62,15 @@ describe("failures are shown", () => {
             rawProcess.kill = kill;
         }
         expect(server.scope.ctx.state.serverEntries.map((e) => String(e.content))).toContain("[Paperboard] The server that failed to start could not be ended: the supervisor did not answer");
+        // the console only shows while its page is open: Paperboard shows the problem by the panel's name
+        let off = () => {};
+        const problem = await new Promise<PanelProblem>((resolve, reject) => {
+            off = problemsApi.watch(PANEL_ID, (problems) => {
+                const found = problems.find((p) => p.title.endsWith(": The server that failed to start could not be ended"));
+                if (found) resolve(found);
+            }, reject);
+        }).finally(() => off());
+        expect(problem).toMatchObject({ title: `${server.scope.server.name}: The server that failed to start could not be ended`, message: "the supervisor did not answer" });
         const exit = server.nextExit();
         await server.run(() => processApi.kill(palworldService.primaryProcessId, "SIGKILL"));
         await exit;

@@ -8,8 +8,8 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { randomBytes } from "node:crypto";
 import { files, processApi, readSettings, updateSettings, type ServiceContext } from "../service/api";
-import { fileApi as rawFiles, secretsApi, errorMessage } from "@mileniumhq/paperapi";
-import { currentServer, emitTrigger, serverLocal } from "../service/scope";
+import { fileApi as rawFiles, problemsApi, secretsApi, errorMessage } from "@mileniumhq/paperapi";
+import { currentServer, emitTrigger, serverLocal, serverOf } from "../service/scope";
 import { TRIGGER_IDS } from "../service/contract";
 import type { PaperConsoleEntry } from "@mileniumhq/paperui";
 import { appendCapped, PANEL_ID, type ChatMessage, type GameServerState } from "../service/types";
@@ -69,9 +69,20 @@ export function assertHost(game: GameDefinition, options: GameOptions = { softwa
 export const hostSupportHere = (game: GameDefinition, options: GameOptions = { software: "", version: "" }) =>
     game.hostSupport({ os: process.platform, arch: process.arch }, options);
 
-/** Background work has no caller to throw to, so its failures land in the console. */
+/**
+ * Background work has no caller to throw to: its failure is a line in the
+ * server's console, and the panel's problem under the server's name until
+ * the same work reports again or clears it (settle).
+ */
 export function report(ctx: Context, what: string, err: unknown) {
-    ctx.setState((prev) => ({ serverEntries: appendCapped(prev.serverEntries, { type: "error", content: `[Paperboard] ${what}: ${errorMessage(err)}` }) }));
+    const message = errorMessage(err);
+    const { server } = serverOf(ctx, what);
+    ctx.setState((prev) => ({ serverEntries: appendCapped(prev.serverEntries, { type: "error", content: `[Paperboard] ${what}: ${message}` }) }));
+    problemsApi.report(PANEL_ID, { key: `${server.id}:${what}`, title: `${server.name}: ${what}`, message });
+}
+/** The work `report` said failed (the same `what`) has worked since: its problem goes. */
+export function settle(ctx: Context, what: string) {
+    problemsApi.clear(PANEL_ID, `${serverOf(ctx, what).server.id}:${what}`);
 }
 /** Adds a message to the chat and returns it as triggers send it. */
 export function pushChat(ctx: Context, message: Omit<ChatMessage, "id" | "timestamp">): ChatMessage {
@@ -119,6 +130,7 @@ export function playerPoller<P extends { name: string }>(spec: {
         }
         if (asked !== state.latest) return;
         state.asking = false;
+        if (state.error) settle(ctx, `Could not list ${spec.game}'s players`);
         state.error = "";
         const before = new Map(state.online.map((p) => [spec.id(p), p]));
         const now = new Map(players.map((p) => [spec.id(p), p]));

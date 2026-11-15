@@ -26,11 +26,15 @@ const scopes = new WeakMap<object, ServerScope>();
 export function bindScope(ctx: object, scope: ServerScope): void {
     scopes.set(ctx, scope);
 }
+/** The server a context belongs to; `what` names what asked, for the error when it belongs to none. */
+export function serverOf(ctx: object, what: string): ServerScope {
+    const scope = scopes.get(ctx);
+    if (!scope) throw new Error(`${what} came from a context that belongs to no server`);
+    return scope;
+}
 /** A game event (a join, a chat line, the server starting) for the server the context belongs to. */
 export function emitTrigger(ctx: object, id: string, output: unknown): void {
-    const scope = scopes.get(ctx);
-    if (!scope) throw new Error(`The event ${id} came from a context that belongs to no server`);
-    scope.trigger(id, output);
+    serverOf(ctx, `The event ${id}`).trigger(id, output);
 }
 export const currentServer = () => storage.getStore();
 export const inServer = <T>(scope: ServerScope, work: () => T): T => storage.run(scope, work);
