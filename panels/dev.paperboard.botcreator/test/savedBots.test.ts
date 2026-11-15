@@ -111,6 +111,21 @@ describe("the saved bots", () => {
 
 // A deleted bot's commands don't outlive it on Discord: once its token is
 // gone nothing can take them off the server's command picker.
+describe("stopping the service", () => {
+    test("a save still on its way when Paperboard stops the service lands before it exits", async () => {
+        const fake = discord.addBot({ username: "Late Saver" });
+        await savedBots([{ stored: storedBot("b-late-saver", fake.appId, { enabled: false }), token: fake.token }]);
+        const service = await startService({ discordApi: discord.api, entry: path.join(import.meta.dir, "fixtures/heldSave.ts") });
+        // the page's switch: the service saves the bot on, and is stopped mid-save
+        // (the call itself ends with the service, whichever way: the switch's save is what's checked)
+        const switched = call.connectBot({ bot: "b-late-saver" }).then(() => undefined, () => undefined);
+        await service.heard("test:saving");
+        await service.stop();
+        expect(JSON.parse(fs.readFileSync(await configFile(), "utf8")).bots).toMatchObject([{ id: "b-late-saver", enabled: true }]);
+        await switched;
+    });
+});
+
 describe("deleting a bot", () => {
     test("an online bot's slash commands are taken off Discord in every scope before it goes", async () => {
         const home = guild("Home");

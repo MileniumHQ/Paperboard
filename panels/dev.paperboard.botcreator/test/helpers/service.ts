@@ -20,6 +20,8 @@ const TEARDOWN = Symbol.for("paperboard.botcreator.test.teardown");
 export interface ServiceProcess {
     /** everything the service printed */
     output(): string;
+    /** resolves once the service has sent a message of `type` over its process channel */
+    heard(type: string): Promise<void>;
     /** SIGTERM, as the daemon stops a service */
     stop(): Promise<void>;
 }
@@ -72,6 +74,15 @@ export async function startService(options: { discordApi: string; entry?: string
     const exited = new Promise<void>((resolve) => child.once("exit", () => resolve()));
     const service: ServiceProcess = {
         output: () => log,
+        heard: (type) =>
+            within(`the Bot Creator service to send ${type}`, new Promise<void>((resolve) => {
+                const hear = (message: any) => {
+                    if (message?.type !== type) return;
+                    child.off("message", hear);
+                    resolve();
+                };
+                child.on("message", hear);
+            }), READY_MS, () => log),
         async stop() {
             running.delete(service);
             if (child.exitCode === null && child.signalCode === null) child.kill("SIGTERM");

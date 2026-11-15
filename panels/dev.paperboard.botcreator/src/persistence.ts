@@ -44,6 +44,11 @@ export function saveBots(): Promise<void> {
     return write;
 }
 
+/** Resolves once every save made so far has been answered: the daemon has written it. */
+export function savesSettled(): Promise<void> {
+    return writing.settled();
+}
+
 export async function readToken(id: string): Promise<string | null> {
     const stored = await secretsApi.get(tokenName(id), PANEL_ID);
     return stored.found && stored.value ? stored.value : null;

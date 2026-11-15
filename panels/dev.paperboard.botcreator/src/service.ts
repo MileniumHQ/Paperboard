@@ -15,7 +15,7 @@
 import { definePanelService, errorMessage } from "@mileniumhq/paperapi";
 import { botCreatorContract } from "./contract";
 import { bots, panel, publish, reportFailure } from "./registry";
-import { forgetStrayTokens, loadBots, rememberGuideSeen } from "./persistence";
+import { forgetStrayTokens, loadBots, rememberGuideSeen, savesSettled } from "./persistence";
 import { createEntry, registerPanelBlocks } from "./blocksBridge";
 import { connectEntry, registerEntry } from "./lifecycle";
 import { blocksBots, botChoices, serviceCalls } from "./calls";
@@ -56,5 +56,12 @@ export const botService = definePanelService({
         console.log(`[DiscordService] Ready with ${bots.size} bot(s); connecting them to Discord.`);
     },
 });
+
+// The daemon stops a service with SIGTERM and gives it a few seconds. A save
+// already made lands first: dying mid-save would lose the newer list, or let
+// the daemon write it after the next start has read the older one.
+for (const signal of ["SIGTERM", "SIGINT"] as const) {
+    process.once(signal, () => void savesSettled().finally(() => process.exit(0)));
+}
 
 export default botService;
