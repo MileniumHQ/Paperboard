@@ -171,7 +171,7 @@ export default function Overview(props: OverviewProps) {
                                 checked={props.bot().enabled}
                                 aria-label={`${props.bot().name} is on`}
                                 title={props.bot().enabled ? "On: runs while Paperboard does" : "Off"}
-                                // the switch flips once the bot is on or off: its thump waits for the save
+                                // the switch flips once saved; its thump waits for the bot to be on or off
                                 onChange={setEnabled}
                             />
                         </PaperFlex>

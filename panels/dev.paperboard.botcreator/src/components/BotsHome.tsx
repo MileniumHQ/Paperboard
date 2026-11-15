@@ -38,8 +38,8 @@ export function botStatusText(bot: BotSummary): string {
 export default function BotsHome(props: { bots: BotsState; onOpen: (bot: { id: string }) => void }) {
     const [failure, setFailure] = createSignal<{ title: string; text: string } | null>(null);
     const [adding, setAdding] = createSignal(false);
-    // a switch flips once its bot is on or off, and its thump waits for that;
-    // only the newest flip of a bot may say it failed
+    // a switch flips once saved; its thump waits for the bot to be on or off,
+    // and only the newest flip of a bot may say it failed
     const flips = new Map<string, number>();
     const setEnabled = async (bot: BotSummary, enabled: boolean) => {
         const flip = (flips.get(bot.id) ?? 0) + 1;

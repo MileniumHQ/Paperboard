@@ -589,7 +589,7 @@ export default function Commands(props: { bot: () => BotSummary }) {
             >
                 <PaperText preset="text">
                     This removes the command and its trigger. Flows bound to the trigger
-                    stop firing until a command with this name is created again.
+                    stop firing until a command with this name is created again in the same scope.
                 </PaperText>
             </PaperModal>
         </>
