@@ -27,7 +27,7 @@ describe("a picture from Discord's CDN", () => {
         await expect(discordPicture(`${cdn()}/moved.png`)).rejects.toThrow("redirected more than 0 times");
 
         discord().cdnAnswers.set("/cdn/page.png", () => new Response("<script>", { headers: { "content-type": "text/html" } }));
-        await expect(discordPicture(`${cdn()}/page.png`)).rejects.toThrow("sent text/html that isn't a picture");
+        await expect(discordPicture(`${cdn()}/page.png`)).rejects.toThrow("sent text/html where a picture should be, and it isn't one");
 
         discord().cdnAnswers.set("/cdn/huge.png", () => new Response(new Uint8Array(1024 * 1024 + 1), { headers: { "content-type": "image/png" } }));
         await expect(discordPicture(`${cdn()}/huge.png`)).rejects.toThrow("is over 1 MB");
