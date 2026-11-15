@@ -17,9 +17,9 @@ import { SNOWFLAKE_PATTERN, errorToMessage } from "./types";
 
 // discord presence statuses — the only legal values for set-status
 export const PRESENCE_STATUSES = ["online", "idle", "dnd", "invisible"] as const;
-export type PresenceStatus = (typeof PRESENCE_STATUSES)[number];
+type PresenceStatus = (typeof PRESENCE_STATUSES)[number];
 
-export function validatePresenceStatus(status: unknown): PresenceStatus {
+function validatePresenceStatus(status: unknown): PresenceStatus {
     if (typeof status === "string" && (PRESENCE_STATUSES as readonly string[]).includes(status)) {
         return status as PresenceStatus;
     }
@@ -29,7 +29,7 @@ export function validatePresenceStatus(status: unknown): PresenceStatus {
 }
 
 /** The most members List Role Members (and a role's Members) gives. */
-export const MAX_LISTED_MEMBERS = 100;
+const MAX_LISTED_MEMBERS = 100;
 
 // ─── finding things ─────────────────────────────────────────────────────────
 
@@ -300,7 +300,7 @@ export async function createInvite(bot: Client, channelId: string, maxUses?: num
 }
 
 /** Set Channel Permissions' inputs as one overwrite: true allows, false denies, null resets. */
-export async function channelPermissionChanges(inputs: { allow?: unknown; deny?: unknown; reset?: unknown }): Promise<Record<string, boolean | null>> {
+async function channelPermissionChanges(inputs: { allow?: unknown; deny?: unknown; reset?: unknown }): Promise<Record<string, boolean | null>> {
     const changes: Record<string, boolean | null> = {};
     const lists: [unknown, boolean | null][] = [[inputs.allow, true], [inputs.deny, false], [inputs.reset, null]];
     for (const [list, value] of lists) {
@@ -341,7 +341,7 @@ export async function editThread(bot: Client, threadId: string, inputs: { name?:
 // ─── scheduled events ───────────────────────────────────────────────────────
 
 /** Create Scheduled Event's inputs as Discord's options, refused with what's missing. */
-export async function scheduledEventOptions(
+async function scheduledEventOptions(
     bot: Client,
     inputs: { name: string; start: unknown; end?: unknown; channel?: string; location?: string; description?: string },
 ) {

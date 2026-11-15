@@ -38,7 +38,7 @@ export interface BotsBlocksHost {
 }
 
 /** A slash command, as a value carrying the bot it belongs to, so it can be deleted by itself. */
-export interface SlashCommandValue {
+interface SlashCommandValue {
     id: string;
     bot: string;
     name: string;
@@ -47,7 +47,7 @@ export interface SlashCommandValue {
     "usable-in-dms": boolean;
 }
 
-export function slashCommandValue(bot: string, command: SlashCommandDefinition): SlashCommandValue {
+function slashCommandValue(bot: string, command: SlashCommandDefinition): SlashCommandValue {
     return {
         id: command.id,
         bot,
@@ -68,7 +68,7 @@ export function botStatus(summary: BotSummary): BotStatus {
 }
 
 /** The bot types: a Bot, its slash commands, and an option for one. */
-export function botTypes(host: BotsBlocksHost): BlockTypeDefinition[] {
+function botTypes(host: BotsBlocksHost): BlockTypeDefinition[] {
     const of = (id: string) => host.bot(id);
     return [
         {

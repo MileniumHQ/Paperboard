@@ -28,7 +28,7 @@ import { count, errorToMessage } from "../types";
 import { pictureIcon } from "../picture";
 
 /** "3 servers" for a bot online, or why it isn't, as its card says it. */
-export function botStatusText(bot: BotSummary): string {
+function botStatusText(bot: BotSummary): string {
     if (bot.connected) return count(bot.guildCount, "server");
     if (!bot.hasToken) return "Needs a token";
     if (bot.connecting) return "Connecting…";

@@ -28,7 +28,7 @@ import { DiscordAvatar } from "../picture";
 
 const HEALTH_POLL_MS = 10000;
 
-export interface OverviewProps {
+interface OverviewProps {
     bot: () => BotSummary;
     /** turns the bot on or off; rejects with the reason it couldn't */
     onSetEnabled: (enabled: boolean) => Promise<unknown>;

@@ -61,7 +61,7 @@ function payload(inputs: Inputs) {
 }
 
 /** The servers a bot is in; none while it's offline. */
-export function serversOf(bot: BotBlocksHost): string[] {
+function serversOf(bot: BotBlocksHost): string[] {
     return bot.connected() ? [...bot.client().guilds.cache.keys()] : [];
 }
 

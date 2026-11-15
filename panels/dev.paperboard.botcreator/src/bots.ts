@@ -26,7 +26,7 @@ export interface StoredBot {
     createdAt: number;
 }
 
-export interface BotsConfig {
+interface BotsConfig {
     version: number;
     bots: StoredBot[];
 }

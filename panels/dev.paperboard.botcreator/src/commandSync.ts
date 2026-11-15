@@ -33,7 +33,7 @@ function optionPayload(option: SlashCommandOption): ApplicationCommandOptionData
     throw new Error(`Unsupported command option type: ${String(option.type)}`);
 }
 
-export function commandPayload(
+function commandPayload(
     def: SlashCommandDefinition,
 ): ChatInputApplicationCommandData {
     // Always explicit: omitting integration types inherits the app's

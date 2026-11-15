@@ -4,8 +4,8 @@
 // bot reconnects but not a service restart; `since` says when recording
 // began, so a reader never mistakes a fresh start for a quiet day.
 
-export const ACTIVITY_BUCKET_MS = 60 * 60 * 1000;
-export const ACTIVITY_BUCKETS = 24;
+const ACTIVITY_BUCKET_MS = 60 * 60 * 1000;
+const ACTIVITY_BUCKETS = 24;
 
 export interface CommandActivity {
     /** counts per hour, oldest first; the last bucket is the current hour */

@@ -1,4 +1,4 @@
-export interface PermissionDefinition {
+interface PermissionDefinition {
     id: string;
     name: string;
     description: string;
@@ -224,7 +224,7 @@ export const GLOBAL_SCOPE = "global";
 export const MAX_COMMANDS_PER_SCOPE = 100;
 
 // Discord chat-input command names: 1-32 chars of a-z, 0-9, - and _
-export const COMMAND_NAME_PATTERN = /^[a-z0-9_-]{1,32}$/;
+const COMMAND_NAME_PATTERN = /^[a-z0-9_-]{1,32}$/;
 export const COMMAND_DESCRIPTION_MAX_LENGTH = 100;
 export const SNOWFLAKE_PATTERN = /^\d{17,21}$/;
 
@@ -310,7 +310,7 @@ export interface CommandMutationResult {
     triggerError: string | null;
 }
 
-export function isCommandOptionType(value: unknown): value is CommandOptionType {
+function isCommandOptionType(value: unknown): value is CommandOptionType {
     return (
         typeof value === "string" &&
         (COMMAND_OPTION_TYPES as readonly string[]).includes(value)
@@ -567,7 +567,7 @@ export interface GuildChannel {
     position: number;
 }
 
-export interface GuildRole {
+interface GuildRole {
     id: string;
     name: string;
     color: number;

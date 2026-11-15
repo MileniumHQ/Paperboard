@@ -14,7 +14,7 @@ export interface MessageRef {
 }
 
 /** A person as a member of one server. */
-export interface MemberRef {
+interface MemberRef {
     user: string;
     server: string;
 }

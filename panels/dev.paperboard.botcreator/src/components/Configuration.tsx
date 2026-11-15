@@ -9,7 +9,7 @@ import {
 import { DeleteBotModal, ReplaceTokenModal } from "./BotDialogs";
 import type { BotSummary, DeleteBotResult } from "../bots";
 
-export interface ConfigurationProps {
+interface ConfigurationProps {
     bot: () => BotSummary;
     onReplaceToken: (id: string, token: string) => Promise<unknown>;
     onDelete: (id: string, anyway: boolean) => Promise<DeleteBotResult>;

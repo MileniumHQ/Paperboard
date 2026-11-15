@@ -11,7 +11,7 @@ type Discord = Awaited<ReturnType<typeof loadDiscord>>;
 
 // A flow passes either the flat inputs or the Embed block's output, which is
 // Discord's own shape: footer {text}, image {url}, color as a number.
-export interface DiscordEmbedData {
+interface DiscordEmbedData {
     title?: string;
     description?: string;
     color?: string | number;
@@ -74,7 +74,7 @@ export function normalizeEmbeds(input: unknown): DiscordEmbedData[] {
 // custom id the author chose travels inside them); send time lays them out
 // into Discord action rows. A message holds at most five rows; a row holds
 // up to five buttons or exactly one select menu.
-export interface DiscordButtonData {
+interface DiscordButtonData {
     kind?: "button";
     label?: string;
     style?: string;
@@ -84,10 +84,10 @@ export interface DiscordButtonData {
     disabled?: boolean;
 }
 
-export const SELECT_MENU_KINDS = ["text", "user", "role", "channel"] as const;
-export type SelectMenuKind = (typeof SELECT_MENU_KINDS)[number];
+const SELECT_MENU_KINDS = ["text", "user", "role", "channel"] as const;
+type SelectMenuKind = (typeof SELECT_MENU_KINDS)[number];
 
-export interface DiscordSelectMenuData {
+interface DiscordSelectMenuData {
     kind: "select";
     menu: SelectMenuKind;
     customId: string;
@@ -98,21 +98,21 @@ export interface DiscordSelectMenuData {
     disabled?: boolean;
 }
 
-export interface DiscordComponentRowData {
+interface DiscordComponentRowData {
     kind: "row";
     components: (DiscordButtonData | DiscordSelectMenuData)[];
 }
 
-export type DiscordComponentData =
+type DiscordComponentData =
     | DiscordButtonData
     | DiscordSelectMenuData
     | DiscordComponentRowData;
 
-export const MAX_COMPONENT_ROWS = 5;
-export const MAX_BUTTONS_PER_ROW = 5;
+const MAX_COMPONENT_ROWS = 5;
+const MAX_BUTTONS_PER_ROW = 5;
 export const MAX_SELECT_OPTIONS = 25;
 
-export const BUTTON_STYLES = [
+const BUTTON_STYLES = [
     "primary",
     "secondary",
     "success",
@@ -162,7 +162,7 @@ export function buildButtonComponent(
 
 // Text options arrive as a list (the Options field is edited item by item;
 // a lone text value is one option); each option's label is also its value.
-export function parseSelectOptions(input: unknown): string[] {
+function parseSelectOptions(input: unknown): string[] {
     const raw = Array.isArray(input)
         ? input.map((item) => String(item ?? ""))
         : typeof input === "string"
@@ -275,7 +275,7 @@ export function buildComponentRow(input: unknown): DiscordComponentRowData {
  * select menu interrupts them; a loose select menu takes a row of its own.
  * Result: (button | select)[][] — one inner array per Discord action row.
  */
-export function layoutComponentRows(
+function layoutComponentRows(
     input: unknown,
 ): (DiscordButtonData | DiscordSelectMenuData)[][] {
     const raw = Array.isArray(input) ? input : input ? [input] : [];
@@ -410,7 +410,7 @@ function messagePayload(lib: Discord, input: MessagePayloadInput) {
 
 export const MAX_MODAL_FIELDS = 5;
 
-export interface DiscordModalFieldData {
+interface DiscordModalFieldData {
     kind: "text-field";
     label: string;
     style: "short" | "paragraph";
@@ -519,7 +519,7 @@ export function listInput(value: unknown, commas = false): string[] {
     return raw.map((item) => item.trim()).filter(Boolean);
 }
 
-export const MAX_POLL_ANSWERS = 10;
+const MAX_POLL_ANSWERS = 10;
 export const MAX_POLL_HOURS = 768;
 
 /** A Discord poll from a question and its answers, refused with the rule it breaks. */

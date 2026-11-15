@@ -35,7 +35,7 @@ const PROBLEM_CAP = 20;
 // for a bot that isn't running. The same rule applies mid-session:
 // gateway disconnects invalidate the status (see watchGateway), and a
 // successful reconnect marks it live again via clientReady/shardReady.
-export interface ConnectionStatus {
+interface ConnectionStatus {
     connected: boolean;
     error?: string;
 }
@@ -60,7 +60,7 @@ export interface BotWidgetStatus {
 }
 
 /** Where a session's events go: the service maps them to the bot's project. */
-export interface SessionHost {
+interface SessionHost {
     /** fires one of this bot's triggers, by its id inside the bot's project */
     emit(trigger: string, output: unknown): void;
     /** the bot's identity, connection or servers changed; the service republishes it */
@@ -139,7 +139,7 @@ const gatewayErrorMessage = (err: unknown): string => {
  * against a Discord on loopback; the gateway address comes from that API,
  * and its pictures are at /cdn on the same host (discordCdnBase).
  */
-export function discordApiBase(env: Record<string, string | undefined> = process.env): string | undefined {
+function discordApiBase(env: Record<string, string | undefined> = process.env): string | undefined {
     const raw = env.BOTCREATOR_DISCORD_API;
     if (raw === undefined || raw === "") return undefined;
     let url: URL;

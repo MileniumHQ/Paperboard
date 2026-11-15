@@ -16,7 +16,7 @@ import { loadDiscord } from "./discord";
 import { actionRows, buildMessagePayload, buildModalPayload, embedFrom, listInput, modalFieldId, normalizeEmbeds, type MessagePayloadInput } from "./payloads";
 import { errorToMessage } from "./types";
 
-export interface ComponentClickData {
+interface ComponentClickData {
     customId: string;
     interactionId: string;
     userId: string;
@@ -47,7 +47,7 @@ export function componentClickPayload(
     };
 }
 
-export interface ModalSubmitData {
+interface ModalSubmitData {
     modalId: string;
     interactionId: string;
     userId: string;
@@ -107,7 +107,7 @@ export async function resolveGuild(
 /** The most messages Get Recent Messages reads at once: one Discord page. */
 export const MAX_RECENT_MESSAGES = 50;
 
-export interface RecentChannelMessage {
+interface RecentChannelMessage {
     id: string;
     authorId: string;
     author: string;
@@ -116,14 +116,14 @@ export interface RecentChannelMessage {
     sentAt: string;
 }
 
-export function clampMessageLimit(limit: unknown): number {
+function clampMessageLimit(limit: unknown): number {
     const n = Number(limit);
     if (limit === undefined || limit === null || limit === "") return 20;
     if (!Number.isFinite(n) || n < 1) throw new Error(`Count is a number from 1 to ${MAX_RECENT_MESSAGES}`);
     return Math.min(Math.floor(n), MAX_RECENT_MESSAGES);
 }
 
-export interface FoundMember {
+interface FoundMember {
     userId: string;
     username: string;
     displayName: string;

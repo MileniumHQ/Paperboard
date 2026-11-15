@@ -18,7 +18,7 @@ import {
 import { bots, logFailure, panel, publish, requireReadable, type BotEntry } from "./registry";
 
 /** Makes the entry for a saved bot: its session and its host. */
-export type CreateEntry = (stored: StoredBot, hasToken: boolean) => BotEntry;
+type CreateEntry = (stored: StoredBot, hasToken: boolean) => BotEntry;
 
 // writes run one after another, each saving the list as it is then, so an
 // older write never lands after a newer one
