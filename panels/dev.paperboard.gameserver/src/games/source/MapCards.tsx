@@ -137,10 +137,12 @@ export default function MapCards(props: {
         for (const map of maps()) counts.set(modeOf(map), (counts.get(modeOf(map)) ?? 0) + 1);
         return [...counts].sort(([a], [b]) => (a === OTHER_MODE ? 1 : b === OTHER_MODE ? -1 : a.localeCompare(b)));
     });
+    // a mode picked while the menu showed counts only while it still shows
+    const pickedMode = () => (modes().length > 1 ? mode() : null);
     const shown = createMemo(() => {
         const words = query().toLowerCase().split(/\s+/).filter(Boolean);
         return maps().filter((map) => {
-            if (mode() !== null && modeOf(map) !== mode()) return false;
+            if (pickedMode() !== null && modeOf(map) !== pickedMode()) return false;
             const text = `${map.name} ${mapNames(map, props.pictures).title} ${map.mode ?? ""}`.toLowerCase();
             return words.every((word) => text.includes(word));
         });

@@ -1,5 +1,5 @@
 import GameOptions from "./components/GameOptions";
-import { createEffect, createMemo, createSignal, on, onMount, onCleanup, untrack, For, Index, Show } from "solid-js";
+import { createEffect, createMemo, createSignal, on, onMount, onCleanup, untrack, ErrorBoundary, For, Index, Show } from "solid-js";
 import { tabIds } from "./lib/tabIds";
 import {
     PaperPanel, PaperPresence, PaperButton, PaperIcon, PaperQuote, PaperLoader, PaperFlex, PaperText,
@@ -134,7 +134,7 @@ export default function App() {
         setPageOpen(true);
         if (serverHere() && id === selectedServerId) return;
         // the page has slid in over the list; the server's document loads inside it
-        navigation = setTimeout(() => openServer(id), slideMs());
+        navigation = setTimeout(() => openServer(id), slide());
     };
     const closeServerPage = () => {
         clearTimeout(navigation);
@@ -148,11 +148,20 @@ export default function App() {
             const url = new URL(window.location.href);
             url.searchParams.delete("server");
             window.history.replaceState(window.history.state, "", url.href);
-        }, slideMs());
+        }, slide());
     };
     const fail = (what: string, err: unknown) => {
         console.error(`[App] ${what} failed:`, err);
         setFailure(errorMessage(err));
+    };
+    // a page that can't tell how long it slides says so, instead of a tap doing nothing
+    const slide = () => {
+        try {
+            return slideMs();
+        } catch (err) {
+            fail("sliding the server's page", err);
+            throw err;
+        }
     };
     const apply = (state: ServersState) => {
         // the server's game and setup state first: the page never renders
@@ -247,8 +256,20 @@ export default function App() {
                             const tab = () => features().tabs.find((t) => t.id === id)!;
                             const owner = untrack(() => tab().owner);
                             return <PaperInterfaceItem value={id} variant={(compact() && tab().compactVariant) || tab().variant} width={tab().width}>
-                                {/* made once; its props follow the features, so a state change never remounts the tab */}
-                                {untrack(() => renderTab(id, owner))}
+                                {/* a tab that can't be drawn says why, instead of standing blank */}
+                                <ErrorBoundary
+                                    fallback={(err) => {
+                                        console.error(`[App] the ${id} tab could not be drawn:`, err);
+                                        return (
+                                            <PaperQuote variant="danger" icon="warning" title={`${untrack(tab).label} could not open`} role="alert">
+                                                {errorMessage(err)}
+                                            </PaperQuote>
+                                        );
+                                    }}
+                                >
+                                    {/* made once; its props follow the features, so a state change never remounts the tab */}
+                                    {untrack(() => renderTab(id, owner))}
+                                </ErrorBoundary>
                             </PaperInterfaceItem>;
                         }}
                     </For>

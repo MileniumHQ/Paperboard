@@ -14,7 +14,7 @@ import {
 import { serverBridge, serverStatus } from "../../lib/server";
 import { errorMessage } from "../../lib/failure";
 import { createSaves } from "../../lib/saves";
-import { sameData } from "../../core/state";
+import { createLatest, sameData } from "../../core/state";
 import { discardUpload, listAdded, newStage, pickFiles, stageFolder } from "../../lib/addons/upload";
 import { sourceCalls, type SourceGameSpec, type SourceModView } from "./index";
 import type { SourcePlugin } from "./sourcemod";
@@ -33,11 +33,16 @@ export default function SourceMods(props: { spec: SourceGameSpec; active: boolea
     const [error, setError] = createSignal<{ title: string; message: string } | null>(null);
     const [notice, setNotice] = createSignal("");
     const [removing, setRemoving] = createSignal<SourcePlugin | null>(null);
+    // the plugin stays named while its dialog closes
+    const shownRemoving = createMemo<SourcePlugin | null>((prev) => removing() ?? prev, null);
 
+    // a save's answer, or a newer read, wins over a read sent before it
+    const latest = createLatest();
     const load = async () => {
         setLoadError("");
         try {
-            setView(await serverBridge.call<SourceModView>(ids.sourcemod));
+            const answer = await latest(() => serverBridge.call<SourceModView>(ids.sourcemod));
+            if (answer) setView(answer.value);
         } catch (err) {
             setLoadError(errorMessage(err));
         }
@@ -59,7 +64,8 @@ export default function SourceMods(props: { spec: SourceGameSpec; active: boolea
     /** saves through `work`, and on a failure shows whatever did land */
     const answer = async (work: () => Promise<SourceModView>) => {
         try {
-            setView(await work());
+            const saved = await latest(work);
+            if (saved) setView(saved.value);
         } catch (err) {
             await load();
             throw err;
@@ -209,7 +215,7 @@ export default function SourceMods(props: { spec: SourceGameSpec; active: boolea
             <PaperModal
                 open={removing() !== null}
                 onClose={() => setRemoving(null)}
-                title={`Remove ${removing()?.title ?? "plugin"}`}
+                title={`Remove ${shownRemoving()?.title}`}
                 size="small"
                 footer={
                     <>
@@ -221,7 +227,7 @@ export default function SourceMods(props: { spec: SourceGameSpec; active: boolea
                 }
             >
                 <PaperText preset="body">
-                    {removing()?.file} is deleted from the server. Its settings in cfg/sourcemod stay.
+                    {shownRemoving()?.file} is deleted from the server. Its settings in cfg/sourcemod stay.
                 </PaperText>
                 <Show when={error()}>
                     <PaperText size={2} color="danger">{error()!.message}</PaperText>

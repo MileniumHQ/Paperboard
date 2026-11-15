@@ -14,6 +14,7 @@ import {
 } from "@mileniumhq/paperui";
 import { serverBridge, serverLevel, serverStatus } from "../../lib/server";
 import { errorMessage } from "../../lib/failure";
+import { createLatest } from "../../core/state";
 import { mapMode, sourceCalls, type SourceGameSpec, type SourceMapCycle } from "./index";
 import MapCards, { MapPicturesCredit, MapPicturesFailure, mapChoices, mapNames, type MapChoice } from "./MapCards";
 import { createMapPictures } from "./useMapPictures";
@@ -38,12 +39,17 @@ export default function SourceMaps(props: { spec: SourceGameSpec; active: boolea
     const [source, setSource] = createSignal<"server" | "workshop">("server");
     const [joined, setJoined] = createSignal("");
     const [removingWorkshop, setRemovingWorkshop] = createSignal<SourceWorkshopMap | null>(null);
+    // the map stays named while its dialog closes
+    const shownRemoving = createMemo<SourceWorkshopMap | null>((prev) => removingWorkshop() ?? prev, null);
     const pictures = createMapPictures(props.spec);
 
+    // a save's answer, or a newer read, wins over a read sent before it
+    const latest = createLatest();
     const load = async () => {
         setLoadError("");
         try {
-            setView(await serverBridge.call<SourceMapCycle>(ids.mapCycle));
+            const answer = await latest(() => serverBridge.call<SourceMapCycle>(ids.mapCycle));
+            if (answer) setView(answer.value);
         } catch (err) {
             setLoadError(errorMessage(err));
         }
@@ -56,7 +62,8 @@ export default function SourceMaps(props: { spec: SourceGameSpec; active: boolea
         setError(null);
         setNotice("");
         try {
-            setView(await serverBridge.call<SourceMapCycle>(ids.mapCycleSet, { maps }));
+            const answer = await latest(() => serverBridge.call<SourceMapCycle>(ids.mapCycleSet, { maps }));
+            if (answer) setView(answer.value);
             return true;
         } catch (err) {
             setError({ title, message: errorMessage(err) });
@@ -74,10 +81,10 @@ export default function SourceMaps(props: { spec: SourceGameSpec; active: boolea
     const workshopMap = (name: string) => view()?.workshop.find((m) => workshopName(m.id) === canonicalMap(name));
     /** a map as the screens name it */
     const choiceOf = (name: string): MapChoice => { const map = workshopMap(name); return map ? workshopChoice(map) : mapChoices(props.spec, [name])[0]!; };
+    const addable = createMemo(() => (view()?.installed ?? []).filter((name) => !view()!.maps.includes(name)));
     const choices = createMemo(() => addable().map(choiceOf));
     /** what a person calls a map: its Workshop title or real name, else its file name */
     const titleOf = (name: string) => mapNames(choiceOf(name), pictures).title;
-    const addable = createMemo(() => (view()?.installed ?? []).filter((name) => !view()!.maps.includes(name)));
     const editable = () => !!view() && !view()!.overriddenBy;
 
     const add = (name: string) => {
@@ -252,7 +259,7 @@ export default function SourceMaps(props: { spec: SourceGameSpec; active: boolea
             <PaperModal
                 open={removingWorkshop() !== null}
                 onClose={() => setRemovingWorkshop(null)}
-                title={`Remove ${removingWorkshop()?.title ?? "map"}`}
+                title={`Remove ${shownRemoving()?.title}`}
                 size="small"
                 footer={
                     <>
@@ -262,7 +269,7 @@ export default function SourceMaps(props: { spec: SourceGameSpec; active: boolea
                 }
             >
                 <PaperText preset="body">
-                    {removingWorkshop()?.title} is taken off this server, and you can add it again from the Steam Workshop any time.
+                    {shownRemoving()?.title} is taken off this server, and you can add it again from the Steam Workshop any time.
                 </PaperText>
                 <Show when={error()}>
                     <PaperText size={2} color="danger">{error()!.message}</PaperText>
