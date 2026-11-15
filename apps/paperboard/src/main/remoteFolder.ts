@@ -1,4 +1,5 @@
 import { execFile, spawn } from "child_process";
+import { KeyedQueue } from "../../../../packages/paperapi/src/serialQueue";
 import * as fs from "fs";
 import connectionPool from "./communication/papercrane/ConnectionPool";
 import { logger } from "../../papercrane/logger";
@@ -261,16 +262,10 @@ async function showFolder(rec: ActiveSession, subDir: string): Promise<string | 
 
 // opens for one computer run one at a time: two at once would each mint a
 // session, and the first would be left mounted with nothing to end it
-const opening = new Map<string, Promise<unknown>>();
+const opening = new KeyedQueue();
 
 export function openRemoteFolder(computerId: string, panelId?: string): Promise<{ ok: boolean; error?: string }> {
-    const run = (opening.get(computerId) ?? Promise.resolve()).then(() => openNow(computerId, panelId));
-    const settled = Promise.allSettled([run]);
-    opening.set(computerId, settled);
-    void settled.then(() => {
-        if (opening.get(computerId) === settled) opening.delete(computerId);
-    });
-    return run;
+    return opening.run(computerId, () => openNow(computerId, panelId));
 }
 
 async function openNow(computerId: string, panelId?: string): Promise<{ ok: boolean; error?: string }> {

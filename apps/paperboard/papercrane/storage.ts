@@ -4,7 +4,7 @@ import * as crypto from "crypto";
 import { pipeline } from "node:stream/promises";
 import { errorCode, errorMessage } from "../../../packages/paperapi/src/errors";
 import { writeFileAtomic as writeWhole, writeFileAtomicSync as writeWholeSync } from "../../../packages/paperapi/src/fs";
-import { SerialQueue } from "../../../packages/paperapi/src/serialQueue";
+import { KeyedQueue } from "../../../packages/paperapi/src/serialQueue";
 
 // one-shot timers must never hold the process open: unref and move on.
 // (bun and node both expose unref on Timeout handles)
@@ -25,9 +25,8 @@ export class LimitError extends Error {
 
 // ─── Atomic JSON persistence ─────────────────────────────────────────────────
 
-// writes to one path land in the order they were asked for; a line lives
-// while writes to its path are waiting
-const writeLines = new Map<string, { queue: SerialQueue; waiting: number }>();
+// writes to one path land in the order they were asked for
+const writeLines = new KeyedQueue();
 
 // A failed write names the file it was saving and the system's reason in
 // its own words ("permission denied"), never the temp file it went
@@ -47,19 +46,11 @@ function saveFailed(filePath: string, err: unknown): Error {
 
 /** Writes a file atomically via temp plus rename; the mode, when given, applies at birth. */
 export function writeFileAtomic(filePath: string, data: string, options?: { mode?: number }): Promise<void> {
-    const line = writeLines.get(filePath) ?? { queue: new SerialQueue(), waiting: 0 };
-    writeLines.set(filePath, line);
-    line.waiting++;
-    const done = line.queue.run(() =>
+    return writeLines.run(filePath, () =>
         writeWhole(filePath, data, options).catch((err) => {
             throw saveFailed(filePath, err);
         }),
     );
-    const forget = () => {
-        if (--line.waiting === 0 && writeLines.get(filePath) === line) writeLines.delete(filePath);
-    };
-    done.then(forget, forget);
-    return done;
 }
 
 export function writeJsonAtomicSync(

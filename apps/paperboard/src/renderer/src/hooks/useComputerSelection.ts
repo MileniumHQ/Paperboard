@@ -5,6 +5,7 @@ import type { AppSettingsData } from "../lib/appSettings";
 import type { useComputers } from "./useComputers";
 import type { usePanels } from "./usePanels";
 import { errorMessage } from "@mileniumhq/paperapi";
+import { createLatest } from "@mileniumhq/paperui";
 
 export interface ComputerSelectionOptions {
     computers: ReturnType<typeof useComputers>;
@@ -21,11 +22,9 @@ export function useComputerSelection(options: ComputerSelectionOptions) {
     const { activeTabByComputer, openedPanels, setComputerTab, refreshPanelsForComputer, panelsLoadFailed, forgetPanels } = options.panels;
 
     // a newer selection wins: a slow probe for an older one is dropped
-    let selectionRequest = 0;
+    const selection = createLatest();
     /** an older selection still probing is dropped */
-    const supersedeSelection = () => {
-        selectionRequest++;
-    };
+    const supersedeSelection = selection.cancel;
 
     // why a computer couldn't be made the active one, shown in its panel list
     const [switchError, setSwitchError] = createSignal<Record<string, string>>({});
@@ -61,7 +60,7 @@ export function useComputerSelection(options: ComputerSelectionOptions) {
     };
 
     const selectComputer = async (compId: string) => {
-        const request = ++selectionRequest;
+        const current = selection();
         const comp = computers().find((c) => c.id === compId);
         if (!comp || comp.isLocal) {
             showComputer(compId);
@@ -78,7 +77,7 @@ export function useComputerSelection(options: ComputerSelectionOptions) {
             logToMain("error", "Failed to probe computer:", err);
             unreachable = { error: errorMessage(err) };
         }
-        if (request !== selectionRequest) return;
+        if (!current()) return;
         if (unreachable) {
             setOfflineTarget({ ...comp, status: { ...comp.status, connected: false, error: unreachable.error } });
             return;

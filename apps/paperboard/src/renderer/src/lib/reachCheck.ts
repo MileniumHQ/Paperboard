@@ -1,4 +1,5 @@
 import { createSignal } from "solid-js";
+import { createLatest } from "@mileniumhq/paperui";
 import { computersApi, logToMain } from "./shell";
 import { errorMessage } from "@mileniumhq/paperapi";
 
@@ -11,30 +12,30 @@ import { errorMessage } from "@mileniumhq/paperapi";
 export function createReachCheck() {
     const [checking, setChecking] = createSignal(false);
     const [error, setError] = createSignal<string | null>(null);
-    let request = 0;
+    const latest = createLatest();
 
     const check = async (computer: { host: string; port: number }): Promise<boolean> => {
-        const mine = ++request;
+        const current = latest();
         setChecking(true);
         setError(null);
         try {
             const probe = await computersApi.probe(computer.host, computer.port);
-            if (mine !== request) return false;
+            if (!current()) return false;
             if (probe?.reachable) return true;
             setError(probe?.error || "Unreachable");
         } catch (err) {
             logToMain("error", "Checking a computer failed:", err);
-            if (mine === request) setError(errorMessage(err));
+            if (current()) setError(errorMessage(err));
         } finally {
             // only the newest check may clear the busy flag
-            if (mine === request) setChecking(false);
+            if (current()) setChecking(false);
         }
         return false;
     };
 
     /** drops a check still out, and shows `shown` as the last answer */
     const reset = (shown: string | null) => {
-        request++;
+        latest.cancel();
         setChecking(false);
         setError(shown);
     };

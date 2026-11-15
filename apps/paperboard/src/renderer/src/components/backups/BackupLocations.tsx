@@ -61,22 +61,22 @@ const BackupLocations: Component<{ computerId: string; computerName: string }> =
     const [reconnecting, setReconnecting] = createSignal<string | null>(null);
     const [reconnectError, setReconnectError] = createSignal("");
     // a reconnect that was canceled drops its answer
-    let reconnects = 0;
+    const reconnects = createLatest();
     const reconnect = async (location: BackupLocation) => {
-        const mine = ++reconnects;
+        const current = reconnects();
         setReconnecting(location.id);
         setReconnectError("");
         try {
             await shellIpc().invoke("backup-gdrive-connect", { computerId: props.computerId, locationId: location.id });
-            if (mine === reconnects) await load();
+            if (current()) await load();
         } catch (err) {
-            if (mine === reconnects) setReconnectError(`${location.label} could not be reconnected: ${errorMessage(err)}`);
+            if (current()) setReconnectError(`${location.label} could not be reconnected: ${errorMessage(err)}`);
         } finally {
-            if (mine === reconnects) setReconnecting(null);
+            if (current()) setReconnecting(null);
         }
     };
     const cancelReconnect = async () => {
-        reconnects++;
+        reconnects.cancel();
         setReconnecting(null);
         try {
             await shellIpc().invoke("backup-gdrive-cancel");

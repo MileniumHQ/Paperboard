@@ -10,6 +10,7 @@ import {
     PaperQuote,
     PaperText,
     useWizard,
+    createLatest,
 } from "@mileniumhq/paperui";
 import {
     computersApi as computers,
@@ -75,13 +76,13 @@ export const ComputerSetupWizard: Component<ComputerSetupWizardProps> = (
     // only the latest probe answers for the address: one for an address
     // that has since been changed is dropped, so Next can't be enabled by
     // a check of something other than what's typed
-    let probeRequest = 0;
+    const probes = createLatest();
 
     // the probe timer must not fire past this component's lifecycle
     onCleanup(() => clearTimeout(probeTimeout));
 
     const probeTarget = async (targetHost: string, targetPort: string) => {
-        const request = ++probeRequest;
+        const current = probes();
         const trimmedHost = targetHost.trim();
         const trimmedPort = targetPort.trim();
         if (!trimmedHost) {
@@ -98,7 +99,7 @@ export const ComputerSetupWizard: Component<ComputerSetupWizardProps> = (
                 trimmedHost,
                 trimmedPort === "" ? undefined : trimmedPort,
             );
-            if (request !== probeRequest) return;
+            if (!current()) return;
 
             if (res && res.reachable) {
                 setIsReachable(true);
@@ -119,7 +120,7 @@ export const ComputerSetupWizard: Component<ComputerSetupWizardProps> = (
                 setProbeInvalid(res?.invalidAddress === true);
             }
         } catch (err) {
-            if (request !== probeRequest) return;
+            if (!current()) return;
             setIsReachable(false);
             setProbeUnreachable(true);
             setProbeDetail(errorMessage(err));
@@ -128,7 +129,7 @@ export const ComputerSetupWizard: Component<ComputerSetupWizardProps> = (
     };
 
     const handleIpInput = (val: string) => {
-        probeRequest++;
+        probes.cancel();
         setHost(val);
         setIsReachable(false);
         setProbeUnreachable(false);
@@ -141,7 +142,7 @@ export const ComputerSetupWizard: Component<ComputerSetupWizardProps> = (
     };
 
     const handlePortInput = (val: string) => {
-        probeRequest++;
+        probes.cancel();
         setPort(val);
         setIsReachable(false);
         setProbeUnreachable(false);
@@ -180,7 +181,7 @@ export const ComputerSetupWizard: Component<ComputerSetupWizardProps> = (
     };
 
     const handleMethodChange = (val: string) => {
-        probeRequest++;
+        probes.cancel();
         setMethod(val);
         if (val === "custom") {
             setHost("");

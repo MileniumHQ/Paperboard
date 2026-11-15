@@ -21,6 +21,7 @@ import { PackageManager, sanitizeIdOrThrow, type PackageInstallOutcome, type Pac
 import { PanelInstaller, type ExpectedPanelRelease, type UninstallResult } from "./enginePanels";
 import type { PanelManifest } from "./types";
 import { errorCode } from "../../../packages/paperapi/src/errors";
+import { isWriteFileAtomicTemp } from "../../../packages/paperapi/src/fs";
 
 export type { ProcessStreams, TerminalStreams } from "./engineWorkloads";
 export type { StagedPackage, PackageUpdateWait, PackageInstallOutcome } from "./enginePackages";
@@ -112,7 +113,7 @@ export class PaperCraneEngine {
         for (const dir of [this.packagesDir, this.panelsDir]) {
             try {
                 for (const entry of fs.readdirSync(dir)) {
-                    if (/\.(tmp|staging)-\d+|\.[0-9a-f]{12}\.tmp$/.test(entry)) {
+                    if (/\.(tmp|staging)-\d+/.test(entry) || isWriteFileAtomicTemp(entry)) {
                         fs.rmSync(path.join(dir, entry), {
                             recursive: true,
                             force: true,

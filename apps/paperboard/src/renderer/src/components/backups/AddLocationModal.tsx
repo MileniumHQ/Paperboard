@@ -1,5 +1,5 @@
 import { type Component, createEffect, createSignal, For, on, Show } from "solid-js";
-import { PaperButton, PaperCheckbox, PaperFlex, PaperInput, PaperModal, PaperSelectMenu, PaperSelectMenuItem, PaperText } from "@mileniumhq/paperui";
+import { createLatest, PaperButton, PaperCheckbox, PaperFlex, PaperInput, PaperModal, PaperSelectMenu, PaperSelectMenuItem, PaperText } from "@mileniumhq/paperui";
 import { isBrowserShell } from "../../lib/shell";
 import { BACKUP_PROVIDERS, LocationLogo, type BackupProvider } from "./providers";
 import { uniqueLocationLabel } from "./locationLabel";
@@ -37,14 +37,14 @@ const AddLocationModal: Component<{
     createEffect(on(() => props.open, (open) => open && choose(BACKUP_PROVIDERS[0].kind)));
 
     // a connect that was canceled drops its answer
-    let attempt = 0;
+    const attempt = createLatest();
 
     // while a connect waits on the person, closing cancels it if its provider can
     const close = () => {
         if (!busy()) return props.onClose();
         const cancel = provider().cancel;
         if (!cancel) return;
-        attempt++;
+        attempt.cancel();
         setBusy(false);
         cancel().then(
             () => props.onClose(),
@@ -53,21 +53,21 @@ const AddLocationModal: Component<{
     };
 
     const submit = async () => {
-        const mine = ++attempt;
+        const current = attempt();
         setBusy(true);
         setError("");
         try {
             const chosen = provider();
             const named = chosen.defaultLabel ? { label: uniqueLocationLabel(chosen.defaultLabel, props.takenLabels), ...values() } : values();
             await chosen.connect(named, toggles(), props.computerId);
-            if (mine !== attempt) return;
+            if (!current()) return;
             setBusy(false);
             close();
             props.onAdded();
         } catch (err) {
-            if (mine === attempt) setError(errorMessage(err));
+            if (current()) setError(errorMessage(err));
         } finally {
-            if (mine === attempt) setBusy(false);
+            if (current()) setBusy(false);
         }
     };
 

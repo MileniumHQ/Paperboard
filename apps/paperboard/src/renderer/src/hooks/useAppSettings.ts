@@ -1,8 +1,7 @@
 import { createSignal, createEffect, on, onCleanup } from "solid-js";
-import { config, errorMessage } from "@mileniumhq/paperapi";
+import { config, errorMessage, SerialQueue } from "@mileniumhq/paperapi";
 import { showToast } from "@mileniumhq/paperui";
 import { logToMain, notifyAppSettingsChanged, shellApi } from "../lib/shell";
-import { createSaveQueue } from "../lib/saveQueue";
 import { withAppSettingsDefaults } from "../../../shared/appSettingsDefaults";
 import { effectiveLook, type Graphics } from "../../../shared/graphics";
 import { APP_SETTINGS_DEFAULTS, APP_SETTINGS_ID, type AppSettingsData } from "../lib/appSettings";
@@ -87,7 +86,7 @@ export function useAppSettings() {
     // that only changed once the save came back would hand a second change,
     // made while the first was saving, the old settings, and its save would
     // undo the first. The saves themselves run one at a time, in order.
-    const saves = createSaveQueue();
+    const saves = new SerialQueue();
     const handleAppSettingsChange = (next: AppSettingsData): Promise<void> => {
         if (unread) {
             showToast({
@@ -99,7 +98,8 @@ export function useAppSettings() {
         }
         changes++;
         setAppSettings(next);
-        return saves((superseded) => persistAppSettings(next, superseded));
+        // a save with a newer one waiting behind it knows that one carries its change on
+        return saves.run(() => persistAppSettings(next, () => saves.waiting > 0));
     };
 
     const persistAppSettings = async (next: AppSettingsData, superseded: () => boolean) => {
