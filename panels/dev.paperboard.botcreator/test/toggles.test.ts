@@ -96,7 +96,7 @@ describe("a bot's on switch", () => {
             await call("markSetupGuideSeen");
             await page.waitFor(`document.body.innerText.includes("Gateway status")`, "the Overview after the next announcement");
             expect(await page.evaluate<string | null>(`${overview}.getAttribute("aria-checked")`)).toBe("true");
-            expect(await page.evaluate<string>(`document.body.innerText`)).toContain("Gateway status\tConnected");
+            expect(await page.evaluate<string | null>(`[...document.querySelectorAll("dt")].find((dt) => dt.textContent === "Gateway status")?.nextElementSibling?.textContent ?? null`)).toBe("Connected");
             expect(page.exceptions).toEqual([]);
         } finally {
             await page.close();
