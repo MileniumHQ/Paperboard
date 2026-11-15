@@ -24,11 +24,7 @@ import {
     type Health,
     type GuildSummary,
 } from "./types";
-import type { BotProblem } from "./bots";
 import { errorMessage } from "@mileniumhq/paperapi";
-
-/** the background failures a bot's Overview lists, newest last */
-const PROBLEM_CAP = 20;
 
 // connection state is explicit, never inferred: a failed login nulls the
 // client and records the typed error here (surfaced via getBotInfo and
@@ -66,6 +62,8 @@ interface SessionHost {
     emit(trigger: string, output: unknown): void;
     /** the bot's identity, connection or servers changed; the service republishes it */
     changed(): void;
+    /** something went wrong with no button waiting to say it (a sentence about the bot); the service tells the person */
+    problem(text: string): void;
 }
 
 interface PendingInteraction {
@@ -174,10 +172,6 @@ export class BotSession {
     private sessionStartedAt: number | null = null;
     private commandsReceived = 0;
     private commandSyncError: string | null = null;
-    // what went wrong in the background, capped like the messages; it
-    // outlives reconnects, so a failure stays readable after a blip
-    private problemLog: BotProblem[] = [];
-    private problemCount = 0;
 
     constructor(
         readonly id: string,
@@ -197,15 +191,10 @@ export class BotSession {
         return this.client !== null && this.connectionStatus.connected;
     }
 
-    /** Logs a failure that no button waits for, for the bot's Overview to show. */
+    /** A failure that no button waits for: logged, and told to the person as the bot's problem. */
     noteProblem(text: string): void {
         console.error(`[DiscordService] ${this.id}: ${text}`);
-        this.problemLog = appendCapped(this.problemLog, { id: ++this.problemCount, at: Date.now(), text }, PROBLEM_CAP);
-        this.host.changed();
-    }
-
-    problems(): BotProblem[] {
-        return this.problemLog;
+        this.host.problem(text);
     }
 
     getRecentMessages(): RecentMessage[] {
@@ -503,8 +492,8 @@ export class BotSession {
         try {
             this.host.emit(trigger, output);
         } catch (err) {
-            // quiet: a Blocks trigger lost must not stop the Discord event it came from
-            console.error(`[DiscordService] trigger emit failed for ${trigger}:`, err);
+            // a Blocks trigger lost must not stop the Discord event it came from
+            this.noteProblem(`Its ${trigger} event didn't reach Blocks: ${errorMessage(err)}`);
         }
     }
 
@@ -609,7 +598,7 @@ export class BotSession {
             this.emit("on-connection-error", { error: message });
         });
 
-        // transient client/shard errors: in its problems and a trigger, but
+        // transient client/shard errors: a problem and a trigger, but
         // NOT disconnected — the gateway session may still be live
         const transient = (err: Error) => {
             const message = errorMessage(err);

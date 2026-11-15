@@ -9,7 +9,7 @@ import { blockEvent, commandEvent, staticEvents } from "./blocks/events";
 import { botStatus, panelBlocks, type BotsBlocksHost } from "./blocks/bots";
 import { PANEL_ID, type StoredBot } from "./bots";
 import { BotSession } from "./session";
-import { appIdOf, bots, logFailure, panel, publish, summary, type BotEntry } from "./registry";
+import { appIdOf, bots, panel, publish, reportBotProblem, reportFailure, summary, type BotEntry } from "./registry";
 import { saveBots } from "./persistence";
 
 // why the panel's Blocks types and builders couldn't be registered; no bot's blocks can be then
@@ -49,12 +49,13 @@ function sessionHost(id: string, entry: () => BotEntry) {
             entry().blocksChanged?.();
             if (known) noteOnline(known);
         },
+        problem: (text: string) => reportBotProblem(entry(), text),
     };
 }
 
 /**
  * One of the panel's own Blocks events, once the panel's blocks are
- * registered. One that fails is in the bot's Overview while the bot is there.
+ * registered. One that fails is the bot's problem while the bot is there.
  */
 export function firePanelEvent(event: string, payload: Record<string, unknown>): void {
     if (!panelBlocksReady) return;
@@ -62,14 +63,14 @@ export function firePanelEvent(event: string, payload: Record<string, unknown>):
         const entry = typeof payload.bot === "string" ? bots.get(payload.bot) : undefined;
         const name = panelEventNames.get(event) ?? event;
         if (entry) entry.session.noteProblem(`${name} didn't run: ${errorMessage(err)}`);
-        else logFailure(`${name} didn't run`)(err);
+        else reportFailure(`${name} didn't run`)(err);
     });
 }
 
 /** Tells Blocks the list of bots changed. */
 export function botsChanged(): void {
     if (!panelBlocksReady) return;
-    blocksApi.panel(PANEL_ID).changed("bots").catch(logFailure("the change to the bot list did not reach Blocks"));
+    blocksApi.panel(PANEL_ID).changed("bots").catch(reportFailure("The change to the bot list didn't reach Blocks"));
 }
 
 /** Fires When a Bot Goes Online or Offline, when the bot did since Blocks last heard. */

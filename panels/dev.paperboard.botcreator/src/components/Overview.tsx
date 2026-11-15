@@ -241,24 +241,6 @@ export default function Overview(props: OverviewProps) {
                 </PaperFlex>
             </PaperCard>
 
-            {/* what went wrong with no button to say it under: a flow event that didn't run */}
-            <Show when={props.bot().problems.length > 0}>
-                <PaperCard>
-                    <PaperFlex direction="column" gap="half" padding="full">
-                        <PaperText preset="heading">Recent problems</PaperText>
-                        <PaperList selectable={false} fullWidth borderless scrollable={false}>
-                            <For each={props.bot().problems}>
-                                {(problem) => (
-                                    <PaperListItem value={problem.id} icon="warning" description={problem.text}>
-                                        {new Date(problem.at).toLocaleTimeString()}
-                                    </PaperListItem>
-                                )}
-                            </For>
-                        </PaperList>
-                    </PaperFlex>
-                </PaperCard>
-            </Show>
-
             <Show when={recent().length > 0}>
                 <PaperCard>
                     <PaperFlex direction="column" gap="half" padding="full">

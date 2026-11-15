@@ -7,7 +7,7 @@ import type { BotsServiceState } from "../src/bots";
 import { panelBrowser, servePanel, type Page } from "./helpers/browser";
 import { guild, slashCommand, startFakeDiscord, userMessage, type FakeDiscord } from "./helpers/discord";
 import { call, PANEL_ID, savedBots, startService, stopServices, storedBot } from "./helpers/service";
-import { stateWhere } from "./helpers/wait";
+import { problemWhere, stateWhere } from "./helpers/wait";
 
 // each wait below has its own bound; a test as a whole may take longer than bun's 5 s default
 setDefaultTimeout(60_000);
@@ -139,7 +139,7 @@ describe("a bot's page", () => {
         }
     });
 
-    test("what went wrong with no button to say it under is in the bot's Overview, and a picture that couldn't be fetched says why", async () => {
+    test("what went wrong with no button to say it under is the panel's problem, under the bot's name, and a picture that couldn't be fetched says why", async () => {
         const home = guild("Home");
         const fake = discord.addBot({ username: "Troubled", guilds: [home] });
         // every default avatar is missing from the CDN
@@ -154,12 +154,13 @@ describe("a bot's page", () => {
             await clickText(page, "[class*=card], [class*=Card]", "Troubled");
             await page.waitFor(`document.body.innerText.includes("Gateway status")`, "the Overview");
 
-            // a command Discord still has but the bot doesn't: no flow runs, and the Overview says so
+            // a command Discord still has but the bot doesn't: no flow runs, and Paperboard says so by the bot's name
             discord.dispatch(fake, "INTERACTION_CREATE", slashCommand(fake, { guild: home, name: "ghost" }));
-            await page.waitFor(`document.body.innerText.includes("Recent problems") && document.body.innerText.includes("/ghost")`, "the problem in the Overview");
-            // health is label and value pairs, and the problem a row of a list, as everywhere in Paperboard
+            const reported = await problemWhere(PANEL_ID, (p) => p.message.includes("/ghost"), "the problem");
+            expect(reported.title).toBe("Troubled");
+            expect(reported.message).toBe("Someone used /ghost, which isn't one of this bot's commands, so no flow ran.");
+            // health is label and value pairs, as everywhere in Paperboard
             expect(await page.evaluate<string | null>(`[...document.querySelectorAll("dt")].find((dt) => dt.textContent === "Gateway status")?.nextElementSibling?.textContent ?? null`)).toBe("Connected");
-            expect(await page.evaluate<boolean>(`[...document.querySelectorAll("[class*=PaperList] [data-value]")].some((el) => el.innerText.includes("/ghost"))`)).toBe(true);
 
             await page.waitFor(`[...document.querySelectorAll("[title]")].some((el) => /picture couldn't be shown: .*404/.test(el.title))`, "the avatar to say why it's empty");
             expect(page.exceptions).toEqual([]);

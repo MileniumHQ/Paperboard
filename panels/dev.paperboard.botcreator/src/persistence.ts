@@ -15,7 +15,7 @@ import {
     tokenOwner,
     type StoredBot,
 } from "./bots";
-import { bots, logFailure, panel, publish, requireReadable, type BotEntry } from "./registry";
+import { bots, logFailure, panel, publish, reportFailure, requireReadable, type BotEntry } from "./registry";
 
 /** Makes the entry for a saved bot: its session and its host. */
 type CreateEntry = (stored: StoredBot, hasToken: boolean) => BotEntry;
@@ -139,5 +139,5 @@ export async function markSetupGuideSeen(): Promise<void> {
 export async function rememberGuideSeen(): Promise<void> {
     if (panel.botsError || bots.size === 0 || panel.savedExtras[SETUP_GUIDE_FIELD] === true) return;
     panel.savedExtras = { ...panel.savedExtras, [SETUP_GUIDE_FIELD]: true };
-    await saveBots().catch(logFailure("saving that the setup guide is done failed"));
+    await saveBots().catch(reportFailure("Bot Creator couldn't save that its setup guide is done"));
 }

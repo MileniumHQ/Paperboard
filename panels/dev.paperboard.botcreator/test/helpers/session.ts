@@ -34,12 +34,15 @@ export function useFakeDiscord(): () => FakeDiscord {
 export interface RecordedSession {
     session: BotSession;
     triggers: { trigger: string; output: any }[];
+    /** what the session told the service went wrong with no button waiting */
+    problems: string[];
     /** resolves once `accept` holds, checked now and whenever the session fires a trigger or reports a change */
     until(accept: () => boolean, what: string): Promise<void>;
 }
 
 export function recordedSession(id: string): RecordedSession {
     const triggers: RecordedSession["triggers"] = [];
+    const problems: string[] = [];
     const waiters = new Set<() => void>();
     const wake = () => {
         for (const waiter of [...waiters]) waiter();
@@ -50,11 +53,16 @@ export function recordedSession(id: string): RecordedSession {
             wake();
         },
         changed: wake,
+        problem(text) {
+            problems.push(text);
+            wake();
+        },
     });
     sessions.push(session);
     return {
         session,
         triggers,
+        problems,
         until: (accept, what) =>
             new Promise((resolve, reject) => {
                 const check = () => {

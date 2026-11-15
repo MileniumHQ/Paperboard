@@ -85,15 +85,15 @@ describe("connection status is truthful per session", () => {
         expect(fired(bot.triggers, "on-connection-error")).toEqual([{ trigger: "on-connection-error", output: { error: "Session invalidated: token was reset or revoked" } }]);
     });
 
-    test("what goes wrong mid-session is in its problems, and an invalidated session has nothing left to answer", async () => {
+    test("what goes wrong mid-session is told as a problem, and an invalidated session has nothing left to answer", async () => {
         const fake = discord().addBot({ username: "Troubled Bot" });
         const bot = recordedSession("b-troubled");
         await bot.session.start(fake.token);
         await bot.until(() => bot.session.connected(), "the bot to connect");
         const client = bot.session.client!;
-        const problems = () => bot.session.problems().map((p) => p.text);
+        const problems = () => bot.problems;
 
-        // a transient error leaves the bot connected, and is in its Overview
+        // a transient error leaves the bot connected, and is a problem
         client.emit("error", new Error("heartbeat hiccup"));
         expect(bot.session.connected()).toBe(true);
         expect(problems()).toEqual(["Its connection to Discord had an error: heartbeat hiccup"]);

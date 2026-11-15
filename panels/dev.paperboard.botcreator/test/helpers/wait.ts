@@ -1,6 +1,6 @@
 // Waiting on real signals, each with an upper bound that fails saying what
 // never happened.
-import { blocksApi, getTransport, STATE_EVENT, STATE_VALUE } from "@mileniumhq/paperapi";
+import { blocksApi, getTransport, problemsApi, STATE_EVENT, STATE_VALUE, type PanelProblem } from "@mileniumhq/paperapi";
 
 export function within<T>(what: string, promise: Promise<T>, ms = 20_000, context?: () => string): Promise<T> {
     let timer: ReturnType<typeof setTimeout>;
@@ -32,6 +32,18 @@ export function stateWhere<T>(panelId: string, accept: (state: T) => boolean, wh
         off();
         clearTimeout(timer);
     });
+}
+
+/** The first of a panel's problems `accept` takes, as the daemon holds them: now, or once it is reported. */
+export function problemWhere(panelId: string, accept: (problem: PanelProblem) => boolean, what: string, ms = 20_000): Promise<PanelProblem> {
+    let off = () => {};
+    const found = new Promise<PanelProblem>((resolve, reject) => {
+        off = problemsApi.watch(panelId, (problems) => {
+            const match = problems.find(accept);
+            if (match) resolve(match);
+        }, reject);
+    });
+    return within(what, found, ms).finally(() => off());
 }
 
 /** Resolves once the daemon has taken every subscription made so far: an event fired after it is heard. */

@@ -2,9 +2,9 @@
 // entry pairs a saved bot with its live session; the rest of the service
 // (persistence, Blocks, commands, the bot flows, the calls) works on these.
 import type { BlocksProjectHandle, ServiceContext } from "@mileniumhq/paperapi";
-import { isBotId, SETUP_GUIDE_FIELD, type BotSummary, type BotsServiceState, type StoredBot } from "./bots";
+import { isBotId, PANEL_ID, SETUP_GUIDE_FIELD, type BotSummary, type BotsServiceState, type StoredBot } from "./bots";
 import type { BotSession } from "./session";
-import { errorMessage } from "@mileniumhq/paperapi";
+import { errorMessage, problemsApi } from "@mileniumhq/paperapi";
 
 export interface BotEntry {
     stored: StoredBot;
@@ -50,7 +50,6 @@ export function summary(entry: BotEntry): BotSummary {
         createdAt: stored.createdAt,
         commands: stored.commands,
         commandSyncError: session.syncError(),
-        problems: session.problems(),
     };
 }
 
@@ -87,6 +86,17 @@ export function appIdOf(entry: BotEntry): string {
     return entry.session.client?.user?.id || entry.stored.applicationId;
 }
 
+/** A failure whose caller hears it too: the log keeps the details. */
 export function logFailure(what: string) {
     return (err: unknown) => console.error(`[DiscordService] ${what}:`, errorMessage(err));
+}
+
+/** A failure no button waits for, told to the person as the panel's problem: `what` is a sentence such as "Saving the bots failed". */
+export function reportFailure(what: string) {
+    return (err: unknown) => problemsApi.report(PANEL_ID, { key: what, title: what, message: errorMessage(err) });
+}
+
+/** Something that went wrong with a bot, no button waiting: a sentence about it, under its name. */
+export function reportBotProblem(entry: BotEntry, text: string): void {
+    problemsApi.report(PANEL_ID, { key: `${entry.stored.id}:${text.slice(0, 160)}`, title: entry.stored.name, message: text });
 }
