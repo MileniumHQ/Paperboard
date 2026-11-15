@@ -1,4 +1,4 @@
-import { errorCode, errorText } from "./failures";
+import { errorCode, errorText, unlessMissing } from "./failures";
 import * as nodeFs from "node:fs/promises";
 import * as nodePath from "node:path";
 import {
@@ -117,14 +117,8 @@ export async function readModpack(deps: Pick<ModpackDeps, "readConfig">): Promis
 }
 
 async function liveModJars(root: string, fs: PackFs): Promise<string[]> {
-    let names: string[];
-    try {
-        names = await fs.readdir(nodePath.join(root, "mods"));
-    } catch (err) {
-        // no mods/ folder is no mods; anything else stops the install
-        if (errorCode(err) === "ENOENT") return [];
-        throw err;
-    }
+    // no mods/ folder is no mods; anything else stops the install
+    const names = await unlessMissing(fs.readdir(nodePath.join(root, "mods")), []);
     return names.filter((name) => name.toLowerCase().endsWith(".jar")).map((name) => `mods/${name}`);
 }
 

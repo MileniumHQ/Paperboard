@@ -1,4 +1,4 @@
-import { errorText, exists } from "./failures";
+import { errorText, exists, unlessMissing } from "./failures";
 import * as nodeFs from "node:fs/promises";
 import * as nodePath from "node:path";
 import { SOFTWARE, type ServerSoftwareType } from "../software/catalog";
@@ -155,10 +155,7 @@ const MAX_PACK_ENTRIES = 5000;
 
 /** a folder that is a datapack: pack.mcmeta at its top, and nothing but files and folders in it */
 async function folderProblem(entry: StagedEntry): Promise<string | null> {
-    const marker = await nodeFs.lstat(nodePath.join(entry.path, DATAPACK_MARKER)).catch((err) => {
-        if ((err as { code?: string } | null)?.code === "ENOENT") return null;
-        throw err;
-    });
+    const marker = await unlessMissing(nodeFs.lstat(nodePath.join(entry.path, DATAPACK_MARKER)), null);
     if (!marker?.isFile()) return `${entry.name} is not a datapack: it has no ${DATAPACK_MARKER} at its top.`;
     let seen = 0;
     const walk = async (dir: string): Promise<string | null> => {

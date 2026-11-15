@@ -1,6 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { writeFileAtomic } from "../../service/fileWrites";
+import { unlessMissing } from "../../service/failures";
 
 /** What a player has done on the server, read from its game log. */
 export interface SourceStats {
@@ -55,9 +56,8 @@ export class SourceRoster {
     }
 
     private async read<T>(file: string): Promise<T[]> {
-        let text: string;
-        try { text = await fs.readFile(file, "utf8"); }
-        catch (err) { if ((err as NodeJS.ErrnoException).code === "ENOENT") return []; throw err; }
+        const text = await unlessMissing(fs.readFile(file, "utf8"), null);
+        if (text === null) return [];
         const parsed = JSON.parse(text) as unknown;
         if (!Array.isArray(parsed)) throw new Error(`${path.basename(file)} is not a list`);
         return parsed as T[];

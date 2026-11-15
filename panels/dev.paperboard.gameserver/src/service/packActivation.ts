@@ -1,4 +1,4 @@
-import { errorCode, errorText, exists } from "./failures";
+import { errorCode, errorText, exists, unlessMissing } from "./failures";
 import * as nodeFs from "node:fs/promises";
 import * as nodePath from "node:path";
 import { safePackPath } from "../core/modpack";
@@ -247,13 +247,7 @@ export async function recoverStagedPacks(
     for (const entry of await fs.readdir(root)) {
         if (!PACK_STAGING_PATTERN.test(entry)) continue;
         const stagingDir = nodePath.join(root, entry);
-        let raw: string | null;
-        try {
-            raw = await fs.readFile(nodePath.join(stagingDir, JOURNAL_FILE), "utf8");
-        } catch (err) {
-            if (errorCode(err) !== "ENOENT") throw err;
-            raw = null;
-        }
+        const raw = await unlessMissing(fs.readFile(nodePath.join(stagingDir, JOURNAL_FILE), "utf8"), null);
         if (raw === null) {
             // never activated: only downloads and extracted overrides
             await fs.rm(stagingDir, { recursive: true, force: true });

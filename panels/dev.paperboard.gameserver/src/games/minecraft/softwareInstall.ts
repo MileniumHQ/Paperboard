@@ -1,4 +1,4 @@
-import { errorText } from "../../service/failures";
+import { errorText, exists } from "../../service/failures";
 import { serverLocal } from "../../service/scope";
 import * as nodeFs from "node:fs/promises";
 import * as nodePath from "node:path";
@@ -190,15 +190,7 @@ async function install(
             }
             const detected = await detectInstallerLaunch(
                 plan.launchCandidates(version, build),
-                async (relative) => {
-                    try {
-                        await fs.lstat(nodePath.join(stagedAbs, ...relative.split("/")));
-                        return true;
-                    } catch (err) {
-                        if ((err as { code?: string } | null)?.code === "ENOENT") return false;
-                        throw err;
-                    }
-                },
+                (relative) => exists(nodePath.join(stagedAbs, ...relative.split("/")), fs),
             );
             if (!detected) {
                 throw new Error(

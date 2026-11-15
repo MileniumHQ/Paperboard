@@ -4,6 +4,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { writeFileAtomic } from "../../service/fileWrites";
+import { unlessMissing } from "../../service/failures";
 
 export type ConsoleEvent =
     | { kind: "join"; name: string }
@@ -96,11 +97,8 @@ export class PlayerStore {
     }
 
     private async readSeen(): Promise<SeenPlayer[]> {
-        let text: string;
-        try { text = await fs.readFile(this.seenFile, "utf8"); } catch (err) {
-            if ((err as NodeJS.ErrnoException).code === "ENOENT") return [];
-            throw err;
-        }
+        const text = await unlessMissing(fs.readFile(this.seenFile, "utf8"), null);
+        if (text === null) return [];
         const parsed: unknown = JSON.parse(text);
         if (!Array.isArray(parsed) || parsed.some((p) => typeof p?.name !== "string" || typeof p?.lastSeen !== "number")) {
             throw new Error("players.json is damaged; fix or remove it in Files");
@@ -124,10 +122,8 @@ export class PlayerStore {
     }
 
     private async readBans(): Promise<BanEntry[]> {
-        try { return parseBanlist(await fs.readFile(this.banFile, "utf8")); } catch (err) {
-            if ((err as NodeJS.ErrnoException).code === "ENOENT") return [];
-            throw err;
-        }
+        const text = await unlessMissing(fs.readFile(this.banFile, "utf8"), null);
+        return text === null ? [] : parseBanlist(text);
     }
 
     /** Bans a player who is not online by the last address they joined from. */

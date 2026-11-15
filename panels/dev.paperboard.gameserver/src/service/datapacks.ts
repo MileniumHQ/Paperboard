@@ -1,4 +1,4 @@
-import { errorCode, exists } from "./failures";
+import { exists, unlessMissing } from "./failures";
 import { serverLocal } from "./scope";
 import * as nodeFs from "node:fs/promises";
 import * as nodePath from "node:path";
@@ -87,14 +87,8 @@ export async function listDatapacks(deps: DatapackDeps): Promise<DatapackListing
     // level.dat, not the folder: installing a pack creates <world>/datapacks/
     // before the server has generated anything
     const worldExists = await exists(nodePath.join(root, world, "level.dat"), fs);
-    let entries: Awaited<ReturnType<DatapackFs["readdir"]>>;
-    try {
-        entries = await fs.readdir(nodePath.join(root, ...relative.split("/")), { withFileTypes: true });
-    } catch (err) {
-        // no datapacks/ folder is no datapacks; anything else is a failure
-        if (errorCode(err) !== "ENOENT") throw err;
-        entries = [];
-    }
+    // no datapacks/ folder is no datapacks; anything else is a failure
+    const entries = await unlessMissing(fs.readdir(nodePath.join(root, ...relative.split("/")), { withFileTypes: true }), []);
     const saved = await deps.readConfig();
     const records = parseDatapackRecords(saved[DATAPACK_RECORDS_KEY]);
     const uploads = parseUploadRecords(saved[UPLOAD_RECORDS_KEY]);

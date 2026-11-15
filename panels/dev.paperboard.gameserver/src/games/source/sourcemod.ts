@@ -1,6 +1,7 @@
 import fs from "node:fs/promises";
 import { exists } from "../serviceKit";
 import path from "node:path";
+import { unlessMissing } from "../../service/failures";
 
 // SourceMod on a Source server: Metamod:Source loads it, and it loads the
 // plugins (.smx) in addons/sourcemod/plugins. Paperboard keeps addons/ and
@@ -102,9 +103,7 @@ export class SourceMod {
 
     async list(): Promise<SourcePlugin[]> {
         const read = async (dir: string, enabled: boolean) => {
-            let names: string[];
-            try { names = await fs.readdir(dir); }
-            catch (err) { if ((err as NodeJS.ErrnoException).code === "ENOENT") return []; throw err; }
+            const names = await unlessMissing(fs.readdir(dir), []);
             return names.filter((n) => n.toLowerCase().endsWith(".smx")).map((file): SourcePlugin => {
                 const known = BUNDLED_PLUGINS[file.slice(0, -4)];
                 return { file, title: known?.title ?? file.slice(0, -4), description: known?.description ?? "Uploaded by you", enabled, bundled: !!known };
@@ -182,7 +181,6 @@ export class SourceMod {
     }
 
     private async readAdmins(): Promise<string> {
-        try { return (await fs.readFile(this.adminsFile, "utf8")).replace(/\r\n/g, "\n"); }
-        catch (err) { if ((err as NodeJS.ErrnoException).code === "ENOENT") return ""; throw err; }
+        return (await unlessMissing(fs.readFile(this.adminsFile, "utf8"), "")).replace(/\r\n/g, "\n");
     }
 }

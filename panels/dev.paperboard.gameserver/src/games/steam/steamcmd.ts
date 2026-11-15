@@ -4,6 +4,7 @@ import { fileApi as rawFiles } from "@mileniumhq/paperapi";
 import { packages as packageApi } from "../../service/api";
 import { PANEL_ID } from "../../service/types";
 import { runInstallerProcess, stopLeftoverInstaller, type InstallerRun } from "../../service/installerProcess";
+import { unlessMissing } from "../../service/failures";
 
 // SteamCMD, shared by every server of the panel: Workshop items and whole
 // dedicated servers (`installApp`). Origami's `steamcmd` package
@@ -50,7 +51,7 @@ async function prepare(own?: string): Promise<{ command: string; root: string; h
     const root = await workspace(own);
     const bin = path.join(root, "steamcmd");
     const command = path.join(bin, bootstrapName());
-    const present = await fs.stat(command).then(s => s.isFile(), (err: NodeJS.ErrnoException) => { if (err.code === "ENOENT") return false; throw err; });
+    const present = (await unlessMissing(fs.stat(command), null))?.isFile();
     if (!present) {
         if (!(await packageApi.isInstalled(PACKAGE))) await packageApi.download(PACKAGE);
         const source = path.join(await packageApi.getPath(PACKAGE), "bin");
@@ -140,7 +141,7 @@ export function downloadWorkshopItems(appId: number, ids: readonly string[], opt
             const folder = path.join(target, "steamapps", "workshop", "content", String(appId), id);
             if (!item) problems.push(`${id}: SteamCMD did not report the download`);
             else if (!item.ok) problems.push(`${id}: ${item.reason || "download failed"}`);
-            else if (!(await fs.stat(folder).then(s => s.isDirectory(), (err: NodeJS.ErrnoException) => { if (err.code === "ENOENT") return false; throw err; }))) problems.push(`${id}: SteamCMD reported success but left no files`);
+            else if (!(await unlessMissing(fs.stat(folder), null))?.isDirectory()) problems.push(`${id}: SteamCMD reported success but left no files`);
             else folders.set(id, folder);
         }
         if (problems.length > 0 || result.exitCode !== 0) {
@@ -198,9 +199,8 @@ export async function steamClientLibrary(own?: string): Promise<string> {
 
 /** The build SteamCMD installed, from the app manifest it leaves in the folder; null before any install. */
 export async function installedBuild(appId: number, dir: string): Promise<string | null> {
-    let text: string;
-    try { text = await fs.readFile(path.join(dir, "steamapps", `appmanifest_${appId}.acf`), "utf8"); }
-    catch (err) { if ((err as NodeJS.ErrnoException).code === "ENOENT") return null; throw err; }
+    const text = await unlessMissing(fs.readFile(path.join(dir, "steamapps", `appmanifest_${appId}.acf`), "utf8"), null);
+    if (text === null) return null;
     const build = /"buildid"\s+"(\d+)"/.exec(text)?.[1];
     if (!build) throw new Error(`Steam's app manifest for ${appId} names no build`);
     return build;

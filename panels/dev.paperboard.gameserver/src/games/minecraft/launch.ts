@@ -13,6 +13,7 @@ import { isSupportedMcVersion, MIN_SUPPORTED_MC_VERSION } from "../../lib/versio
 import { javaBinaryPath } from "./java";
 import { minecraft } from "./index";
 import type { PreparedLaunch } from "../serviceTypes";
+import { unlessMissing } from "../../service/failures";
 
 export async function prepareLaunch(ctx: ServiceContext<GameServerState>): Promise<PreparedLaunch> {
     const saved = await config.get<Record<string, unknown>>(PANEL_ID);
@@ -84,11 +85,6 @@ export function javaMajorOf(javaPkg: string): number {
 
 /** Whether Linux lets the JVM back its heap with transparent huge pages; a kernel without them has no file to read. */
 export async function transparentHugePages(file = "/sys/kernel/mm/transparent_hugepage/enabled"): Promise<boolean> {
-    try {
-        // "always [madvise] never": the bracketed mode is the current one
-        return /\[(always|madvise)\]/.test(await nodeFs.readFile(file, "utf8"));
-    } catch (err) {
-        if ((err as NodeJS.ErrnoException).code === "ENOENT") return false;
-        throw err;
-    }
+    // "always [madvise] never": the bracketed mode is the current one
+    return /\[(always|madvise)\]/.test(await unlessMissing(nodeFs.readFile(file, "utf8"), ""));
 }

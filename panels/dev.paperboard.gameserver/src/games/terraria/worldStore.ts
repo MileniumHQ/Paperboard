@@ -4,6 +4,7 @@ import path from "node:path";
 import { readWorldHeader, type TerrariaWorldHeader } from "./worldFile";
 import { worldName } from "./config";
 import { trashDirName } from "../../service/trash";
+import { unlessMissing } from "../../service/failures";
 
 /** One .wld file in a server's worlds folder, as the Worlds tab shows it. */
 export interface TerrariaWorld {
@@ -116,13 +117,7 @@ export async function trashWorld(root: string, name: unknown): Promise<void> {
     const checked = worldName(name);
     const directory = path.join(root, "worlds");
     const world = `${checked}.wld`;
-    let entries: string[];
-    try {
-        entries = await fs.readdir(directory);
-    } catch (err) {
-        if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
-        entries = [];
-    }
+    const entries = await unlessMissing(fs.readdir(directory), []);
     // tModLoader keeps the modded part of a world beside it, as .twld
     const own = [world, `${checked}.twld`];
     const files = entries.filter((file) => own.some((base) => file === base || (file.startsWith(base) && /^\.bak\d*$/.test(file.slice(base.length)))));

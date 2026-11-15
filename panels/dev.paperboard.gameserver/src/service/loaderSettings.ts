@@ -1,4 +1,4 @@
-import { errorCode, errorText } from "./failures";
+import { errorText, unlessMissing } from "./failures";
 import * as nodeFs from "node:fs/promises";
 import * as nodePath from "node:path";
 import type { ServerSoftwareType } from "../software/catalog";
@@ -91,13 +91,8 @@ async function readCapped(fs: LoaderFs, absolute: string): Promise<string> {
 
 // server.properties' level-name: the world whose per-world configs apply
 async function activeWorld(fs: LoaderFs, root: string): Promise<string> {
-    let text: string;
-    try {
-        text = await readCapped(fs, nodePath.join(root, "server.properties"));
-    } catch (err) {
-        if (errorCode(err) === "ENOENT") return "world";
-        throw err;
-    }
+    const text = await unlessMissing(readCapped(fs, nodePath.join(root, "server.properties")), null);
+    if (text === null) return "world";
     const name = parseProperties(text)["level-name"]?.trim() || "world";
     if (!isListableDirArg(name)) throw new Error(`level-name ${JSON.stringify(name)} is not a folder Paperboard can use`);
     return name;
@@ -106,12 +101,7 @@ async function activeWorld(fs: LoaderFs, root: string): Promise<string> {
 /** the first location of a file that exists, or null */
 async function locate(fs: LoaderFs, root: string, file: LoaderFile, world: string): Promise<string | null> {
     for (const relative of file.locations(world)) {
-        try {
-            await fs.stat(nodePath.join(root, ...relative.split("/")));
-            return relative;
-        } catch (err) {
-            if (errorCode(err) !== "ENOENT") throw err;
-        }
+        if (await unlessMissing(fs.stat(nodePath.join(root, ...relative.split("/"))), null)) return relative;
     }
     return null;
 }

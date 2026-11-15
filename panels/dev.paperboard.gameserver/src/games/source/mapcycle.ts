@@ -1,6 +1,6 @@
 import fs from "node:fs/promises";
 import path from "node:path";
-import { exists } from "../serviceKit";
+import { exists, unlessMissing } from "../serviceKit";
 import { mapName } from "./config";
 
 // How srcds picks the maps it cycles through, as the Team Fortress 2 server
@@ -68,12 +68,7 @@ export function cfgMapCycleFile(cfg: string): string | null {
 
 /** The folders srcds loads a game's files from, in the order it searches them: custom/ ones, then the game's own. */
 async function searchFolders(gameDir: string): Promise<string[]> {
-    let custom: string[] = [];
-    try {
-        custom = (await fs.readdir(path.join(gameDir, "custom"), { withFileTypes: true })).filter((e) => e.isDirectory()).map((e) => path.join(gameDir, "custom", e.name)).sort();
-    } catch (err) {
-        if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
-    }
+    const custom = (await unlessMissing(fs.readdir(path.join(gameDir, "custom"), { withFileTypes: true }), [])).filter((e) => e.isDirectory()).map((e) => path.join(gameDir, "custom", e.name)).sort();
     return [...custom, gameDir];
 }
 
@@ -82,13 +77,8 @@ export async function installedMaps(gameDir: string): Promise<string[]> {
     const names = new Set<string>();
     let found = false;
     for (const folder of await searchFolders(gameDir)) {
-        let entries: string[];
-        try {
-            entries = await fs.readdir(path.join(folder, "maps"));
-        } catch (err) {
-            if ((err as NodeJS.ErrnoException).code === "ENOENT") continue;
-            throw err;
-        }
+        const entries = await unlessMissing(fs.readdir(path.join(folder, "maps")), null);
+        if (!entries) continue;
         found = true;
         for (const entry of entries) {
             if (!entry.endsWith(".bsp")) continue;

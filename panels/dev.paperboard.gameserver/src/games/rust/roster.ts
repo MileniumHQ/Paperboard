@@ -2,6 +2,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { writeFileAtomic } from "../../service/fileWrites";
 import type { RustPlayer } from "./webrcon";
+import { unlessMissing } from "../../service/failures";
 
 /** A player Paperboard has seen on the server, keyed by Steam id. */
 export interface RustSeen {
@@ -51,9 +52,8 @@ export class RustRoster {
     private get file() { return path.join(this.root, "rust-players.json"); }
 
     async seen(): Promise<RustSeen[]> {
-        let text: string;
-        try { text = await fs.readFile(this.file, "utf8"); }
-        catch (err) { if ((err as NodeJS.ErrnoException).code === "ENOENT") return []; throw err; }
+        const text = await unlessMissing(fs.readFile(this.file, "utf8"), null);
+        if (text === null) return [];
         const parsed = JSON.parse(text) as unknown;
         if (!Array.isArray(parsed)) throw new Error("rust-players.json is not a list");
         return parsed as RustSeen[];

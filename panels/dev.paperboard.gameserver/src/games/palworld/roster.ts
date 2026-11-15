@@ -1,6 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { writeFileAtomic } from "../../service/fileWrites";
+import { unlessMissing } from "../../service/failures";
 import type { PalworldPlayer } from "./rest";
 
 /** A player Paperboard has seen on the server, keyed by Palworld's user id. */
@@ -37,9 +38,8 @@ export class PalworldRoster {
     }
 
     async seen(): Promise<PalworldSeen[]> {
-        let text: string;
-        try { text = await fs.readFile(this.file, "utf8"); }
-        catch (err) { if ((err as NodeJS.ErrnoException).code === "ENOENT") return []; throw err; }
+        const text = await unlessMissing(fs.readFile(this.file, "utf8"), null);
+        if (text === null) return [];
         const parsed = JSON.parse(text) as unknown;
         if (!Array.isArray(parsed)) throw new Error("palworld-players.json is not a list");
         return parsed as PalworldSeen[];
@@ -57,9 +57,7 @@ export class PalworldRoster {
 
     /** The banned user ids. Palworld writes each ban as "<user id>,<its own player uid>". */
     async bans(): Promise<string[]> {
-        let text: string;
-        try { text = await fs.readFile(this.banFile, "utf8"); }
-        catch (err) { if ((err as NodeJS.ErrnoException).code === "ENOENT") return []; throw err; }
+        const text = await unlessMissing(fs.readFile(this.banFile, "utf8"), "");
         return text.split(/\r?\n/).map((line) => line.split(",")[0]!.trim()).filter(Boolean);
     }
 }

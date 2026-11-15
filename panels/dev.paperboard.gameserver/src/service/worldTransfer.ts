@@ -1,4 +1,4 @@
-import { errorText } from "./failures";
+import { errorText, unlessMissing } from "./failures";
 import { serverLocal } from "./scope";
 import * as nodeFs from "node:fs/promises";
 import * as nodePath from "node:path";
@@ -81,10 +81,7 @@ export function exportWorld(ctx: ServiceContext<GameServerState>, levelName: unk
         const root = await serverDir();
         const folders: string[] = [];
         for (const suffix of DIMENSION_SUFFIXES) {
-            const stat = await nodeFs.lstat(nodePath.join(root, `${name}${suffix}`)).catch((err) => {
-                if (err?.code === "ENOENT") return null;
-                throw err;
-            });
+            const stat = await unlessMissing(nodeFs.lstat(nodePath.join(root, `${name}${suffix}`)), null);
             if (stat?.isDirectory()) folders.push(`${name}${suffix}`);
         }
         if (!folders.includes(name)) throw new Error(`There is no world folder named "${name}"`);

@@ -18,6 +18,7 @@ import { readJarEntries } from "./jarEntries";
 import { readSchemaSettings, writeSchemaSetting, type LoaderDeps, type LoaderGroupView } from "./loaderSettings";
 import { serializedFileTask, writeFileAtomic } from "./fileWrites";
 import { listServerFiles, ServerFileMissingError } from "./serverFiles";
+import { unlessMissing } from "./failures";
 
 // The Crossplay tab's owner: which of Geyser and Floodgate are installed
 // (by the name inside each jar, so a renamed jar still counts) and their
@@ -108,13 +109,8 @@ export async function readBedrockNaming(software: ServerSoftwareType, deps: Load
 
 async function javaPort(deps: LoaderDeps): Promise<number> {
     const fs = deps.fs ?? (nodeFs as unknown as NonNullable<LoaderDeps["fs"]>);
-    let text: string;
-    try {
-        text = await fs.readFile(nodePath.join(await deps.serverDir(), "server.properties"), "utf8");
-    } catch (err) {
-        if ((err as { code?: string }).code === "ENOENT") return 25565;
-        throw err;
-    }
+    const text = await unlessMissing(fs.readFile(nodePath.join(await deps.serverDir(), "server.properties"), "utf8"), null);
+    if (text === null) return 25565;
     return Number(parseProperties(text)["server-port"]?.trim() || 25565);
 }
 
@@ -209,13 +205,8 @@ export async function allowUnsignedChat(deps: LoaderDeps): Promise<void> {
     const fs = deps.fs ?? (nodeFs as unknown as NonNullable<LoaderDeps["fs"]>);
     const file = nodePath.join(await deps.serverDir(), "server.properties");
     await serializedFileTask(file, async () => {
-        let text = "";
-        try {
-            text = await fs.readFile(file, "utf8");
-        } catch (err) {
-            // the server writes its defaults around this line on first start
-            if ((err as { code?: string }).code !== "ENOENT") throw err;
-        }
+        // the server writes its defaults around this line on first start
+        const text = await unlessMissing(fs.readFile(file, "utf8"), "");
         if (parseProperties(text)["enforce-secure-profile"]?.trim() === "false") return;
         const line = /^([ \t]*enforce-secure-profile[ \t]*[=:]).*$/m;
         const next = line.test(text)

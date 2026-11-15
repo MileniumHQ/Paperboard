@@ -9,6 +9,7 @@ import { BEDROCK_PORT_SETTING_ID, CROSSPLAY, crossplaySetting, NETHERNET_PORT_SE
 import { findCrossplayJars, readBedrockTransport, settleBedrockTransport } from "../../service/crossplay";
 import { serializedFileTask, writeFileAtomic } from "../../service/fileWrites";
 import { writeSchemaSetting, type LoaderDeps, type LoaderFs } from "../../service/loaderSettings";
+import { unlessMissing } from "../../service/failures";
 
 // The server's ports go through Paperboard's port registry, so no other
 // panel and no other program ends up on the same one. The config files say
@@ -33,13 +34,8 @@ async function propertiesPath(deps: LoaderDeps): Promise<string> {
 
 /** the port server.properties asks for; the server's own default when it names none */
 export async function readJavaPort(deps: LoaderDeps): Promise<number> {
-    let text: string;
-    try {
-        text = await fsOf(deps).readFile(await propertiesPath(deps), "utf8");
-    } catch (err) {
-        if ((err as { code?: string }).code === "ENOENT") return DEFAULT_JAVA_PORT;
-        throw err;
-    }
+    const text = await unlessMissing(fsOf(deps).readFile(await propertiesPath(deps), "utf8"), null);
+    if (text === null) return DEFAULT_JAVA_PORT;
     const port = Number(parseProperties(text)["server-port"]?.trim());
     return Number.isInteger(port) && port >= 1 && port <= 65535 ? port : DEFAULT_JAVA_PORT;
 }
@@ -48,12 +44,7 @@ async function writeJavaPort(port: number, deps: LoaderDeps): Promise<void> {
     const fs = fsOf(deps);
     const file = await propertiesPath(deps);
     await serializedFileTask(file, async () => {
-        let text = "";
-        try {
-            text = await fs.readFile(file, "utf8");
-        } catch (err) {
-            if ((err as { code?: string }).code !== "ENOENT") throw err;
-        }
+        const text = await unlessMissing(fs.readFile(file, "utf8"), "");
         await writeFileAtomic(fs, file, stringifyServerProperties({ ...parseProperties(text), "server-port": String(port) }));
     });
 }

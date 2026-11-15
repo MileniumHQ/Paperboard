@@ -10,7 +10,7 @@ import { steamInstall, steamInstallCalls, steamUpdateStatus, type SteamInstallSp
 import type { GameService } from "../serviceTypes";
 import {
     ConsoleBuffer, assertHost, exclusive, exists, fileStamp, linkFolder, offlineBackup, playerPoller, pushChat, readSettings, redact, report,
-    resumeAfterBackup, serverRoot, serverSecret, settingPort, settled, singleLine, updateSettings, waitUntil, type Context,
+    resumeAfterBackup, serverRoot, serverSecret, settingPort, settled, singleLine, unlessMissing, updateSettings, waitUntil, type Context,
 } from "../serviceKit";
 import { trashDirName } from "../../service/trash";
 import { rust, options, RUST_APP_ID, type RustMapView, type RustOption } from "./index";
@@ -178,10 +178,7 @@ const RENDERED = "Saved map render to:";
 /** The picture of the map the settings name, or null when the server hasn't drawn it. */
 async function mapPicture(): Promise<string | null> {
     const { size, seed } = await mapView();
-    const png = await fs.readFile(path.join(await identityDir(), pictureName(size, seed))).catch((err: NodeJS.ErrnoException) => {
-        if (err.code === "ENOENT") return null;
-        throw err;
-    });
+    const png = await unlessMissing(fs.readFile(path.join(await identityDir(), pictureName(size, seed))), null);
     return png && pictureUrl(png);
 }
 

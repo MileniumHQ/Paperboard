@@ -1,4 +1,4 @@
-import { errorCode, errorText, exists } from "./failures";
+import { errorText, exists, unlessMissing } from "./failures";
 import * as nodeFs from "node:fs/promises";
 import * as nodePath from "node:path";
 import { isInstallArtifactName } from "../core/installFiles";
@@ -261,13 +261,7 @@ export async function recoverStagedInstalls(
     for (const entry of await fs.readdir(root)) {
         if (!STAGING_PATTERN.test(entry)) continue;
         const stagingDir = nodePath.join(root, entry);
-        let raw: string | null;
-        try {
-            raw = await fs.readFile(nodePath.join(stagingDir, JOURNAL_FILE), "utf8");
-        } catch (err) {
-            if (errorCode(err) !== "ENOENT") throw err;
-            raw = null;
-        }
+        const raw = await unlessMissing(fs.readFile(nodePath.join(stagingDir, JOURNAL_FILE), "utf8"), null);
         staged.push({ entry, stagingDir, journal: raw === null ? null : parseJournal(raw) });
     }
     for (const { entry, stagingDir, journal } of staged) {

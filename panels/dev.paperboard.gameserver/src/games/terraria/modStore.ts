@@ -6,6 +6,7 @@ import { trashDirName } from "../../service/trash";
 import { writeFileAtomic } from "../../service/fileWrites";
 import { downloadWorkshopItems, discardWorkshopItems, type Runner } from "../steam/steamcmd";
 import { workshopItems, type WorkshopItem } from "../steam/modscan";
+import { unlessMissing } from "../../service/failures";
 
 // A tModLoader server's mods: .tmod files in tModLoader/Mods, the names
 // enabled.json turns on, and what Paperboard knows about where each came
@@ -194,8 +195,8 @@ export async function pickBuild(folder: string, tmodloaderVersion: string): Prom
 }
 
 async function readJson<T>(file: string, fallback: T): Promise<T> {
-    let text: string;
-    try { text = await fs.readFile(file, "utf8"); } catch (err) { if ((err as NodeJS.ErrnoException).code === "ENOENT") return fallback; throw err; }
+    const text = await unlessMissing(fs.readFile(file, "utf8"), null);
+    if (text === null) return fallback;
     try { return JSON.parse(text) as T; } catch { throw new Error(`${path.basename(file)} is not valid JSON; fix or remove it in Files`); }
 }
 async function writeJson(file: string, value: unknown) {
@@ -230,9 +231,7 @@ export class ModStore {
     private setRecords(records: Record<string, ModRecord>) { return writeJson(path.join(this.deps.root, RECORDS), records); }
 
     async list(): Promise<InstalledMod[]> {
-        let files: string[];
-        try { files = (await fs.readdir(this.dir)).filter(f => f.endsWith(".tmod")).sort((a, b) => a.localeCompare(b)); }
-        catch (err) { if ((err as NodeJS.ErrnoException).code === "ENOENT") return []; throw err; }
+        const files = (await unlessMissing(fs.readdir(this.dir), [])).filter(f => f.endsWith(".tmod")).sort((a, b) => a.localeCompare(b));
         const [enabled, records] = await Promise.all([this.enabled(), this.records()]);
         return Promise.all(files.map(async (file): Promise<InstalledMod> => {
             try {

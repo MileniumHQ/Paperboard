@@ -3,7 +3,7 @@
  * console, chat, waits, one operation at a time, offline backups and links.
  * Game modules keep only what is theirs; nothing here names a game.
  */
-import { errorText, exists } from "../service/failures";
+import { errorText, exists, unlessMissing } from "../service/failures";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { randomBytes } from "node:crypto";
@@ -21,7 +21,7 @@ export type Context = ServiceContext<GameServerState>;
 
 /** The current server's folder. */
 export const serverRoot = () => files.getPath("", PANEL_ID);
-export { exists, readSettings, updateSettings };
+export { exists, readSettings, unlessMissing, updateSettings };
 
 function serverId(game: string): string {
     const id = currentServer()?.server.id;
@@ -355,7 +355,7 @@ export function offlineBackup(spec: OfflineBackupSpec): GameService["backup"] {
  */
 export async function linkFolder(link: string, target: string): Promise<void> {
     await fs.mkdir(target, { recursive: true });
-    const stat = await fs.lstat(link).catch((err: NodeJS.ErrnoException) => { if (err.code === "ENOENT") return null; throw err; });
+    const stat = await unlessMissing(fs.lstat(link), null);
     if (stat?.isSymbolicLink()) {
         if (path.resolve(path.dirname(link), await fs.readlink(link)) === path.resolve(target)) return;
         await fs.unlink(link);
@@ -382,7 +382,7 @@ export async function linkFolder(link: string, target: string): Promise<void> {
  */
 export function keptFile(link: string, target: string, platform = process.platform) {
     const both = () => new Error(`${path.basename(link)} is in both the game's folder and the server folder; move one aside in Files`);
-    const stat = (file: string) => fs.lstat(file).catch((err: NodeJS.ErrnoException) => { if (err.code === "ENOENT") return null; throw err; });
+    const stat = (file: string) => unlessMissing(fs.lstat(file), null);
     const move = async (from: string, to: string) => {
         if (await exists(to)) throw both();
         await fs.mkdir(path.dirname(to), { recursive: true });
@@ -415,11 +415,11 @@ export function keptFile(link: string, target: string, platform = process.platfo
 
 /** Removes a link linkFolder made; a real folder there is the user's and stays. */
 export async function unlinkFolder(link: string): Promise<void> {
-    const stat = await fs.lstat(link).catch((err: NodeJS.ErrnoException) => { if (err.code === "ENOENT") return null; throw err; });
+    const stat = await unlessMissing(fs.lstat(link), null);
     if (stat?.isSymbolicLink()) await fs.unlink(link);
 }
 /** Whether linkFolder's link is at this path. */
 export async function isLinked(link: string): Promise<boolean> {
-    const stat = await fs.lstat(link).catch((err: NodeJS.ErrnoException) => { if (err.code === "ENOENT") return null; throw err; });
+    const stat = await unlessMissing(fs.lstat(link), null);
     return !!stat?.isSymbolicLink();
 }

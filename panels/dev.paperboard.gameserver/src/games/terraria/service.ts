@@ -8,7 +8,7 @@ import { appendCapped, PANEL_ID } from "../../service/types";
 import type { GameService } from "../serviceTypes";
 import {
     ConsoleBuffer, assertHost, exclusive, exists, fileStamp, hostSupportHere, offlineBackup, pushChat, readSettings, redact, report,
-    resumeAfterBackup, serverRoot, serverSecret, settingPort, settled, singleLine, waitUntil, writePrivate, type Context,
+    resumeAfterBackup, serverRoot, serverSecret, settingPort, settled, singleLine, unlessMissing, waitUntil, writePrivate, type Context,
 } from "../serviceKit";
 import { terraria } from "./index";
 import { configText, validateOptions, worldName } from "./config";
@@ -54,8 +54,7 @@ async function generate(password: string) {
     const directory = await root();
     await fs.mkdir(path.join(directory, "worlds"), { recursive: true });
     const file = path.join(directory, "serverconfig.txt");
-    let existing = "";
-    try { existing = await fs.readFile(file, "utf8"); } catch (err) { if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err; }
+    const existing = await unlessMissing(fs.readFile(file, "utf8"), "");
     await writePrivate(file, configText(directory, await settings(), password, existing));
 }
 async function loadOptions(ctx: Context) {

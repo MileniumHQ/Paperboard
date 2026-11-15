@@ -1,6 +1,7 @@
 import * as nodeFs from "node:fs/promises";
 import * as nodePath from "node:path";
 import type { ChatMessage, GameServerState } from "./types";
+import { unlessMissing } from "./failures";
 
 /** How much of the console and the chat a server keeps across service restarts. */
 export const HISTORY_ENTRIES = 500;
@@ -48,13 +49,8 @@ export function historyOf(state: ServerHistory): ServerHistory {
 
 /** Throws on a damaged file; a missing one is a server that has said nothing yet. */
 export async function readHistory(file: string): Promise<ServerHistory> {
-    let text: string;
-    try {
-        text = await nodeFs.readFile(file, "utf8");
-    } catch (err) {
-        if ((err as NodeJS.ErrnoException).code === "ENOENT") return { serverEntries: [], chatMessages: [], running: false, onlineSince: null };
-        throw err;
-    }
+    const text = await unlessMissing(nodeFs.readFile(file, "utf8"), null);
+    if (text === null) return { serverEntries: [], chatMessages: [], running: false, onlineSince: null };
     const raw = JSON.parse(text) as { version?: unknown; serverEntries?: unknown; chatMessages?: unknown; running?: unknown; onlineSince?: unknown };
     if (raw?.version !== VERSION || !Array.isArray(raw.serverEntries) || !Array.isArray(raw.chatMessages) || typeof raw.running !== "boolean")
         throw new Error("The saved console history is damaged");

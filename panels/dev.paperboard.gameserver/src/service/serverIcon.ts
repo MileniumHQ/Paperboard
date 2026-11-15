@@ -1,4 +1,4 @@
-import { errorText } from "./failures";
+import { errorText, unlessMissing } from "./failures";
 import * as nodeFs from "node:fs/promises";
 import * as nodePath from "node:path";
 import type { PNG as Png } from "pngjs";
@@ -23,12 +23,8 @@ const dataUrl = (bytes: Buffer) => `data:image/png;base64,${bytes.toString("base
 /** the current icon as a data URL, or null when the server has none */
 export async function readServerIcon(deps: ServerIconDeps): Promise<string | null> {
     const file = nodePath.join(await deps.serverDir(), SERVER_ICON_FILE);
-    try {
-        return dataUrl(await nodeFs.readFile(file));
-    } catch (err) {
-        if ((err as { code?: string } | null)?.code === "ENOENT") return null;
-        throw err;
-    }
+    const bytes = await unlessMissing(nodeFs.readFile(file), null);
+    return bytes && dataUrl(bytes);
 }
 
 /** replaces the icon with `png` (base64), once it proves to be a 64×64 PNG */
