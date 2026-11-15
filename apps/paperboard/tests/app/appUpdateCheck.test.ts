@@ -91,6 +91,26 @@ describe("desktop app update checks", () => {
         session.dispose();
     });
 
+    test("a download that keeps making progress outlives the time limit, which counts only quiet time", async () => {
+        class SlowLink extends EventEmitter {
+            async checkForUpdates() {
+                this.emit("update-available", { version: NEWER });
+                const downloadPromise = (async () => {
+                    // twice the limit in all, never quiet for a tenth of it
+                    for (let step = 1; step <= 20; step++) {
+                        await new Promise((r) => setTimeout(r, 30));
+                        this.emit("download-progress", { percent: step * 5 });
+                    }
+                    this.emit("update-downloaded", { version: NEWER });
+                })();
+                return { downloadPromise };
+            }
+        }
+        const session = new AppUpdateSession(new SlowLink(), () => undefined, 300);
+        expect(await session.check()).toMatchObject({ status: "ready", version: NEWER, error: null });
+        session.dispose();
+    });
+
     test("a native activation error after the download stays failed", async () => {
         // electron-updater's events, in the order Squirrel.Mac gives them when
         // it refuses the verified download

@@ -19,6 +19,9 @@ export class AppUpdateSession {
     private disposed = false;
     private cancelDownload: (() => void) | null = null;
     private timer: ReturnType<typeof setTimeout> | undefined;
+    // the time limit is how long a run may go without progress: a large
+    // download on a slow link keeps going as long as bytes arrive
+    private armTimeout: (() => void) | null = null;
     private rejectRun: ((error: Error) => void) | null = null;
     // a timed-out run's updater may still emit; its events are dropped until
     // the next check starts
@@ -36,7 +39,10 @@ export class AppUpdateSession {
         this.listeners = [
             ["update-available", (info) => this.set({ status: installMode === "automatic" ? "downloading" : "manual", version: info.version, percent: null, error: null })],
             ["update-not-available", () => this.set({ status: "current", version: null, percent: null, error: null })],
-            ["download-progress", (progress) => this.set({ percent: Math.round(progress.percent) })],
+            ["download-progress", (progress) => {
+                this.armTimeout?.();
+                this.set({ percent: Math.round(progress.percent) });
+            }],
             ["update-downloaded", (info) => this.set({ status: "ready", version: info.version, percent: 100, error: null })],
             ["error", (err) => this.fail(err)],
         ];
@@ -79,12 +85,16 @@ export class AppUpdateSession {
         try {
             await Promise.race([work, new Promise<never>((_, reject) => {
                 this.rejectRun = reject;
-                this.timer = setTimeout(() => {
-                    timedOut = true;
-                    this.updater.cancel?.();
-                    this.cancelDownload?.();
-                    reject(new Error("The app update timed out. Check your connection and try again."));
-                }, this.timeoutMs);
+                this.armTimeout = () => {
+                    clearTimeout(this.timer);
+                    this.timer = setTimeout(() => {
+                        timedOut = true;
+                        this.updater.cancel?.();
+                        this.cancelDownload?.();
+                        reject(new Error("The app update timed out. Check your connection and try again."));
+                    }, this.timeoutMs);
+                };
+                this.armTimeout();
             })]);
         } catch (err) {
             this.fail(err);
@@ -94,6 +104,7 @@ export class AppUpdateSession {
         } finally {
             clearTimeout(this.timer);
             this.timer = undefined;
+            this.armTimeout = null;
             this.rejectRun = null;
             this.cancelDownload = null;
         }
