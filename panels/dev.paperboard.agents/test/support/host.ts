@@ -176,6 +176,11 @@ export class TestHost {
         return until(this.changes.subscribe, () => !this.procs.has(id), `${id} to exit`, ms);
     }
 
+    /** How many output and exit listeners are subscribed to this id. */
+    listeners(id: string): number {
+        return [this.stdout, this.stderr, this.exits].reduce((n, map) => n + (map.get(id)?.size ?? 0), 0);
+    }
+
     startedAs(id: string): StartOptions[] {
         return this.started.filter((s) => s.id === id);
     }

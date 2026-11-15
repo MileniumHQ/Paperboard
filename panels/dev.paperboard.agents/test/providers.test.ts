@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import fs from "node:fs";
 import { Providers, SERVER_PROCESS_ID } from "../src/service/providers";
-import { brainProgram, fakeEnv, fakeLog, packageHost, SLOW, tempDir, TestHost } from "./support/host";
+import { brainProgram, fakeEnv, fakeLog, packageHost, plan, SLOW, tempDir, TestHost } from "./support/host";
 
 const cleanups: (() => unknown)[] = [];
 afterEach(async () => {
@@ -59,5 +59,43 @@ describe("OpenCode's provider server", () => {
 
         // the key went in the request body only: never in how the server was started
         expect(JSON.stringify(host.started)).not.toContain("sk-ant-secret");
+    }, SLOW);
+
+    function rig() {
+        const root = tempDir("providers");
+        const host = new TestHost(fakeEnv(root));
+        const program = brainProgram(root, "opencode");
+        const providers = new Providers({
+            host: { ...host, packages: packageHost({}) } as never,
+            program: () => program,
+            env: () => ({}),
+            cwd: root,
+            onChange: async () => undefined,
+        });
+        cleanups.push(async () => {
+            await host.close();
+            fs.rmSync(root, { recursive: true, force: true });
+        });
+        return { root, host, providers };
+    }
+
+    test("a server that ignores SIGTERM is killed, so stopping it (and listing OpenCode's models) doesn't hang", async () => {
+        const { root, host, providers } = rig();
+        plan(root, { serveIgnoresTerm: true });
+        await providers.list();
+        await providers.stop();
+        expect(await host.exists(SERVER_PROCESS_ID)).toBe(false);
+        expect(fakeLog(root).some((e) => e.event === "ignored SIGTERM")).toBe(true);
+        expect(host.kills.map((k) => k.signal)).toEqual(["SIGTERM", "SIGKILL"]);
+    }, SLOW);
+
+    test("each start's listeners go when its server stops", async () => {
+        const { host, providers } = rig();
+        for (let i = 0; i < 3; i++) {
+            await providers.list();
+            expect(await providers.quiet()).toBe(true);
+        }
+        expect(host.startedAs(SERVER_PROCESS_ID)).toHaveLength(3);
+        expect(host.listeners(SERVER_PROCESS_ID)).toBe(0);
     }, SLOW);
 });

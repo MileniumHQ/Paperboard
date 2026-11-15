@@ -352,7 +352,8 @@ async function opencode() {
             });
         });
         server.listen(port, host, () => log({ event: "listening", host, port }));
-        process.on("SIGTERM", () => server.close(() => process.exit(0)));
+        // plan.serveIgnoresTerm: a server that only goes when it's killed
+        process.on("SIGTERM", () => (plan.serveIgnoresTerm ? log({ event: "ignored SIGTERM" }) : server.close(() => process.exit(0))));
         return;
     }
     if (argv[0] === "acp") {

@@ -27,13 +27,13 @@ import { WEBRTC_CANDIDATES_JS, type Mark } from "./pageScripts";
 import { startProxy, type Proxy } from "./proxy";
 import { errorText } from "../lib/failure";
 import { writeAtomic } from "./writeAtomic";
+import { stopChild } from "./stopChild";
 
 export const BROWSER_PROC_ID = `${PANEL_ID}.browser`;
 const RECORD_FILE = "browser.json";
 const RECORD_VERSION = 1;
 
 const START_MS = 30_000;
-const STOP_GRACE_MS = 2_000; // the daemon gives the whole service 3 s to stop
 const LOAD_MS = 15_000;
 const MAX_TABS = 16;
 const MAX_CALLS = 4;
@@ -141,7 +141,6 @@ export class BrowserComputer {
     private record: BrowserRecord = { version: RECORD_VERSION, installed: false, chromium: null };
     private busy: Promise<unknown> = Promise.resolve();
     private abort: AbortController | null = null;
-    private exitWaiters = new Set<(code?: number) => void>();
     private offs: (() => void)[] = [];
     private stderrTail = "";
     private running = false;
@@ -520,8 +519,6 @@ export class BrowserComputer {
 
     private onExited(code?: number) {
         this.running = false;
-        for (const w of [...this.exitWaiters]) w(code);
-        this.exitWaiters.clear();
         const unexpected = !this.stopping && this.state.phase === "ready";
         this.teardown();
         if (unexpected) {
@@ -564,18 +561,9 @@ export class BrowserComputer {
     private async kill() {
         this.stopping = true;
         try {
-            if (this.running || (await this.deps.host.exists(BROWSER_PROC_ID))) {
-                const gone = new Promise<void>((ok) => this.exitWaiters.add(() => ok()));
-                if (!(await this.deps.host.exists(BROWSER_PROC_ID))) this.onExited();
-                else {
-                    await this.deps.host.kill(BROWSER_PROC_ID, "SIGTERM");
-                    const late = await Promise.race([gone.then(() => false), new Promise<boolean>((r) => setTimeout(() => r(true), STOP_GRACE_MS))]);
-                    if (late) {
-                        await this.deps.host.kill(BROWSER_PROC_ID, "SIGKILL");
-                        await gone;
-                    }
-                }
-            }
+            await stopChild(this.deps.host, BROWSER_PROC_ID);
+            // its exit was seen already, unless it was gone before it was asked to stop
+            if (this.running) this.onExited();
         } finally {
             this.teardown();
             this.stopping = false;

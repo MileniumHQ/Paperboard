@@ -7,6 +7,7 @@
 
 import { isImageType, type ToolImage, type ToolResult } from "./computerMcp";
 import { errorText } from "../lib/failure";
+import { stopChild } from "./stopChild";
 
 export const PROTOCOL_VERSION = "2025-06-18";
 export const MAX_MESSAGE = 4 * 1024 * 1024;
@@ -14,7 +15,6 @@ const MAX_PENDING = 32;
 const MAX_TOOLS = 500;
 const MAX_PAGES = 10;
 const STDERR_KEEP = 2000;
-const STOP_GRACE_MS = 2000;
 
 export const TIMEOUTS = { initialize: 20_000, list: 15_000, call: 120_000 } as const;
 
@@ -158,8 +158,6 @@ export class StdioWire implements McpWire {
     private offs: (() => void)[] = [];
     private ended: string | null = null;
     private endCbs: ((reason: string) => void)[] = [];
-    private exited: Promise<void>;
-    private markExited!: () => void;
     private closing = false;
     /** why this end stopped the server itself, which is what it ended with */
     private failure: string | null = null;
@@ -167,21 +165,14 @@ export class StdioWire implements McpWire {
     private constructor(
         private host: ProcessHost,
         readonly id: string,
-    ) {
-        this.exited = new Promise((ok) => (this.markExited = ok));
-    }
+    ) {}
 
     /** Start the child. Its output is subscribed before it runs, so nothing is missed. */
     static async start(host: ProcessHost, o: { id: string; command: string; args: string[]; env?: Record<string, string> }): Promise<StdioWire> {
         // a child the last service generation left behind is not ours to talk to
-        if (await host.exists(o.id)) {
-            await host.kill(o.id, "SIGKILL");
-            const end = Date.now() + STOP_GRACE_MS;
-            while (await host.exists(o.id)) {
-                if (Date.now() > end) throw new Error("an earlier copy of this server is still running and won't stop");
-                await new Promise((r) => setTimeout(r, 25));
-            }
-        }
+        await stopChild(host, o.id).catch((e) => {
+            throw new Error(`an earlier copy of this server is still running and won't stop: ${errorText(e)}`);
+        });
         const wire = new StdioWire(host, o.id);
         wire.offs.push(
             host.onStdout(o.id, (d) => wire.onData(d)),
@@ -229,7 +220,6 @@ export class StdioWire implements McpWire {
     private onExit(code?: number) {
         const tail = this.stderr.trim().split("\n").slice(-3).join(" | ");
         this.finish(this.failure ?? (this.closing ? "stopped" : `the server exited${code !== undefined ? ` (${code})` : ""}${tail ? `: ${tail}` : ""}`));
-        this.markExited();
     }
 
     private finish(reason: string) {
@@ -300,24 +290,8 @@ export class StdioWire implements McpWire {
     /** Ask it to stop, then make it, and return once the daemon says it's gone. */
     async close(): Promise<void> {
         this.closing = true;
-        if (this.ended === null || (await this.host.exists(this.id))) {
-            await this.host.kill(this.id, "SIGTERM");
-            if (!(await this.stopped(STOP_GRACE_MS))) {
-                await this.host.kill(this.id, "SIGKILL");
-                if (!(await this.stopped(STOP_GRACE_MS))) throw new Error(`${this.id} didn't stop`);
-            }
-        }
+        await stopChild(this.host, this.id);
         this.finish(this.failure ?? "stopped");
-    }
-
-    private async stopped(ms: number): Promise<boolean> {
-        let timer: ReturnType<typeof setTimeout> | undefined;
-        const timeout = new Promise<boolean>((ok) => (timer = setTimeout(() => ok(false), ms)));
-        try {
-            return await Promise.race([this.exited.then(() => true), timeout]);
-        } finally {
-            clearTimeout(timer);
-        }
     }
 }
 

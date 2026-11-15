@@ -13,6 +13,7 @@ import net from "node:net";
 import type { ProviderAttempt, ProviderAttemptStatus, ProviderField, ProviderInfo, ProviderMethod } from "../contract";
 import { errorText } from "../lib/failure";
 import type { BrainsHost } from "./brains";
+import { stopChild } from "./stopChild";
 
 export const SERVER_PROCESS_ID = "brain-opencode-server";
 const READY_MS = 30_000;
@@ -43,6 +44,8 @@ export class Providers {
     private idle: ReturnType<typeof setTimeout> | null = null;
     /** sign-ins started and not finished: the server stays up for them */
     private pending = new Set<string>();
+    /** the running server's output and exit listeners; they go when it exits */
+    private offs: (() => void)[] = [];
 
     constructor(private deps: ProvidersDeps) {}
 
@@ -126,16 +129,7 @@ export class Providers {
         this.pending.clear();
         this.server = null;
         this.starting = null;
-        if (await this.deps.host.exists(SERVER_PROCESS_ID)) {
-            const gone = new Promise<void>((ok) => {
-                const off = this.deps.host.onExit(SERVER_PROCESS_ID, () => {
-                    off();
-                    ok();
-                });
-            });
-            await this.deps.host.kill(SERVER_PROCESS_ID, "SIGTERM");
-            await gone;
-        }
+        await stopChild(this.deps.host, SERVER_PROCESS_ID);
     }
 
     // ------------------------------------------------------------- internals
@@ -174,15 +168,17 @@ export class Providers {
         const base = `http://127.0.0.1:${port}`;
         const auth = `Basic ${Buffer.from(`opencode:${password}`).toString("base64")}`;
         let stderr = "";
-        const offs = [this.deps.host.onStderr(SERVER_PROCESS_ID, (d) => (stderr = (stderr + d).slice(-2000)))];
         let died: string | null = null;
-        offs.push(
+        this.unsubscribe();
+        this.offs = [
+            this.deps.host.onStderr(SERVER_PROCESS_ID, (d) => (stderr = (stderr + d).slice(-2000))),
             this.deps.host.onExit(SERVER_PROCESS_ID, (code) => {
                 died = `OpenCode's provider server stopped (exit ${code ?? "?"})${stderr.trim() ? `: ${stderr.trim().split("\n").slice(-2).join(" | ")}` : ""}`;
                 this.server = null;
                 this.starting = null;
+                this.unsubscribe();
             }),
-        );
+        ];
         try {
             await this.deps.host.start({
                 id: SERVER_PROCESS_ID,
@@ -205,12 +201,18 @@ export class Providers {
                 await new Promise((r) => setTimeout(r, 100));
             }
         } catch (e) {
-            for (const off of offs) off();
-            await this.deps.host.kill(SERVER_PROCESS_ID, "SIGTERM").catch(() => undefined);
+            this.unsubscribe();
+            await stopChild(this.deps.host, SERVER_PROCESS_ID).catch((k) => {
+                throw new ProviderError(`${errorText(e)}; and it couldn't be closed: ${errorText(k)}`);
+            });
             throw e;
         }
         this.server = { base, auth };
         return this.server;
+    }
+
+    private unsubscribe() {
+        for (const off of this.offs.splice(0)) off();
     }
 
     private async request(method: string, path: string, body?: unknown): Promise<unknown> {
