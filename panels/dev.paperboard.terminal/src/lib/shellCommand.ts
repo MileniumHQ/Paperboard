@@ -12,8 +12,8 @@ function commandLabel(cmd: string): string {
     return line.length > 80 ? `${line.slice(0, 79)}…` : line;
 }
 
-/** The last lines a failed command printed, for its error. */
-function outputTail(text: string): string {
+/** The last lines a command printed: a failed command's error, a saved command's outcome. */
+export function outputTail(text: string): string {
     const tail = text.split(/\r?\n/).slice(-SHELL_TAIL_LINES).join("\n");
     return tail.length > SHELL_TAIL_CHARS ? `…${tail.slice(-SHELL_TAIL_CHARS)}` : tail;
 }

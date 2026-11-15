@@ -12,6 +12,7 @@ import { errorMessage, SerialQueue } from "@mileniumhq/paperapi";
 // its runs (dispose); one that restarts after a crash finds the records and
 // takes the runs back with the deadline they had left (init).
 import type { CommandRun, SavedCommand } from "./contract";
+import { outputTail } from "./shellCommand";
 
 export const MAX_SAVED_COMMANDS = 32;
 export const MAX_COMMAND_LENGTH = 4096;
@@ -21,6 +22,8 @@ const RUN_TIMEOUT_MS = 10 * 60_000;
 /** After a kill, how long to wait for the exit before giving up on the run. */
 const EXIT_GRACE_MS = 30_000;
 const SAVED_COMMANDS_VERSION = 1;
+/** How much of a run's output is held while it runs; its last lines are kept with the outcome. */
+const OUTPUT_BUFFER_CHARS = 8_000;
 
 /** A child the daemon accepted and this service has not yet seen exit. */
 interface RunningRecord {
@@ -51,6 +54,8 @@ export interface SavedCommandsDeps {
     /** Resolves once the daemon accepted the spawn; rejects if it refused. */
     start(procId: string, command: string): Promise<void>;
     onExit(procId: string, callback: (exitCode?: number) => void): () => void;
+    /** What the child prints, stdout and stderr together. */
+    onOutput(procId: string, callback: (data: string) => void): () => void;
     kill(procId: string): Promise<void>;
     /** Whether the daemon still has this child. */
     exists(procId: string): Promise<boolean>;
@@ -76,6 +81,7 @@ function isFinishedRun(raw: unknown): raw is CommandRun {
     if (!raw || typeof raw !== "object") return false;
     const run = raw as Record<string, unknown>;
     if (typeof run.startedAt !== "number" || typeof run.endedAt !== "number") return false;
+    if (run.output !== undefined && typeof run.output !== "string") return false;
     if (run.state === "exited") return typeof run.exitCode === "number";
     if (run.state === "timed-out" || run.state === "stopped") return true;
     if (run.state === "failed") return typeof run.error === "string";
@@ -149,6 +155,9 @@ interface LiveRun {
     /** The daemon accepted the spawn: from here the run is in the file. */
     accepted: boolean;
     offExit: () => void;
+    offOutput: () => void;
+    /** The latest of what it printed, bounded. */
+    output: string;
     timeout?: ReturnType<typeof setTimeout>;
     grace?: ReturnType<typeof setTimeout>;
     timedOut: boolean;
@@ -271,7 +280,7 @@ export class SavedCommands {
         }
         const startedAt = this.now();
         const procId = `pinned_${command.id}_${startedAt.toString(36)}`;
-        const live: LiveRun = { commandId: command.id, procId, startedAt, accepted: false, offExit: () => {}, timedOut: false, stopping: false, settled: false };
+        const live: LiveRun = { commandId: command.id, procId, startedAt, accepted: false, offExit: () => {}, offOutput: () => {}, output: "", timedOut: false, stopping: false, settled: false };
         this.live.set(command.id, live);
         this.listen(live);
         const previousRun = this.runs[command.id];
@@ -357,6 +366,7 @@ export class SavedCommands {
         for (const live of pending) {
             live.settled = true;
             live.offExit();
+            live.offOutput();
             clearTimeout(live.timeout);
             clearTimeout(live.grace);
             live.onSettled?.();
@@ -382,6 +392,9 @@ export class SavedCommands {
 
     // listen before spawning: a fast command can exit before start() answers
     private listen(live: LiveRun): void {
+        live.offOutput = this.deps.onOutput(live.procId, (data) => {
+            live.output = (live.output + data).slice(-OUTPUT_BUFFER_CHARS);
+        });
         live.offExit = this.deps.onExit(live.procId, (exitCode) => {
             const { startedAt } = live;
             if (live.timedOut) {
@@ -401,6 +414,7 @@ export class SavedCommands {
         if (live.settled) return;
         live.settled = true;
         live.offExit();
+        live.offOutput();
         if (this.live.get(live.commandId) === live) this.live.delete(live.commandId);
         live.onSettled?.();
         if (previousRun) this.runs = { ...this.runs, [live.commandId]: previousRun };
@@ -451,7 +465,7 @@ export class SavedCommands {
                 );
                 continue;
             }
-            const live: LiveRun = { commandId: rec.commandId, procId: rec.procId, startedAt: rec.startedAt, accepted: true, offExit: () => {}, timedOut: false, stopping: false, settled: false };
+            const live: LiveRun = { commandId: rec.commandId, procId: rec.procId, startedAt: rec.startedAt, accepted: true, offExit: () => {}, offOutput: () => {}, output: "", timedOut: false, stopping: false, settled: false };
             this.live.set(rec.commandId, live);
             this.listen(live);
             this.runs = { ...this.runs, [rec.commandId]: { state: "running", startedAt: rec.startedAt } };
@@ -483,10 +497,14 @@ export class SavedCommands {
         }, this.graceMs);
     }
 
-    private settle(live: LiveRun, outcome: CommandRun): void {
+    private settle(live: LiveRun, ended: CommandRun): void {
         if (live.settled) return;
         live.settled = true;
         live.offExit();
+        live.offOutput();
+        // what it printed last is how a failure says why
+        const printed = live.output.trim();
+        const outcome: CommandRun = printed && ended.state !== "running" ? { ...ended, output: outputTail(printed) } : ended;
         clearTimeout(live.timeout);
         clearTimeout(live.grace);
         if (this.live.get(live.commandId) === live) this.live.delete(live.commandId);

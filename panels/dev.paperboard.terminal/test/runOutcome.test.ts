@@ -113,6 +113,7 @@ describe("run outcome is only the exit the daemon reported, across restarts", ()
                 if (!res?.success) throw new Error("the daemon did not start the process");
             },
             onExit: (procId, callback) => processApi.onExit(procId, callback),
+            onOutput: (procId, callback) => processApi.onData(procId, callback),
             kill: (procId) => processApi.kill(procId),
             exists: (procId) => processApi.exists(procId),
             publish: (view) => {

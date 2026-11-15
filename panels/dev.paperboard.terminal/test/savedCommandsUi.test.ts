@@ -71,6 +71,35 @@ describe("saved commands in the panel", () => {
             served.stop();
         }
     });
+    test("a failed run shows what it printed, an unnamed command is said once, and the field's placeholder is its type", async () => {
+        await panelFiles({ "tabs.json": TABS });
+        await startService();
+        const command = "echo before-the-error; ls /nonexistent-qa";
+        const id = await call.saveCommand({ label: "", command });
+        const served = await servePanel();
+        const page = await browser.open(served.url);
+        try {
+            await page.waitFor(`document.querySelectorAll(".xterm").length === 1`, "the shell");
+            await page.click('button[aria-label="Saved commands"]');
+            await page.clickText("[role=menuitem]", "Manage saved commands");
+            await page.waitFor(dialog, "the modal");
+            expect(await page.evaluate<string[]>(`[...${dialog}.querySelectorAll("input")].map((i) => i.placeholder)`)).toContain("Command");
+            expect(await page.evaluate<boolean>(`[...${dialog}.querySelectorAll("input")].some((i) => i.placeholder === "git pull")`)).toBe(false);
+            // the row names the command once
+            const row = `${dialog}.querySelector('[data-value="${id}"]')`;
+            await page.waitFor(row, "the command's row");
+            expect(await page.evaluate<number>(`${row}.innerText.split(${JSON.stringify(command)}).length - 1`)).toBe(1);
+
+            await press(page, `[role=dialog] button[aria-label="Run ${command}"]`);
+            // why it failed: the last lines it printed, stderr with stdout
+            await page.waitFor(`${row}.innerText.includes("Exit 2") && ${row}.innerText.includes("before-the-error") && /No such file/.test(${row}.innerText)`, "the failed run's output");
+            expect(await page.evaluate<number>(`${row}.innerText.split(${JSON.stringify(command)}).length - 1`)).toBe(1);
+            expect(page.exceptions).toEqual([]);
+        } finally {
+            await page.close();
+            served.stop();
+        }
+    });
 });
 
 describe("the Pinned command widget", () => {

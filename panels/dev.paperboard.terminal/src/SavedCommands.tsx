@@ -1,7 +1,7 @@
 // Saved commands, run from the toolbar's menu and managed in a modal: add,
 // run, remove. The list and every outcome are the service's; this only asks
 // and shows what it answered.
-import { createSignal, For, Show } from "solid-js";
+import { createSignal, For, Index, Show } from "solid-js";
 import {
     PaperButton,
     PaperContextMenuHeader,
@@ -15,6 +15,7 @@ import {
     PaperModal,
     PaperQuote,
     PaperText,
+    stripAnsi,
     type PaperColor,
     createAction,
     type ActionFailure,
@@ -34,6 +35,12 @@ const TONE_COLOR: Record<RunTone, PaperColor> = {
     danger: "danger",
     warning: "warning",
 };
+
+/** The last lines a finished run printed, as plain text: how a failure says why. */
+function runOutput(run: CommandRun | undefined): string[] {
+    if (!run || run.state === "running" || !run.output) return [];
+    return run.output.split("\n").map(stripAnsi);
+}
 
 interface SavedCommandsProps {
     commands: SavedCommand[];
@@ -167,13 +174,23 @@ function SavedCommandsModal(props: {
                                         value={saved.id}
                                         icon="terminal"
                                         description={
-                                            <PaperFlex direction="column" minWidth={0}>
-                                                <PaperText size={1} family="code" truncate title={saved.command}>
-                                                    {saved.command}
-                                                </PaperText>
+                                            <PaperFlex direction="column" gap="half" minWidth={0}>
+                                                {/* an unnamed command is named by its command: said once */}
+                                                <Show when={saved.label !== saved.command}>
+                                                    <PaperText size={1} family="code" truncate title={saved.command}>
+                                                        {saved.command}
+                                                    </PaperText>
+                                                </Show>
                                                 <PaperText size={1} color={TONE_COLOR[status().tone]} title={status().detail}>
                                                     {status().text}
                                                 </PaperText>
+                                                <Index each={runOutput(props.runs[saved.id])}>
+                                                    {(line) => (
+                                                        <PaperText size={1} family="code" color="text-subtle" breakWord>
+                                                            {line()}
+                                                        </PaperText>
+                                                    )}
+                                                </Index>
                                             </PaperFlex>
                                         }
                                         actions={
@@ -220,7 +237,7 @@ function SavedCommandsModal(props: {
                         <PaperInput
                             fullWidth
                             label="Command"
-                            placeholder="git pull"
+                            placeholder="Command"
                             value={command()}
                             onInput={(e) => setCommand(e.currentTarget.value)}
                             onKeyDown={(e) => {

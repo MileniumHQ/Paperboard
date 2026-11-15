@@ -62,7 +62,8 @@ export type SessionErrorKind = keyof SessionErrors[string];
 const savedCommand = shape.object({ id: shape.text(), label: shape.text(), command: shape.text() });
 export type SavedCommand = Infer<typeof savedCommand>;
 
-const ended = { startedAt: shape.number(), endedAt: shape.number() };
+// output: the last lines it printed (stdout and stderr together), when it printed any
+const ended = { startedAt: shape.number(), endedAt: shape.number(), output: shape.optional(shape.text()) };
 const commandRun = shape.either(
     shape.object({ state: shape.oneOf("running"), startedAt: shape.number() }),
     shape.object({ state: shape.oneOf("exited"), ...ended, exitCode: shape.number() }),
