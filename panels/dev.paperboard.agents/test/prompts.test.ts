@@ -5,7 +5,7 @@ import { Prompts } from "../src/service/prompts";
 
 const KEY = "lin_api_correct-horse-battery-staple";
 
-function setup(o: { failSave?: boolean } = {}) {
+function setup(o: { failSave?: boolean; saving?: Promise<void> } = {}) {
     const posted: PromptEntry[] = [];
     const notices: string[] = [];
     const vault = new Map<string, string>();
@@ -14,6 +14,7 @@ function setup(o: { failSave?: boolean } = {}) {
         checkSecretName: (n) => checkSecretName(n),
         saveSecret: async (server, name, value) => {
             if (o.failSave) throw new Error("the vault is locked");
+            await o.saving;
             vault.set(`mcp.${server}.${name}`, value);
         },
         post: (e) => posted.push(structuredClone(e)),
@@ -53,6 +54,21 @@ describe("asking the user for things", () => {
         expect(s.posted.at(-1)).toMatchObject({ status: "failed" });
         expect(s.notices.at(-1)).toContain("couldn't be saved");
         expect(JSON.stringify([s.posted, s.notices])).not.toContain(KEY);
+    });
+
+    test("an answer that lands after a new request leaves the new one waiting", async () => {
+        let saved!: () => void;
+        const s = setup({ saving: new Promise<void>((ok) => (saved = ok)) });
+        const first = await s.ask();
+        const answering = s.prompts.answer(first, ["acme", KEY]);
+        // the agent asks again while the first answer's secret is still being saved
+        const second = await s.ask();
+        saved();
+        await answering;
+        expect(s.posted.filter((e) => e.id === second).at(-1)!.status).toBe("waiting");
+        expect(s.posted.filter((e) => e.id === first).at(-1)!.status).toBe("sent");
+        await s.prompts.answer(second, ["acme", KEY]);
+        expect(s.posted.at(-1)).toMatchObject({ id: second, status: "sent" });
     });
 
     test("an empty answer is refused and the request keeps waiting", async () => {

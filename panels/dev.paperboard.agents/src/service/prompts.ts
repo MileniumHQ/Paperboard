@@ -75,9 +75,14 @@ const text = (v: unknown) => (typeof v === "string" ? v.trim() : "");
 /** what the user typed, after its prefix; a value they pasted with the prefix already on keeps just the one */
 const withPrefix = (value: string, prefix?: string) => (!prefix || value.toLowerCase().startsWith(prefix.toLowerCase()) ? value : prefix + value);
 
+interface Pending {
+    entry: PromptEntry;
+    timer: ReturnType<typeof setTimeout>;
+}
+
 export class Prompts {
     /** one request waits at a time; a new one replaces it */
-    private pending: { entry: PromptEntry; timer: ReturnType<typeof setTimeout> } | null = null;
+    private pending: Pending | null = null;
 
     constructor(private deps: PromptDeps) {}
 
@@ -153,7 +158,7 @@ export class Prompts {
         if (empty) throw new Error(`Fill in ${empty.label}.`);
 
         clearTimeout(p.timer);
-        this.update({ status: "sending" });
+        this.update(p, { status: "sending" });
         const saved: string[] = [];
         for (const [i, f] of fields.entries()) {
             if (!f.secret) continue;
@@ -161,7 +166,7 @@ export class Prompts {
                 await this.deps.saveSecret(f.secret.server, f.secret.name, withPrefix(answers[i]!.trim(), f.secret.prefix));
             } catch (e) {
                 const error = `${f.label} wasn't saved: ${errorText(e)}`;
-                this.finish({ status: "failed", error });
+                this.finish(p, { status: "failed", error });
                 this.tell(
                     `The user answered "${p.entry.title}", but ${f.secret.name} for ${f.secret.server} couldn't be saved: ${errorText(e)}.` +
                         (saved.length ? ` Saved before it: ${saved.join(", ")}.` : "") +
@@ -171,7 +176,7 @@ export class Prompts {
             }
             saved.push(`${f.secret.name} for ${f.secret.server}`);
         }
-        this.finish({ status: "sent" });
+        this.finish(p, { status: "sent" });
         const lines = fields.map((f, i) => (f.secret ? `- ${f.label}: saved in the vault as ${f.secret.name} for ${f.secret.server}` : `- ${f.label}: ${answers[i]!.trim()}`));
         this.tell(`The user answered "${p.entry.title}":\n${lines.join("\n")}`);
         return { sent: true };
@@ -180,7 +185,7 @@ export class Prompts {
     decline(id: unknown) {
         const p = this.waiting(id);
         clearTimeout(p.timer);
-        this.finish({ status: "declined" });
+        this.finish(p, { status: "declined" });
         this.tell(`The user said no to "${p.entry.title}". Don't ask again unless they bring it up.`);
         return { declined: true };
     }
@@ -200,19 +205,18 @@ export class Prompts {
         const p = this.pending;
         if (!p || p.entry.status !== "waiting") return;
         clearTimeout(p.timer);
-        this.finish({ status: "expired" });
+        this.finish(p, { status: "expired" });
     }
 
-    private update(patch: Partial<PromptEntry>) {
-        const p = this.pending;
-        if (!p) return;
+    /** `p`'s card, changed: never the request that replaced it while an answer was on its way */
+    private update(p: Pending, patch: Partial<PromptEntry>) {
         p.entry = { ...p.entry, ...patch };
         this.deps.post(p.entry);
     }
 
-    private finish(patch: Partial<PromptEntry>) {
-        this.update(patch);
-        this.pending = null;
+    private finish(p: Pending, patch: Partial<PromptEntry>) {
+        this.update(p, patch);
+        if (this.pending === p) this.pending = null;
     }
 
     private tell(text: string) {
