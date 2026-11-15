@@ -6,7 +6,6 @@ import {
     createSignal,
     For,
     on,
-    onMount,
     Show,
 } from "solid-js";
 import { createStore, reconcile } from "solid-js/store";
@@ -19,6 +18,7 @@ import {
     PaperMediaCardGroup,
     PaperPage,
     PaperText,
+    createRead,
 } from "@mileniumhq/paperui";
 import bannerImg from "./assets/PanelLibraryBanner.webp";
 import styles from "./Library.module.css";
@@ -52,52 +52,34 @@ export interface PanelLibraryAppProps {
 }
 
 const PanelLibraryApp: Component<PanelLibraryAppProps> = (props) => {
-    const [registry, setRegistry] = createSignal<Record<
-        string,
-        RegistryPanelRecord
-    > | null>(null);
-    const [loadFailed, setLoadFailed] = createSignal(false);
-    const [loading, setLoading] = createSignal(false);
+    // A reload is a retry for a library that is open but wrong: a transient
+    // registry read that came back empty or malformed leaves the frame alive
+    // with nothing to click, so the user is stuck until the app restarts.
+    // A failed reload keeps whatever was rendered; the shell never sees an
+    // empty library it would mistake for "nothing published".
+    const read = createRead(async () => {
+        // same-origin registry read: the library is a division of the
+        // registry, so index.json is exactly the document it documents
+        const data = await fetchRegistryJson("/panels/index.json");
+        // an index is a map of panel id to record; anything else is not
+        // an empty registry and must not be rendered as "nothing published"
+        if (!data || typeof data !== "object" || Array.isArray(data)) {
+            throw new Error("Panel registry index is not an object");
+        }
+        return data as Record<string, RegistryPanelRecord>;
+    });
+    const registry = () => read.value() ?? null;
+    const loadFailed = () => read.error() !== null;
+    const load = read.reload;
     // Registry settled is distinct from succeeded: a failed load is still
     // "settled" for readiness, because the library has something to show.
     const [registrySettled, setRegistrySettled] = createSignal(false);
+    void read.ready().then(() => setRegistrySettled(true));
     const route = createLibraryRoute();
     // Install state is per panel: installs run side by side (the shell
     // answers each request on its own), and a failure stays on the page of
     // the panel that failed until that panel's next attempt.
     const [installs, setInstalls] = createStore<Record<string, { busy: boolean; error: string | null }>>({});
-
-    // A reload is a retry for a library that is open but wrong: a transient
-    // registry read that came back empty or malformed leaves the frame alive
-    // with nothing to click, so the user is stuck until the app restarts.
-    const load = async () => {
-        if (loading()) return;
-        setLoading(true);
-        setLoadFailed(false);
-        try {
-            // same-origin registry read: the library is a division of the
-            // registry, so index.json is exactly the document it documents
-            const data = await fetchRegistryJson("/panels/index.json");
-            // an index is a map of panel id to record; anything else is not
-            // an empty registry and must not be rendered as "nothing published"
-            if (!data || typeof data !== "object" || Array.isArray(data)) {
-                throw new Error("Panel registry index is not an object");
-            }
-            setRegistry(data);
-        } catch (err) {
-            // A failed reload keeps whatever was rendered; the shell never
-            // sees an empty library it would mistake for "nothing published".
-            console.error("[library] registry unavailable:", err);
-            setLoadFailed(true);
-        } finally {
-            setLoading(false);
-            setRegistrySettled(true);
-        }
-    };
-
-    onMount(() => {
-        void load();
-    });
 
     const unrecognizedIds = createMemo(() => {
         const listed = registry();
@@ -189,7 +171,7 @@ const PanelLibraryApp: Component<PanelLibraryAppProps> = (props) => {
                                         title={loadFailed() ? "Couldn't load library" : "Panel not found"}
                                         description={
                                             loadFailed()
-                                                ? "The registry didn't answer."
+                                                ? `The registry didn't answer: ${read.error()}`
                                                 : `No published panel is named ${route.panelId()}.`
                                         }
                                     >
