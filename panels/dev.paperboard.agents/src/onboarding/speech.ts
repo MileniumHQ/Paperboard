@@ -64,21 +64,25 @@ export function createSpeaker(face: FaceController) {
     // whether the bubble is up; text stays in place while it fades out
     const [shown, setShown] = createSignal(false);
 
-    // every say() gets a generation; a newer one (or cleanup) cancels the old
+    // every say() gets a generation; a newer one (or cleanup) cancels the old,
+    // and its pending sleeps answer false at once
     let generation = 0;
-    const timers = new Set<ReturnType<typeof setTimeout>>();
+    const sleeps = new Map<ReturnType<typeof setTimeout>, (finished: boolean) => void>();
     const sleep = (ms: number, gen: number) =>
         new Promise<boolean>((resolve) => {
             const t = setTimeout(() => {
-                timers.delete(t);
+                sleeps.delete(t);
                 resolve(gen === generation);
             }, ms);
-            timers.add(t);
+            sleeps.set(t, resolve);
         });
     const stop = () => {
         generation++;
-        timers.forEach(clearTimeout);
-        timers.clear();
+        sleeps.forEach((resolve, t) => {
+            clearTimeout(t);
+            resolve(false);
+        });
+        sleeps.clear();
         face.talk(false);
         setSpeaking(false);
     };
