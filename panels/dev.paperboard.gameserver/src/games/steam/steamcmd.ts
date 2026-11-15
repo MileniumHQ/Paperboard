@@ -1,6 +1,6 @@
 import fs from "node:fs/promises";
 import path from "node:path";
-import { fileApi as rawFiles } from "@mileniumhq/paperapi";
+import { fileApi as rawFiles, SerialQueue } from "@mileniumhq/paperapi";
 import { packages as packageApi } from "../../service/api";
 import { PANEL_ID } from "../../service/types";
 import { runInstallerProcess, stopLeftoverInstaller, type InstallerRun } from "../../service/installerProcess";
@@ -29,13 +29,8 @@ function branchName(branch: string | undefined): string {
     return branch;
 }
 
-let queue: Promise<unknown> = Promise.resolve();
-function serialized<T>(work: () => Promise<T>): Promise<T> {
-    const run = queue.then(work, work);
-    // the next run waits for this one to settle; its failure reaches its own caller through `run`
-    queue = Promise.allSettled([run]);
-    return run;
-}
+// one SteamCMD run at a time
+const serialized = new SerialQueue().run;
 
 /** the panel's SteamCMD folder; a test hands its own */
 const workspace = (own?: string) => (own ? Promise.resolve(own) : rawFiles.getPath(".steam", PANEL_ID));

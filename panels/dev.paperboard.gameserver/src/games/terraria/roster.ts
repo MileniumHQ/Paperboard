@@ -3,6 +3,7 @@
 // keeps of everyone who has joined. Formats are Terraria 1.4.5.8's.
 import fs from "node:fs/promises";
 import path from "node:path";
+import { SerialQueue } from "@mileniumhq/paperapi";
 import { writeFileAtomic } from "../../service/fileWrites";
 import { unlessMissing } from "../../service/failures";
 
@@ -78,12 +79,11 @@ export interface SeenPlayer { name: string; lastSeen: number; address?: string }
 
 const sameName = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
 // read-modify-write of one file at a time: two joins at once must not drop a sighting
-const queues = new Map<string, Promise<unknown>>();
+const queues = new Map<string, SerialQueue>();
 function serial<T>(file: string, work: () => Promise<T>): Promise<T> {
-    const next = (queues.get(file) ?? Promise.resolve()).then(work, work);
-    // the caller gets the failure from `next`; the queue only waits for it to settle
-    queues.set(file, Promise.allSettled([next]));
-    return next;
+    let queue = queues.get(file);
+    if (!queue) queues.set(file, (queue = new SerialQueue()));
+    return queue.run(work);
 }
 
 export class PlayerStore {

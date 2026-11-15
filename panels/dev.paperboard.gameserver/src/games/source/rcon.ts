@@ -1,5 +1,5 @@
 import net from "node:net";
-import { inOrder } from "../../service/inOrder";
+import { SerialQueue } from "@mileniumhq/paperapi";
 
 // Valve's Source RCON protocol: little-endian packets of
 // [size][id][type][body\0][\0], over TCP on the server's game port. A
@@ -86,7 +86,7 @@ export class SourceRcon {
     private buffer: Buffer = Buffer.alloc(0);
     private nextId = 1;
     private waiting: ((packet: RconPacket | Error) => void) | null = null;
-    private readonly inOrder = inOrder();
+    private readonly commands = new SerialQueue();
 
     constructor(private readonly port: number, private readonly password: string, private readonly label = "The server", private readonly timeoutMs = TIMEOUT_MS) {
         if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error(`RCON port is not a port: ${port}`);
@@ -96,7 +96,7 @@ export class SourceRcon {
     /** Runs a console command and resolves with its whole reply. */
     exec(command: string): Promise<string> {
         if (/[\r\n\0]/.test(command)) throw new Error("A command must be a single line");
-        return this.inOrder(() => this.run(command));
+        return this.commands.run(() => this.run(command));
     }
 
     close(): void {

@@ -15,7 +15,7 @@ import { gamertagOf, floodgateUuid, xuidOfFloodgateUuid, type BedrockNaming } fr
 import { uuidForPlayerName } from "./playerStats";
 import { fetchMojang, formatUuid, profileForName } from "./mojang";
 import { errorMessage } from "@mileniumhq/paperapi";
-import { atMost } from "./inOrder";
+import { atMost } from "./atMost";
 import { skinUrlForXuid, xuidForGamertag } from "./xbox";
 
 const PROFILE_URL = "https://sessionserver.mojang.com/session/minecraft/profile/";

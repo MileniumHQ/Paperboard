@@ -6,6 +6,7 @@ import {
     fileApi,
     type ServiceContext,
     type BlocksHandle,
+    SerialQueue,
 } from "@mileniumhq/paperapi";
 import {
     PANEL_ID,
@@ -36,7 +37,6 @@ import { assertGameCall, gameFor, games } from "./games";
 import { loadServerOptions } from "./service/options";
 import { livePortDeps } from "./service/portDeps";
 import { report, waitUntil } from "./games/serviceKit";
-import { inOrder } from "./service/inOrder";
 export * from "./service/types";
 
 export interface ServerSummary extends Omit<StoredServer, "settings"> {
@@ -56,8 +56,8 @@ const entries = new Map<string, ServerScope>();
 let saved: ServersConfig = readServersConfig(null);
 let rootContext: ServiceContext<ServersState>;
 // server changes, and the config writes inside them, one at a time
-const serial = inOrder();
-const configWrites = inOrder();
+const serial = new SerialQueue().run;
+const configWrites = new SerialQueue().run;
 function updateSaved(change: (current: ServersConfig) => ServersConfig): Promise<void> {
     return configWrites(async () => {
         const next = change(saved);

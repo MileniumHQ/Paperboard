@@ -1,5 +1,6 @@
 import fs from "node:fs/promises";
 import path from "node:path";
+import { SerialQueue } from "@mileniumhq/paperapi";
 import { writeFileAtomic } from "../../service/fileWrites";
 import { unlessMissing } from "../../service/failures";
 import type { PalworldPlayer } from "./rest";
@@ -25,17 +26,12 @@ export function userId(value: unknown): string {
  * go through the running server.
  */
 export class PalworldRoster {
-    private queue: Promise<unknown> = Promise.resolve();
+    // read-modify-writes of its files, one at a time
+    private readonly serial = new SerialQueue().run;
     constructor(private readonly root: string, private readonly saved: string) {}
 
     private get file() { return path.join(this.root, "palworld-players.json"); }
     private get banFile() { return path.join(this.saved, "SaveGames", "banlist.txt"); }
-
-    private serial<T>(work: () => Promise<T>): Promise<T> {
-        const run = this.queue.then(work, work);
-        this.queue = Promise.allSettled([run]);
-        return run;
-    }
 
     async seen(): Promise<PalworldSeen[]> {
         const text = await unlessMissing(fs.readFile(this.file, "utf8"), null);

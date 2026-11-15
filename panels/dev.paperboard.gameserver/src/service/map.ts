@@ -4,7 +4,7 @@ import * as fs from "node:fs";
 import { gunzipSync, inflateSync } from "node:zlib";
 import type { PNG as Png } from "pngjs";
 import { loadNbt, loadPng } from "../core/lazy";
-import { files as fileApi, type ServiceContext, errorMessage } from "./api";
+import { files as fileApi, type ServiceContext, errorMessage, SerialQueue } from "./api";
 import { tryListDirectory } from "./filesystem";
 import { resolveVersionProfile, worldPathsFor, type VersionProfile } from "../lib/versionProfile";
 import {
@@ -27,7 +27,6 @@ import {
 } from "../core/map";
 import { type GameServerState, PANEL_ID } from "./types";
 import { resolveLevelName } from "./worlds";
-import { inOrder } from "./inOrder";
 
 const local = serverLocal(() => ({ tileCache: new Map<string, CachedTile>() }));
 
@@ -285,7 +284,7 @@ function cacheSet(tiles: Map<string, CachedTile>, key: string, value: CachedTile
 const CHUNKS_PER_TURN = 8;
 const loopTurn = () => new Promise<void>((resolve) => setImmediate(resolve));
 // the next region waits for this one to settle, whichever way it does
-const painting = inOrder();
+const painting = new SerialQueue().run;
 const paintingNow = new Map<string, Promise<string>>();
 
 export function paintInTurn(key: string, paint: () => Promise<string>): Promise<string> {

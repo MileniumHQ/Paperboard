@@ -6,7 +6,7 @@
 // on, checks the answer is a picture, and hands the page a data: address.
 import { fetchPublic } from "@mileniumhq/paperapi/net";
 import { errorMessage } from "@mileniumhq/paperapi";
-import { atMost } from "./inOrder";
+import { atMost } from "./atMost";
 import type { PictureSource } from "./contract";
 
 /**

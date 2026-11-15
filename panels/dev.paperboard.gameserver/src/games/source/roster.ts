@@ -1,5 +1,6 @@
 import fs from "node:fs/promises";
 import path from "node:path";
+import { SerialQueue } from "@mileniumhq/paperapi";
 import { writeFileAtomic } from "../../service/fileWrites";
 import { unlessMissing } from "../../service/failures";
 
@@ -43,17 +44,12 @@ export interface SourceBan {
  * this list at each start; a running server is told of each change itself.
  */
 export class SourceRoster {
-    private queue: Promise<unknown> = Promise.resolve();
+    // read-modify-writes of its files, one at a time
+    private readonly serial = new SerialQueue().run;
     constructor(private readonly root: string) {}
 
     private get seenFile() { return path.join(this.root, "players.json"); }
     private get banFile() { return path.join(this.root, "bans.json"); }
-
-    private serial<T>(work: () => Promise<T>): Promise<T> {
-        const run = this.queue.then(work, work);
-        this.queue = Promise.allSettled([run]);
-        return run;
-    }
 
     private async read<T>(file: string): Promise<T[]> {
         const text = await unlessMissing(fs.readFile(file, "utf8"), null);

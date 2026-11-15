@@ -10,7 +10,7 @@
 // so a running server whitelists them through Floodgate's `fwhitelist`, and
 // a stopped one gets the uuid Floodgate derives from their XUID written in.
 import { createHash } from "node:crypto";
-import { files as fileApi, type ServiceContext, errorMessage } from "./api";
+import { files as fileApi, type ServiceContext, errorMessage, SerialQueue } from "./api";
 import { serverLocal } from "./scope";
 import { report } from "../games/serviceKit";
 import { resolvePlayerIdentities } from "./playerStats";
@@ -27,7 +27,6 @@ import {
     type BedrockNaming,
 } from "../core/bedrock";
 import { type GameServerState, PANEL_ID } from "./types";
-import { inOrder } from "./inOrder";
 
 export type PlayerFlag = "op" | "whitelist";
 
@@ -59,7 +58,7 @@ const local = serverLocal(() => ({
     names: new Map<string, { name: string; at: number }>(),
     // one list edit at a time: two quick toggles must not read the same file
     // and each write back a copy missing the other's change
-    editing: inOrder(),
+    editing: new SerialQueue().run,
 }));
 
 async function readList(path: string): Promise<ListEntry[]> {

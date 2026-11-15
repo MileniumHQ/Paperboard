@@ -1,5 +1,6 @@
 import fs from "node:fs/promises";
 import path from "node:path";
+import { SerialQueue } from "@mileniumhq/paperapi";
 import { writeFileAtomic } from "../../service/fileWrites";
 import type { RustPlayer } from "./webrcon";
 import { unlessMissing } from "../../service/failures";
@@ -46,7 +47,7 @@ export function parseBansCfg(text: string): RustBan[] {
 
 /** The players file Paperboard keeps in the server folder, so backups carry it. */
 export class RustRoster {
-    private queue: Promise<unknown> = Promise.resolve();
+    private readonly queue = new SerialQueue();
     constructor(private readonly root: string) {}
 
     private get file() { return path.join(this.root, "rust-players.json"); }
@@ -62,12 +63,10 @@ export class RustRoster {
     /** Records who is online now. */
     remember(players: readonly RustPlayer[], now = Date.now()): Promise<void> {
         if (players.length === 0) return Promise.resolve();
-        const run = this.queue.then(async () => {
+        return this.queue.run(async () => {
             const byId = new Map((await this.seen()).map((p) => [p.steamId, p]));
             for (const p of players) byId.set(p.steamId, { steamId: p.steamId, name: p.name, lastSeen: now });
             await writeFileAtomic(fs, this.file, JSON.stringify([...byId.values()], null, 2));
         });
-        this.queue = Promise.allSettled([run]);
-        return run;
     }
 }
