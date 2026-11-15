@@ -15,7 +15,7 @@ function setup(fill: (args: { id: string; values: string[] }) => Promise<unknown
             return fill(args);
         },
         post: (e) => posted.push(structuredClone(e)),
-        notice: (t) => notices.push(t),
+        tell: (t) => notices.push(t),
     });
     const ask = async () => {
         const r = await signIns.toolset().call("ask_to_sign_in", { window: 1, fields: [{ mark: 3, label: "Email" }, { mark: 4, label: "Password" }], submit: 5 }, { fromFlow: false });

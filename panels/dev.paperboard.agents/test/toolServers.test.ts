@@ -9,7 +9,7 @@ import { parseServer } from "../src/service/mcpConfig";
 import { McpServers } from "../src/service/mcpServers";
 import { findProgram } from "../src/service/which";
 import type { ToolsConfig, ToolsView } from "../src/toolsContract";
-import { SLOW, tempDir, TestHost } from "./support/host";
+import { poll, SLOW, tempDir, TestHost } from "./support/host";
 
 const cleanups: (() => unknown)[] = [];
 afterEach(async () => {
@@ -230,11 +230,6 @@ describe("signing in to a tool server", () => {
         return r.headers.get("location")!;
     }
 
-    async function until(check: () => boolean) {
-        for (let i = 0; i < 200 && !check(); i++) await new Promise((r) => setTimeout(r, 10));
-        expect(check()).toBe(true);
-    }
-
     test("a server that answers 401 is signed in to with PKCE, and its tokens live only in the vault", async () => {
         const { base, st } = await oauthServer();
         const { s, vault, writes } = servers();
@@ -250,7 +245,7 @@ describe("signing in to a tool server", () => {
         const back = await browse(pending.url);
         const page = await fetch(back);
         expect(page.status).toBe(200);
-        await until(() => s.status()[0]!.phase === "running");
+        await poll(() => s.status()[0]!.phase === "running", "the server to run");
 
         expect(st.resource).toBe(`${base}/mcp`);
         expect(s.status()[0]).toEqual({ name: "web", phase: "running", needsSignIn: false, error: null, tools: 1 });

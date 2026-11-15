@@ -10,7 +10,7 @@ import { Prompts } from "../src/service/prompts";
 import { ServerTools } from "../src/service/serverTools";
 import { findProgram } from "../src/service/which";
 import type { ToolsConfig } from "../src/toolsContract";
-import { SLOW, tempDir, TestHost } from "./support/host";
+import { poll, SLOW, tempDir, TestHost } from "./support/host";
 
 const KEY = "lin_api_correct-horse-battery-staple";
 const cleanups: (() => unknown)[] = [];
@@ -39,13 +39,13 @@ function rig() {
         },
         onChange: (v) => tools?.seen(v),
     });
-    tools = new ServerTools({ servers, findProgram, post: (e) => posted.push(structuredClone(e)), notice: (t) => notices.push(t), startMs: 10_000 });
+    tools = new ServerTools({ servers, findProgram, post: (e) => posted.push(structuredClone(e)), tell: (t) => notices.push(t), startMs: 10_000 });
     const prompts = new Prompts({
         hasServer: (s) => servers.config.servers.some((x) => x.name === s),
         checkSecretName,
         saveSecret: (server, name, value) => servers.setSecret(server, name, value),
         post: (e) => posted.push(structuredClone(e)),
-        notice: (t) => notices.push(t),
+        tell: (t) => notices.push(t),
     });
     const set = tools.toolset();
     const call = async (name: string, args: Record<string, unknown> = {}, fromFlow = false) => {
@@ -92,11 +92,6 @@ async function mcpOverHttp(o: { bearer?: () => string } = {}) {
     cleanups.push(() => new Promise<void>((ok) => server.close(() => ok())));
     const base = await new Promise<string>((ok) => server.listen(0, "127.0.0.1", () => ok(`http://127.0.0.1:${(server.address() as AddressInfo).port}`)));
     return { url: `${base}/mcp`, seen };
-}
-
-async function until(check: () => boolean, what: string) {
-    for (let i = 0; i < 500 && !check(); i++) await new Promise((r) => setTimeout(r, 10));
-    if (!check()) throw new Error(`timed out waiting for ${what}`);
 }
 
 // The agent adding its own tool servers when the user asks: what it can do alone, and what waits for the user.
@@ -185,7 +180,7 @@ describe("the agent's own tool servers", () => {
         await r.tools.answer(r.card("tool-server")!.id, true);
         expect(r.card("tool-server")!.status).toBe("allowed");
         expect(r.servers.config.servers[0]).toMatchObject({ name: "whoami", transport: "stdio", command, args: [] });
-        await until(() => r.notices.some((n) => n.includes("allowed whoami")), "the agent to be told");
+        await poll(() => r.notices.some((n) => n.includes("allowed whoami")), "the agent to be told");
         expect(r.notices.at(-1)).toContain('It needs "token" before it can start');
 
         // switching it off runs nothing new: no card
@@ -208,7 +203,7 @@ describe("the agent's own tool servers", () => {
         await r.servers.load();
         await r.call("add_tool_server", { name: "whoami", command: r.program(), reason: "It tells me who I am." });
         await r.tools.answer(r.card("tool-server")!.id, true);
-        await until(() => r.notices.some((n) => n.includes("allowed whoami")), "the agent to be told");
+        await poll(() => r.notices.some((n) => n.includes("allowed whoami")), "the agent to be told");
         expect(r.notices.at(-1)).toContain("It's running with 1 tool: whoami.");
         expect(r.servers.status()[0]).toMatchObject({ phase: "running" });
     }, SLOW);
@@ -228,7 +223,7 @@ describe("the agent's own tool servers", () => {
         token = "a1";
         r.vault.set("mcp.web.oauth", JSON.stringify({ access: "a1", type: "Bearer", refresh: null, expiresAt: null, clientId: "c", clientSecret: null, tokenEndpoint: `${web.url}/token`, clientAuth: "none", resource: web.url }));
         await r.servers.restart("web");
-        await until(() => r.notices.some((n) => n.includes("signed in to web")), "the agent to be told");
+        await poll(() => r.notices.some((n) => n.includes("signed in to web")), "the agent to be told");
         expect(r.notices.at(-1)).toContain("It's running with 1 tool: echo.");
         // told once
         await r.servers.restart("web");

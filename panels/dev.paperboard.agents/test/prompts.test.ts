@@ -18,7 +18,7 @@ function setup(o: { failSave?: boolean; saving?: Promise<void> } = {}) {
             vault.set(`mcp.${server}.${name}`, value);
         },
         post: (e) => posted.push(structuredClone(e)),
-        notice: (t) => notices.push(t),
+        tell: (t) => notices.push(t),
     });
     const call = (args: Record<string, unknown>, fromFlow = false) => prompts.toolset().call("ask_user", args, { fromFlow });
     const ask = async () => {

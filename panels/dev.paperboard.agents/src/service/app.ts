@@ -179,14 +179,14 @@ export class AiApp {
             prepare: (args) => browserTool(this.computer, "sign_in_prepare", args),
             fill: (args) => browserView(this.computer, "view_sign_in", args),
             post: (entry) => this.conversation.post(entry),
-            notice: (text) => this.conversation.notice(text),
+            tell: (text) => this.conversation.tell(text),
         });
         this.access = new Access({
             file: path.join(root, "access.json"),
             findProgram: (command, args) => this.host.findProgram(command, args),
             exec: (command, args, o) => this.host.exec(command, args, o),
             post: (entry) => this.conversation.post(entry),
-            notice: (text) => this.conversation.notice(text),
+            tell: (text) => this.conversation.tell(text),
             turning: () => this.conversation?.turning() ?? false,
             onChange: (view) => this.ctx.emit(EVENTS.access, view),
         });
@@ -196,13 +196,13 @@ export class AiApp {
             checkSecretName,
             saveSecret: (server, name, value) => this.servers.setSecret(server, name, value),
             post: (entry) => this.conversation.post(entry),
-            notice: (text) => this.conversation.notice(text),
+            tell: (text) => this.conversation.tell(text),
         });
         this.serverTools = new ServerTools({
             servers: this.servers,
             findProgram: (command, args) => this.host.findProgram(command, args),
             post: (entry) => this.conversation.post(entry),
-            notice: (text) => this.conversation.notice(text),
+            tell: (text) => this.conversation.tell(text),
         });
         const brainsHost = { ...this.host, write: this.host.tools.write };
         this.brains = new Brains({ host: brainsHost, dir: path.join(root, "brains"), find: this.host.findBrain, onState: (brains) => this.ctx.setState({ brains }) });

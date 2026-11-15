@@ -65,8 +65,8 @@ export interface PromptDeps {
     saveSecret(server: string, name: string, value: string): Promise<unknown>;
     /** add or update the request's card in the conversation */
     post(entry: PromptEntry): void;
-    /** tell the agent how it went (starts a turn) */
-    notice(text: string): void;
+    /** tell the agent how it went, never refused (Conversation.tell); it starts a turn */
+    tell(text: string): void;
     waitMs?: number;
 }
 
@@ -138,7 +138,7 @@ export class Prompts {
         const timer = setTimeout(() => {
             if (this.pending?.entry.id !== entry.id) return;
             this.lapse();
-            this.tell(`The user didn't answer "${title}" in time; it has lapsed.`);
+            this.deps.tell(`The user didn't answer "${title}" in time; it has lapsed.`);
         }, this.deps.waitMs ?? L.waitMinutes * 60_000);
         this.pending = { entry, timer };
         this.deps.post(entry);
@@ -166,7 +166,7 @@ export class Prompts {
             } catch (e) {
                 const error = `${f.label} wasn't saved: ${errorText(e)}`;
                 this.finish(p, { status: "failed", error });
-                this.tell(
+                this.deps.tell(
                     `The user answered "${p.entry.title}", but ${f.secret.name} for ${f.secret.server} couldn't be saved: ${errorText(e)}.` +
                         (saved.length ? ` Saved before it: ${saved.join(", ")}.` : "") +
                         " Nothing else from the form was used; fix what's wrong and ask again.",
@@ -177,7 +177,7 @@ export class Prompts {
         }
         this.finish(p, { status: "sent" });
         const lines = fields.map((f, i) => (f.secret ? `- ${f.label}: saved in the vault as ${f.secret.name} for ${f.secret.server}` : `- ${f.label}: ${answers[i]!.trim()}`));
-        this.tell(`The user answered "${p.entry.title}":\n${lines.join("\n")}`);
+        this.deps.tell(`The user answered "${p.entry.title}":\n${lines.join("\n")}`);
         return { sent: true };
     }
 
@@ -185,7 +185,7 @@ export class Prompts {
         const p = this.waiting(id);
         clearTimeout(p.timer);
         this.finish(p, { status: "declined" });
-        this.tell(`The user said no to "${p.entry.title}". Don't ask again unless they bring it up.`);
+        this.deps.tell(`The user said no to "${p.entry.title}". Don't ask again unless they bring it up.`);
         return { declined: true };
     }
 
@@ -216,14 +216,5 @@ export class Prompts {
     private finish(p: Pending, patch: Partial<PromptEntry>) {
         this.update(p, patch);
         if (this.pending === p) this.pending = null;
-    }
-
-    private tell(text: string) {
-        try {
-            this.deps.notice(text);
-        } catch (e) {
-            // the card already shows the answer; the agent hears of it when it's next asked
-            console.error("[agents] couldn't tell the agent about its request:", errorText(e));
-        }
     }
 }

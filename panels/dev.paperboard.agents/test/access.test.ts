@@ -37,7 +37,7 @@ function setup(o: { turning?: boolean } = {}) {
             return { stdout: r.stdout, stderr: r.stderr, exitCode: r.status ?? -1 };
         },
         post: (e: AccessEntry) => posted.push(structuredClone(e)),
-        notice: (t: string) => notices.push(t),
+        tell: (t: string) => notices.push(t),
         turning: () => turning,
         onChange: (v: AccessView) => views.push(v),
     };

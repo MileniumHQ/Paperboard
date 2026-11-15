@@ -24,10 +24,9 @@ import { fault, type Toolset } from "./toolsets";
 import { errorText } from "../lib/failure";
 import { writeAtomic } from "./writeAtomic";
 import { isRecord } from "./mcpConfig";
+import { OUTPUT_CHARS } from "./shell";
 
 const L = LIMITS.access;
-/** what one read or one command may hand back before the rest is cut */
-export const OUTPUT_CHARS = 30_000;
 const RUN_MS = 5 * 60_000;
 const WRITE_BYTES = 2 * 1024 * 1024;
 const SEARCH_FILES = 20_000;
@@ -137,8 +136,8 @@ export interface AccessDeps {
     exec(command: string, args: string[], o: { cwd: string; timeoutMs: number }): Promise<{ stdout: string; stderr: string; exitCode: number }>;
     /** add or update the request's card in the conversation */
     post(entry: AccessEntry): void;
-    /** tell the agent how it went (starts a turn) */
-    notice(text: string): void;
+    /** tell the agent how it went, never refused (Conversation.tell); it starts a turn */
+    tell(text: string): void;
     /** a turn is running now */
     turning(): boolean;
     onChange(view: AccessView): void;
@@ -348,7 +347,7 @@ export class Access {
         const timer = setTimeout(() => {
             if (this.pending?.entry.id !== entry.id) return;
             this.lapse();
-            this.tell("The user didn't answer your request for access in time; it has lapsed.");
+            this.deps.tell("The user didn't answer your request for access in time; it has lapsed.");
         }, this.deps.waitMs ?? L.waitMinutes * 60_000);
         this.pending = { entry, timer };
         this.deps.post(entry);
@@ -389,7 +388,7 @@ export class Access {
         this.finish(status);
         this.changed();
         const list = items.map(describe).join("; ");
-        this.tell(
+        this.deps.tell(
             how === "decline"
                 ? `The user said no to: ${list}. Don't ask again for it unless they bring it up.`
                 : `The user allowed ${how === "always" ? "for good" : "for this turn"}: ${list}. Go ahead with what you asked it for.`,
@@ -420,14 +419,6 @@ export class Access {
         this.pending = null;
     }
 
-    private tell(text: string) {
-        try {
-            this.deps.notice(text);
-        } catch (e) {
-            // the card already shows the answer; the agent hears of it when it's next asked
-            console.error("[agents] couldn't tell the agent about access:", errorText(e));
-        }
-    }
 
     private list(args: Record<string, unknown>): ToolResult {
         const dir = this.allowed(args.path);

@@ -177,10 +177,22 @@ export class Conversation {
 
     /** The current conversation and what goes with it, read from its files. */
     private loadCurrent() {
+        const threads = this.readSaved<Partial<Record<Harness, string>>>(THREADS) ?? {};
+        const carry = this.readSaved<Carry>(CARRY);
         this.transcript.load();
-        const threads = path.join(this.deps.dir, THREADS);
-        this.threads = fs.existsSync(threads) ? JSON.parse(fs.readFileSync(threads, "utf8")) : {};
-        this.carry = this.loadCarry();
+        this.threads = threads;
+        this.carry = carry;
+    }
+
+    /** One of the conversation's own files, or null when there's none. A damaged one is named, and left as it is. */
+    private readSaved<T>(name: string): T | null {
+        const file = path.join(this.deps.dir, name);
+        if (!fs.existsSync(file)) return null;
+        try {
+            return JSON.parse(fs.readFileSync(file, "utf8")) as T;
+        } catch (e) {
+            throw new Error(`${file} can't be read (${errorText(e)}); fix or delete it`);
+        }
     }
 
     private get entries(): ChatEntry[] {
@@ -240,6 +252,17 @@ export class Conversation {
         if (!this.deps.settings()) throw new Error("the agent isn't set up yet");
         // a backlog this long means turns aren't keeping up: this one is refused, and whoever sent it shows why
         if (this.notices.length >= MAX_NOTICES) throw new Error(`the agent has ${MAX_NOTICES} things waiting to be read already`);
+        this.tell(text);
+    }
+
+    /**
+     * Tell the agent how one of its requests went: a card the user answered, or one that lapsed (signIn.ts,
+     * access.ts, prompts.ts and serverTools.ts). Never held to the backlog, so what the user did always reaches
+     * it: these follow the user's own answers, a card at a time, and can't pile up the way routines can.
+     * Shutting down, it goes with every other notice.
+     */
+    tell(text: string) {
+        if (this.closed) return;
         this.notices.push(text);
         this.pump();
     }
@@ -686,11 +709,6 @@ export class Conversation {
         const file = path.join(this.deps.dir, CARRY);
         if (carry) writeAtomic(file, JSON.stringify(carry));
         else fs.rmSync(file, { force: true });
-    }
-
-    private loadCarry(): Carry | null {
-        const file = path.join(this.deps.dir, CARRY);
-        return fs.existsSync(file) ? (JSON.parse(fs.readFileSync(file, "utf8")) as Carry) : null;
     }
 
     private dropThread(harness: Harness) {

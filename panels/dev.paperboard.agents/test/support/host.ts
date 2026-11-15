@@ -47,6 +47,13 @@ export function until(subscribe: (changed: () => void) => () => void, check: () 
     });
 }
 
+/** Resolves when `check` holds, for what reports no changes to wait on: it's looked at again every few ms until the deadline. */
+export async function poll(check: () => boolean, what: string, ms = WAIT_MS): Promise<void> {
+    for (const end = Date.now() + ms; !check(); await new Promise((r) => setTimeout(r, 10))) {
+        if (Date.now() > end) throw new Error(`timed out after ${ms} ms waiting for ${what}`);
+    }
+}
+
 /** Values pushed by the code under test (state, entries, events), awaitable. */
 export class Recorder<T> {
     readonly items: T[] = [];

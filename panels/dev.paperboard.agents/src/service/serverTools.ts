@@ -87,8 +87,8 @@ export interface ServerToolsDeps {
     findProgram(command: string, args: readonly string[]): Launch | null;
     /** add or update a card in the conversation */
     post(entry: ToolServerEntry | ToolSignInEntry): void;
-    /** tell the agent how it went (starts a turn) */
-    notice(text: string): void;
+    /** tell the agent how it went, never refused (Conversation.tell); it starts a turn */
+    tell(text: string): void;
     waitMs?: number;
     startMs?: number;
 }
@@ -255,11 +255,11 @@ export class ServerTools {
             }
             if (s.phase === "running") {
                 this.awaiting.delete(name);
-                this.tell(`The user signed in to ${name}. It's running with ${toolsText(this.servers, name)} They're in your tools now: go on with what they asked.`);
+                this.deps.tell(`The user signed in to ${name}. It's running with ${toolsText(this.servers, name)} They're in your tools now: go on with what they asked.`);
             } else if (s.phase === "failed" && !s.needsSignIn) {
                 // it was started again (after a sign-in) and failed for another reason
                 this.awaiting.delete(name);
-                this.tell(`${name}, which you asked the user to sign in to, didn't start: ${s.error ?? "it stopped"}. Tell the user.`);
+                this.deps.tell(`${name}, which you asked the user to sign in to, didn't start: ${s.error ?? "it stopped"}. Tell the user.`);
             }
         }
     }
@@ -286,7 +286,7 @@ export class ServerTools {
         const timer = setTimeout(() => {
             if (this.pending?.entry.id !== entry.id) return;
             this.lapse();
-            this.tell(`The user didn't answer whether ${spec.name} may run on their computer in time; it has lapsed.`);
+            this.deps.tell(`The user didn't answer whether ${spec.name} may run on their computer in time; it has lapsed.`);
         }, this.deps.waitMs ?? L.waitMinutes * 60_000);
         this.pending = { entry, spec, timer };
         this.deps.post(entry);
@@ -302,7 +302,7 @@ export class ServerTools {
         const name = p.spec.name;
         if (!allow) {
             this.finish({ status: "declined" });
-            this.tell(`The user said no to running ${name} on their computer. Don't add it again unless they bring it up.`);
+            this.deps.tell(`The user said no to running ${name} on their computer. Don't add it again unless they bring it up.`);
             return { status: "declined" };
         }
         try {
@@ -313,14 +313,14 @@ export class ServerTools {
         } catch (e) {
             const error = errorText(e);
             this.finish({ status: "failed", error });
-            this.tell(`The user allowed ${name}, but it couldn't be saved: ${error}.`);
+            this.deps.tell(`The user allowed ${name}, but it couldn't be saved: ${error}.`);
             throw new Error(`Not saved: ${error}`);
         }
         this.finish({ status: "allowed" });
         // the click is answered now; starting can take a while (a package to download), and the agent hears how it went
         void this.bringUp(name).then(
-            (how) => this.tell(`The user allowed ${name} to run on their computer, and it's ${p.entry.change ? "changed" : "added"}. ${how}`),
-            (e) => this.tell(`The user allowed ${name}, and it's saved, but it couldn't be started: ${errorText(e)}.`),
+            (how) => this.deps.tell(`The user allowed ${name} to run on their computer, and it's ${p.entry.change ? "changed" : "added"}. ${how}`),
+            (e) => this.deps.tell(`The user allowed ${name}, and it's saved, but it couldn't be started: ${errorText(e)}.`),
         );
         return { status: "allowed" };
     }
@@ -344,15 +344,6 @@ export class ServerTools {
         p.entry = { ...p.entry, ...patch };
         this.deps.post(p.entry);
         this.pending = null;
-    }
-
-    private tell(text: string) {
-        try {
-            this.deps.notice(text);
-        } catch (e) {
-            // the card already shows the answer; the agent hears of it when it's next asked
-            console.error("[agents] couldn't tell the agent about its tool servers:", errorText(e));
-        }
     }
 }
 

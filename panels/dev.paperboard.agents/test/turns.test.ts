@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { conversationRig, errors, said, settled, turnId, type Rig } from "./support/rig";
 import { plan, release, SLOW } from "./support/host";
+import { Prompts } from "../src/service/prompts";
 
 let rig: Rig | null = null;
 afterEach(async () => {
@@ -63,6 +64,23 @@ describe("notices", () => {
         await settled(rig);
         const next = rig.turns()[1].message as string;
         for (let i = 0; i < 10; i++) expect(next).toContain(`routine ${i} is due`);
+    }, SLOW);
+
+    test("what the user answers on a card reaches the agent even past the backlog", async () => {
+        rig = await conversationRig({ harness: "codex" });
+        const conversation = rig.conversation;
+        const prompts = new Prompts({ hasServer: () => false, checkSecretName: (n) => n, saveSecret: async () => {}, post: (e) => conversation.post(e), tell: (t) => conversation.tell(t) });
+        rig.conversation.send("busy [[hold]]");
+        await rig.host.printed(turnId, "fake.holding");
+        const asked = await prompts.toolset().call("ask_user", { title: "Where to", reason: "To book the table.", fields: [{ label: "Address" }] }, {});
+        expect(asked.isError).toBeFalsy();
+        for (let i = 0; i < 10; i++) rig.conversation.notice(`routine ${i} is due`);
+        const card = rig.conversation.history().find((e) => e.kind === "prompt")!;
+        expect(await prompts.answer(card.id, ["12 Rue Cler"])).toEqual({ sent: true });
+        release(rig.root);
+        await rig.states.until(() => rig!.turns().length === 2, "the notices' turn");
+        await settled(rig);
+        expect(rig.turns()[1].message as string).toContain("Address: 12 Rue Cler");
     }, SLOW);
 });
 

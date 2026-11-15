@@ -206,6 +206,17 @@ describe("the history", () => {
         expect(() => rig!.conversation.past()).toThrow(new RegExp(`${path.join(dir, "meta.json").replace(/[\\.]/g, "\\$&")} can't be read`));
     });
 
+    test("a damaged threads.json or carry.json stops the start with its name, and is left as it is", async () => {
+        rig = await conversationRig();
+        for (const name of ["threads.json", "carry.json"]) {
+            const file = path.join(rig.dir, name);
+            fs.writeFileSync(file, "{nope");
+            expect(() => rig!.restart()).toThrow(`${file} can't be read`);
+            expect(fs.readFileSync(file, "utf8")).toBe("{nope");
+            fs.rmSync(file);
+        }
+    });
+
     test("attachments follow their conversation into the history and back", async () => {
         rig = await conversationRig();
         const file = upload(rig, "photo.png", PNG);

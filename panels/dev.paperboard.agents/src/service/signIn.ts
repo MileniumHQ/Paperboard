@@ -57,8 +57,8 @@ export interface SignInDeps {
     fill(args: { id: string; values: string[] }): Promise<unknown>;
     /** add or update the request's bubble in the conversation */
     post(entry: SignInEntry): void;
-    /** tell the agent how it went (starts a turn) */
-    notice(text: string): void;
+    /** tell the agent how it went, never refused (Conversation.tell); it starts a turn */
+    tell(text: string): void;
     waitMs?: number;
 }
 
@@ -127,7 +127,7 @@ export class SignIns {
         const timer = setTimeout(() => {
             if (this.pending?.entry.id !== id) return;
             this.lapse("expired");
-            this.tell(`The user didn't answer your sign-in request on ${entry.site} in time; it has lapsed.`);
+            this.deps.tell(`The user didn't answer your sign-in request on ${entry.site} in time; it has lapsed.`);
         }, this.deps.waitMs ?? LIMITS.signIn.waitMinutes * 60_000);
         this.pending = { entry, window: window as number, image, timer };
         this.deps.post(entry);
@@ -159,11 +159,11 @@ export class SignIns {
         } catch (e) {
             const error = errorText(e);
             this.finish(p, { status: "failed", error });
-            this.tell(`The sign-in on ${site} couldn't be filled in: ${error}. Look at window ${p.window} and ask again if it still needs one.`);
+            this.deps.tell(`The sign-in on ${site} couldn't be filled in: ${error}. Look at window ${p.window} and ask again if it still needs one.`);
             throw new Error(`Couldn't sign in: ${error}`);
         }
         this.finish(p, { status: "submitted" });
-        this.tell(`The user filled in the sign-in on ${site} and it was submitted. Look at window ${p.window} to see whether it worked.`);
+        this.deps.tell(`The user filled in the sign-in on ${site} and it was submitted. Look at window ${p.window} to see whether it worked.`);
         return { submitted: true };
     }
 
@@ -171,7 +171,7 @@ export class SignIns {
         const p = this.waiting(id);
         clearTimeout(p.timer);
         this.finish(p, { status: "declined" });
-        this.tell(`The user said no to signing in on ${p.entry.site}. Don't ask again unless they bring it up.`);
+        this.deps.tell(`The user said no to signing in on ${p.entry.site}. Don't ask again unless they bring it up.`);
         return { declined: true };
     }
 
@@ -201,15 +201,6 @@ export class SignIns {
     private finish(p: Pending, patch: Partial<SignInEntry>) {
         this.update(p, patch);
         if (this.pending === p) this.pending = null;
-    }
-
-    private tell(text: string) {
-        try {
-            this.deps.notice(text);
-        } catch (e) {
-            // the request's bubble already shows how it went; the agent hears of it when it's next asked
-            console.error("[agents] couldn't tell the agent about a sign-in:", errorText(e));
-        }
     }
 }
 
