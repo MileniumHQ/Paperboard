@@ -61,6 +61,49 @@ describe("the server explorer", () => {
     });
 });
 
+// What a server holds reads as rows, the same as every list in Paperboard,
+// and the rows fit a phone.
+describe("a server's page", () => {
+    test("its channels, roles and members are list rows that fit a phone", async () => {
+        const home = { ...guild("Home"), channels: [{ id: snowflake(), name: "a-channel-with-a-name-long-enough-to-run-past-a-phone-screen" }] };
+        const fake = discord.addBot({ username: "Lister", guilds: [home] });
+        await savedBots([{ stored: storedBot("b-list", fake.appId, { name: "Lister" }), token: fake.token }]);
+        await startService({ discordApi: discord.api });
+        await stateWhere<BotsServiceState>(PANEL_ID, (s) => Boolean(s.bots[0]?.connected), "Lister to connect");
+        const served = await servePanel();
+        const page = await browser.open(served.url);
+        try {
+            await page.waitFor(`document.body.innerText.includes("Lister")`, "the bot list");
+            await clickText(page, "[class*=card], [class*=Card]", "Lister");
+            await page.click(`input[name=botMenu][value="servers"]`);
+            await page.waitFor(`document.body.innerText.includes("Home")`, "the server list");
+            await clickText(page, "[class*=card], [class*=Card]", "Home");
+            await page.waitFor(`document.body.innerText.includes("@everyone")`, "the server's page");
+            await clickText(page, "button", "Search");
+            await page.waitFor(`document.body.innerText.includes("@Lister")`, "the member search");
+
+            /** the list row (a PaperList item) that shows `text`, or null */
+            const row = (text: string) => `([...document.querySelectorAll("[class*=PaperList] [data-value]")].find((el) => el.innerText.includes(${JSON.stringify(text)})) ?? null)`;
+            const rows = await page.evaluate<Record<string, boolean>>(`({
+                channel: ${row("a-channel-with-a-name")} !== null,
+                role: ${row("@everyone")} !== null,
+                member: ${row("@Lister")} !== null,
+            })`);
+            expect(rows).toEqual({ channel: true, role: true, member: true });
+            // the same page on a phone
+            await page.resize(390, 800);
+            await page.evaluate(`new Promise((resolve) => { const tick = () => (document.getAnimations().length ? requestAnimationFrame(tick) : resolve(true)); tick(); })`);
+            const spilled = await page.evaluate<string[]>(`[...document.querySelectorAll("[class*=PaperCard]")].filter((el) => el.getClientRects().length > 0 && el.scrollWidth > el.clientWidth).map((el) => el.innerText.slice(0, 40))`);
+            expect(spilled).toEqual([]);
+            expect(await page.evaluate<number>(`document.documentElement.scrollWidth`)).toBeLessThanOrEqual(390);
+            expect(page.exceptions).toEqual([]);
+        } finally {
+            await page.close();
+            served.stop();
+        }
+    });
+});
+
 // A message is confirmed only on the page of the server it went to: an
 // answer that comes back after the person opened another server is dropped.
 describe("a test message's answer", () => {

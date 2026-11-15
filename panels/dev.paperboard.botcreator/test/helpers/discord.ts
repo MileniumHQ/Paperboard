@@ -291,6 +291,18 @@ export function startFakeDiscord(): FakeDiscord {
                     ws.send(JSON.stringify({ op: 11 }));
                     return;
                 }
+                // Request Guild Members: one chunk of the members whose name starts with the query (only the bot here)
+                if (packet.op === 8) {
+                    const session = [...sessions.values()].find((s) => s.ws === ws);
+                    const bot = ws.data.token ? bots.get(ws.data.token) : undefined;
+                    if (!session || !bot) return;
+                    const query = String(packet.d?.query ?? "").toLowerCase();
+                    const members = bot.username.toLowerCase().startsWith(query)
+                        ? [{ user: userOf(bot), roles: [], joined_at: new Date().toISOString(), deaf: false, mute: false, flags: 0 }]
+                        : [];
+                    sendDispatch(session, "GUILD_MEMBERS_CHUNK", { guild_id: packet.d?.guild_id, members, chunk_index: 0, chunk_count: 1, nonce: packet.d?.nonce });
+                    return;
+                }
                 if (packet.op !== 2) return;
                 const bot = bots.get(packet.d?.token);
                 if (!bot) {

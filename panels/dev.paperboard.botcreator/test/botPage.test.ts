@@ -157,6 +157,9 @@ describe("a bot's page", () => {
             // a command Discord still has but the bot doesn't: no flow runs, and the Overview says so
             discord.dispatch(fake, "INTERACTION_CREATE", slashCommand(fake, { guild: home, name: "ghost" }));
             await page.waitFor(`document.body.innerText.includes("Recent problems") && document.body.innerText.includes("/ghost")`, "the problem in the Overview");
+            // health is label and value pairs, and the problem a row of a list, as everywhere in Paperboard
+            expect(await page.evaluate<string | null>(`[...document.querySelectorAll("dt")].find((dt) => dt.textContent === "Gateway status")?.nextElementSibling?.textContent ?? null`)).toBe("Connected");
+            expect(await page.evaluate<boolean>(`[...document.querySelectorAll("[class*=PaperList] [data-value]")].some((el) => el.innerText.includes("/ghost"))`)).toBe(true);
 
             await page.waitFor(`[...document.querySelectorAll("[title]")].some((el) => /picture couldn't be shown: .*404/.test(el.title))`, "the avatar to say why it's empty");
             expect(page.exceptions).toEqual([]);

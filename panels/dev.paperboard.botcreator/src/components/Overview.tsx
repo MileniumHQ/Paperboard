@@ -6,8 +6,11 @@ import {
     PaperQuote,
     PaperButton,
     PaperBadge,
-    PaperTable,
     PaperCard,
+    PaperKeyValue,
+    PaperKeyValueList,
+    PaperList,
+    PaperListItem,
     PaperCopyButton,
     PaperToggle,
 } from "@mileniumhq/paperui";
@@ -224,38 +227,15 @@ export default function Overview(props: OverviewProps) {
                         }
                     >
                         {(h) => (
-                            <PaperTable>
-                                <tbody>
-                                    <tr>
-                                        <th>Gateway status</th>
-                                        <td>{connected() ? "Connected" : "Disconnected"}</td>
-                                    </tr>
-                                    <tr>
-                                        <th>Gateway latency</th>
-                                        <td>{pingText()}</td>
-                                    </tr>
-                                    <tr>
-                                        <th>Uptime</th>
-                                        <td>{uptimeText()}</td>
-                                    </tr>
-                                    <tr>
-                                        <th>Servers</th>
-                                        <td>{h().guildCount}</td>
-                                    </tr>
-                                    <tr>
-                                        <th>Cached users / channels</th>
-                                        <td>{h().cachedUsers} / {h().cachedChannels}</td>
-                                    </tr>
-                                    <tr>
-                                        <th>Commands received</th>
-                                        <td>{h().commandsReceived}</td>
-                                    </tr>
-                                    <tr>
-                                        <th>Pending replies</th>
-                                        <td>{h().pendingInteractions}</td>
-                                    </tr>
-                                </tbody>
-                            </PaperTable>
+                            <PaperKeyValueList>
+                                <PaperKeyValue label="Gateway status">{connected() ? "Connected" : "Disconnected"}</PaperKeyValue>
+                                <PaperKeyValue label="Gateway latency">{pingText()}</PaperKeyValue>
+                                <PaperKeyValue label="Uptime">{uptimeText()}</PaperKeyValue>
+                                <PaperKeyValue label="Servers">{h().guildCount}</PaperKeyValue>
+                                <PaperKeyValue label="Cached users / channels">{h().cachedUsers} / {h().cachedChannels}</PaperKeyValue>
+                                <PaperKeyValue label="Commands received">{h().commandsReceived}</PaperKeyValue>
+                                <PaperKeyValue label="Pending replies">{h().pendingInteractions}</PaperKeyValue>
+                            </PaperKeyValueList>
                         )}
                     </Show>
 
@@ -270,16 +250,15 @@ export default function Overview(props: OverviewProps) {
                 <PaperCard>
                     <PaperFlex direction="column" gap="half" padding="full">
                         <PaperText preset="heading">Recent problems</PaperText>
-                        <For each={props.bot().problems}>
-                            {(problem) => (
-                                <PaperText preset="text" breakWord>
-                                    <PaperText as="span" preset="text" color="text-subtle">
-                                        {new Date(problem.at).toLocaleTimeString()}:
-                                    </PaperText>{" "}
-                                    {problem.text}
-                                </PaperText>
-                            )}
-                        </For>
+                        <PaperList selectable={false} fullWidth borderless scrollable={false}>
+                            <For each={props.bot().problems}>
+                                {(problem) => (
+                                    <PaperListItem value={problem.id} icon="warning" description={problem.text}>
+                                        {new Date(problem.at).toLocaleTimeString()}
+                                    </PaperListItem>
+                                )}
+                            </For>
+                        </PaperList>
                     </PaperFlex>
                 </PaperCard>
             </Show>
@@ -287,19 +266,16 @@ export default function Overview(props: OverviewProps) {
             <Show when={recent().length > 0}>
                 <PaperCard>
                     <PaperFlex direction="column" gap="half" padding="full">
-                        <PaperText preset="heading">
-                            Recent messages
-                        </PaperText>
-                        <For each={recent()}>
-                            {(msg) => (
-                                <PaperText preset="text" breakWord>
-                                    <PaperText as="span" preset="text" color="text-subtle">
-                                        {msg.author}:
-                                    </PaperText>{" "}
-                                    {msg.content || "(no text)"}
-                                </PaperText>
-                            )}
-                        </For>
+                        <PaperText preset="heading">Recent messages</PaperText>
+                        <PaperList selectable={false} fullWidth borderless scrollable={false}>
+                            <For each={recent()}>
+                                {(msg) => (
+                                    <PaperListItem value={msg.messageId} icon="chat" description={msg.content || "(no text)"}>
+                                        {msg.author}
+                                    </PaperListItem>
+                                )}
+                            </For>
+                        </PaperList>
                     </PaperFlex>
                 </PaperCard>
             </Show>

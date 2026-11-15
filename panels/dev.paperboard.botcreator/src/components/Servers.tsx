@@ -16,7 +16,9 @@ import {
     PaperSelectMenu,
     PaperSelectMenuItem,
     PaperSwatch,
-    PaperTable,
+    PaperList,
+    PaperListItem,
+    PaperListLabel,
     PaperCopyButton,
     PaperPage,
     PaperSlidePage,
@@ -277,20 +279,16 @@ export default function Servers(props: { bot: () => BotSummary }) {
     );
 
     const channelSection = (title: string, channels: () => GuildChannel[]): JSX.Element => (
-        <PaperFlex direction="column" gap="onefourth">
-            <PaperText as="h3" preset="section">
-                {title}
-            </PaperText>
+        <>
+            <PaperListLabel as="h3">{title}</PaperListLabel>
             <For each={channels()}>
                 {(channel) => (
-                    <PaperFlex direction="row" gap="half" align="center">
-                        <PaperIcon>{CHANNEL_KIND_ICONS[channel.kind]}</PaperIcon>
-                        <PaperText preset="text">{channel.name}</PaperText>
-                        <PaperText preset="hint">{CHANNEL_KIND_LABELS[channel.kind]}</PaperText>
-                    </PaperFlex>
+                    <PaperListItem value={channel.id} icon={CHANNEL_KIND_ICONS[channel.kind]} description={CHANNEL_KIND_LABELS[channel.kind]}>
+                        {channel.name}
+                    </PaperListItem>
                 )}
             </For>
-        </PaperFlex>
+        </>
     );
 
     const server = (): JSX.Element => (
@@ -368,12 +366,14 @@ export default function Servers(props: { bot: () => BotSummary }) {
                                 <PaperText preset="heading">
                                     Channels
                                 </PaperText>
-                                <For each={categories()}>
-                                    {(category) => channelSection(category.name, () => channelsIn(category.id))}
-                                </For>
-                                <Show when={uncategorized().length > 0}>
-                                    {channelSection("No category", uncategorized)}
-                                </Show>
+                                <PaperList selectable={false} fullWidth borderless scrollable={false}>
+                                    <For each={categories()}>
+                                        {(category) => channelSection(category.name, () => channelsIn(category.id))}
+                                    </For>
+                                    <Show when={uncategorized().length > 0}>
+                                        {channelSection("No category", uncategorized)}
+                                    </Show>
+                                </PaperList>
                             </PaperFlex>
                         </PaperCard>
 
@@ -382,31 +382,23 @@ export default function Servers(props: { bot: () => BotSummary }) {
                                 <PaperText preset="heading">
                                     Roles
                                 </PaperText>
-                                <PaperTable>
-                                    <tbody>
-                                        <For each={guild().roles}>
-                                            {(role) => (
-                                                <tr>
-                                                    <th>
-                                                        <PaperFlex
-                                                            direction="row"
-                                                            gap="half"
-                                                            align="center"
-                                                        >
-                                                            <PaperSwatch color={roleColor(role.color)} />
-                                                            {role.name}
-                                                            <Show when={role.managed}>
-                                                                <PaperBadge variant="primary">
-                                                                    Managed
-                                                                </PaperBadge>
-                                                            </Show>
-                                                        </PaperFlex>
-                                                    </th>
-                                                </tr>
-                                            )}
-                                        </For>
-                                    </tbody>
-                                </PaperTable>
+                                <PaperList selectable={false} fullWidth borderless scrollable={false}>
+                                    <For each={guild().roles}>
+                                        {(role) => (
+                                            <PaperListItem
+                                                value={role.id}
+                                                icon={<PaperSwatch color={roleColor(role.color)} />}
+                                                actions={
+                                                    <Show when={role.managed}>
+                                                        <PaperBadge variant="primary">Managed</PaperBadge>
+                                                    </Show>
+                                                }
+                                            >
+                                                {role.name}
+                                            </PaperListItem>
+                                        )}
+                                    </For>
+                                </PaperList>
                             </PaperFlex>
                         </PaperCard>
 
@@ -453,40 +445,24 @@ export default function Servers(props: { bot: () => BotSummary }) {
                                             </PaperText>
                                         }
                                     >
-                                        <PaperFlex direction="column" gap="half">
+                                        <PaperList selectable={false} fullWidth borderless scrollable={false}>
                                             <For each={members()}>
                                                 {(member) => (
-                                                    <PaperFlex
-                                                        direction="row"
-                                                        gap="half"
-                                                        align="center"
-                                                        fullWidth
+                                                    <PaperListItem
+                                                        value={member.id}
+                                                        icon={<DiscordAvatar url={member.avatar} size="medium" fallbackIcon="person" />}
+                                                        description={`@${member.username} · ${formatJoined(member.joinedAt)}`}
+                                                        actions={
+                                                            <Show when={member.bot}>
+                                                                <PaperBadge variant="primary">Bot</PaperBadge>
+                                                            </Show>
+                                                        }
                                                     >
-                                                        <DiscordAvatar url={member.avatar} size="medium" fallbackIcon="person" />
-                                                        <PaperFlex direction="column" gap="onefourth" flex minWidth={0}>
-                                                            <PaperFlex
-                                                                direction="row"
-                                                                gap="half"
-                                                                align="center"
-                                                            >
-                                                                <PaperText preset="label">
-                                                                    {member.displayName}
-                                                                </PaperText>
-                                                                <Show when={member.bot}>
-                                                                    <PaperBadge variant="primary">
-                                                                        Bot
-                                                                    </PaperBadge>
-                                                                </Show>
-                                                            </PaperFlex>
-                                                            <PaperText preset="hint">
-                                                                @{member.username} ·{" "}
-                                                                {formatJoined(member.joinedAt)}
-                                                            </PaperText>
-                                                        </PaperFlex>
-                                                    </PaperFlex>
+                                                        {member.displayName}
+                                                    </PaperListItem>
                                                 )}
                                             </For>
-                                        </PaperFlex>
+                                        </PaperList>
                                     </Show>
                                 </Show>
                             </PaperFlex>
