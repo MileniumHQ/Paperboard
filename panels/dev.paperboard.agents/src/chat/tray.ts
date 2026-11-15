@@ -11,7 +11,7 @@ import { errorText } from "../lib/failure";
 export interface Chip {
     key: string;
     name: string;
-    /** a local picture of an image or video being sent, while it's here */
+    /** a local picture of an image being sent, while it's here */
     preview: string | null;
     kind: "image" | "video" | "audio" | "file";
     /** 0–1 while uploading */
@@ -48,7 +48,7 @@ export function createTray(agent: Agent) {
                 const kind = kindOf(f.type);
                 const abort = new AbortController();
                 aborts.set(key, abort);
-                setChips(list.length, { key, name: f.name, preview: kind === "image" || kind === "video" ? URL.createObjectURL(f) : null, kind, progress: 0, file: null, error: null });
+                setChips(list.length, { key, name: f.name, preview: kind === "image" ? URL.createObjectURL(f) : null, kind, progress: 0, file: null, error: null });
                 agent.files
                     .upload(f, (progress) => update(key, { progress }), abort.signal)
                     .then(

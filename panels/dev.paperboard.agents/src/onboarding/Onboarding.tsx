@@ -39,7 +39,6 @@ import styles from "./Onboarding.module.css";
 // the last step is the answer to the computer: setting it up, or not yet
 const STEP = { name: 0, brain: 1, signIn: 2, model: 3, computer: 4, last: 5 } as const;
 
-
 /**
  * onSaving: the settings are about to be saved, so this window keeps the
  * onboarding open to show the computer's setup; onDone: it's finished.
