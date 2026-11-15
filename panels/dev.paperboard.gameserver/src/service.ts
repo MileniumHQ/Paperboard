@@ -1,4 +1,3 @@
-import { errorText } from "./service/failures";
 import {
     definePanelService,
     backupApi,
@@ -23,7 +22,7 @@ import { bindScope, inServer, type ServerScope } from "./service/scope";
 import type { ServerCalls } from "./service/calls";
 import { announceChanges, bindBlocks, fireBackupEnded, fireTrigger, mergeBlocks, serverOperation, sharedBlocks, sharedTypes } from "./service/blocks";
 import { SERVER_EVENTS, serverType, serversBlocks, type ServersBlocksHost } from "./service/serversBlocks";
-import { processApi as scopedProcess } from "./service/api";
+import { processApi as scopedProcess, errorMessage } from "./service/api";
 import { type GameServerState, appendCapped } from "./service/types";
 import { CALLS, PICTURE_CALL, SETUP_CALLS } from "./service/contract";
 import { pictureCall } from "./service/pictures";
@@ -223,7 +222,7 @@ function createScope(server: StoredServer): ServerScope {
     entries.set(server.id, scope);
     histories.set(server.id, historyWriter(() => historyFile(server.id), (err) => {
         console.error(`[gameserver] the console history of ${server.name} could not be saved:`, err);
-        scope.ctx.setState((prev) => ({ serverEntries: appendCapped(prev.serverEntries, { type: "error", content: `[Server] The console history could not be saved: ${errorText(err)}` }) }));
+        scope.ctx.setState((prev) => ({ serverEntries: appendCapped(prev.serverEntries, { type: "error", content: `[Server] The console history could not be saved: ${errorMessage(err)}` }) }));
     }));
     return scope;
 }
@@ -267,7 +266,7 @@ async function initialize(scope: ServerScope): Promise<ServerScope> {
             scope.ctx.setState({ serverEntries: history.serverEntries, chatMessages: history.chatMessages });
         } catch (err) {
             console.error(`[gameserver] the console history of ${server.name} could not be read:`, err);
-            scope.ctx.setState({ serverEntries: [{ type: "error", content: `[Server] The saved console history could not be read: ${errorText(err)}` }] });
+            scope.ctx.setState({ serverEntries: [{ type: "error", content: `[Server] The saved console history could not be read: ${errorMessage(err)}` }] });
         }
         await inServer(scope, async () => {
             // A server left running keeps its identity and directory on migration.
@@ -309,8 +308,8 @@ async function initialize(scope: ServerScope): Promise<ServerScope> {
         return scope;
     } catch (err) {
         scope.ctx.setState((prev) => ({
-            initFailure: errorText(err),
-            serverEntries: appendCapped(prev.serverEntries, { type: "error", content: `[Server] The server could not be set up: ${errorText(err)}` }),
+            initFailure: errorMessage(err),
+            serverEntries: appendCapped(prev.serverEntries, { type: "error", content: `[Server] The server could not be set up: ${errorMessage(err)}` }),
         }));
         throw err;
     }
@@ -515,7 +514,7 @@ export const gameServerService = definePanelService({
             panelBlocks = handle;
             publish();
         } catch (err) {
-            ctx.setState({ serversError: errorText(err) });
+            ctx.setState({ serversError: errorMessage(err) });
             console.error("[gameserver] servers could not be loaded:", err);
         }
     },

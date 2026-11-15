@@ -1,5 +1,4 @@
-import { files as fileApi, type ServiceContext } from "./api";
-import { errorText } from "./failures";
+import { files as fileApi, type ServiceContext, errorMessage } from "./api";
 import { listDirectory } from "./filesystem";
 import {
     parsePlayerStats,
@@ -22,7 +21,7 @@ async function readJson(relative: string): Promise<unknown> {
     try {
         return JSON.parse(content);
     } catch (err) {
-        throw new Error(`${relative} is not valid JSON: ${errorText(err)}`);
+        throw new Error(`${relative} is not valid JSON: ${errorMessage(err)}`);
     }
 }
 

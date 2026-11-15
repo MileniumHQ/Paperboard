@@ -1,4 +1,4 @@
-import { errorText } from "./failures";
+import { errorMessage } from "@mileniumhq/paperapi";
 import * as nodePath from "node:path";
 import { minecraftSoftware } from "../games/minecraft/index";
 import { MOD_DESCRIPTORS, PLUGIN_DESCRIPTORS, modVersionFrom, pluginDescription } from "./addonConfig";
@@ -110,7 +110,7 @@ async function describeJar(jarPath: string, mod: boolean): Promise<NonNullable<I
         // a mod's id is no better a title than its file's name; its version is news
         return { version: modVersionFrom(entries) ?? undefined };
     } catch (err) {
-        return { error: errorText(err) };
+        return { error: errorMessage(err) };
     }
 }
 
@@ -336,7 +336,7 @@ export async function previewPluginInstall(
             try {
                 version = await modrinth(`/version/${encodeURIComponent(pinned)}`);
             } catch (err) {
-                return { ...base, name: await named(undefined, raw), unresolvableReason: `Could not read the pinned version: ${errorText(err)}` };
+                return { ...base, name: await named(undefined, raw), unresolvableReason: `Could not read the pinned version: ${errorMessage(err)}` };
             }
             return { ...base, projectId: text(version.project_id) ?? project, name: await named(text(version.project_id) ?? project, raw), ...fromVersion(version, "The pinned version has no verifiable file; refusing to install it.") };
         }
@@ -347,7 +347,7 @@ export async function previewPluginInstall(
                 const versions = await modrinthVersions<RawVersion>(deps.fetchJson, project, { loaders: [loader], ...(mcVersion ? { gameVersions: [mcVersion] } : {}) });
                 return { ...base, name, ...fromVersion(versions[0], mcVersion ? `No verifiable ${loader} build for Minecraft ${mcVersion}.` : "No verifiable build found.") };
             } catch (err) {
-                return { ...base, name, unresolvableReason: `Could not resolve a build: ${errorText(err)}` };
+                return { ...base, name, unresolvableReason: `Could not resolve a build: ${errorMessage(err)}` };
             }
         }
         return { ...base, name: await named(undefined, raw), unresolvableReason: "No project or version reference." };
@@ -384,7 +384,7 @@ export async function previewPluginInstall(
             sub = await modrinth(`/version/${encodeURIComponent(dep.versionId)}`);
         } catch (err) {
             // its own dependencies are unknown: the preview says so rather than leave them out
-            failures.push(`${dep.name}'s dependencies: ${errorText(err)}`);
+            failures.push(`${dep.name}'s dependencies: ${errorMessage(err)}`);
             return;
         }
         for (const t of await resolveAll(list<RawVersionDependency>(sub.dependencies).filter((r) => dependencyKindOf(r) === "required"))) {
@@ -456,7 +456,7 @@ export async function installPluginVersion(
             await deps.writeRecords(records);
         } catch (err) {
             if (entry.kind === "main") throw err;
-            throw new Error(`Installed ${installed.map((i) => i.filename).join(", ")} but failed on dependency ${entry.title}: ${errorText(err)}`);
+            throw new Error(`Installed ${installed.map((i) => i.filename).join(", ")} but failed on dependency ${entry.title}: ${errorMessage(err)}`);
         }
         installed.push({ filename: safe, versionNumber: entry.versionNumber, title: entry.title, kind: entry.kind });
     }

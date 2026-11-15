@@ -1,3 +1,4 @@
+import { errorCode } from "@mileniumhq/paperapi";
 import * as nodeFs from "node:fs";
 
 const GB = 1024 ** 3;
@@ -35,7 +36,7 @@ export function oomKillCount(root = "/sys/fs/cgroup", self = "/proc/self/cgroup"
     try {
         group = /^0::(.*)$/m.exec(nodeFs.readFileSync(self, "utf8"))?.[1];
     } catch (err) {
-        if ((err as NodeJS.ErrnoException).code === "ENOENT") return null;
+        if (errorCode(err) === "ENOENT") return null;
         throw err;
     }
     if (group === undefined) return null;
@@ -43,7 +44,7 @@ export function oomKillCount(root = "/sys/fs/cgroup", self = "/proc/self/cgroup"
     try {
         events = nodeFs.readFileSync(`${root}${group === "/" ? "" : group}/memory.events`, "utf8");
     } catch (err) {
-        if ((err as NodeJS.ErrnoException).code === "ENOENT") return null;
+        if (errorCode(err) === "ENOENT") return null;
         throw err;
     }
     const count = /^oom_kill (\d+)$/m.exec(events)?.[1];

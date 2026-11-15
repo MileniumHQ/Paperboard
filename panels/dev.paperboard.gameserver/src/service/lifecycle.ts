@@ -1,6 +1,5 @@
-import { errorText } from "./failures";
 import { emitTrigger, serverLocal } from "./scope";
-import { processApi, type ServiceContext } from "./api";
+import { processApi, type ServiceContext, errorMessage } from "./api";
 import { currentGame, currentGameService } from "../games/service";
 import { assertRecoverySettled } from "./recoveryState";
 import { prepareGamePorts } from "./ports";
@@ -36,7 +35,7 @@ function monitorReadiness(ctx: ServiceContext<GameServerState>): void {
     const fail = async (err: unknown) => {
         if (!active()) return;
         clearTimeout(expired); cancelReadiness();
-        ctx.setState({ serverEntries: appendCapped(ctx.state.serverEntries, { type: "error", content: `Startup failed: ${errorText(err)}` }) });
+        ctx.setState({ serverEntries: appendCapped(ctx.state.serverEntries, { type: "error", content: `Startup failed: ${errorMessage(err)}` }) });
         markStopRequested();
         // nobody awaits this: a kill that fails is said, or the server would sit "starting" in silence
         await processApi.kill(primaryProcessId(), "SIGKILL").catch((killErr) => report(ctx, "The server that failed to start could not be ended", killErr));
@@ -75,7 +74,7 @@ function scheduleStopForceKill(
     const timer = setTimeout(() => {
         local().stopTimeout = null;
         if (currentGameService().stopTimeoutMs) ctx.setState({ serverEntries: appendCapped(ctx.state.serverEntries, { type: "error", content: "[Server] Graceful stop timed out; force-killing. World save not confirmed." }) });
-        void Promise.resolve(processApi.kill(primaryProcessId(), "SIGKILL")).catch((err) => ctx.setState((prev) => ({ serverEntries: appendCapped(prev.serverEntries, { type: "error", content: `[Server] Force-kill failed: ${errorText(err)}` }) })));
+        void Promise.resolve(processApi.kill(primaryProcessId(), "SIGKILL")).catch((err) => ctx.setState((prev) => ({ serverEntries: appendCapped(prev.serverEntries, { type: "error", content: `[Server] Force-kill failed: ${errorMessage(err)}` }) })));
         const deadline = setTimeout(() => void confirmForceKill(ctx), confirmMs);
         deadline.unref?.();
         local().killDeadline = deadline;
@@ -98,7 +97,7 @@ async function confirmForceKill(ctx: ServiceContext<GameServerState>): Promise<v
         if (!(await processApi.exists(primaryProcessId()))) return handleProcessExit(ctx);
         reason = "the process is still running";
     } catch (err) {
-        reason = errorText(err);
+        reason = errorMessage(err);
     }
     local().isRestarting = false;
     cancelStopRequest();
@@ -125,7 +124,7 @@ function releaseServer(ctx: ServiceContext<GameServerState>): Promise<void> | un
         ctx.setState((prev) => ({
             serverEntries: appendCapped(prev.serverEntries, {
                 type: "error",
-                content: `[Server] Could not clean up after the server stopped: ${errorText(err)}`,
+                content: `[Server] Could not clean up after the server stopped: ${errorMessage(err)}`,
             }),
         }));
     });
@@ -136,7 +135,7 @@ function readOomKills(ctx: ServiceContext<GameServerState>): number | null {
     try {
         return oomKillCount();
     } catch (err) {
-        ctx.setState((prev) => ({ serverEntries: appendCapped(prev.serverEntries, { type: "warn", content: `[Server] Could not read the system's memory events, so a crash from running out of memory is not told apart: ${errorText(err)}` }) }));
+        ctx.setState((prev) => ({ serverEntries: appendCapped(prev.serverEntries, { type: "warn", content: `[Server] Could not read the system's memory events, so a crash from running out of memory is not told apart: ${errorMessage(err)}` }) }));
         return null;
     }
 }
@@ -220,7 +219,7 @@ export async function startServerInstance(
             serverStatus: "offline",
             serverEntries: appendCapped(ctx.state.serverEntries, {
                 type: "error",
-                content: `[Server] Failed to launch: ${errorText(err)}`,
+                content: `[Server] Failed to launch: ${errorMessage(err)}`,
             }),
         });
         throw err;

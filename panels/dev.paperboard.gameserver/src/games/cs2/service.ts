@@ -1,6 +1,6 @@
 import fs from "node:fs/promises";
 import path from "node:path";
-import { processApi } from "../../service/api";
+import { processApi, errorCode } from "../../service/api";
 import { emitTrigger, serverLocal } from "../../service/scope";
 import { initialServerState } from "../../service/initialState";
 import { appendCapped } from "../../service/types";
@@ -72,7 +72,7 @@ export async function installedMaps(game: string): Promise<string[]> {
     let entries: string[];
     try { entries = await fs.readdir(path.join(game, "maps")); }
     catch (err) {
-        if ((err as NodeJS.ErrnoException).code === "ENOENT") throw new Error("No maps folder; install the game in Updates first");
+        if (errorCode(err) === "ENOENT") throw new Error("No maps folder; install the game in Updates first");
         throw err;
     }
     return entries.filter((e) => e.endsWith(".vpk")).map((e) => e.slice(0, -4)).filter((name) => !NOT_PLAYABLE.test(name)).sort();

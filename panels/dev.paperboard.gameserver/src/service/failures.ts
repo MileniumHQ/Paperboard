@@ -1,9 +1,8 @@
-// What the service asks of a failure: its code, its words, and whether a
-// missing file is all it was. The words are the error's own; the page's
-// readable form is lib/failure.ts's errorMessage.
+// Whether a missing file is all a failure was. Its code and words are
+// PaperAPI's errorCode and errorMessage; the page's readable form is
+// lib/failure.ts's errorMessage.
 import * as nodeFs from "node:fs/promises";
-export { errorCode, errorText } from "../lib/failure";
-import { errorCode } from "../lib/failure";
+import { errorCode } from "@mileniumhq/paperapi";
 
 /** What `work` gives, or `missing` when what it reads isn't there; any other failure throws. */
 export async function unlessMissing<T, M>(work: Promise<T>, missing: M): Promise<T | M> {

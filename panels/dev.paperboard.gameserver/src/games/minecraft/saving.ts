@@ -1,6 +1,5 @@
-import { errorText } from "../../service/failures";
 import { serverLocal } from "../../service/scope";
-import { files as fileApi, processApi, type ServiceContext } from "../../service/api";
+import { files as fileApi, processApi, type ServiceContext, errorMessage } from "../../service/api";
 import { PANEL_ID, SERVER_PROC_ID, type GameServerState } from "../../service/types";
 
 const local = serverLocal(() => ({ waiters: new Set<Waiter>(), pausing: false }));
@@ -94,8 +93,8 @@ export async function withSavingPaused<T>(ctx: ServiceContext<GameServerState>, 
         } catch (err) {
             // saving is still off and the marker stays: say so, and keep
             // the failure that came first
-            const reason = errorText(err);
-            const earlier = workFailed ? ` (the copy also failed: ${workError instanceof Error ? workError.message : String(workError)})` : "";
+            const reason = errorMessage(err);
+            const earlier = workFailed ? ` (the copy also failed: ${errorMessage(workError)})` : "";
             throw new Error(`Saving could not be turned back on: ${reason}${earlier}`, { cause: err });
         }
         if (workFailed) throw workError;
@@ -136,8 +135,8 @@ export async function pauseSavingForBackup(ctx: ServiceContext<GameServerState>)
         try {
             await resumeSaving();
         } catch (resumeErr) {
-            const reason = resumeErr instanceof Error ? resumeErr.message : String(resumeErr);
-            throw new Error(`${errorText(err)} (saving could not be turned back on: ${reason})`, { cause: err });
+            const reason = errorMessage(resumeErr);
+            throw new Error(`${errorMessage(err)} (saving could not be turned back on: ${reason})`, { cause: err });
         }
         throw err;
     } finally {

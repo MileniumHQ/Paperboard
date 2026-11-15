@@ -1,4 +1,5 @@
-import { errorCode, errorText, exists, unlessMissing } from "./failures";
+import { errorMessage, errorCode } from "@mileniumhq/paperapi";
+import { exists, unlessMissing } from "./failures";
 import * as nodeFs from "node:fs/promises";
 import * as nodePath from "node:path";
 import { safePackPath } from "../core/modpack";
@@ -72,7 +73,7 @@ const inDir = (dir: string, path: string) => nodePath.join(dir, ...path.split("/
 
 
 function messageOf(err: unknown): string {
-    return errorText(err);
+    return errorMessage(err);
 }
 
 function ancestors(path: string): string[] {

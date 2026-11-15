@@ -1,5 +1,4 @@
-import { errorText } from "./failures";
-import { config, files as fileApi, updateSettings, type ServiceContext } from "./api";
+import { config, files as fileApi, updateSettings, type ServiceContext, errorMessage } from "./api";
 import { sanitizeFileName, listDirectory } from "./filesystem";
 import {
     buildWorldInfos,
@@ -95,7 +94,7 @@ export async function listWorlds(): Promise<WorldInfo[]> {
         try {
             await writePendingWorlds(pendingOnly);
         } catch (err) {
-            const reason = errorText(err);
+            const reason = errorMessage(err);
             throw new Error(`Couldn't save the list of created worlds: ${reason}`);
         }
     }
@@ -191,7 +190,7 @@ export async function resolveLevelName(): Promise<string> {
     try {
         content = await fileApi.read("server.properties", PANEL_ID);
     } catch (err) {
-        const reason = errorText(err);
+        const reason = errorMessage(err);
         throw new Error(`Couldn't read server.properties to find the active world: ${reason}`);
     }
     if (!content) return "world";

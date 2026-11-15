@@ -1,7 +1,6 @@
-import { errorText } from "./failure";
 import { PANEL_ID, CALLS } from "../service/contract";
 import { createSignal } from "solid-js";
-import { createPanelBridge } from "./api";
+import { createPanelBridge, errorMessage } from "./api";
 import type { PaperConsoleEntry } from "@mileniumhq/paperui";
 import stripAnsi from "strip-ansi";
 import { SOFTWARE_NAMES, type ServerSoftwareType } from "./software";
@@ -135,7 +134,7 @@ export async function initServerListeners() {
 }
 
 function reportActionError(action: string, err: unknown): void {
-    const message = errorText(err);
+    const message = errorMessage(err);
     console.error(`[ServerBridge] ${action} failed:`, message);
     setServerActionError(message);
 }

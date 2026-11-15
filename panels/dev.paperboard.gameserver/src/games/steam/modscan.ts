@@ -1,4 +1,4 @@
-import { errorText } from "../../service/failures";
+import { errorMessage } from "@mileniumhq/paperapi";
 // Steam Workshop metadata through Paperboard's modscan service
 // (apps/panelapis). The Steam Web API key stays in that Worker; the panel
 // sends only a game slug and a query. Metadata only: mod files come from
@@ -74,7 +74,7 @@ async function call(base: string, path: string, signal?: AbortSignal): Promise<W
         response = await fetch(`${base}${path}`, { signal: signal ?? AbortSignal.timeout(20_000), headers: { Accept: "application/json" } });
     } catch (err) {
         if (signal?.aborted) throw err;
-        throw new Error(`Couldn't reach Steam Workshop search: ${errorText(err)}`);
+        throw new Error(`Couldn't reach Steam Workshop search: ${errorMessage(err)}`);
     }
     const text = await response.text();
     let body: any;

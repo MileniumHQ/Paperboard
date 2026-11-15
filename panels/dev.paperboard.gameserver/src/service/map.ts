@@ -1,11 +1,10 @@
 import { minecraftSoftware } from "../games/minecraft/index";
-import { errorText } from "./failures";
 import { serverLocal } from "./scope";
 import * as fs from "node:fs";
 import { gunzipSync, inflateSync } from "node:zlib";
 import type { PNG as Png } from "pngjs";
 import { loadNbt, loadPng } from "../core/lazy";
-import { files as fileApi, type ServiceContext } from "./api";
+import { files as fileApi, type ServiceContext, errorMessage } from "./api";
 import { tryListDirectory } from "./filesystem";
 import { resolveVersionProfile, worldPathsFor, type VersionProfile } from "../lib/versionProfile";
 import {
@@ -374,7 +373,7 @@ export async function paintRegion(buffer: Buffer, minY: number, name: string): P
                 if (await paintChunk(png, chunk.buffer, cx, cz, minY)) paintedChunks++;
             } catch (err) {
                 // one damaged chunk is a hole in the tile; the rest still paint
-                unreadable ??= errorText(err);
+                unreadable ??= errorMessage(err);
             }
             if (++parsedChunks % CHUNKS_PER_TURN === 0) await loopTurn();
         }

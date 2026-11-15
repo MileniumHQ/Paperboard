@@ -1,4 +1,4 @@
-import { errorText } from "../../service/failures";
+import { errorMessage } from "@mileniumhq/paperapi";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { readWorldHeader, type TerrariaWorldHeader } from "./worldFile";
@@ -51,7 +51,7 @@ export async function listWorlds(directory: string, active: string): Promise<Ter
         try {
             return { ...base, header: await readHeader(file) };
         } catch (err) {
-            return { ...base, header: null, error: errorText(err) };
+            return { ...base, header: null, error: errorMessage(err) };
         }
     }));
     // a new world exists only as the config's choice until the server starts

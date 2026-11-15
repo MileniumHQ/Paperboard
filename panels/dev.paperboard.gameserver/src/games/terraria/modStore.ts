@@ -1,4 +1,4 @@
-import { errorText } from "../../service/failures";
+import { errorMessage, errorCode } from "@mileniumhq/paperapi";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { inflateRawSync } from "node:zlib";
@@ -238,7 +238,7 @@ export class ModStore {
                 const info = await readTmod(path.join(this.dir, file));
                 return { file, info, enabled: enabled.includes(info.name), record: records[file] };
             } catch (err) {
-                return { file, info: null, problem: errorText(err), enabled: false, record: records[file] };
+                return { file, info: null, problem: errorMessage(err), enabled: false, record: records[file] };
             }
         }));
     }
@@ -358,7 +358,7 @@ export class ModStore {
             let names: string[];
             // sorted: the disk's own order differs between filesystems, and
             // the error below should read the same everywhere
-            try { names = (await fs.readdir(stageDir)).sort((a, b) => a.localeCompare(b)); } catch (err) { if ((err as NodeJS.ErrnoException).code === "ENOENT") throw new Error("Nothing was uploaded. Choose the files again."); throw err; }
+            try { names = (await fs.readdir(stageDir)).sort((a, b) => a.localeCompare(b)); } catch (err) { if (errorCode(err) === "ENOENT") throw new Error("Nothing was uploaded. Choose the files again."); throw err; }
             if (names.length === 0) throw new Error("Nothing was uploaded. Choose the files again.");
             const incoming = [];
             const problems: string[] = [];
@@ -370,7 +370,7 @@ export class ModStore {
                     this.compatible(info, name);
                     incoming.push({ source, info, record: { title: info.displayName, uploaded: true } });
                 } catch (err) {
-                    problems.push(`${name}: ${errorText(err)}`);
+                    problems.push(`${name}: ${errorMessage(err)}`);
                 }
             }
             if (problems.length) throw new Error(`Nothing was added. ${problems.join(" ")}`);

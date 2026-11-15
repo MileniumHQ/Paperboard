@@ -1,3 +1,5 @@
+import { errorMessage as messageOf } from "@mileniumhq/paperapi";
+
 // What the UI shows when something happens: a title that names it, and the
 // detail. A failure's detail is the error's own message, never a pointer to
 // the console.
@@ -34,13 +36,8 @@ export function readableFailure(message: string): string {
     return `${text.slice(0, match.index)}${say(match[2]!, match[3]!)} (${match[1]}).${text.slice(match.index + match[0].length).replace(/^\.?/, "")}`;
 }
 
-/** A failure's own words, as it threw them. */
-export const errorText = (err: unknown): string => (err instanceof Error ? err.message : String(err));
-
-/** The system's code for a failure (ENOENT, EACCES, …), if it has one. */
-export const errorCode = (err: unknown): string | undefined => (err as { code?: string } | null)?.code;
-
-export const errorMessage = (err: unknown): string => readableFailure(errorText(err));
+/** A failure as a person reads it: its own words, made readable. */
+export const errorMessage = (err: unknown): string => readableFailure(messageOf(err));
 
 /**
  * A failure's first line says what failed; what a tool printed after it

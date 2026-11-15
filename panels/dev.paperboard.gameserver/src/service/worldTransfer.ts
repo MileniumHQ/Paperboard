@@ -1,11 +1,11 @@
-import { errorText, unlessMissing } from "./failures";
+import { unlessMissing } from "./failures";
 import { serverLocal } from "./scope";
 import * as nodeFs from "node:fs/promises";
 import * as nodePath from "node:path";
 import { randomUUID } from "node:crypto";
 import type { UnzipFile } from "fflate";
 import { loadZip } from "../core/lazy";
-import { files as fileApi, type ServiceContext } from "./api";
+import { files as fileApi, type ServiceContext, errorMessage } from "./api";
 import {
     DIMENSION_SUFFIXES,
     MAX_WORLD_EXPORT_BYTES,
@@ -215,7 +215,7 @@ async function readZip(archive: string, onFile: (file: UnzipFile) => void, settl
             try {
                 unzip.push(buffer.slice(0, bytesRead), final);
             } catch (err) {
-                throw new Error(`This zip is damaged: ${errorText(err)}`);
+                throw new Error(`This zip is damaged: ${errorMessage(err)}`);
             }
             await settle();
             if (final) break;

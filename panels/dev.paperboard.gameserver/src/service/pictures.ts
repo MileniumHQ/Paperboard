@@ -5,7 +5,7 @@
 // capped, every redirect checked), from the hosts its source keeps pictures
 // on, checks the answer is a picture, and hands the page a data: address.
 import { fetchPublic } from "@mileniumhq/paperapi/net";
-import { errorText } from "./failures";
+import { errorMessage } from "@mileniumhq/paperapi";
 import { atMost } from "./inOrder";
 import type { PictureSource } from "./contract";
 
@@ -64,7 +64,7 @@ async function fetchPicture(url: URL, trusted: boolean, from: string): Promise<s
     try {
         answer = await fetchPublic(url.href, { maxBytes: MAX_PICTURE_BYTES, timeoutMs: FETCH_MS, accept: "image/*", trustedOrigins: trusted ? [url.origin] : [] });
     } catch (err) {
-        throw new Error(`Couldn't load the picture from ${from}: ${errorText(err)}`);
+        throw new Error(`Couldn't load the picture from ${from}: ${errorMessage(err)}`);
     }
     const declared = answer.contentType.split(";")[0]!.trim().toLowerCase();
     const type = pictureType(answer.body, declared);

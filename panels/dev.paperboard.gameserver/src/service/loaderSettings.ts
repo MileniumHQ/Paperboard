@@ -1,4 +1,5 @@
-import { errorText, unlessMissing } from "./failures";
+import { errorMessage } from "@mileniumhq/paperapi";
+import { unlessMissing } from "./failures";
 import * as nodeFs from "node:fs/promises";
 import * as nodePath from "node:path";
 import type { ServerSoftwareType } from "../software/catalog";
@@ -188,7 +189,7 @@ export async function readSchemaSettings(
                 label: file.label,
                 path: relative,
                 settings: [],
-                error: errorText(err),
+                error: errorMessage(err),
             });
         }
     }

@@ -1,4 +1,5 @@
-import { errorText, exists, unlessMissing } from "./failures";
+import { errorMessage } from "@mileniumhq/paperapi";
+import { exists, unlessMissing } from "./failures";
 import * as nodeFs from "node:fs/promises";
 import * as nodePath from "node:path";
 import { isInstallArtifactName } from "../core/installFiles";
@@ -163,7 +164,7 @@ export async function activateStagedInstall(request: ActivationRequest): Promise
 }
 
 function messageOf(err: unknown): string {
-    return errorText(err);
+    return errorMessage(err);
 }
 
 /**

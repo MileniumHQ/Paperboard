@@ -9,9 +9,8 @@
 // accounts Mojang does not know: the vanilla `whitelist` cannot find them,
 // so a running server whitelists them through Floodgate's `fwhitelist`, and
 // a stopped one gets the uuid Floodgate derives from their XUID written in.
-import { errorText } from "./failures";
 import { createHash } from "node:crypto";
-import { files as fileApi, type ServiceContext } from "./api";
+import { files as fileApi, type ServiceContext, errorMessage } from "./api";
 import { serverLocal } from "./scope";
 import { report } from "../games/serviceKit";
 import { resolvePlayerIdentities } from "./playerStats";
@@ -185,7 +184,7 @@ export async function currentPlayerNames(ctx: ServiceContext<GameServerState>, r
                 rememberName(uuid, name);
                 result[uuid] = name;
             } catch (err) {
-                failures.push(errorText(err));
+                failures.push(errorMessage(err));
             }
         }
     };

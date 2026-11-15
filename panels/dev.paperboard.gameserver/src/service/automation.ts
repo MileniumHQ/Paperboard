@@ -1,5 +1,4 @@
-import { errorText } from "./failures";
-import { config, updateSettings, type ServiceContext } from "./api";
+import { config, updateSettings, type ServiceContext, errorMessage } from "./api";
 import { serverLocal } from "./scope";
 import { currentGameService } from "../games/service";
 import { appendCapped, type GameServerState, PANEL_ID } from "./types";
@@ -134,7 +133,7 @@ export function afterCrash(ctx: ServiceContext<GameServerState>, exit: { whileSt
         if (ctx.state.serverStatus !== "offline") return;
         // the fresh console still says why the server started again
         const when = new Date(now).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
-        start(ctx, [{ type: "warn", content: `[Server] Restarted after a crash at ${when}${code}.` }]).catch((err) => say("error", `[Server] Restart after the crash failed: ${errorText(err)}`));
+        start(ctx, [{ type: "warn", content: `[Server] Restarted after a crash at ${when}${code}.` }]).catch((err) => say("error", `[Server] Restart after the crash failed: ${errorMessage(err)}`));
     }, CRASH_RESTART_DELAY_MS);
     timer.unref?.();
     local().crashTimer = timer;
@@ -186,7 +185,7 @@ export function scheduleDailyRestart(ctx: ServiceContext<GameServerState>, resta
             const sendChat = currentGameService().sendChat;
             if (ctx.state.serverStatus !== "online" || !sendChat || ctx.state.onlinePlayers.length === 0) return;
             await sendChat(ctx, `The server restarts in ${minutes} minute${minutes === 1 ? "" : "s"}.`)
-                .catch((err) => say("error", `[Server] Could not warn players about the daily restart: ${errorText(err)}`));
+                .catch((err) => say("error", `[Server] Could not warn players about the daily restart: ${errorMessage(err)}`));
         });
     }
     at(due, async () => {
@@ -194,7 +193,7 @@ export function scheduleDailyRestart(ctx: ServiceContext<GameServerState>, resta
         scheduleDailyRestart(ctx, restart, new Date(Date.now() + 1000));
         if (ctx.state.serverStatus !== "online") return;
         say("info", "[Server] Daily restart.");
-        await restart(ctx).catch((err) => say("error", `[Server] The daily restart failed: ${errorText(err)}`));
+        await restart(ctx).catch((err) => say("error", `[Server] The daily restart failed: ${errorMessage(err)}`));
     });
 }
 
@@ -216,7 +215,7 @@ export async function updateBeforeStart(ctx: ServiceContext<GameServerState>): P
     try {
         status = await game.updateStatus(ctx);
     } catch (err) {
-        say("error", `[Server] Could not check for an update, so the server starts as it is: ${errorText(err)}`);
+        say("error", `[Server] Could not check for an update, so the server starts as it is: ${errorMessage(err)}`);
         return;
     }
     if (!status.updateAvailable) return;
@@ -244,7 +243,7 @@ export function scheduleUpdateChecks(ctx: ServiceContext<GameServerState>, resta
     const restartForUpdate = async () => {
         if (ctx.state.serverStatus !== "online") return scheduleUpdateChecks(ctx, restart, every);
         say("info", "[Server] Restarting to install an update.");
-        await restart(ctx).catch((err) => say("error", `[Server] The restart for an update failed: ${errorText(err)}`));
+        await restart(ctx).catch((err) => say("error", `[Server] The restart for an update failed: ${errorMessage(err)}`));
         scheduleUpdateChecks(ctx, restart, every);
     };
     arm(every, async () => {
@@ -253,7 +252,7 @@ export function scheduleUpdateChecks(ctx: ServiceContext<GameServerState>, resta
         try {
             status = await game.updateStatus!(ctx);
         } catch (err) {
-            say("error", `[Server] Could not check for an update: ${errorText(err)}`);
+            say("error", `[Server] Could not check for an update: ${errorMessage(err)}`);
             return scheduleUpdateChecks(ctx, restart, every);
         }
         if (!status.updateAvailable) return scheduleUpdateChecks(ctx, restart, every);
@@ -261,7 +260,7 @@ export function scheduleUpdateChecks(ctx: ServiceContext<GameServerState>, resta
         if (ctx.state.onlinePlayers.length === 0) return restartForUpdate();
         const minutes = UPDATE_WARNING_MS / 60_000;
         await game.sendChat?.(ctx, `An update is out. The server restarts to install it in ${minutes} minute${minutes === 1 ? "" : "s"}.`)
-            .catch((err) => say("error", `[Server] Could not warn players about the update: ${errorText(err)}`));
+            .catch((err) => say("error", `[Server] Could not warn players about the update: ${errorMessage(err)}`));
         arm(UPDATE_WARNING_MS, restartForUpdate);
     });
 }

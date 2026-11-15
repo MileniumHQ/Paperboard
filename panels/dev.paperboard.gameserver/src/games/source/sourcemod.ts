@@ -1,3 +1,4 @@
+import { errorCode } from "@mileniumhq/paperapi";
 import fs from "node:fs/promises";
 import { exists } from "../serviceKit";
 import path from "node:path";
@@ -146,7 +147,7 @@ export class SourceMod {
         let names: string[];
         // sorted, so the first file refused is the same on every filesystem
         try { names = (await fs.readdir(stage)).sort((a, b) => a.localeCompare(b)); }
-        catch (err) { if ((err as NodeJS.ErrnoException).code === "ENOENT") throw new Error("Nothing was uploaded. Choose the files again."); throw err; }
+        catch (err) { if (errorCode(err) === "ENOENT") throw new Error("Nothing was uploaded. Choose the files again."); throw err; }
         if (names.length === 0) throw new Error("Nothing was uploaded. Choose the files again.");
         for (const name of names) {
             if (!PLUGIN_FILE.test(name)) throw new Error(`${name} is not a SourceMod plugin. Upload the compiled .smx, not the .sp source.`);

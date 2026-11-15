@@ -14,7 +14,7 @@ import { composeHeadFromSkin, clampHeadSize } from "../core/skin";
 import { gamertagOf, floodgateUuid, xuidOfFloodgateUuid, type BedrockNaming } from "../core/bedrock";
 import { uuidForPlayerName } from "./playerStats";
 import { fetchMojang, formatUuid, profileForName } from "./mojang";
-import { errorText } from "./failures";
+import { errorMessage } from "@mileniumhq/paperapi";
 import { atMost } from "./inOrder";
 import { skinUrlForXuid, xuidForGamertag } from "./xbox";
 
@@ -69,7 +69,7 @@ async function mojangSkinUrl(uuid: string): Promise<string | null> {
     try {
         decoded = JSON.parse(Buffer.from(String(encoded), "base64").toString("utf8"));
     } catch (err) {
-        throw new Error(`Mojang's skin record for ${uuid} could not be read: ${errorText(err)}`);
+        throw new Error(`Mojang's skin record for ${uuid} could not be read: ${errorMessage(err)}`);
     }
     // an account on the default skin has none of its own
     const url = decoded?.textures?.SKIN?.url;

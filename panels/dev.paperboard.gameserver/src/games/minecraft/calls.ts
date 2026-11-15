@@ -1,6 +1,6 @@
 import { minecraftSoftware } from "./index";
 import { sharedCalls, type ServerCalls } from "../../service/calls";
-import { files as fileApi, type ServiceContext } from "../../service/api";
+import { files as fileApi, type ServiceContext, errorMessage } from "../../service/api";
 import { sendServerCommand } from "../../service/lifecycle";
 import { waitForLine } from "./saving";
 import {
@@ -30,7 +30,6 @@ import { discardWorldTransfer, exportWorld, importWorld } from "../../service/wo
 import type { MapDimension } from "../../core/map";
 import { listPlayerStats } from "../../service/playerStats";
 import { currentPlayerNames, isBanned, listRoster, setPlayerFlag, type PlayerFlag } from "../../service/playerLists";
-import { errorText } from "../../service/failures";
 import { getHeadDataUrl } from "../../service/skins";
 import { queryGamerules, setGamerule } from "../../service/gamerules";
 import { readGameOptions, writeGameOptions } from "./gameOptions";
@@ -109,7 +108,7 @@ async function banCommand(ctx: ServiceContext<GameServerState>, verb: "ban" | "p
         line = await said;
     } catch (err) {
         if (await recorded()) return;
-        throw new Error(`${errorText(err)}, and the ban list ${verb === "ban" ? "does not have" : "still has"} ${name}`);
+        throw new Error(`${errorMessage(err)}, and the ban list ${verb === "ban" ? "does not have" : "still has"} ${name}`);
     }
     if (!done.test(line)) throw new Error(`The server refused: ${line.replace(/^\[[^\]]*\]\s*(\[[^\]]*\]:?\s*)?/, "")}`);
 }

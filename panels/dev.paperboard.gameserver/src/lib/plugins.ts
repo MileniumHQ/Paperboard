@@ -1,7 +1,6 @@
-import { errorText } from "./failure";
 import { minecraftSoftware } from "../games/minecraft/index";
 import semver from "semver";
-import { fileApi } from "./api";
+import { fileApi, errorMessage } from "./api";
 import { PANEL_ID } from "../service/types";
 import { serverSoftware, serverVersion, serverBridge } from "./server";
 import { behaviorVersionOf } from "./versionProfile";
@@ -384,7 +383,7 @@ export async function checkPluginUpdates(): Promise<PluginUpdateCheck[]> {
                 title,
                 record: plugin.record,
                 status: "error",
-                error: errorText(err),
+                error: errorMessage(err),
             });
         }
     }

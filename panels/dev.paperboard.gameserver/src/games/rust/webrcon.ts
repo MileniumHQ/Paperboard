@@ -1,4 +1,4 @@
-import { errorText } from "../../service/failures";
+import { errorMessage } from "@mileniumhq/paperapi";
 // Rust's WebSocket remote console ("WebRCON", `+rcon.web 1`): one socket at
 // ws://<rcon.ip>:<rcon.port>/<rcon.password>. A command is a JSON frame
 // { Identifier, Message, Name }; the server answers with frames
@@ -95,7 +95,7 @@ export class RustRcon {
             else this.waiting.get(f.Identifier)?.take(f.Message);
         } catch (err) {
             // a frame that can't be read answers no command: whoever listens for problems is told
-            const problem = err instanceof RustRconError ? err : new RustRconError(`Rust's remote console sent a frame that is not JSON: ${errorText(err)}`);
+            const problem = err instanceof RustRconError ? err : new RustRconError(`Rust's remote console sent a frame that is not JSON: ${errorMessage(err)}`);
             if (this.onProblem) this.onProblem(problem);
             else console.error(`[rust] ${problem.message}`);
         }

@@ -1,4 +1,4 @@
-import { errorCode } from "./failures";
+import { errorCode } from "@mileniumhq/paperapi";
 import * as nodeFs from "node:fs/promises";
 import * as nodePath from "node:path";
 import { isUtf8 } from "node:buffer";

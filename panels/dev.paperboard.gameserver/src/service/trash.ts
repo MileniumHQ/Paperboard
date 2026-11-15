@@ -1,4 +1,4 @@
-import { errorCode, errorText } from "./failures";
+import { errorMessage, errorCode } from "@mileniumhq/paperapi";
 import * as nodeFs from "node:fs/promises";
 import * as nodePath from "node:path";
 import { randomBytes } from "node:crypto";
@@ -49,7 +49,7 @@ function describeMoveFailure(relative: string, err: unknown): string {
     if (code === "EBUSY" || code === "EPERM" || code === "EACCES") {
         return `"${relative}" is in use or not writable; stop the server and try again`;
     }
-    const message = errorText(err);
+    const message = errorMessage(err);
     return `"${relative}" could not be moved: ${message}`;
 }
 

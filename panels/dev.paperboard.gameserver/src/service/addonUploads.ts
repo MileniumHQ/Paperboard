@@ -1,4 +1,5 @@
-import { errorText, exists, unlessMissing } from "./failures";
+import { errorMessage, errorCode } from "@mileniumhq/paperapi";
+import { exists, unlessMissing } from "./failures";
 import * as nodeFs from "node:fs/promises";
 import * as nodePath from "node:path";
 import { SOFTWARE, type ServerSoftwareType } from "../software/catalog";
@@ -58,12 +59,12 @@ async function zipProblem(entry: StagedEntry, kind: ArchiveKind): Promise<string
     try {
         await assertZipFile(entry.path, entry.name);
     } catch (err) {
-        return `${errorText(err)}.`;
+        return `${errorMessage(err)}.`;
     }
     try {
         return archiveProblem(await zipEntryNames(entry.path), kind, entry.name);
     } catch (err) {
-        return `${entry.name} could not be read: ${errorText(err)}.`;
+        return `${entry.name} could not be read: ${errorMessage(err)}.`;
     }
 }
 
@@ -75,7 +76,7 @@ async function commit(deps: UploadDeps, stage: unknown, plan: UploadPlan): Promi
         try {
             listed = await nodeFs.readdir(stageDir, { withFileTypes: true });
         } catch (err) {
-            if ((err as { code?: string } | null)?.code === "ENOENT") throw new Error(NOT_THERE);
+            if (errorCode(err) === "ENOENT") throw new Error(NOT_THERE);
             throw err;
         }
         if (listed.length === 0) throw new Error(NOT_THERE);
@@ -119,13 +120,13 @@ async function commit(deps: UploadDeps, stage: unknown, plan: UploadPlan): Promi
                 try {
                     await nodeFs.rename(nodePath.join(targetDir, entry.name), entry.path);
                 } catch (undoErr) {
-                    stuck.push(`${entry.name} (${errorText(undoErr)})`);
+                    stuck.push(`${entry.name} (${errorMessage(undoErr)})`);
                 }
             }
             throw new Error(
                 stuck.length
-                    ? `${errorText(err)}. ${stuck.join(", ")} could not be taken back out of ${plan.targetDir}/, so ${stuck.length === 1 ? "it stays" : "they stay"} there.`
-                    : `${errorText(err)}. Nothing was added.`,
+                    ? `${errorMessage(err)}. ${stuck.join(", ")} could not be taken back out of ${plan.targetDir}/, so ${stuck.length === 1 ? "it stays" : "they stay"} there.`
+                    : `${errorMessage(err)}. Nothing was added.`,
             );
         }
         return { added: entries.map((e) => e.name) };
@@ -182,7 +183,7 @@ export async function uploadDatapacks(stage: unknown, deps: UploadDeps): Promise
             try {
                 assertDatapackName(entry.name);
             } catch (err) {
-                return `${entry.name} cannot be used as a datapack name (${errorText(err)}).`;
+                return `${entry.name} cannot be used as a datapack name (${errorMessage(err)}).`;
             }
             if (entry.isDirectory) return folderProblem(entry);
             if (!entry.name.toLowerCase().endsWith(".zip")) return `${entry.name} is not a datapack: upload a .zip or a folder.`;

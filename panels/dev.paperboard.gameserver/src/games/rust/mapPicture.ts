@@ -1,3 +1,4 @@
+import { errorMessage } from "@mileniumhq/paperapi";
 import { loadPng } from "../../core/lazy";
 
 // Rust draws its map with `world.rendermap <scale>`: a PNG of the world at
@@ -20,7 +21,7 @@ export async function worldPicture(render: Buffer): Promise<Buffer> {
     try {
         image = PNG.sync.read(render);
     } catch (err) {
-        throw new Error(`Rust's map render isn't a readable PNG: ${err instanceof Error ? err.message : String(err)}`);
+        throw new Error(`Rust's map render isn't a readable PNG: ${errorMessage(err)}`);
     }
     const { width, height } = image;
     if (width !== height || width <= RENDER_MARGIN * 2) throw new Error(`Rust's map render is ${width}×${height}, not a map inside its ocean border`);

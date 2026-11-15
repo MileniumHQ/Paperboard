@@ -3,12 +3,12 @@
  * console, chat, waits, one operation at a time, offline backups and links.
  * Game modules keep only what is theirs; nothing here names a game.
  */
-import { errorText, exists, unlessMissing } from "../service/failures";
+import { exists, unlessMissing } from "../service/failures";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { randomBytes } from "node:crypto";
 import { files, processApi, readSettings, updateSettings, type ServiceContext } from "../service/api";
-import { fileApi as rawFiles, secretsApi } from "@mileniumhq/paperapi";
+import { fileApi as rawFiles, secretsApi, errorMessage } from "@mileniumhq/paperapi";
 import { currentServer, emitTrigger, serverLocal } from "../service/scope";
 import { TRIGGER_IDS } from "../service/contract";
 import type { PaperConsoleEntry } from "@mileniumhq/paperui";
@@ -71,7 +71,7 @@ export const hostSupportHere = (game: GameDefinition, options: GameOptions = { s
 
 /** Background work has no caller to throw to, so its failures land in the console. */
 export function report(ctx: Context, what: string, err: unknown) {
-    ctx.setState((prev) => ({ serverEntries: appendCapped(prev.serverEntries, { type: "error", content: `[Paperboard] ${what}: ${errorText(err)}` }) }));
+    ctx.setState((prev) => ({ serverEntries: appendCapped(prev.serverEntries, { type: "error", content: `[Paperboard] ${what}: ${errorMessage(err)}` }) }));
 }
 /** Adds a message to the chat and returns it as triggers send it. */
 export function pushChat(ctx: Context, message: Omit<ChatMessage, "id" | "timestamp">): ChatMessage {
@@ -111,7 +111,7 @@ export function playerPoller<P extends { name: string }>(spec: {
         } catch (err) {
             if (asked !== state.latest) return;
             state.asking = false;
-            const message = errorText(err);
+            const message = errorMessage(err);
             // one notice in the console per failure, not one every few seconds
             if (message !== state.error && ctx.state.serverStatus === "online") report(ctx, `Could not list ${spec.game}'s players`, err);
             state.error = message;

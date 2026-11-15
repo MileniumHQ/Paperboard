@@ -1,4 +1,4 @@
-import { errorText } from "../../service/failures";
+import { errorMessage } from "@mileniumhq/paperapi";
 // Palworld's REST API: the dedicated server reads no console input, so every
 // command goes here. It listens on RESTAPIPort under /v1/api with HTTP Basic
 // auth, user "admin" and the server's AdminPassword. Paperboard only ever
@@ -58,7 +58,7 @@ export class PalworldRest {
                 signal: AbortSignal.timeout(TIMEOUT_MS),
             });
         } catch (err) {
-            throw new Error(`Palworld's REST API did not answer ${endpoint}: ${errorText(err)}`);
+            throw new Error(`Palworld's REST API did not answer ${endpoint}: ${errorMessage(err)}`);
         }
         const text = await response.text();
         if (response.status === 401) throw new Error("Palworld refused Paperboard's admin password. Restart the server so it reads the current one.");

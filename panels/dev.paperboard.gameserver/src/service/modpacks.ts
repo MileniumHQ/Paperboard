@@ -1,4 +1,5 @@
-import { errorCode, errorText, unlessMissing } from "./failures";
+import { errorMessage, errorCode } from "@mileniumhq/paperapi";
+import { unlessMissing } from "./failures";
 import * as nodeFs from "node:fs/promises";
 import * as nodePath from "node:path";
 import {
@@ -85,7 +86,7 @@ function fsOf(deps: ModpackDeps): PackFs {
 }
 
 function messageOf(err: unknown): string {
-    return errorText(err);
+    return errorMessage(err);
 }
 
 

@@ -1,3 +1,4 @@
+import { errorMessage } from "@mileniumhq/paperapi";
 import { apiFetch } from "../../lib/userAgent";
 import { servedPicture } from "../../service/pictures";
 import type { SourceMapPictures, SourceMapPictureSource } from "./index";
@@ -100,7 +101,7 @@ async function load(source: SourceMapPictureSource): Promise<ParsedMapList> {
     } catch (err) {
         // fetch says only "fetch failed"; what failed is its cause
         const cause = err instanceof Error && err.cause instanceof Error ? `: ${err.cause.message}` : "";
-        throw new Error(`Couldn't reach ${source.name} for map pictures: ${err instanceof Error ? err.message : String(err)}${cause}`);
+        throw new Error(`Couldn't reach ${source.name} for map pictures: ${errorMessage(err)}${cause}`);
     }
     if (!response.ok) throw new Error(`${source.name} answered HTTP ${response.status} for its map list`);
     if (Number(response.headers.get("content-length") ?? 0) > MAX_BYTES) throw new Error(`${source.name}'s map list is larger than expected`);
@@ -109,7 +110,7 @@ async function load(source: SourceMapPictureSource): Promise<ParsedMapList> {
     try {
         return parseMapPictures(html, source.page);
     } catch (err) {
-        throw new Error(`Couldn't read map pictures from ${source.name}: ${err instanceof Error ? err.message : String(err)}`);
+        throw new Error(`Couldn't read map pictures from ${source.name}: ${errorMessage(err)}`);
     }
 }
 
