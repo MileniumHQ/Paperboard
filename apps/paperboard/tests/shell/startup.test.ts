@@ -79,7 +79,7 @@ test("opening on a computer that isn't listed opens Home and says so", async () 
 // Inventory: Core contracts — a setting the system won't apply at start is said, not only logged.
 test("Run on startup that the system refuses at start is said on screen, and in App Settings", async () => {
     const { page } = shell;
-    await page.waitFor(`window.__toasts.some((t) => t.includes("Settings not applied") && t.includes("Allow Paperboard in Login Items"))`, "a toast saying the settings weren't applied");
+    await page.waitFor(`window.__toasts.some((t) => t.includes("Run on startup not applied") && t.includes("Allow Paperboard in Login Items"))`, "a toast saying the settings weren't applied");
     await page.click("[role=radio][aria-label='Settings']");
     await page.waitFor(`[...document.querySelectorAll("[role=alert]")].some((a) => a.innerText.includes("Allow Paperboard in Login Items"))`, "App Settings saying why");
     expect(page.exceptions).toEqual([]);

@@ -214,7 +214,7 @@ const PanelPermissionPrompt: Component<{ panelName: (computerId: string, panelId
                     </PaperButton>
                 }
             >
-                <PaperQuote variant="danger" icon="error" title="Paperboard refused it because something went wrong" role="alert">
+                <PaperQuote variant="danger" icon="error" title="Paperboard couldn't decide, so it said no" role="alert">
                     <PaperText preset="text" breakWord>{failed()?.message}</PaperText>
                 </PaperQuote>
             </PaperModal>

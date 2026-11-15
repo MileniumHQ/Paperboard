@@ -60,7 +60,7 @@ export function useStartUp(options: StartUpOptions) {
             // the system may have changed since the last start (Run on
             // startup points at this copy of Paperboard, or macOS asks again)
             const refused = await applyAppSettings();
-            if (refused) showToast({ variant: "danger", title: "Settings not applied", message: refused });
+            if (refused) showToast({ variant: "danger", title: "Run on startup not applied", message: refused });
         }
 
         // Launch lands on Home or the computer App Settings starts on, never
