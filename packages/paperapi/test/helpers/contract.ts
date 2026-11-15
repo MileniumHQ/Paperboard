@@ -21,6 +21,13 @@ export const notesContract = defineContract(NOTES, {
         // a handler that answers only once released: the page waits for it as long as the contract says
         held: { output: shape.nothing(), timeoutMs: 200 },
         release: { output: shape.nothing() },
+        // the notebook's draft, kept in the keyed state under the notebook
+        draft: { input: shape.object({ text: shape.text() }), output: shape.nothing() },
+        discardDraft: { output: shape.nothing() },
+        // a handler that keeps a draft its shape refuses
+        brokenDraft: { output: shape.nothing() },
+        // no one notebook's: the page calls it without the scope
+        books: { output: shape.list(shape.text()), unscoped: true },
     },
     events: {
         noteAdded: note,
@@ -28,5 +35,8 @@ export const notesContract = defineContract(NOTES, {
     state: {
         shape: shape.object({ count: shape.number(), last: shape.nullable(shape.text()) }),
         initial: { count: 0, last: null },
+    },
+    keyed: {
+        drafts: shape.object({ text: shape.text(), words: shape.number() }),
     },
 });

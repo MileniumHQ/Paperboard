@@ -3,7 +3,7 @@ import { blocksApi } from "./blocks";
 import { getPanelId } from "./ipc";
 import type { ActionDefinition, ActionCategoryDefinition, CustomTypeDefinition } from "./schema";
 import { defineType } from "./schema";
-import { STATE_EVENT, STATE_VALUE, WIDGET_CHOICES_COMMAND, callBlockId, eventBlockId } from "./serviceCalls";
+import { STATE_EVENT, STATE_KEY_VALUE, STATE_VALUE, WIDGET_CHOICES_COMMAND, callBlockId, eventBlockId } from "./serviceCalls";
 import { parseWidgetChoices, type WidgetChoice } from "./widgetManifest";
 import type { BackupEnded } from "./backups";
 import { errorMessage } from "./errors";
@@ -12,23 +12,36 @@ import {
     callInputProblem,
     callOutputProblem,
     eventPayloadProblem,
+    keyedValueProblem,
     statePatchProblem,
     type CallDefinition,
     type CallInput,
     type CallOutput,
+    type CallScope,
     type CallsOf,
     type EventsOf,
     type Infer,
+    type KeyedOf,
+    type KeyedPatch,
     type AnyContract,
     type PanelContract,
-    type ScopeOf,
     type Shape,
     type StateOf,
 } from "./contract";
 
 type EventShapes = Record<string, Shape<any>>;
 
-export interface ServiceContext<TState, TEvents extends EventShapes | undefined = undefined> {
+/** One keyed state field as its service keeps it: each change is checked against its shape and pushed alone. */
+export interface KeyedEntries<T> {
+    get(key: string): T | undefined;
+    /** keeps `value` under `key` and pushes it to every window; a value its shape refuses throws here */
+    set(key: string, value: T): void;
+    /** removes the key; a window following it hears undefined */
+    delete(key: string): void;
+    keys(): string[];
+}
+
+export interface ServiceContext<TState, TEvents extends EventShapes | undefined = undefined, TKeyed = {}> {
     state: TState;
     setState: (
         patchOrUpdater:
@@ -45,6 +58,8 @@ export interface ServiceContext<TState, TEvents extends EventShapes | undefined 
         : (event: string, payload?: unknown) => void;
     /** @deprecated Actions is being removed: fire a block event (blocksApi) instead. Kept only while Agents moves to Blocks. */
     emitTrigger: <T = any>(triggerId: string, output: T) => void;
+    /** the contract's keyed state, by field */
+    keyed: { readonly [F in keyof TKeyed]: KeyedEntries<TKeyed[F]> };
 }
 
 /** @deprecated An untyped call (serviceApi.call): declare it in a contract (defineContract) instead. Kept only while Game Server and Agents move. */
@@ -54,17 +69,17 @@ export type ServiceCall<TState> = (ctx: ServiceContext<TState>, input?: any) => 
 export type CallHandlers<C extends PanelContract<any>, TState = ContractState<C, Record<string, any>>> = {
     [K in keyof CallsOf<C>]: (
         input: CallInput<CallsOf<C>[K]>,
-        ctx: ServiceContext<TState, EventsOf<C>>,
-        scope: ScopeOf<C>,
+        ctx: ServiceContext<TState, EventsOf<C>, KeyedOf<C>>,
+        scope: CallScope<C, CallsOf<C>[K]>,
     ) => CallOutput<CallsOf<C>[K]> | Promise<CallOutput<CallsOf<C>[K]>>;
 };
 
 /** What a contract's handlers and hooks are given: its state (or `TState`, for a contract that says nothing of it), and its events to emit. */
-export type ContractContext<C extends PanelContract<any>, TState = Record<string, any>> = ServiceContext<ContractState<C, TState>, EventsOf<C>>;
+export type ContractContext<C extends PanelContract<any>, TState = Record<string, any>> = ServiceContext<ContractState<C, TState>, EventsOf<C>, KeyedOf<C>>;
 
 /** The state a service keeps: its contract's, or what `state` starts as when the contract says nothing of it. */
 type ContractState<C, TState> = C extends PanelContract<any> ? (StateOf<C> extends undefined ? TState : StateOf<C>) : TState;
-type ContextOf<TState, C> = ServiceContext<ContractState<C, TState>, C extends PanelContract<any> ? EventsOf<C> : undefined>;
+type ContextOf<TState, C> = ServiceContext<ContractState<C, TState>, C extends PanelContract<any> ? EventsOf<C> : undefined, C extends PanelContract<any> ? KeyedOf<C> : {}>;
 
 export interface DefinePanelServiceOptions<
     TState extends Record<string, any>,
@@ -198,9 +213,15 @@ export function definePanelService<
             type: "any",
             read: async () => { await ready; return currentState; },
         }],
-        events: [{ id: STATE_EVENT, name: "Panel State Changed", internal: true, values: { state: { type: "any", name: "State" } } }],
+        events: [{
+            id: STATE_EVENT,
+            name: "Panel State Changed",
+            internal: true,
+            values: { state: { type: "any", name: "State", optional: true }, keyed: { type: "any", name: "Keyed State", optional: true } },
+        }],
     });
     const syncState = stateSync(panelId, blocks, internals);
+    const keyed = contract && Object.keys(contract.keyed).length > 0 ? keyedState(contract, blocks, () => ready, syncState) : null;
 
     const setState = (
         patchOrUpdater:
@@ -215,10 +236,10 @@ export function definePanelService<
         const problem = stateShape && statePatchProblem(stateShape, patch);
         if (problem) throw new Error(`[Service:${panelId}] ${problem}`);
         currentState = { ...currentState, ...patch };
-        syncState(patch);
+        syncState({ state: patch });
     };
 
-    const ctx: ServiceContext<State, any> = {
+    const ctx: ServiceContext<State, any, any> = {
         get state() {
             return currentState;
         },
@@ -228,10 +249,12 @@ export function definePanelService<
             // quiet: TRANSITIONAL (Actions removal): Actions is deprecated, and its triggers have no page to show a failure in
             actionsApi.emitTrigger(triggerId, output, panelId).catch((err) => console.error(`[Service:${panelId}] Failed to emit trigger '${triggerId}':`, err));
         },
+        keyed: keyed?.entries ?? {},
     };
 
     const registrations: Promise<void>[] = [
         internals,
+        ...(keyed ? [keyed.registered] : []),
         ...registerWidgetChoices(blocks, options, ctx, () => ready),
         ...(contract ? registerContractCalls(contract, blocks, options, ctx) : registerCalls(panelId, blocks, options.calls as Record<string, ServiceCall<any>> | undefined, ctx)),
         ...(contract && options.untypedCalls ? registerCalls(panelId, blocks, options.untypedCalls, ctx, contract) : []),
@@ -296,37 +319,96 @@ function pageEvents(panelId: string, blocks: Blocks, legacyActions: boolean, con
     };
 }
 
+/** One push to the page: what changed in the state, and in each keyed field, key by key. */
+interface StatePush {
+    state?: Record<string, unknown>;
+    keyed?: KeyedPatch;
+}
+
+function mergePush(older: StatePush, newer: StatePush): StatePush {
+    const keyed: KeyedPatch = { ...older.keyed };
+    for (const [field, changes] of Object.entries(newer.keyed ?? {})) keyed[field] = { ...keyed[field], ...changes };
+    return {
+        ...(older.state || newer.state ? { state: { ...older.state, ...newer.state } } : {}),
+        ...(older.keyed || newer.keyed ? { keyed } : {}),
+    };
+}
+
+// The contract's keyed state: each field's keys in the service, each change
+// checked and pushed alone, and read by the page one key (or one field) at
+// a time from an internal value.
+function keyedState(contract: AnyContract, blocks: Blocks, ready: () => Promise<void>, sync: (push: StatePush) => void) {
+    const panelId = contract.panelId;
+    const fields = new Map(Object.keys(contract.keyed).map((field) => [field, new Map<string, unknown>()]));
+    const keys = (field: string) => {
+        const found = fields.get(field);
+        if (!found) throw new Error(`The state has no keyed field "${field}"`);
+        return found;
+    };
+    const entries = Object.fromEntries([...fields].map(([field, values]): [string, KeyedEntries<unknown>] => [field, {
+        get: (key) => values.get(key),
+        set: (key, value) => {
+            // a value the contract doesn't allow is the panel's mistake: thrown where it was made
+            const problem = keyedValueProblem(contract, field, key, value);
+            if (problem) throw new Error(`[Service:${panelId}] ${problem}`);
+            values.set(key, value);
+            sync({ keyed: { [field]: { [key]: value } } });
+        },
+        delete: (key) => {
+            if (!values.delete(key)) return;
+            sync({ keyed: { [field]: { [key]: null } } });
+        },
+        keys: () => [...values.keys()],
+    }]));
+    const registered = blocks.register({
+        values: [{
+            id: STATE_KEY_VALUE,
+            name: "Panel Keyed State",
+            internal: true,
+            type: "any",
+            inputs: { field: { type: "text", name: "Field" }, key: { type: "text", name: "Key", optional: true } },
+            read: async ({ field, key }: { field: string; key?: string }) => {
+                await ready();
+                const values = keys(field);
+                // a key the service doesn't have reads as null: the page's undefined
+                return key === undefined ? Object.fromEntries(values) : values.has(key) ? values.get(key) : null;
+            },
+        }],
+    });
+    return { entries, registered };
+}
+
 // Sends each state patch to the page. BOUNDED: one sync in flight per
 // service; patches made while it travels merge into the next one, so a
 // chatty service (a console printing hundreds of lines a second) cannot pile
 // up daemon calls. The page only ever hears patches, so one that fails to
 // send is kept and sent again, under anything newer, until it arrives.
-function stateSync(panelId: string, blocks: Blocks, internals: Promise<void>): (patch: Record<string, unknown>) => void {
-    let unsynced: Record<string, unknown> | null = null;
+function stateSync(panelId: string, blocks: Blocks, internals: Promise<void>): (push: StatePush) => void {
+    let unsynced: StatePush | null = null;
     let syncing = false;
     let failures = 0;
     const send = () => {
-        const state = unsynced;
+        const push = unsynced;
         unsynced = null;
-        syncing = state !== null;
-        if (!state) return;
+        syncing = push !== null;
+        if (!push) return;
         internals
-            .then(() => blocks.fire(STATE_EVENT, { state }))
+            .then(() => blocks.fire(STATE_EVENT, { ...push }))
             .then(
                 () => {
                     failures = 0;
                     send();
                 },
                 (err) => {
-                    unsynced = unsynced ? { ...state, ...unsynced } : state;
+                    unsynced = unsynced ? mergePush(push, unsynced) : push;
                     const delay = Math.min(STATE_RETRY_MAX_MS, STATE_RETRY_BASE_MS * 2 ** failures++);
                     console.error(`[Service:${panelId}] Failed to sync state, trying again in ${delay} ms:`, err);
                     setTimeout(send, delay);
                 },
             );
     };
-    return (patch) => {
-        unsynced = unsynced ? { ...unsynced, ...patch } : patch;
+    return (push) => {
+        unsynced = unsynced ? mergePush(unsynced, push) : push;
         if (!syncing) send();
     };
 }
@@ -382,7 +464,7 @@ function registerCalls(panelId: string, blocks: Blocks, calls: Record<string, Se
 // each call of the contract, its input checked before its handler runs and
 // its answer before it leaves
 function registerContractCalls(contract: AnyContract, blocks: Blocks, options: AnyOptions, ctx: ServiceContext<any, any>): Promise<void>[] {
-    const handlers = (options.calls ?? {}) as Record<string, (input: unknown, ctx: ServiceContext<any, any>, scope: Record<string, unknown>) => unknown>;
+    const handlers = (options.calls ?? {}) as Record<string, (input: unknown, ctx: ServiceContext<any, any, any>, scope: Record<string, unknown>) => unknown>;
     const scopeKeys = Object.keys(contract.scope);
     const defs = contract.calls as Record<string, CallDefinition>;
     for (const name of Object.keys(handlers)) {
@@ -401,10 +483,11 @@ function registerContractCalls(contract: AnyContract, blocks: Blocks, options: A
             run: async ({ input }: { input?: unknown }) => {
                 const refused = callInputProblem(contract, name, input);
                 if (refused) throw new Error(refused);
-                // the call's own fields to its input, the scope's beside it
+                // the call's own fields to its input, the scope's beside it; an unscoped call is given no scope
                 const given = (input ?? {}) as Record<string, unknown>;
-                const scope = Object.fromEntries(scopeKeys.map((key) => [key, given[key]]));
-                const own = def.input ? Object.fromEntries(Object.entries(given).filter(([key]) => !scopeKeys.includes(key))) : undefined;
+                const scoped = def.unscoped ? [] : scopeKeys;
+                const scope = Object.fromEntries(scoped.map((key) => [key, given[key]]));
+                const own = def.input ? Object.fromEntries(Object.entries(given).filter(([key]) => !scoped.includes(key))) : undefined;
                 const output = await handler(own, ctx, scope);
                 const wrong = callOutputProblem(name, def, output);
                 if (wrong) throw new Error(wrong);

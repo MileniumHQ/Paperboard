@@ -280,6 +280,10 @@ async function notes(): Promise<void> {
             brokenState: (_input, ctx) => ctx.setState(JSON.parse('{"count":"many"}')),
             held: () => held,
             release: () => release(),
+            draft: ({ text }, ctx, { book }) => ctx.keyed.drafts.set(book, { text, words: text.split(" ").length }),
+            discardDraft: (_input, ctx, { book }) => ctx.keyed.drafts.delete(book),
+            brokenDraft: (_input, ctx, { book }) => ctx.keyed.drafts.set(book, JSON.parse('{"text":"x","words":"one"}')),
+            books: (_input, ctx) => [...new Set([...notes.map((n) => n.book), ...ctx.keyed.drafts.keys()])].sort(),
         },
     });
     await service.ready;

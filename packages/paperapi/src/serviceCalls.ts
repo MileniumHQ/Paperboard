@@ -9,6 +9,8 @@ import { blocksApi, type BlockCallOptions } from "./blocks";
 export const STATE_VALUE = "panel-state";
 /** The internal event a service's state changes travel on. */
 export const STATE_EVENT = "panel-state-changed";
+/** The internal value a page reads one key of its service's keyed state from, or a keyed field whole. */
+export const STATE_KEY_VALUE = "panel-state-key";
 /** The internal command Home asks a widget option's dropdown from. */
 export const WIDGET_CHOICES_COMMAND = "widget-choices";
 
