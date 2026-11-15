@@ -15,6 +15,7 @@ import {
     PaperContextMenuItem,
     PaperContextMenuSub,
     PaperFileBrowser,
+    PaperIcon,
     PaperInput,
     PaperInterfaceGroup,
     PaperInterfaceItem,
@@ -22,6 +23,7 @@ import {
     PaperListItem,
     PaperMarkdown,
     PaperMenu,
+    PaperMediaCard,
     PaperMenuItem,
     PaperModal,
     PaperPanel,
@@ -659,6 +661,27 @@ const scenarios: Record<string, () => JSX.Element> = {
             return <p id="page">A page that polls.</p>;
         };
         return shell(() => <Poller />);
+    },
+
+    // pictures named by a relative address or any URL scheme, and a glyph;
+    // the page lives at the root and its stylesheet under /assets
+    pictures() {
+        return shell(() => (
+            <div style={{ padding: "24px", display: "flex", "flex-direction": "column", gap: "16px", width: "320px" }}>
+                <span id="tinted" style={{ "font-size": "48px" }}>
+                    <PaperIcon src="pictures/mark.svg" tint />
+                </span>
+                <div id="scheme">
+                    <PaperMediaCard title="Scheme" icon="panel://dev.example/icon.png" />
+                </div>
+                <div id="relative">
+                    <PaperMediaCard title="Relative" icon="pictures/card.svg" />
+                </div>
+                <div id="glyph">
+                    <PaperMediaCard title="Glyph" icon="dns" />
+                </div>
+            </div>
+        ));
     },
 
     provider() {

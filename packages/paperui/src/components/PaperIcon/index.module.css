@@ -52,7 +52,6 @@ button .PaperIcon {
 
 .tint {
     background-color: currentColor;
-    mask-image: var(--paper-icon-mask);
     mask-size: contain;
     mask-repeat: no-repeat;
     mask-position: center;

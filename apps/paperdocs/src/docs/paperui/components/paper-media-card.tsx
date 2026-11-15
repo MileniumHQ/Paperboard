@@ -154,7 +154,7 @@ export function Example(props: { onOpen: () => void }) {
                         <td><PaperCode>icon</PaperCode></td>
                         <td><PaperCode>string | JSX.Element</PaperCode></td>
                         <td>No default</td>
-                        <td>A small mark for the card. A string starting with <PaperCode>http</PaperCode>, <PaperCode>/</PaperCode>, or <PaperCode>data:</PaperCode> is an image address. Any other string is a Material icon name. With a banner the icon overlaps the banner's bottom edge. Without one it stands above the title.</td>
+                        <td>A small mark for the card. A string with a scheme (<PaperCode>https:</PaperCode>, <PaperCode>data:</PaperCode>, <PaperCode>panel:</PaperCode>), a slash, or a dot is an image address, relative ones included. Any other string is a Material icon name. With a banner the icon overlaps the banner's bottom edge. Without one it stands above the title.</td>
                     </tr>
                     <tr>
                         <td><PaperCode>plainIcon</PaperCode></td>

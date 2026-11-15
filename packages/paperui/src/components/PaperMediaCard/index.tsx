@@ -170,11 +170,13 @@ export function PaperMediaCard(props: ParentProps<PaperMediaCardProps>) {
         }
     };
 
-    // an icon is a picture's address, a glyph name, or an element
+    // an icon is a picture's address, a glyph name, or an element. A glyph
+    // name is letters, digits and underscores: anything with a scheme, a
+    // slash or a dot is an address
     const renderIcon = (imageClass: string) => {
         const resolved = icon();
         if (typeof resolved !== "string") return resolved;
-        if (resolved.startsWith("http") || resolved.startsWith("/") || resolved.startsWith("data:")) {
+        if (/[:/.]/.test(resolved)) {
             return <img src={resolved} alt="" class={imageClass} />;
         }
         return <PaperIcon class={styles.iconGlyph}>{resolved}</PaperIcon>;

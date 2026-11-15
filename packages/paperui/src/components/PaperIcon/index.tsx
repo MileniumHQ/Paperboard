@@ -70,11 +70,13 @@ export function PaperIcon(props: PaperIconProps) {
                             />
                         }
                     >
-                        {/* the image's alpha cut out of the text color */}
+                        {/* the image's alpha cut out of the text color. Set here, not
+                            through a custom property, so a relative address is read
+                            against the page and not the stylesheet */}
                         <span
                             class={[styles.iconImage, styles.tint].join(" ")}
                             style={{
-                                "--paper-icon-mask": `url(${JSON.stringify(src())})`,
+                                "mask-image": `url(${JSON.stringify(src())})`,
                                 "background-color": typeof local.tint === "string" ? resolveColor(local.tint) : undefined,
                             }}
                         />

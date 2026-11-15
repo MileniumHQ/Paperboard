@@ -81,7 +81,7 @@ export function Example() {
                         <td><PaperCode>src</PaperCode></td>
                         <td><PaperCode>string</PaperCode></td>
                         <td>No default</td>
-                        <td>Draws an image, one em square, instead of a symbol.</td>
+                        <td>Draws an image, one em square, instead of a symbol. A relative address is read against the page, with or without <PaperCode>tint</PaperCode>.</td>
                     </tr>
                     <tr>
                         <td><PaperCode>alt</PaperCode></td>
