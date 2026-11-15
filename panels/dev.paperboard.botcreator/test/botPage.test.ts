@@ -201,6 +201,31 @@ describe("a bot's page", () => {
         }
     });
 
+    test("Replace with a mistyped token says Discord refused it, and the bot keeps running on its saved token", async () => {
+        const fake = discord.addBot({ username: "Steady" });
+        await savedBots([{ stored: storedBot("b-steady", fake.appId, { name: "Steady" }), token: fake.token }]);
+        await startService({ discordApi: discord.api });
+        await stateWhere<BotsServiceState>(PANEL_ID, (s) => Boolean(s.bots[0]?.connected), "Steady to connect");
+        const served = await servePanel();
+        const page = await browser.open(served.url);
+        try {
+            await page.waitFor(`document.body.innerText.includes("Steady")`, "the bot list");
+            await clickText(page, "[class*=card], [class*=Card]", "Steady");
+            await page.click(`input[name=botMenu][value="config"]`);
+            await clickText(page, "button", "Replace");
+            await page.waitFor(`document.querySelector("[role=dialog] input[type=password]") !== null`, "the Replace token dialog");
+            const [app, stamp] = fake.token.split(".");
+            await page.type("[role=dialog] input[type=password]", `${app}.${stamp}.${"y".repeat(27)}`, true);
+            await page.waitFor(`document.querySelector("[role=dialog] [role=alert]")?.innerText.includes("Discord refused the new token")`, "the refusal in the dialog");
+            const state = await stateWhere<BotsServiceState>(PANEL_ID, (s) => s.bots.length === 1, "the bot");
+            expect(state.bots[0]).toMatchObject({ connected: true, lastError: null });
+            expect(page.exceptions).toEqual([]);
+        } finally {
+            await page.close();
+            served.stop();
+        }
+    });
+
     test("on a phone the Overview fits: the switch, the name and every message stay inside their cards", async () => {
         const home = guild("Home");
         const fake = discord.addBot({ username: "ModerationHelperBot", guilds: [home] });

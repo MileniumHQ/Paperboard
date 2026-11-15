@@ -240,6 +240,11 @@ export function startFakeDiscord(): FakeDiscord {
                 return json(200, { ...messagePayload(userOf(bot), found.channel.id, recorded.body, recorded.files), guild_id: found.guild.id });
             }
         }
+        // GET /users/@me: the bot the token is for
+        if (method === "GET" && path === "/users/@me") {
+            if (!bot) return unauthorized();
+            return json(200, userOf(bot));
+        }
         // DELETE /users/@me/guilds/:guild: the bot leaves it
         if (method === "DELETE" && parts[0] === "users" && parts[1] === "@me" && parts[2] === "guilds" && parts[3]) {
             if (!bot) return unauthorized();

@@ -9,8 +9,10 @@ import {
     PANEL_ID,
     SETUP_GUIDE_FIELD,
     createBotId,
+    newTokenName,
     readBotsConfig,
     tokenName,
+    tokenOwner,
     type StoredBot,
 } from "./bots";
 import { bots, logFailure, panel, publish, requireReadable, type BotEntry } from "./registry";
@@ -45,6 +47,28 @@ export function saveBots(): Promise<void> {
 export async function readToken(id: string): Promise<string | null> {
     const stored = await secretsApi.get(tokenName(id), PANEL_ID);
     return stored.found && stored.value ? stored.value : null;
+}
+
+/** The new token the page left for a bot, taken out of the vault: it is saved again only once it has been checked. */
+export async function takeNewToken(id: string): Promise<string | null> {
+    const left = await secretsApi.get(newTokenName(id), PANEL_ID);
+    await secretsApi.delete(newTokenName(id), PANEL_ID);
+    return left.found && left.value ? left.value : null;
+}
+
+/**
+ * Tokens no saved bot holds: a new token never checked, or one the page saved
+ * for a bot whose add never reached the service. Nothing is forgotten while
+ * the saved bots can't be read.
+ */
+export async function forgetStrayTokens(): Promise<void> {
+    if (panel.botsError) return;
+    for (const name of await secretsApi.list(PANEL_ID)) {
+        const owner = tokenOwner(name);
+        if (!owner || (owner.kind === "token" && bots.has(owner.bot))) continue;
+        await secretsApi.delete(name, PANEL_ID);
+        console.log(`[DiscordService] forgot ${owner.kind === "new" ? "an unchecked new token" : "the token of a bot that was never added"} (${owner.bot})`);
+    }
 }
 
 // The one bot from before several bots becomes the first of them: its

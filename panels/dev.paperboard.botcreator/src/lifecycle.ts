@@ -4,7 +4,8 @@ import { secretsApi } from "@mileniumhq/paperapi";
 import { errorToMessage, extractApplicationIdFromToken } from "./types";
 import { MAX_BOTS, PANEL_ID, isBotId, tokenName, type BotSummary, type DeleteBotResult } from "./bots";
 import { adding, bots, logFailure, publish, requireReadable, summary, type BotEntry } from "./registry";
-import { readToken, saveBots } from "./persistence";
+import { readToken, saveBots, takeNewToken } from "./persistence";
+import { tokenUser } from "./session";
 import { botsChanged, createEntry, firePanelEvent, noteIdentity, noteOnline, registerBlocks } from "./blocksBridge";
 
 /** Connects a saved bot with its vault token; the reason it can't is the bot's error. */
@@ -118,11 +119,27 @@ export async function addBot(id: unknown): Promise<BotSummary> {
     return summary(entry);
 }
 
-/** Reconnects a bot that's on with the new token the panel saved in the vault. */
+/**
+ * Replaces a bot's token with the new one the panel left in the vault, once
+ * Discord takes it as this bot's, and reconnects the bot if it's on. A token
+ * Discord refuses, or one for another bot, leaves the saved token as it was.
+ */
 export async function replaceToken(entry: BotEntry): Promise<void> {
     requireReadable();
-    const saved = await readToken(entry.stored.id);
-    if (!saved) throw new Error("No token was saved for this bot.");
+    const token = await takeNewToken(entry.stored.id);
+    if (!token) throw new Error("No new token was given for this bot.");
+    // a token for another application would quietly turn this bot into that one
+    const expected = entry.stored.applicationId;
+    const other = "That token is for a different bot. Add it as a new bot instead.";
+    if (expected && extractApplicationIdFromToken(token) !== expected) throw new Error(other);
+    let user: string;
+    try {
+        user = await tokenUser(token);
+    } catch (err) {
+        throw new Error(`Discord refused the new token, so the saved one is kept: ${errorToMessage(err)}`);
+    }
+    if (expected && user !== expected) throw new Error(other);
+    await secretsApi.set(tokenName(entry.stored.id), token, PANEL_ID);
     entry.hasToken = true;
     if (entry.stored.enabled) await connect(entry);
     else publish();

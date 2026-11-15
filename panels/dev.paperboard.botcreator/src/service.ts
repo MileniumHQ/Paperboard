@@ -15,8 +15,8 @@
 import { definePanelService, type ServiceContext } from "@mileniumhq/paperapi";
 import { errorToMessage } from "./types";
 import { PANEL_ID, type BotsServiceState } from "./bots";
-import { bots, panel, publish } from "./registry";
-import { loadBots, rememberGuideSeen } from "./persistence";
+import { bots, logFailure, panel, publish } from "./registry";
+import { forgetStrayTokens, loadBots, rememberGuideSeen } from "./persistence";
 import { createEntry, registerPanelBlocks } from "./blocksBridge";
 import { connectEntry, registerEntry } from "./lifecycle";
 import { blocksBots, botChoices, serviceCalls } from "./calls";
@@ -50,6 +50,7 @@ export const botService = definePanelService({
         // the types first: every bot's blocks use them
         await registerPanelBlocks(blocksBots);
         await rememberGuideSeen();
+        await forgetStrayTokens().catch(logFailure("forgetting tokens no bot holds failed"));
         for (const entry of bots.values()) await registerEntry(entry);
         publish();
         startBots(bots.values(), connectEntry);

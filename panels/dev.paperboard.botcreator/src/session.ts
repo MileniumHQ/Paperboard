@@ -173,6 +173,20 @@ export function discordOrigins(env: Record<string, string | undefined> = process
 /** Listens to one of a client's events while it is the session's own. */
 type On = <E extends keyof ClientEvents>(event: E, listener: (...args: ClientEvents[E]) => void) => void;
 
+/**
+ * The Discord user a bot token logs in as, asked over REST with no gateway
+ * login, so a bot that is running keeps running while a new token is
+ * checked; throws what Discord refused.
+ */
+export async function tokenUser(token: string): Promise<string> {
+    const { REST, Routes } = await loadDiscord();
+    const api = discordApiBase();
+    const rest = new REST({ ...(api ? { api } : {}), hashSweepInterval: 0, handlerSweepInterval: 0 }).setToken(token);
+    const user = (await rest.get(Routes.user())) as { id?: unknown };
+    if (typeof user?.id !== "string") throw new Error("Discord didn't say which bot the token is for.");
+    return user.id;
+}
+
 export class BotSession {
     client: Client | null = null;
     /** the application id known before login: saved, or read from the token */

@@ -4,7 +4,7 @@
 import { createSignal, onCleanup } from "solid-js";
 import { createStore, reconcile } from "solid-js/store";
 import { createPanelBridge, secretsApi } from "@mileniumhq/paperapi";
-import { byCreation, createBotId, PANEL_ID, tokenName, type BotSummary, type BotsServiceState, type DeleteBotResult } from "./bots";
+import { byCreation, createBotId, newTokenName, PANEL_ID, tokenName, type BotSummary, type BotsServiceState, type DeleteBotResult } from "./bots";
 
 const DEFAULT_STATE: BotsServiceState = { bots: [], botsError: null, setupGuideSeen: true };
 
@@ -54,9 +54,13 @@ export function createBots() {
             await secretsApi.set(tokenName(id), token, PANEL_ID);
             return call<BotSummary>("addBot", { bot: id });
         },
-        /** saves a new token for the same bot, then reconnects it if it is on */
+        /**
+         * Gives the service a new token for the same bot, in the vault beside
+         * the saved one: the service replaces the saved token only once
+         * Discord takes the new one, then reconnects the bot if it is on.
+         */
         replaceToken: async (bot: string, token: string) => {
-            await secretsApi.set(tokenName(bot), token, PANEL_ID);
+            await secretsApi.set(newTokenName(bot), token, PANEL_ID);
             return call<boolean>("replaceToken", { bot });
         },
         /** the setup guide was finished or skipped: it never shows again */

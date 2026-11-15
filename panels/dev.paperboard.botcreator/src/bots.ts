@@ -93,10 +93,28 @@ export function createBotId(): string {
     return `b-${crypto.randomUUID().replace(/-/g, "").slice(0, 12)}`;
 }
 
+const TOKEN_PREFIX = "bot-token.";
+const NEW_TOKEN_PREFIX = "bot-token-new.";
+
 /** The vault secret holding one bot's token. */
 export function tokenName(botId: string): string {
     if (!isBotId(botId)) throw new Error(`"${botId}" is not a bot id`);
-    return `bot-token.${botId}`;
+    return `${TOKEN_PREFIX}${botId}`;
+}
+
+/** Where the page leaves a bot's new token for the service to check; the saved one is replaced only once it has. */
+export function newTokenName(botId: string): string {
+    if (!isBotId(botId)) throw new Error(`"${botId}" is not a bot id`);
+    return `${NEW_TOKEN_PREFIX}${botId}`;
+}
+
+/** The bot a vault secret is the token of ("token") or the unchecked new token of ("new"); null for any other secret. */
+export function tokenOwner(name: string): { bot: string; kind: "token" | "new" } | null {
+    for (const [prefix, kind] of [[TOKEN_PREFIX, "token"], [NEW_TOKEN_PREFIX, "new"]] as const) {
+        const bot = name.startsWith(prefix) ? name.slice(prefix.length) : "";
+        if (isBotId(bot)) return { bot, kind };
+    }
+    return null;
 }
 
 /** A bot's saved commands, or why they can't be read, naming whose they are. */

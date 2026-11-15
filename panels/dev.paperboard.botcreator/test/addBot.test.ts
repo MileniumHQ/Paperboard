@@ -1,10 +1,11 @@
 // Adding a bot and replacing its token: the page saves the token in the
-// vault under the bot's id and the service keeps the bot once it logs in.
+// vault under the bot's id and the service keeps the bot once it logs in. A
+// new token waits beside the saved one until Discord takes it.
 // A token that isn't kept (not a bot token, a bot that already runs, a
 // login Discord refuses) is forgotten with everything made for it.
 import { afterAll, afterEach, beforeAll, describe, expect, setDefaultTimeout, test } from "bun:test";
 import { blocksApi, secretsApi } from "@mileniumhq/paperapi";
-import { tokenName, type BotsServiceState } from "../src/bots";
+import { newTokenName, tokenName, type BotsServiceState } from "../src/bots";
 import { startFakeDiscord, type FakeDiscord } from "./helpers/discord";
 import { call, PANEL_ID, savedBots, startService, stopServices, storedBot } from "./helpers/service";
 import { stateWhere } from "./helpers/wait";
@@ -77,15 +78,49 @@ describe("adding a bot", () => {
 });
 
 describe("replacing a bot's token", () => {
+    /** What the page does to replace a token: the new one beside the saved one, then the call. */
+    async function replace(id: string, token: string) {
+        await secretsApi.set(newTokenName(id), token, PANEL_ID);
+        return call("replaceToken", { bot: id });
+    }
+
     test("a bot with no token connects once a new one is saved", async () => {
         const fake = discord.addBot({ username: "Lost Key" });
         await savedBots([{ stored: storedBot("b-lost", fake.appId, { name: "Lost Key" }) }]);
         await startService({ discordApi: discord.api });
         await stateWhere<BotsServiceState>(PANEL_ID, (s) => s.bots[0]?.lastError === "No token is saved for this bot. Replace its token in Configuration.", "the missing token");
 
-        await secretsApi.set(tokenName("b-lost"), fake.token, PANEL_ID);
-        await call("replaceToken", { bot: "b-lost" });
+        await replace("b-lost", fake.token);
         const state = await stateWhere<BotsServiceState>(PANEL_ID, (s) => Boolean(s.bots[0]?.connected), "the bot to connect");
         expect(state.bots[0]).toMatchObject({ hasToken: true, lastError: null });
+        expect(await secretsApi.get(tokenName("b-lost"), PANEL_ID)).toMatchObject({ found: true, value: fake.token });
+        expect((await secretsApi.get(newTokenName("b-lost"), PANEL_ID)).found).toBe(false);
+    });
+
+    test("a mistyped token for the same bot is refused, and the bot keeps its working token and stays online", async () => {
+        const fake = discord.addBot({ username: "Steady Hand" });
+        await savedBots([{ stored: storedBot("b-steady", fake.appId, { name: "Steady Hand" }), token: fake.token }]);
+        await startService({ discordApi: discord.api });
+        await stateWhere<BotsServiceState>(PANEL_ID, (s) => Boolean(s.bots[0]?.connected), "the bot to connect");
+
+        // the right application, a wrong secret part: Discord doesn't know it
+        const [app, stamp] = fake.token.split(".");
+        await expect(replace("b-steady", `${app}.${stamp}.${"y".repeat(27)}`)).rejects.toThrow("Discord refused the new token, so the saved one is kept");
+        expect(await secretsApi.get(tokenName("b-steady"), PANEL_ID)).toMatchObject({ found: true, value: fake.token });
+        expect((await secretsApi.get(newTokenName("b-steady"), PANEL_ID)).found).toBe(false);
+        const state = await stateWhere<BotsServiceState>(PANEL_ID, (s) => s.bots.length === 1, "the bot");
+        expect(state.bots[0]).toMatchObject({ connected: true, hasToken: true, lastError: null });
+    });
+
+    test("a token left for a bot that never reached the service is forgotten when it next starts", async () => {
+        const fake = discord.addBot({ username: "Kept" });
+        await savedBots([{ stored: storedBot("b-kept", fake.appId, { name: "Kept" }), token: fake.token }]);
+        // the page saved these, then lost the service before it could ask
+        await secretsApi.set(tokenName("b-orphan"), fake.token, PANEL_ID);
+        await secretsApi.set(newTokenName("b-kept"), fake.token, PANEL_ID);
+        await startService({ discordApi: discord.api });
+        expect((await secretsApi.get(tokenName("b-orphan"), PANEL_ID)).found).toBe(false);
+        expect((await secretsApi.get(newTokenName("b-kept"), PANEL_ID)).found).toBe(false);
+        expect(await secretsApi.get(tokenName("b-kept"), PANEL_ID)).toMatchObject({ found: true, value: fake.token });
     });
 });
