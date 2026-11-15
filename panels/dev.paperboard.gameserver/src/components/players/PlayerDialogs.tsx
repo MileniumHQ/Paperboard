@@ -2,7 +2,7 @@
 // and a kick or ban with its reason. Each sends through what it is given and
 // shows the refusal.
 import { createEffect, createSignal, on, Show } from "solid-js";
-import { PaperButton, PaperFlex, PaperInput, PaperModal, PaperSelector, PaperSelectorItem, PaperText } from "@mileniumhq/paperui";
+import { createAction, PaperButton, PaperFlex, PaperInput, PaperModal, PaperSelector, PaperSelectorItem, PaperText } from "@mileniumhq/paperui";
 import { JAVA_NAME_PATTERN, PLAYER_NAME_PATTERN } from "../../core/players";
 import { bedrockPlayerName, type BedrockNaming } from "../../core/bedrock";
 import { errorMessage } from "../../lib/failure";
@@ -168,20 +168,13 @@ export function ReasonActionDialog(props: {
 }) {
     const [reason, setReason] = createSignal("");
     // one press sends one action: the button waits for it
-    const [sending, setSending] = createSignal(false);
-    const [error, setError] = createSignal("");
+    const send = createAction({ message: errorMessage });
 
     const submit = async () => {
-        if (!props.open || sending()) return;
-        setSending(true);
-        setError("");
-        try {
+        if (!props.open || send.busy()) return;
+        await send.run(props.title, async () => {
             if (await props.onSubmit(reason().trim())) setReason("");
-        } catch (err) {
-            setError(errorMessage(err));
-        } finally {
-            setSending(false);
-        }
+        });
     };
 
     return (
@@ -195,7 +188,7 @@ export function ReasonActionDialog(props: {
                     <PaperButton onClick={props.onClose}>
                         Cancel
                     </PaperButton>
-                    <PaperButton variant="danger" disabled={sending()} onClick={() => void submit()}>
+                    <PaperButton variant="danger" disabled={send.busy()} onClick={() => void submit()}>
                         {props.confirmLabel}
                     </PaperButton>
                 </>
@@ -208,10 +201,12 @@ export function ReasonActionDialog(props: {
                     value={reason()}
                     onInput={(e) => setReason(e.currentTarget.value)}
                 />
-                <Show when={error()}>
-                    <PaperText size={2} color="danger">
-                        {error()}
-                    </PaperText>
+                <Show when={send.error()}>
+                    {(failure) => (
+                        <PaperText size={2} color="danger">
+                            {failure().message}
+                        </PaperText>
+                    )}
                 </Show>
             </PaperFlex>
         </PaperModal>

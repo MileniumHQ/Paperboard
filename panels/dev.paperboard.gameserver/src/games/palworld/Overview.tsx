@@ -1,5 +1,5 @@
 import { createSignal, Show } from "solid-js";
-import { PaperAvatar, PaperButton, PaperInput, PaperModal, PaperQuote, PaperText } from "@mileniumhq/paperui";
+import { createAction, PaperAvatar, PaperButton, PaperInput, PaperModal, PaperQuote, PaperText } from "@mileniumhq/paperui";
 import ServerOverview, { EditableDetail } from "../../components/ServerOverview";
 import { gameSettings, serverBridge, serverStatus } from "../../lib/server";
 import { errorMessage } from "../../lib/failure";
@@ -15,23 +15,14 @@ export default function PalworldOverview() {
     const description = () => String(gameSettings()[DESCRIPTION] ?? "");
     const [open, setOpen] = createSignal(false);
     const [draft, setDraft] = createSignal("");
-    const [saving, setSaving] = createSignal(false);
-    const [error, setError] = createSignal("");
+    const saving = createAction({ message: errorMessage });
     const [pending, setPending] = createSignal(false);
-    const edit = () => { setDraft(description()); setError(""); setOpen(true); };
-    const save = async () => {
-        setSaving(true);
-        setError("");
-        try {
-            await serverBridge.call(CALLS.writeGameOptions, { patch: { [DESCRIPTION]: draft().trim() } });
-            setPending(serverStatus() !== "offline");
-            setOpen(false);
-        } catch (err) {
-            setError(errorMessage(err));
-        } finally {
-            setSaving(false);
-        }
-    };
+    const edit = () => { setDraft(description()); saving.setError(null); setOpen(true); };
+    const save = () => saving.run("Description not saved", async () => {
+        await serverBridge.call(CALLS.writeGameOptions, { patch: { [DESCRIPTION]: draft().trim() } });
+        setPending(serverStatus() !== "offline");
+        setOpen(false);
+    });
 
     const metrics = createMetrics<PalworldMetrics>("palworld-metrics");
     const uptime = createUptime();
@@ -72,8 +63,8 @@ export default function PalworldOverview() {
                 footer={
                     <>
                         <PaperButton variant="text" onClick={() => setOpen(false)}>Cancel</PaperButton>
-                        <PaperButton variant="primary" disabled={saving() || draft().trim() === description()} onClick={() => void save()}>
-                            {saving() ? "Saving..." : "Save"}
+                        <PaperButton variant="primary" disabled={saving.busy() || draft().trim() === description()} onClick={() => void save()}>
+                            {saving.busy() ? "Saving..." : "Save"}
                         </PaperButton>
                     </>
                 }
@@ -85,10 +76,10 @@ export default function PalworldOverview() {
                     value={draft()}
                     maxLength={256}
                     onInput={(e) => setDraft(e.currentTarget.value)}
-                    onKeyDown={(e) => { if (e.key === "Enter" && !saving() && draft().trim() !== description()) void save(); }}
+                    onKeyDown={(e) => { if (e.key === "Enter" && !saving.busy() && draft().trim() !== description()) void save(); }}
                 />
-                <Show when={error()}>
-                    <PaperQuote variant="danger" icon="warning" title="Description not saved">{error()}</PaperQuote>
+                <Show when={saving.error()}>
+                    {(failure) => <PaperQuote variant="danger" icon="warning" title={failure().title}>{failure().message}</PaperQuote>}
                 </Show>
             </PaperModal>
         </ServerOverview>

@@ -5,6 +5,7 @@
 import { batch, createEffect, createMemo, createSignal, mapArray, Match, on, onCleanup, Show, Switch, type JSX } from "solid-js";
 import { type WidgetContext } from "@mileniumhq/paperapi";
 import {
+    createAction,
     PaperButton,
     PaperWidget,
     PaperWidgetDot,
@@ -123,17 +124,8 @@ export function StatusWidget(props: Props) {
     askForCap(server);
     const size = useSize(props.widget);
     const tall = () => size().h > 1;
-    const [pending, setPending] = createSignal(false);
-    const [failure, setFailure] = createSignal<{ verb: string; action: string; message: string } | null>(null);
-
-    const run = (verb: string, action: string) => {
-        setPending(true);
-        setFailure(null);
-        server
-            .call(action)
-            .catch((err) => setFailure({ verb, action, message: errorMessage(err) }))
-            .finally(() => setPending(false));
-    };
+    const power = createAction({ message: errorMessage });
+    const run = (verb: string, action: string) => void power.run(`Couldn't ${verb} the server`, () => server.call(action));
 
     return (
         <Connected server={server} widget={props.widget} title={SERVER_TITLE} icon="dns" short={!tall()}>
@@ -141,7 +133,7 @@ export function StatusWidget(props: Props) {
                 const status = () => s().serverStatus;
                 const installed = () => s().serverVersion !== "";
                 const online = () => status() === "online";
-                const busy = () => pending() || status() === "stopping" || status() === "restarting";
+                const busy = () => power.busy() || status() === "stopping" || status() === "restarting";
                 const address = () => `${s().localIp}:${s().serverPort}`;
                 const players = () => !s().supportsPlayers ? { ...playerCount(0, null), short: "Unavailable", long: "Player count unavailable", online: "—" } : playerCount(s().onlinePlayers.length, s().maxPlayers);
                 // what the one button does now; a server with nothing installed
@@ -199,14 +191,14 @@ export function StatusWidget(props: Props) {
                                 />
                             }
                         >
-                            <Match when={failure()}>
+                            <Match when={power.error()}>
                                 {(failed) => (
                                     <PaperWidgetMessage
                                         tone="danger"
-                                        title={`Couldn't ${failed().verb} the server`}
+                                        title={failed().title}
                                         description={tall() ? failed().message : undefined}
                                     >
-                                        <PaperButton size="tiny" onClick={() => setFailure(null)}>
+                                        <PaperButton size="tiny" onClick={() => power.setError(null)}>
                                             Dismiss
                                         </PaperButton>
                                         <PaperButton size="tiny" onClick={() => props.widget.openPanel()}>

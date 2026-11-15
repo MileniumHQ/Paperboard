@@ -5,6 +5,7 @@ import {
     PaperModal,
     PaperQuote,
     PaperSwatch,
+    createAction,
     createLatest,
 } from "@mileniumhq/paperui";
 import {
@@ -154,8 +155,7 @@ export function MotdEditor(props: {
 }) {
     const [loaded, setLoaded] = createSignal(false);
     const [loadError, setLoadError] = createSignal("");
-    const [saveError, setSaveError] = createSignal("");
-    const [saving, setSaving] = createSignal(false);
+    const saving = createAction({ message: errorMessage });
     const [active, setActive] = createSignal<MotdStyle>(plainStyle());
 
     let root: HTMLDivElement | undefined;
@@ -218,7 +218,7 @@ export function MotdEditor(props: {
     const load = async () => {
         setLoaded(false);
         setLoadError("");
-        setSaveError("");
+        saving.setError(null);
         const current = latest();
         try {
             const answer = await props.load();
@@ -325,16 +325,10 @@ export function MotdEditor(props: {
     };
 
     const save = async () => {
-        setSaving(true);
-        setSaveError("");
-        try {
+        await saving.run("Couldn't save", async () => {
             await props.save(props.dialect.serialize(doc));
             props.onClose();
-        } catch (err) {
-            setSaveError(errorMessage(err));
-        } finally {
-            setSaving(false);
-        }
+        });
     };
 
     // toolbar buttons keep the editor's selection instead of taking focus
@@ -349,7 +343,7 @@ export function MotdEditor(props: {
             footer={
                 <>
                     <PaperButton variant="text" onClick={props.onClose}>Cancel</PaperButton>
-                    <PaperButton variant="primary" disabled={!loaded() || saving()} onClick={() => void save()}>
+                    <PaperButton variant="primary" disabled={!loaded() || saving.busy()} onClick={() => void save()}>
                         Save
                     </PaperButton>
                 </>
@@ -428,10 +422,12 @@ export function MotdEditor(props: {
                         class={[styles.listBox, styles.editor].join(" ")}
                     />
 
-                    <Show when={saveError()}>
-                        <PaperQuote variant="danger" icon="warning" title="Couldn't save">
-                            {saveError()}
-                        </PaperQuote>
+                    <Show when={saving.error()}>
+                        {(failure) => (
+                            <PaperQuote variant="danger" icon="warning" title={failure().title}>
+                                {failure().message}
+                            </PaperQuote>
+                        )}
                     </Show>
                 </PaperFlex>
             </Show>

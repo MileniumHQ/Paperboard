@@ -14,6 +14,7 @@ import {
     PaperGrid,
     PaperQuote,
     PaperStatTile,
+    createAction,
     createPaperCompact,
 } from "@mileniumhq/paperui";
 import {
@@ -80,20 +81,9 @@ export default function ServerOverview(props: {
     // loading the config also reads the server's state
     onMount(() => void loadServerConfig());
 
-    const [saving, setSaving] = createSignal(false);
-    const [saveError, setSaveError] = createSignal("");
+    const saving = createAction({ message: errorMessage });
     const [commandError, setCommandError] = createSignal("");
-    const save = async () => {
-        setSaving(true);
-        setSaveError("");
-        try {
-            await saveWorld();
-        } catch (err) {
-            setSaveError(errorMessage(err));
-        } finally {
-            setSaving(false);
-        }
-    };
+    const save = () => saving.run("World not saved", saveWorld);
     const control = () => props.control?.kind ?? "stdin";
     const runCommand = (line: string) => {
         setCommandError("");
@@ -143,9 +133,9 @@ export default function ServerOverview(props: {
                             Restart
                         </PaperButton>
                         <Show when={props.world !== false}>
-                            <PaperButton onClick={() => void save()} disabled={saving()}>
+                            <PaperButton onClick={() => void save()} disabled={saving.busy()}>
                                 <PaperIcon>save</PaperIcon>
-                                {saving() ? "Saving..." : "Save world"}
+                                {saving.busy() ? "Saving..." : "Save world"}
                             </PaperButton>
                         </Show>
                         {props.actions}
@@ -177,10 +167,12 @@ export default function ServerOverview(props: {
                 </PaperQuote>
             </Show>
 
-            <Show when={saveError()}>
-                <PaperQuote variant="danger" icon="warning" title="World not saved" onDismiss={() => setSaveError("")}>
-                    {saveError()}
-                </PaperQuote>
+            <Show when={saving.error()}>
+                {(failure) => (
+                    <PaperQuote variant="danger" icon="warning" title={failure().title} onDismiss={() => saving.setError(null)}>
+                        {failure().message}
+                    </PaperQuote>
+                )}
             </Show>
 
             <Show when={commandError()}>

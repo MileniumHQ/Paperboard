@@ -12,6 +12,7 @@ import {
     PaperModal,
     PaperLink,
     PaperQuote,
+    createAction,
     useWizard,
     type LoaderStatus,
 } from "@mileniumhq/paperui";
@@ -249,22 +250,15 @@ export default function Setup(props: SetupProps) {
         createSignal<ServerSoftwareType>(props.initialSoftware || "paper");
     const [serverVersion, setServerVersion] = createSignal<string>(props.initialVersion || "");
 
-    const [saveError, setSaveError] = createSignal("");
-    const [saving, setSaving] = createSignal(false);
+    const finishing = createAction({ message: errorMessage });
     const handleFinishSetup = async () => {
-        if (saving()) return;
-        setSaving(true);
-        setSaveError("");
-        try {
+        if (finishing.busy()) return;
+        await finishing.run("Could not finish setup", async () => {
             // the install step already recorded software and version; this
             // marks onboarding done, through the service so panel state is live
             await updatePanelConfig({ configured: true });
             props.onComplete?.();
-        } catch (err) {
-            setSaveError(errorMessage(err));
-        } finally {
-            setSaving(false);
-        }
+        });
     };
 
     return (
@@ -323,8 +317,8 @@ export default function Setup(props: SetupProps) {
             </PaperWizardStep>
 
             <PaperWizardStep index={2}>
-                <Show when={saveError()}>
-                    <PaperQuote variant="danger" title="Could not finish setup">{saveError()} Try Finish Setup again.</PaperQuote>
+                <Show when={finishing.error()}>
+                    {(failure) => <PaperQuote variant="danger" title={failure().title}>{failure().message} Try Finish Setup again.</PaperQuote>}
                 </Show>
                 <InstallStep software={serverSoftware()} version={serverVersion()} />
             </PaperWizardStep>

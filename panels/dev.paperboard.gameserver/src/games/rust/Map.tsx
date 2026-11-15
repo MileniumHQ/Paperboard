@@ -1,5 +1,5 @@
 import { batch, createEffect, createSignal, on, Show } from "solid-js";
-import { PaperButton, PaperCard, PaperFlex, PaperIcon, PaperLoader, PaperModal, PaperPageHeader, PaperQuote, PaperSettingItem, PaperSettingList, PaperTable, PaperText, PaperToggle, createLatest } from "@mileniumhq/paperui";
+import { PaperButton, PaperCard, PaperFlex, PaperIcon, PaperLoader, PaperModal, PaperPageHeader, PaperQuote, PaperSettingItem, PaperSettingList, PaperTable, PaperText, PaperToggle, createAction, createLatest } from "@mileniumhq/paperui";
 import { serverBridge, serverStatus } from "../../lib/server";
 import { errorMessage } from "../../lib/failure";
 import type { RustMapView } from "./index";
@@ -16,8 +16,7 @@ export default function RustMap(props: { active: boolean }) {
     const [loadError, setLoadError] = createSignal("");
     const [open, setOpen] = createSignal(false);
     const [blueprints, setBlueprints] = createSignal(false);
-    const [wiping, setWiping] = createSignal(false);
-    const [error, setError] = createSignal("");
+    const wiping = createAction({ message: errorMessage });
     /** set once a wipe is done: whether there was a map to move to the trash */
     const [wiped, setWiped] = createSignal<{ trashed: boolean }>();
 
@@ -58,22 +57,14 @@ export default function RustMap(props: { active: boolean }) {
         }
     };
 
-    const ask = () => { setBlueprints(false); setError(""); setOpen(true); };
-    const wipe = async () => {
-        setWiping(true);
-        setError("");
-        try {
-            const trashed = view()?.made === true;
-            setView(await serverBridge.call<RustMapView>("rust-wipe", { blueprints: blueprints() }));
-            setPicture(null);
-            setWiped({ trashed });
-            setOpen(false);
-        } catch (err) {
-            setError(errorMessage(err));
-        } finally {
-            setWiping(false);
-        }
-    };
+    const ask = () => { setBlueprints(false); wiping.setError(null); setOpen(true); };
+    const wipe = () => wiping.run("Not wiped", async () => {
+        const trashed = view()?.made === true;
+        setView(await serverBridge.call<RustMapView>("rust-wipe", { blueprints: blueprints() }));
+        setPicture(null);
+        setWiped({ trashed });
+        setOpen(false);
+    });
 
     return (
         <>
@@ -160,8 +151,8 @@ export default function RustMap(props: { active: boolean }) {
                 footer={
                     <>
                         <PaperButton variant="text" onClick={() => setOpen(false)}>Cancel</PaperButton>
-                        <PaperButton variant="danger" disabled={wiping()} onClick={() => void wipe()}>
-                            {wiping() ? "Wiping..." : "Wipe"}
+                        <PaperButton variant="danger" disabled={wiping.busy()} onClick={() => void wipe()}>
+                            {wiping.busy() ? "Wiping..." : "Wipe"}
                         </PaperButton>
                     </>
                 }
@@ -171,11 +162,11 @@ export default function RustMap(props: { active: boolean }) {
                 </PaperText>
                 <PaperSettingList autoHeight>
                     <PaperSettingItem title="Wipe blueprints too" description="Players also lose what they have learned to craft.">
-                        <PaperToggle checked={blueprints()} disabled={wiping()} aria-label="Wipe blueprints too" onChange={setBlueprints} />
+                        <PaperToggle checked={blueprints()} disabled={wiping.busy()} aria-label="Wipe blueprints too" onChange={setBlueprints} />
                     </PaperSettingItem>
                 </PaperSettingList>
-                <Show when={error()}>
-                    <PaperQuote variant="danger" icon="warning" title="Not wiped">{error()}</PaperQuote>
+                <Show when={wiping.error()}>
+                    {(failure) => <PaperQuote variant="danger" icon="warning" title={failure().title}>{failure().message}</PaperQuote>}
                 </Show>
             </PaperModal>
         </>

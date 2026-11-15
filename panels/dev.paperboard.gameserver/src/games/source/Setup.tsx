@@ -1,5 +1,5 @@
 import { createMemo, createResource, createSignal, For, Show } from "solid-js";
-import { PaperButton, PaperCenteredInterface, PaperFlex, PaperIcon, PaperMediaCard, PaperMediaCardGroup, PaperQuote, PaperText, PaperWizardStep } from "@mileniumhq/paperui";
+import { createAction, PaperButton, PaperCenteredInterface, PaperFlex, PaperIcon, PaperMediaCard, PaperMediaCardGroup, PaperQuote, PaperText, PaperWizardStep } from "@mileniumhq/paperui";
 import { serverBridge } from "../../lib/server";
 import { errorMessage } from "../../lib/failure";
 import SteamSetup from "../steam/SteamSetup";
@@ -35,8 +35,7 @@ export default function SourceSetup(props: { spec: SourceGameSpec; onComplete():
     // the mode picked ("" before one is), and null for the game's own map cycle
     const [mode, setMode] = createSignal<string | null | "">("");
     const [map, setMap] = createSignal("");
-    const [saveError, setSaveError] = createSignal("");
-    const [saving, setSaving] = createSignal(false);
+    const saving = createAction({ message: errorMessage });
 
     const modes = createMemo(() => playModes(props.spec, installed() ?? []));
     const chosenMode = createMemo(() => modes().find((m) => m.prefix === mode()));
@@ -62,20 +61,10 @@ export default function SourceSetup(props: { spec: SourceGameSpec; onComplete():
         setMap(gameDefault() ?? "");
     };
 
-    const save = async () => {
-        setSaving(true);
-        setSaveError("");
-        try {
-            const choice: Choice = { mode: mode() as string | null, map: map() };
-            await serverBridge.call(ids.play, choice);
-            return true;
-        } catch (err) {
-            setSaveError(errorMessage(err));
-            return false;
-        } finally {
-            setSaving(false);
-        }
-    };
+    const save = () => saving.run("Setup is not finished", () => {
+        const choice: Choice = { mode: mode() as string | null, map: map() };
+        return serverBridge.call(ids.play, choice);
+    });
 
     return (
         <SteamSetup
@@ -133,7 +122,7 @@ export default function SourceSetup(props: { spec: SourceGameSpec; onComplete():
                         </PaperCenteredInterface>
                     </PaperWizardStep>
 
-                    <PaperWizardStep index={2} canProceed={map() !== "" && !saving()}>
+                    <PaperWizardStep index={2} canProceed={map() !== "" && !saving.busy()}>
                         <PaperCenteredInterface size="large">
                             <PaperFlex direction="column" gap="half" fullWidth fullHeight>
                                 <PaperText preset="title">Starting Map</PaperText>
@@ -142,11 +131,11 @@ export default function SourceSetup(props: { spec: SourceGameSpec; onComplete():
                                         ? "The server starts on this map, then follows the game's own map cycle."
                                         : `The server starts on this map, then plays the other ${chosenMode()?.name ?? ""} maps in turn. Change the rotation any time on the Maps tab.`}
                                 </PaperText>
-                                <Show when={saveError()}>
-                                    <PaperQuote variant="danger" icon="warning" title="Setup is not finished">{saveError()}</PaperQuote>
+                                <Show when={saving.error()}>
+                                    {(failure) => <PaperQuote variant="danger" icon="warning" title={failure().title}>{failure().message}</PaperQuote>}
                                 </Show>
                                 <PaperFlex direction="column" fullWidth flex minHeight={0} scrollable="y">
-                                    <MapCards maps={startableChoices()} value={map()} pictures={pictures} hideMode={mode() !== null} disabled={saving()} onPick={setMap} />
+                                    <MapCards maps={startableChoices()} value={map()} pictures={pictures} hideMode={mode() !== null} disabled={saving.busy()} onPick={setMap} />
                                 </PaperFlex>
                             </PaperFlex>
                         </PaperCenteredInterface>
