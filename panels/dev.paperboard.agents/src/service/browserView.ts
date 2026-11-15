@@ -4,7 +4,8 @@
 
 import { createHash } from "node:crypto";
 import { LIMITS } from "../contract";
-import { ToolError, type BrowserComputer, type Tab } from "./browser";
+import type { BrowserComputer } from "./browser";
+import { ToolError, type Tab } from "./browserWindows";
 import { close, go, SCROLL_PX, siteOf } from "./browserTools";
 import { EDITABLE_JS, SIGN_IN_FOCUS_JS, SIGN_IN_MOVED_JS } from "./pageScripts";
 
@@ -26,9 +27,9 @@ export async function browserView(c: BrowserComputer, tool: ViewTool, args: Reco
     try {
         switch (tool) {
             case "view_windows":
-                await c.refreshAll();
+                await c.windows.refreshAll();
                 return {
-                    windows: [...c.tabs.values()]
+                    windows: [...c.windows.tabs.values()]
                         .sort((a, b) => a.id - b.id)
                         .map((t) => ({ id: t.id, title: t.title || t.url, url: t.url, app: "Helium", width: t.size.width, height: t.size.height })),
                 };
@@ -53,20 +54,20 @@ export async function browserView(c: BrowserComputer, tool: ViewTool, args: Reco
 }
 
 async function frame(c: BrowserComputer, args: Record<string, unknown>) {
-    const tab = c.tab(args.window);
+    const tab = c.windows.tab(args.window);
     // a page waiting on a dialog can't be pictured: the last picture stands, with the dialog to answer
     if (tab.dialog) return { same: true, hash: typeof args.since === "string" ? args.since : "", dialog: tab.dialog };
-    const s = await c.session(tab);
+    const s = await c.windows.session(tab);
     const quality = Math.max(30, Math.min(90, Number.isInteger(args.quality) ? (args.quality as number) : 72));
     const { data } = await c.connection().send<{ data: string }>("Page.captureScreenshot", { format: "jpeg", quality }, s, 10_000);
     const hash = createHash("sha256").update(data).digest("hex").slice(0, 24);
     if (args.since === hash) return { same: true, hash, dialog: null };
-    await c.measure(tab);
+    await c.windows.measure(tab);
     return { frame: data, hash, width: tab.size.width, height: tab.size.height, dialog: null };
 }
 
 async function input(c: BrowserComputer, args: Record<string, unknown>) {
-    const tab = c.tab(args.window);
+    const tab = c.windows.tab(args.window);
     const events = args.events;
     if (!Array.isArray(events) || events.length > VIEW_MAX_EVENTS) throw new ToolError(`send at most ${VIEW_MAX_EVENTS} events at a time`);
     const inside = (e: Record<string, unknown>) => {
@@ -79,7 +80,7 @@ async function input(c: BrowserComputer, args: Record<string, unknown>) {
         const e = (raw ?? {}) as Record<string, unknown>;
         switch (e.type) {
             case "move":
-                if (!tab.dialog) await c.mouse(tab, "mouseMoved", inside(e));
+                if (!tab.dialog) await c.windows.mouse(tab, "mouseMoved", inside(e));
                 break;
             case "down":
             case "up": {
@@ -92,24 +93,24 @@ async function input(c: BrowserComputer, args: Record<string, unknown>) {
                     const again = last && last.button === Number(e.button) && Date.now() - last.at < 500 && Math.abs(last.x - at.x) <= 4 && Math.abs(last.y - at.y) <= 4;
                     const count = again ? Math.min(3, last.count + 1) : 1;
                     tab.pointer.lastDown = { at: Date.now(), x: at.x, y: at.y, button: Number(e.button), count };
-                    await c.press(tab, at, button, count);
-                } else await c.lift(tab, at, button, tab.pointer.lastDown?.count ?? 1);
+                    await c.windows.press(tab, at, button, count);
+                } else await c.windows.lift(tab, at, button, tab.pointer.lastDown?.count ?? 1);
                 break;
             }
             case "scroll": {
                 if (tab.dialog) break;
                 const dy = Math.max(-20, Math.min(20, Math.trunc(Number(e.dy ?? 0)) || 0));
                 const dx = Math.max(-20, Math.min(20, Math.trunc(Number(e.dx ?? 0)) || 0));
-                if (dy || dx) await c.mouse(tab, "mouseWheel", inside(e), { deltaX: dx * SCROLL_PX, deltaY: dy * SCROLL_PX });
+                if (dy || dx) await c.windows.mouse(tab, "mouseWheel", inside(e), { deltaX: dx * SCROLL_PX, deltaY: dy * SCROLL_PX });
                 break;
             }
             case "key":
-                await c.keys(tab, [String(e.keys ?? "")]);
+                await c.windows.keys(tab, [String(e.keys ?? "")]);
                 break;
             case "text": {
                 const text = String(e.text ?? "");
                 if (text.length > VIEW_MAX_TEXT) throw new ToolError(`type at most ${VIEW_MAX_TEXT} characters at a time`);
-                await c.text(tab, text);
+                await c.windows.text(tab, text);
                 break;
             }
             default:
@@ -128,21 +129,21 @@ async function signInFill(c: BrowserComputer, args: Record<string, unknown>) {
         throw new ToolError(`one value per field, each at most ${LIMITS.signIn.valueChars} characters`);
     }
     c.signIn = null; // used once, whatever happens next
-    const tab = c.tabs.get(p.targetId);
+    const tab = c.windows.tabs.get(p.targetId);
     if (!tab) throw new ToolError("that page isn't open anymore");
     const onSite = async () => {
-        const [origin] = await c.evaluate(tab, EDITABLE_JS);
+        const [origin] = await c.windows.evaluate(tab, EDITABLE_JS);
         if (siteOf(origin) !== p.site) throw new ToolError(`the page isn't on ${p.site} anymore`);
     };
     if (siteOf(tab.url) !== p.site) throw new ToolError(`the page isn't on ${p.site} anymore`);
-    const s = await c.session(tab);
+    const s = await c.windows.session(tab);
     for (const [i, at] of p.fields.entries()) {
         const value = values[i] as string;
-        await c.mouse(tab, "mouseMoved", at);
-        await c.press(tab, at, "left", 1);
-        await c.lift(tab, at, "left", 1);
+        await c.windows.mouse(tab, "mouseMoved", at);
+        await c.windows.press(tab, at, "left", 1);
+        await c.windows.lift(tab, at, "left", 1);
         await new Promise((r) => setTimeout(r, 150));
-        const [origin, editable, maxLength] = await c.evaluate(tab, EDITABLE_JS);
+        const [origin, editable, maxLength] = await c.windows.evaluate(tab, EDITABLE_JS);
         if (siteOf(origin) !== p.site) throw new ToolError(`the page isn't on ${p.site} anymore`);
         if (!editable) throw new ToolError(`field ${i + 1} didn't take the cursor; the page may have changed`);
         if (maxLength > 0 && maxLength < value.length) await typeSplit(c, tab, s, value);
@@ -150,10 +151,10 @@ async function signInFill(c: BrowserComputer, args: Record<string, unknown>) {
     }
     await onSite();
     if (p.submit) {
-        await c.mouse(tab, "mouseMoved", p.submit);
-        await c.press(tab, p.submit, "left", 1);
-        await c.lift(tab, p.submit, "left", 1);
-    } else await c.keys(tab, ["Return"]); // the last field still has the cursor
+        await c.windows.mouse(tab, "mouseMoved", p.submit);
+        await c.windows.press(tab, p.submit, "left", 1);
+        await c.windows.lift(tab, p.submit, "left", 1);
+    } else await c.windows.keys(tab, ["Return"]); // the last field still has the cursor
     return { ok: true };
 }
 
@@ -161,12 +162,12 @@ async function signInFill(c: BrowserComputer, args: Record<string, unknown>) {
 async function typeSplit(c: BrowserComputer, tab: Tab, s: string, value: string) {
     const chars = [...value];
     for (const [i, ch] of chars.entries()) {
-        await c.evaluate(tab, SIGN_IN_FOCUS_JS);
+        await c.windows.evaluate(tab, SIGN_IN_FOCUS_JS);
         const code = /^[0-9]$/.test(ch) ? `Digit${ch}` : /^[a-z]$/i.test(ch) ? `Key${ch.toUpperCase()}` : "";
         const vk = /^[a-z0-9]$/i.test(ch) ? ch.toUpperCase().charCodeAt(0) : 0;
         await c.connection().send("Input.dispatchKeyEvent", { type: "keyDown", key: ch, code, windowsVirtualKeyCode: vk, text: ch, unmodifiedText: ch }, s);
         await c.connection().send("Input.dispatchKeyEvent", { type: "keyUp", key: ch, code, windowsVirtualKeyCode: vk }, s);
         await new Promise((r) => setTimeout(r, 30)); // the site's own handler moves the cursor
-        if (i < chars.length - 1 && (await c.evaluate(tab, SIGN_IN_MOVED_JS))) await c.keys(tab, ["Tab"]);
+        if (i < chars.length - 1 && (await c.windows.evaluate(tab, SIGN_IN_MOVED_JS))) await c.windows.keys(tab, ["Tab"]);
     }
 }

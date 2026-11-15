@@ -23,7 +23,8 @@ import { SIGN_IN_REQUIRED, type BrainState, type Harness, type LoginPrompt } fro
 import { errorText } from "../lib/failure";
 import { writeAtomic } from "./writeAtomic";
 import { LOGOUT_COMMAND, STATUS_COMMAND, callbackAddress, loginCommand, loginEnv, loginTail, outputTail, readLoginOutput, readStatus, type LoginMethod } from "./brainLogin";
-import type { PackageHost, StartOptions } from "./browser";
+import type { StartOptions } from "./browser";
+import type { PackageHost } from "./browserSetup";
 import { findExistingBrain, PROGRAMS, versionFrom } from "./existingBrains";
 
 export const BRAIN_PACKAGES: Record<Harness, string> = { codex: "codex", "claude-code": "claude-code", opencode: "opencode" };

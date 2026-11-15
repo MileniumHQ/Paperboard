@@ -1,10 +1,11 @@
 // What the agent does with its computer: the tools in COMPUTER_TOOLS
 // (computerTools.ts), each a few of the browser's own inputs and reads
-// (browser.ts) on one of its windows, answered with what changed.
+// (browserWindows.ts) on one of its windows, answered with what changed.
 
 import fs from "node:fs";
 import { LIMITS, type ComputerPhase } from "../contract";
-import { ToolError, dialogNote, type BrowserComputer, type Tab } from "./browser";
+import type { BrowserComputer } from "./browser";
+import { ToolError, dialogNote, type Tab } from "./browserWindows";
 import type { ToolResult } from "./computerMcp";
 import { MARKS_JS, REMOVE_OVERLAY_JS, overlayJs, type Mark } from "./pageScripts";
 import { errorText } from "../lib/failure";
@@ -66,18 +67,18 @@ const TOOLS: Record<string, (c: BrowserComputer, args: Record<string, unknown>) 
 
 /** What happened since `before`: windows that opened or closed, downloads, a dialog that's waiting. */
 function changes(c: BrowserComputer, before: Set<number>, tab?: Tab): string {
-    const now = new Set([...c.tabs.values()].map((t) => t.id));
+    const now = new Set([...c.windows.tabs.values()].map((t) => t.id));
     const out: string[] = [];
-    for (const t of c.tabs.values()) if (!before.has(t.id)) out.push(`Window ${t.id} "${t.title || t.url}" opened.`);
+    for (const t of c.windows.tabs.values()) if (!before.has(t.id)) out.push(`Window ${t.id} "${t.title || t.url}" opened.`);
     for (const id of before) if (!now.has(id)) out.push(`Window ${id} closed.`);
     out.push(...c.notes.splice(0));
-    if (tab?.dialog && c.tabs.has(tab.targetId)) out.push(dialogNote(tab));
-    if (tab?.chooser && c.tabs.has(tab.targetId)) out.push("A file picker opened: pick files from your home folder with `upload`.");
+    if (tab?.dialog && c.windows.tabs.has(tab.targetId)) out.push(dialogNote(tab));
+    if (tab?.chooser && c.windows.tabs.has(tab.targetId)) out.push("A file picker opened: pick files from your home folder with `upload`.");
     return out.length ? ` ${out.join(" ")}` : "";
 }
 
 function ids(c: BrowserComputer) {
-    return new Set([...c.tabs.values()].map((t) => t.id));
+    return new Set([...c.windows.tabs.values()].map((t) => t.id));
 }
 
 async function settle() {
@@ -105,8 +106,8 @@ function point(tab: Tab, args: Record<string, unknown>, keys = { mark: "mark", x
 }
 
 async function windows(c: BrowserComputer): Promise<ToolResult> {
-    await c.refreshAll();
-    const list = [...c.tabs.values()].sort((a, b) => a.id - b.id);
+    await c.windows.refreshAll();
+    const list = [...c.windows.tabs.values()].sort((a, b) => a.id - b.id);
     if (!list.length) return { text: "No windows are open." };
     return {
         text: list
@@ -118,41 +119,41 @@ async function windows(c: BrowserComputer): Promise<ToolResult> {
 async function open(c: BrowserComputer, args: Record<string, unknown>): Promise<ToolResult> {
     const url = webAddress(args.what, true);
     const before = ids(c);
-    const { tab, still } = await c.openWindow(url);
+    const { tab, still } = await c.windows.openWindow(url);
     return { text: `Opened window ${tab.id} "${tab.title || tab.url}" <${tab.url}>.${still}` + changes(c, new Set([...before, tab.id]), tab) };
 }
 
 export async function go(c: BrowserComputer, args: Record<string, unknown>): Promise<ToolResult> {
-    const tab = c.tab(args.window);
+    const tab = c.windows.tab(args.window);
     const to = typeof args.to === "string" ? args.to.trim() : "";
     const before = ids(c);
-    const s = await c.session(tab);
+    const s = await c.windows.session(tab);
     const cdp = c.connection();
     let still = "";
     if (to === "back" || to === "forward") {
         const h = await cdp.send<any>("Page.getNavigationHistory", {}, s);
         const entry = h.entries?.[h.currentIndex + (to === "back" ? -1 : 1)];
         if (!entry) throw new ToolError(`there's no page to go ${to} to`);
-        const load = c.loaded(tab);
+        const load = c.windows.loaded(tab);
         await cdp.send("Page.navigateToHistoryEntry", { entryId: entry.id }, s);
         still = (await load.done) ? "" : " It's still loading.";
     } else if (to === "reload") {
-        const load = c.loaded(tab);
+        const load = c.windows.loaded(tab);
         await cdp.send("Page.reload", {}, s);
         still = (await load.done) ? "" : " It's still loading.";
     } else {
-        still = await c.navigate(tab, webAddress(to, false));
+        still = await c.windows.navigate(tab, webAddress(to, false));
     }
-    await c.refreshInfo(tab);
+    await c.windows.refreshInfo(tab);
     return { text: `Window ${tab.id} is at <${tab.url}> "${tab.title}".${still}` + changes(c, before, tab) };
 }
 
 async function look(c: BrowserComputer, args: Record<string, unknown>): Promise<ToolResult> {
-    const tab = c.tab(args.window);
-    const s = await c.session(tab);
+    const tab = c.windows.tab(args.window);
+    const s = await c.windows.session(tab);
     await c.connection().send("Target.activateTarget", { targetId: tab.targetId });
     if (tab.dialog) return { text: `Window ${tab.id} "${tab.title}": ${dialogNote(tab)} The page is paused until it's answered.` };
-    const page = await c.evaluate(tab, MARKS_JS);
+    const page = await c.windows.evaluate(tab, MARKS_JS);
     tab.marks = page.marks as Mark[];
     tab.size = { width: page.width, height: page.height };
     const image = await shot(c, tab, overlayJs({ boxes: tab.marks.map((m, i) => ({ ...m, label: String(i + 1) })) }), { format: "png" }, s);
@@ -165,21 +166,21 @@ async function look(c: BrowserComputer, args: Record<string, unknown>): Promise<
 
 /** A screenshot with something drawn over the page for it, taken away again whatever happens. */
 async function shot(c: BrowserComputer, tab: Tab, overlay: string, params: Record<string, unknown>, s: string): Promise<string> {
-    await c.evaluate(tab, overlay);
+    await c.windows.evaluate(tab, overlay);
     try {
         const { data } = await c.connection().send<{ data: string }>("Page.captureScreenshot", params, s);
         return data;
     } finally {
         // a page that navigated away took the overlay with it; anything else that fails here is the call's failure
-        await c.evaluate(tab, REMOVE_OVERLAY_JS);
+        await c.windows.evaluate(tab, REMOVE_OVERLAY_JS);
     }
 }
 
 async function zoom(c: BrowserComputer, args: Record<string, unknown>): Promise<ToolResult> {
-    const tab = c.tab(args.window);
-    const s = await c.session(tab);
+    const tab = c.windows.tab(args.window);
+    const s = await c.windows.session(tab);
     if (tab.dialog) throw new ToolError(dialogNote(tab));
-    await c.measure(tab);
+    await c.windows.measure(tab);
     const x = Math.max(0, Math.floor(Number(args.x)));
     const y = Math.max(0, Math.floor(Number(args.y)));
     const w = Math.min(Math.floor(Number(args.width)), tab.size.width - x);
@@ -204,86 +205,86 @@ async function zoom(c: BrowserComputer, args: Record<string, unknown>): Promise<
 }
 
 async function click(c: BrowserComputer, args: Record<string, unknown>): Promise<ToolResult> {
-    const tab = c.tab(args.window);
+    const tab = c.windows.tab(args.window);
     if (tab.dialog) throw new ToolError(dialogNote(tab));
     const at = point(tab, args);
     const button = (["left", "middle", "right"] as const).find((b) => b === (args.button ?? "left"));
     if (!button) throw new ToolError("button is left, middle or right");
     const before = ids(c);
-    await c.mouse(tab, "mouseMoved", at);
-    await c.press(tab, at, button, 1);
-    await c.lift(tab, at, button, 1);
+    await c.windows.mouse(tab, "mouseMoved", at);
+    await c.windows.press(tab, at, button, 1);
+    await c.windows.lift(tab, at, button, 1);
     if (args.double === true) {
-        await c.press(tab, at, button, 2);
-        await c.lift(tab, at, button, 2);
+        await c.windows.press(tab, at, button, 2);
+        await c.windows.lift(tab, at, button, 2);
     }
     await settle();
     return { text: `Clicked at ${at.x},${at.y} in window ${tab.id}.` + changes(c, before, tab) };
 }
 
 async function hover(c: BrowserComputer, args: Record<string, unknown>): Promise<ToolResult> {
-    const tab = c.tab(args.window);
+    const tab = c.windows.tab(args.window);
     if (tab.dialog) throw new ToolError(dialogNote(tab));
     const at = point(tab, args);
-    await c.mouse(tab, "mouseMoved", at);
+    await c.windows.mouse(tab, "mouseMoved", at);
     await new Promise((r) => setTimeout(r, 600));
     return { text: `Pointer resting at ${at.x},${at.y}.` };
 }
 
 async function drag(c: BrowserComputer, args: Record<string, unknown>): Promise<ToolResult> {
-    const tab = c.tab(args.window);
+    const tab = c.windows.tab(args.window);
     if (tab.dialog) throw new ToolError(dialogNote(tab));
     const from = point(tab, args);
     if (args.to_mark === undefined && (args.to_x === undefined || args.to_y === undefined)) throw new ToolError("give to_mark, or to_x and to_y");
     const to = point(tab, args, { mark: "to_mark", x: "to_x", y: "to_y" });
     const before = ids(c);
-    await c.mouse(tab, "mouseMoved", from);
-    await c.press(tab, from, "left", 1);
+    await c.windows.mouse(tab, "mouseMoved", from);
+    await c.windows.press(tab, from, "left", 1);
     try {
         // in steps, so the page sees a drag rather than a jump
         for (let i = 1; i <= 10; i++) {
-            await c.mouse(tab, "mouseMoved", { x: from.x + Math.round(((to.x - from.x) * i) / 10), y: from.y + Math.round(((to.y - from.y) * i) / 10) });
+            await c.windows.mouse(tab, "mouseMoved", { x: from.x + Math.round(((to.x - from.x) * i) / 10), y: from.y + Math.round(((to.y - from.y) * i) / 10) });
             await new Promise((r) => setTimeout(r, 20));
         }
     } finally {
-        await c.lift(tab, to, "left", 1);
+        await c.windows.lift(tab, to, "left", 1);
     }
     await settle();
     return { text: `Dragged from ${from.x},${from.y} to ${to.x},${to.y}.` + changes(c, before, tab) };
 }
 
 async function type(c: BrowserComputer, args: Record<string, unknown>): Promise<ToolResult> {
-    const tab = c.tab(args.window);
+    const tab = c.windows.tab(args.window);
     const before = ids(c);
-    await c.text(tab, String(args.text ?? ""));
-    if (args.enter === true && !tab.dialog) await c.keys(tab, ["Return"]);
+    await c.windows.text(tab, String(args.text ?? ""));
+    if (args.enter === true && !tab.dialog) await c.windows.keys(tab, ["Return"]);
     await settle();
     return { text: "Typed." + changes(c, before, tab) };
 }
 
 async function key(c: BrowserComputer, args: Record<string, unknown>): Promise<ToolResult> {
-    const tab = c.tab(args.window);
+    const tab = c.windows.tab(args.window);
     const names = String(args.keys ?? "").split(/\s+/).filter(Boolean);
     if (!names.length || names.length > KEYS_MAX) throw new ToolError(`press 1 to ${KEYS_MAX} keys at a time`);
     const before = ids(c);
-    await c.keys(tab, names);
+    await c.windows.keys(tab, names);
     await settle();
     return { text: `Pressed ${names.join(" ")}.` + changes(c, before, tab) };
 }
 
 async function scroll(c: BrowserComputer, args: Record<string, unknown>): Promise<ToolResult> {
-    const tab = c.tab(args.window);
+    const tab = c.windows.tab(args.window);
     if (tab.dialog) throw new ToolError(dialogNote(tab));
     const at = args.mark !== undefined || args.x !== undefined ? point(tab, args) : { x: Math.floor(tab.size.width / 2), y: Math.floor(tab.size.height / 2) };
     const amount = args.amount === undefined ? 5 : Number(args.amount);
     if (!Number.isInteger(amount) || !amount || Math.abs(amount) > SCROLL_MAX) throw new ToolError(`amount is 1 to ${SCROLL_MAX} steps, negative to scroll up`);
-    await c.mouse(tab, "mouseWheel", at, { deltaX: 0, deltaY: amount * SCROLL_PX });
+    await c.windows.mouse(tab, "mouseWheel", at, { deltaX: 0, deltaY: amount * SCROLL_PX });
     await settle();
     return { text: `Scrolled ${amount > 0 ? "down" : "up"} ${Math.abs(amount)}.` };
 }
 
 async function place(c: BrowserComputer, args: Record<string, unknown>): Promise<ToolResult> {
-    const tab = c.tab(args.window);
+    const tab = c.windows.tab(args.window);
     const width = args.width === undefined ? tab.size.width : Number(args.width);
     const height = args.height === undefined ? tab.size.height : Number(args.height);
     if (![width, height].every((n) => Number.isInteger(n) && n >= 200 && n <= SIZE_MAX)) throw new ToolError(`sizes are 200 to ${SIZE_MAX} px`);
@@ -294,19 +295,19 @@ async function place(c: BrowserComputer, args: Record<string, unknown>): Promise
     const dy = bounds.height - tab.size.height;
     await cdp.send("Browser.setWindowBounds", { windowId, bounds: { width: width + dx, height: height + dy } });
     await settle();
-    await c.measure(tab);
+    await c.windows.measure(tab);
     tab.marks = null;
     return { text: `Window ${tab.id} is ${tab.size.width}x${tab.size.height} now.` };
 }
 
 export async function close(c: BrowserComputer, args: Record<string, unknown>): Promise<ToolResult> {
-    const tab = c.tab(args.window);
-    await c.closeWindow(tab);
+    const tab = c.windows.tab(args.window);
+    await c.windows.closeWindow(tab);
     return { text: "Closed." };
 }
 
 async function upload(c: BrowserComputer, args: Record<string, unknown>): Promise<ToolResult> {
-    const tab = c.tab(args.window);
+    const tab = c.windows.tab(args.window);
     const chooser = tab.chooser;
     if (!chooser) throw new ToolError("No file picker is open in that window: click the page's upload button first.");
     const files = Array.isArray(args.files) ? args.files : [args.files];
@@ -318,7 +319,7 @@ async function upload(c: BrowserComputer, args: Record<string, unknown>): Promis
         return full;
     });
     const before = ids(c);
-    await c.connection().send("DOM.setFileInputFiles", { files: paths, backendNodeId: chooser.backendNodeId }, await c.session(tab));
+    await c.connection().send("DOM.setFileInputFiles", { files: paths, backendNodeId: chooser.backendNodeId }, await c.windows.session(tab));
     tab.chooser = null;
     await settle();
     return { text: `Picked ${paths.map((p) => c.home.shown(p)).join(", ")}.` + changes(c, before, tab) };
@@ -328,7 +329,7 @@ async function upload(c: BrowserComputer, args: Record<string, unknown>): Promis
 async function signInPrepare(c: BrowserComputer, args: Record<string, unknown>): Promise<ToolResult> {
     const rid = String(args.id ?? "");
     if (!/^[a-z0-9]{6,32}$/.test(rid)) throw new ToolError("a sign-in id is lowercase letters and digits");
-    const tab = c.tab(args.window);
+    const tab = c.windows.tab(args.window);
     const ms = tab.marks;
     if (!ms) throw new ToolError("look at the browser window first so its marks are fresh");
     const fields = args.fields;
@@ -346,7 +347,7 @@ async function signInPrepare(c: BrowserComputer, args: Record<string, unknown>):
     for (const [n, m] of picked) if (!["entry", "text", "password text"].includes(m.kind)) throw new ToolError(`mark ${n} is a ${m.kind}, not a text field`);
     const site = siteOf(tab.url);
     const boxes = [...picked.map(([, m], i) => ({ ...m, label: String(i + 1) })), ...(submit ? [{ ...submit[1], label: "submit" }] : [])];
-    const s = await c.session(tab);
+    const s = await c.windows.session(tab);
     const image = await shot(c, tab, overlayJs({ boxes }), { format: "png" }, s);
     const centre = (m: Mark) => ({ x: m.x + Math.floor(m.w / 2), y: m.y + Math.floor(m.h / 2) });
     c.signIn = { id: rid, targetId: tab.targetId, window: tab.id, site, fields: picked.map(([, m]) => centre(m)), submit: submit ? centre(submit[1]) : null };
