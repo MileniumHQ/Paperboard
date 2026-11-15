@@ -10,7 +10,7 @@ export default defineConfig({
     },
     build: {
         rollupOptions: {
-            // the panel page; ?face opens the face playground on it
+            // the panel page (under `vite`, ?face opens the face playground on it)
             input: { index: "index.html" },
         },
     },

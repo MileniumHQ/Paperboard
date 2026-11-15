@@ -9,8 +9,9 @@ import "@mileniumhq/paperui/panel.css";
 import "./tokens.css";
 import styles from "./App.module.css";
 
-// Scratch playground for the AI's face: the identity comes first, the
-// onboarding is built around it.
+// The face playground, a dev tool (`vite`, then ?face): every expression,
+// spot and line of speech, to try the face on its own. A release build
+// leaves it out (index.tsx).
 
 const HELLO: { text: string; expression: Expression; spot: Spot }[] = [
     { text: "Hi! I'm your new agent.", expression: "happy", spot: "home" },
