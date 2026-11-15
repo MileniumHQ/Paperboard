@@ -1,9 +1,11 @@
 #!/usr/bin/env bun
-// Backstop for AGENTS.md "Solid:" — catches the mechanical SolidJS mistakes
-// a parser can decide on its own, with no type checker, so a whole target
-// scans in well under a second. Usage: bun scripts/check-solid.ts <dir>...
+// Backstop for AGENTS.md "Solid:" and the house rules that keep coming back —
+// catches the mechanical mistakes a parser can decide on its own, with no
+// type checker, so a whole target scans in well under a second.
+// Usage: bun scripts/check-solid.ts [--solid-only] <dir>...
 // Prints `path:line: <rule>: <why and what to do instead>` per hit and exits
-// 1 on any hit, 0 when clean, 2 when the scan could not run.
+// 1 on any hit, 0 when clean, 2 when the scan could not run. --solid-only
+// runs the Solid rules alone (the deprecated panels, which nobody changes).
 //
 // Scanned: .ts/.tsx under the given dirs, skipping node_modules, dist, out,
 // build, release, coverage, dot-dirs and `fixtures` dirs (fixtures are test
@@ -65,6 +67,28 @@
 //    props, `component={…}`): which call sites render them as components is
 //    not decidable without types.
 //
+// House rules (every scanned file; test-sleep in test files only). A
+// deliberate exception carries `// quiet: <reason>` on the hit's line or the
+// line above (for a catch clause, also inside its block); a marker with no
+// reason is itself a hit.
+//  swallowed-error ("Fail loudly")
+//    A catch clause whose block is empty or only `console.x(...)` calls and a
+//    bare `return;`; a `.catch(h)` whose handler is `console.x`, does
+//    nothing, only logs, or returns a placeholder literal (undefined, null,
+//    true/false, [], {}, "", 0). A catch that rethrows, sets state, answers,
+//    or does any other work is not flagged: what that work shows the user is
+//    for review.
+//  effect-without-on ("Effects track what they mean")
+//    createEffect whose first argument is not an `on(deps, fn)` call.
+//  for-fresh-rows ("Rows keep their identity")
+//    `<For each={…}>` given `x.map(cb)`/`x.flatMap(cb)` whose callback returns
+//    an object or array literal, or `Object.entries(…)`: fresh objects every
+//    read. A memo or store passed by name is not decidable and not flagged.
+//  test-sleep ("Tests are CI": deterministic, no sleeps tuned to timing)
+//    `Bun.sleep`/`Bun.sleepSync`, `await sleep(…)`, and `setTimeout` handed
+//    the resolve of the `new Promise` it is in (a fixed wait). A promise
+//    raced in `Promise.race([...])` is a deadline and is not flagged.
+//
 // typescript is resolved from packages/paperui, which depends on it; the root
 // package.json does not, and a missing compiler fails the scan (exit 2).
 import { readdirSync, readFileSync, statSync } from "node:fs";
@@ -85,6 +109,7 @@ const SKIP_DIRS = new Set(["node_modules", "dist", "out", "build", "release", "c
 const EFFECTS = new Set(["createEffect", "createRenderEffect", "createComputed", "onMount"]);
 
 export type Hit = { file: string; line: number; rule: string; message: string };
+export type Options = { solidOnly?: boolean };
 
 function listFiles(dir: string, out: string[]): void {
     for (const name of readdirSync(dir)) {
@@ -162,7 +187,7 @@ function tagName(n: TS.JsxElement): string {
     return n.openingElement.tagName.getText();
 }
 
-export function checkSource(file: string, text: string): Hit[] {
+export function checkSource(file: string, text: string, options: Options = {}): Hit[] {
     const sf = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true, file.endsWith(".tsx") ? ts.ScriptKind.TSX : ts.ScriptKind.TS);
     const hits: Hit[] = [];
     const hit = (node: TS.Node, rule: string, message: string) =>
@@ -335,19 +360,247 @@ export function checkSource(file: string, text: string): Hit[] {
     }
 
     visit(sf, false);
+    if (!options.solidOnly) checkHouseRules(sf, file, hit);
     return hits;
 }
 
-export function checkDirs(dirs: string[]): Hit[] {
+
+// ── House rules (not Solid-specific) ─────────────────────────────────────────
+
+// A test file: `*.test.ts(x)` / `*.spec.ts(x)`, or anything under a `test`,
+// `tests` or `__tests__` directory.
+const isTestFile = (file: string): boolean =>
+    /\.(test|spec)\.tsx?$/.test(file) || /(^|[\\/])(test|tests|__tests__)[\\/]/.test(file);
+
+// `console.<anything>(...)`.
+const isConsoleCall = (e: TS.Expression): boolean => {
+    const u = unwrap(e);
+    return (
+        ts.isCallExpression(u) &&
+        ts.isPropertyAccessExpression(u.expression) &&
+        ts.isIdentifier(u.expression.expression) &&
+        u.expression.expression.text === "console"
+    );
+};
+
+// A block that does nothing but log: empty, or only `console.x(...)` calls
+// and a bare `return;`.
+const logsOnly = (block: TS.Block): boolean =>
+    block.statements.every(
+        (st) => (ts.isExpressionStatement(st) && isConsoleCall(st.expression)) || (ts.isReturnStatement(st) && !st.expression),
+    );
+
+// A literal that stands in for a missing answer: undefined, null, true/false,
+// [], {}, "", 0.
+const isFallbackLiteral = (e: TS.Expression): boolean => {
+    const u = unwrap(e);
+    return (
+        (ts.isIdentifier(u) && u.text === "undefined") ||
+        u.kind === ts.SyntaxKind.NullKeyword ||
+        u.kind === ts.SyntaxKind.TrueKeyword ||
+        u.kind === ts.SyntaxKind.FalseKeyword ||
+        (ts.isArrayLiteralExpression(u) && u.elements.length === 0) ||
+        (ts.isObjectLiteralExpression(u) && u.properties.length === 0) ||
+        (ts.isStringLiteral(u) && u.text === "") ||
+        (ts.isNumericLiteral(u) && u.text === "0") ||
+        (ts.isVoidExpression(u) && ts.isNumericLiteral(unwrap(u.expression)))
+    );
+};
+
+// What a `.catch(handler)` handler does when it only swallows, or undefined.
+function swallowingHandler(arg: TS.Expression): string | undefined {
+    const u = unwrap(arg);
+    if (ts.isPropertyAccessExpression(u) && ts.isIdentifier(u.expression) && u.expression.text === "console") return "only logs";
+    if (!ts.isArrowFunction(u) && !ts.isFunctionExpression(u)) return undefined;
+    if (ts.isBlock(u.body)) {
+        if (u.body.statements.length === 0) return "does nothing";
+        if (logsOnly(u.body)) return "only logs";
+        const only = u.body.statements.length === 1 ? u.body.statements[0] : undefined;
+        if (only && ts.isReturnStatement(only) && only.expression && isFallbackLiteral(only.expression)) return "returns a placeholder";
+        return undefined;
+    }
+    if (isConsoleCall(u.body)) return "only logs";
+    if (isFallbackLiteral(u.body)) return "returns a placeholder";
+    return undefined;
+}
+
+// A callback whose result is an object or array literal (a fresh row each
+// call): an expression body, or every `return` of its own block.
+function buildsFreshRows(cb: TS.Expression | undefined): boolean {
+    if (!cb) return false;
+    const u = unwrap(cb);
+    if (!ts.isArrowFunction(u) && !ts.isFunctionExpression(u)) return false;
+    const fresh = (e: TS.Expression | undefined): boolean => {
+        if (!e) return false;
+        const x = unwrap(e);
+        return ts.isObjectLiteralExpression(x) || ts.isArrayLiteralExpression(x);
+    };
+    if (!ts.isBlock(u.body)) return fresh(u.body);
+    const returns: TS.ReturnStatement[] = [];
+    const walk = (n: TS.Node): void => {
+        if (isFunction(n) || ts.isClassLike(n)) return;
+        if (ts.isReturnStatement(n)) returns.push(n);
+        ts.forEachChild(n, walk);
+    };
+    ts.forEachChild(u.body, walk);
+    return returns.length > 0 && returns.every((r) => fresh(r.expression));
+}
+
+// Does `<For each={…}>` get an array rebuilt into fresh objects on every read?
+function freshRowsSource(e: TS.Expression): string | undefined {
+    const u = unwrap(e);
+    if (!ts.isCallExpression(u)) return undefined;
+    const callee = u.expression;
+    if (ts.isPropertyAccessExpression(callee)) {
+        const name = callee.name.text;
+        if ((name === "map" || name === "flatMap") && buildsFreshRows(u.arguments[0])) return `.${name}() that returns a new object per row`;
+        if (name === "entries" && ts.isIdentifier(callee.expression) && callee.expression.text === "Object") return "Object.entries(), a new [key, value] pair per row";
+    }
+    return undefined;
+}
+
+// `setTimeout(resolve, …)` / `setTimeout(() => resolve(), …)` inside a
+// `new Promise((resolve) => …)` executor: a fixed wait. A promise raced in
+// `Promise.race([...])` is a deadline and is not one.
+function isTimerWait(call: TS.CallExpression): boolean {
+    const first = call.arguments[0] && unwrap(call.arguments[0]);
+    if (!first) return false;
+    let p: TS.Node | undefined = call.parent;
+    while (p && !(isFunction(p) && ts.isNewExpression(p.parent) && ts.isIdentifier(p.parent.expression) && p.parent.expression.text === "Promise"))
+        p = p.parent;
+    if (!p) return false;
+    // a racer in Promise.race([...]) is a deadline, not a wait
+    const promise = p.parent;
+    const race = ts.isArrayLiteralExpression(promise.parent) ? promise.parent.parent : undefined;
+    if (
+        race &&
+        ts.isCallExpression(race) &&
+        ts.isPropertyAccessExpression(race.expression) &&
+        ts.isIdentifier(race.expression.expression) &&
+        race.expression.expression.text === "Promise" &&
+        race.expression.name.text === "race"
+    )
+        return false;
+    const executor = p as TS.FunctionLikeDeclaration;
+    const resolve = executor.parameters[0];
+    if (!resolve || !ts.isIdentifier(resolve.name)) return false;
+    const name = resolve.name.text;
+    if (ts.isIdentifier(first)) return first.text === name;
+    if (ts.isArrowFunction(first) || ts.isFunctionExpression(first)) {
+        const body = ts.isBlock(first.body)
+            ? first.body.statements.length === 1 && ts.isExpressionStatement(first.body.statements[0])
+                ? first.body.statements[0].expression
+                : undefined
+            : first.body;
+        const c = body && unwrap(body);
+        return !!c && ts.isCallExpression(c) && ts.isIdentifier(c.expression) && c.expression.text === name;
+    }
+    return false;
+}
+
+const QUIET = /\/\/\s*quiet:(.*)$/;
+
+function checkHouseRules(sf: TS.SourceFile, file: string, hit: (node: TS.Node, rule: string, message: string) => void): void {
+    const lines = sf.text.split("\n");
+    const lineOf = (pos: number) => sf.getLineAndCharacterOfPosition(pos).line;
+    // The `// quiet: <reason>` marker on the hit's line, the line above it, or
+    // (for a catch clause) inside the catch block. undefined: no marker; "":
+    // a marker with no reason.
+    const marker = (node: TS.Node, inside?: TS.Node): string | undefined => {
+        const at = lineOf(node.getStart(sf));
+        const candidates = [lines[at], lines[at - 1]];
+        if (inside) for (let l = lineOf(inside.getStart(sf)); l <= lineOf(inside.end); l++) candidates.push(lines[l]);
+        for (const c of candidates) {
+            const m = c === undefined ? null : QUIET.exec(c);
+            if (m) return m[1].trim();
+        }
+        return undefined;
+    };
+    const report = (node: TS.Node, rule: string, message: string, inside?: TS.Node): void => {
+        const reason = marker(node, inside);
+        if (reason === undefined) hit(node, rule, message);
+        else if (reason === "") hit(node, rule, "a `// quiet:` marker needs a reason after the colon: say why this is safe");
+    };
+    const testFile = isTestFile(file);
+    const visit = (n: TS.Node): void => {
+        // swallowed-error: a catch that only logs or does nothing.
+        if (ts.isCatchClause(n) && logsOnly(n.block)) {
+            report(
+                n,
+                "swallowed-error",
+                `this catch ${n.block.statements.length === 0 ? "does nothing" : "only logs"}, so the failure never reaches the user (AGENTS.md "Fail loudly"); show it in state, rethrow, or mark a deliberate one with \`// quiet: <reason>\``,
+                n.block,
+            );
+        }
+        if (ts.isCallExpression(n) && ts.isPropertyAccessExpression(n.expression) && n.expression.name.text === "catch" && n.arguments.length === 1) {
+            const what = swallowingHandler(n.arguments[0]);
+            if (what)
+                report(
+                    n.expression.name,
+                    "swallowed-error",
+                    `this .catch() ${what}, so the failure never reaches the user (AGENTS.md "Fail loudly"); show it in state, let it reject, or mark a deliberate one with \`// quiet: <reason>\``,
+                    n.arguments[0],
+                );
+        }
+        if (ts.isCallExpression(n) && ts.isIdentifier(n.expression)) {
+            const callee = n.expression.text;
+            // effect-without-on
+            if (callee === "createEffect") {
+                const first = n.arguments[0] && unwrap(n.arguments[0]);
+                if (!(first && ts.isCallExpression(first) && ts.isIdentifier(first.expression) && first.expression.text === "on"))
+                    report(
+                        n,
+                        "effect-without-on",
+                        `createEffect tracks whatever its body happens to read (AGENTS.md "Effects track what they mean"); name the dependencies with createEffect(on(deps, fn))`,
+                    );
+            }
+            // test-sleep: setTimeout as a wait
+            if (testFile && callee === "setTimeout" && isTimerWait(n))
+                report(n, "test-sleep", `a fixed setTimeout wait makes the test timing-tuned (AGENTS.md "Tests are CI": deterministic); wait for the observable outcome instead, or mark it with \`// quiet: <reason>\``);
+            // test-sleep: await sleep(…)
+            if (testFile && callee === "sleep" && ts.isAwaitExpression(n.parent))
+                report(n, "test-sleep", `a fixed sleep makes the test timing-tuned (AGENTS.md "Tests are CI": deterministic); wait for the observable outcome instead, or mark it with \`// quiet: <reason>\``);
+        }
+        // test-sleep: Bun.sleep / Bun.sleepSync
+        if (
+            testFile &&
+            ts.isCallExpression(n) &&
+            ts.isPropertyAccessExpression(n.expression) &&
+            ts.isIdentifier(n.expression.expression) &&
+            n.expression.expression.text === "Bun" &&
+            /^sleep(Sync)?$/.test(n.expression.name.text)
+        )
+            report(n, "test-sleep", `a fixed Bun.${n.expression.name.text} makes the test timing-tuned (AGENTS.md "Tests are CI": deterministic); wait for the observable outcome instead, or mark it with \`// quiet: <reason>\``);
+        // for-fresh-rows
+        if ((ts.isJsxElement(n) && tagName(n) === "For") || (ts.isJsxSelfClosingElement(n) && n.tagName.getText(sf) === "For")) {
+            const attrs = ts.isJsxElement(n) ? n.openingElement.attributes : n.attributes;
+            const each = attrs.properties.find((a): a is TS.JsxAttribute => ts.isJsxAttribute(a) && a.name.getText(sf) === "each");
+            const expr = each?.initializer && ts.isJsxExpression(each.initializer) ? each.initializer.expression : undefined;
+            const why = expr && freshRowsSource(expr);
+            if (each && why)
+                report(
+                    each,
+                    "for-fresh-rows",
+                    `<For each> gets ${why}, so every row is rebuilt on each read (AGENTS.md "Rows keep their identity"); keep rows in a store reconciled by id, or use <Index>`,
+                );
+        }
+        ts.forEachChild(n, visit);
+    };
+    visit(sf);
+}
+
+export function checkDirs(dirs: string[], options: Options = {}): Hit[] {
     const files: string[] = [];
     for (const d of dirs) listFiles(d, files);
-    return files.flatMap((f) => checkSource(f, readFileSync(f, "utf8")));
+    return files.flatMap((f) => checkSource(f, readFileSync(f, "utf8"), options));
 }
 
 if (import.meta.main) {
-    const dirs = process.argv.slice(2);
+    const args = process.argv.slice(2);
+    const solidOnly = args.includes("--solid-only");
+    const dirs = args.filter((a) => a !== "--solid-only");
     if (dirs.length === 0) {
-        console.error("usage: bun scripts/check-solid.ts <dir>...");
+        console.error("usage: bun scripts/check-solid.ts [--solid-only] <dir>...");
         process.exit(2);
     }
     for (const d of dirs) {
@@ -358,10 +611,10 @@ if (import.meta.main) {
             process.exit(2);
         }
     }
-    const hits = checkDirs(dirs);
+    const hits = checkDirs(dirs, { solidOnly });
     for (const h of hits) console.log(`${relative(process.cwd(), h.file)}:${h.line}: ${h.rule}: ${h.message}`);
     if (hits.length > 0) {
-        console.error(`FAIL: ${hits.length} Solid mistake(s) found above`);
+        console.error(`FAIL: ${hits.length} AGENTS.md rule break(s) found above`);
         process.exit(1);
     }
 }

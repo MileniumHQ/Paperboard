@@ -9,9 +9,13 @@
 #     packages       shared library builds + packed external consumer check
 #     paperapi       SDK: build, typecheck, tests, silent-catches
 #     paperui        design system: build, tests, styling, silent-catches
-#   Every target with Solid UI (paperui, paperboard, paperdocs, origami-library,
-#   create-panel and the panels) runs the Solid check (scripts/check-solid.ts):
-#   the mechanical Solid mistakes AGENTS.md's "Solid:" section names.
+#   Every target with code runs the code check (scripts/check-solid.ts) over
+#   its sources and tests: the mechanical Solid mistakes AGENTS.md's "Solid:"
+#   section names, and the house rules that kept coming back (a catch that
+#   only logs, an effect without on(), <For> fed fresh rows, fixed sleeps in
+#   tests). The deprecated panels (actions, ai) get the Solid rules alone;
+#   paperapi, paperui and gameserver run the house rules as advisory until
+#   their hits are fixed.
 #   paperboard, origami-library and the panels also run an advisory styling
 #   check (scripts/check-app-styling.sh): literal sizes, colors, motion,
 #   z-index and the like that have a PaperUI token. It warns, never fails.
@@ -205,7 +209,7 @@ gstep paperboard "paperboard lint" run_in "$ROOT/apps/paperboard" bunx biome lin
 gstep paperboard "supervisor format and vet (linux, macOS, Windows)" supervisor_vet
 gstep paperboard "supervisor tests" run_in "$ROOT/apps/paperboard/supervisor" go test -count=1 ./...
 gstep paperboard "paperboard silent-catches" run_in "$ROOT/apps/paperboard" bash "$CATCH"
-gstep paperboard "paperboard solid check" run_in "$ROOT" bun scripts/check-solid.ts apps/paperboard/src/renderer
+gstep paperboard "paperboard code check" run_in "$ROOT" bun scripts/check-solid.ts apps/paperboard/papercrane apps/paperboard/src apps/paperboard/tests apps/paperboard/scripts
 gwarn paperboard "paperboard styling literals" bash "$ROOT/scripts/check-app-styling.sh" apps/paperboard
 
 # ── root dev scripts: typecheck, publisher release-math proofs, the browser
@@ -214,49 +218,56 @@ gwarn paperboard "paperboard styling literals" bash "$ROOT/scripts/check-app-sty
 gstep scripts "root scripts typecheck" run_in "$ROOT" bun packages/paperui/node_modules/typescript/bin/tsc -p scripts/tsconfig.json
 gstep scripts "root scripts tests" run_in "$ROOT" bun test scripts
 gstep scripts "root scripts silent-catches" run_in "$ROOT" bash "$CATCH" scripts
+gstep scripts "root scripts code check" run_in "$ROOT" bun scripts/check-solid.ts scripts
 
 # ── paperdocs: tests plus the static site build (typecheck, site + docs
 # prerender, alias files, shared 404) ────────────────────────────────────────
 gstep paperdocs "paperdocs tests" run_in "$ROOT/apps/paperdocs" bun test
 gstep paperdocs "paperdocs build" run_in "$ROOT/apps/paperdocs" bun run build
-gstep paperdocs "paperdocs solid check" run_in "$ROOT" bun scripts/check-solid.ts apps/paperdocs/src
+gstep paperdocs "paperdocs code check" run_in "$ROOT" bun scripts/check-solid.ts apps/paperdocs/src apps/paperdocs/test apps/paperdocs/scripts
 
 # ── shared libraries ─────────────────────────────────────────────────────────
 gstep paperapi "paperapi typecheck" run_in "$ROOT/packages/paperapi" bunx tsc --noEmit
 gstep paperapi "paperapi tests" run_in "$ROOT/packages/paperapi" bun test
 gstep paperapi "paperapi silent-catches" run_in "$ROOT/packages/paperapi" bash "$CATCH" src test
+gwarn paperapi "paperapi code check" run_in "$ROOT" bun scripts/check-solid.ts packages/paperapi/src packages/paperapi/test
 gstep paperui "paperui tests" run_in "$ROOT/packages/paperui" bun run test
 gstep paperui "paperui styling invariant" bash "$ROOT/scripts/check-paperui-styling.sh"
 gstep paperui "paperui silent-catches" run_in "$ROOT/packages/paperui" bash "$CATCH" src
-gstep paperui "paperui solid check" run_in "$ROOT" bun scripts/check-solid.ts packages/paperui/src
+gstep paperui "paperui solid check" run_in "$ROOT" bun scripts/check-solid.ts --solid-only packages/paperui/src packages/paperui/test
+gwarn paperui "paperui code check" run_in "$ROOT" bun scripts/check-solid.ts packages/paperui/src packages/paperui/test
 gstep create-panel "create-panel tests" run_in "$ROOT/packages/create-panel" bun run test
 gstep create-panel "create-panel silent-catches" run_in "$ROOT/packages/create-panel" bash "$CATCH" src bin test template
-gstep create-panel "create-panel solid check" run_in "$ROOT" bun scripts/check-solid.ts packages/create-panel/template/src
+gstep create-panel "create-panel code check" run_in "$ROOT" bun scripts/check-solid.ts packages/create-panel/src packages/create-panel/bin packages/create-panel/test packages/create-panel/template
 gstep crane-launcher "crane-launcher tests" run_in "$ROOT/packages/crane-launcher" bun run test
 gstep crane-launcher "crane-launcher silent-catches" run_in "$ROOT/packages/crane-launcher" bash "$CATCH" src test
+gstep crane-launcher "crane-launcher code check" run_in "$ROOT" bun scripts/check-solid.ts packages/crane-launcher/src packages/crane-launcher/test
 
 # ── registry service: typecheck plus its worker suite (the library division
 # has its own vitest suite below; `bun test ./test` scopes bun to the worker) ─
 gstep origami "origami typecheck" run_in "$ROOT/apps/origami" bun run typecheck
 gstep origami "origami tests" run_in "$ROOT/apps/origami" bun run test
 gstep origami "origami silent-catches" run_in "$ROOT/apps/origami" bash "$CATCH" src test
+gstep origami "origami code check" run_in "$ROOT" bun scripts/check-solid.ts apps/origami/src apps/origami/test apps/origami/scripts
 
 # ── pbd.lc short-link worker ─────────────────────────────────────────────────
 gstep pbd "pbd typecheck" run_in "$ROOT/apps/pbd" bun run typecheck
 gstep pbd "pbd tests" run_in "$ROOT/apps/pbd" bun run test
 gstep pbd "pbd silent-catches" run_in "$ROOT/apps/pbd" bash "$CATCH" src test
+gstep pbd "pbd code check" run_in "$ROOT" bun scripts/check-solid.ts apps/pbd/src apps/pbd/test
 
 # ── panelapis: third-party API proxy worker ─────────────────────────────────
 gstep panelapis "panelapis typecheck" run_in "$ROOT/apps/panelapis" bun run typecheck
 gstep panelapis "panelapis tests" run_in "$ROOT/apps/panelapis" bun run test
 gstep panelapis "panelapis silent-catches" run_in "$ROOT/apps/panelapis" bash "$CATCH" src test
+gstep panelapis "panelapis code check" run_in "$ROOT" bun scripts/check-solid.ts apps/panelapis/src apps/panelapis/test
 
 # ── the panel library division of origami: browser-logic suite and the
 # production build that static assets serve (typecheck rides origami's) ──────
 gstep origami-library "origami library tests" run_in "$ROOT/apps/origami/library" bun run test
 gstep origami-library "origami library build" run_in "$ROOT/apps/origami/library" bun run build
 gstep origami-library "origami library silent-catches" run_in "$ROOT/apps/origami/library" bash "$CATCH" src test
-gstep origami-library "origami library solid check" run_in "$ROOT" bun scripts/check-solid.ts apps/origami/library/src
+gstep origami-library "origami library code check" run_in "$ROOT" bun scripts/check-solid.ts apps/origami/library/src apps/origami/library/test
 gwarn origami-library "origami library styling literals" bash "$ROOT/scripts/check-app-styling.sh" apps/origami/library
 
 # ── first-party panels: suite, typecheck, production build, silent-catch gate.
@@ -269,7 +280,16 @@ for short in actions agents ai blocks botcreator gameserver terminal; do
     gstep "$short" "$panel typecheck" run_in "$ROOT/$panel" bunx tsc --noEmit
     gstep "$short" "$panel build" run_in "$ROOT/$panel" bun run build
     gstep "$short" "$panel silent-catches" run_in "$ROOT/$panel" bash "$CATCH" src test
-    gstep "$short" "$panel solid check" run_in "$ROOT" bun scripts/check-solid.ts "$panel/src"
+    case "$short" in
+        # deprecated: nobody changes them, so only the Solid rules hold
+        actions | ai) gstep "$short" "$panel solid check" run_in "$ROOT" bun scripts/check-solid.ts --solid-only "$panel" ;;
+        # being migrated: the house rules are advisory until its hits are fixed
+        gameserver)
+            gstep "$short" "$panel solid check" run_in "$ROOT" bun scripts/check-solid.ts --solid-only "$panel"
+            gwarn "$short" "$panel code check" run_in "$ROOT" bun scripts/check-solid.ts "$panel"
+            ;;
+        *) gstep "$short" "$panel code check" run_in "$ROOT" bun scripts/check-solid.ts "$panel" ;;
+    esac
     gwarn "$short" "$panel styling literals" bash "$ROOT/scripts/check-app-styling.sh" "$panel"
 done
 

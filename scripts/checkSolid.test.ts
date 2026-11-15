@@ -44,14 +44,14 @@ describe("the Solid check flags each mistake and passes its near miss", () => {
     });
 
     test("onCleanup after an await in an async effect, and the before-the-await near miss", () => {
-        const solid = `import { createEffect, onCleanup, onMount } from "solid-js";\ndeclare const load: () => Promise<() => void>;\n`;
+        const solid = `import { createEffect, on, onCleanup, onMount } from "solid-js";\ndeclare const load: () => Promise<() => void>;\n`;
         expect(rules(`${solid}onMount(async () => {\n    const stop = await load();\n    if (stop) onCleanup(stop);\n});\n`)).toEqual([
             "5:cleanup-after-await",
         ]);
         // registered before the first await; a nested function is opaque by design
         expect(
             rules(
-                `${solid}createEffect(async () => {\n    let stop = () => {};\n    onCleanup(() => stop());\n    stop = await load();\n    const later = () => onCleanup(stop);\n    later();\n});\n`,
+                `${solid}createEffect(on(load, async () => {\n    let stop = () => {};\n    onCleanup(() => stop());\n    stop = await load();\n    const later = () => onCleanup(stop);\n    later();\n}));\n`,
             ),
         ).toEqual([]);
     });
@@ -68,5 +68,66 @@ describe("the Solid check flags each mistake and passes its near miss", () => {
         } finally {
             rmSync(root, { recursive: true, force: true });
         }
+    });
+});
+
+// an empty body, spelled so the silent-catch grep doesn't take the fixtures for code
+const EMPTY = "{}";
+const ruleIn = (file: string, src: string) => checkSource(file, src).map((h) => `${h.line}:${h.rule}`);
+
+// Each house rule: one hit, one allowed with a reason, one near miss.
+describe("the house rules flag each break, honour a reasoned quiet marker, and pass the near miss", () => {
+    test("a catch that only logs, and a .catch that swallows (Fail loudly)", () => {
+        expect(rules(`try {\n    run();\n} catch (e) {\n    console.error(e);\n}\n`)).toEqual(["3:swallowed-error"]);
+        expect(rules(`void run().catch(() => ${EMPTY});\nvoid run().catch(() => undefined);\nvoid run().catch(console.warn);\n`)).toEqual([
+            "1:swallowed-error",
+            "2:swallowed-error",
+            "3:swallowed-error",
+        ]);
+        // a reasoned marker allows it, inside the block or on the line above
+        expect(rules(`try {\n    run();\n} catch (e) {\n    // quiet: the logger cannot report its own failure\n    console.error(e);\n}\n`)).toEqual([]);
+        expect(rules(`// quiet: shutdown, nothing is left to show it\nvoid run().catch(() => ${EMPTY});\n`)).toEqual([]);
+        // a marker with no reason is itself a hit
+        expect(rules(`void run().catch(() => ${EMPTY}); // quiet:\n`)).toEqual(["1:swallowed-error"]);
+        // a catch that rethrows or sets state does something the user sees
+        expect(rules(`try {\n    run();\n} catch (e) {\n    console.error(e);\n    setError(e);\n}\nvoid run().catch((e) => setError(e));\n`)).toEqual([]);
+    });
+
+    test("an effect that does not name its dependencies (Effects track what they mean)", () => {
+        const solid = `import { createEffect, on } from "solid-js";\ndeclare const a: () => number;\n`;
+        expect(rules(`${solid}createEffect(() => console.log(a()));\n`)).toEqual(["3:effect-without-on"]);
+        expect(rules(`${solid}// quiet: reads every field of a store on purpose\ncreateEffect(() => console.log(a()));\n`)).toEqual([]);
+        expect(rules(`${solid}createEffect(on(a, (v) => console.log(v)));\n`)).toEqual([]);
+    });
+
+    test("<For> fed fresh objects (Rows keep their identity)", () => {
+        const solid = `import { For } from "solid-js";\ndeclare const rows: () => { id: string }[];\n`;
+        expect(rules(`${solid}export const A = () => <For each={rows().map((r) => ({ ...r, on: true }))}>{(r) => <b>{r.id}</b>}</For>;\n`)).toEqual([
+            "3:for-fresh-rows",
+        ]);
+        expect(rules(`${solid}export const A = () => <For each={Object.entries({ a: 1 })}>{(e) => <b>{e[0]}</b>}</For>;\n`)).toEqual(["3:for-fresh-rows"]);
+        expect(
+            rules(`${solid}// quiet: two fixed rows, nothing to animate\nexport const A = () => <For each={rows().map((r) => ({ ...r }))}>{(r) => <b>{r.id}</b>}</For>;\n`),
+        ).toEqual([]);
+        // filtering keeps the same objects; mapping to ids keeps primitives
+        expect(
+            rules(`${solid}export const A = () => <><For each={rows().filter((r) => r.id)}>{(r) => <b>{r.id}</b>}</For><For each={rows().map((r) => r.id)}>{(id) => <b>{id}</b>}</For></>;\n`),
+        ).toEqual([]);
+    });
+
+    test("a fixed sleep in a test (Tests are CI), and the deadline near miss", () => {
+        expect(ruleIn("a.test.ts", `await Bun.sleep(50);\nawait sleep(50);\nawait new Promise((r) => setTimeout(r, 50));\n`)).toEqual([
+            "1:test-sleep",
+            "2:test-sleep",
+            "3:test-sleep",
+        ]);
+        expect(ruleIn("test/support/wait.ts", `// quiet: the poll interval of a deadline-bound wait\nawait new Promise((r) => setTimeout(() => r(undefined), 10));\n`)).toEqual([]);
+        // a raced deadline is not a wait; outside a test file a sleep is the product's business
+        expect(ruleIn("a.test.ts", `await Promise.race([done, new Promise((late) => setTimeout(() => late("timed out"), 5000))]);\n`)).toEqual([]);
+        expect(ruleIn("src/retry.ts", `await Bun.sleep(50);\n`)).toEqual([]);
+    });
+
+    test("--solid-only leaves the house rules out", () => {
+        expect(checkSource("a.test.ts", `void run().catch(() => ${EMPTY});\nawait Bun.sleep(5);\n`, { solidOnly: true })).toEqual([]);
     });
 });
