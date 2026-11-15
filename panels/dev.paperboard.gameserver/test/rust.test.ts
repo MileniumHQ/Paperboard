@@ -150,7 +150,6 @@ describe("Rust", () => {
         // nothing was deleted: the old map is whole in the trash
         expect(fs.readFileSync(path.join(server.dir, trash[0]!, "server", "paperboard", "proceduralmap.1000.12345.290.map"), "utf8")).toBe("proceduralmap.1000.12345.290.map");
 
-        await Bun.sleep(5);
         expect(await call(server, "rust-wipe", { blueprints: true })).toMatchObject({ made: false, blueprints: false });
         expect(left()).toEqual(["player.identities.19.db", "player.tokens.db"]);
         // the next start is on the new seed

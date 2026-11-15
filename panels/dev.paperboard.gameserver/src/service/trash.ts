@@ -1,9 +1,11 @@
+import { errorCode, errorText } from "./failures";
 import * as nodeFs from "node:fs/promises";
 import * as nodePath from "node:path";
+import { randomBytes } from "node:crypto";
 import { isListableDirArg } from "../core/dirs";
 
 // Recoverable removal for worlds, world reset, plugins and player data.
-// Each source is renamed into a retained `.trash-<ts>` directory inside the
+// Each source is renamed into a retained `.trash-<ts>-<random>` directory inside the
 // server folder, keeping its relative path (plugins/x.jar and mods/x.jar
 // cannot collide). Nothing is recursively deleted; the trash directory is
 // the recovery point.
@@ -34,13 +36,11 @@ export interface TrashRemoveDeps {
 
 const TRASH_DIR_PATTERN = /^\.trash-[A-Za-z0-9-]+$/;
 
-export function trashDirName(stamp: number = Date.now()): string {
-    return `.trash-${stamp}`;
+/** A fresh trash folder: two removals in the same millisecond never share one, so neither replaces what the other moved. */
+export function trashDirName(): string {
+    return `.trash-${Date.now()}-${randomBytes(4).toString("hex")}`;
 }
 
-function errorCode(err: unknown): string | undefined {
-    return (err as { code?: string } | null)?.code;
-}
 
 function describeMoveFailure(relative: string, err: unknown): string {
     const code = errorCode(err);
@@ -49,7 +49,7 @@ function describeMoveFailure(relative: string, err: unknown): string {
     if (code === "EBUSY" || code === "EPERM" || code === "EACCES") {
         return `"${relative}" is in use or not writable; stop the server and try again`;
     }
-    const message = err instanceof Error ? err.message : String(err);
+    const message = errorText(err);
     return `"${relative}" could not be moved: ${message}`;
 }
 

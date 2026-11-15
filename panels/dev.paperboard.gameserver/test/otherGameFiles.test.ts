@@ -174,13 +174,14 @@ describe("other games' files", () => {
             "worlds/Wörld 2.wld": "other",
             "worlds/Wörld.wld.notes": "user's",
         });
-        await trashWorld(root, "Wörld", 1_700_000_000_000);
+        await trashWorld(root, "Wörld");
         const tree = readTree(root);
+        const [trash] = fs.readdirSync(root).filter((f) => f.startsWith(".trash-"));
         expect(Object.keys(tree).filter((f) => f.startsWith(".trash-") && !f.endsWith("/")).sort()).toEqual([
-            ".trash-1700000000000/worlds/Wörld.twld",
-            ".trash-1700000000000/worlds/Wörld.wld",
-            ".trash-1700000000000/worlds/Wörld.wld.bak",
-            ".trash-1700000000000/worlds/Wörld.wld.bak2",
+            `${trash}/worlds/Wörld.twld`,
+            `${trash}/worlds/Wörld.wld`,
+            `${trash}/worlds/Wörld.wld.bak`,
+            `${trash}/worlds/Wörld.wld.bak2`,
         ]);
         expect([tree["worlds/Wörld 2.wld"], tree["worlds/Wörld.wld.notes"]]).toEqual(["other", "user's"]);
         await expect(trashWorld(root, "Wörld")).rejects.toThrow('There is no world named "Wörld"');

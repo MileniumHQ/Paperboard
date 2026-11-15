@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { afterAll, beforeAll, describe, expect, spyOn, test } from "bun:test";
 import * as fs from "node:fs";
 import * as nodeFs from "node:fs/promises";
 import * as path from "node:path";
@@ -35,6 +35,21 @@ describe("world deletion", () => {
         expect(fs.existsSync(path.join(root, "world"))).toBe(false);
     });
 
+    test("two removals in the same millisecond each keep what they moved", async () => {
+        const root = tempDir();
+        const now = spyOn(Date, "now").mockReturnValue(1_700_000_000_000);
+        try {
+            writeTree(root, { "plugins/a.jar": "first" });
+            await trashRemovePathsWith({ getServerDir: async () => root }, ["plugins/a.jar"]);
+            writeTree(root, { "plugins/a.jar": "second" });
+            await trashRemovePathsWith({ getServerDir: async () => root }, ["plugins/a.jar"]);
+        } finally {
+            now.mockRestore();
+        }
+        const kept = Object.entries(readTree(root)).filter(([f]) => f.startsWith(".trash-") && f.endsWith("/plugins/a.jar")).map(([, c]) => c).sort();
+        expect(kept).toEqual(["first", "second"]);
+    });
+
     test("an in-use file stops the removal and what was already moved stays in the trash", async () => {
         const root = tempDir();
         writeTree(root, { "world/level.dat": "w", "world_nether/level.dat": "n", "world_the_end/level.dat": "e" });
@@ -48,7 +63,7 @@ describe("world deletion", () => {
             },
         };
         await expect(trashRemovePathsWith({ getServerDir: async () => root, fs: busy }, ["world", "world_nether", "world_the_end"])).rejects.toThrow(
-            /"world_nether" is in use or not writable; stop the server and try again\. Already removed items are kept in "\.trash-\d+"/,
+            /"world_nether" is in use or not writable; stop the server and try again\. Already removed items are kept in "\.trash-\d+-[0-9a-f]+"/,
         );
         expect(trashed(root)).toEqual(["world/level.dat"]);
         expect(fs.readFileSync(path.join(root, "world_nether", "level.dat"), "utf8")).toBe("n");

@@ -1,3 +1,4 @@
+import { errorText } from "../../service/failures";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { readWorldHeader, type TerrariaWorldHeader } from "./worldFile";
@@ -49,7 +50,7 @@ export async function listWorlds(directory: string, active: string): Promise<Ter
         try {
             return { ...base, header: await readHeader(file) };
         } catch (err) {
-            return { ...base, header: null, error: err instanceof Error ? err.message : String(err) };
+            return { ...base, header: null, error: errorText(err) };
         }
     }));
     // a new world exists only as the config's choice until the server starts
@@ -106,12 +107,12 @@ export async function discardUpload(root: string, file: unknown): Promise<void> 
 
 /**
  * Moves a world, its tModLoader `.twld` and their backups (`.bak`, `.bak2`)
- * into a `.trash-<ts>/worlds` folder in the server folder, like every other
+ * into a `.trash-<ts>-<random>/worlds` folder in the server folder, like every other
  * removal in Game Server: recoverable, never deleted. The shared trash helper
  * takes ASCII paths only and Terraria world names can be any letters, so the
  * move happens here.
  */
-export async function trashWorld(root: string, name: unknown, stamp = Date.now()): Promise<void> {
+export async function trashWorld(root: string, name: unknown): Promise<void> {
     const checked = worldName(name);
     const directory = path.join(root, "worlds");
     const world = `${checked}.wld`;
@@ -126,7 +127,7 @@ export async function trashWorld(root: string, name: unknown, stamp = Date.now()
     const own = [world, `${checked}.twld`];
     const files = entries.filter((file) => own.some((base) => file === base || (file.startsWith(base) && /^\.bak\d*$/.test(file.slice(base.length)))));
     if (!files.some((file) => file.startsWith(world))) throw new Error(`There is no world named "${checked}"`);
-    const trash = path.join(root, trashDirName(stamp), "worlds");
+    const trash = path.join(root, trashDirName(), "worlds");
     await fs.mkdir(trash, { recursive: true });
     for (const file of files) await fs.rename(path.join(directory, file), path.join(trash, file));
 }
