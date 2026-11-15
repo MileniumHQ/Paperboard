@@ -1,4 +1,4 @@
-import { createSignal, onMount, For, Show } from "solid-js";
+import { createSignal, For, Show } from "solid-js";
 import {
     PaperFlex,
     PaperText,
@@ -10,9 +10,8 @@ import {
     PaperQuote,
     PaperSeparator,
     usePaperPanel,
-    createLatest,
+    createRead,
 } from "@mileniumhq/paperui";
-import { errorMessage } from "@mileniumhq/paperapi";
 import type { BotSummary } from "../bots";
 import { botCreator } from "../client";
 import { PERMISSION_DEFINITIONS, DEFAULT_SELECTED_PERMISSIONS } from "../permissions";
@@ -21,46 +20,20 @@ export default function Invite(props: { bot: () => BotSummary }) {
     // the phone layout of the panel this page is in
     const panel = usePaperPanel();
     const compact = () => Boolean(panel?.compact?.());
-    const [inviteUrl, setInviteUrl] = createSignal("");
-    const [inviteError, setInviteError] = createSignal("");
-    const [userInstallUrl, setUserInstallUrl] = createSignal("");
-    const [userInstallError, setUserInstallError] = createSignal("");
     const [selectedPermissions, setSelectedPermissions] = createSignal<string[]>(
         DEFAULT_SELECTED_PERMISSIONS,
     );
 
-    // toggles fire requests back to back: only the latest one may land
-    const inviteRead = createLatest();
-    const updateInviteUrl = async (perms: string[]) => {
-        const current = inviteRead();
-        setInviteError("");
-        try {
-            const url = await botCreator.calls.getInviteUrl({ bot: props.bot().id, permissions: perms });
-            if (current()) setInviteUrl(url);
-        } catch (err) {
-            console.error("[Invite] invite URL generation failed:", err);
-            if (!current()) return;
-            // a link for the old permissions must not be copied as the new one
-            setInviteUrl("");
-            setInviteError(errorMessage(err));
-        }
-    };
-
-    const updateUserInstallUrl = async () => {
-        setUserInstallError("");
-        try {
-            const url = await botCreator.calls.getUserInstallUrl({ bot: props.bot().id });
-            setUserInstallUrl(url);
-        } catch (err) {
-            console.error("[Invite] user install URL generation failed:", err);
-            setUserInstallError(errorMessage(err));
-        }
-    };
-
-    onMount(() => {
-        void updateInviteUrl(selectedPermissions());
-        void updateUserInstallUrl();
+    // read again for each change of the permissions; only the newest lands
+    const invite = createRead((permissions) => botCreator.calls.getInviteUrl({ bot: props.bot().id, permissions }), {
+        source: selectedPermissions,
     });
+    // a read again hides the last one's failure, as it did before it was asked
+    const inviteError = () => (invite.loading() ? null : invite.error());
+    // a link for the old permissions must not be copied as the new one
+    const inviteUrl = () => (invite.error() ? "" : invite.value() ?? "");
+    const userInstall = createRead(() => botCreator.calls.getUserInstallUrl({ bot: props.bot().id }));
+    const userInstallUrl = () => userInstall.value() ?? "";
 
     const isSelected = (permId: string) =>
         selectedPermissions().includes(permId);
@@ -74,7 +47,6 @@ export default function Invite(props: { bot: () => BotSummary }) {
             updated = current.filter((p) => p !== permId);
         }
         setSelectedPermissions(updated);
-        void updateInviteUrl(updated);
     };
 
     const permissionGroup = (
@@ -155,15 +127,15 @@ export default function Invite(props: { bot: () => BotSummary }) {
                         group chats. Needs User Install enabled in the Discord
                         developer portal.
                     </PaperText>
-                    <Show when={userInstallError()}>
+                    <Show when={userInstall.error()}>
                         <PaperQuote variant="danger" icon="warning" title="Couldn't make the install link">
-                            {userInstallError()}
+                            {userInstall.error()}
                         </PaperQuote>
                     </Show>
                     <PaperFlex direction="row" gap="full" align="center">
                         <PaperFlex flex minWidth={0}>
                             <PaperText preset="text" truncate>
-                                {userInstallUrl() || (userInstallError() ? "No install link" : "Generating user install link…")}
+                                {userInstallUrl() || (userInstall.error() ? "No install link" : "Generating user install link…")}
                             </PaperText>
                         </PaperFlex>
 

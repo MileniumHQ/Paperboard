@@ -1,5 +1,4 @@
-import { createEffect, createSignal, on, onCleanup, Show, For } from "solid-js";
-import { createStore, reconcile } from "solid-js/store";
+import { createEffect, createSignal, on, Show, For } from "solid-js";
 import {
     PaperFlex,
     PaperText,
@@ -15,6 +14,7 @@ import {
     PaperToggle,
     createPolling,
     createLatest,
+    createRead,
 } from "@mileniumhq/paperui";
 import { errorMessage } from "@mileniumhq/paperapi";
 import type { BotSummary } from "../bots";
@@ -25,7 +25,6 @@ import {
     RECENT_MESSAGE_CAP,
     type Health,
 } from "../types";
-import type { RecentMessage } from "../session";
 import { DiscordAvatar } from "../picture";
 
 const HEALTH_POLL_MS = 10000;
@@ -37,80 +36,46 @@ interface OverviewProps {
 }
 
 export default function Overview(props: OverviewProps) {
-    const [tag, setTag] = createSignal("");
-    const [infoError, setInfoError] = createSignal("");
-    const [healthError, setHealthError] = createSignal("");
     const [toggleError, setToggleError] = createSignal("");
-    // the messages the session last received, oldest first; reconciled by
-    // message id, so a reread keeps the rows already shown
-    const [recentStore, setRecentStore] = createStore<{ list: RecentMessage[] }>({ list: [] });
-    const recent = () => recentStore.list;
-    const setRecent = (next: RecentMessage[]) => setRecentStore("list", reconcile(next, { key: "messageId" }));
-    const [health, setHealth] = createSignal<Health | null>(null);
     // the bot's name, avatar and connection are the service's, kept live
     const connected = () => props.bot().connected;
     const connectionError = () => props.bot().lastError;
 
-    // a poll and a reconnect can overlap: only the newest read is shown
-    const infoRead = createLatest();
-    const healthRead = createLatest();
-    // the messages heard live since the newest getBotInfo was asked: its
-    // snapshot may have been taken before them
-    let heardSince: RecentMessage[] = [];
-
-    const loadBotInfo = async () => {
-        const current = infoRead();
-        heardSince = [];
-        setInfoError("");
-        try {
-            const info = await botCreator.calls.getBotInfo({ bot: props.bot().id });
-            if (!current()) return;
-            setTag(info.tag);
-            const known = new Set(info.recentMessages.map((m) => m.messageId));
-            setRecent(heardSince.filter((m) => !known.has(m.messageId)).reduce((list, m) => appendCapped(list, m, RECENT_MESSAGE_CAP), info.recentMessages));
-        } catch (err) {
-            if (!current()) return;
-            console.error("[Overview] bot info read failed:", err);
-            setInfoError(errorMessage(err));
-        }
-    };
-
-    const loadHealth = async () => {
-        const current = healthRead();
-        try {
-            const next = await botCreator.calls.getHealth({ bot: props.bot().id });
-            if (!current()) return;
-            setHealth(next);
-            setHealthError("");
-        } catch (err) {
-            if (!current()) return;
-            // the last good reading stays on screen under the error
-            console.error("[Overview] health read failed:", err);
-            setHealthError(errorMessage(err));
-        }
-    };
-
-    void loadBotInfo();
-    createPolling(loadHealth, HEALTH_POLL_MS, { immediate: true });
+    // the bot's tag and the messages its session last received, oldest
+    // first; reconciled by message id, so a reread keeps the rows already
+    // shown. Each message the service emits shows at once, and joins a read
+    // still out too: its snapshot may have been taken before it
+    const info = createRead(
+        () => botCreator.calls.getBotInfo({ bot: props.bot().id }).then(({ tag, recentMessages }) => ({ tag, recentMessages })),
+        {
+            key: "messageId",
+            follow: (land) =>
+                botCreator.events.message(({ bot, ...heard }) => {
+                    if (bot !== props.bot().id) return;
+                    // heard before the first read answered: no tag is known yet
+                    land(({ tag, recentMessages } = { tag: "", recentMessages: [] }) =>
+                        recentMessages.some((m) => m.messageId === heard.messageId)
+                            ? { tag, recentMessages }
+                            : { tag, recentMessages: appendCapped(recentMessages, heard, RECENT_MESSAGE_CAP) },
+                    );
+                }),
+        },
+    );
+    const tag = () => info.value()?.tag ?? "";
+    const recent = () => info.value()?.recentMessages ?? [];
+    // a read again hides the last one's failure, as it did before it was asked
+    const infoError = () => (info.loading() ? null : info.error());
+    // the last good reading stays on screen under a failed one's error
+    const health = createRead(() => botCreator.calls.getHealth({ bot: props.bot().id }));
+    createPolling(health.reload, HEALTH_POLL_MS);
 
     // a bot that comes online has a tag and a fresh session to show
     createEffect(on(connected, (now, before) => {
         if (now && before === false) {
-            void loadBotInfo();
-            void loadHealth();
+            void info.reload();
+            void health.reload();
         }
     }, { defer: true }));
-
-    // live session truth: the service emits each message with the bot it
-    // came to; the subscription is cleaned up with the component (bounded:
-    // no listener outlives it)
-    onCleanup(
-        botCreator.events.message(({ bot, ...heard }) => {
-            if (bot !== props.bot().id) return;
-            heardSince = appendCapped(heardSince, heard, RECENT_MESSAGE_CAP);
-            setRecent(appendCapped(recent(), heard, RECENT_MESSAGE_CAP));
-        }),
-    );
 
     // only the newest flip may say it failed
     const flipped = createLatest();
@@ -125,13 +90,13 @@ export default function Overview(props: OverviewProps) {
     };
 
     const pingText = () => {
-        const h = health();
+        const h = health.value();
         if (!h || !h.connected || h.wsPing < 0) return "—";
         return `${h.wsPing} ms`;
     };
 
     const uptimeText = () => {
-        const h = health();
+        const h = health.value();
         if (!h || !h.connected) return "—";
         return formatDuration(h.uptimeMs);
     };
@@ -197,14 +162,14 @@ export default function Overview(props: OverviewProps) {
                         <PaperText preset="hint">Refreshes every {HEALTH_POLL_MS / 1000}s</PaperText>
                     </PaperFlex>
 
-                    <Show when={healthError()}>
+                    <Show when={health.error()}>
                         {(text) => <PaperQuote variant="danger" icon="warning" title="Couldn't check health">{text()}</PaperQuote>}
                     </Show>
 
                     <Show
-                        when={health()}
+                        when={health.value()}
                         fallback={
-                            <Show when={!healthError()}>
+                            <Show when={!health.error()}>
                                 <PaperText preset="hint">Checking health…</PaperText>
                             </Show>
                         }

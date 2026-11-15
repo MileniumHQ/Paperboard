@@ -1,5 +1,4 @@
 import { createEffect, createSignal, on, Show, For, type JSX } from "solid-js";
-import { createStore, reconcile } from "solid-js/store";
 import {
     PaperFlex,
     PaperText,
@@ -24,6 +23,7 @@ import {
     PaperSlidePage,
     usePaperPanel,
     createLatest,
+    createRead,
 } from "@mileniumhq/paperui";
 import { errorMessage } from "@mileniumhq/paperapi";
 import type { BotSummary } from "../bots";
@@ -34,9 +34,7 @@ import {
     count,
     type DiscordChannelKind,
     type GuildChannel,
-    type GuildDetail,
     type GuildSummary,
-    type MemberSummary,
 } from "../types";
 
 
@@ -89,20 +87,22 @@ export default function Servers(props: { bot: () => BotSummary }) {
     // page slides away, so nothing changes under the person's eyes
     const [shownId, setShownId] = createSignal<string | null>(null);
     // what was read of the open server, reconciled by id on every reload so
-    // its rows keep their place
-    const [view, setView] = createStore<{ detail: GuildDetail | null; members: MemberSummary[] | null }>({ detail: null, members: null });
-    const detail = () => view.detail;
-    const setDetail = (next: GuildDetail | null) => setView("detail", reconcile(next, { key: "id" }));
-    const members = () => view.members;
-    const setMembers = (next: MemberSummary[] | null) => setView("members", reconcile(next, { key: "id" }));
-    const [detailLoading, setDetailLoading] = createSignal(false);
-    const [detailError, setDetailError] = createSignal("");
+    // its rows keep their place; only the newest look at a server lands, so a
+    // slow answer for one server never shows on the page of the one chosen after it
+    const detailRead = createRead((guildId) => botCreator.calls.getGuildDetail({ bot: bot(), guildId }), { source: selectedId });
+    const detail = () => detailRead.value();
+    // a read again hides the last one's failure, as it did before it was asked
+    const detailError = () => (detailRead.loading() ? null : detailRead.error());
 
     const [memberQuery, setMemberQuery] = createSignal("");
-    const [membersLoading, setMembersLoading] = createSignal(false);
-    const [membersError, setMembersError] = createSignal("");
+    // a search is asked by pressing Search: each press is a new one
+    const [search, setSearch] = createSignal<{ guildId: string; query: string } | null>(null);
+    const membersRead = createRead((asked) => botCreator.calls.searchGuildMembers({ bot: bot(), ...asked }), { source: search });
+    const membersError = () => (membersRead.loading() ? null : membersRead.error());
+    const members = () => (membersRead.error() ? undefined : membersRead.value());
 
-    const [channelId, setChannelId] = createSignal("");
+    // the channel picked to send to; the server's first until one is picked
+    const [pickedChannel, setPickedChannel] = createSignal("");
     const [content, setContent] = createSignal("Hello from Paperboard!");
     const [sending, setSending] = createSignal(false);
     const [sendError, setSendError] = createSignal("");
@@ -112,56 +112,30 @@ export default function Servers(props: { bot: () => BotSummary }) {
         (detail()?.channels ?? []).filter(
             (channel) => channel.kind === "text" || channel.kind === "announcement",
         );
+    const channelId = () =>
+        textChannels().some((channel) => channel.id === pickedChannel()) ? pickedChannel() : textChannels()[0]?.id ?? "";
 
-    // only the newest look at a server may land: a slow answer for one server
-    // never shows on the page of the one chosen after it
-    const detailRead = createLatest();
-    const memberRead = createLatest();
-    // a message sent from one server's page is never confirmed on another's
+    // a message sent from one server's page is never confirmed on another's:
+    // sending is an action, not a read
     const sendRead = createLatest();
     const dropSend = () => {
-        sendRead();
+        sendRead.cancel();
         setSending(false);
         setSendError("");
         setSentTo("");
     };
 
-    const selectGuild = async (guildId: string) => {
-        const current = detailRead();
-        // reloading the server on screen (Refresh) keeps it, and what was typed or found in it, in place
-        const reloading = detail()?.id === guildId;
-        setSelectedId(guildId);
-        setShownId(guildId);
-        setDetailError("");
-        if (!reloading) {
-            memberRead();
-            dropSend();
-            setMembersLoading(false);
-            setDetail(null);
-            setMembers(null);
-            setMembersError("");
+    const selectGuild = (guildId: string) => {
+        // a server's page opened again keeps what was typed or found in it
+        if (detail()?.id !== guildId) {
+            detailRead.set(undefined);
+            setSearch(null);
+            membersRead.set(undefined);
             setMemberQuery("");
+            dropSend();
         }
-        setDetailLoading(true);
-        try {
-            const next = await botCreator.calls.getGuildDetail({ bot: bot(), guildId });
-            if (!current()) return;
-            setDetail(next);
-            if (!reloading || !textChannels().some((channel) => channel.id === channelId())) {
-                setChannelId(textChannels()[0]?.id ?? "");
-            }
-        } catch (err) {
-            if (!current()) return;
-            console.error("[Servers] guild detail read failed:", err);
-            setDetailError(errorMessage(err));
-        } finally {
-            if (current()) setDetailLoading(false);
-        }
-    };
-
-    const refresh = () => {
-        const id = selectedId();
-        if (id) void selectGuild(id);
+        setShownId(guildId);
+        setSelectedId(guildId);
     };
 
     // the open server follows what is announced of it: read again when it
@@ -173,47 +147,29 @@ export default function Servers(props: { bot: () => BotSummary }) {
     };
     createEffect(on(announced, (now, before) => {
         if (!before) return;
-        if (now) void selectGuild(selectedId()!);
+        if (now) void detailRead.reload();
         else closeServer();
     }, { defer: true }));
 
     // the page is gone: what it showed goes with it
     const clearServer = () => {
         setShownId(null);
-        setDetail(null);
-        setMembers(null);
+        detailRead.set(undefined);
+        membersRead.set(undefined);
     };
 
     const closeServer = () => {
         // an answer still on its way is for a page that is no longer open
-        detailRead();
-        memberRead();
-        dropSend();
-        setDetailLoading(false);
-        setMembersLoading(false);
         setSelectedId(null);
+        setSearch(null);
+        dropSend();
         // a phone's page clears once it has slid away (onClosed)
         if (!compact()) clearServer();
     };
 
-    const searchMembers = async () => {
-        const id = selectedId();
-        if (!id) return;
-        const current = memberRead();
-        setMembersLoading(true);
-        setMembersError("");
-        try {
-            const found = await botCreator.calls.searchGuildMembers({ bot: bot(), guildId: id, query: memberQuery() });
-            if (!current()) return;
-            setMembers(found);
-        } catch (err) {
-            if (!current()) return;
-            console.error("[Servers] member search failed:", err);
-            setMembers(null);
-            setMembersError(errorMessage(err));
-        } finally {
-            if (current()) setMembersLoading(false);
-        }
+    const searchMembers = () => {
+        const guildId = selectedId();
+        if (guildId) setSearch({ guildId, query: memberQuery() });
     };
 
     const sendTest = async () => {
@@ -297,7 +253,7 @@ export default function Servers(props: { bot: () => BotSummary }) {
                         All servers
                     </PaperButton>
                 </Show>
-                <PaperButton disabled={detailLoading()} onClick={refresh}>
+                <PaperButton disabled={detailRead.loading()} onClick={() => void detailRead.reload()}>
                     <PaperIcon>refresh</PaperIcon>
                     Refresh
                 </PaperButton>
@@ -305,7 +261,7 @@ export default function Servers(props: { bot: () => BotSummary }) {
 
             {status()}
 
-            <Show when={detailLoading() && !detail()}>
+            <Show when={detailRead.loading() && !detail()}>
                 <PaperCard>
                     <PaperFlex padding="double" center>
                         <PaperText preset="hint">
@@ -410,15 +366,15 @@ export default function Servers(props: { bot: () => BotSummary }) {
                                                 setMemberQuery(e.currentTarget.value)
                                             }
                                             onKeyDown={(e) => {
-                                                if (e.key === "Enter") void searchMembers();
+                                                if (e.key === "Enter") searchMembers();
                                             }}
                                         />
                                     </PaperFlex>
                                     <PaperButton
-                                        disabled={membersLoading()}
-                                        onClick={() => void searchMembers()}>
+                                        disabled={membersRead.loading()}
+                                        onClick={searchMembers}>
                                         <PaperIcon>search</PaperIcon>
-                                        {membersLoading() ? "Searching…" : "Search"}
+                                        {membersRead.loading() ? "Searching…" : "Search"}
                                     </PaperButton>
                                 </PaperFlex>
 
@@ -428,7 +384,7 @@ export default function Servers(props: { bot: () => BotSummary }) {
                                     </PaperQuote>
                                 </Show>
 
-                                <Show when={members() !== null}>
+                                <Show when={members()}>
                                     <Show
                                         when={members()!.length > 0}
                                         fallback={
@@ -470,7 +426,7 @@ export default function Servers(props: { bot: () => BotSummary }) {
                                         name="testChannel"
                                         fullWidth
                                         value={channelId()}
-                                        onValueChange={(val) => setChannelId(String(val))}
+                                        onValueChange={(val) => setPickedChannel(String(val))}
                                     >
                                         <For each={textChannels()}>
                                             {(channel) => (
@@ -554,7 +510,7 @@ export default function Servers(props: { bot: () => BotSummary }) {
                                     title={guild.name}
                                     subtitle={count(guild.memberCount, "member")}
                                     description={`${count(guild.channelCount, "channel")} · ${count(guild.roleCount, "role")}`}
-                                    onClick={() => void selectGuild(guild.id)}
+                                    onClick={() => selectGuild(guild.id)}
                                 />
                             )}
                         </For>

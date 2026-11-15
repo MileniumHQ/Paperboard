@@ -18,8 +18,8 @@ import {
     PaperWidgetDot,
     PaperWidgetMessage,
     PaperWidgetStat,
-    createLatest,
-    createStateSignal,
+    createPolling,
+    createRead,
 } from "@mileniumhq/paperui";
 import { defineWidgets, type WidgetContext, errorMessage } from "@mileniumhq/paperapi";
 import { botCreator } from "./client";
@@ -31,46 +31,17 @@ import { picture } from "./picture";
 const STATUS_POLL_MS = 15_000;
 const ACTIVITY_POLL_MS = 60_000;
 
-type Load<T> = { kind: "loading" } | { kind: "ready"; value: T } | { kind: "failed"; message: string };
-
 // reads the service now and every `ms` while the widget is visible; nothing
 // runs while Home is hidden or the widget is scrolled away. A read that
 // says what the last one said changes nothing on screen.
 function createPolledRead<T>(widget: WidgetContext, ms: number, read: () => Promise<T>) {
-    const [state, setState] = createStateSignal<Load<T>>({ kind: "loading" });
-    let timer: ReturnType<typeof setInterval> | undefined;
-    const latest = createLatest();
-    const refresh = async () => {
-        const current = latest();
-        try {
-            const value = await read();
-            if (current()) setState({ kind: "ready", value });
-        } catch (err) {
-            if (current()) setState({ kind: "failed", message: errorMessage(err) });
-        }
-    };
-    const sync = (visible: boolean) => {
-        clearInterval(timer);
-        timer = undefined;
-        if (!visible) return;
-        void refresh();
-        timer = setInterval(() => void refresh(), ms);
-    };
-    const off = widget.onVisibilityChange(sync);
-    sync(widget.visible());
-    onCleanup(() => {
-        off();
-        clearInterval(timer);
-    });
-    const ready = () => {
-        const s = state();
-        return s.kind === "ready" ? s.value : null;
-    };
-    const failed = () => {
-        const s = state();
-        return s.kind === "failed" ? s.message : null;
-    };
-    return { ready, failed, refresh };
+    const [visible, setVisible] = createSignal(widget.visible());
+    onCleanup(widget.onVisibilityChange(setVisible));
+    const polled = createRead(read, { source: visible });
+    createEffect(on(visible, (shown) => shown && createPolling(polled.reload, ms)));
+    // a failed read is shown as the failure, never as the last answer
+    const ready = () => (polled.error() ? null : polled.value() ?? null);
+    return { ready, failed: polled.error, refresh: polled.reload };
 }
 
 function createSize(widget: WidgetContext) {
