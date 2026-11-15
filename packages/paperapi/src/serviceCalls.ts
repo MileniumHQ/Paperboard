@@ -34,9 +34,9 @@ export const callBlockId = (name: string): string => internalId("call-", name, "
 export const eventBlockId = (name: string): string => internalId("emit-", name, "service event");
 
 /**
- * What a panel's page uses to reach its own service: the calls its
- * definePanelService declares, and the events it emits. Another panel is
- * refused both.
+ * @deprecated Untyped calls by name: declare them in a contract
+ * (defineContract) and reach them with serviceClient. Kept only while Game
+ * Server and Agents move.
  */
 export const serviceApi = {
     /** Runs one of the service's calls with its input, and gives back what it returned. */

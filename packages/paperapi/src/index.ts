@@ -38,6 +38,7 @@ export * from "./actions";
 export * from "./blocks";
 export * from "./service";
 export * from "./serviceCalls";
+export * from "./contract";
 export * from "./bridge";
 export * from "./channels";
 export * from "./protocol";

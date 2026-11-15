@@ -588,7 +588,8 @@ function coreProblem(name: CoreType | "any", value: unknown): string | null {
     }
 }
 
-function describeValue(value: unknown): string {
+/** A value as a sentence names it ("the text \"hi\"", "a list"), for a problem that says what it got. */
+export function describeValue(value: unknown): string {
     if (value === null) return "nothing";
     if (value === undefined) return "nothing";
     if (Array.isArray(value)) return "a list";

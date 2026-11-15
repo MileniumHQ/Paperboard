@@ -100,9 +100,11 @@ export function createPanelBridge<
         getState: () => localState,
         refreshState,
         onStateChange,
+        /** @deprecated untyped: reach the service with serviceClient(contract) */
         calls: callsProxy,
+        /** @deprecated untyped: reach the service with serviceClient(contract) */
         call: <R = unknown>(name: string, input?: unknown): Promise<R> => serviceApi.call<R>(panelId, name, input),
-        /** hears an event the service emits */
+        /** @deprecated untyped: hear the service with serviceClient(contract).on */
         on: <T = unknown>(event: string, callback: (payload: T) => void): (() => void) => serviceApi.on<T>(panelId, event, callback),
         dispose,
     };

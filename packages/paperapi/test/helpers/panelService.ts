@@ -6,6 +6,7 @@ import { blocksApi } from "../../src/blocks";
 import { definePanelService } from "../../src/service";
 import { serviceApi } from "../../src/serviceCalls";
 import { getPanelId } from "../../src/ipc";
+import { notesContract } from "./contract";
 
 const panelId = getPanelId();
 if (!panelId) throw new Error("the panel service booted without a panel id");
@@ -248,6 +249,42 @@ async function caller(): Promise<void> {
     });
 }
 
+// a panel service on a contract: the same page and service, typed and checked
+async function notes(): Promise<void> {
+    const notes: { id: string; book: string; text: string; pinned: boolean }[] = [];
+    let handlerRuns = 0;
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => (release = resolve));
+    const service = definePanelService({
+        contract: notesContract,
+        calls: {
+            addNote: (input, ctx, { book }) => {
+                handlerRuns++;
+                const note = { id: `n${notes.length + 1}`, book, text: input.text, pinned: input.pinned ?? false };
+                notes.push(note);
+                ctx.setState({ count: ctx.state.count + 1, last: note.text });
+                ctx.emit("noteAdded", note);
+                return note;
+            },
+            listNotes: (_input, _ctx, { book }) => {
+                handlerRuns++;
+                return notes.filter((n) => n.book === book);
+            },
+            clear: () => {
+                handlerRuns++;
+                notes.length = 0;
+            },
+            handlerRuns: () => handlerRuns,
+            // what an untyped handler could always do: answer what the page doesn't expect
+            brokenAnswer: () => JSON.parse('{"id":"n0","book":"b","text":7,"pinned":false}'),
+            brokenState: (_input, ctx) => ctx.setState(JSON.parse('{"count":"many"}')),
+            held: () => held,
+            release: () => release(),
+        },
+    });
+    await service.ready;
+}
+
 // a service whose start fails: it never reports ready
 async function brokenInit(): Promise<void> {
     definePanelService({
@@ -259,7 +296,7 @@ async function brokenInit(): Promise<void> {
     await new Promise(() => {});
 }
 
-const scenarios: Record<string, () => Promise<void>> = { inputs, owner, blocks, caller, service, brokenInit };
+const scenarios: Record<string, () => Promise<void>> = { inputs, owner, blocks, caller, service, notes, brokenInit };
 const scenario = scenarios[process.env.PANEL_SCENARIO ?? ""];
 if (!scenario) throw new Error(`unknown PANEL_SCENARIO ${process.env.PANEL_SCENARIO}`);
 await scenario();
