@@ -12,8 +12,8 @@
 //   commands.ts      making and removing slash commands
 //   lifecycle.ts     adding, starting, switching, re-tokening, deleting a bot
 //   calls.ts         the page's calls and the panel's bot blocks
-import { definePanelService, type ServiceContext, errorMessage } from "@mileniumhq/paperapi";
-import { PANEL_ID, type BotsServiceState } from "./bots";
+import { definePanelService, errorMessage } from "@mileniumhq/paperapi";
+import { botCreatorContract } from "./contract";
 import { bots, panel, publish, reportFailure } from "./registry";
 import { forgetStrayTokens, loadBots, rememberGuideSeen } from "./persistence";
 import { createEntry, registerPanelBlocks } from "./blocksBridge";
@@ -32,14 +32,13 @@ function startBots<T>(entries: Iterable<T>, start: (entry: T) => Promise<void>):
 }
 
 export const botService = definePanelService({
-    id: PANEL_ID,
-    state: { bots: [], botsError: null, setupGuideSeen: true } as BotsServiceState,
+    contract: botCreatorContract,
     calls: serviceCalls,
     widgetChoices: {
         "bot-status": { bot: botChoices },
         "command-activity": { bot: botChoices },
     },
-    async onInit(ctx: ServiceContext<BotsServiceState>) {
+    async onInit(ctx) {
         panel.ctx = ctx;
         try {
             await loadBots(createEntry);

@@ -16,8 +16,9 @@ import {
     createPolling,
     createLatest,
 } from "@mileniumhq/paperui";
-import { serviceApi, errorMessage } from "@mileniumhq/paperapi";
-import { PANEL_ID, type BotSummary } from "../bots";
+import { errorMessage } from "@mileniumhq/paperapi";
+import type { BotSummary } from "../bots";
+import { botCreator } from "../client";
 import {
     appendCapped,
     formatDuration,
@@ -62,14 +63,11 @@ export default function Overview(props: OverviewProps) {
         heardSince = [];
         setInfoError("");
         try {
-            const info = await serviceApi.call<any>(PANEL_ID, "getBotInfo", { bot: props.bot().id });
+            const info = await botCreator.calls.getBotInfo({ bot: props.bot().id });
             if (!current()) return;
-            if (!info || typeof info !== "object") throw new Error("getBotInfo returned no bot details");
-            setTag(typeof info.tag === "string" ? info.tag : "");
-            if (Array.isArray(info.recentMessages)) {
-                const known = new Set(info.recentMessages.map((m: RecentMessage) => m.messageId));
-                setRecent(heardSince.filter((m) => !known.has(m.messageId)).reduce((list, m) => appendCapped(list, m, RECENT_MESSAGE_CAP), info.recentMessages as RecentMessage[]));
-            }
+            setTag(info.tag);
+            const known = new Set(info.recentMessages.map((m) => m.messageId));
+            setRecent(heardSince.filter((m) => !known.has(m.messageId)).reduce((list, m) => appendCapped(list, m, RECENT_MESSAGE_CAP), info.recentMessages));
         } catch (err) {
             if (!current()) return;
             console.error("[Overview] bot info read failed:", err);
@@ -80,11 +78,8 @@ export default function Overview(props: OverviewProps) {
     const loadHealth = async () => {
         const current = healthRead();
         try {
-            const next = await serviceApi.call<Health>(PANEL_ID, "getHealth", { bot: props.bot().id });
+            const next = await botCreator.calls.getHealth({ bot: props.bot().id });
             if (!current()) return;
-            if (!next || typeof next !== "object") {
-                throw new Error("getHealth returned no health payload");
-            }
             setHealth(next);
             setHealthError("");
         } catch (err) {
@@ -110,16 +105,8 @@ export default function Overview(props: OverviewProps) {
     // came to; the subscription is cleaned up with the component (bounded:
     // no listener outlives it)
     onCleanup(
-        serviceApi.on(PANEL_ID, "message", (msg: any) => {
-            if (!msg || typeof msg !== "object" || msg.bot !== props.bot().id) return;
-            const heard: RecentMessage = {
-                content: String(msg.content ?? ""),
-                author: String(msg.author ?? ""),
-                authorId: String(msg.authorId ?? ""),
-                channelId: String(msg.channelId ?? ""),
-                guildId: msg.guildId ?? null,
-                messageId: String(msg.messageId ?? ""),
-            };
+        botCreator.events.message(({ bot, ...heard }) => {
+            if (bot !== props.bot().id) return;
             heardSince = appendCapped(heardSince, heard, RECENT_MESSAGE_CAP);
             setRecent(appendCapped(recent(), heard, RECENT_MESSAGE_CAP));
         }),

@@ -1,9 +1,9 @@
 import { afterAll, afterEach, beforeAll, describe, expect, setDefaultTimeout, test } from "bun:test";
 import * as path from "node:path";
-import { blocksApi, serviceApi } from "@mileniumhq/paperapi";
+import { blocksApi } from "@mileniumhq/paperapi";
 import type { BotsServiceState } from "../src/bots";
 import { startFakeDiscord, type FakeDiscord } from "./helpers/discord";
-import { PANEL_ID, savedBots, startService, stopServices, storedBot } from "./helpers/service";
+import { call, PANEL_ID, savedBots, startService, stopServices, storedBot } from "./helpers/service";
 import { stateWhere } from "./helpers/wait";
 
 // each wait below has its own bound; a test as a whole may take longer than bun's 5 s default
@@ -48,7 +48,7 @@ describe("ready doesn't wait for Discord", () => {
         expect(byId["b-tokenless"]).toMatchObject({ connected: false, connecting: false, hasToken: false, lastError: "No token is saved for this bot. Replace its token in Configuration." });
         expect(service.output()).toContain("Bot b-broken didn't connect: Discord login failed: An invalid token was provided.");
         // the stuck bot is still connecting: its login is Discord's to finish
-        expect(await serviceApi.call(PANEL_ID, "getBotInfo", { bot: "b-stuck" })).toMatchObject({ connected: false, lastError: null });
+        expect(await call.getBotInfo({ bot: "b-stuck" })).toMatchObject({ connected: false, lastError: null });
     });
 });
 

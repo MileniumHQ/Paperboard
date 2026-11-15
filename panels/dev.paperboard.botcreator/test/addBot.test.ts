@@ -23,7 +23,7 @@ afterEach(stopServices);
 /** What the page does to add a bot: the token in the vault, then the call. */
 async function add(id: string, token: string) {
     await secretsApi.set(tokenName(id), token, PANEL_ID);
-    return call("addBot", { bot: id });
+    return call.addBot({ bot: id });
 }
 
 /** Nothing is left of a bot that wasn't added: no token and no Blocks project. */
@@ -81,7 +81,7 @@ describe("replacing a bot's token", () => {
     /** What the page does to replace a token: the new one beside the saved one, then the call. */
     async function replace(id: string, token: string) {
         await secretsApi.set(newTokenName(id), token, PANEL_ID);
-        return call("replaceToken", { bot: id });
+        return call.replaceToken({ bot: id });
     }
 
     test("a bot with no token connects once a new one is saved", async () => {

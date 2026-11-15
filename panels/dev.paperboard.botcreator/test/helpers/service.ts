@@ -6,7 +6,8 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { secretsApi, serviceApi } from "@mileniumhq/paperapi";
+import { secretsApi, serviceClient } from "@mileniumhq/paperapi";
+import { botCreatorContract } from "../../src/contract";
 import { PANEL_ID, tokenName, type StoredBot } from "../../src/bots";
 import { testDaemon } from "./daemon";
 import { within } from "./wait";
@@ -88,7 +89,5 @@ export async function startService(options: { discordApi: string; entry?: string
     return service;
 }
 
-/** One of the service's own calls, as the panel's page makes it. */
-export function call<T = any>(name: string, input: Record<string, unknown> = {}): Promise<T> {
-    return serviceApi.call<T>(PANEL_ID, name, input);
-}
+/** The service's own calls, as the panel's page makes them: through its contract. */
+export const call = serviceClient(botCreatorContract).calls;

@@ -55,7 +55,7 @@ describe("Bot Creator is run from Blocks by the panel's own blocks", () => {
             // as Bot Creator adds one: the token to the vault, then the bot by its id
             const bot = createBotId();
             await secretsApi.set(tokenName(bot), fake.token, PANEL_ID);
-            expect((await call<{ id: string }>("add-bot", { bot })).id).toBe(bot);
+            expect((await call.addBot({ bot })).id).toBe(bot);
             expect(await added.next()).toEqual({ bot });
             expect(await online.next()).toEqual({ bot });
             expect(await read("bots")).toEqual([bot]);

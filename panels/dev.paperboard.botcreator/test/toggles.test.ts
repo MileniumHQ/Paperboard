@@ -93,7 +93,7 @@ describe("a bot's on switch", () => {
             }
             expect(await page.evaluate<string>(`document.body.innerText`)).toMatch(/Could not save the bots: .*(EACCES|permission denied)/i);
             // the next announcement still has the bot on, as it is saved
-            await call("markSetupGuideSeen");
+            await call.markSetupGuideSeen();
             await page.waitFor(`document.body.innerText.includes("Gateway status")`, "the Overview after the next announcement");
             expect(await page.evaluate<string | null>(`${overview}.getAttribute("aria-checked")`)).toBe("true");
             expect(await page.evaluate<string | null>(`[...document.querySelectorAll("dt")].find((dt) => dt.textContent === "Gateway status")?.nextElementSibling?.textContent ?? null`)).toBe("Connected");

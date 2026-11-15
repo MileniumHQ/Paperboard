@@ -8,7 +8,7 @@ import { botBlocks, valueChanges, type BotBlocksHost } from "./blocks/bot";
 import { blockEvent, commandEvent, staticEvents } from "./blocks/events";
 import { botStatus, panelBlocks, type BotsBlocksHost } from "./blocks/bots";
 import { PANEL_ID, type StoredBot } from "./bots";
-import { BotSession } from "./session";
+import { BotSession, type RecentMessage } from "./session";
 import { appIdOf, bots, panel, publish, reportBotProblem, reportFailure, summary, type BotEntry } from "./registry";
 import { saveBots } from "./persistence";
 
@@ -35,12 +35,14 @@ export async function registerPanelBlocks(host: BotsBlocksHost): Promise<void> {
 function sessionHost(id: string, entry: () => BotEntry) {
     return {
         emit(trigger: string, output: unknown) {
-            // a bot's Overview shows its messages live
-            if (trigger === "on-message") panel.ctx?.emit("message", { bot: id, ...(output as object) });
             void fireBlocksEvent(entry(), trigger, output);
             if (trigger === "on-connection-error" && bots.has(id)) {
                 firePanelEvent("bot-connection-failed", { bot: id, error: String((output as { error?: unknown } | null)?.error ?? "") });
             }
+        },
+        // a bot's Overview shows its messages live
+        heard(message: RecentMessage) {
+            panel.ctx?.emit("message", { bot: id, ...message });
         },
         changed() {
             const known = bots.get(id);

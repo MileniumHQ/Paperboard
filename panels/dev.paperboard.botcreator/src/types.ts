@@ -1,4 +1,6 @@
 import { errorMessage } from "@mileniumhq/paperapi";
+export type { CommandMutationResult, DiscordChannelKind, GuildChannel, GuildDetail, GuildSummary, Health, MemberSummary, SlashCommandDefinition, SlashCommandOption } from "./contract";
+import type { DiscordChannelKind, SlashCommandDefinition, SlashCommandOption } from "./contract";
 
 // shared with the service's ring buffer so the UI subscription caps
 // recent messages with the exact same bound (one invariant, one number)
@@ -84,39 +86,6 @@ export const COMMAND_OPTION_TYPE_LABELS: Record<CommandOptionType, string> = {
 // Discord's hard cap per command; enforced at the boundary so stored config
 // can never ask for more than the API accepts
 export const MAX_COMMAND_OPTIONS = 25;
-
-export interface SlashCommandOption {
-    id: string;
-    name: string;
-    description: string;
-    type: CommandOptionType;
-    required: boolean;
-}
-
-export interface SlashCommandDefinition {
-    id: string;
-    name: string;
-    description: string;
-    /** GLOBAL_SCOPE or a Discord guild id */
-    scope: string;
-    options: SlashCommandOption[];
-    /**
-     * Also available to users who installed the app on their account, not
-     * just servers the bot is in. Discord only honors installation
-     * contexts on globally-scoped commands, so this is global-only.
-     */
-    userInstall: boolean;
-}
-
-export interface CommandMutationResult {
-    command: SlashCommandDefinition;
-    /** true when the command is live on Discord right now */
-    registered: boolean;
-    /** why it is not live, if it is not */
-    syncError: string | null;
-    /** why its trigger is not registered, if it is not */
-    triggerError: string | null;
-}
 
 function isCommandOptionType(value: unknown): value is CommandOptionType {
     return (
@@ -303,18 +272,6 @@ export function readStoredCommands(raw: unknown): SlashCommandDefinition[] {
 // server explorer
 // ---------------------------------------------------------------------------
 
-// the service maps Discord's numeric ChannelType to these names so the UI
-// never has to import discord.js
-export type DiscordChannelKind =
-    | "text"
-    | "voice"
-    | "category"
-    | "announcement"
-    | "stage"
-    | "forum"
-    | "media"
-    | "other";
-
 export const CHANNEL_KIND_LABELS: Record<DiscordChannelKind, string> = {
     text: "Text",
     voice: "Voice",
@@ -343,65 +300,6 @@ export function formatDuration(ms: number): string {
 // wire shapes shared by the service and the UI: the service fills them from
 // discord.js, the UI renders them, and neither side redefines the other's
 // fields (drift between the two is how a dashboard starts lying)
-
-export interface Health {
-    connected: boolean;
-    lastError: string | null;
-    uptimeMs: number;
-    wsPing: number;
-    wsStatus: number;
-    guildCount: number;
-    cachedUsers: number;
-    cachedChannels: number;
-    commandsReceived: number;
-    pendingInteractions: number;
-}
-
-export interface GuildSummary {
-    id: string;
-    name: string;
-    icon: string;
-    memberCount: number;
-    channelCount: number;
-    roleCount: number;
-    ownerId: string;
-}
-
-export interface GuildChannel {
-    id: string;
-    name: string;
-    kind: DiscordChannelKind;
-    parentId: string | null;
-    position: number;
-}
-
-interface GuildRole {
-    id: string;
-    name: string;
-    color: number;
-    position: number;
-    managed: boolean;
-}
-
-export interface GuildDetail {
-    id: string;
-    name: string;
-    icon: string;
-    memberCount: number;
-    ownerId: string;
-    createdAt: string;
-    channels: GuildChannel[];
-    roles: GuildRole[];
-}
-
-export interface MemberSummary {
-    id: string;
-    username: string;
-    displayName: string;
-    avatar: string;
-    joinedAt: string | null;
-    bot: boolean;
-}
 
 export function extractApplicationIdFromToken(token: string): string | null {
     if (!token) return null;

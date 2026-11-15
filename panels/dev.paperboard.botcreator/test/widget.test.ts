@@ -132,12 +132,12 @@ describe("the Bot status widget", () => {
 
             // the bot is put right and turned on in Bot Creator, not from the tile
             await secretsApi.set(tokenName("b-recovered"), fake.token, PANEL_ID);
-            await call("connectBot", { bot: "b-recovered" });
+            await call.connectBot({ bot: "b-recovered" });
             await reread();
             await page.waitFor(`${shown}.includes("server")`, "the tile to show the bot online");
 
             // and turned off again: it's off, not failing
-            await call("disconnectBot", { bot: "b-recovered" });
+            await call.disconnectBot({ bot: "b-recovered" });
             await reread();
             await page.waitFor(`${shown}.includes("Offline")`, "the tile to say the bot is offline");
             expect(await page.evaluate<string>(shown)).not.toContain("Couldn't connect");
@@ -159,7 +159,7 @@ describe("the Bot status widget", () => {
             // the bot it names is added after all
             const fake = discord.addBot({ username: "Late" });
             await secretsApi.set(tokenName("b-late"), fake.token, PANEL_ID);
-            await call("addBot", { bot: "b-late" });
+            await call.addBot({ bot: "b-late" });
             await press(page, "Retry");
             await page.waitFor(`${shown}.includes("Late")`, "the tile to show the bot after Retry");
             expect(await page.evaluate<string>(shown)).not.toContain("Couldn't load status");

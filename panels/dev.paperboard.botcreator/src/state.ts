@@ -1,41 +1,38 @@
 // The bot list as every window sees it: the service's state, kept live
-// through the panel bridge, and the changes a person makes to it. Every
+// through the panel's contract, and the changes a person makes to it. Every
 // change goes through the service, which saves the list and announces it.
 import { createSignal, onCleanup } from "solid-js";
 import { createStore, reconcile } from "solid-js/store";
-import { createPanelBridge, secretsApi, errorMessage } from "@mileniumhq/paperapi";
-import { byCreation, createBotId, newTokenName, PANEL_ID, tokenName, type BotSummary, type BotsServiceState, type DeleteBotResult } from "./bots";
-
-const DEFAULT_STATE: BotsServiceState = { bots: [], botsError: null, setupGuideSeen: true };
+import { secretsApi, errorMessage, serviceClient } from "@mileniumhq/paperapi";
+import { byCreation, createBotId, newTokenName, PANEL_ID, tokenName, type BotSummary, type BotsServiceState } from "./bots";
+import { botCreatorContract } from "./contract";
 
 export type BotsState = ReturnType<typeof createBots>;
 
 export function createBots() {
-    const bridge = createPanelBridge<BotsServiceState>({ panelId: PANEL_ID, defaultState: DEFAULT_STATE });
+    const { calls, state: service } = serviceClient(botCreatorContract);
     // reconciled by id, so a bot keeps its object across announcements and
     // its card stays mounted: a remounted switch would skip its slide
-    const [state, setState] = createStore<BotsServiceState>(structuredClone(bridge.getState()));
+    const [state, setState] = createStore<BotsServiceState>(structuredClone(service.current()));
     const apply = (full: BotsServiceState) => setState(reconcile(structuredClone(full), { key: "id" }));
     const [ready, setReady] = createSignal(false);
     const [loadError, setLoadError] = createSignal<string | null>(null);
-    const off = bridge.onStateChange((_patch, full) => apply(full));
+    const off = service.subscribe(apply);
     onCleanup(() => {
         off();
-        bridge.dispose();
+        service.dispose();
     });
 
     const load = async () => {
         setLoadError(null);
         try {
-            apply(await bridge.refreshState());
+            apply(await service.refresh());
             setReady(true);
         } catch (err) {
             setLoadError(errorMessage(err));
         }
     };
     void load();
-
-    const call = <T>(name: string, input: Record<string, unknown>) => bridge.call<T>(name, input);
 
     return {
         state: () => state,
@@ -52,7 +49,7 @@ export function createBots() {
         add: async (token: string) => {
             const id = createBotId();
             await secretsApi.set(tokenName(id), token, PANEL_ID);
-            return call<BotSummary>("addBot", { bot: id });
+            return calls.addBot({ bot: id });
         },
         /**
          * Gives the service a new token for the same bot, in the vault beside
@@ -61,12 +58,12 @@ export function createBots() {
          */
         replaceToken: async (bot: string, token: string) => {
             await secretsApi.set(newTokenName(bot), token, PANEL_ID);
-            return call<boolean>("replaceToken", { bot });
+            return calls.replaceToken({ bot });
         },
         /** the setup guide was finished or skipped: it never shows again */
-        markSetupGuideSeen: () => call<boolean>("markSetupGuideSeen", {}),
-        setEnabled: (bot: string, enabled: boolean) => call<boolean>(enabled ? "connectBot" : "disconnectBot", { bot }),
+        markSetupGuideSeen: () => calls.markSetupGuideSeen(),
+        setEnabled: (bot: string, enabled: boolean) => (enabled ? calls.connectBot({ bot }) : calls.disconnectBot({ bot })),
         /** `anyway` deletes it even though Discord refused to take its slash commands off */
-        remove: (bot: string, anyway = false) => call<DeleteBotResult>("deleteBot", { bot, anyway }),
+        remove: (bot: string, anyway = false) => calls.deleteBot({ bot, anyway }),
     };
 }

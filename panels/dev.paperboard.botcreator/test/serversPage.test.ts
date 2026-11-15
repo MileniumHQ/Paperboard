@@ -141,7 +141,7 @@ describe("a test message's answer", () => {
             // the bot's next message to Home queues behind the held one, so once it is
             // answered Home's answer has left the service; a Refresh answered after that
             // reaches the page behind it
-            await call("sendMessage", { bot: "b-keep", channel: home.channels[0]!.id, content: "after" });
+            await call.sendMessage({ bot: "b-keep", channel: home.channels[0]!.id, content: "after" });
             await clickText(page, "button", "Refresh");
             await page.waitFor(`[...document.querySelectorAll("button")].some((b) => b.innerText.includes("Refresh") && !b.disabled)`, "the refresh");
             const text = await page.evaluate<string>(`document.body.innerText`);
@@ -172,7 +172,7 @@ describe("the server list follows the bot", () => {
             await page.click(`input[name=botMenu][value="servers"]`);
             await page.waitFor(`document.body.innerText.includes("Bot offline")`, "the offline bot's servers");
 
-            await call("connectBot", { bot: "b-sleep" });
+            await call.connectBot({ bot: "b-sleep" });
             await page.waitFor(`document.body.innerText.includes("1 member") && !document.body.innerText.includes("Bot offline")`, "the bot's servers once it is on");
             const card = `([...document.querySelectorAll("[class*=card], [class*=Card]")].filter((el) => /Home|Hearth/.test(el.innerText ?? "")).at(-1) ?? null)`;
             await page.evaluate(`window.homeCard = ${card}`);

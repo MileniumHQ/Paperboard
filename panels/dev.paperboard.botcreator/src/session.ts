@@ -2,6 +2,8 @@
 // interactions, recent messages and slash-command sync. Every bot gets its
 // own, so two bots share nothing but the code; the service owns the list
 // and tells each session where its triggers go.
+export type { BotWidgetStatus, RecentMessage } from "./contract";
+import type { BotWidgetStatus, RecentMessage } from "./contract";
 import type { Client, ChatInputCommandInteraction, RepliableInteraction } from "discord.js";
 import { discord, discordApiBase, discordCdnBase, loadDiscord, tokenRest } from "./discord";
 import {
@@ -37,29 +39,12 @@ interface ConnectionStatus {
     error?: string;
 }
 
-export interface RecentMessage {
-    content: string;
-    author: string;
-    authorId: string;
-    channelId: string;
-    guildId: string | null;
-    messageId: string;
-}
-
-export interface BotWidgetStatus {
-    /** a token is saved for this bot; false means it needs one */
-    configured: boolean;
-    connected: boolean;
-    lastError: string | null;
-    name: string;
-    avatar: string;
-    guildCount: number;
-}
-
 /** Where a session's events go: the service maps them to the bot's project. */
 interface SessionHost {
     /** fires one of this bot's triggers, by its id inside the bot's project */
     emit(trigger: string, output: unknown): void;
+    /** a message the bot heard, for its Overview */
+    heard(message: RecentMessage): void;
     /** the bot's identity, connection or servers changed; the service republishes it */
     changed(): void;
     /** something went wrong with no button waiting to say it (a sentence about the bot); the service tells the person */
@@ -509,7 +494,10 @@ export class BotSession {
         relayEvents(on, {
             emit: (trigger, output) => this.emit(trigger, output),
             changed: () => this.host.changed(),
-            heard: (message) => this.recordRecentMessage(message),
+            heard: (message) => {
+                this.recordRecentMessage(message);
+                this.host.heard(message);
+            },
             noteProblem: (text) => this.noteProblem(text),
         });
         this.routeInteractions(on);

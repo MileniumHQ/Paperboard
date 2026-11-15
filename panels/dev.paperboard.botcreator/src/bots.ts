@@ -4,6 +4,8 @@
 // the panel and their tests share one implementation.
 import { readStoredCommands, type GuildSummary, type SlashCommandDefinition } from "./types";
 import { errorMessage } from "@mileniumhq/paperapi";
+import type { BotSummary } from "./contract";
+export type { BotSummary, BotsServiceState, DeleteBotResult } from "./contract";
 
 export const PANEL_ID = "dev.paperboard.botcreator";
 export const BOTS_VERSION = 2;
@@ -30,44 +32,6 @@ export interface StoredBot {
 interface BotsConfig {
     version: number;
     bots: StoredBot[];
-}
-
-/** What every window sees of a bot: its saved identity and its live state. */
-export interface BotSummary {
-    id: string;
-    name: string;
-    avatar: string;
-    applicationId: string;
-    enabled: boolean;
-    connected: boolean;
-    /** logging in to Discord, not connected yet */
-    connecting: boolean;
-    /** a token is in the vault; without one the bot can't connect */
-    hasToken: boolean;
-    lastError: string | null;
-    guildCount: number;
-    /** the servers it is in now (the first 100); none while it isn't connected */
-    guilds: GuildSummary[];
-    createdAt: number;
-    /**
-     * Its saved slash commands, however they were made (the Commands tab, a
-     * Blocks flow, another window): announced with every change, so an open
-     * Commands tab follows them
-     */
-    commands: SlashCommandDefinition[];
-    /** why its commands aren't all on Discord, as of the last sync; null when they are */
-    commandSyncError: string | null;
-}
-
-/** What deleting a bot came to: deleted, or kept because Discord refused to take its slash commands off. */
-export type DeleteBotResult = { deleted: string } | { refused: string };
-
-export interface BotsServiceState {
-    bots: BotSummary[];
-    /** why the saved bots could not be read; nothing is written over them meanwhile */
-    botsError: string | null;
-    /** the setup guide for making a Discord application has been finished or skipped; it shows once */
-    setupGuideSeen: boolean;
 }
 
 /** the config field that keeps the setup guide from showing again */

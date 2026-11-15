@@ -41,7 +41,7 @@ describe("a bot's page", () => {
     test("New bot opens the added bot, whose avatar the service fetched: the page asks nothing of Discord", async () => {
         await savedBots([]);
         await startService({ discordApi: discord.api });
-        await call("markSetupGuideSeen");
+        await call.markSetupGuideSeen();
         const fake = discord.addBot({ username: "Newcomer" });
         const served = await servePanel();
         const page = await browser.open("about:blank");
@@ -113,7 +113,7 @@ describe("a bot's page", () => {
     test("a bot being added keeps its dialog until the service answers, then opens", async () => {
         await savedBots([]);
         await startService({ discordApi: discord.api });
-        await call("markSetupGuideSeen");
+        await call.markSetupGuideSeen();
         const fake = discord.addBot({ username: "Patient" });
         const served = await servePanel();
         const page = await browser.open(served.url);

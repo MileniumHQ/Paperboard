@@ -1,7 +1,8 @@
 // The bots the service runs, and what every window is told of them. Each
 // entry pairs a saved bot with its live session; the rest of the service
 // (persistence, Blocks, commands, the bot flows, the calls) works on these.
-import type { BlocksProjectHandle, ServiceContext } from "@mileniumhq/paperapi";
+import type { BlocksProjectHandle, ContractContext } from "@mileniumhq/paperapi";
+import type { botCreatorContract } from "./contract";
 import { isBotId, PANEL_ID, SETUP_GUIDE_FIELD, type BotSummary, type BotsServiceState, type StoredBot } from "./bots";
 import type { BotSession } from "./session";
 import { errorMessage, problemsApi } from "@mileniumhq/paperapi";
@@ -29,7 +30,7 @@ export const panel = {
     savedExtras: {} as Record<string, unknown>,
     // why the saved bots couldn't be read; nothing is written over them meanwhile
     botsError: null as string | null,
-    ctx: null as ServiceContext<BotsServiceState> | null,
+    ctx: null as ContractContext<typeof botCreatorContract> | null,
 };
 
 export function summary(entry: BotEntry): BotSummary {

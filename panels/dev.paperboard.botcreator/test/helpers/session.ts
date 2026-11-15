@@ -52,6 +52,8 @@ export function recordedSession(id: string): RecordedSession {
             triggers.push({ trigger, output });
             wake();
         },
+        // what the bot heard reaches its triggers too (on-message), which this records
+        heard: () => {},
         changed: wake,
         problem(text) {
             problems.push(text);

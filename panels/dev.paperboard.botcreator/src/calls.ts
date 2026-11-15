@@ -13,6 +13,8 @@ import { appIdOf, bots, requireBot, requireReadable, summary, type BotEntry } fr
 import { markSetupGuideSeen } from "./persistence";
 import { createCommand, deleteCommand } from "./commands";
 import { addBot, deleteBot, replaceToken, restart, setEnabled } from "./lifecycle";
+import type { CallHandlers } from "@mileniumhq/paperapi";
+import type { botCreatorContract } from "./contract";
 
 async function buildInviteUrl(appId: string, permissions: string[]): Promise<string> {
     if (!appId) {
@@ -44,8 +46,8 @@ function widgetBot(id: unknown): BotEntry {
     return requireBot(id);
 }
 
-function requireGuild(entry: BotEntry, guildId: unknown) {
-    const id = typeof guildId === "string" ? guildId.trim() : "";
+function requireGuild(entry: BotEntry, guildId: string) {
+    const id = guildId.trim();
     if (!id) throw new Error("A guild id is required.");
     const guild = entry.session.requireClient().guilds.cache.get(id);
     if (!guild) throw new Error(`Guild ${id} is not available to this bot.`);
@@ -53,90 +55,41 @@ function requireGuild(entry: BotEntry, guildId: unknown) {
 }
 
 /**
- * What the panel's own page and widgets ask the service (serviceApi.call). Each takes the bot's id in its input, and
+ * What the panel's own page and widgets ask the service (its contract). Each takes the bot's id in its input, and
  * none of them is a block: what a person automates is in blocks/.
  */
-export const serviceCalls = {
-    /** Identity and recent messages, for a bot's Overview. */
-    getBotInfo: (_ctx: unknown, input: any) => requireBot(input?.bot).session.info(),
-
-    /** Identity, connection and server count, for the home widget. */
-    getWidgetStatus: (_ctx: unknown, input: any) => {
-        const entry = widgetBot(input?.bot);
+export const serviceCalls: CallHandlers<typeof botCreatorContract> = {
+    getBotInfo: ({ bot }) => requireBot(bot).session.info(),
+    getWidgetStatus: ({ bot }) => {
+        const entry = widgetBot(bot);
         return entry.session.widgetStatus(entry.hasToken, entry.stored);
     },
-
-    /** Slash commands run per hour over the last day, for the home widget. */
-    getCommandActivity: (_ctx: unknown, input: any) => widgetBot(input?.bot).session.activity.snapshot(),
-
-    /** The invite URL for the chosen permissions. */
-    getInviteUrl: (_ctx: unknown, input: any) => {
-        const entry = requireBot(input?.bot);
-        const permissions = Array.isArray(input?.permissions) ? input.permissions : [];
-        return buildInviteUrl(appIdOf(entry), permissions);
-    },
-
-    /** The account-install URL for user-app commands. */
-    getUserInstallUrl: (_ctx: unknown, input: any) => buildUserInstallUrl(appIdOf(requireBot(input?.bot))),
-
-    /** Adds a bot whose token the page saved in the vault under the bot's id, once it logs in. */
-    addBot: (_ctx: unknown, input: any): Promise<BotSummary> => addBot(input?.bot),
-
-    /** Turns a bot on with its vault token. Never accepts a token over the wire. */
-    connectBot: async (_ctx: unknown, input: any) => {
+    getCommandActivity: ({ bot }) => widgetBot(bot).session.activity.snapshot(),
+    getInviteUrl: ({ bot, permissions }) => buildInviteUrl(appIdOf(requireBot(bot)), permissions),
+    getUserInstallUrl: ({ bot }) => buildUserInstallUrl(appIdOf(requireBot(bot))),
+    addBot: ({ bot }) => addBot(bot),
+    connectBot: async ({ bot }) => {
         requireReadable();
-        await setEnabled(widgetBot(input?.bot), true);
-        return true;
+        await setEnabled(widgetBot(bot), true);
     },
-
-    /** Turns a bot off. */
-    disconnectBot: async (_ctx: unknown, input: any) => {
+    disconnectBot: async ({ bot }) => {
         requireReadable();
-        await setEnabled(requireBot(input?.bot), false);
-        return true;
+        await setEnabled(requireBot(bot), false);
     },
-
-    /** The page saved a new token for the same bot in the vault; reconnects with it when the bot is on. */
-    replaceToken: async (_ctx: unknown, input: any) => {
-        await replaceToken(requireBot(input?.bot));
-        return true;
-    },
-
-    /** Stops a bot and removes it, its token, its commands and its Blocks project; `anyway` leaves its commands on Discord. */
-    deleteBot: (_ctx: unknown, input: any) => deleteBot(requireBot(input?.bot), input?.anyway === true),
-
-    /** The setup guide was finished or skipped: it never shows again. Saved with the bots. */
-    markSetupGuideSeen: async () => {
-        await markSetupGuideSeen();
-        return true;
-    },
-
-    /** Gateway, cache and memory health. */
-    getHealth: (_ctx: unknown, input: any) => requireBot(input?.bot).session.health(),
-
-    /** Channels and roles, for the server explorer. */
-    getGuildDetail: (_ctx: unknown, input: any) => buildGuildDetail(requireGuild(requireBot(input?.bot), input?.guildId)),
-
-    /** One bounded member-search page. */
-    searchGuildMembers: async (_ctx: unknown, input: any) => {
-        const guild = requireGuild(requireBot(input?.bot), input?.guildId);
-        const query = typeof input?.query === "string" ? input.query.trim() : "";
-        const members = await searchMembers(guild, query, MEMBER_SEARCH_LIMIT);
+    replaceToken: ({ bot }) => replaceToken(requireBot(bot)),
+    deleteBot: ({ bot, anyway }) => deleteBot(requireBot(bot), anyway === true),
+    markSetupGuideSeen: () => markSetupGuideSeen(),
+    getHealth: ({ bot }) => requireBot(bot).session.health(),
+    getGuildDetail: ({ bot, guildId }) => buildGuildDetail(requireGuild(requireBot(bot), guildId)),
+    searchGuildMembers: async ({ bot, guildId, query }) => {
+        const guild = requireGuild(requireBot(bot), guildId);
+        const members = await searchMembers(guild, query.trim(), MEMBER_SEARCH_LIMIT);
         return buildMemberSummaries(members.values());
     },
-
-    /** Stores a command and registers its event and Discord definition. */
-    createCommand: (_ctx: unknown, input: any) => createCommand(requireBot(input?.bot), input),
-
-    /** Removes a stored command, its event and its Discord definition. */
-    deleteCommand: (_ctx: unknown, input: any) => deleteCommand(requireBot(input?.bot), input?.id),
-
-    /** An avatar or server icon from Discord's CDN, as a data: address: a page never loads a picture someone else chose. */
-    getPicture: (_ctx: unknown, input: any) => discordPicture(input?.url),
-
-    /** Sends a message as the bot, from the server explorer. */
-    sendMessage: (_ctx: unknown, input: any) =>
-        new MessageOps(requireBot(input?.bot).session.requireClient()).send(String(input?.channel ?? ""), { content: input?.content }),
+    createCommand: (input) => createCommand(requireBot(input.bot), input),
+    deleteCommand: ({ bot, id }) => deleteCommand(requireBot(bot), id),
+    getPicture: ({ url }) => discordPicture(url),
+    sendMessage: ({ bot, channel, content }) => new MessageOps(requireBot(bot).session.requireClient()).send(channel, { content }),
 };
 
 // what a widget's "Bot" dropdown offers in Home's gallery

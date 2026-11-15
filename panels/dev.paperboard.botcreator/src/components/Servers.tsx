@@ -25,8 +25,9 @@ import {
     usePaperPanel,
     createLatest,
 } from "@mileniumhq/paperui";
-import { serviceApi, errorMessage } from "@mileniumhq/paperapi";
-import { PANEL_ID, type BotSummary } from "../bots";
+import { errorMessage } from "@mileniumhq/paperapi";
+import type { BotSummary } from "../bots";
+import { botCreator } from "../client";
 import { DiscordAvatar, pictureIcon } from "../picture";
 import {
     CHANNEL_KIND_LABELS,
@@ -143,11 +144,7 @@ export default function Servers(props: { bot: () => BotSummary }) {
         }
         setDetailLoading(true);
         try {
-            const next = await serviceApi.call<GuildDetail>(
-                PANEL_ID,
-                "getGuildDetail",
-                { bot: bot(), guildId },
-            );
+            const next = await botCreator.calls.getGuildDetail({ bot: bot(), guildId });
             if (!current()) return;
             setDetail(next);
             if (!reloading || !textChannels().some((channel) => channel.id === channelId())) {
@@ -206,13 +203,8 @@ export default function Servers(props: { bot: () => BotSummary }) {
         setMembersLoading(true);
         setMembersError("");
         try {
-            const found = await serviceApi.call<MemberSummary[]>(
-                PANEL_ID,
-                "searchGuildMembers",
-                { bot: bot(), guildId: id, query: memberQuery() },
-            );
+            const found = await botCreator.calls.searchGuildMembers({ bot: bot(), guildId: id, query: memberQuery() });
             if (!current()) return;
-            if (!Array.isArray(found)) throw new Error("searchGuildMembers returned no member list");
             setMembers(found);
         } catch (err) {
             if (!current()) return;
@@ -241,7 +233,7 @@ export default function Servers(props: { bot: () => BotSummary }) {
         }
         setSending(true);
         try {
-            await serviceApi.call(PANEL_ID, "sendMessage", {
+            await botCreator.calls.sendMessage({
                 bot: bot(),
                 channel: channel.id,
                 content: content().trim(),

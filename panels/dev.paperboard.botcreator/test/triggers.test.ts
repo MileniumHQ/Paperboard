@@ -38,7 +38,7 @@ describe("command events stay bound", () => {
         const roll = { bot: BOT, name: "roll", description: "Roll a die", options: [{ name: "sides", description: "How many sides", type: "integer", required: true }] };
         const globalRoll = commandEventId({ scope: GLOBAL_SCOPE, name: "roll" });
         const homeRoll = commandEventId({ scope: home.id, name: "roll" });
-        const first = await call<CommandMutationResult>("createCommand", roll);
+        const first = await call.createCommand(roll);
         expect(first).toMatchObject({ registered: true, syncError: null, triggerError: null });
         const event = await registered(globalRoll);
         expect(event).toBeDefined();
@@ -47,14 +47,14 @@ describe("command events stay bound", () => {
         expect(event.schema.values.interaction).toMatchObject({ type: `${PANEL_ID}:interaction` });
 
         // deleting and recreating keeps the event id, so flows bound to it keep working
-        await call("deleteCommand", { bot: BOT, id: first.command.id });
+        await call.deleteCommand({ bot: BOT, id: first.command.id });
         expect(await registered(globalRoll)).toBeUndefined();
-        const again = await call<CommandMutationResult>("createCommand", roll);
+        const again = await call.createCommand(roll);
         expect(again.command.id).not.toBe(first.command.id);
         expect(await registered(globalRoll)).toBeDefined();
 
         // the same name in one server: that server's invocations are its own
-        await call("createCommand", { ...roll, scope: home.id });
+        await call.createCommand({ ...roll, scope: home.id });
         expect(await registered(homeRoll)).toBeDefined();
         const inHome = nextEvent(homeRoll);
         await inHome.ready;

@@ -12,8 +12,9 @@ import {
     usePaperPanel,
     createLatest,
 } from "@mileniumhq/paperui";
-import { serviceApi, errorMessage } from "@mileniumhq/paperapi";
-import { PANEL_ID, type BotSummary } from "../bots";
+import { errorMessage } from "@mileniumhq/paperapi";
+import type { BotSummary } from "../bots";
+import { botCreator } from "../client";
 import { PERMISSION_DEFINITIONS, DEFAULT_SELECTED_PERMISSIONS } from "../permissions";
 
 export default function Invite(props: { bot: () => BotSummary }) {
@@ -34,12 +35,7 @@ export default function Invite(props: { bot: () => BotSummary }) {
         const current = inviteRead();
         setInviteError("");
         try {
-            const url = await serviceApi.call<string>(
-                PANEL_ID,
-                "getInviteUrl",
-                { bot: props.bot().id, permissions: perms },
-            );
-            if (!url) throw new Error("getInviteUrl returned no link");
+            const url = await botCreator.calls.getInviteUrl({ bot: props.bot().id, permissions: perms });
             if (current()) setInviteUrl(url);
         } catch (err) {
             console.error("[Invite] invite URL generation failed:", err);
@@ -53,12 +49,7 @@ export default function Invite(props: { bot: () => BotSummary }) {
     const updateUserInstallUrl = async () => {
         setUserInstallError("");
         try {
-            const url = await serviceApi.call<string>(
-                PANEL_ID,
-                "getUserInstallUrl",
-                { bot: props.bot().id },
-            );
-            if (!url) throw new Error("getUserInstallUrl returned no link");
+            const url = await botCreator.calls.getUserInstallUrl({ bot: props.bot().id });
             setUserInstallUrl(url);
         } catch (err) {
             console.error("[Invite] user install URL generation failed:", err);

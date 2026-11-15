@@ -19,8 +19,9 @@ import {
     PaperCheckbox,
     PaperCopyButton,
 } from "@mileniumhq/paperui";
-import { serviceApi, errorMessage } from "@mileniumhq/paperapi";
-import { PANEL_ID, type BotSummary } from "../bots";
+import { errorMessage } from "@mileniumhq/paperapi";
+import type { BotSummary } from "../bots";
+import { botCreator } from "../client";
 import {
     GLOBAL_SCOPE,
     COMMAND_DESCRIPTION_MAX_LENGTH,
@@ -197,18 +198,14 @@ export default function Commands(props: { bot: () => BotSummary }) {
         setFormError("");
         setActionError(null);
         try {
-            const result = await serviceApi.call<CommandMutationResult>(
-                PANEL_ID,
-                "createCommand",
-                {
-                    bot: bot(),
-                    name: name(),
-                    description: description(),
-                    scope: scope(),
-                    options: options(),
-                    userInstall: userInstall(),
-                },
-            );
+            const result = await botCreator.calls.createCommand({
+                bot: bot(),
+                name: name(),
+                description: description(),
+                scope: scope(),
+                options: options(),
+                userInstall: userInstall(),
+            });
             setCreateOpen(false);
             setActionError(mutationProblem(result));
         } catch (err) {
@@ -226,11 +223,7 @@ export default function Commands(props: { bot: () => BotSummary }) {
         setBusy(true);
         setActionError(null);
         try {
-            const result = await serviceApi.call<CommandMutationResult>(
-                PANEL_ID,
-                "deleteCommand",
-                { bot: bot(), id: target.id },
-            );
+            const result = await botCreator.calls.deleteCommand({ bot: bot(), id: target.id });
             // a bot that is on says what its sync refused above; one that is
             // off clears the command now, and says here if it couldn't
             const kept = props.bot().connected ? null : result.syncError;

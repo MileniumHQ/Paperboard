@@ -21,12 +21,12 @@ import {
     createLatest,
     createStateSignal,
 } from "@mileniumhq/paperui";
-import { serviceApi, defineWidgets, type WidgetContext, errorMessage } from "@mileniumhq/paperapi";
+import { defineWidgets, type WidgetContext, errorMessage } from "@mileniumhq/paperapi";
+import { botCreator } from "./client";
 import type { CommandActivity } from "./commandActivity";
 import type { BotWidgetStatus } from "./session";
 import { count } from "./types";
 import { picture } from "./picture";
-import { PANEL_ID } from "./bots";
 
 const STATUS_POLL_MS = 15_000;
 const ACTIVITY_POLL_MS = 60_000;
@@ -82,21 +82,8 @@ function createSize(widget: WidgetContext) {
 // the bot chosen in the gallery; the service refuses a widget with none
 const chosenBot = (widget: WidgetContext) => ({ bot: widget.options.bot ?? "" });
 
-async function readStatus(widget: WidgetContext): Promise<BotWidgetStatus> {
-    const status = await serviceApi.call<BotWidgetStatus>(PANEL_ID, "getWidgetStatus", chosenBot(widget));
-    if (!status || typeof status !== "object" || typeof status.connected !== "boolean") {
-        throw new Error("Bot Creator returned no status");
-    }
-    return status;
-}
-
-async function readActivity(widget: WidgetContext): Promise<CommandActivity> {
-    const activity = await serviceApi.call<CommandActivity>(PANEL_ID, "getCommandActivity", chosenBot(widget));
-    if (!activity || !Array.isArray(activity.counts)) {
-        throw new Error("Bot Creator returned no command activity");
-    }
-    return activity;
-}
+const readStatus = (widget: WidgetContext): Promise<BotWidgetStatus> => botCreator.calls.getWidgetStatus(chosenBot(widget));
+const readActivity = (widget: WidgetContext): Promise<CommandActivity> => botCreator.calls.getCommandActivity(chosenBot(widget));
 
 // the header's way out: a compact icon button, the same in every state
 function HeaderButton(props: { icon: string; label: string; onClick: () => void; disabled?: boolean }) {
@@ -125,7 +112,7 @@ function BotStatus(props: { widget: WidgetContext }) {
         setConnecting(true);
         setConnectError(null);
         try {
-            await serviceApi.call(PANEL_ID, "connectBot", chosenBot(props.widget));
+            await botCreator.calls.connectBot(chosenBot(props.widget));
         } catch (err) {
             setConnectError(errorMessage(err));
         } finally {

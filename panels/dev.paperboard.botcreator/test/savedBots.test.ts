@@ -84,7 +84,7 @@ describe("the saved bots", () => {
         const state = await stateWhere<BotsServiceState>(PANEL_ID, (s) => Boolean(s.botsError), "the refusal");
         expect(state.botsError).toContain("bot 1 in the saved list: saved command 2 (/ping) is damaged: /ping is saved twice");
         expect(state.bots).toEqual([]);
-        await expect(call("markSetupGuideSeen")).rejects.toThrow("Bot Creator couldn't read its saved bots, so nothing is changed");
+        await expect(call.markSetupGuideSeen()).rejects.toThrow("Bot Creator couldn't read its saved bots, so nothing is changed");
         expect(fs.readFileSync(file, "utf8")).toBe(before);
     });
 
@@ -97,12 +97,12 @@ describe("the saved bots", () => {
 
         fs.chmodSync(path.dirname(file), 0o555);
         try {
-            await expect(call("disconnectBot", { bot: "b-steady" })).rejects.toThrow("Could not save the bots");
+            await expect(call.disconnectBot({ bot: "b-steady" })).rejects.toThrow("Could not save the bots");
         } finally {
             fs.chmodSync(path.dirname(file), 0o755);
         }
         // the next announcement and the next save both say what is saved: on
-        await call("markSetupGuideSeen");
+        await call.markSetupGuideSeen();
         const state = await stateWhere<BotsServiceState>(PANEL_ID, () => true, "the bots");
         expect(state.bots[0]).toMatchObject({ enabled: true, connected: true });
         expect(JSON.parse(fs.readFileSync(file, "utf8")).bots[0].enabled).toBe(true);
@@ -123,7 +123,7 @@ describe("deleting a bot", () => {
         await discord.request((r) => r.method === "PUT" && r.path === guildCommands, "the commands synced at login");
 
         const before = discord.requests.length;
-        expect(await call("deleteBot", { bot: "b-leave" })).toEqual({ deleted: "b-leave" });
+        expect(await call.deleteBot({ bot: "b-leave" })).toEqual({ deleted: "b-leave" });
         const cleared = discord.requests.slice(before).filter((r) => r.method === "PUT" && r.path.startsWith(`/applications/${fake.appId}/`));
         expect(cleared.map((r) => [r.path, r.body]).sort()).toEqual([
             [`/applications/${fake.appId}/commands`, []],
@@ -140,7 +140,7 @@ describe("deleting a bot", () => {
         await stateWhere<BotsServiceState>(PANEL_ID, (s) => s.bots[0]?.name === "Sleeper", "Sleeper");
 
         const before = discord.requests.length;
-        expect(await call("deleteBot", { bot: "b-sleep" })).toEqual({ deleted: "b-sleep" });
+        expect(await call.deleteBot({ bot: "b-sleep" })).toEqual({ deleted: "b-sleep" });
         const made = discord.requests.slice(before).filter((r) => r.bot === fake.token);
         expect(made.map((r) => [r.method, r.path, r.body]).sort()).toEqual([
             ["PUT", `/applications/${fake.appId}/commands`, []],
@@ -157,13 +157,13 @@ describe("deleting a bot", () => {
         await startService({ discordApi: discord.api });
         await stateWhere<BotsServiceState>(PANEL_ID, (s) => s.bots[0]?.name === "Revoked", "Revoked");
 
-        expect(await call("deleteBot", { bot: "b-revoked" })).toEqual({ refused: `Guild ${home.id}: 401: Unauthorized` });
+        expect(await call.deleteBot({ bot: "b-revoked" })).toEqual({ refused: `Guild ${home.id}: 401: Unauthorized` });
         expect((await stateWhere<BotsServiceState>(PANEL_ID, () => true, "the bots")).bots.map((b) => b.id)).toEqual(["b-revoked"]);
         expect((await secretsApi.get(tokenName("b-revoked"), PANEL_ID)).found).toBe(true);
 
         // anyway skips Discord: the bot, its token and its list entry go
         const before = discord.requests.length;
-        expect(await call("deleteBot", { bot: "b-revoked", anyway: true })).toEqual({ deleted: "b-revoked" });
+        expect(await call.deleteBot({ bot: "b-revoked", anyway: true })).toEqual({ deleted: "b-revoked" });
         expect(discord.requests.slice(before)).toEqual([]);
         expect((await stateWhere<BotsServiceState>(PANEL_ID, (s) => s.bots.length === 0, "the bot to go")).bots).toEqual([]);
         expect((await secretsApi.get(tokenName("b-revoked"), PANEL_ID)).found).toBe(false);
@@ -183,11 +183,11 @@ describe("deleting a command while the bot is off", () => {
         await stateWhere<BotsServiceState>(PANEL_ID, (s) => s.bots[0]?.name === "Napper", "Napper");
         const guildCommands = `/applications/${fake.appId}/guilds/${home.id}/commands`;
 
-        expect(await call("deleteCommand", { bot: "b-nap", id: "c-home" })).toMatchObject({ registered: false, syncError: null, triggerError: null });
+        expect(await call.deleteCommand({ bot: "b-nap", id: "c-home" })).toMatchObject({ registered: false, syncError: null, triggerError: null });
         const cleared = discord.requests.filter((r) => r.method === "PUT" && r.path === guildCommands);
         expect(cleared.map((r) => [r.bot, r.body])).toEqual([[fake.token, []]]);
 
-        await call("connectBot", { bot: "b-nap" });
+        await call.connectBot({ bot: "b-nap" });
         await discord.request((r) => r.method === "PUT" && r.path === `/applications/${fake.appId}/commands`, "the commands synced at login");
         expect(discord.requests.filter((r) => r.method === "PUT" && r.path === guildCommands).map((r) => r.body)).toEqual([[]]);
     });

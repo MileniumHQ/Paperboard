@@ -3,11 +3,10 @@
 import { afterAll, afterEach, beforeAll, describe, expect, setDefaultTimeout, test } from "bun:test";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { serviceApi } from "@mileniumhq/paperapi";
 import type { BotsServiceState } from "../src/bots";
 import { testDaemon } from "./helpers/daemon";
 import { startFakeDiscord, type FakeDiscord } from "./helpers/discord";
-import { PANEL_ID, savedBots, startService, stopServices, storedBot } from "./helpers/service";
+import { call, PANEL_ID, savedBots, startService, stopServices, storedBot } from "./helpers/service";
 import { stateWhere } from "./helpers/wait";
 
 setDefaultTimeout(60_000);
@@ -28,7 +27,7 @@ describe("the setup guide shows once", () => {
         await startService({ discordApi: discord.api });
         expect((await state()).setupGuideSeen).toBe(false);
 
-        await serviceApi.call(PANEL_ID, "markSetupGuideSeen", {});
+        await call.markSetupGuideSeen();
         expect((await stateWhere<BotsServiceState>(PANEL_ID, (s) => s.setupGuideSeen, "the guide to be seen")).bots).toEqual([]);
         expect((await configFile()).setupGuideSeen).toBe(true);
 
