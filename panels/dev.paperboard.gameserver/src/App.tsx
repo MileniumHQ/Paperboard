@@ -1,5 +1,5 @@
 import GameOptions from "./components/GameOptions";
-import { createEffect, createMemo, createSignal, onMount, onCleanup, untrack, For, Index, Show } from "solid-js";
+import { createEffect, createMemo, createSignal, on, onMount, onCleanup, untrack, For, Index, Show } from "solid-js";
 import { tabIds } from "./lib/tabIds";
 import {
     PaperPanel, PaperPresence, PaperButton, PaperIcon, PaperQuote, PaperLoader, PaperFlex, PaperText,
@@ -17,6 +17,8 @@ import type { ServersState } from "./service";
 import ServersHome from "./components/ServersHome";
 import { serverSoftware, serverVersion, gameSettings } from "./lib/server";
 import { gameFor } from "./games";
+import { keepUnchanged } from "./core/state";
+import { errorMessage } from "./lib/failure";
 import { gameUIFor } from "./games/ui";
 import Files from "./components/Files";
 import Backups from "./components/Backups";
@@ -99,9 +101,12 @@ export default function App() {
             }
         }
     };
-    createEffect(() => {
-        if (described() && !hasTab(activeTab())) setActiveTab("overview");
-    });
+    // a version without the open tab falls back to the overview
+    createEffect(
+        on([described, activeTab], ([shown, tab]) => {
+            if (shown && !hasTab(tab)) setActiveTab("overview");
+        }),
+    );
 
     const [servers, setServers] = createSignal<ServersState | null>(null);
     const [failure, setFailure] = createSignal("");
@@ -146,7 +151,7 @@ export default function App() {
     };
     const fail = (what: string, err: unknown) => {
         console.error(`[App] ${what} failed:`, err);
-        setFailure(err instanceof Error ? err.message : String(err));
+        setFailure(errorMessage(err));
     };
     const apply = (state: ServersState) => {
         // the server's game and setup state first: the page never renders
@@ -159,7 +164,8 @@ export default function App() {
             // install marks the server set up underneath it
             setConfigured((shown) => (shown === false ? false : server.configured));
         }
-        setServers(state);
+        // each push is a fresh copy: a server it did not change keeps its card
+        setServers((prev) => keepUnchanged(prev, state));
     };
     const load = async () => {
         try {

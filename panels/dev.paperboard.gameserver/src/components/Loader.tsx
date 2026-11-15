@@ -6,6 +6,8 @@ import { serverBridge, serverSoftware, serverStatus } from "../lib/server";
 import { CALLS } from "../service/contract";
 import { SOFTWARE_NAMES } from "../lib/software";
 import type { LoaderSettingsView } from "../service/loaderSettings";
+import { errorMessage } from "../lib/failure";
+import { createLatest, keepUnchanged } from "../core/state";
 
 // Loader: the installed software's own settings files (Paper's YAML,
 // NeoForge/Forge TOML). The service owns reading and writing; this tab
@@ -14,12 +16,15 @@ export default function Loader(props: { active: boolean }) {
     const [settings, setSettings] = createSignal<LoaderSettingsView | null>(null);
     const [loadError, setLoadError] = createSignal("");
 
+    const latest = createLatest();
     const load = async () => {
         setLoadError("");
         try {
-            setSettings(await serverBridge.call<LoaderSettingsView>(CALLS.readLoaderSettings));
+            const answer = await latest(() => serverBridge.call<LoaderSettingsView>(CALLS.readLoaderSettings));
+            // a setting read again unchanged keeps its row
+            if (answer) setSettings((prev) => keepUnchanged(prev, answer.value));
         } catch (err) {
-            setLoadError(err instanceof Error ? err.message : String(err));
+            setLoadError(errorMessage(err));
         }
     };
 

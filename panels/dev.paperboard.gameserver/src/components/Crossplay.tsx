@@ -18,6 +18,7 @@ import { localIp, serverBridge, serverSoftware, serverStatus } from "../lib/serv
 import { CALLS } from "../service/contract";
 import type { CrossplayView } from "../service/crossplay";
 import { BEDROCK_PORT_SETTING_ID } from "../software/crossplay";
+import { createLatest, keepUnchanged } from "../core/state";
 
 // Crossplay: one switch for Geyser and Floodgate, then their settings.
 // Turning it off removes the jars and keeps their settings folders, so
@@ -27,10 +28,14 @@ export default function Crossplay(props: { active: boolean }) {
     const [loadError, setLoadError] = createSignal("");
     const [error, setError] = createSignal("");
 
+    const latest = createLatest();
+    // a view read again, or answered by a save, keeps the rows it did not change
+    const show = (next: CrossplayView) => setView((prev) => keepUnchanged(prev, next));
     const load = async () => {
         setLoadError("");
         try {
-            setView(await readCrossplay());
+            const answer = await latest(readCrossplay);
+            if (answer) show(answer.value);
         } catch (err) {
             setLoadError(errorMessage(err));
         }
@@ -52,7 +57,7 @@ export default function Crossplay(props: { active: boolean }) {
         const current = view();
         if (!current) throw new Error("Crossplay has not been read yet");
         try {
-            setView(on ? await enableCrossplay(current) : await disableCrossplay(current));
+            show(on ? await enableCrossplay(current) : await disableCrossplay(current));
         } catch (err) {
             // whatever did land is what the switch shows
             await load();
