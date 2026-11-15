@@ -3,11 +3,13 @@
 // OpenCode itself (service/providers.ts); nothing here names a provider.
 // A key goes from its field to OpenCode and is kept nowhere else.
 
-import { For, Match, Show, Switch, createEffect, createResource, createSignal, on } from "solid-js";
+import { For, Match, Show, Switch, createEffect, createSignal, on } from "solid-js";
+import { createStore, reconcile } from "solid-js/store";
 import { createPolling, PaperButton, PaperCopyButton, PaperFlex, PaperInput, PaperLink, PaperLoader, PaperModal, PaperQuote, PaperSectionHeader, PaperSelectMenu, PaperSelectMenuItem, PaperText } from "@mileniumhq/paperui";
 import type { ProviderAttempt, ProviderField, ProviderInfo, ProviderMethod } from "../contract";
 import type { Agent } from "../lib/agent";
-import { errorText, failure, type Failure } from "../lib/failure";
+import { createAction, createLatest } from "../lib/action";
+import { errorText, failure } from "../lib/failure";
 
 const POLL_MS = 2_000;
 
@@ -16,19 +18,30 @@ const shown = (field: ProviderField, answers: Record<string, string>) =>
     !field.hidden && field.when.every((w) => (w.op === "eq" ? (answers[w.key] ?? "") === w.value : (answers[w.key] ?? "") !== w.value));
 
 export default function Providers(props: { agent: Agent; open: boolean; onClose: () => void }) {
-    const [providers, { refetch }] = createResource(
-        () => props.open || undefined,
-        () => props.agent.providers(),
-    );
+    // reconciled by id, so a re-read (after a connect or a sign-in) changes what differs and every row and form stays the one it was
+    const [list, setList] = createStore<{ providers: ProviderInfo[] | null }>({ providers: null });
+    const [listError, setListError] = createSignal<string | null>(null);
+    const latest = createLatest();
+    const refetch = async () => {
+        const current = latest();
+        setListError(null);
+        try {
+            const next = await props.agent.providers();
+            if (current()) setList("providers", reconcile(next, { key: "id" }));
+        } catch (e) {
+            if (current()) setListError(errorText(e));
+        }
+    };
+    // read afresh each time it opens
+    createEffect(on(() => props.open, (open) => open && void refetch()));
     const [selected, setSelected] = createSignal<string>();
-    const [error, setError] = createSignal<Failure | null>(null);
-    const [busy, setBusy] = createSignal(false);
+    const { busy, error, setError, run: act } = createAction();
     const [key, setKey] = createSignal("");
     const [answers, setAnswers] = createSignal<Record<string, string>>({});
     const [attempt, setAttempt] = createSignal<{ provider: string; info: ProviderAttempt } | null>(null);
     const [code, setCode] = createSignal("");
 
-    const current = (): ProviderInfo | undefined => providers.latest?.find((p) => p.id === selected());
+    const current = (): ProviderInfo | undefined => list.providers?.find((p) => p.id === selected());
 
     // a provider chosen afresh: its form starts from its defaults, and nothing typed for another stays
     createEffect(
@@ -40,17 +53,6 @@ export default function Providers(props: { agent: Agent; open: boolean; onClose:
         }),
     );
 
-    const act = async (title: string, run: () => Promise<unknown>) => {
-        setBusy(true);
-        setError(null);
-        try {
-            await run();
-        } catch (e) {
-            setError(failure(title, e));
-        } finally {
-            setBusy(false);
-        }
-    };
 
     const answersFor = (method: ProviderMethod): Record<string, string> => {
         const out: Record<string, string> = {};
@@ -117,20 +119,20 @@ export default function Providers(props: { agent: Agent; open: boolean; onClose:
                     OpenCode already has free models. Connect a provider to use its models too.
                 </PaperText>
                 <Switch>
-                    <Match when={providers.error}>
+                    <Match when={listError()}>
                         <PaperQuote variant="danger" icon="error" title="Providers not listed" role="alert">
-                            {errorText(providers.error)}
+                            {listError()}
                         </PaperQuote>
                         <PaperFlex direction="row">
                             <PaperButton onClick={() => void refetch()}>Look again</PaperButton>
                         </PaperFlex>
                     </Match>
-                    <Match when={providers.loading && !providers.latest}>
+                    <Match when={list.providers === null}>
                         <PaperLoader loaderStatus="indeterminate" label="Asking OpenCode for its providers" />
                     </Match>
                     <Match when={true}>
                         <PaperSelectMenu name="provider" aria-label="Provider" searchable value={selected()} onValueChange={(v) => setSelected(String(v))}>
-                            <For each={providers.latest ?? []}>
+                            <For each={list.providers ?? []}>
                                 {(p) => (
                                     <PaperSelectMenuItem value={p.id} icon={p.connected ? "check_circle" : undefined} description={p.connected ? "Connected" : (p.unsupported ?? undefined)}>
                                         {p.name}

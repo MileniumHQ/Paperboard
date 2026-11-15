@@ -1,7 +1,9 @@
 // OpenCode's providers in a real browser, over the stubbed service
 // (paperapiStub.ts): a sign-in started, canceled and started again while the
 // first one's status question is still on its way. That late answer belongs
-// to a sign-in that is gone, and must not end the new one.
+// to a sign-in that is gone, and must not end the new one. Then a key is
+// connected, and the list read again keeps the provider's forms the ones
+// they were.
 import { onCleanup } from "solid-js";
 import { render } from "solid-js/web";
 import { PaperProvider } from "@mileniumhq/paperui";
@@ -19,7 +21,10 @@ const ACME: ProviderInfo = {
     name: "Acme",
     connected: false,
     connections: [],
-    methods: [{ id: "browser", kind: "oauth", label: "Sign in with Acme", fields: [] }],
+    methods: [
+        { id: "browser", kind: "oauth", label: "Sign in with Acme", fields: [] },
+        { id: null, kind: "key", label: "Use an API key", fields: [] },
+    ],
     unsupported: null,
 };
 
@@ -27,7 +32,12 @@ let begun = 0;
 /** each attempt's status questions, and how to answer the first one's */
 const questions: string[] = [];
 let answerFirst!: (status: ProviderAttemptStatus) => void;
-answers.set(UI_ACTION_IDS.providers, async () => ({ providers: [ACME] }));
+// every read is a fresh copy, as the service's answer is; once a key is in, Acme has it
+let keyed = false;
+answers.set(UI_ACTION_IDS.providers, async () => ({
+    providers: [{ ...structuredClone(ACME), ...(keyed ? { connected: true, connections: [{ id: "key1", label: "Acme key" }] } : {}) }],
+}));
+answers.set(UI_ACTION_IDS.connectKey, async () => void (keyed = true));
 answers.set(UI_ACTION_IDS.beginProvider, async () => ({ id: `attempt${++begun}`, url: "https://acme.example/login", instructions: `Sign-in ${begun}`, mode: "auto" }));
 answers.set(UI_ACTION_IDS.cancelProvider, async () => ({}));
 answers.set(UI_ACTION_IDS.providerAttempt, (inputs) => {
@@ -73,9 +83,23 @@ async function run(): Promise<Record<string, unknown>> {
     // the second one is asked about again after it (the next poll), so the late answer has been handled by then; or it ended
     await until("the second sign-in's next status question, or its end", () => asked() > before || !shows("Sign-in 2"));
 
+    const stillSigningIn = shows("Sign-in 2") && shows("Waiting for you to finish signing in");
+    const refused = shows("the first sign-in was refused");
+
+    // a key connected: the list is read again, and the forms on show are the same nodes
+    button("Cancel")!.click();
+    await until("the sign-in canceled", () => !shows("Sign-in 2"));
+    const form = await until("the key's field", () => document.querySelector<HTMLInputElement>('input[type="password"]'));
+    form.value = "sk-test";
+    form.dispatchEvent(new InputEvent("input", { bubbles: true }));
+    const signIn = button("Sign in")!;
+    (await until("Connect", () => button("Connect") && !button("Connect")!.disabled && button("Connect")))!.click();
+    await until("the list read again", () => shows("Acme key is connected."));
+
     return {
-        stillSigningIn: shows("Sign-in 2") && shows("Waiting for you to finish signing in"),
-        refused: shows("the first sign-in was refused"),
+        stillSigningIn,
+        refused,
+        formsKept: form.isConnected && signIn.isConnected,
         uncaught: [...errors],
     };
 }
