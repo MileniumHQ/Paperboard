@@ -1,5 +1,4 @@
-import { type Component, createSignal, createEffect, on, Show, For, onMount, onCleanup } from "solid-js";
-import { createStore, reconcile } from "solid-js/store";
+import { type Component, createSignal, createEffect, on, Show, For, onCleanup } from "solid-js";
 import {
     PaperWizard,
     PaperWizardStep,
@@ -10,7 +9,7 @@ import {
     PaperQuote,
     PaperText,
     useWizard,
-    createLatest,
+    createRead,
 } from "@mileniumhq/paperui";
 import {
     computersApi as computers,
@@ -37,120 +36,75 @@ export const ComputerSetupWizard: Component<ComputerSetupWizardProps> = (
     const [name, setName] = createSignal("");
     const [code, setCode] = createSignal("");
 
-    const [isReachable, setIsReachable] = createSignal(false);
-    const [probeUnreachable, setProbeUnreachable] = createSignal(false);
-    // the probe's typed error carries the real reason (refused / timeout /
-    // unknown host); losing it turned every failure into "check the address"
-    const [probeDetail, setProbeDetail] = createSignal("");
-    // no address was reached, so the port is left out of the message
-    const [probeInvalid, setProbeInvalid] = createSignal(false);
     const [isPairing, setIsPairing] = createSignal(false);
     const [pairError, setPairError] = createSignal("");
 
-    // each update is the whole list again; reconciled by id, a computer
-    // already listed keeps its row
-    const [discoveredList, setDiscoveredList] = createStore<DiscoveredComputer[]>([]);
-    const discovered = () => discoveredList;
-    const setDiscovered = (list: DiscoveredComputer[]) => setDiscoveredList(reconcile(list, { key: "id" }));
+    // nearby computers: each update is the whole list again; reconciled by
+    // id, a computer already listed keeps its row. A list that couldn't be
+    // read says why; one can still be added by address
+    const discovery = createRead(() => discoveryApi.list().then((list) => list ?? []), {
+        follow: (land) => discoveryApi.onChanged((list) => land(list ?? [])),
+    });
+    const discovered = (): DiscoveredComputer[] => discovery.value() ?? [];
+    const discoveryError = discovery.error;
 
     const suggestionKey = (c: { host: string; port: number }) =>
         `${c.host}:${c.port}`;
 
-    // nearby computers couldn't be listed; one can still be added by address
-    const [discoveryError, setDiscoveryError] = createSignal("");
-    onMount(() => {
-        discoveryApi.list().then(
-            (list) => setDiscovered(list ?? []),
-            (err) => setDiscoveryError(errorMessage(err)),
-        );
-        const off = discoveryApi.onChanged((list) => {
-            setDiscoveryError("");
-            setDiscovered(list ?? []);
-        });
-        onCleanup(() => off());
-    });
-
     let probeTimeout: ReturnType<typeof setTimeout> | undefined;
     let lastAutoName = "";
-    // only the latest probe answers for the address: one for an address
-    // that has since been changed is dropped, so Next can't be enabled by
-    // a check of something other than what's typed
-    const probes = createLatest();
+    // the address being checked; only the latest check answers for it: one
+    // for an address that has since been changed is dropped, so Next can't
+    // be enabled by a check of something other than what's typed
+    const [checking, setChecking] = createSignal<{ host: string; port: string } | null>(null);
+    // empty means the default; anything else is checked as typed
+    const probe = createRead(({ host, port }) => computers.probe(host, port === "" ? undefined : port), { source: checking });
+    // a computer picked from the nearby list counts as reachable while it is checked
+    const [picked, setPicked] = createSignal(false);
+    const answered = () => !probe.loading() && (probe.value() !== undefined || probe.error() !== null);
+    const isReachable = () => (answered() ? !probe.error() && Boolean(probe.value()?.reachable) : picked() && probe.loading());
+    const probeUnreachable = () => answered() && !isReachable();
+    // the probe's typed error carries the real reason (refused / timeout /
+    // unknown host); losing it turned every failure into "check the address"
+    const probeDetail = () => probe.error() ?? probe.value()?.error ?? "";
+    // no address was reached, so the port is left out of the message
+    const probeInvalid = () => !probe.error() && probe.value()?.invalidAddress === true;
+    // a computer that answers names itself, unless a name was typed
+    createEffect(on(probe.value, (res) => {
+        if (!res?.reachable) return;
+        const rawName = (res.hostname || checking()?.host || "").replace(/\.local$/i, "").trim();
+        if (!name().trim() || name() === lastAutoName) {
+            setName(rawName);
+            lastAutoName = rawName;
+        }
+    }));
 
     // the probe timer must not fire past this component's lifecycle
     onCleanup(() => clearTimeout(probeTimeout));
 
-    const probeTarget = async (targetHost: string, targetPort: string) => {
-        const current = probes();
-        const trimmedHost = targetHost.trim();
-        const trimmedPort = targetPort.trim();
-        if (!trimmedHost) {
-            setIsReachable(false);
-            setProbeUnreachable(false);
-            setProbeDetail("");
-            setProbeInvalid(false);
-            return;
-        }
-
-        try {
-            // empty means the default; anything else is checked as typed
-            const res = await computers.probe(
-                trimmedHost,
-                trimmedPort === "" ? undefined : trimmedPort,
-            );
-            if (!current()) return;
-
-            if (res && res.reachable) {
-                setIsReachable(true);
-                setProbeUnreachable(false);
-                setProbeDetail("");
-                setProbeInvalid(false);
-                const rawName = (res.hostname || trimmedHost)
-                    .replace(/\.local$/i, "")
-                    .trim();
-                if (!name().trim() || name() === lastAutoName) {
-                    setName(rawName);
-                    lastAutoName = rawName;
-                }
-            } else {
-                setIsReachable(false);
-                setProbeUnreachable(true);
-                setProbeDetail(res?.error ?? "");
-                setProbeInvalid(res?.invalidAddress === true);
-            }
-        } catch (err) {
-            if (!current()) return;
-            setIsReachable(false);
-            setProbeUnreachable(true);
-            setProbeDetail(errorMessage(err));
-            setProbeInvalid(false);
-        }
+    /** forgets the last check, and checks `target` (trimmed) when there is one */
+    const probeTarget = (target: { host: string; port: string } | null) => {
+        clearTimeout(probeTimeout);
+        setChecking(null);
+        probe.set(undefined);
+        const host = target?.host.trim();
+        if (host) setChecking({ host, port: target!.port.trim() });
+    };
+    // an address being typed is checked once the typing pauses
+    const probeTyped = (targetHost: string, targetPort: string) => {
+        setPicked(false);
+        probeTarget(null);
+        if (targetHost.trim().length >= 3) probeTimeout = setTimeout(() => probeTarget({ host: targetHost, port: targetPort }), 400);
     };
 
     const handleIpInput = (val: string) => {
-        probes.cancel();
         setHost(val);
-        setIsReachable(false);
-        setProbeUnreachable(false);
-        clearTimeout(probeTimeout);
-        if (val.trim().length >= 3) {
-            probeTimeout = setTimeout(() => {
-                void probeTarget(val, port());
-            }, 400);
-        }
+        probeTyped(val, port());
     };
 
     const handlePortInput = (val: string) => {
-        probes.cancel();
         setPort(val);
-        setIsReachable(false);
-        setProbeUnreachable(false);
-        clearTimeout(probeTimeout);
-        if (host().trim().length >= 3) {
-            probeTimeout = setTimeout(() => {
-                void probeTarget(host(), val);
-            }, 400);
-        }
+        probeTyped(host(), val);
     };
 
     const canProceedFromStep2 = () => {
@@ -180,14 +134,13 @@ export const ComputerSetupWizard: Component<ComputerSetupWizardProps> = (
     };
 
     const handleMethodChange = (val: string) => {
-        probes.cancel();
         setMethod(val);
+        setPicked(false);
+        probeTarget(null);
         if (val === "custom") {
             setHost("");
             setPort(String(DAEMON_PORT));
             setName("");
-            setIsReachable(false);
-            setProbeUnreachable(false);
             return;
         }
         const s = discovered().find((d) => suggestionKey(d) === val);
@@ -196,14 +149,13 @@ export const ComputerSetupWizard: Component<ComputerSetupWizardProps> = (
             setPort(String(s.port));
             const cleanName = s.name.replace(/\.local$/i, "").trim();
             setName(cleanName || s.host);
-            setIsReachable(true);
-            setProbeUnreachable(false);
-            void probeTarget(s.host, String(s.port));
+            setPicked(true);
+            probeTarget({ host: s.host, port: String(s.port) });
         }
     };
 
     let hasAutoSelected = false;
-    createEffect(on(discovered, (list) => {
+    createEffect(on(() => [...discovered()], (list) => {
         if (list.length > 0 && !hasAutoSelected && method() === "" && !host()) {
             hasAutoSelected = true;
             const first = list[0];
