@@ -18,8 +18,3 @@ export function clearActiveIssue(): Promise<unknown> {
 export async function killConflictingProcess(port: string = serverPort()): Promise<void> {
     await serverBridge.call(CALLS.killConflictingProcess, { port });
 }
-
-/** Rejects with why the service could not move the world to the trash. */
-export async function resetWorldFiles(): Promise<void> {
-    await serverBridge.call(CALLS.resetWorldFiles);
-}

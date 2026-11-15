@@ -3,8 +3,8 @@ export interface ServerIssueAction {
     label: string;
     variant?: "danger" | "warning" | "brand" | "primary";
     icon?: string;
-    actionKey?: string;
-    action?: () => void | Promise<void>;
+    /** the repair, then a start once the failed one has ended */
+    actionKey: "killPortAndRetry" | "acceptEula";
 }
 
 export interface ServerIssue {

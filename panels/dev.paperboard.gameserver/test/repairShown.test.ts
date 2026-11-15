@@ -25,7 +25,8 @@ describe("the server issue repairs", () => {
     test("a port conflict's Kill Process & Retry that could not look up the port shows the service's reason", async () => {
         const config = path.join(daemon.dataDir, "configs", `${PANEL_ID}.json`);
         fs.mkdirSync(path.dirname(config), { recursive: true });
-        fs.writeFileSync(config, JSON.stringify({ version: 2, serversDirectory: SERVERS, servers: [{ id: "s-mc", name: "s-mc", game: "minecraft", directory: `${SERVERS}/s-mc`, createdAt: 0, settings: { configured: true, software: "paper", version: "1.21.1" } }, { id: "s-bad", name: "Broken", game: "minecraft", directory: `${SERVERS}/s-bad`, createdAt: 0, settings: {} }] }));
+        fs.writeFileSync(config, JSON.stringify({ version: 2, serversDirectory: SERVERS, servers: [{ id: "s-mc", name: "s-mc", game: "minecraft", directory: `${SERVERS}/s-mc`, createdAt: 0, settings: { configured: true, software: "paper", version: "1.21.1" } }, { id: "s-bad", name: "Broken", game: "minecraft", directory: `${SERVERS}/s-bad`, createdAt: 0, settings: {} }, { id: "s-eula", name: "s-eula", game: "minecraft", directory: `${SERVERS}/s-eula`, createdAt: 0, settings: { configured: true, software: "paper", version: "1.21.1" } }] }));
+        writeTree(path.join(daemon.dataDir, "files", PANEL_ID, SERVERS, "s-eula"), { "server.jar": "jar", "eula.txt": "eula=false\n", "fake-server.json": JSON.stringify({ eulaHold: "release-eula" }) });
         writeTree(path.join(daemon.dataDir, "files", PANEL_ID, SERVERS, "s-mc"), { "server.jar": "jar", "eula.txt": "eula=true\n", "fake-server.json": "{}" });
         // s-bad can't be set up: a file stands where its folder goes
         fs.writeFileSync(path.join(daemon.dataDir, "files", PANEL_ID, SERVERS, "s-bad"), "not a folder");
@@ -77,4 +78,35 @@ describe("the server issue repairs", () => {
             served.stop();
         }
     });
+
+    test("Accept EULA & Launch starts the server once the start that needed it has ended", async () => {
+        const dir = path.join(daemon.dataDir, "files", PANEL_ID, SERVERS, "s-eula");
+        const served = await servePanel(daemon);
+        const nextExit = () => new Promise<void>((resolve) => rawProcess.onExit("s-eula-mc-server", () => resolve()));
+        const refused = nextExit();
+        await callServer("s-eula", "start-server");
+        const page = await openPage(`${served.url}/?server=s-eula`);
+        try {
+            await page.waitFor(`document.body.innerText.includes("EULA Agreement Required")`, "the EULA to be asked for");
+            // the page's short waits end at once: a repair that waited a guessed
+            // while for the refused start to end would start while it still runs
+            await page.evaluate(`(() => { const later = window.setTimeout; window.setTimeout = (fn, ms, ...args) => later(fn, ms < 1000 ? 0 : ms, ...args); })()`);
+            await page.evaluate(`[...document.querySelectorAll("button")].find((b) => b.innerText.includes("Accept EULA")).dataset.test = "accept"`);
+            await page.click('button[data-test="accept"]');
+            await page.waitFor(`!document.querySelector("[role=dialog]")`, "the issue to close");
+            await page.settled();
+            expect(fs.readFileSync(path.join(dir, "eula.txt"), "utf8")).toBe("eula=true\n");
+            // the refused start ends only now
+            fs.writeFileSync(path.join(dir, "release-eula"), "");
+            await refused;
+            await page.waitFor(`document.body.innerText.includes("ONLINE")`, "the server to start once the refused start ended");
+            expect(page.exceptions).toEqual([]);
+        } finally {
+            await page.close();
+            const stopped = nextExit();
+            await callServer("s-eula", "stop-server");
+            if (fs.readFileSync(path.join(dir, "runs.log"), "utf8").trim().split("\n").length > 1) await stopped;
+            served.stop();
+        }
+    }, 60_000);
 });

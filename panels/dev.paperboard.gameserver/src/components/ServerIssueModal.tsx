@@ -1,5 +1,5 @@
 import { PANEL_ID } from "../service/types";
-import { type Component, createMemo, createSignal, For, Show } from "solid-js";
+import { type Component, createEffect, createMemo, createRoot, createSignal, For, on, Show } from "solid-js";
 import {
     PaperFlex,
     PaperModal,
@@ -9,61 +9,55 @@ import {
     PaperQuote,
 } from "@mileniumhq/paperui";
 import { files as fileApi } from "../lib/api";
-import { activeIssue, clearActiveIssue, killConflictingProcess, resetWorldFiles, type ServerIssue } from "../lib/diagnostics";
-import { serverPort, startServer } from "../lib/server";
+import { activeIssue, clearActiveIssue, killConflictingProcess, type ServerIssue, type ServerIssueAction } from "../lib/diagnostics";
+import { serverPort, serverStatus, startServer } from "../lib/server";
 import { errorMessage } from "../lib/failure";
+
+/** Resolves true once the server is offline, or false if it turns out to run after all. */
+function whenOffline(): Promise<boolean> {
+    return new Promise((resolve) =>
+        createRoot((dispose) =>
+            createEffect(
+                on(serverStatus, (status) => {
+                    if (status !== "offline" && status !== "online") return;
+                    dispose();
+                    resolve(status === "offline");
+                }),
+            ),
+        ),
+    );
+}
 
 const ServerIssueModal: Component = () => {
     const [actionError, setActionError] = createSignal<{ title: string; message: string } | null>(null);
+    const [repairing, setRepairing] = createSignal(false);
     // the last issue stays on the modal while it closes, so it animates out instead of vanishing
     const shownIssue = createMemo<ServerIssue | null>((prev) => activeIssue() ?? prev, null);
 
-    // pty/repair failures arrive as developer-speak; the customer needs
-    // "what happened to my data, retry or do it manually", not shell
-    // vocabulary. Order matters: a wrapped trash failure contains BOTH
-    // phrases — the recoverability fact must win over the timeout fact.
-    const humanizeRepairError = (err: unknown): string => {
-        const raw = errorMessage(err);
-        if (/trash|remains on disk/i.test(raw)) {
-            return "Resetting stopped partway: the world files were moved to a '.trash-*' folder in your server directory and are recoverable there. You can retry, or clean that folder up manually.";
-        }
-        if (/did not complete|timed out/i.test(raw)) {
-            return "The repair did not finish in time. Nothing was changed. You can retry, or fix the problem manually.";
-        }
-        if (/without the/i.test(raw)) {
-            return "The repair stopped partway before it finished. You can retry.";
-        }
-        return raw;
-    };
-
-    const handleActionClick = async (action: any) => {
+    // the repair, then a start once the start that failed has ended: a start
+    // asked for while it is still ending would do nothing
+    const repair = async (action: ServerIssueAction) => {
+        if (repairing()) return;
         setActionError(null);
+        setRepairing(true);
         try {
-            if (typeof action.action === "function") {
-                await action.action();
-                return;
+            switch (action.actionKey) {
+                case "killPortAndRetry":
+                    await killConflictingProcess(serverPort());
+                    break;
+                case "acceptEula":
+                    await fileApi.write("eula.txt", "eula=true\n", PANEL_ID);
+                    break;
             }
-            if (action.actionKey === "killPortAndRetry") {
-                // a kill that failed throws, and the catch below shows why
-                await killConflictingProcess(serverPort());
-                await clearActiveIssue();
-                setTimeout(() => startServer(), 600);
-            } else if (action.actionKey === "acceptEula") {
-                await fileApi.write("eula.txt", "eula=true\n", PANEL_ID);
-                await clearActiveIssue();
-                setTimeout(() => startServer(), 400);
-            } else if (action.actionKey === "resetWorldAndStart") {
-                await resetWorldFiles();
-                await clearActiveIssue();
-                setTimeout(() => startServer(), 500);
-            } else {
-                await clearActiveIssue();
-            }
+            await clearActiveIssue();
         } catch (err) {
-            // a repair action that throws must not become an unhandled
-            // rejection — the issue stays open and the reason is shown
-            setActionError({ title: "Repair failed", message: humanizeRepairError(err) });
+            // the issue stays open and says why
+            setActionError({ title: "Repair failed", message: errorMessage(err) });
+            return;
+        } finally {
+            setRepairing(false);
         }
+        if (await whenOffline()) startServer();
     };
 
     // a dismissal the service refused leaves the issue open, saying why
@@ -87,7 +81,8 @@ const ServerIssueModal: Component = () => {
                         {(action) => (
                             <PaperButton
                                 variant={action.variant || "brand"}
-                                onClick={() => handleActionClick(action)}>
+                                disabled={repairing()}
+                                onClick={() => void repair(action)}>
                                 <Show when={action.icon}>
                                     <PaperIcon>{action.icon}</PaperIcon>
                                 </Show>

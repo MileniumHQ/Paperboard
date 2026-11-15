@@ -71,6 +71,13 @@ function server(): void {
     const plan = readJson(path.join(cwd, "fake-server.json"));
     const players: string[] = plan.players ?? [];
     log("Starting minecraft server version 1.21.1");
+    if (plan.eulaHold && !/eula=true/.test(fs.existsSync(path.join(cwd, "eula.txt")) ? fs.readFileSync(path.join(cwd, "eula.txt"), "utf8") : "")) {
+        // Minecraft refuses to run until its EULA is accepted; this one ends
+        // only once the test leaves the file `eulaHold` names
+        log("You need to agree to the EULA in order to run the server. Go to eula.txt for more info.");
+        setInterval(() => { if (fs.existsSync(path.join(cwd, plan.eulaHold))) process.exit(0); }, 20);
+        return;
+    }
     log("Starting Minecraft server on *:25565");
     if (plan.exitBeforeDone !== undefined) {
         // a chunk with no newline at the end: the last line arrives with the exit
