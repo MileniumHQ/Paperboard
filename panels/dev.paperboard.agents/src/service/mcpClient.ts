@@ -161,6 +161,8 @@ export class StdioWire implements McpWire {
     private exited: Promise<void>;
     private markExited!: () => void;
     private closing = false;
+    /** why this end stopped the server itself, which is what it ended with */
+    private failure: string | null = null;
 
     private constructor(
         private host: ProcessHost,
@@ -204,7 +206,7 @@ export class StdioWire implements McpWire {
         }
         if (this.buf.length > MAX_MESSAGE) {
             this.buf = "";
-            void this.fail("the server sent a message past the size limit");
+            this.fail("the server sent a message past the size limit");
         }
     }
 
@@ -226,7 +228,7 @@ export class StdioWire implements McpWire {
 
     private onExit(code?: number) {
         const tail = this.stderr.trim().split("\n").slice(-3).join(" | ");
-        this.finish(this.closing ? "stopped" : `the server exited${code !== undefined ? ` (${code})` : ""}${tail ? `: ${tail}` : ""}`);
+        this.finish(this.failure ?? (this.closing ? "stopped" : `the server exited${code !== undefined ? ` (${code})` : ""}${tail ? `: ${tail}` : ""}`));
         this.markExited();
     }
 
@@ -239,19 +241,17 @@ export class StdioWire implements McpWire {
             p.reject(new Error(reason));
         }
         this.pending.clear();
-        if (!this.closing) for (const cb of this.endCbs) cb(reason);
+        if (!this.closing || this.failure !== null) for (const cb of this.endCbs) cb(reason);
     }
 
     private unsubscribe() {
         for (const off of this.offs.splice(0)) off();
     }
 
-    private async fail(reason: string) {
-        try {
-            await this.close();
-        } finally {
-            this.finish(reason);
-        }
+    /** End it from this side: what was waiting, and whoever follows its end, get `reason`. */
+    private fail(reason: string) {
+        this.failure = reason;
+        this.close().catch((e) => this.finish(`${reason}, and it couldn't be stopped: ${errorText(e)}`));
     }
 
     async request(method: string, params: unknown, timeoutMs: number): Promise<unknown> {
@@ -291,9 +291,10 @@ export class StdioWire implements McpWire {
         await writeLine(this.host.write, this.id, line);
     }
 
+    /** `cb` is told why it ended; at once, if it already has */
     onEnd(cb: (reason: string) => void) {
-        if (this.ended !== null) return;
-        this.endCbs.push(cb);
+        if (this.ended !== null) cb(this.ended);
+        else this.endCbs.push(cb);
     }
 
     /** Ask it to stop, then make it, and return once the daemon says it's gone. */
@@ -306,7 +307,7 @@ export class StdioWire implements McpWire {
                 if (!(await this.stopped(STOP_GRACE_MS))) throw new Error(`${this.id} didn't stop`);
             }
         }
-        this.finish("stopped");
+        this.finish(this.failure ?? "stopped");
     }
 
     private async stopped(ms: number): Promise<boolean> {
@@ -482,7 +483,13 @@ export class SseWire implements McpWire {
 
     static async open(o: HttpWireOptions, timeoutMs = TIMEOUTS.initialize): Promise<SseWire> {
         const w = new SseWire(o);
-        await w.connect(timeoutMs);
+        try {
+            await w.connect(timeoutMs);
+        } catch (e) {
+            // a stream that opened but never said where to send messages isn't left open: nobody will close it
+            w.stream.abort(e);
+            throw e;
+        }
         return w;
     }
 

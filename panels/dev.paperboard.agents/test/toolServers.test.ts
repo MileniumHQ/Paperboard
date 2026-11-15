@@ -3,6 +3,7 @@ import fs from "node:fs";
 import http from "node:http";
 import type { AddressInfo } from "node:net";
 import path from "node:path";
+import { MAX_MESSAGE, StdioWire } from "../src/service/mcpClient";
 import { parseServer } from "../src/service/mcpConfig";
 import { McpServers } from "../src/service/mcpServers";
 import { findProgram } from "../src/service/which";
@@ -83,6 +84,20 @@ describe("tool-server config", () => {
         expect(view.secrets).toEqual({ whoami: ["token"] });
         for (const shown of [JSON.stringify(writes), JSON.stringify(views), JSON.stringify(view)]) expect(shown).not.toContain("s3cret-value");
         expect(writes.at(-1)!.servers[0]).toMatchObject({ env: { MY_TOKEN: { secret: "token" } } });
+    }, SLOW);
+
+    test("a server that sends a message past the size limit ends with that reason, to its requests and to whoever follows it", async () => {
+        const root = tempDir("mcp-big");
+        cleanups.push(() => fs.rmSync(root, { recursive: true, force: true }));
+        const program = path.join(root, "chatty.mjs");
+        fs.writeFileSync(program, `process.stdout.write("x".repeat(${MAX_MESSAGE + 1})); setInterval(() => {}, 1000);`);
+        const host = new TestHost();
+        cleanups.push(() => host.close());
+        const wire = await StdioWire.start(host, { id: "big", command: program, args: [] });
+        const ended: string[] = [];
+        wire.onEnd((reason) => ended.push(reason));
+        await expect(wire.request("initialize", {}, 10_000)).rejects.toThrow("the server sent a message past the size limit");
+        expect(ended).toEqual(["the server sent a message past the size limit"]);
     }, SLOW);
 
     test("an unreadable tools.json is reported and never written over", async () => {
@@ -271,6 +286,21 @@ describe("signing in to a tool server", () => {
         await b.s.finishSignIn("web", await browse(pending.url));
         expect(secretOnly.st.secretSeen).toBe(true);
         expect(b.s.status()[0]!.phase).toBe("running");
+    });
+
+    test("an SSE stream whose server names another server to send to is refused and closed, not left open", async () => {
+        let closed!: () => void;
+        const streamClosed = new Promise<void>((ok) => (closed = ok));
+        const base = await serve((req, res) => {
+            res.writeHead(200, { "Content-Type": "text/event-stream" });
+            res.write("event: endpoint\ndata: http://elsewhere.example/messages\n\n");
+            req.on("close", closed);
+        });
+        const { s } = servers();
+        await s.save({ name: "old", transport: "http", url: `${base}/sse`, sse: true });
+        await s.warm();
+        expect(s.status()[0]).toMatchObject({ phase: "failed", error: expect.stringContaining("another server") });
+        await streamClosed;
     });
 
     test("the older SSE transport: messages go to the address the stream names, answers come on the stream", async () => {
