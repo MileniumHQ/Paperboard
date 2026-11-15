@@ -6,7 +6,7 @@ import type { WebSocket } from "ws";
 import type { PaperCraneAuth } from "./auth";
 import { getDetailedOsInfo } from "./osInfo";
 import { ErrorCode } from "./protocol";
-import { readParams } from "./rpc/contract";
+import { readParams } from "@mileniumhq/paperapi/protocol";
 import { requireHost } from "./principal";
 import type { SocketIdentity } from "./wsIdentity";
 

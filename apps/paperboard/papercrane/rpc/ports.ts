@@ -24,7 +24,7 @@ const claimsOf = (panelId: string, action: string, ctx: RpcContext) => resourceP
 const ports = (ctx: RpcContext) => portRegistryFor(ctx.engine);
 
 // Claims are panel-scoped. The policy and the list of every claim are the
-// user's, shown in the shell: those need host authority (rpc/contract.ts).
+// user's, shown in the shell: those need host authority (PaperAPI's protocol/rpc.ts).
 // A failure's message is the user's answer ("port 25565: Game Server has it"), unprefixed.
 export const portsRpc = rpcModule({
     "ports:claim": (params, ctx, action) => ports(ctx).claim(claimsOf(params.panelId, action, ctx), params),

@@ -4,6 +4,7 @@ import { rpcModule } from "./dispatch";
 import { resourcePanelId } from "../principal";
 import { problemsFor } from "./problems";
 import { errorMessage } from "@mileniumhq/paperapi/errors";
+import type { DownloadProgressPayload } from "../download";
 
 // a scoped caller reaches only its own panel
 function ownPanel(requested: string, action: string, ctx: RpcContext): string {
@@ -29,7 +30,7 @@ export const panelsRpc = rpcModule({
         // daemon resolves the release and its bytes from its own registry;
         // any downloadUrl sent is ignored.
         const expected = { allowDowngrade: allowDowngrade === true, version, sha256 };
-        const progress = downloadId ? (payload: object) => ctx.sendEvent("progress", { ...payload, downloadId }) : undefined;
+        const progress = downloadId ? (payload: DownloadProgressPayload) => ctx.sendEvent("progress", { ...payload, downloadId }) : undefined;
         // ifUnused (the updater): a panel running something people rely on
         // (important or long running) is held, and the reply names those
         // processes; anything else it runs is stopped for the install and

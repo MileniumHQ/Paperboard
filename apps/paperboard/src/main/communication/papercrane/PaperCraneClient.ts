@@ -1,17 +1,16 @@
 // What a computer's Paperboard Server can be asked: pairing, packages,
 // panel installs, Stop and update, config, its own update and system info.
 // The connection under it is PaperCraneConnection.ts.
-import type { PanelManifest } from "../../../../papercrane";
-import type { PackageUpdateWait } from "../../../../papercrane/enginePackages";
 import { logger } from "../../../../papercrane/logger";
-import type { RpcResult } from "../../../../papercrane/rpc/contract";
+import type { PanelManifest, RpcResult } from "@mileniumhq/paperapi/protocol";
 import { PaperCraneConnection, type ProgressPayload } from "./PaperCraneConnection";
 
 export { type PaperCraneClientOptions, type ProgressPayload, type TargetStatus } from "./PaperCraneConnection";
 
 export type CraneSystemInfo = RpcResult<"system:info">;
 export type PairResult = RpcResult<"auth:pair">;
-export type { PackageUpdateWait };
+/** a runtime update staged on a computer, and what it waits for */
+export type PackageUpdateWait = RpcResult<"package:pending">["updates"][number];
 
 export const PACKAGE_DOWNLOAD_TIMEOUT_MS = 45 * 60_000;
 

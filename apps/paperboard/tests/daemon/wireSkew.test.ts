@@ -71,6 +71,19 @@ describe("a peer of another release", () => {
         await panel.close();
     });
 
+    test("events:subscribe reads as every release sent it: entries that aren't names pass over, added fields travel, and a missing list is refused naming it", async () => {
+        const daemon = await startDaemon();
+        const host = await daemon.rpc();
+        expect(await host.ok("events:subscribe", { events: ["problems:changed", 7, null, "backup:progress"] })).toEqual({ success: true, count: 2 });
+        expect(await host.ok("events:subscribe", { events: [], since: 3 })).toEqual({ success: true, count: 0 });
+        const missing = await host.fail("events:subscribe", { names: ["problems:changed"] });
+        expect(missing.code).toBe("INVALID_PARAMS");
+        expect(missing.error).toContain("events:subscribe");
+        const many = await host.fail("events:subscribe", { events: Array.from({ length: 513 }, (_, i) => `e${i}`) });
+        expect(many).toEqual({ error: "Request failed: Too many event subscriptions (max 512) (in events:subscribe)", code: "INVALID_PARAMS" });
+        await host.close();
+    });
+
     test("the shell reads a 0.1 daemon's answers: a self-update it started at once, and a panel list with nothing else in it", async () => {
         const token = `pc_${"cd".repeat(24)}`;
         const wss = new WebSocketServer({ host: "127.0.0.1", port: 0 });

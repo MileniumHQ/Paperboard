@@ -42,7 +42,7 @@ async function carrying<T>(callId: string | undefined, ctx: RpcContext, operatio
 }
 
 // Locations are the user's choice, made in the shell: every location
-// action needs host authority (rpc/contract.ts). Backups themselves are panel-scoped.
+// action needs host authority (PaperAPI's protocol/rpc.ts). Backups themselves are panel-scoped.
 const backups = (ctx: RpcContext) => backupServiceFor(ctx.engine);
 
 export const backupsRpc = rpcModule({

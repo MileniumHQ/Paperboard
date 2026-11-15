@@ -5,6 +5,7 @@ import { pipeline } from "node:stream/promises";
 import { errorCode, errorMessage } from "@mileniumhq/paperapi/errors";
 import { writeFileAtomic as writeWhole, writeFileAtomicSync as writeWholeSync } from "@mileniumhq/paperapi/fs";
 import { KeyedQueue } from "@mileniumhq/paperapi/serialQueue";
+import { isSafeId } from "@mileniumhq/paperapi/protocol";
 
 // one-shot timers must never hold the process open: unref and move on.
 // (bun and node both expose unref on Timeout handles)
@@ -110,14 +111,9 @@ export function readStateFileSync<T>(filePath: string, empty: T, label: string):
 
 // ─── Ids ─────────────────────────────────────────────────────────────────────
 
-const SAFE_ID_RE = /^[a-zA-Z0-9._-]+$/;
-
 // Sanitizes an id so it can never escape its base directory
 export function sanitizeId(id: string | undefined | null): string | null {
-    if (!id || typeof id !== "string") return null;
-    if (!SAFE_ID_RE.test(id)) return null;
-    if (id.startsWith(".")) return null;
-    return id;
+    return isSafeId(id) ? id : null;
 }
 
 // Directory name for a panel home under files/, dots preserved

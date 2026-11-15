@@ -14,11 +14,11 @@ import { computerHostname } from "../hostname";
 import type { S3Settings } from "./s3Store";
 import type { DriveSettings } from "./driveStore";
 import { errorCode } from "@mileniumhq/paperapi/errors";
-import { LOCAL_DESTINATION_ID, isDestinationId } from "./types";
+import { LOCAL_DESTINATION_ID, isDestinationId } from "@mileniumhq/paperapi/protocol";
 
 /** vault owner for location secrets; shell-* ids are reserved, no panel holds it */
 export const BACKUP_VAULT_OWNER = "shell-backups";
-export { LOCAL_DESTINATION_ID, isDestinationId } from "./types";
+export { LOCAL_DESTINATION_ID, isDestinationId };
 export const MAX_DESTINATIONS = 16;
 export const DESTINATION_LABEL_MAX = 60;
 

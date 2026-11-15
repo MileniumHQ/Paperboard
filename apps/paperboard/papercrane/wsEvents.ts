@@ -1,13 +1,12 @@
 // Broadcast events: which sockets declared which event names, and delivery
 // to exactly those sockets.
 import { WebSocket } from "ws";
-import { ErrorCode } from "./protocol";
+import type { EventPayload } from "@mileniumhq/paperapi/protocol";
 import type { TrafficMonitor } from "./monitor";
 import { sendBounded } from "./wsFrames";
 
 // per-socket broadcast interest is opt-in: a socket that never declares an
 // events:subscribe list receives no broadcast event frames at all
-const MAX_EVENT_SUBS = 512;
 
 export class EventSubscriptions {
     // broadcast interest per socket: socket → declared event names
@@ -20,7 +19,7 @@ export class EventSubscriptions {
     constructor(private monitor: TrafficMonitor) {}
 
     // sends an event to the sockets that declared it; fromPanel is who raised it
-    deliver(event: string, payload: any, fromPanel: string | null): void {
+    deliver<E extends string>(event: E, payload: EventPayload<E>, fromPanel: string | null): void {
         const recipients = new Set<WebSocket>();
         for (const client of this.byEvent.get(event) ?? []) recipients.add(client);
         for (const client of this.byEvent.get("*") ?? []) recipients.add(client);
@@ -53,22 +52,11 @@ export class EventSubscriptions {
     }
 
     // broadcast interest: full-replace declaration of the event names this
-    // socket wants to receive. events:unsubscribe is expressed as an empty
-    // list — one idempotent toggle.
-    subscribe(socket: WebSocket, params: any, reply: (result: any, error?: string, code?: string) => void): void {
-        const events = params?.events;
-        if (!Array.isArray(events)) {
-            reply(null, "Missing required parameter: events (array)", ErrorCode.INVALID_PARAMS);
-            return;
-        }
-        if (events.length > MAX_EVENT_SUBS) {
-            reply(null, `Too many event subscriptions (max ${MAX_EVENT_SUBS})`, ErrorCode.INVALID_PARAMS);
-            return;
-        }
-        const declared = new Set<string>();
-        for (const evt of events) {
-            if (typeof evt === "string") declared.add(evt);
-        }
+    // socket wants to receive, as events:subscribe's shape read them
+    // (bounded, text only). events:unsubscribe is expressed as an empty
+    // list — one idempotent toggle. Returns how many it hears.
+    subscribe(socket: WebSocket, events: string[]): number {
+        const declared = new Set(events);
         // full-replace: drop the old interest before indexing the new
         // declaration so the event index never holds a stale membership
         this.forget(socket);
@@ -81,6 +69,6 @@ export class EventSubscriptions {
             }
             set.add(socket);
         }
-        reply({ success: true, count: declared.size });
+        return declared.size;
     }
 }

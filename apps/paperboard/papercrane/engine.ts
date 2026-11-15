@@ -19,7 +19,7 @@ import { requirePanelId } from "@mileniumhq/paperapi/panelIdentity";
 import { WorkloadRegistry, type ProcessStreams, type TerminalStreams } from "./engineWorkloads";
 import { PackageManager, sanitizeIdOrThrow, type PackageInstallOutcome, type PackageUpdateWait, type ReleaseSource } from "./enginePackages";
 import { PanelInstaller, type ExpectedPanelRelease, type UninstallResult } from "./enginePanels";
-import type { PanelManifest } from "./types";
+import type { PanelManifest } from "@mileniumhq/paperapi/protocol";
 import { errorCode } from "@mileniumhq/paperapi/errors";
 import { isWriteFileAtomicTemp } from "@mileniumhq/paperapi/fs";
 

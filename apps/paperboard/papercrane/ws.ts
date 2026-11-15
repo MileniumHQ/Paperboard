@@ -18,7 +18,8 @@ import { backupServiceFor, backupsRpc } from "./rpc/backups";
 import { portsRpc } from "./rpc/ports";
 import { problemsFor, problemsRpc } from "./rpc/problems";
 import { PROTOCOL_VERSION, ErrorCode } from "./protocol";
-import { panelId as panelIdShape, readValue, rpcErrorCode } from "./rpc/params";
+import { panelId as panelIdShape, readParams, readValue } from "@mileniumhq/paperapi/protocol";
+import { rpcErrorCode } from "./rpc/errors";
 import { TrafficMonitor } from "./monitor";
 import { secretsMatch } from "./secretCompare";
 import { MONITOR_PROTOCOL, MONITOR_SUBSCRIBE, MONITOR_UNSUBSCRIBE } from "@mileniumhq/paperapi/monitorProtocol";
@@ -77,7 +78,7 @@ interface ServerOptions extends TunnelOptions {
 
 const MAX_CONNECTIONS = 4096;
 
-// every action rpc/contract.ts declares, past the auth gate
+// every action PaperAPI's protocol/rpc.ts declares, past the auth gate
 const dispatch = rpcDispatcher([
     terminalRpc, processRpc, filesRpc, packagesRpc, panelsRpc, actionsRpc, blocksRpc,
     systemRpc, secretsRpc, backupsRpc, portsRpc, problemsRpc,
@@ -152,13 +153,13 @@ export function setupWebSocketServer(
         handshakeTimer.unref?.();
         const tunnels = socketTunnels(ws, identity, options);
 
-        const sendEvent = (event: string, payload: any) => {
+        const sendEvent: RpcContext["sendEvent"] = (event, payload) => {
             if (!sendBounded(ws, JSON.stringify({ type: "event", event, payload }))) {
                 ws.close(4429, "Slow event consumer");
             }
         };
 
-        const broadcastEvent = (event: string, payload: any) => events.deliver(event, payload, identity.panelId);
+        const broadcastEvent: RpcContext["broadcastEvent"] = (event, payload) => events.deliver(event, payload, identity.panelId);
 
         ws.on("close", () => {
             clearTimeout(handshakeTimer);
@@ -263,7 +264,7 @@ export function setupWebSocketServer(
                 if (await handleAuth(action, params, { ws, auth, identity, remoteAddress: req?.socket?.remoteAddress, reply, revokeSockets })) return;
 
                 if (action === "events:subscribe") {
-                    events.subscribe(ws, params, reply);
+                    reply({ success: true, count: events.subscribe(ws, readParams(action, params).events) });
                     return;
                 }
 
@@ -293,7 +294,7 @@ export function setupWebSocketServer(
                 reply(null, `Unknown action: ${action}`, ErrorCode.NOT_FOUND);
             } catch (err: any) {
                 // always answer with a sanitized message, never a stack.
-                // malformed calls (rpc/contract.ts shapes) get a typed
+                // malformed calls (PaperAPI's protocol/rpc.ts shapes) get a typed
                 // INVALID_PARAMS; everything else is INTERNAL.
                 try {
                     const error = `Request failed: ${err?.message || "internal error"}`;

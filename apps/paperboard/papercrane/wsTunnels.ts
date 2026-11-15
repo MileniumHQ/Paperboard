@@ -9,7 +9,7 @@ import { pinnedTlsOptions } from "./pinnedTls";
 import { pinnableWebSocket } from "./pinnableWebSocket";
 import { logger } from "./logger";
 import { ErrorCode } from "./protocol";
-import { readValue, text } from "./rpc/params";
+import { readValue, text } from "@mileniumhq/paperapi/protocol";
 import { HANDSHAKE_TIMEOUT_MS, MAX_WS_PAYLOAD, sendBounded } from "./wsFrames";
 import type { SocketIdentity } from "./wsIdentity";
 

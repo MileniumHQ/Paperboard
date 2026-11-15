@@ -31,7 +31,7 @@ export interface PackageUpdatesState {
 
 const QUERY_TIMEOUT_MS = 5_000;
 
-type PackageHolders = Array<{ owner: string | null; holds: boolean }>;
+type PackageHolders = Array<{ owner: string | null; holds?: boolean }>;
 
 /** The display names of what holds a package update back: only important
  * or long-running processes hold it, a panel's by its name, the app's own

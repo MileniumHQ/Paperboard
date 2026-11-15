@@ -1,10 +1,10 @@
 import { actionsRegistry } from "../actions";
 import { rpcModule, type RpcHandler } from "./dispatch";
-import { InvalidParamsError } from "./params";
+import { InvalidParamsError } from "@mileniumhq/paperapi/protocol";
 import { answeredAs, ownNamespace, ownedElsewhere } from "./blocks";
 
 // The Actions registry (Blocks' predecessor). Malformed calls are refused
-// by their shapes (rpc/contract.ts); registry conflicts answer CONFLICT,
+// by their shapes (PaperAPI's protocol/rpc.ts); registry conflicts answer CONFLICT,
 // and registry call failures answer as they are.
 const register: RpcHandler<"actions:register" | "action:register"> = ({ panelId, action: act, actions: acts, schema }, ctx, action) => {
     const owner = ownNamespace(panelId, action, ctx);

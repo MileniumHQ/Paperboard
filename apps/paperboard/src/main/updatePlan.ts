@@ -5,6 +5,7 @@
 import { semverGt } from "@mileniumhq/release";
 import { logger } from "../../papercrane/logger";
 import { errorMessage } from "@mileniumhq/paperapi/errors";
+import type { RpcResult } from "@mileniumhq/paperapi/protocol";
 
 export type UpdateTaskType =
     | "local_panel"
@@ -42,7 +43,7 @@ export interface ComputerUpdateState {
     name: string;
     isLocal: boolean;
     panels: PanelUpdateInfo[];
-    packages: Record<string, { version?: string }>;
+    packages: RpcResult<"package:getIndex">["index"];
     // what system:info answered; a computer that couldn't say is unreachable, not planned
     sysInfo: {
         os: string;
@@ -134,8 +135,9 @@ export async function planUpdateTasks(
 
         for (const [pkgId, installed] of Object.entries(comp.packages)) {
             const reg = registryPackages[pkgId];
-            if (!reg?.version || !(installed as any)?.version) continue;
-            if (!semverGt(reg.version, (installed as any).version)) continue;
+            const version = typeof installed === "string" ? undefined : installed.version;
+            if (!reg?.version || !version) continue;
+            if (!semverGt(reg.version, version)) continue;
             const platformData = reg.platforms?.[`${comp.sysInfo.os}-${archKey(comp.sysInfo.arch)}`];
             if (!platformData?.url) continue;
             // trust boundary: same rule as panels — no checksum fact, no task.

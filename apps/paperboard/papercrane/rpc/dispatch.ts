@@ -1,10 +1,9 @@
 // Runs a daemon RPC: finds the action's handler, refuses a panel's scoped
 // credential for a host action, reads the params against the action's
-// shape (rpc/contract.ts) and answers with what the handler returns.
+// shape (PaperAPI's protocol/rpc.ts) and answers with what the handler returns.
 import type { RpcContext } from "./context";
-import { isRpcAction, readParams, RPC, type RpcAction, type RpcParams, type RpcResult } from "./contract";
-import { Refusal } from "./errors";
-import { rpcErrorCode } from "./params";
+import { isRpcAction, readParams, RPC, type RpcAction, type RpcParams, type RpcResult } from "@mileniumhq/paperapi/protocol";
+import { Refusal, rpcErrorCode } from "./errors";
 import { requireHost } from "../principal";
 
 export type RpcHandler<A extends RpcAction> = (params: RpcParams<A>, ctx: RpcContext, action: A) => Promise<RpcResult<A>> | RpcResult<A>;

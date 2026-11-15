@@ -6,7 +6,7 @@ import * as fs from "fs";
 import { writeFileAtomic } from "../storage";
 import { invalidParams } from "../rpc/errors";
 import { isPanelId } from "@mileniumhq/paperapi/panelIdentity";
-import { MAX_ROUTINE_BACKUPS_KEPT, ROUTINE_BACKUP_HOURS, ROUTINE_BACKUP_LABEL } from "@mileniumhq/paperapi/backups";
+import { MAX_ROUTINE_BACKUPS_KEPT, ROUTINE_BACKUP_HOURS, ROUTINE_BACKUP_LABEL, type BackupSchedule, type BackupScheduleResult } from "@mileniumhq/paperapi/backups";
 import { errorMessage } from "@mileniumhq/paperapi/errors";
 
 export const SCHEDULE_FILE_VERSION = 1;
@@ -16,21 +16,10 @@ export const BUSY_RETRY_MS = 15 * 60 * 1000;
 /** the timer wakes at least this often, so a changed clock is noticed */
 export const MAX_SLEEP_MS = 60 * 60 * 1000;
 
-export interface ScheduleResult {
-    /** ISO time it finished */
-    at: string;
-    ok: boolean;
-    /** what went wrong, or what was pruned */
-    message: string | null;
-}
-
-export interface BackupSchedule {
-    everyHours: number;
-    keep: number;
-    /** ISO time the next routine backup is due */
-    nextRunAt: string;
-    last: ScheduleResult | null;
-}
+// a schedule and how its last run went are what the wire carries
+export type { BackupSchedule, BackupScheduleResult as ScheduleResult };
+type RoutineHours = BackupSchedule["everyHours"];
+const isRoutineHours = (value: unknown): value is RoutineHours => (ROUTINE_BACKUP_HOURS as readonly unknown[]).includes(value);
 
 export interface ScheduleFile {
     version: typeof SCHEDULE_FILE_VERSION;
@@ -41,7 +30,7 @@ const iso = (value: unknown) => typeof value === "string" && Number.isFinite(Dat
 
 function validSchedule(value: any): value is BackupSchedule {
     return value && typeof value === "object"
-        && (ROUTINE_BACKUP_HOURS as readonly number[]).includes(value.everyHours)
+        && isRoutineHours(value.everyHours)
         && Number.isInteger(value.keep) && value.keep >= 1 && value.keep <= MAX_ROUTINE_BACKUPS_KEPT
         && iso(value.nextRunAt)
         && (value.last === null || (value.last && iso(value.last.at) && typeof value.last.ok === "boolean"
@@ -80,9 +69,9 @@ export function writeSchedules(file: string, schedules: ScheduleFile): Promise<v
 }
 
 /** a schedule a caller asked for, checked */
-export function scheduleInput(input: any): { everyHours: number; keep: number } {
+export function scheduleInput(input: any): { everyHours: RoutineHours; keep: number } {
     if (!input || typeof input !== "object") throw invalidParams("schedule must be an object or null");
-    if (!(ROUTINE_BACKUP_HOURS as readonly number[]).includes(input.everyHours)) {
+    if (!isRoutineHours(input.everyHours)) {
         throw invalidParams(`everyHours must be one of ${ROUTINE_BACKUP_HOURS.join(", ")}`);
     }
     if (!Number.isInteger(input.keep) || input.keep < 1 || input.keep > MAX_ROUTINE_BACKUPS_KEPT) {

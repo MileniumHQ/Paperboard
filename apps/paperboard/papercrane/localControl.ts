@@ -9,7 +9,7 @@ import * as fs from "fs";
 import { WebSocket } from "ws";
 import { DAEMON_CHALLENGE_HEADER, DAEMON_PROOF_TYPE, craneHandshakePath, verifyDaemonProof } from "./handshake";
 import { PROTOCOL_VERSION } from "./protocol";
-import { readResult, type RpcAction, type RpcParams, type RpcResult } from "./rpc/contract";
+import { readResult, type RpcAction, type RpcParams, type RpcResult } from "@mileniumhq/paperapi/protocol";
 import { getPaperboardDir } from "./paths";
 import { formatListenAddress } from "./tui";
 import { getDisplayHost } from "./util";
@@ -57,7 +57,7 @@ function readHandshake(): Handshake {
 
 export interface LocalDaemon {
     handshake: Handshake;
-    /** Asks the daemon; the answer is checked against the action's shape (rpc/contract.ts). */
+    /** Asks the daemon; the answer is checked against the action's shape (PaperAPI's protocol/rpc.ts). */
     call<A extends RpcAction>(action: A, params?: RpcParams<A>): Promise<RpcResult<A>>;
     close(): void;
 }

@@ -37,7 +37,8 @@ import { DriveBackupStore, forgetDriveToken, GOOGLE_ENDPOINTS, type DriveEndpoin
 import { LocalBackupStore } from "./localStore";
 import { normalizeS3Prefix, S3BackupStore } from "./s3Store";
 import { ROUTINE_BACKUP_LABEL } from "@mileniumhq/paperapi/backups";
-import { BACKUP_ID_RE, BACKUP_LABEL_MAX, newBackupId, type BackupProgress, type BackupProgressChange, type BackupRecord, type BackupStep, type BackupStore, type BackupUsage } from "./types";
+import { BACKUP_LABEL_MAX } from "@mileniumhq/paperapi/protocol";
+import { BACKUP_ID_RE, newBackupId, type BackupProgress, type BackupProgressChange, type BackupRecord, type BackupStep, type BackupStore, type BackupUsage } from "./types";
 import {
     BUSY_RETRY_MS,
     MAX_SCHEDULES,

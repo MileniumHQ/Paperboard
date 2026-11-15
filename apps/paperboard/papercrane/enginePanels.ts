@@ -3,7 +3,7 @@
 // for a restore, each holding the panel's operation lock
 import path from "path";
 import fs from "fs";
-import { PanelManifest } from "./types";
+import type { PanelManifest } from "@mileniumhq/paperapi/protocol";
 import { moveFileSafe, panelFilesDirName, LimitError } from "./storage";
 import { validatePanelManifest } from "./panelManifest";
 import { ProgressCallback, streamToFileWithProgress } from "./download";

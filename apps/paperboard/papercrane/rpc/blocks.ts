@@ -8,7 +8,8 @@ import { ErrorCode } from "../protocol";
 import type { RpcContext } from "./context";
 import { rpcModule } from "./dispatch";
 import { Refusal } from "./errors";
-import { InvalidParamsError, rpcErrorCode } from "./params";
+import { InvalidParamsError } from "@mileniumhq/paperapi/protocol";
+import { rpcErrorCode } from "./errors";
 import { resourcePanelId } from "../principal";
 import { errorMessage } from "@mileniumhq/paperapi/errors";
 

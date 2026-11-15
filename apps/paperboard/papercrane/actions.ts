@@ -4,7 +4,7 @@ import { logger } from "./logger";
 import { RpcError } from "./rpc/errors";
 import { ErrorCode } from "./protocol";
 import { LimitError } from "./storage";
-import { MAX_PROJECT_IMAGE } from "./rpc/contract";
+import { MAX_PROJECT_IMAGE } from "@mileniumhq/paperapi/protocol";
 
 // outstanding action-call caps, mirroring the client surface
 // (PaperAPI CraneTransport.MAX_PENDING_CALLS): a caller runaway is refused

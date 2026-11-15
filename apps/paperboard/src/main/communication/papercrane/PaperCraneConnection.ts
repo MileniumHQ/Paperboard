@@ -9,7 +9,7 @@ import * as path from "path";
 import * as crypto from "crypto";
 import { startPaperCraneServer, ServerInstance, DEFAULT_PORT } from "../../../../papercrane";
 import { PROTOCOL_VERSION } from "../../../../papercrane/protocol";
-import { readResult, type RpcAction, type RpcParams, type RpcResult } from "../../../../papercrane/rpc/contract";
+import { readEvent, readResult, type ProgressEvent, type RpcAction, type RpcParams, type RpcResult } from "@mileniumhq/paperapi/protocol";
 import {
     readCraneHandshake, verifyDaemonProof,
     DAEMON_CHALLENGE_HEADER, DAEMON_PROOF_TYPE,
@@ -29,23 +29,8 @@ import { bracketHost, isLoopback } from "./probeTarget";
 import { errorMessage } from "@mileniumhq/paperapi/errors";
 
 
-export interface ProgressPayload {
-    stage:
-        | "starting"
-        | "checking"
-        | "stopping"
-        | "downloading"
-        | "verifying"
-        | "extracting"
-        | "completed"
-        | "error";
-    percent: number;
-    bytesLoaded?: number;
-    bytesTotal?: number;
-    message?: string;
-    // update:inUse: which of its updates this is about
-    target?: string;
-}
+/** how far a download, an install or an update is (update:inUse's name which of its updates in target) */
+export type ProgressPayload = ProgressEvent;
 
 // Prove the peer on the very socket that will carry credentials. A proof
 // from a separate HTTP probe would leave a port-replacement race before WS.
@@ -483,7 +468,7 @@ export class PaperCraneConnection extends EventEmitter {
 
     // a daemon frame: an answer to a call on this socket, or a push
     private onFrame(ws: WebSocket, raw: RawData): void {
-        let msg: { type?: string; id?: number; error?: string; result?: unknown; event?: string; payload?: Record<string, unknown> };
+        let msg: { type?: string; id?: number; error?: string; result?: unknown; event?: string; payload?: unknown };
         try {
             msg = JSON.parse(raw.toString());
         } catch (err) {
@@ -502,7 +487,7 @@ export class PaperCraneConnection extends EventEmitter {
             if (msg.error) handler.reject(new DaemonRefusal(msg.error));
             else handler.resolve(msg.result);
         } else if (msg.type === "event") {
-            this.handlePushEvent(msg.event ?? "", msg.payload ?? {});
+            this.handlePushEvent(msg.event ?? "", msg.payload);
         }
     }
 
@@ -618,18 +603,20 @@ export class PaperCraneConnection extends EventEmitter {
 
     // panels own their streams through PaperAPI's transport; this client
     // only hears progress for the updater's package downloads
-    private handlePushEvent(
-        event: string,
-        payload: Record<string, unknown>,
-    ) {
-        if (event === "progress") {
-            this.progressListeners
-                .get(payload.downloadId as string)
-                ?.(payload as unknown as ProgressPayload);
+    private handlePushEvent(event: string, payload: unknown) {
+        if (event !== "progress") return;
+        let progress: ProgressPayload;
+        try {
+            progress = readEvent(event, payload);
+        } catch (err) {
+            // quiet: a report that doesn't fit is said here and dropped; the download's own answer still settles it
+            logger.error(`[PaperCraneClient] ${this.host}:`, errorMessage(err));
+            return;
         }
+        this.progressListeners.get(progress.downloadId)?.(progress);
     }
 
-    /** Asks the daemon; the answer is checked against the action's shape (rpc/contract.ts). */
+    /** Asks the daemon; the answer is checked against the action's shape (PaperAPI's protocol/rpc.ts). */
     public async call<A extends RpcAction>(
         action: A,
         params: RpcParams<A>,

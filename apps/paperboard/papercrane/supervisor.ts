@@ -12,7 +12,7 @@ import { unrefTimer } from "./storage";
 
 import type { InputEncoding } from "./supervisorTypes";
 
-export { INPUT_ENCODINGS, type InputEncoding } from "./supervisorTypes";
+export type { InputEncoding } from "./supervisorTypes";
 
 export interface SupervisorSpawnConfig {
     command?: string;

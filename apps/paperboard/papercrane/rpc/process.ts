@@ -1,7 +1,7 @@
 import type { RpcContext } from "./context";
 import { claimClient, checkClientOwnership, checkSpawnEnv } from "./ownership";
 import type { ProcessStreams } from "../engineWorkloads";
-import { InvalidParamsError } from "./params";
+import { InvalidParamsError } from "@mileniumhq/paperapi/protocol";
 import { rpcModule } from "./dispatch";
 
 // a process's streams as the events its socket receives
