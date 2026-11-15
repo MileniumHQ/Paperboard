@@ -79,12 +79,14 @@ export async function isBanned(ctx: Server, name: string): Promise<boolean | nul
     // none written yet: nobody is banned
     if (content === null) return false;
     let parsed: unknown;
+    let whole = true;
     try {
         parsed = JSON.parse(content);
     } catch {
         // quiet: a list cut short by the server's write says nothing yet; the caller reads it again
-        return null;
+        whole = false;
     }
+    if (!whole) return null;
     if (!Array.isArray(parsed)) throw new Error(`${LIST_FILES.banned} is not a list of players`);
     const wanted = name.toLowerCase();
     return parsed.some((entry) => !!entry && typeof entry === "object" && typeof entry.name === "string" && entry.name.toLowerCase() === wanted);
