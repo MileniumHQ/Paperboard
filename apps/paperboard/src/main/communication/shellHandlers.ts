@@ -15,6 +15,7 @@ import { servePanelAsset } from "../panelServe";
 import type { LaunchOptions } from "../../shared/launchOptions";
 import type { Graphics } from "../../shared/graphics";
 import { isListingFilePath, LISTING_FILE_MAX_BYTES } from "../../shared/listingFile";
+import { field } from "../../shared/fileTransfer";
 import type { SHARED_SHELL_INVOKE_CHANNELS } from "./shellChannels";
 
 export interface ShellHandlerDeps {
@@ -28,10 +29,6 @@ export interface ShellHandlerDeps {
 export type ShellInvokeHandler = (args: unknown) => unknown;
 
 export type SharedShellInvokeChannel = (typeof SHARED_SHELL_INVOKE_CHANNELS)[number];
-
-function field(args: unknown, key: string): unknown {
-    return args && typeof args === "object" ? (args as Record<string, unknown>)[key] : undefined;
-}
 
 function requireString(value: unknown, name: string): string {
     if (typeof value !== "string" || !value) {

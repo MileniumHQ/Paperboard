@@ -71,7 +71,8 @@ function invalid(message: string): never {
     throw new PanelFileTransferError("invalid-request", message);
 }
 
-function field(args: unknown, key: string): unknown {
+/** one field of an IPC call's arguments, whatever shape they came in */
+export function field(args: unknown, key: string): unknown {
     return args && typeof args === "object" ? (args as Record<string, unknown>)[key] : undefined;
 }
 
