@@ -1,7 +1,8 @@
-import { createMemo, createSignal, For, onMount, Show } from "solid-js";
+import { batch, createMemo, createSignal, For, onMount, Show } from "solid-js";
 import { PaperButton, PaperFlex, PaperInput, PaperLink, PaperQuote, PaperText } from "@mileniumhq/paperui";
 import { serverBridge } from "../../lib/server";
 import { errorMessage } from "../../lib/failure";
+import { createLatest } from "../../core/state";
 import { formatCount } from "../../lib/addons/presentation";
 import { sourceCalls, type SourceGameSpec } from "./index";
 import MapCards from "./MapCards";
@@ -32,19 +33,23 @@ export default function WorkshopPane(props: {
     const [searching, setSearching] = createSignal(false);
     const [error, setError] = createSignal("");
     // the answer in view is the last one asked for, whichever search comes back last
-    let latest = 0;
+    const latest = createLatest();
 
     const search = async () => {
-        const asked = ++latest;
         setSearching(true);
         setError("");
         try {
-            const found = await serverBridge.call<SourceWorkshopResults>(ids.workshopFind, { query: query() }, { timeoutMs: 30_000 });
-            if (asked === latest) setResults(found);
+            const answer = await latest(() => serverBridge.call<SourceWorkshopResults>(ids.workshopFind, { query: query() }, { timeoutMs: 30_000 }));
+            if (!answer) return;
+            batch(() => {
+                setResults(answer.value);
+                setSearching(false);
+            });
         } catch (err) {
-            if (asked === latest) setError(errorMessage(err));
-        } finally {
-            if (asked === latest) setSearching(false);
+            batch(() => {
+                setError(errorMessage(err));
+                setSearching(false);
+            });
         }
     };
     // what is popular, until something is asked for

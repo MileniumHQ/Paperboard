@@ -1,5 +1,6 @@
-import { createEffect, createSignal, on, onCleanup, type Accessor } from "solid-js";
+import { batch, createEffect, createSignal, on, onCleanup, type Accessor } from "solid-js";
 import { errorMessage } from "../../lib/failure";
+import { createLatest, createStateSignal } from "../../core/state";
 import { versionLabel } from "../../lib/addons/presentation";
 import {
     defaultVersion,
@@ -20,22 +21,24 @@ import { newStage, stageFolder } from "../../lib/addons/upload";
 const TYPING_DEBOUNCE_MS = 400;
 
 export function createAddonListing<Meta>(kind: Accessor<AddonKind<Meta>>) {
-    const [listing, setListing] = createSignal<AddonListing<Meta> | null>(null);
+    // a reload keeps the entries it did not change, so their cards stay
+    const [listing, setListing] = createStateSignal<AddonListing<Meta> | null>(null);
     const [error, setError] = createSignal("");
-    // a read that finishes after a newer one started must not overwrite it
-    let latest = 0;
+    const latest = createLatest();
     const reload = async () => {
-        const current = ++latest;
         try {
-            const next = await kind().list();
-            if (current !== latest) return;
-            setListing(() => next);
-            setError("");
+            const answer = await latest(() => kind().list());
+            if (!answer) return;
+            batch(() => {
+                setListing(answer.value);
+                setError("");
+            });
         } catch (err) {
-            if (current !== latest) return;
             console.error(`[${kind().title}] Failed to list what is installed:`, err);
-            setListing(null);
-            setError(errorMessage(err));
+            batch(() => {
+                setListing(null);
+                setError(errorMessage(err));
+            });
         }
     };
     return { listing, error, reload };
@@ -99,29 +102,30 @@ export function createAddonInstall<Meta>(
 
     createEffect(
         on(target, (next) => {
+            // made for this target: the next one (or none) drops its answer
+            const latest = createLatest();
             setVersions(null);
             setVersionId("");
             setError("");
             setReady(true);
             setPayload(undefined);
+            setLoading(next !== null);
             if (!next) return;
-            const projectId = next.projectId;
-            const current = () => target()?.projectId === projectId;
-            setLoading(true);
-            kind()
-                .versions(projectId)
-                .then((list) => {
-                    if (!current()) return;
-                    setVersions(list);
-                    setVersionId(defaultVersion(kind(), list)?.id ?? "");
+            latest(() => kind().versions(next.projectId))
+                .then((answer) => {
+                    if (!answer) return;
+                    batch(() => {
+                        setVersions(answer.value);
+                        setVersionId(defaultVersion(kind(), answer.value)?.id ?? "");
+                        setLoading(false);
+                    });
                 })
                 .catch((err) => {
-                    if (!current()) return;
                     console.error(`[${kind().title}] Failed to load versions of "${next.title}":`, err);
-                    setError(errorMessage(err));
-                })
-                .finally(() => {
-                    if (current()) setLoading(false);
+                    batch(() => {
+                        setError(errorMessage(err));
+                        setLoading(false);
+                    });
                 });
         }),
     );

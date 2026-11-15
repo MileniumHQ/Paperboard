@@ -9,7 +9,8 @@ import { serverStateOf } from "../servers";
 import { PANEL_ID } from "../service/contract";
 import type { ServersState } from "../service";
 import type { GameServerState } from "../service/types";
-import { createStateSignal } from "../core/state";
+import { createLatest, createStateSignal } from "../core/state";
+import { errorMessage } from "../lib/failure";
 
 /** the last log lines a widget keeps; the console tail shows two */
 export const TAIL_ENTRIES = 4;
@@ -74,19 +75,16 @@ export interface WidgetServer {
     call<R = unknown>(name: string, input?: Record<string, unknown>): Promise<R>;
 }
 
-const messageOf = (err: unknown) => (err instanceof Error ? err.message : String(err));
-
 /** Must run inside a Solid root: it cleans up with it. */
 export function useWidgetServer(widget: WidgetContext): WidgetServer {
     const [visible, setVisible] = createSignal(widget.visible());
     // every server's activity is pushed to every widget: a push that leaves
     // this widget's view as it was keeps the view, and the widget stays put
     const [connection, setConnection] = createStateSignal<Connection>({ phase: "loading" });
+    // what a bridge reports counts only while it is the open one
     let bridge: ReturnType<typeof createPanelBridge<ServersState>> | null = null;
-    let generation = 0;
 
     const close = () => {
-        generation++;
         bridge?.dispose();
         bridge = null;
     };
@@ -97,30 +95,29 @@ export function useWidgetServer(widget: WidgetContext): WidgetServer {
         chosen = selected.id;
         return selected.view;
     };
+    // a retry replaces the read before it
+    const latest = createLatest();
     const refresh = () => {
-        const mine = generation;
         const current = bridge;
         if (!current) return;
-        current
-            .refreshState()
-            .then((state) => {
-                if (mine === generation) setConnection({ phase: "ready", server: project(state) });
+        latest(() => current.refreshState())
+            .then((answer) => {
+                if (answer && bridge === current) setConnection({ phase: "ready", server: project(answer.value) });
             })
             .catch((err) => {
-                if (mine === generation) setConnection({ phase: "unavailable", message: messageOf(err) });
+                if (bridge === current) setConnection({ phase: "unavailable", message: errorMessage(err) });
             });
     };
 
     const open = () => {
         close();
-        const mine = generation;
         const next = createPanelBridge<ServersState>({ panelId: PANEL_ID });
         bridge = next;
         // pushes before the first full read are partial; wait for it
         next.onStateChange((_patch, full) => {
-            if (mine === generation && next.getStatus().ready) {
+            if (bridge === next && next.getStatus().ready) {
                 try { setConnection({ phase: "ready", server: project(full) }); }
-                catch (err) { setConnection({ phase: "unavailable", message: messageOf(err) }); }
+                catch (err) { setConnection({ phase: "unavailable", message: errorMessage(err) }); }
             }
         });
         refresh();

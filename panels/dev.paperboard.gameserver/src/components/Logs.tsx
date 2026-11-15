@@ -27,16 +27,25 @@ import { errorMessage, type Outcome } from "../lib/failure";
 // refresh is genuinely useful here rather than surprising.
 export default function Logs() {
     const [files, setFiles] = createSignal<LogFileInfo[] | null>(null);
+    // a menu entry is a log's name, so a refresh (which rotates the list and
+    // grows latest.log) keeps every entry whose log is still there
+    const names = () => (files() ?? []).map((file) => file.name);
+    const modifiedAt = (name: string) => files()!.find((file) => file.name === name)!.mtimeMs;
     const [selected, setSelected] = createSignal("");
     const [content, setContent] = createSignal<LogFileContent | null>(null);
     const [loading, setLoading] = createSignal(false);
     const [error, setError] = createSignal<Outcome | null>(null);
     const [filter, setFilter] = createSignal("");
 
+    // the newest listing and the newest read are the ones shown: an older
+    // one that finishes after them is dropped
+    const latestList = createLatest();
     const loadFiles = async (selectName?: string) => {
         setError(null);
         try {
-            const list = await listLogFiles();
+            const answer = await latestList(listLogFiles);
+            if (!answer) return;
+            const list = answer.value;
             setFiles(list);
             const wanted =
                 selectName && list.some((f) => f.name === selectName)
@@ -50,7 +59,6 @@ export default function Logs() {
         }
     };
 
-    // the newest read is the one shown: an older one that finishes after it is dropped
     const latest = createLatest();
     const selectFile = async (name: string) => {
         setSelected(name);
@@ -116,10 +124,10 @@ export default function Logs() {
                             value={selected()}
                             onValueChange={(val) => void selectFile(String(val))}
                         >
-                            <For each={files() ?? []}>
-                                {(file) => (
-                                    <PaperSelectMenuItem value={file.name}>
-                                        {logLabel(file.name, file.mtimeMs)}
+                            <For each={names()}>
+                                {(name) => (
+                                    <PaperSelectMenuItem value={name}>
+                                        {logLabel(name, modifiedAt(name))}
                                     </PaperSelectMenuItem>
                                 )}
                             </For>

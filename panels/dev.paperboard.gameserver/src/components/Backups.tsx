@@ -1,4 +1,4 @@
-import { createEffect, createSignal, For, onCleanup, Show, on } from "solid-js";
+import { batch, createEffect, createSignal, For, onCleanup, Show, on } from "solid-js";
 import {
     PaperButton,
     PaperFlex,
@@ -28,6 +28,7 @@ import { selectedServerId } from "../lib/api";
 import { PANEL_ID } from "../service/contract";
 import { errorMessage, type Outcome } from "../lib/failure";
 import { createSaves } from "../lib/saves";
+import { createLatest, createStateSignal } from "../core/state";
 
 // Backups of the whole server folder (worlds, settings, plugins, mods),
 // made now or routinely by this computer's Paperboard Server, which makes
@@ -55,8 +56,9 @@ const dateText = (iso: string) => new Date(iso).toLocaleString();
 export default function Backups(props: { active: boolean; whileRunning: "quiesce" | "offline" }) {
     if (!selectedServerId) throw new Error("Choose a server before opening backups");
     const backupsApi = backupApi.forSource(PANEL_ID, selectedServerId);
-    const [status, setStatus] = createSignal<BackupStatus | null>(null);
-    const [backups, setBackups] = createSignal<BackupRecord[] | null>(null);
+    // each read keeps the rows it did not change, so a reload rebuilds no backup's row
+    const [status, setStatus] = createStateSignal<BackupStatus | null>(null);
+    const [backups, setBackups] = createStateSignal<BackupRecord[] | null>(null);
     const [loadError, setLoadError] = createSignal("");
     const [error, setError] = createSignal<Outcome | null>(null);
     const [notice, setNotice] = createSignal<Outcome | null>(null);
@@ -66,14 +68,23 @@ export default function Backups(props: { active: boolean; whileRunning: "quiesce
     let stopProgress: (() => void) | null = null;
     onCleanup(() => stopProgress?.());
 
+    // showing the tab and finishing an action both read again: the newest read is the one shown
+    const latest = createLatest();
     const load = async () => {
         setLoadError("");
         try {
             stopProgress ??= backupsApi.onProgress((change) => setProgress(change.progress));
-            const now = await backupsApi.status();
-            setStatus(now);
-            setProgress(now.progress);
-            setBackups(now.location ? await backupsApi.list() : []);
+            const answer = await latest(async () => {
+                const now = await backupsApi.status();
+                return { now, list: now.location ? await backupsApi.list() : [] };
+            });
+            if (!answer) return;
+            const { now, list } = answer.value;
+            batch(() => {
+                setStatus(now);
+                setProgress(now.progress);
+                setBackups(list);
+            });
         } catch (err) {
             setLoadError(`Backups could not be loaded: ${errorMessage(err)}`);
         }
