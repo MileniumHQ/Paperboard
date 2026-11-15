@@ -52,41 +52,57 @@ export function TokenField(props: { value: string; onInput: (value: string) => v
     );
 }
 
-export function NewBotModal(props: {
-    open: boolean;
-    onAdd: (token: string) => Promise<{ id: string }>;
-    onAdded: (bot: { id: string }) => void;
-    onClose: () => void;
-}) {
+/**
+ * A bot added from a token typed in: the token, the application it names,
+ * and the add, which says why it failed in place. The New bot dialog and the
+ * setup guide both add bots this way.
+ */
+export function createAddBot(onAdd: (token: string) => Promise<{ id: string }>, onAdded: (bot: { id: string }) => void) {
     const [token, setToken] = createSignal("");
     const [busy, setBusy] = createSignal(false);
     const [error, setError] = createSignal<string | null>(null);
-    // what was asked can't be taken back: the dialog stays for its answer
-    const close = () => {
-        if (!busy()) props.onClose();
-    };
     const appId = () => extractApplicationIdFromToken(token());
-    // each opening starts empty
-    createEffect(on(() => props.open, (open) => {
-        if (!open) return;
-        setToken("");
-        setError(null);
-        setBusy(false);
-    }));
     const submit = async () => {
         if (busy() || !appId()) return;
         setBusy(true);
         setError(null);
         try {
-            const bot = await props.onAdd(token().trim());
-            props.onAdded(bot);
-            props.onClose();
+            onAdded(await onAdd(token().trim()));
         } catch (err) {
             setError(errorToMessage(err));
         } finally {
             setBusy(false);
         }
     };
+    const reset = () => {
+        setToken("");
+        setError(null);
+        setBusy(false);
+    };
+    return { token, setToken, busy, error, appId, submit, reset };
+}
+
+export function NewBotModal(props: {
+    open: boolean;
+    onAdd: (token: string) => Promise<{ id: string }>;
+    onAdded: (bot: { id: string }) => void;
+    onClose: () => void;
+}) {
+    const { token, setToken, busy, error, appId, submit, reset } = createAddBot(
+        (value) => props.onAdd(value),
+        (bot) => {
+            props.onAdded(bot);
+            props.onClose();
+        },
+    );
+    // what was asked can't be taken back: the dialog stays for its answer
+    const close = () => {
+        if (!busy()) props.onClose();
+    };
+    // each opening starts empty
+    createEffect(on(() => props.open, (open) => {
+        if (open) reset();
+    }));
     return (
         <PaperModal
             open={props.open}

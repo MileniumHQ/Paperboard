@@ -5,15 +5,14 @@
 //
 // The screenshots are from discord.py's documentation (MIT); see
 // assets/portal/CREDITS.md.
-import { createSignal, Show, type JSX } from "solid-js";
+import { Show, type JSX } from "solid-js";
 import { PaperButton, PaperFlex, PaperIcon, PaperQuote, PaperText, PaperWizard, PaperWizardStep } from "@mileniumhq/paperui";
 import createApplication from "../assets/portal/1-create-application.webp";
 import botTab from "../assets/portal/2-bot-tab.webp";
 import resetToken from "../assets/portal/3-reset-token.webp";
 import intents from "../assets/portal/4-privileged-intents.webp";
-import { PORTAL_URL, TokenField } from "./BotDialogs";
+import { createAddBot, PORTAL_URL, TokenField } from "./BotDialogs";
 import styles from "./SetupGuide.module.css";
-import { errorToMessage, extractApplicationIdFromToken } from "../types";
 
 function Step(props: { title: string; shot: string; alt: string; children: JSX.Element; action?: JSX.Element }) {
     return (
@@ -34,22 +33,10 @@ export default function SetupGuide(props: {
     /** leave the guide: it is saved as seen */
     onSkip: () => void;
 }) {
-    const [token, setToken] = createSignal("");
-    const [busy, setBusy] = createSignal(false);
-    const [error, setError] = createSignal<string | null>(null);
-    const appId = () => extractApplicationIdFromToken(token());
-    const submit = async () => {
-        if (busy() || !appId()) return;
-        setBusy(true);
-        setError(null);
-        try {
-            props.onAdded(await props.onAdd(token().trim()));
-        } catch (err) {
-            setError(errorToMessage(err));
-        } finally {
-            setBusy(false);
-        }
-    };
+    const { token, setToken, busy, error, appId, submit } = createAddBot(
+        (value) => props.onAdd(value),
+        (bot) => props.onAdded(bot),
+    );
     return (
         <PaperFlex direction="column" fullWidth fullHeight>
             <PaperFlex direction="row" align="center" justify="space-between" gap="half" paddingX="double" paddingY="half" fullWidth>
