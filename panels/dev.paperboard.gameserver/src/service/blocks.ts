@@ -116,13 +116,6 @@ const DAILY_RESTART_CHOICES = [
     }),
 ];
 
-/** Launches the server and waits for it to be online, as Start the Server does. */
-export async function startFromBlocks(ctx: Context): Promise<void> {
-    await startServerInstance(ctx);
-    // a launch that fails says why in the console and leaves the server offline
-    if (ctx.state.serverStatus === "offline") throw new Error("The server did not start; its console says why");
-}
-
 /** Restarts a server that is online, as Restart the Server does. */
 export async function restartFromBlocks(ctx: Context): Promise<void> {
     if (ctx.state.serverStatus !== "online") throw new Error("The server is not online, so it can't restart");
@@ -229,7 +222,7 @@ export function sharedBlocks(ctx: Context): BlockSet {
                 category: "Server",
                 icon: "power",
                 description: "Launches the server; it is online once it finishes starting",
-                run: () => startFromBlocks(ctx),
+                run: () => startServerInstance(ctx),
             },
             {
                 id: "stop-server",

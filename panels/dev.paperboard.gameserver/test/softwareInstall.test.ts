@@ -47,7 +47,7 @@ function paperServer(installerPlan: Record<string, unknown>, overrides: Partial<
         },
         readConfig: async () => mc.scope.server.settings,
         writeConfig: async (patch) => {
-            await mc.scope.saveSettings({ ...mc.scope.server.settings, ...patch });
+            await mc.scope.updateSettings((current) => ({ ...current, ...patch }));
         },
         provider: () => ({
             ...neoforgeProvider,
@@ -125,8 +125,8 @@ describe("software installs", () => {
         let release!: () => void;
         const holding = mc.run(() => withInstallLock(() => new Promise<void>((resolve) => (release = resolve))));
         await expect(install()).rejects.toThrow("A server install is already running");
-        // a refused Minecraft start says why in the console
-        await mc.run(() => startServerInstance(mc.scope.ctx));
+        // a refused Minecraft start fails its call, as every game's does, and says why in the console
+        await expect(mc.run(() => startServerInstance(mc.scope.ctx))).rejects.toThrow("A server install is running");
         expect(mc.scope.ctx.state.serverStatus).toBe("offline");
         expect(mc.scope.ctx.state.serverEntries.at(-1)).toEqual({
             type: "error",

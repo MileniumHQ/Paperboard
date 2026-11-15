@@ -8,8 +8,8 @@
 import type { BlockChoice, BlockEventDefinition, BlockSet, BlockTypeDefinition, ServiceContext } from "@mileniumhq/paperapi";
 import type { GameServerState } from "./types";
 import { TRIGGER_IDS } from "./contract";
-import { stopServerInstance } from "./lifecycle";
-import { restartFromBlocks, startFromBlocks } from "./blocks";
+import { startServerInstance, stopServerInstance } from "./lifecycle";
+import { restartFromBlocks } from "./blocks";
 
 type Context = ServiceContext<GameServerState>;
 
@@ -139,7 +139,7 @@ export function serversBlocks(host: ServersBlocksHost): BlockSet {
                 description: "Launches the server; it is online once it finishes starting",
                 text: "Start {server}",
                 inputs: { server },
-                run: ({ server }: { server: string }) => host.operate(idOf(server), startFromBlocks),
+                run: ({ server }: { server: string }) => host.operate(idOf(server), (ctx) => startServerInstance(ctx)),
             },
             {
                 id: "stop-server",

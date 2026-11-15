@@ -1,4 +1,4 @@
-import { config, files as fileApi, type ServiceContext } from "../../service/api";
+import { config, files as fileApi, updateSettings, type ServiceContext } from "../../service/api";
 import { PANEL_ID, type GameServerState } from "../../service/types";
 import { parseProperties, stringifyServerProperties } from "../../core/properties";
 import { applyRuntimeProperties } from "../../service/runtimeProperties";
@@ -42,7 +42,7 @@ export async function writeGameOptions(ctx: Context, patch: unknown): Promise<Re
     const fields = minecraftOptions(ctx.state.serverVersion);
     const checked = validateOptions(fields, "Minecraft", patch as Record<string, unknown>);
     const { [RAM_OPTION]: ram, ...properties } = checked;
-    if (ram !== undefined) await config.set({ ...await settings(), ramGB: ram }, PANEL_ID);
+    if (ram !== undefined) await updateSettings({ ramGB: ram });
     if (Object.keys(properties).length > 0) {
         const current = await readProperties();
         const changed = Object.fromEntries(Object.entries(properties).map(([key, value]) => [key, toProperty(value)]));

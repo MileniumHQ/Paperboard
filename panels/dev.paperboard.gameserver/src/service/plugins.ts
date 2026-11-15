@@ -1,3 +1,4 @@
+import { errorText } from "./failures";
 import * as nodePath from "node:path";
 import { minecraftSoftware } from "../games/minecraft/index";
 import { MOD_DESCRIPTORS, PLUGIN_DESCRIPTORS, modVersionFrom, pluginDescription } from "./addonConfig";
@@ -5,6 +6,7 @@ import { readJarEntries } from "./jarEntries";
 import {
     files as fileApi,
     config,
+    updateSettings,
     type ServiceContext,
 } from "./api";
 import { sanitizeFileName, tryListDirectory, listDirectory } from "./filesystem";
@@ -44,7 +46,7 @@ async function getInstallRecords(): Promise<Record<string, InstalledRecord>> {
 }
 
 async function writeInstallRecords(records: Record<string, InstalledRecord>): Promise<void> {
-    await config.set({ ...(await config.get<Record<string, unknown> | null>(PANEL_ID)), [INSTALL_RECORDS_KEY]: records }, PANEL_ID);
+    await updateSettings({ [INSTALL_RECORDS_KEY]: records });
 }
 
 /**
@@ -108,7 +110,7 @@ async function describeJar(jarPath: string, mod: boolean): Promise<NonNullable<I
         // a mod's id is no better a title than its file's name; its version is news
         return { version: modVersionFrom(entries) ?? undefined };
     } catch (err) {
-        return { error: err instanceof Error ? err.message : String(err) };
+        return { error: errorText(err) };
     }
 }
 

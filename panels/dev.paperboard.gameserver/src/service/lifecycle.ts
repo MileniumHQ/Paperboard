@@ -1,3 +1,4 @@
+import { errorText } from "./failures";
 import { emitTrigger, serverLocal } from "./scope";
 import { processApi, type ServiceContext } from "./api";
 import { currentGame, currentGameService } from "../games/service";
@@ -35,7 +36,7 @@ function monitorReadiness(ctx: ServiceContext<GameServerState>): void {
     const fail = async (err: unknown) => {
         if (!active()) return;
         clearTimeout(expired); cancelReadiness();
-        ctx.setState({ serverEntries: appendCapped(ctx.state.serverEntries, { type: "error", content: `Startup failed: ${err instanceof Error ? err.message : String(err)}` }) });
+        ctx.setState({ serverEntries: appendCapped(ctx.state.serverEntries, { type: "error", content: `Startup failed: ${errorText(err)}` }) });
         markStopRequested();
         await processApi.kill(primaryProcessId(), "SIGKILL");
     };
@@ -73,7 +74,7 @@ function scheduleStopForceKill(
     const timer = setTimeout(() => {
         local().stopTimeout = null;
         if (currentGameService().stopTimeoutMs) ctx.setState({ serverEntries: appendCapped(ctx.state.serverEntries, { type: "error", content: "[Server] Graceful stop timed out; force-killing. World save not confirmed." }) });
-        void Promise.resolve(processApi.kill(primaryProcessId(), "SIGKILL")).catch((err) => ctx.setState((prev) => ({ serverEntries: appendCapped(prev.serverEntries, { type: "error", content: `[Server] Force-kill failed: ${err instanceof Error ? err.message : String(err)}` }) })));
+        void Promise.resolve(processApi.kill(primaryProcessId(), "SIGKILL")).catch((err) => ctx.setState((prev) => ({ serverEntries: appendCapped(prev.serverEntries, { type: "error", content: `[Server] Force-kill failed: ${errorText(err)}` }) })));
         const deadline = setTimeout(() => void confirmForceKill(ctx), confirmMs);
         deadline.unref?.();
         local().killDeadline = deadline;
@@ -96,7 +97,7 @@ async function confirmForceKill(ctx: ServiceContext<GameServerState>): Promise<v
         if (!(await processApi.exists(primaryProcessId()))) return handleProcessExit(ctx);
         reason = "the process is still running";
     } catch (err) {
-        reason = err instanceof Error ? err.message : String(err);
+        reason = errorText(err);
     }
     local().isRestarting = false;
     cancelStopRequest();
@@ -123,7 +124,7 @@ function releaseServer(ctx: ServiceContext<GameServerState>): Promise<void> | un
         ctx.setState((prev) => ({
             serverEntries: appendCapped(prev.serverEntries, {
                 type: "error",
-                content: `[Server] Could not clean up after the server stopped: ${err instanceof Error ? err.message : String(err)}`,
+                content: `[Server] Could not clean up after the server stopped: ${errorText(err)}`,
             }),
         }));
     });
@@ -134,7 +135,7 @@ function readOomKills(ctx: ServiceContext<GameServerState>): number | null {
     try {
         return oomKillCount();
     } catch (err) {
-        ctx.setState((prev) => ({ serverEntries: appendCapped(prev.serverEntries, { type: "warn", content: `[Server] Could not read the system's memory events, so a crash from running out of memory is not told apart: ${err instanceof Error ? err.message : String(err)}` }) }));
+        ctx.setState((prev) => ({ serverEntries: appendCapped(prev.serverEntries, { type: "warn", content: `[Server] Could not read the system's memory events, so a crash from running out of memory is not told apart: ${errorText(err)}` }) }));
         return null;
     }
 }
@@ -221,7 +222,7 @@ export async function startServerInstance(
                 content: `[Server] Failed to launch: ${err?.message || err}`,
             }),
         });
-        if (currentGameService().readiness) throw err;
+        throw err;
     }
 }
 

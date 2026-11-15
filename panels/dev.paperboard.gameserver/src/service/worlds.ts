@@ -1,4 +1,5 @@
-import { config, files as fileApi, type ServiceContext } from "./api";
+import { errorText } from "./failures";
+import { config, files as fileApi, updateSettings, type ServiceContext } from "./api";
 import { sanitizeFileName, listDirectory } from "./filesystem";
 import {
     buildWorldInfos,
@@ -39,12 +40,7 @@ async function readPendingWorlds(): Promise<string[]> {
 }
 
 async function writePendingWorlds(names: string[]): Promise<void> {
-    const current = await config.get<Record<string, unknown> | null>(PANEL_ID);
-    const saved = current && typeof current === "object" ? current : {};
-    await config.set(
-        { ...saved, pendingWorlds: names.slice(0, MAX_PENDING_WORLDS) },
-        PANEL_ID,
-    );
+    await updateSettings({ pendingWorlds: names.slice(0, MAX_PENDING_WORLDS) });
 }
 
 export async function listWorldDirs(): Promise<string[]> {
@@ -99,7 +95,7 @@ export async function listWorlds(): Promise<WorldInfo[]> {
         try {
             await writePendingWorlds(pendingOnly);
         } catch (err) {
-            const reason = err instanceof Error ? err.message : String(err);
+            const reason = errorText(err);
             throw new Error(`Couldn't save the list of created worlds: ${reason}`);
         }
     }
@@ -200,7 +196,7 @@ export async function resolveLevelName(): Promise<string> {
     try {
         content = await fileApi.read("server.properties", PANEL_ID);
     } catch (err) {
-        const reason = err instanceof Error ? err.message : String(err);
+        const reason = errorText(err);
         throw new Error(`Couldn't read server.properties to find the active world: ${reason}`);
     }
     if (!content) return "world";

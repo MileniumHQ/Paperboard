@@ -1,4 +1,4 @@
-import { config, files as fileApi, type ServiceContext } from "./api";
+import { files as fileApi, readSettings, type ServiceContext } from "./api";
 import { parseProperties, stringifyServerProperties } from "../core/properties";
 import { apiFetch } from "../lib/userAgent";
 import { fetchJson } from "../software/http";
@@ -22,10 +22,7 @@ export function liveResourcePackDeps(ctx: ServiceContext<GameServerState>): Reso
             const current = await readProperties();
             await fileApi.write("server.properties", stringifyServerProperties({ ...current, ...values }), PANEL_ID);
         },
-        readConfig: async () => {
-            const saved = await config.get<Record<string, unknown>>(PANEL_ID);
-            return saved && typeof saved === "object" ? saved : {};
-        },
+        readConfig: readSettings,
         writeConfig: (patch) => updatePanelConfig(ctx, patch),
     };
 }

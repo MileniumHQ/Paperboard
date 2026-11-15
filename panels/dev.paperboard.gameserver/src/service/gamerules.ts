@@ -1,5 +1,5 @@
 import { minecraftSoftware } from "../games/minecraft/index";
-import { config, processApi, type ServiceContext } from "./api";
+import { processApi, updateSettings, type ServiceContext } from "./api";
 import { writeServerLineBestEffort } from "./serverConsole";
 import {
     assertGameruleName,
@@ -42,7 +42,8 @@ export async function setGamerule(
     const serverValue = serverGameruleValue(profile, name, value);
 
     if (ctx.state.serverStatus === "online") {
-        writeServerLineBestEffort(`gamerule ${serverName} ${serverValue}\n`);
+        // a write the console refused fails the call: no readout would ever correct it
+        await processApi.write(SERVER_PROC_ID, `gamerule ${serverName} ${serverValue}\n`);
     } else {
         // offline edits must never look applied-and-dropped: they persist
         // in panel config and re-apply the next time the server boots, and
@@ -57,20 +58,11 @@ export async function setGamerule(
     return true;
 }
 
-// one read-merge-write of the saved edits at a time, so two quick edits both stay
-let pendingWrites: Promise<unknown> = Promise.resolve();
-
-function persistPendingGamerule(name: string, value: string): Promise<void> {
-    const write = pendingWrites.then(async () => {
-        const saved = (await config.get<Record<string, unknown> | null>(PANEL_ID)) ?? {};
-        const pending = {
-            ...((saved.pendingGamerules as Record<string, string> | undefined) ?? {}),
-            [name]: value,
-        };
-        await config.set({ ...saved, pendingGamerules: pending }, PANEL_ID);
-    });
-    pendingWrites = write.catch(() => undefined);
-    return write;
+async function persistPendingGamerule(name: string, value: string): Promise<void> {
+    await updateSettings((saved) => ({
+        ...saved,
+        pendingGamerules: { ...((saved.pendingGamerules as Record<string, string> | undefined) ?? {}), [name]: value },
+    }));
 }
 
 // reads current values from the running server — one query per rule,

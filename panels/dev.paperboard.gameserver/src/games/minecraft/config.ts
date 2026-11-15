@@ -1,5 +1,6 @@
 import {
     config,
+    updateSettings,
     files as fileApi,
     type ServiceContext,
 } from "../../service/api";
@@ -50,8 +51,6 @@ export async function updatePanelConfig(
     ctx: ServiceContext<GameServerState>,
     patch: Record<string, unknown>,
 ): Promise<void> {
-    const saved = await config.get<Record<string, unknown>>(PANEL_ID);
-    const current = saved && typeof saved === "object" ? saved : {};
-    await config.set({ ...current, ...patch }, PANEL_ID);
+    await updateSettings(patch);
     await loadConfigAndProperties(ctx);
 }

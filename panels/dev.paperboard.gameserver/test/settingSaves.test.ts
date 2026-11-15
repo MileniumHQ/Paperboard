@@ -11,6 +11,7 @@ import { openPage, servePanel, type Page } from "./helpers/browser";
 import { installFakeJava } from "./helpers/fakeJava";
 import { loopbackServer, routeHost } from "./helpers/http";
 import { writeTree } from "./helpers/tmp";
+import { callServer } from "./helpers/serverCall";
 import { PANEL_ID } from "../src/servers";
 import { javaPackageFor } from "../src/lib/versionProfile";
 
@@ -103,6 +104,21 @@ describe("a setting's switch", () => {
             served.stop();
         }
     }, 60_000);
+});
+
+describe("settings saved at once", () => {
+    test("from different parts of the panel all stay saved", async () => {
+        await setUp();
+        // the server is stopped, so each gamerule edit is kept for its next start
+        await Promise.all([
+            callServer("s-mc", "write-automation", { patch: { dailyRestart: "04:00" } }),
+            callServer("s-mc", "set-gamerule", { name: "keep_inventory", value: "true" }),
+            callServer("s-mc", "write-game-options", { patch: { ramGB: 3 } }),
+        ]);
+        expect(settings().automation.dailyRestart).toBe("04:00");
+        expect(settings().pendingGamerules).toEqual({ keep_inventory: "true" });
+        expect(settings().ramGB).toBe(3);
+    });
 });
 
 describe("the Versions tab", () => {

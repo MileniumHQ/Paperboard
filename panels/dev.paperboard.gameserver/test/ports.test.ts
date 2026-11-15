@@ -68,7 +68,7 @@ describe("ports", () => {
         const mc = minecraftServer({ files: { "server.properties": original } });
         await portSettingsApi.setPolicy("refuse");
         try {
-            await mc.run(() => startServerInstance(mc.scope.ctx));
+            await expect(mc.run(() => startServerInstance(mc.scope.ctx))).rejects.toThrow(`can't use port ${held.port}`);
         } finally {
             await portSettingsApi.setPolicy("next-free");
             await held.release();

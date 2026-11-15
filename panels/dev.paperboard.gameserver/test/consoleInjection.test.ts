@@ -98,6 +98,13 @@ describe("console and property injection", () => {
         await expect(set("respawn_radius", "true")).rejects.toThrow();
     });
 
+    test("a gamerule the running server's console did not take fails its call and is not shown applied", async () => {
+        // online, but no process behind it: the console write is refused
+        const scope = testScope({ directory: "servers/rules-gone" }, { serverStatus: "online", serverVersion: "1.21.11", serverSoftware: "paper" });
+        await expect(inServer(scope, () => setGamerule(scope.ctx, "keep_inventory", "true"))).rejects.toThrow();
+        expect(scope.ctx.state.gamerules.keep_inventory).toBeUndefined();
+    });
+
     test("difficulty and gamemode map only to known named commands", () => {
         expect(runtimeCommandsFor({ difficulty: "3", gamemode: "1", "force-gamemode": "true" })).toEqual([
             "difficulty hard",

@@ -3,10 +3,11 @@
  * console, chat, waits, one operation at a time, offline backups and links.
  * Game modules keep only what is theirs; nothing here names a game.
  */
+import { errorText, exists } from "../service/failures";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { randomBytes } from "node:crypto";
-import { config, files, processApi, type ServiceContext } from "../service/api";
+import { files, processApi, readSettings, updateSettings, type ServiceContext } from "../service/api";
 import { fileApi as rawFiles, secretsApi } from "@mileniumhq/paperapi";
 import { currentServer } from "../service/scope";
 import type { PaperConsoleEntry } from "@mileniumhq/paperui";
@@ -19,14 +20,7 @@ export type Context = ServiceContext<GameServerState>;
 
 /** The current server's folder. */
 export const serverRoot = () => files.getPath("", PANEL_ID);
-/** The current server's saved settings. */
-export const readSettings = async () => (await config.get<Record<string, unknown>>(PANEL_ID)) ?? {};
-/** Saves these settings over the current ones and returns the result. */
-export async function updateSettings(patch: Record<string, unknown>): Promise<Record<string, unknown>> {
-    const next = { ...(await readSettings()), ...patch };
-    await config.set(next, PANEL_ID);
-    return next;
-}
+export { exists, readSettings, updateSettings };
 
 function serverId(game: string): string {
     const id = currentServer()?.server.id;
@@ -76,7 +70,7 @@ export const hostSupportHere = (game: GameDefinition, options: GameOptions = { s
 
 /** Background work has no caller to throw to, so its failures land in the console. */
 export function report(ctx: Context, what: string, err: unknown) {
-    ctx.setState((prev) => ({ serverEntries: appendCapped(prev.serverEntries, { type: "error", content: `[Paperboard] ${what}: ${err instanceof Error ? err.message : String(err)}` }) }));
+    ctx.setState((prev) => ({ serverEntries: appendCapped(prev.serverEntries, { type: "error", content: `[Paperboard] ${what}: ${errorText(err)}` }) }));
 }
 /** Adds a message to the chat and returns it as triggers send it. */
 export function pushChat(ctx: Context, message: Omit<ChatMessage, "id" | "timestamp">): ChatMessage {
@@ -85,10 +79,6 @@ export function pushChat(ctx: Context, message: Omit<ChatMessage, "id" | "timest
     return entry;
 }
 
-/** Whether anything is at this path; any error but a missing file throws. */
-export async function exists(file: string): Promise<boolean> {
-    return fs.lstat(file).then(() => true, (err: NodeJS.ErrnoException) => { if (err.code === "ENOENT") return false; throw err; });
-}
 export { singleLine } from "./options";
 /** Polls until the check passes; the label finishes "Timed out waiting for …". */
 export async function waitUntil(check: () => boolean | Promise<boolean>, ms: number, label: string, pollMs = 100) {

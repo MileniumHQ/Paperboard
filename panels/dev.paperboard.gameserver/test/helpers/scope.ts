@@ -52,9 +52,11 @@ export function testScope(server: Partial<StoredServer> & { directory: string },
         activeOperations: 0,
         removing: false,
         unsubscribe: [],
-        saveSettings: async (settings) => {
+        updateSettings: async (change) => {
+            const settings = change(scope.server.settings);
             scope.server = { ...scope.server, settings };
             for (const check of [...waiters]) check();
+            return settings;
         },
         trigger: (id, output) => void triggers.push({ id, output }),
         triggers,

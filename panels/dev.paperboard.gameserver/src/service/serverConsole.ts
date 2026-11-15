@@ -3,7 +3,7 @@ import { SERVER_PROC_ID } from "./types";
 
 /**
  * A console line nobody waits for (status polls, the stop request whose
- * force-kill timer is the recovery, optimistic gamerule edits). The write
+ * force-kill timer is the recovery). The write
  * can fail, so the failure is logged here instead of surfacing as an
  * unhandled rejection; callers that need delivery await processApi.write.
  */

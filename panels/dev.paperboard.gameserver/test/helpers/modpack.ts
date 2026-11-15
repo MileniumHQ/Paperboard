@@ -75,7 +75,7 @@ export function packDeps(mc: McServer, cdn: LoopbackServer, overrides: Partial<M
         sha512: async (absolute) => sha512(nodeFs.readFileSync(absolute)),
         readConfig: async () => mc.scope.server.settings,
         writeConfig: async (patch) => {
-            await mc.scope.saveSettings({ ...mc.scope.server.settings, ...patch });
+            await mc.scope.updateSettings((current) => ({ ...current, ...patch }));
         },
         installed: async () => ({ software: "neoforge", version: "1.21.1", build: "21.1.256" }),
         installSoftware: async () => {

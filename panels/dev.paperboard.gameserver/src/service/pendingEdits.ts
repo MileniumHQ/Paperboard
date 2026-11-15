@@ -1,4 +1,4 @@
-import { config, processApi } from "./api";
+import { config, processApi, updateSettings } from "./api";
 import { PANEL_ID, SERVER_PROC_ID } from "./types";
 
 /**
@@ -13,7 +13,5 @@ export async function applyPendingEdits(key: string, commands: (pending: Record<
     const pending = saved?.[key];
     if (!pending || typeof pending !== "object" || Object.keys(pending).length === 0) return;
     for (const line of commands(pending as Record<string, unknown>)) await processApi.write(SERVER_PROC_ID, `${line}\n`);
-    // re-read: the config may have changed while the commands went out
-    const fresh = await config.get<Record<string, unknown> | null>(PANEL_ID);
-    await config.set({ ...(fresh && typeof fresh === "object" ? fresh : {}), [key]: {} }, PANEL_ID);
+    await updateSettings({ [key]: {} });
 }

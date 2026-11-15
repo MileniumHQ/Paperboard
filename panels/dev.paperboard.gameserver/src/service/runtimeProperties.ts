@@ -1,4 +1,4 @@
-import { config, processApi, type ServiceContext } from "./api";
+import { processApi, updateSettings, type ServiceContext } from "./api";
 import { PANEL_ID, SERVER_PROC_ID, type GameServerState } from "./types";
 import { applyPendingEdits } from "./pendingEdits";
 
@@ -73,8 +73,7 @@ export async function applyRuntimeProperties(
 // a missing config reads as null; a read that throws is unreadable state,
 // so the error propagates instead of overwriting the config with {}
 async function persistPendingProperties(values: Record<string, string>): Promise<void> {
-    const current = await config.get<Record<string, unknown> | null>(PANEL_ID);
-    const saved: Record<string, unknown> = current && typeof current === "object" ? current : {};
+    await updateSettings((saved) => {
     const pending: Record<string, string> = {
         ...((saved.pendingProperties as Record<string, string> | undefined) ?? {}),
     };
@@ -91,7 +90,8 @@ async function persistPendingProperties(values: Record<string, string>): Promise
             `refusing ${entries.length} pending property edits (cap ${MAX_PENDING_PROPERTIES})`,
         );
     }
-    await config.set({ ...saved, pendingProperties: pending }, PANEL_ID);
+    return { ...saved, pendingProperties: pending };
+    });
 }
 
 /** Sends the property edits made while the server was offline; throws why they were not. */

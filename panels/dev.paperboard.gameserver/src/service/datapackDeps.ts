@@ -1,4 +1,4 @@
-import { config, files as fileApi, type ServiceContext } from "./api";
+import { files as fileApi, readSettings, type ServiceContext } from "./api";
 import { updatePanelConfig } from "../games/minecraft/config";
 import { fetchJson } from "../software/http";
 import { resolveLevelName } from "./worlds";
@@ -15,10 +15,7 @@ export function liveDatapackDeps(ctx: ServiceContext<GameServerState>): Datapack
         fetchJson,
         download: ({ url, targetPath, sha1, sha512 }) =>
             fileApi.download({ url, targetPath, sha1, checksum: { algorithm: "sha512", value: sha512 }, appId: PANEL_ID }),
-        readConfig: async () => {
-            const saved = await config.get<Record<string, unknown>>(PANEL_ID);
-            return saved && typeof saved === "object" ? saved : {};
-        },
+        readConfig: readSettings,
         writeConfig: (patch) => updatePanelConfig(ctx, patch),
         trash: (paths) => trashRemovePathsWith(makeTrashRemoveDeps(), paths),
     };

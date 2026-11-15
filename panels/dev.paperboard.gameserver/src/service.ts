@@ -1,3 +1,4 @@
+import { errorText } from "./service/failures";
 import {
     definePanelService,
     backupApi,
@@ -203,24 +204,26 @@ function createScope(server: StoredServer): ServerScope {
             fireTrigger(scope.blocks, id, output, server.name);
             fireServerEvent(id, server.id);
         },
-        saveSettings: async (settings) => {
+        updateSettings: async (change) => {
+            let next: Record<string, unknown> = {};
             await updateSaved((current) => {
                 requireServer(server.id);
                 return {
                     ...current,
                     servers: current.servers.map((s) =>
-                        s.id === server.id ? { ...s, settings } : s,
+                        s.id === server.id ? { ...s, settings: (next = change(s.settings)) } : s,
                     ),
                 };
             });
             publish();
+            return next;
         },
     };
     bindScope(scope.ctx, scope);
     entries.set(server.id, scope);
     histories.set(server.id, historyWriter(() => historyFile(server.id), (err) => {
         console.error(`[gameserver] the console history of ${server.name} could not be saved:`, err);
-        scope.ctx.setState((prev) => ({ serverEntries: appendCapped(prev.serverEntries, { type: "error", content: `[Server] The console history could not be saved: ${err instanceof Error ? err.message : String(err)}` }) }));
+        scope.ctx.setState((prev) => ({ serverEntries: appendCapped(prev.serverEntries, { type: "error", content: `[Server] The console history could not be saved: ${errorText(err)}` }) }));
     }));
     return scope;
 }
@@ -263,7 +266,7 @@ async function initialize(scope: ServerScope): Promise<ServerScope> {
             scope.ctx.setState({ serverEntries: history.serverEntries, chatMessages: history.chatMessages });
         } catch (err) {
             console.error(`[gameserver] the console history of ${server.name} could not be read:`, err);
-            scope.ctx.setState({ serverEntries: [{ type: "error", content: `[Server] The saved console history could not be read: ${err instanceof Error ? err.message : String(err)}` }] });
+            scope.ctx.setState({ serverEntries: [{ type: "error", content: `[Server] The saved console history could not be read: ${errorText(err)}` }] });
         }
         await inServer(scope, async () => {
             // A server left running keeps its identity and directory on migration.
@@ -304,7 +307,7 @@ async function initialize(scope: ServerScope): Promise<ServerScope> {
         });
         return scope;
     } catch (err) {
-        const reason = `Server initialization failed: ${err instanceof Error ? err.message : String(err)}`;
+        const reason = `Server initialization failed: ${errorText(err)}`;
         inServer(scope, () => setRecoveryBlock(reason));
         scope.ctx.setState({ recoveryBlock: reason });
         publish(scope);
@@ -338,7 +341,6 @@ function addServer(name: unknown, game: unknown): Promise<string> {
             ...current,
             servers: [...current.servers, server],
         }));
-        await fileApi.getPath(server.directory, PANEL_ID);
         await initialize(createScope(server));
         publish();
         return id;
@@ -503,7 +505,7 @@ export const gameServerService = definePanelService({
             panelBlocks = handle;
             publish();
         } catch (err) {
-            ctx.setState({ serversError: err instanceof Error ? err.message : String(err) });
+            ctx.setState({ serversError: errorText(err) });
             console.error("[gameserver] servers could not be loaded:", err);
         }
     },

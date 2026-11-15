@@ -1,14 +1,10 @@
-import { config, files as fileApi, type ServiceContext } from "./api";
+import { files as fileApi, readSettings, type ServiceContext } from "./api";
 import { updatePanelConfig } from "../games/minecraft/config";
 import { ensureJavaFor } from "../games/minecraft/java";
 import { runInstallerProcess, stopLeftoverInstaller } from "./installerProcess";
 import type { InstallDeps } from "../games/minecraft/softwareInstall";
 import { PANEL_ID, type GameServerState } from "./types";
 
-async function readConfig(): Promise<Record<string, unknown>> {
-    const saved = await config.get<Record<string, unknown>>(PANEL_ID);
-    return saved && typeof saved === "object" ? saved : {};
-}
 
 const serverDir = () => fileApi.getPath("", PANEL_ID);
 
@@ -19,11 +15,11 @@ export function liveInstallDeps(ctx: ServiceContext<GameServerState>): InstallDe
         download: (opts) => fileApi.download({ ...opts, appId: PANEL_ID }),
         javaBinary: ensureJavaFor,
         runInstaller: (run) => runInstallerProcess(run),
-        readConfig,
+        readConfig: readSettings,
         writeConfig: (patch) => updatePanelConfig(ctx, patch),
     };
 }
 
 export function liveRecoveryDeps() {
-    return { serverDir, readConfig, stopLeftoverInstaller: () => stopLeftoverInstaller() };
+    return { serverDir, readConfig: readSettings, stopLeftoverInstaller: () => stopLeftoverInstaller() };
 }

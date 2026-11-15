@@ -9,7 +9,8 @@ export interface ServerScope {
     ctx: ServiceContext<GameServerState>;
     /** the server's Blocks project */
     blocks?: BlocksProjectHandle;
-    saveSettings(settings: Record<string, unknown>): Promise<void>;
+    /** maps the saved settings in the panel's write queue; gives what was saved */
+    updateSettings(change: (current: Record<string, unknown>) => Record<string, unknown>): Promise<Record<string, unknown>>;
     /** a game event the server's blocks fire for: `output` is what the game saw */
     trigger(id: string, output: unknown): void;
     locals: Map<symbol, unknown>;

@@ -102,7 +102,7 @@ describe("the launch record", () => {
             software: "neoforge",
             settings: { install: record({ type: "argfile", unix: `${NEO}/unix_args.txt`, windows: `${NEO}/win_args.txt` }) },
         });
-        await mc.run(() => startServerInstance(mc.scope.ctx));
+        await expect(mc.run(() => startServerInstance(mc.scope.ctx))).rejects.toThrow(/args\.txt is missing in the server folder/);
         expect(mc.scope.ctx.state.serverStatus).toBe("offline");
         expect(mc.scope.ctx.state.serverEntries.at(-1)?.content).toMatch(/args\.txt is missing in the server folder/);
         expect(fs.existsSync(path.join(mc.dir, "argv.json"))).toBe(false);
@@ -111,7 +111,7 @@ describe("the launch record", () => {
     test("a heap that cannot fit the machine is refused before Java starts", async () => {
         const total = os.totalmem() / 1024 ** 3;
         const mc = minecraftServer({ state: { ramAllocation: Math.ceil(total) + 1 } });
-        await mc.run(() => startServerInstance(mc.scope.ctx));
+        await expect(mc.run(() => startServerInstance(mc.scope.ctx))).rejects.toThrow("Lower Memory Allocation in Options to");
         expect(mc.scope.ctx.state.serverStatus).toBe("offline");
         expect(mc.scope.ctx.state.serverEntries.at(-1)?.content).toContain("Lower Memory Allocation in Options to");
         expect(fs.existsSync(path.join(mc.dir, "argv.json"))).toBe(false);

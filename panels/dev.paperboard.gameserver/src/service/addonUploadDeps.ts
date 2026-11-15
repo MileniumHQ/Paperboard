@@ -1,4 +1,4 @@
-import { config, files as fileApi, type ServiceContext } from "./api";
+import { files as fileApi, readSettings, type ServiceContext } from "./api";
 import { updatePanelConfig } from "../games/minecraft/config";
 import { resolveLevelName } from "./worlds";
 import type { UploadDeps } from "./addonUploads";
@@ -9,10 +9,7 @@ export function liveUploadDeps(ctx: ServiceContext<GameServerState>): UploadDeps
     return {
         serverDir: () => fileApi.getPath("", PANEL_ID),
         levelName: resolveLevelName,
-        readConfig: async () => {
-            const saved = await config.get<Record<string, unknown>>(PANEL_ID);
-            return saved && typeof saved === "object" ? saved : {};
-        },
+        readConfig: readSettings,
         writeConfig: (patch) => updatePanelConfig(ctx, patch),
     };
 }

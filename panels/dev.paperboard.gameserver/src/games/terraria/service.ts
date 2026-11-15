@@ -1,7 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import net from "node:net";
-import { config, packages as packageApi, processApi } from "../../service/api";
+import { packages as packageApi, processApi, updateSettings } from "../../service/api";
 import { emitTrigger, serverLocal } from "../../service/scope";
 import { initialServerState } from "../../service/initialState";
 import { appendCapped, PANEL_ID } from "../../service/types";
@@ -200,9 +200,10 @@ export const terrariaService: GameService = {
         [CALLS.readGameOptions]: async ctx => { await loadOptions(ctx); return ctx.state.gameSettings; },
         [CALLS.writeGameOptions]: (ctx, { patch }) => exclusive(ctx, local(), "Terraria", async () => {
             if (!patch || typeof patch !== "object" || Array.isArray(patch)) throw new Error("Options patch is required");
-            const next = validateOptions(patch, await settings());
+            // refused before the password changes
+            validateOptions(patch, await settings());
             if (Object.hasOwn(patch, "password")) await joinPassword.set(singleLine(patch.password, "Join password"));
-            await config.set(next, PANEL_ID); await generate(""); await loadOptions(ctx); return ctx.state.gameSettings;
+            await updateSettings((current) => validateOptions(patch, current)); await generate(""); await loadOptions(ctx); return ctx.state.gameSettings;
         }),
         ["terraria-versions"]: () => ({ releases, tmodloaderReleases, host: hostFor("vanilla"), hosts: { vanilla: hostFor("vanilla"), tmodloader: hostFor("tmodloader") } }),
         ["terraria-install"]: (ctx, { software: rawSoftware, version }) => exclusive(ctx, local(), "Terraria", async () => {
@@ -217,7 +218,7 @@ export const terrariaService: GameService = {
                 if (!(await packageApi.isInstalled(runtime))) throw new Error(`Install the ${runtime} runtime before tModLoader ${release.version}`);
             }
             await install(ctx, software, version);
-            await config.set({ ...previous, software, version, configured: true }, PANEL_ID);
+            await updateSettings({ software, version, configured: true });
             await generate(""); await loadOptions(ctx); return true;
         }),
         ["terraria-worlds"]: async () => listWorlds(path.join(await root(), "worlds"), worldName((await settings()).world ?? "World")),
@@ -226,13 +227,10 @@ export const terrariaService: GameService = {
             const file = path.join(await root(), "worlds", `${nameChecked}.wld`);
             const found = await exists(file);
             if (create ? found : !found) throw new Error(create ? "This world already exists; select it instead" : "The selected .wld world does not exist");
-            let next = { ...await settings(), world: nameChecked };
-            if (create && generation !== undefined) {
-                // a new world's size, difficulty and seed; Terraria reads them on the start that creates it
-                if (!generation || typeof generation !== "object" || Object.keys(generation).some(k => !WORLD_GENERATION.includes(k))) throw new Error(`New world settings are ${WORLD_GENERATION.join(", ")}`);
-                next = { ...validateOptions(generation, next), world: nameChecked };
-            }
-            await config.set(next, PANEL_ID);
+            const generated = create && generation !== undefined;
+            // a new world's size, difficulty and seed; Terraria reads them on the start that creates it
+            if (generated && (!generation || typeof generation !== "object" || Object.keys(generation).some(k => !WORLD_GENERATION.includes(k)))) throw new Error(`New world settings are ${WORLD_GENERATION.join(", ")}`);
+            await updateSettings((current) => ({ ...(generated ? validateOptions(generation, current) : current), world: nameChecked }));
             await generate(""); await loadOptions(ctx); return true;
         }),
         ["terraria-world-delete"]: (ctx, { name }) => exclusive(ctx, local(), "Terraria", async () => { await trashWorld(await root(), name); return true; }),
@@ -279,7 +277,7 @@ export const terrariaService: GameService = {
             if (local().busy) throw new Error("Wait for the Terraria operation to finish");
             const status = ctx.state.serverStatus;
             if (status !== "online" && status !== "offline") throw new Error("Wait for Terraria to finish starting or stopping");
-            await config.set(validateOptions({ motd }, await settings()), PANEL_ID);
+            await updateSettings((current) => validateOptions({ motd }, current));
             // a running server takes the new message at once; its console has
             // no way to clear one, so an empty message waits for the next start
             let appliesOnRestart = false;

@@ -1,7 +1,7 @@
 import { minecraftSoftware } from "../games/minecraft/index";
 import * as crypto from "node:crypto";
 import * as nodeFs from "node:fs";
-import { config, files as fileApi, type ServiceContext } from "./api";
+import { files as fileApi, readSettings, type ServiceContext } from "./api";
 import { updatePanelConfig } from "../games/minecraft/config";
 import { fetchJson } from "../software/http";
 import { currentInstall } from "../software/installRecord";
@@ -12,10 +12,6 @@ import { liveInstallDeps } from "./softwareInstallDeps";
 import type { ModpackDeps } from "./modpacks";
 import { PANEL_ID, type GameServerState } from "./types";
 
-async function readConfig(): Promise<Record<string, unknown>> {
-    const saved = await config.get<Record<string, unknown>>(PANEL_ID);
-    return saved && typeof saved === "object" ? saved : {};
-}
 
 function sha512(absolutePath: string): Promise<string> {
     return new Promise((resolve, reject) => {
@@ -38,10 +34,10 @@ export function liveModpackDeps(ctx: ServiceContext<GameServerState>): ModpackDe
         fetchJson,
         download: (opts) => fileApi.download({ ...opts, appId: PANEL_ID }),
         sha512,
-        readConfig,
+        readConfig: readSettings,
         writeConfig: (patch) => updatePanelConfig(ctx, patch),
         installed: async () => {
-            const saved = await readConfig();
+            const saved = await readSettings();
             const { record } = currentInstall(saved);
             if (record) return { software: record.software, version: record.version, build: record.build };
             // installs from before the record: what config and state say, build unknown
@@ -56,5 +52,5 @@ export function liveModpackDeps(ctx: ServiceContext<GameServerState>): ModpackDe
 }
 
 export function liveModpackRecoveryDeps() {
-    return { serverDir, readConfig };
+    return { serverDir, readConfig: readSettings };
 }
