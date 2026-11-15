@@ -2,7 +2,7 @@
 // interactions, recent messages and slash-command sync. Every bot gets its
 // own, so two bots share nothing but the code; the service owns the list
 // and tells each session where its triggers go.
-import type { Client, ChatInputCommandInteraction, RepliableInteraction } from "discord.js";
+import type { Client, ChatInputCommandInteraction, ClientEvents, RepliableInteraction } from "discord.js";
 import { discord, loadDiscord } from "./discord";
 import {
     AUTO_ACK_DELAY_MS,
@@ -33,7 +33,7 @@ const PROBLEM_CAP = 20;
 // client and records the typed error here (surfaced via getBotInfo and
 // the bot's When the Connection Fails event), so the UI can never show "online"
 // for a bot that isn't running. The same rule applies mid-session:
-// gateway disconnects invalidate the status (see attachListeners), and a
+// gateway disconnects invalidate the status (see watchGateway), and a
 // successful reconnect marks it live again via clientReady/shardReady.
 export interface ConnectionStatus {
     connected: boolean;
@@ -169,6 +169,9 @@ export function discordOrigins(env: Record<string, string | undefined> = process
     const api = discordApiBase(env);
     return api ? [new URL(api).origin] : [];
 }
+
+/** Listens to one of a client's events while it is the session's own. */
+type On = <E extends keyof ClientEvents>(event: E, listener: (...args: ClientEvents[E]) => void) => void;
 
 export class BotSession {
     client: Client | null = null;
@@ -546,17 +549,24 @@ export class BotSession {
         }
     }
 
+    // Only the live session's events count: a superseded client's listeners
+    // stay registered on it until its destroy completes, and what it hears
+    // must not be reported as if it came from the bot the person runs now.
     private attachListeners(bot: Client): void {
-        // only the live session's events may touch session state: a
-        // superseded client's listeners are still registered on it until
-        // destroy completes, and its messages/reactions must not be reported
-        // as if they came from the bot the user is running now
-        const ownsSession = () => this.client === bot;
-        const emit = (trigger: string, output: unknown) => this.emit(trigger, output);
+        const on: On = (event, listener) => {
+            bot.on(event, (...args) => {
+                if (this.client === bot) listener(...args);
+            });
+        };
+        this.relayEvents(on);
+        this.routeInteractions(on);
+        this.watchGateway(bot, on);
+    }
 
-        bot.on("messageCreate", (msg) => {
+    /** What happens in the bot's servers, as its Blocks events. */
+    private relayEvents(on: On): void {
+        on("messageCreate", (msg) => {
             if (msg.author.bot) return;
-            if (!ownsSession()) return;
             const payload = {
                 content: msg.content,
                 author: msg.author.username,
@@ -566,15 +576,14 @@ export class BotSession {
                 messageId: msg.id,
             };
             this.recordRecentMessage(payload);
-            emit("on-message", payload);
+            this.emit("on-message", payload);
         });
 
         // every window shows each server with its member, channel and role
         // counts: a change to any of them is announced with the bot
-        bot.on("guildMemberAdd", (member) => {
-            if (!ownsSession()) return;
+        on("guildMemberAdd", (member) => {
             this.host.changed();
-            emit("on-member-join", {
+            this.emit("on-member-join", {
                 username: member.user.username,
                 userId: member.user.id,
                 guildId: member.guild.id,
@@ -582,10 +591,9 @@ export class BotSession {
             });
         });
 
-        bot.on("guildMemberRemove", (member) => {
-            if (!ownsSession()) return;
+        on("guildMemberRemove", (member) => {
             this.host.changed();
-            emit("on-member-leave", {
+            this.emit("on-member-leave", {
                 username: member.user.username,
                 userId: member.user.id,
                 guildId: member.guild.id,
@@ -595,51 +603,42 @@ export class BotSession {
         // discord.js says guildCreate only for a server joined while
         // connected, and guildDelete only for one left (an outage is
         // guildUnavailable); a rename or a new icon is guildUpdate
-        bot.on("guildCreate", (guild) => {
-            if (!ownsSession()) return;
+        on("guildCreate", (guild) => {
             this.host.changed();
-            emit("on-guild-joined", { guildId: guild.id, guildName: guild.name });
+            this.emit("on-guild-joined", { guildId: guild.id, guildName: guild.name });
         });
-        bot.on("guildDelete", (guild) => {
-            if (!ownsSession()) return;
+        on("guildDelete", (guild) => {
             this.host.changed();
-            emit("on-guild-left", { guildId: guild.id, guildName: guild.name ?? "" });
+            this.emit("on-guild-left", { guildId: guild.id, guildName: guild.name ?? "" });
         });
-        bot.on("guildUpdate", () => {
-            if (ownsSession()) this.host.changed();
+        on("guildUpdate", () => this.host.changed());
+
+        on("channelCreate", (channel) => {
+            this.host.changed();
+            this.emit("on-channel-created", { channelId: channel.id, name: channel.name, type: channel.type, guildId: channel.guildId });
+        });
+        on("channelDelete", (channel) => {
+            if (channel.isDMBased()) return;
+            this.host.changed();
+            this.emit("on-channel-deleted", { channelId: channel.id, name: channel.name, type: channel.type, guildId: channel.guildId });
         });
 
-        bot.on("channelCreate", (channel) => {
-            if (!ownsSession()) return;
+        on("roleCreate", (role) => {
             this.host.changed();
-            emit("on-channel-created", { channelId: channel.id, name: channel.name, type: channel.type, guildId: channel.guildId });
+            this.emit("on-role-created", { roleId: role.id, name: role.name, guildId: role.guild.id });
         });
-        bot.on("channelDelete", (channel) => {
-            if (!ownsSession() || channel.isDMBased()) return;
+        on("roleDelete", (role) => {
             this.host.changed();
-            emit("on-channel-deleted", { channelId: channel.id, name: channel.name, type: channel.type, guildId: channel.guildId });
+            this.emit("on-role-deleted", { roleId: role.id, name: role.name, guildId: role.guild.id });
         });
 
-        bot.on("roleCreate", (role) => {
-            if (!ownsSession()) return;
-            this.host.changed();
-            emit("on-role-created", { roleId: role.id, name: role.name, guildId: role.guild.id });
-        });
-        bot.on("roleDelete", (role) => {
-            if (!ownsSession()) return;
-            this.host.changed();
-            emit("on-role-deleted", { roleId: role.id, name: role.name, guildId: role.guild.id });
+        on("guildBanRemove", (ban) => {
+            this.emit("on-member-unbanned", { userId: ban.user.id, username: ban.user.username, guildId: ban.guild.id });
         });
 
-        bot.on("guildBanRemove", (ban) => {
-            if (!ownsSession()) return;
-            emit("on-member-unbanned", { userId: ban.user.id, username: ban.user.username, guildId: ban.guild.id });
-        });
-
-        bot.on("messageReactionAdd", (reaction, user) => {
+        on("messageReactionAdd", (reaction, user) => {
             if (user.bot) return;
-            if (!ownsSession()) return;
-            emit("on-reaction-add", {
+            this.emit("on-reaction-add", {
                 emoji: reaction.emoji.name || reaction.emoji.id,
                 userId: user.id,
                 username: user.username,
@@ -648,10 +647,9 @@ export class BotSession {
             });
         });
 
-        bot.on("messageReactionRemove", (reaction, user) => {
+        on("messageReactionRemove", (reaction, user) => {
             if (user.bot) return;
-            if (!ownsSession()) return;
-            emit("on-reaction-removed", {
+            this.emit("on-reaction-removed", {
                 emoji: reaction.emoji.name || reaction.emoji.id,
                 userId: user.id,
                 username: user.username,
@@ -660,15 +658,14 @@ export class BotSession {
             });
         });
 
-        bot.on("messageUpdate", (_oldMsg, newMsg) => {
-            if (!ownsSession()) return;
+        on("messageUpdate", (_oldMsg, newMsg) => {
             const apply = async () => {
                 const msg = newMsg.partial ? await newMsg.fetch().catch((err: unknown) => {
                     this.noteProblem(`An edited message in channel ${newMsg.channelId} couldn't be read, so When a Message Is Edited didn't run: ${errorToMessage(err)}`);
                     return null;
                 }) : newMsg;
                 if (!msg || msg.author?.bot) return;
-                emit("on-message-edited", {
+                this.emit("on-message-edited", {
                     content: msg.content ?? "",
                     author: msg.author?.username ?? "",
                     authorId: msg.author?.id ?? "",
@@ -680,18 +677,16 @@ export class BotSession {
             void apply();
         });
 
-        bot.on("messageDelete", (msg) => {
-            if (!ownsSession()) return;
-            emit("on-message-deleted", {
+        on("messageDelete", (msg) => {
+            this.emit("on-message-deleted", {
                 messageId: msg.id,
                 channelId: msg.channelId,
                 guildId: msg.guildId ?? "",
             });
         });
 
-        bot.on("guildBanAdd", (ban) => {
-            if (!ownsSession()) return;
-            emit("on-member-banned", {
+        on("guildBanAdd", (ban) => {
+            this.emit("on-member-banned", {
                 userId: ban.user.id,
                 username: ban.user.username,
                 reason: ban.reason ?? "",
@@ -699,48 +694,29 @@ export class BotSession {
             });
         });
 
-        bot.on("guildMemberUpdate", (oldMember, newMember) => {
-            if (!ownsSession()) return;
+        on("guildMemberUpdate", (oldMember, newMember) => {
             const before = new Set((oldMember?.roles?.cache?.keys?.() ?? []) as Iterable<string>);
             const added = [...newMember.roles.cache.keys()].filter((roleId) => !before.has(roleId));
             const removed = [...before].filter((roleId) => !newMember.roles.cache.has(roleId));
             if (added.length || removed.length) {
-                emit("on-member-roles-changed", { userId: newMember.user.id, guildId: newMember.guild.id, added, removed });
+                this.emit("on-member-roles-changed", { userId: newMember.user.id, guildId: newMember.guild.id, added, removed });
             }
             // a member discord.js hadn't seen before arrives partial: what its nickname was isn't known
             if (!oldMember.partial && oldMember.nickname !== newMember.nickname) {
-                emit("on-nickname-changed", {
+                this.emit("on-nickname-changed", {
                     userId: newMember.user.id,
                     guildId: newMember.guild.id,
                     nickname: newMember.nickname ?? "",
                     previousNickname: oldMember.nickname ?? "",
                 });
             }
-            for (const roleId of newMember.roles.cache.keys()) {
-                if (!before.has(roleId)) {
-                    emit("on-role-added", {
-                        userId: newMember.user.id,
-                        username: newMember.user.username,
-                        roleId,
-                        guildId: newMember.guild.id,
-                    });
-                }
-            }
-            for (const roleId of before) {
-                if (!newMember.roles.cache.has(roleId)) {
-                    emit("on-role-removed", {
-                        userId: newMember.user.id,
-                        username: newMember.user.username,
-                        roleId,
-                        guildId: newMember.guild.id,
-                    });
-                }
-            }
+            const who = { userId: newMember.user.id, username: newMember.user.username, guildId: newMember.guild.id };
+            for (const roleId of added) this.emit("on-role-added", { ...who, roleId });
+            for (const roleId of removed) this.emit("on-role-removed", { ...who, roleId });
         });
 
-        bot.on("threadCreate", (thread) => {
-            if (!ownsSession()) return;
-            emit("on-thread-created", {
+        on("threadCreate", (thread) => {
+            this.emit("on-thread-created", {
                 threadId: thread.id,
                 name: thread.name ?? "",
                 channelId: thread.parentId ?? "",
@@ -749,9 +725,8 @@ export class BotSession {
             });
         });
 
-        bot.on("voiceStateUpdate", (oldState, newState) => {
-            if (!ownsSession()) return;
-            emit("on-voice-state-change", {
+        on("voiceStateUpdate", (oldState, newState) => {
+            this.emit("on-voice-state-change", {
                 userId: newState.id,
                 username: newState.member?.user?.username ?? "",
                 channelId: newState.channelId ?? "",
@@ -759,20 +734,22 @@ export class BotSession {
                 guildId: newState.guild.id,
             });
         });
+    }
 
-        bot.on("interactionCreate", (interaction) => {
-            if (!ownsSession()) return;
+    /** Buttons, menus, modals and slash commands, each to the event its flows listen on. */
+    private routeInteractions(on: On): void {
+        on("interactionCreate", (interaction) => {
             // button clicks and menu picks become the bot's component-used
             // Blocks event, which flows tell apart by component id
             if (interaction.isButton() || interaction.isAnySelectMenu()) {
                 this.rememberInteraction(interaction);
-                emit("interaction-triggered", componentClickPayload(interaction));
+                this.emit("interaction-triggered", componentClickPayload(interaction));
                 return;
             }
             // submitted modals route by modal id the same way
             if (interaction.isModalSubmit()) {
                 this.rememberInteraction(interaction);
-                emit("modal-submitted", modalSubmitPayload(interaction));
+                this.emit("modal-submitted", modalSubmitPayload(interaction));
                 return;
             }
             if (!interaction.isChatInputCommand()) return;
@@ -796,7 +773,7 @@ export class BotSession {
 
             this.commandUses.record(command);
             this.rememberInteraction(interaction);
-            emit(commandTriggerId(command), {
+            this.emit(commandTriggerId(command), {
                 interactionId: interaction.id,
                 commandName: command.name,
                 commandId: command.id,
@@ -811,31 +788,29 @@ export class BotSession {
                 ),
             });
         });
+    }
 
-        // gateway truth mid-session: a drop must invalidate connectionStatus
-        // the same way a failed login does — otherwise the UI shows "online"
-        // for a bot that is not running. A successful reconnect flips it back.
-        const markGatewayDown = (source: string, err?: unknown) => {
-            if (!ownsSession()) return;
-            const message = gatewayErrorMessage(err);
-            console.error(`[DiscordService] gateway ${source}:`, message);
+    /** The gateway's health mid-session, as the bot's connection status. */
+    private watchGateway(bot: Client, on: On): void {
+        // a drop marks the bot offline the way a failed login does, or the
+        // page would show "online" for a bot that isn't running. discord.js
+        // reconnects a dropped shard itself; shardReady/clientReady below
+        // restore the connected flag when the gateway comes back
+        on("shardDisconnect", (event) => {
+            const message = gatewayErrorMessage(event);
+            console.error("[DiscordService] gateway shardDisconnect:", message);
             this.connectionStatus = { connected: false, error: message };
             this.host.changed();
-            emit("on-connection-error", { error: message });
-        };
-
-        // discord.js reconnects a dropped shard itself; shardReady/clientReady
-        // below restores the connected flag when the gateway comes back
-        bot.on("shardDisconnect", (event) => markGatewayDown("shardDisconnect", event));
+            this.emit("on-connection-error", { error: message });
+        });
         // a resume replays what the dropped connection missed; interactions
         // in that replay are already past Discord's answer window
-        bot.on("shardResume", (_shardId, replayed) => {
+        on("shardResume", (_shardId, replayed) => {
             if (replayed > 0) console.warn(`[DiscordService] gateway resumed and replayed ${replayed} missed events`);
         });
 
         // fatal: the token was reset/revoked — destroy immediately and record
-        bot.on("invalidated", () => {
-            if (!ownsSession()) return;
+        on("invalidated", () => {
             const message = "Session invalidated: token was reset or revoked";
             console.error(`[DiscordService] ${message}`);
             this.connectionStatus = { connected: false, error: message };
@@ -846,34 +821,30 @@ export class BotSession {
                     console.error("[DiscordService] bot destroy after invalidation failed:", destroyErr),
                 );
             this.host.changed();
-            emit("on-connection-error", { error: message });
+            this.emit("on-connection-error", { error: message });
         });
 
         // transient client/shard errors: log and surface as a trigger, but do
         // NOT claim disconnected — the gateway session may still be live
-        bot.on("error", (err) => {
-            if (!ownsSession()) return;
+        on("error", (err) => {
             console.error("[DiscordService] client error:", err instanceof Error ? err.message : String(err));
-            emit("on-connection-error", { error: String(err) });
+            this.emit("on-connection-error", { error: String(err) });
         });
-        bot.on("shardError", (err) => {
-            if (!ownsSession()) return;
+        on("shardError", (err) => {
             console.error("[DiscordService] shard error:", err instanceof Error ? err.message : String(err));
-            emit("on-connection-error", { error: String(err) });
+            this.emit("on-connection-error", { error: String(err) });
         });
 
         // reconnect success: back online
         const markLive = () => {
-            if (!ownsSession()) return;
             this.connectionStatus = { connected: true };
             this.host.changed();
         };
-        bot.on("clientReady", () => {
+        on("clientReady", () => {
             markLive();
-            if (!ownsSession()) return;
-            emit("on-bot-ready", { userId: bot.user?.id ?? "", username: bot.user?.username ?? "" });
+            this.emit("on-bot-ready", { userId: bot.user?.id ?? "", username: bot.user?.username ?? "" });
         });
-        bot.on("shardReady", markLive);
+        on("shardReady", markLive);
     }
 
     // ---------------------------------------------------------------------
