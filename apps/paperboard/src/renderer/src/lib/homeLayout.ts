@@ -158,15 +158,15 @@ export interface HomeGeometry {
 /**
  * Cells flex between MIN_CELL and MAX_CELL before the window gains or loses
  * CELL_STEP of them, so a small resize changes cell size, not how many there
- * are. A window narrower than one step of MIN_CELL cells scales them down.
- * A layout wider than the window keeps its width; fitCanvas draws it smaller.
+ * are. A window narrower than one step of MIN_CELL cells, or a layout wider
+ * than the window, scales them down to share its width, as far as
+ * FLOOR_CELL; past that fitCanvas draws the layout smaller.
  */
 export function computeGeometry(width: number, items: HomeItem[]): HomeGeometry {
     const available = Math.max(width, 0);
     const fit = Math.min(MAX_CELLS_ACROSS, Math.max(1, Math.floor(available / (CELL_STEP * MIN_CELL))) * CELL_STEP);
-    const cell = Math.max(FLOOR_CELL, Math.min(MAX_CELL, available / fit));
-    const used = items.reduce((max, item) => Math.max(max, item.x + sizeOf(item).w), 0);
-    return { cell, across: Math.min(MAX_CELLS_ACROSS, Math.max(fit, used)) };
+    const across = Math.min(MAX_CELLS_ACROSS, Math.max(fit, usedColumns(items)));
+    return { cell: Math.max(FLOOR_CELL, Math.min(MAX_CELL, available / across)), across };
 }
 
 /**
