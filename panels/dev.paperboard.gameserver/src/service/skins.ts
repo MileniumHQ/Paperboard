@@ -14,8 +14,7 @@ import { composeHeadFromSkin, clampHeadSize } from "../core/skin";
 import { gamertagOf, floodgateUuid, xuidOfFloodgateUuid, type BedrockNaming } from "../core/bedrock";
 import { uuidForPlayerName } from "./playerStats";
 import { fetchMojang, formatUuid, profileForName } from "./mojang";
-import { errorMessage } from "@mileniumhq/paperapi";
-import { atMost } from "./atMost";
+import { errorMessage, LimitedQueue } from "@mileniumhq/paperapi";
 import { skinUrlForXuid, xuidForGamertag } from "./xbox";
 
 const PROFILE_URL = "https://sessionserver.mojang.com/session/minecraft/profile/";
@@ -41,7 +40,7 @@ const UUID_DASHED_RE =
 const UUID_BARE_RE = /^[0-9a-fA-F]{32}$/;
 
 // profile + texture are two round trips per player
-const limited = atMost(MAX_CONCURRENT);
+const limited = new LimitedQueue(MAX_CONCURRENT).run;
 
 // the server's own records first: a Bedrock player who has joined is in
 // them under the name Floodgate gave them

@@ -5,7 +5,7 @@ import { isUtf8 } from "node:buffer";
 import { createHash } from "node:crypto";
 import { isListableDirArg, isValidEntryName } from "../core/dirs";
 import { serializedFileTask } from "./fileWrites";
-import { writeFileAtomic } from "@mileniumhq/paperapi/fs";
+import { isWriteFileAtomicTemp, writeFileAtomic } from "@mileniumhq/paperapi/fs";
 
 // The Files tab's owner: lists, reads and saves files under the server
 // folder. Every path is checked here, at the boundary: "/"-joined safe
@@ -46,7 +46,7 @@ const IMAGE_TYPES: Record<string, string> = {
 
 // a write still landing: PaperAPI's writeFileAtomic's temp file, or the one
 // an older Paperboard left
-const WRITING = /\.(?:[0-9a-f]{12}\.tmp|paperboard-tmp)$/;
+const writing = (name: string) => isWriteFileAtomicTemp(name) || name.endsWith(".paperboard-tmp");
 
 /** the path, or a folder on the way to it, is not there */
 export class ServerFileMissingError extends Error {}
@@ -92,7 +92,7 @@ export async function listServerFiles(dir: unknown, deps: ServerFilesDeps): Prom
     // a count, not a million entries in memory
     for await (const dirent of handle) {
         const kind = dirent.isDirectory() ? "folder" : dirent.isFile() ? "file" : null;
-        if (!kind || !isValidEntryName(dirent.name) || WRITING.test(dirent.name)) {
+        if (!kind || !isValidEntryName(dirent.name) || writing(dirent.name)) {
             hidden++;
             continue;
         }
