@@ -2,7 +2,7 @@ import { afterAll, describe, expect, setDefaultTimeout, test } from "bun:test";
 import * as fs from "node:fs";
 import * as net from "node:net";
 import * as path from "node:path";
-import { getSupervisorSocketPath, supervisorEndpointName, supervisorPresent } from "../../../papercrane/supervisor";
+import { getSupervisorMetadataPath, getSupervisorSocketPath, supervisorEndpointName, supervisorPresent } from "../../../papercrane/supervisor";
 import { supervisorLaunch } from "../../../papercrane/supervisorLaunch";
 import { PaperCraneAuth } from "../../../papercrane/auth";
 import { PanelServicesManager } from "../../../papercrane/panelServices";
@@ -182,6 +182,34 @@ describe("supervised workloads are reported faithfully", () => {
 			expect(registry.users(() => true)).toEqual([]);
 			expect(ended).toBe(1);
 		} finally {
+			restoreEnv("PAPERBOARD_DIR", previous);
+		}
+	});
+
+	// what a workload is (its supervisor's pid, for usage) is known the moment
+	// it is taken on, never a frame later
+	test("an attach resolves once the supervisor has said its status, with the workload's pid known", async () => {
+		const dir = dataDir();
+		const previous = process.env.PAPERBOARD_DIR;
+		process.env.PAPERBOARD_DIR = dir;
+		const server = net.createServer();
+		const registry = new WorkloadRegistry(path.join(dir, "local"), { beforeStart: () => Promise.resolve(), requireNotReplacing: () => undefined, ended: () => undefined });
+		try {
+			fs.writeFileSync(getSupervisorMetadataPath("told"), JSON.stringify({ id: "told", config: { command: "x" }, startedAt: new Date().toISOString() }));
+			// a supervisor that says its status only once the test has seen it attach
+			const attached = new Promise<net.Socket>((resolve) => {
+				server.on("connection", (conn) => {
+					conn.setEncoding("utf8");
+					conn.on("data", (chunk: string) => { if (chunk.includes('"attach"')) resolve(conn); });
+				});
+			});
+			await new Promise<void>((resolve, reject) => server.once("error", reject).listen(getSupervisorSocketPath("told"), resolve));
+			const attach = registry.attachProcess("told", {}).then((running) => ({ running, roots: registry.workloadRoots() }));
+			(await attached).write(JSON.stringify({ type: "status", pid: 4242, childPid: 4243 }) + "\n");
+			expect(await attach).toEqual({ running: true, roots: [{ owner: null, pid: 4242 }] });
+		} finally {
+			registry.releaseAllClients();
+			await new Promise((resolve) => server.close(resolve));
 			restoreEnv("PAPERBOARD_DIR", previous);
 		}
 	});

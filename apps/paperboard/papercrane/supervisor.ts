@@ -216,26 +216,35 @@ export class SupervisedProcessClient {
             }
             this.socket = socket;
 
+            // connected is answered: the supervisor's first frame on every
+            // connection is its status, which says its pid and its workload's,
+            // so a workload is never taken on before it is known
+            let answered = false;
+            const settle = (connected: boolean, error: string | null) => {
+                if (answered) return;
+                answered = true;
+                clearTimeout(connectTimeout);
+                this.off("status", onStatus);
+                this.connectError = error;
+                resolve(connected);
+            };
+            const onStatus = () => settle(true, null);
+            this.on("status", onStatus);
             const connectTimeout = setTimeout(() => {
-                if (!this.isConnectedState) {
-                    this.connectError = `no answer on ${this.socketPath} within 1.5 s`;
-                    socket.destroy();
-                    resolve(false);
-                }
+                if (answered) return;
+                settle(false, `no answer on ${this.socketPath} within 1.5 s`);
+                socket.destroy();
             }, 1500);
             // a pending connect must never hold the client process open
             unrefTimer(connectTimeout);
 
             socket.on("connect", () => {
-                clearTimeout(connectTimeout);
                 this.isConnectedState = true;
                 this.hasConnectedOnce = true;
-                this.connectError = null;
                 this.send({ type: "attach" });
                 while (this.messageQueue.length > 0) {
                     socket.write(this.messageQueue.shift()!);
                 }
-                resolve(true);
             });
 
             // a decoding stream keeps a character split across reads whole
@@ -258,15 +267,10 @@ export class SupervisedProcessClient {
                 }
             });
 
-            socket.on("error", (err) => {
-                clearTimeout(connectTimeout);
-                if (!this.isConnectedState) {
-                    this.connectError = err.message;
-                    resolve(false);
-                }
-            });
+            socket.on("error", (err) => settle(false, err.message));
 
             socket.on("close", () => {
+                settle(false, `${this.socketPath} closed before the supervisor said its status`);
                 this.isConnectedState = false;
                 if (this.hasConnectedOnce && !this.hasExited && !this.isManuallyClosed) {
                     this.hasExited = true;
