@@ -16,7 +16,7 @@ import {
     killConflictingProcess,
     resetWorldFiles,
 } from "../../service/diagnostics";
-import { listInstalledPlugins, deletePlugin, recordPluginInstalls, uninstallAllPlugins } from "../../service/plugins";
+import { listInstalledPlugins, deletePlugin, recordPluginInstalls, uninstallAllPlugins, previewPluginInstall, installPluginVersion, pluginTarget, livePluginInstallDeps } from "../../service/plugins";
 import {
     listWorldDirs,
     listWorlds,
@@ -376,6 +376,10 @@ export const minecraftCalls: ServerCalls = {
         await recordPluginInstalls(inputs);
         return true;
     },
+    [CALLS.previewPluginInstall]: (ctx: ServiceContext<GameServerState>, inputs: Parameters<typeof previewPluginInstall>[0]) =>
+        previewPluginInstall(inputs ?? {}, pluginTarget(ctx.state), livePluginInstallDeps),
+    [CALLS.installPluginVersion]: (ctx: ServiceContext<GameServerState>, inputs: Parameters<typeof installPluginVersion>[0]) =>
+        installPluginVersion(inputs ?? {}, pluginTarget(ctx.state), livePluginInstallDeps),
     [CALLS.uninstallAllPlugins]: async (ctx: ServiceContext<GameServerState>) => {
         return uninstallAllPlugins(ctx);
     },

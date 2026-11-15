@@ -7,15 +7,18 @@ import { pickVersionFile, isPluginFilename } from "../src/core/plugins";
 import { pickDatapackBuild } from "../src/core/datapacks";
 import { installDatapack, type DatapackDeps } from "../src/service/datapacks";
 import { setServerSoftware, setServerVersion } from "../src/lib/server";
-import { installProject, PluginVersionMismatchError } from "../src/lib/plugins";
-import { installPlugin, type PluginInstallDeps } from "../src/service/plugins";
+import { resolveLatestFile } from "../src/lib/plugins";
+import { installLatestPlugin, type PluginInstallDeps } from "../src/service/plugins";
 import type { InstalledRecord } from "../src/core/plugins";
 
 /** the plugin install against a loopback Modrinth; downloads are recorded, not made */
-function pluginDeps(versions: unknown[], options: { present?: string[]; records?: () => Record<string, InstalledRecord> } = {}) {
+function pluginDeps(versions: unknown[], options: { records?: () => Record<string, InstalledRecord>; more?: Record<string, unknown> } = {}) {
     const modrinth = loopbackServer((_req, url) => {
         if (url.pathname === "/v2/project/essentialsx") return Response.json({ id: "PROJ1234", slug: "essentialsx", title: "EssentialsX", icon_url: "https://cdn.modrinth.com/i.png", project_type: "plugin" });
         if (url.pathname === "/v2/project/PROJ1234/version") return Response.json(versions);
+        const more = options.more?.[url.pathname];
+        if (more) return Response.json(more);
+        if (url.pathname.startsWith("/v2/version/")) return Response.json(versions.find((v) => (v as { id: string }).id === url.pathname.slice("/v2/version/".length)) ?? null, { status: 200 });
         return new Response("not found", { status: 404 });
     });
     const downloads: Record<string, unknown>[] = [];
@@ -23,7 +26,6 @@ function pluginDeps(versions: unknown[], options: { present?: string[]; records?
     const deps: PluginInstallDeps = {
         fetchJson: async <T>(url: string) => (await (await fetch(url.replace(MODRINTH_API, `${modrinth.url}/v2`))).json()) as T,
         download: async (opts) => void downloads.push(opts),
-        exists: async (path) => (options.present ?? []).includes(path),
         readRecords: async () => (options.records ?? (() => records))(),
         writeRecords: async (next) => void (records = next),
     };
@@ -126,48 +128,50 @@ describe("Modrinth downloads", () => {
         expect(downloads).toEqual([]);
     });
 
-    test("a plugin install from Blocks takes the exact build by its slug, checks both hashes, and keeps the other records", async () => {
-        const { deps, downloads, records } = pluginDeps([
-            version("v121", ["1.21.1"], [file("EssentialsX-2.21.jar", "e")], ["paper"]),
-            version("v120", ["1.20.1"], [file("EssentialsX-2.20.jar", "old")], ["paper"]),
+    test("a plugin install from Blocks takes the exact build by its slug with its required dependency, checks both hashes, and keeps the other records", async () => {
+        const fabricApi = { ...version("fapi121", ["1.21.1"], [file("fabric-api.jar", "f")], ["fabric"]), project_id: "FABRICAP" };
+        const { deps, downloads, records } = pluginDeps(
+            [{ ...version("v121", ["1.21.1"], [file("Sodium.jar", "s")], ["fabric"]), dependencies: [{ project_id: "FABRICAP", dependency_type: "required" }, { project_id: "OTHER123", dependency_type: "required" }] }],
+            { more: { "/v2/project/FABRICAP": { title: "Fabric API" }, "/v2/project/FABRICAP/version": [fabricApi], "/v2/project/OTHER123": { title: "Other" }, "/v2/project/OTHER123/version": [{ ...version("o2", ["1.21.1"], [file("Other-2.jar", "o")], ["fabric"]), project_id: "OTHER123" }] } },
+        );
+        expect(await installLatestPlugin("essentialsx", { software: "fabric", mcVersion: "1.21.1" }, deps)).toEqual({ file: "Sodium.jar", name: "EssentialsX", version: "v121" });
+        // the dependency already installed (Other) stays as it is
+        expect(downloads).toEqual([
+            { url: "https://cdn.modrinth.com/data/x/Sodium.jar", targetPath: "mods/Sodium.jar", sha1: hash("sha1", "s"), sha512: hash("sha512", "s") },
+            { url: "https://cdn.modrinth.com/data/x/fabric-api.jar", targetPath: "mods/fabric-api.jar", sha1: hash("sha1", "f"), sha512: hash("sha512", "f") },
         ]);
-        expect(await installPlugin("essentialsx", "paper", "1.21.1", deps)).toEqual({ file: "EssentialsX-2.21.jar", name: "EssentialsX", version: "v121" });
-        expect(downloads).toEqual([{ url: "https://cdn.modrinth.com/data/x/EssentialsX-2.21.jar", targetPath: "plugins/EssentialsX-2.21.jar", sha1: hash("sha1", "e"), sha512: hash("sha512", "e") }]);
         expect(records()).toEqual({
             "Other.jar": { projectId: "OTHER123", slug: "other", version: "1" },
-            "EssentialsX-2.21.jar": { projectId: "PROJ1234", slug: "essentialsx", version: "v121", title: "EssentialsX", iconUrl: "https://cdn.modrinth.com/i.png" },
+            "Sodium.jar": { projectId: "PROJ1234", slug: "essentialsx", version: "v121", title: "EssentialsX", iconUrl: "https://cdn.modrinth.com/i.png" },
+            "fabric-api.jar": { projectId: "FABRICAP", slug: "Fabric API", version: "fapi121", title: "Fabric API" },
         });
     });
 
-    test("a plugin install from Blocks refuses another version's build, an installed file, an unreadable record list and a bad id, and downloads nothing", async () => {
+    test("a plugin install from Blocks refuses another version's build, an unreadable record list and a bad id, and downloads nothing", async () => {
         const other = pluginDeps([version("v120", ["1.20.1"], [file("EssentialsX-2.20.jar", "old")], ["paper"])]);
-        await expect(installPlugin("essentialsx", "paper", "1.21.1", other.deps)).rejects.toThrow("EssentialsX has no build for Minecraft 1.21.1 on Paper");
+        await expect(installLatestPlugin("essentialsx", { software: "paper", mcVersion: "1.21.1" }, other.deps)).rejects.toThrow("EssentialsX has no build for Minecraft 1.21.1 on Paper");
         const builds = [version("v121", ["1.21.1"], [file("EssentialsX-2.21.jar", "e")], ["paper"])];
-        const present = pluginDeps(builds, { present: ["plugins/EssentialsX-2.21.jar"] });
-        await expect(installPlugin("essentialsx", "paper", "1.21.1", present.deps)).rejects.toThrow("EssentialsX-2.21.jar is already installed");
         const unreadable = pluginDeps(builds, { records: () => { throw new Error("config unreadable"); } });
-        await expect(installPlugin("essentialsx", "paper", "1.21.1", unreadable.deps)).rejects.toThrow("config unreadable");
+        await expect(installLatestPlugin("essentialsx", { software: "paper", mcVersion: "1.21.1" }, unreadable.deps)).rejects.toThrow("config unreadable");
         const bad = pluginDeps(builds);
-        await expect(installPlugin("../../etc", "paper", "1.21.1", bad.deps)).rejects.toThrow("is not a Modrinth id");
-        await expect(installPlugin("essentialsx", "vanilla", "1.21.1", bad.deps)).rejects.toThrow("has no plugin or mod system");
-        expect([...other.downloads, ...present.downloads, ...unreadable.downloads, ...bad.downloads]).toEqual([]);
+        await expect(installLatestPlugin("../../etc", { software: "paper", mcVersion: "1.21.1" }, bad.deps)).rejects.toThrow("is not a Modrinth id");
+        await expect(installLatestPlugin("essentialsx", { software: "vanilla", mcVersion: "1.21.1" }, bad.deps)).rejects.toThrow("has no plugin or mod system");
+        expect([...other.downloads, ...unreadable.downloads, ...bad.downloads]).toEqual([]);
     });
 
-    test("a plugin whose newest build is for another Minecraft version is not installed unless allowed", async () => {
+    test("a failed lookup of this version's builds fails the update check instead of calling the plugin incompatible", async () => {
         const modrinth = loopbackServer((_req, url) => {
             if (url.pathname === "/v2/project/PROJ1234/version") {
-                // nothing for 1.21.1; the loader's newest build is for 1.20.1
-                return Response.json(url.searchParams.has("game_versions") ? [] : [version("v2", ["1.20.1"], [file("Essentials.jar", "e")], ["paper"])]);
+                // the exact lookup is rate limited; the loader's newest build is for 1.20.1
+                return url.searchParams.has("game_versions")
+                    ? Response.json({ description: "rate limited" }, { status: 429 })
+                    : Response.json([version("v2", ["1.20.1"], [file("Essentials.jar", "e")], ["paper"])]);
             }
             return new Response("not found", { status: 404 });
         });
         routeHost("api.modrinth.com", modrinth);
         setServerSoftware("paper");
         setServerVersion("1.21.1");
-        const err = await installProject("PROJ1234").catch((e: unknown) => e);
-        expect(err).toBeInstanceOf(PluginVersionMismatchError);
-        expect((err as Error).message).toBe("Latest build targets Minecraft 1.20.1 but the server runs 1.21.1 — install anyway?");
-        // only the two version lookups ran: no project record, no download
-        expect(modrinth.requests.every((r) => r.startsWith("/v2/project/PROJ1234/version"))).toBe(true);
+        await expect(resolveLatestFile("PROJ1234")).rejects.toThrow("Modrinth request failed: rate limited");
     });
 });

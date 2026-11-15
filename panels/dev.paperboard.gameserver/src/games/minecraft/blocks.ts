@@ -7,11 +7,10 @@ import { needsCall, playerEvents, runGameCall } from "../../service/blocks";
 import { listRoster } from "../../service/playerLists";
 import { listPlayerStats } from "../../service/playerStats";
 import { listWorlds, resolveLevelName } from "../../service/worlds";
-import { installPlugin, listInstalledPlugins, livePluginInstallDeps, uninstallAllPlugins } from "../../service/plugins";
+import { installLatestPlugin, listInstalledPlugins, livePluginInstallDeps, pluginTarget, uninstallAllPlugins } from "../../service/plugins";
 import type { DatapackListing } from "../../service/datapacks";
 import type { ModpackRecord } from "../../core/modpack";
 import type { ModrinthVersion } from "../../core/modrinth";
-import { minecraftSoftware } from "./index";
 import { deletePlayerData } from "../../service/players";
 import { setGamerule } from "../../service/gamerules";
 import type { PlayerStatSummary } from "../../core/playerStats";
@@ -262,8 +261,7 @@ export function minecraftBlocks(ctx: Context): BlockSet {
                 inputs: { plugin: { type: "text", name: "Modrinth Project", description: "Its id or the name in its Modrinth address, such as essentialsx" } },
                 output: "plugin",
                 run: async ({ plugin }: { plugin: string }) => {
-                    const installed = await installPlugin(plugin, minecraftSoftware(ctx.state.serverSoftware), ctx.state.serverVersion, livePluginInstallDeps);
-                    return { file: installed.file, name: installed.name, version: installed.version };
+                    return installLatestPlugin(plugin, pluginTarget(ctx.state), livePluginInstallDeps);
                 },
             }),
             needsCall(ctx, CALLS.deletePlugin, {

@@ -25,6 +25,7 @@ import { trashRemovePathsWith } from "./trash";
 import { SOFTWARE_IDS } from "../software/catalog";
 import { makeTrashRemoveDeps } from "./trashDeps";
 import { fetchJson } from "../software/http";
+import { modrinthVersions } from "./modrinth";
 import { SOFTWARE, type ServerSoftwareType } from "../software/catalog";
 import {
     MODRINTH_API,
@@ -33,7 +34,6 @@ import {
     parseModrinthVersion,
     type ModrinthVersion,
     type RawModrinthProject,
-    type RawModrinthVersion,
 } from "../core/modrinth";
 import type { GameServerState, InstalledPlugin, InstalledRecord } from "./types";
 import { PANEL_ID } from "./types";
@@ -169,65 +169,329 @@ export async function uninstallAllPlugins(
 /** What a plugin install needs of the world: Modrinth's records, and a checked download into the server folder. */
 export interface PluginInstallDeps {
     fetchJson<T>(url: string): Promise<T>;
-    download(file: { url: string; targetPath: string; sha1: string; sha512: string }): Promise<void>;
-    exists(path: string): Promise<boolean>;
+    download(file: { url: string; targetPath: string; sha1?: string; sha512?: string }): Promise<void>;
     /** the install records; a list that can't be read throws, so it is never written over */
     readRecords(): Promise<Record<string, InstalledRecord>>;
     writeRecords(records: Record<string, InstalledRecord>): Promise<void>;
 }
 
+/** What is installed on: the server's software and Minecraft version. */
+export interface PluginTarget {
+    software: ServerSoftwareType;
+    mcVersion: string;
+}
+
+export const pluginTarget = (state: Pick<GameServerState, "serverSoftware" | "serverVersion">): PluginTarget => ({
+    software: minecraftSoftware(state.serverSoftware),
+    mcVersion: state.serverVersion,
+});
+
+function loaderOf(target: PluginTarget): string {
+    const addons = SOFTWARE[target.software].addons;
+    if (!addons) throw new Error(`${SOFTWARE[target.software].name} has no plugin or mod system.`);
+    return addons.modrinthLoader;
+}
+
+export interface RawVersionDependency {
+    version_id?: string | null;
+    project_id?: string | null;
+    file_name?: string | null;
+    dependency_type?: string;
+}
+
+interface RawVersion {
+    id?: string;
+    project_id?: string;
+    version_number?: string;
+    loaders?: string[];
+    game_versions?: string[];
+    dependencies?: RawVersionDependency[];
+    files?: { url?: string; filename?: string; primary?: boolean; hashes?: { sha1?: string; sha512?: string } }[];
+}
+
+export type DependencyKind = "required" | "optional" | "incompatible" | "embedded";
+
+export interface ResolvedDependency {
+    /** stable key for checkboxes: version_id, else project_id, else file name, else its place in the list */
+    key: string;
+    name: string;
+    kind: DependencyKind;
+    versionNumber: string;
+    gameVersions: string[];
+    projectId?: string;
+    versionId?: string;
+    /** present when the dep resolves to a verifiable jar */
+    file?: VerifiableFile;
+    /** set when nothing downloadable could be resolved */
+    unresolvableReason?: string;
+}
+
+type VerifiableFile = { url: string; filename: string; sha1?: string; sha512?: string };
+
+export interface InstallPreview {
+    title: string;
+    versionNumber: string;
+    gameVersions: string[];
+    matchesServer: boolean;
+    mainFile: (VerifiableFile & { versionNumber: string; gameVersions: string[] }) | null;
+    required: ResolvedDependency[];
+    optional: ResolvedDependency[];
+    transitive: ResolvedDependency[];
+    incompatible: ResolvedDependency[];
+    embedded: ResolvedDependency[];
+    /** required entries (direct or transitive) that could not resolve */
+    failures: string[];
+}
+
+export interface InstallVersionSelection {
+    projectId: string;
+    slug: string;
+    /** Modrinth project title, stored so the card survives a reload */
+    title?: string;
+    iconUrl?: string;
+    versionId: string;
+    /** ResolvedDependency.key values of optional deps to include */
+    includeOptionalKeys?: string[];
+}
+
+export interface InstalledFileSummary {
+    filename: string;
+    versionNumber: string;
+    title: string;
+    kind: "main" | "required" | "optional";
+}
+
+/** how many dependency records one version may pull in (names + files) */
+const MAX_DEPENDENCIES = 12;
+// one more level of required deps past the direct ones; deeper trees are
+// rare and each hop is a network fetch, so this stays small and bounded
+const MAX_DEP_DEPTH = 1;
+const MAX_DEP_INSTALLS = 25;
+
+function dependencyKindOf(raw: RawVersionDependency): DependencyKind {
+    const t = (raw.dependency_type ?? "required").toLowerCase();
+    if (t === "optional" || t === "incompatible" || t === "embedded") return t;
+    return "required";
+}
+
+const text = (value: unknown): string | undefined => (typeof value === "string" && value ? value : undefined);
+const list = <T = string>(value: unknown): T[] => (Array.isArray(value) ? value : []);
+
+/** A version's primary file when Modrinth gives a hash to check it against. */
+function verifiableFile(version: RawVersion | undefined): VerifiableFile | undefined {
+    const files = Array.isArray(version?.files) ? version.files : [];
+    const primary = files.find((f) => f.primary) ?? files[0];
+    const { sha1, sha512 } = primary?.hashes ?? {};
+    if (!primary?.url || !primary.filename || (!sha1 && !sha512)) return undefined;
+    return { url: primary.url, filename: primary.filename, ...(sha1 ? { sha1 } : {}), ...(sha512 ? { sha512 } : {}) };
+}
+
+function depLabel(dep: ResolvedDependency): string {
+    const ver = dep.versionNumber ? ` v${dep.versionNumber}` : "";
+    const games = dep.gameVersions.length > 0 ? ` (${dep.gameVersions.join(", ")})` : "";
+    return `${dep.name}${ver}${games}`;
+}
+
 /**
- * Installs a Modrinth plugin or mod's newest build for the server's
- * software and Minecraft version. Only an exact build installs: the Plugins
- * tab asks before an install for another version, and nothing here can.
+ * Resolves what installing one Modrinth build takes, with no writes: its
+ * file, every required dependency, the checked optional ones, and required
+ * dependencies of those, each either verifiable or listed in failures, so an
+ * install never half-installs on a surprise. Exact (loader + Minecraft
+ * version) builds only: a dependency without one is reported, never
+ * substituted with a wrong-version jar.
  */
-export async function installPlugin(
+export async function previewPluginInstall(
+    input: { projectId: unknown; title?: unknown; versionId: unknown; includeOptionalKeys?: unknown },
+    target: PluginTarget,
+    deps: Pick<PluginInstallDeps, "fetchJson">,
+): Promise<InstallPreview> {
+    const projectId = assertModrinthId(input.projectId, "Plugin");
+    const versionId = assertModrinthId(input.versionId, "Version");
+    const loader = loaderOf(target);
+    const { mcVersion } = target;
+    const modrinth = <T>(path: string, query?: Record<string, string>) =>
+        deps.fetchJson<T>(`${MODRINTH_API}${path}${query ? `?${new URLSearchParams(query)}` : ""}`);
+    const named = async (id: string | undefined, raw: RawVersionDependency) => {
+        if (id) {
+            const project = await modrinth<{ title?: string; slug?: string }>(`/project/${encodeURIComponent(id)}`);
+            if (project.title || project.slug) return (project.title || project.slug)!;
+        }
+        return text(raw.file_name)?.replace(/\.jar$/i, "") ?? text(raw.project_id) ?? "Unknown dependency";
+    };
+    const fromVersion = (version: RawVersion | undefined, missing: string) => {
+        const file = verifiableFile(version);
+        return { versionNumber: version?.version_number ?? "", gameVersions: list(version?.game_versions), ...(file ? { file } : { unresolvableReason: missing }) };
+    };
+    const resolveOne = async (raw: RawVersionDependency, position: number): Promise<ResolvedDependency> => {
+        const kind = dependencyKindOf(raw);
+        const pinned = text(raw.version_id);
+        const project = text(raw.project_id);
+        const base = { key: pinned ?? project ?? text(raw.file_name) ?? `dependency-${position}`, kind, versionNumber: "", gameVersions: [] as string[], projectId: project, versionId: pinned };
+        if (kind === "incompatible" || kind === "embedded") {
+            return { ...base, name: await named(project, raw), unresolvableReason: kind === "incompatible" ? "Must not be installed alongside this version." : "Bundled with the version; nothing to install." };
+        }
+        // a pinned version id names the exact file the author declared
+        if (pinned) {
+            let version: RawVersion;
+            try {
+                version = await modrinth(`/version/${encodeURIComponent(pinned)}`);
+            } catch (err) {
+                return { ...base, name: await named(undefined, raw), unresolvableReason: `Could not read the pinned version: ${errorText(err)}` };
+            }
+            return { ...base, projectId: text(version.project_id) ?? project, name: await named(text(version.project_id) ?? project, raw), ...fromVersion(version, "The pinned version has no verifiable file; refusing to install it.") };
+        }
+        // a project-only reference: the newest exact build for this loader + Minecraft version
+        if (project) {
+            const name = await named(project, raw);
+            try {
+                const versions = await modrinthVersions<RawVersion>(deps.fetchJson, project, { loaders: [loader], ...(mcVersion ? { gameVersions: [mcVersion] } : {}) });
+                return { ...base, name, ...fromVersion(versions[0], mcVersion ? `No verifiable ${loader} build for Minecraft ${mcVersion}.` : "No verifiable build found.") };
+            } catch (err) {
+                return { ...base, name, unresolvableReason: `Could not resolve a build: ${errorText(err)}` };
+            }
+        }
+        return { ...base, name: await named(undefined, raw), unresolvableReason: "No project or version reference." };
+    };
+    const resolveAll = async (raws: RawVersionDependency[]) => {
+        const out: ResolvedDependency[] = [];
+        for (const [position, raw] of raws.slice(0, MAX_DEPENDENCIES).entries()) out.push(await resolveOne(raw, position));
+        return out;
+    };
+
+    const record = await modrinth<RawVersion>(`/version/${encodeURIComponent(versionId)}`);
+    const gameVersions = list(record.game_versions);
+    const direct = await resolveAll(list<RawVersionDependency>(record.dependencies));
+    const required = direct.filter((d) => d.kind === "required");
+    const optional = direct.filter((d) => d.kind === "optional");
+    const transitive: ResolvedDependency[] = [];
+    const failures: string[] = [];
+    const seen = new Set<string>([projectId.toLowerCase()]);
+    const wanted = new Set(list(input.includeOptionalKeys).map(String));
+    const full = () => transitive.length + required.length > MAX_DEP_INSTALLS;
+    const consider = async (dep: ResolvedDependency, depth: number) => {
+        if (!dep.projectId) return;
+        const idKey = dep.projectId.toLowerCase();
+        if (seen.has(idKey)) return;
+        seen.add(idKey);
+        if (!dep.file) {
+            failures.push(`${dep.name}: ${dep.unresolvableReason ?? "could not be resolved"}`);
+            return;
+        }
+        if (depth > 0) transitive.push(dep);
+        if (depth >= MAX_DEP_DEPTH || full() || !dep.versionId) return;
+        let sub: RawVersion;
+        try {
+            sub = await modrinth(`/version/${encodeURIComponent(dep.versionId)}`);
+        } catch (err) {
+            // its own dependencies are unknown: the preview says so rather than leave them out
+            failures.push(`${dep.name}'s dependencies: ${errorText(err)}`);
+            return;
+        }
+        for (const t of await resolveAll(list<RawVersionDependency>(sub.dependencies).filter((r) => dependencyKindOf(r) === "required"))) {
+            await consider(t, depth + 1);
+            if (full()) return;
+        }
+    };
+    for (const dep of [...required, ...optional.filter((o) => wanted.has(o.key))]) {
+        await consider(dep, 0);
+        if (full()) break;
+    }
+    const versionNumber = record.version_number ?? "";
+    const mainFile = verifiableFile(record);
+    return {
+        title: text(input.title) ?? projectId,
+        versionNumber,
+        gameVersions,
+        matchesServer: (record.loaders ?? [loader]).includes(loader) && (!mcVersion || gameVersions.includes(mcVersion)),
+        mainFile: mainFile ? { ...mainFile, versionNumber, gameVersions } : null,
+        required,
+        optional,
+        transitive,
+        incompatible: direct.filter((d) => d.kind === "incompatible"),
+        embedded: direct.filter((d) => d.kind === "embedded"),
+        failures,
+    };
+}
+
+/**
+ * Installs one Modrinth build with its required dependencies and the checked
+ * optional ones, for the Plugins tab and Blocks alike. Everything resolves
+ * before the first write, so a missing dependency fails the install instead
+ * of half-installing it; a dependency already installed stays as it is, as
+ * a second copy of a mod (another Fabric API version) stops the server.
+ */
+export async function installPluginVersion(
+    selection: { projectId: unknown; slug?: unknown; title?: unknown; iconUrl?: unknown; versionId: unknown; includeOptionalKeys?: unknown },
+    target: PluginTarget,
+    deps: PluginInstallDeps,
+): Promise<InstalledFileSummary[]> {
+    const preview = await previewPluginInstall(selection, target, deps);
+    const projectId = selection.projectId as string;
+    if (!preview.mainFile) throw new Error(`Version ${preview.versionNumber || String(selection.versionId)} has no verifiable file; refusing to install it.`);
+    if (preview.failures.length > 0) throw new Error(`Cannot install: ${preview.failures.join(" ")}`);
+    const wanted = new Set(list(selection.includeOptionalKeys).map(String));
+    const missingOptional = preview.optional.filter((o) => wanted.has(o.key) && !o.file);
+    if (missingOptional.length > 0) throw new Error(`Cannot install: ${missingOptional.map(depLabel).join("; ")}.`);
+    // read before the first download: a record list that can't be read stops the install
+    const records = await deps.readRecords();
+    const installedProjects = new Set(Object.values(records).map((r) => r.projectId));
+    const iconUrl = text(selection.iconUrl);
+    const dependency = (kind: "required" | "optional") => (dep: ResolvedDependency) => ({
+        kind, file: dep.file!, title: dep.name, versionNumber: dep.versionNumber,
+        record: { projectId: dep.projectId ?? projectId, slug: dep.name, version: dep.versionNumber, title: dep.name },
+    });
+    const entries: { kind: InstalledFileSummary["kind"]; file: VerifiableFile; record: InstalledRecord; title: string; versionNumber: string }[] = [
+        { kind: "main", file: preview.mainFile, title: preview.title, versionNumber: preview.versionNumber, record: { projectId, slug: text(selection.slug) ?? projectId, version: preview.versionNumber, title: preview.title, ...(iconUrl ? { iconUrl } : {}) } },
+        ...[...preview.required, ...preview.transitive].filter((dep) => dep.file && !(dep.projectId && installedProjects.has(dep.projectId))).map(dependency("required")),
+        ...preview.optional.filter((o) => o.file && wanted.has(o.key)).map(dependency("optional")),
+    ];
+    const dir = pluginDirName(target.software);
+    const installed: InstalledFileSummary[] = [];
+    for (const entry of entries) {
+        const safe = sanitizeFileName(entry.file.filename);
+        try {
+            if (!safe || !safe.toLowerCase().endsWith(".jar")) throw new Error(`Can't save Modrinth's file name "${entry.file.filename}" as a plugin`);
+            await deps.download({ url: entry.file.url, targetPath: `${dir}/${validatePluginFilename(safe)}`, sha1: entry.file.sha1, sha512: entry.file.sha512 });
+            records[safe] = entry.record;
+            await deps.writeRecords(records);
+        } catch (err) {
+            if (entry.kind === "main") throw err;
+            throw new Error(`Installed ${installed.map((i) => i.filename).join(", ")} but failed on dependency ${entry.title}: ${errorText(err)}`);
+        }
+        installed.push({ filename: safe, versionNumber: entry.versionNumber, title: entry.title, kind: entry.kind });
+    }
+    return installed;
+}
+
+/**
+ * Installs a Modrinth plugin or mod's newest build for the server's software
+ * and Minecraft version, with its dependencies, as the Plugins tab does.
+ * Only an exact build installs: the tab asks before an install for another
+ * version, and nothing here can.
+ */
+export async function installLatestPlugin(
     project: unknown,
-    software: ServerSoftwareType,
-    mcVersion: string,
+    target: PluginTarget,
     deps: PluginInstallDeps,
 ): Promise<{ file: string; name: string; version: string }> {
     const id = assertModrinthId(project, "Plugin");
-    const addons = SOFTWARE[software].addons;
-    if (!addons) throw new Error(`${SOFTWARE[software].name} has no plugin or mod system.`);
-    if (!mcVersion) throw new Error("Choose a server version before installing plugins.");
+    const loader = loaderOf(target);
+    if (!target.mcVersion) throw new Error("Choose a server version before installing plugins.");
     const meta = parseModrinthProject(await deps.fetchJson<RawModrinthProject>(`${MODRINTH_API}/project/${encodeURIComponent(id)}`));
-    const query = new URLSearchParams({
-        loaders: JSON.stringify([addons.modrinthLoader]),
-        game_versions: JSON.stringify([mcVersion]),
-        include_changelog: "false",
-    });
-    const raw = await deps.fetchJson<RawModrinthVersion[]>(`${MODRINTH_API}/project/${encodeURIComponent(meta.projectId)}/version?${query}`);
-    if (!Array.isArray(raw)) throw new Error("Modrinth returned no version list");
-    const build = raw
+    const build = (await modrinthVersions(deps.fetchJson, meta.projectId, { loaders: [loader], gameVersions: [target.mcVersion] }))
         .map(parseModrinthVersion)
-        .find((v): v is ModrinthVersion => v !== null && v.gameVersions.includes(mcVersion) && v.loaders.includes(addons.modrinthLoader));
-    if (!build) throw new Error(`${meta.title} has no build for Minecraft ${mcVersion} on ${SOFTWARE[software].name}`);
+        .find((v): v is ModrinthVersion => v !== null && v.gameVersions.includes(target.mcVersion) && v.loaders.includes(loader));
+    if (!build) throw new Error(`${meta.title} has no build for Minecraft ${target.mcVersion} on ${SOFTWARE[target.software].name}`);
     if (build.projectId !== meta.projectId) throw new Error("Modrinth answered with a different project's version");
-    if (!build.primary) throw new Error(`${meta.title} ${build.versionNumber} has no file Paperboard can verify`);
-    const safe = sanitizeFileName(build.primary.filename);
-    if (!safe || !safe.toLowerCase().endsWith(".jar")) throw new Error(`Can't save Modrinth's file name "${build.primary.filename}" as a plugin`);
-    const targetPath = `${pluginDirName(software)}/${validatePluginFilename(safe)}`;
-    if (await deps.exists(targetPath)) throw new Error(`${safe} is already installed`);
-    // read before the download: a record list that can't be read stops the install
-    const records = await deps.readRecords();
-    await deps.download({ url: build.primary.url, targetPath, sha1: build.primary.sha1, sha512: build.primary.sha512 });
-    records[safe] = {
-        projectId: meta.projectId,
-        slug: meta.slug,
-        version: build.versionNumber || "latest",
-        title: meta.title,
-        ...(meta.iconUrl ? { iconUrl: meta.iconUrl } : {}),
-    };
-    await deps.writeRecords(records);
-    return { file: safe, name: meta.title, version: build.versionNumber };
+    const [main] = await installPluginVersion({ projectId: meta.projectId, slug: meta.slug, title: meta.title, iconUrl: meta.iconUrl, versionId: build.id }, target, deps);
+    return { file: main!.filename, name: meta.title, version: main!.versionNumber };
 }
 
 /** The daemon's Modrinth reads and checked downloads, for a plugin install. */
 export const livePluginInstallDeps: PluginInstallDeps = {
     fetchJson,
-    download: ({ url, targetPath, sha1, sha512 }) => fileApi.download({ url, targetPath, sha1, checksum: { algorithm: "sha512", value: sha512 }, appId: PANEL_ID }).then(() => undefined),
-    exists: (path) => fileApi.exists(path, PANEL_ID),
+    download: ({ url, targetPath, sha1, sha512 }) =>
+        fileApi.download({ url, targetPath, ...(sha1 ? { sha1 } : {}), ...(sha512 ? { checksum: { algorithm: "sha512", value: sha512 } } : {}), appId: PANEL_ID }).then(() => undefined),
     readRecords: getInstallRecords,
     writeRecords: writeInstallRecords,
 };

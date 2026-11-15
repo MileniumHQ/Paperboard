@@ -1,28 +1,27 @@
 import { errorText } from "./failure";
 import { minecraftSoftware } from "../games/minecraft/index";
 import semver from "semver";
-import { fileApi, config } from "./api";
+import { fileApi } from "./api";
 import { PANEL_ID } from "../service/types";
 import { serverSoftware, serverVersion, serverBridge } from "./server";
 import { behaviorVersionOf } from "./versionProfile";
 import { CALLS } from "../service/contract";
 import { SOFTWARE, type ServerSoftwareType } from "./software";
 import { sanitizeFileName } from "./filesystem";
-import { errorMessage } from "./failure";
 import {
-    INSTALL_RECORDS_KEY,
     classifyPluginUpdate,
-    parseInstallRecords,
     pickVersionFile,
     pluginDirName,
     type PluginUpdateStatus as CoreUpdateStatus,
 } from "../core/plugins";
 import type { InstalledPlugin, InstalledRecord } from "../core/plugins";
 import { resolveGeyserMCLatest } from "./geysermc";
+import type { InstallPreview, InstallVersionSelection, InstalledFileSummary, RawVersionDependency } from "../service/plugins";
 import type { GeyserMCSource } from "../core/plugins";
-import { SEARCH_LIMIT, getProject, modrinthFetch, parseSearchHits, type ModrinthHit, type ModrinthProject, type RawHit, type RawProject } from "./modrinth";
+import { SEARCH_LIMIT, getProject, modrinthFetch, parseSearchHits, type ModrinthHit, type ModrinthProject, type RawHit } from "./modrinth";
 
 export type { InstalledPlugin, InstalledRecord, ModrinthHit, ModrinthProject };
+export type { InstallPreview, InstallVersionSelection, InstalledFileSummary, ResolvedDependency } from "../service/plugins";
 export { getProject, modrinthFetch, pluginDirName };
 
 // Environments with functionality on a dedicated server, per Modrinth.
@@ -31,11 +30,6 @@ const SERVER_ENVIRONMENTS = [
     "dedicated_server_only", "client_only_server_optional",
     "client_or_server", "client_or_server_prefers_both",
 ];
-
-/** The install records the service keeps; a read that fails throws. */
-export async function getInstallRecords(): Promise<Record<string, InstalledRecord>> {
-    return parseInstallRecords((await config.get<Record<string, unknown> | null>(PANEL_ID))?.[INSTALL_RECORDS_KEY]);
-}
 
 /** Records installed files and forgets replaced ones; the service merges them into its records. */
 function recordInstalls(set: Record<string, InstalledRecord>, remove: string[] = []): Promise<unknown> {
@@ -69,13 +63,6 @@ export interface ResolvedDownload {
     gameVersions: string[];
     /** false when the version-filtered lookup had no match and this is a cross-version fallback */
     exactMatch: boolean;
-}
-
-export interface RawVersionDependency {
-    version_id?: string | null;
-    project_id?: string | null;
-    file_name?: string | null;
-    dependency_type?: string;
 }
 
 interface RawVersion {
@@ -190,15 +177,12 @@ export async function resolveLatestFile(projectId: string): Promise<ResolvedDown
     let exactVersions: RawVersion[] = [];
     let fallbackVersions: RawVersion[] = [];
 
+    // a failed exact lookup throws: answering with another version's build would call the plugin incompatible
     if (mcVersion) {
-        try {
-            exactVersions = await modrinthFetch<RawVersion[]>(
-                `/project/${encodeURIComponent(projectId)}/version`,
-                { loaders, game_versions: JSON.stringify([mcVersion]) },
-            );
-        } catch (err) {
-            console.error("[Plugins] Game-version lookup failed:", err);
-        }
+        exactVersions = await modrinthFetch<RawVersion[]>(
+            `/project/${encodeURIComponent(projectId)}/version`,
+            { loaders, game_versions: JSON.stringify([mcVersion]) },
+        );
     }
 
     if (exactVersions.length === 0) {
@@ -212,9 +196,9 @@ export async function resolveLatestFile(projectId: string): Promise<ResolvedDown
 }
 
 /** Which side of the running version a build's target list sits on. */
-export type TargetVersionSide = "older" | "newer" | "mixed" | "unknown";
+type TargetVersionSide = "older" | "newer" | "mixed" | "unknown";
 
-export function targetVersionSide(
+function targetVersionSide(
     gameVersions: string[],
     serverVersionValue: string | null | undefined,
 ): TargetVersionSide {
@@ -277,8 +261,8 @@ export class PluginVersionMismatchError extends Error {
 
 // ─── Version picker + dependency install ───────────────────────────────
 // The install modal lists every build for the current loader (bounded) and
-// what each one pulls in. Dependencies come from Modrinth's version records;
-// required ones install automatically, optional ones are opt-in, and
+// what each one pulls in. The service resolves and installs (service/plugins.ts):
+// required dependencies install automatically, optional ones are opt-in, and
 // incompatible/embedded ones are surfaced, never installed.
 
 export interface ProjectVersionOption {
@@ -335,489 +319,15 @@ export async function listProjectVersions(
     return options;
 }
 
-export type DependencyKind = "required" | "optional" | "incompatible" | "embedded";
-
-export interface ResolvedDependency {
-    /** stable key for checkboxes: version_id, else project_id, else file name, else its place in the list */
-    key: string;
-    name: string;
-    kind: DependencyKind;
-    versionNumber: string;
-    gameVersions: string[];
-    projectId?: string;
-    versionId?: string;
-    /** present when the dep resolves to a verifiable jar */
-    file?: { url: string; filename: string; sha1?: string; sha512?: string };
-    /** set when nothing downloadable could be resolved */
-    unresolvableReason?: string;
+/** What installing a build takes: its file and every dependency, resolved by the service with no writes. */
+export function previewInstall(projectId: string, title: string, versionId: string, includeOptionalKeys: string[] = []): Promise<InstallPreview> {
+    return serverBridge.call(CALLS.previewPluginInstall, { projectId, title, versionId, includeOptionalKeys });
 }
 
-/** how many dependency records one version may pull in (names + files) */
-export const MAX_DEPENDENCIES = 12;
-
-function dependencyKindOf(raw: RawVersionDependency): DependencyKind {
-    const t = (raw.dependency_type ?? "required").toLowerCase();
-    if (t === "optional") return "optional";
-    if (t === "incompatible") return "incompatible";
-    if (t === "embedded") return "embedded";
-    return "required";
+/** Installs a chosen build with its required dependencies (and checked optional ones), as Blocks does. */
+export function installProjectVersion(selection: InstallVersionSelection): Promise<InstalledFileSummary[]> {
+    return serverBridge.call(CALLS.installPluginVersion, { ...selection });
 }
-
-function depDisplayName(
-    project: { title?: string; slug?: string } | null,
-    raw: RawVersionDependency,
-): string {
-    if (project?.title) return project.title;
-    if (project?.slug) return project.slug;
-    if (raw.file_name) return String(raw.file_name).replace(/\.jar$/i, "");
-    if (raw.project_id) return String(raw.project_id);
-    return "Unknown dependency";
-}
-
-async function fetchProjectMeta(projectId: string): Promise<{
-    title?: string;
-    slug?: string;
-    iconUrl?: string;
-} | null> {
-    try {
-        const data = await modrinthFetch<RawProject>(
-            `/project/${encodeURIComponent(projectId)}`,
-        );
-        return {
-            title: data.title,
-            slug: data.slug,
-            iconUrl: data.icon_url || undefined,
-        };
-    } catch (err) {
-        console.error("[Plugins] Dependency project lookup failed:", err);
-        return null;
-    }
-}
-
-const text = (value: unknown): string | undefined => (typeof value === "string" && value ? value : undefined);
-
-/** A version's primary file when Modrinth gives a hash to check it against. */
-function verifiableFile(version: RawVersion | undefined): ResolvedDependency["file"] | undefined {
-    const files = Array.isArray(version?.files) ? version.files : [];
-    const primary = files.find((f) => f.primary) ?? files[0];
-    const { sha1, sha512 } = primary?.hashes ?? {};
-    if (!primary?.url || !primary.filename || (!sha1 && !sha512)) return undefined;
-    return { url: primary.url, filename: primary.filename, ...(sha1 ? { sha1 } : {}), ...(sha512 ? { sha512 } : {}) };
-}
-
-/** What the dependency entry says of the version it settled on, and the file to install, or why there is none. */
-function fromVersion(version: RawVersion | undefined, missing: string): Pick<ResolvedDependency, "versionNumber" | "gameVersions" | "file" | "unresolvableReason"> {
-    const file = verifiableFile(version);
-    return {
-        versionNumber: version?.version_number ?? "",
-        gameVersions: Array.isArray(version?.game_versions) ? version.game_versions : [],
-        ...(file ? { file } : { unresolvableReason: missing }),
-    };
-}
-
-const reason = (what: string, err: unknown) => `${what}: ${errorText(err)}`;
-
-// Resolves one dependency record to a displayable, optionally downloadable
-// entry. Exact (loader + MC version) builds only — a dep with no exact
-// build is reported, never silently substituted with a wrong-version jar.
-// `position` keys a record that names nothing.
-async function resolveOneDependency(raw: RawVersionDependency, position: number): Promise<ResolvedDependency> {
-    const kind = dependencyKindOf(raw);
-    const versionId = text(raw.version_id);
-    const projectId = text(raw.project_id);
-    const base = {
-        key: versionId ?? projectId ?? text(raw.file_name) ?? `dependency-${position}`,
-        kind,
-        versionNumber: "",
-        gameVersions: [] as string[],
-        projectId,
-        versionId,
-    };
-    const named = async (id: string | undefined) => depDisplayName(id ? await fetchProjectMeta(id) : null, raw);
-
-    if (kind === "incompatible" || kind === "embedded") {
-        return {
-            ...base,
-            name: await named(projectId),
-            unresolvableReason: kind === "incompatible" ? "Must not be installed alongside this version." : "Bundled with the version; nothing to install.",
-        };
-    }
-    // pinned version id wins; idents the exact file the author declared
-    if (versionId) {
-        let version: RawVersion & { project_id?: unknown };
-        try {
-            version = await modrinthFetch(`/version/${encodeURIComponent(versionId)}`);
-        } catch (err) {
-            return { ...base, name: depDisplayName(null, raw), unresolvableReason: reason("Could not read the pinned version", err) };
-        }
-        const pinnedProject = text(version.project_id) ?? projectId;
-        return {
-            ...base,
-            projectId: pinnedProject,
-            name: await named(text(version.project_id)),
-            ...fromVersion(version, "The pinned version has no verifiable file; refusing to install it."),
-        };
-    }
-    // project-only reference: latest exact build for this loader + MC
-    if (projectId) {
-        const name = await named(projectId);
-        const loader = currentModrinthLoader();
-        const mcVersion = serverVersion();
-        try {
-            const versions = await modrinthFetch<RawVersion[]>(`/project/${encodeURIComponent(projectId)}/version`, {
-                loaders: JSON.stringify([loader]),
-                ...(mcVersion ? { game_versions: JSON.stringify([mcVersion]) } : {}),
-            });
-            return { ...base, name, ...fromVersion(versions?.[0], mcVersion ? `No verifiable ${loader} build for Minecraft ${mcVersion}.` : "No verifiable build found.") };
-        } catch (err) {
-            return { ...base, name, unresolvableReason: reason("Could not resolve a build", err) };
-        }
-    }
-    return { ...base, name: depDisplayName(null, raw), unresolvableReason: "No project or version reference." };
-}
-
-async function resolveRawDependencies(
-    dependencies: RawVersionDependency[],
-): Promise<ResolvedDependency[]> {
-    const out: ResolvedDependency[] = [];
-    for (const [position, raw] of (dependencies ?? []).slice(0, MAX_DEPENDENCIES).entries()) {
-        out.push(await resolveOneDependency(raw, position));
-    }
-    return out;
-}
-
-export async function resolveVersionDependencies(
-    dependencies: RawVersionDependency[],
-): Promise<ResolvedDependency[]> {
-    return resolveRawDependencies(dependencies);
-}
-
-// Single download+record implementation for every install path. The record
-// write is optional so the legacy contract holds: a project-metadata
-// failure must not fail an install that already downloaded.
-async function downloadAndRecordFile(input: {
-    projectId: string;
-    slug: string;
-    versionNumber: string;
-    title?: string;
-    iconUrl?: string;
-    file: { url: string; filename: string; sha1?: string; sha512?: string };
-    record: boolean;
-}): Promise<{ filename: string; version: string }> {
-    const safe = sanitizeFileName(input.file.filename);
-    if (!safe || !safe.toLowerCase().endsWith(".jar")) {
-        throw new Error(
-            `Can't save Modrinth's file name "${input.file.filename}" — it contains characters that aren't allowed in a jar name.`,
-        );
-    }
-
-    await fileApi.download({
-        url: input.file.url,
-        targetPath: `${pluginDirName(minecraftSoftware(serverSoftware()))}/${safe}`,
-        appId: PANEL_ID,
-        // Modrinth hashes ride the same fields vanilla (sha1) and Paper
-        // (sha256) already use. The daemon enforces sha1/sha256 today;
-        // sha512 travels in checksum for verifiers that accept it.
-        ...(input.file.sha1 ? { sha1: input.file.sha1 } : {}),
-        ...(input.file.sha512
-            ? { checksum: { algorithm: "sha512", value: input.file.sha512 } }
-            : {}),
-    });
-
-    if (input.record) {
-        await recordInstalls({
-            [safe]: {
-                projectId: input.projectId,
-                slug: input.slug,
-                version: input.versionNumber,
-                title: input.title || undefined,
-                iconUrl: input.iconUrl,
-            },
-        });
-    }
-
-    return { filename: safe, version: input.versionNumber };
-}
-
-export async function installProject(
-    projectId: string,
-    opts?: { allowIncompatible?: boolean },
-): Promise<{ filename: string; version: string }> {
-    const file = await resolveLatestFile(projectId);
-    if (!file.exactMatch && !opts?.allowIncompatible) {
-        throw new PluginVersionMismatchError(file, serverVersion());
-    }
-
-    // record project for icons and versions
-    let meta: { slug: string; title?: string; iconUrl?: string } | null = null;
-    try {
-        const project = await getProject(projectId);
-        meta = { slug: project.slug, title: project.title, iconUrl: project.iconUrl };
-    } catch (err) {
-        console.error("[Plugins] Failed to record install metadata:", err);
-    }
-
-    return downloadAndRecordFile({
-        projectId,
-        slug: meta?.slug ?? projectId,
-        versionNumber: file.versionNumber,
-        title: meta?.title,
-        iconUrl: meta?.iconUrl,
-        file,
-        record: meta !== null,
-    });
-}
-
-export interface ResolvedMainFile {
-    url: string;
-    filename: string;
-    sha1?: string;
-    sha512?: string;
-    versionNumber: string;
-    gameVersions: string[];
-}
-
-export interface InstallPreview {
-    title: string;
-    versionNumber: string;
-    gameVersions: string[];
-    matchesServer: boolean;
-    mainFile: ResolvedMainFile | null;
-    required: ResolvedDependency[];
-    optional: ResolvedDependency[];
-    transitive: ResolvedDependency[];
-    incompatible: ResolvedDependency[];
-    embedded: ResolvedDependency[];
-    /** required entries (direct or transitive) that could not resolve */
-    failures: string[];
-}
-
-function primaryFileOf(
-    v: RawVersion,
-): { url: string; filename: string; sha1?: string; sha512?: string } | null {
-    const files = Array.isArray(v.files) ? v.files : [];
-    const primary = files.find((f) => f.primary) ?? files[0];
-    if (!primary?.url || !primary?.filename) return null;
-    if (!primary.hashes?.sha1 && !primary.hashes?.sha512) return null;
-    return {
-        url: primary.url,
-        filename: primary.filename,
-        ...(primary.hashes?.sha1 ? { sha1: primary.hashes.sha1 } : {}),
-        ...(primary.hashes?.sha512 ? { sha512: primary.hashes.sha512 } : {}),
-    };
-}
-
-function depLabel(dep: ResolvedDependency): string {
-    const ver = dep.versionNumber ? ` v${dep.versionNumber}` : "";
-    const games = dep.gameVersions.length > 0 ? ` (${dep.gameVersions.join(", ")})` : "";
-    return `${dep.name}${ver}${games}`;
-}
-
-// Full resolve pass with no writes: the main file, every required dep, the
-// checked optional deps, and transitive required deps — each either
-// verifiable or listed in failures, so the install phase never half-installs
-// on a surprise.
-export async function previewInstall(
-    projectId: string,
-    title: string,
-    versionId: string,
-    includeOptionalKeys: string[] = [],
-): Promise<InstallPreview> {
-    const loader = currentModrinthLoader();
-    const mcVersion = serverVersion();
-    const record = await modrinthFetch<RawVersion>(
-        `/version/${encodeURIComponent(versionId)}`,
-    );
-    const versionNumber = record.version_number ?? "";
-    const gameVersions = Array.isArray(record.game_versions) ? record.game_versions : [];
-    const matchesServer =
-        (record.loaders ?? [loader]).includes(loader) &&
-        (!mcVersion || gameVersions.includes(mcVersion));
-    const mainFile = primaryFileOf(record);
-
-    const direct = await resolveRawDependencies(record.dependencies ?? []);
-    const required = direct.filter((d) => d.kind === "required");
-    const optional = direct.filter((d) => d.kind === "optional");
-    const incompatible = direct.filter((d) => d.kind === "incompatible");
-    const embedded = direct.filter((d) => d.kind === "embedded");
-
-    const transitive: ResolvedDependency[] = [];
-    const failures: string[] = [];
-    const seen = new Set<string>([projectId.toLowerCase()]);
-    const wanted = new Set(includeOptionalKeys);
-    const installedCount = () => transitive.length + required.length;
-    const consider = async (dep: ResolvedDependency, depth: number) => {
-        if (!dep.projectId) return;
-        const idKey = dep.projectId.toLowerCase();
-        if (seen.has(idKey)) return;
-        seen.add(idKey);
-        if (!dep.file) {
-            failures.push(
-                `${dep.name}: ${dep.unresolvableReason ?? "could not be resolved"}`,
-            );
-            return;
-        }
-        if (depth > 0) transitive.push(dep);
-        if (depth >= MAX_DEP_DEPTH || installedCount() > MAX_DEP_INSTALLS) return;
-        if (!dep.versionId) return;
-        let sub: RawVersion;
-        try {
-            sub = await modrinthFetch<RawVersion>(`/version/${encodeURIComponent(dep.versionId)}`);
-        } catch (err) {
-            // its own dependencies are unknown: the preview says so rather than leave them out
-            failures.push(`${dep.name}'s dependencies: ${errorMessage(err)}`);
-            return;
-        }
-        for (const t of await resolveRawDependencies(
-            (sub.dependencies ?? []).filter((r) => dependencyKindOf(r) === "required"),
-        )) {
-            await consider(t, depth + 1);
-            if (installedCount() > MAX_DEP_INSTALLS) return;
-        }
-    };
-    for (const dep of required) {
-        await consider(dep, 0);
-        if (installedCount() > MAX_DEP_INSTALLS) break;
-    }
-    for (const dep of optional) {
-        if (!wanted.has(dep.key)) continue;
-        await consider(dep, 0);
-        if (installedCount() > MAX_DEP_INSTALLS) break;
-    }
-
-    return {
-        title,
-        versionNumber,
-        gameVersions,
-        matchesServer,
-        mainFile: mainFile
-            ? { ...mainFile, versionNumber, gameVersions }
-            : null,
-        required,
-        optional,
-        transitive,
-        incompatible,
-        embedded,
-        failures,
-    };
-}
-
-export interface InstallVersionSelection {
-    projectId: string;
-    slug: string;
-    /** Modrinth project title, stored so the card survives a reload */
-    title?: string;
-    iconUrl?: string;
-    versionId: string;
-    /** ResolvedDependency.key values of optional deps to include */
-    includeOptionalKeys?: string[];
-}
-
-export interface InstalledFileSummary {
-    filename: string;
-    versionNumber: string;
-    title: string;
-    kind: "main" | "required" | "optional";
-}
-
-// Installs an explicitly chosen version plus its required dependencies
-// (and checked optionals). Resolution happens fully before any write, so a
-// missing required dep fails the install instead of half-installing it.
-export async function installProjectVersion(
-    selection: InstallVersionSelection,
-): Promise<InstalledFileSummary[]> {
-    const preview = await previewInstall(
-        selection.projectId,
-        selection.title ?? selection.slug,
-        selection.versionId,
-        selection.includeOptionalKeys ?? [],
-    );
-    if (!preview.mainFile) {
-        throw new Error(
-            `Version ${preview.versionNumber || selection.versionId} has no verifiable file; refusing to install it.`,
-        );
-    }
-    if (preview.failures.length > 0) {
-        throw new Error(`Cannot install: ${preview.failures.join(" ")}`);
-    }
-    const wanted = new Set(selection.includeOptionalKeys ?? []);
-    const chosenOptional = preview.optional.filter(
-        (o) => o.file && wanted.has(o.key),
-    );
-    const missingOptional = preview.optional.filter(
-        (o) => wanted.has(o.key) && !o.file,
-    );
-    if (missingOptional.length > 0) {
-        throw new Error(
-            `Cannot install: ${missingOptional.map(depLabel).join("; ")}.`,
-        );
-    }
-
-    const installed: InstalledFileSummary[] = [];
-    const installOne = async (
-        entry:
-            | { kind: "main" }
-            | { kind: "required" | "optional"; dep: ResolvedDependency },
-    ): Promise<void> => {
-        if (entry.kind === "main") {
-            const res = await downloadAndRecordFile({
-                projectId: selection.projectId,
-                slug: selection.slug,
-                versionNumber: preview.versionNumber,
-                title: preview.title,
-                iconUrl: selection.iconUrl,
-                file: preview.mainFile!,
-                record: true,
-            });
-            installed.push({
-                filename: res.filename,
-                versionNumber: preview.versionNumber,
-                title: preview.title,
-                kind: "main",
-            });
-            return;
-        }
-        const dep = entry.dep;
-        try {
-            const res = await downloadAndRecordFile({
-                projectId: dep.projectId ?? selection.projectId,
-                slug: dep.name,
-                versionNumber: dep.versionNumber,
-                title: dep.name,
-                file: dep.file!,
-                record: true,
-            });
-            installed.push({
-                filename: res.filename,
-                versionNumber: dep.versionNumber,
-                title: dep.name,
-                kind: entry.kind,
-            });
-        } catch (err) {
-            throw new Error(
-                `Installed ${installed.map((i) => i.filename).join(", ") || "nothing"} but failed on dependency ${depLabel(dep)}: ${errorText(err)}`,
-            );
-        }
-    };
-
-    // a dependency that is already installed stays as it is: a second
-    // copy of a mod (another Fabric API version) stops the server starting
-    const installedProjects = new Set(Object.values(await getInstallRecords()).map((r) => r.projectId));
-    await installOne({ kind: "main" });
-    for (const dep of [...preview.required, ...preview.transitive]) {
-        if (!dep.file || (dep.projectId && installedProjects.has(dep.projectId))) continue;
-        await installOne({ kind: "required", dep });
-    }
-    for (const dep of chosenOptional) {
-        await installOne({ kind: "optional", dep });
-    }
-    return installed;
-}
-
-// one more level of required deps past the direct ones; deeper trees are
-// rare and each hop is a network fetch, so this stays small and bounded
-const MAX_DEP_DEPTH = 1;
-const MAX_DEP_INSTALLS = 25;
 
 /** "unchecked": no Modrinth record says what it is (uploaded, or added by hand), so nothing could be looked up */
 export type PluginUpdateStatus = CoreUpdateStatus | "error" | "unchecked";

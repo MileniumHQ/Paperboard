@@ -18,11 +18,11 @@ import {
     parseModrinthVersion,
     type ModrinthVersion,
     type RawModrinthProject,
-    type RawModrinthVersion,
 } from "../core/modrinth";
 import { isListableDirArg } from "../core/dirs";
 import { UPLOAD_RECORDS_KEY, parseUploadRecords } from "../core/addonUpload";
 import { forgetUploads } from "./uploadRecords";
+import { modrinthVersions } from "./modrinth";
 
 const local = serverLocal(() => ({ recordsQueue: Promise.resolve() as Promise<unknown> }));
 
@@ -148,15 +148,7 @@ export async function listDatapackVersions(
 ): Promise<ModrinthVersion[]> {
     const id = assertModrinthId(projectId, "Project");
     if (!mcVersion) throw new Error("Choose a server version before installing datapacks.");
-    const query = new URLSearchParams({
-        loaders: JSON.stringify([DATAPACK_LOADER]),
-        game_versions: JSON.stringify([mcVersion]),
-        include_changelog: "false",
-    });
-    const raw = await deps.fetchJson<RawModrinthVersion[]>(
-        `${MODRINTH_API}/project/${encodeURIComponent(id)}/version?${query}`,
-    );
-    if (!Array.isArray(raw)) throw new Error("Modrinth returned no version list");
+    const raw = await modrinthVersions(deps.fetchJson, id, { loaders: [DATAPACK_LOADER], gameVersions: [mcVersion] });
     return raw.map(parseModrinthVersion).filter((v): v is ModrinthVersion => v !== null);
 }
 

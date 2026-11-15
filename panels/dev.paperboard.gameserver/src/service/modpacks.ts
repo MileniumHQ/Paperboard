@@ -27,6 +27,7 @@ import { INSTALL_RECORDS_KEY, parseInstallRecords } from "../core/plugins";
 import type { ModpackProgress } from "../core/state";
 import { SOFTWARE, type ServerSoftwareType } from "../software/catalog";
 import { extractMrpack } from "./mrpack";
+import { modrinthVersions } from "./modrinth";
 import { assertZipFile } from "./zipFiles";
 import { activatePack, newPackStagingName, packFilesPath, recoverStagedPacks, type PackFs } from "./packActivation";
 
@@ -104,9 +105,7 @@ export async function listModpackVersions(
 ): Promise<ModrinthVersion[]> {
     const id = assertModrinthId(projectId, "Project");
     const loader = modpackLoaderFor(software);
-    const query = new URLSearchParams({ loaders: JSON.stringify([loader.modrinth]), include_changelog: "false" });
-    const raw = await deps.fetchJson<RawModrinthVersion[]>(`${MODRINTH_API}/project/${encodeURIComponent(id)}/version?${query}`);
-    if (!Array.isArray(raw)) throw new Error("Modrinth returned no version list");
+    const raw = await modrinthVersions(deps.fetchJson, id, { loaders: [loader.modrinth] });
     return raw
         .map(parseModrinthVersion)
         .filter((v): v is ModrinthVersion => v !== null && v.primary !== null && v.primary.filename.endsWith(".mrpack"));
