@@ -12,6 +12,7 @@ import {
     createEffect,
     createSignal,
     For,
+    on,
     onCleanup,
     Show,
     type JSX,
@@ -53,29 +54,31 @@ export function Topbar(props: TopbarProps) {
 
     // The mobile panel is a plain disclosure, not a portalled menu, so it
     // matches the landing. Close it on Escape or a click outside.
-    createEffect(() => {
-        if (!mobileOpen()) return;
-        const onKeyDown = (event: KeyboardEvent) => {
-            if (event.key === "Escape") setMobileOpen(false);
-        };
-        const onPointerDown = (event: Event) => {
-            const target = event.target as HTMLElement | null;
-            if (
-                target?.closest(
-                    ".topbar-mobile-panel, .topbar-menu-button",
-                )
-            ) {
-                return;
-            }
-            setMobileOpen(false);
-        };
-        document.addEventListener("keydown", onKeyDown);
-        document.addEventListener("pointerdown", onPointerDown);
-        onCleanup(() => {
-            document.removeEventListener("keydown", onKeyDown);
-            document.removeEventListener("pointerdown", onPointerDown);
-        });
-    });
+    createEffect(
+        on(mobileOpen, (open) => {
+            if (!open) return;
+            const onKeyDown = (event: KeyboardEvent) => {
+                if (event.key === "Escape") setMobileOpen(false);
+            };
+            const onPointerDown = (event: Event) => {
+                const target = event.target as HTMLElement | null;
+                if (
+                    target?.closest(
+                        ".topbar-mobile-panel, .topbar-menu-button",
+                    )
+                ) {
+                    return;
+                }
+                setMobileOpen(false);
+            };
+            document.addEventListener("keydown", onKeyDown);
+            document.addEventListener("pointerdown", onPointerDown);
+            onCleanup(() => {
+                document.removeEventListener("keydown", onKeyDown);
+                document.removeEventListener("pointerdown", onPointerDown);
+            });
+        }),
+    );
 
     const sectionMeta = () =>
         props.section ? metaSections[props.section] : undefined;

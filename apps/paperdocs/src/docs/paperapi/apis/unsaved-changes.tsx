@@ -22,7 +22,7 @@ export default function UnsavedChangesApiDoc() {
 import { PaperFileBrowser, type PaperFileBrowserRef } from "@mileniumhq/paperui";
 
 let browser: PaperFileBrowserRef | undefined;
-createEffect(() => setUnsavedChanges(browser?.dirty() ? browser.confirmLeave : null));
+createEffect(on(() => browser?.dirty(), (dirty) => setUnsavedChanges(dirty ? browser!.confirmLeave : null)));
 
 <PaperFileBrowser ref={(ref) => (browser = ref)} /* ... */ />`}
             </PaperCode>

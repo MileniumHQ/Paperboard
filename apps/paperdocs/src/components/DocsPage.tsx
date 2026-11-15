@@ -9,6 +9,7 @@ import {
     createEffect,
     createMemo,
     createSignal,
+    on,
     onCleanup,
     onMount,
     Show,
@@ -52,10 +53,12 @@ export function DocsPage(props: DocsPageProps) {
 
     // Each navigation is a fresh document load, so scroll starts at the top
     // already; this keeps the reset intentional if the page ever gets reused.
-    createEffect(() => {
-        void props.pageKey;
-        window.scrollTo(0, 0);
-    });
+    createEffect(
+        on(
+            () => props.pageKey,
+            () => window.scrollTo(0, 0),
+        ),
+    );
 
     const updateToc = () => {
         if (!docContainerRef) return;
