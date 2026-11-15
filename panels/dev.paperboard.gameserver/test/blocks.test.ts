@@ -3,7 +3,7 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { backupApi, backupLocationsApi, blocksApi, type BackupRecord } from "@mileniumhq/paperapi";
+import { backupApi, backupLocationsApi, blocksApi, getTransport, type BackupRecord } from "@mileniumhq/paperapi";
 import { callServer } from "./helpers/serverCall";
 import { startTestDaemon, type TestDaemon } from "./helpers/crane";
 import { installFakeJava } from "./helpers/fakeJava";
@@ -38,8 +38,8 @@ function nextEvent(event: string, project: string | undefined, timeoutMs = 10_00
         }, project);
     });
 }
-// subscriptions reach the daemon on their own; a test lets them land before what fires them
-const settle = () => new Promise((resolve) => setTimeout(resolve, 300));
+// subscriptions reach the daemon on their own; a test waits for the daemon to take them before what fires them
+const settle = () => getTransport().subscriptionsSettled();
 
 const SHARED = {
     commands: ["back-up", "delete-backup", "restart-server", "restore-backup", "run-command", "save-world", "say", "set-automatic-updates", "set-daily-restart", "set-option", "set-restart-after-crash", "start-server", "stop-server", "write-file"],

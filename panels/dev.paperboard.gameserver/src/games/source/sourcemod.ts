@@ -1,4 +1,5 @@
 import fs from "node:fs/promises";
+import { exists } from "../serviceKit";
 import path from "node:path";
 
 // SourceMod on a Source server: Metamod:Source loads it, and it loads the
@@ -60,10 +61,6 @@ export const SOURCEMOD_MISSING = "SourceMod is on, but its files are missing fro
 export function pluginFile(value: unknown): string {
     if (typeof value !== "string" || !PLUGIN_FILE.test(value)) throw new Error("Choose a plugin by its .smx file name");
     return value;
-}
-
-async function exists(file: string): Promise<boolean> {
-    return fs.lstat(file).then(() => true, (err: NodeJS.ErrnoException) => { if (err.code === "ENOENT") return false; throw err; });
 }
 
 export class SourceMod {

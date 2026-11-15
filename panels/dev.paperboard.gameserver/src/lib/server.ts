@@ -109,10 +109,8 @@ serverBridge.onStateChange((patch) => {
 
 /* Initial projection is requested after App resolves the selected server. */
 
-// config lives in the service (games/minecraft/config.ts owns read-merge-write
-// with an explicit PANEL_ID). The UI only triggers a reload and pulls the
-// resulting state — the duplicated read-merge-write twins that lived here
-// are gone, and with them the ambient (id-less) config.get/set calls.
+// config lives in the service, which owns every read-merge-write of it. The
+// UI only triggers a reload and pulls the resulting state.
 export async function loadServerConfig() {
     try {
         await serverBridge.call(CALLS.loadConfig);

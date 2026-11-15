@@ -20,11 +20,7 @@ export function scopedFiles(api: typeof fileApi, directory: () => string): typeo
             return (...args: any[]) => {
                 if (key === "download")
                     args[0] = { ...args[0], targetPath: relative(args[0].targetPath) };
-                else if (
-                    ["importFile", "importFiles", "importFolder", "exportFile"].includes(key)
-                ) {
-                    args[0] = relative(args[0]);
-                } else args[0] = relative(args[0]);
+                else args[0] = relative(args[0]);
                 return method.apply(target, args);
             };
         },

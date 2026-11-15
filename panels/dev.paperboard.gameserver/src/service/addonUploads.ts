@@ -1,4 +1,5 @@
 import * as nodeFs from "node:fs/promises";
+import { exists } from "../games/serviceKit";
 import * as nodePath from "node:path";
 import { SOFTWARE, type ServerSoftwareType } from "../software/catalog";
 import {
@@ -50,15 +51,6 @@ interface UploadPlan {
 
 const errorMessage = (err: unknown) => (err instanceof Error ? err.message : String(err));
 
-async function exists(path: string): Promise<boolean> {
-    try {
-        await nodeFs.lstat(path);
-        return true;
-    } catch (err) {
-        if ((err as { code?: string } | null)?.code === "ENOENT") return false;
-        throw err;
-    }
-}
 
 /** the problem with a staged zip file as an add-on of `kind`, or null */
 async function zipProblem(entry: StagedEntry, kind: ArchiveKind): Promise<string | null> {
