@@ -8,29 +8,34 @@ import { app, BrowserWindow, dialog, type WebContents } from "electron";
 import { askShell } from "./shellAsk";
 import { logger } from "../../papercrane/logger";
 
-const unsaved = new Set<WebContents>();
+// each window holding unsaved work, with what drops it once the window is gone
+const unsaved = new Map<WebContents, () => void>();
 // the quit was agreed to, or isn't the person's (a signal, a shutdown)
 let agreed = false;
 let asking: Promise<boolean> | null = null;
 
 /** a shell window said its panels hold unsaved work, or no longer do */
 export function setShellUnsaved(wc: WebContents, value: boolean): void {
+    const gone = unsaved.get(wc);
     if (!value) {
+        if (!gone) return;
         unsaved.delete(wc);
+        wc.off("destroyed", gone);
+        wc.off("render-process-gone", gone);
         return;
     }
-    if (unsaved.has(wc)) return;
-    unsaved.add(wc);
+    if (gone) return;
     // a window that is gone has nothing left to lose
-    const gone = () => unsaved.delete(wc);
-    wc.once("destroyed", gone);
-    wc.once("render-process-gone", gone);
+    const drop = () => setShellUnsaved(wc, false);
+    unsaved.set(wc, drop);
+    wc.once("destroyed", drop);
+    wc.once("render-process-gone", drop);
 }
 
 /** Asks each window holding unsaved work, in turn; false once one keeps Paperboard open. */
 export function confirmQuit(): Promise<boolean> {
     asking ??= (async () => {
-        for (const wc of [...unsaved]) {
+        for (const wc of [...unsaved.keys()]) {
             if (wc.isDestroyed()) continue;
             const window = BrowserWindow.fromWebContents(wc);
             if (window) {
