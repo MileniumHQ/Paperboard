@@ -83,7 +83,7 @@ export async function waitForContentPainted(
             try {
                 await fonts.ready;
             } catch {
-                // Font loading is best effort; a missing font must not block.
+                // quiet: a font that fails to load falls back to the next in its stack; painting must not wait on it
             }
         }
         if (canObserveImageDecode()) {

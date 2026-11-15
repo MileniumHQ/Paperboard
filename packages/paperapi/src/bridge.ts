@@ -65,6 +65,7 @@ export function createPanelBridge<
     };
 
     const unregisterHydrator = registerPanelHydrator(panelId, refreshState);
+    // quiet: refreshState already put the failure in the bridge's status, which the page shows
     void refreshState().catch((err) => console.error(`[bridge:${panelId}] initial hydration failed; retry via refreshState:`, err));
 
     const onStateChange = (

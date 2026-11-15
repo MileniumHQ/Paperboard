@@ -156,6 +156,7 @@ export function definePanelService<
         setState,
         emit: pageEvents(panelId, blocks, !!options.actions),
         emitTrigger: (triggerId, output) => {
+            // quiet: TRANSITIONAL (Actions removal): Actions is deprecated, and its triggers have no page to show a failure in
             actionsApi.emitTrigger(triggerId, output, panelId).catch((err) => console.error(`[Service:${panelId}] Failed to emit trigger '${triggerId}':`, err));
         },
     };
@@ -207,9 +208,11 @@ function pageEvents(panelId: string, blocks: Blocks, legacyActions: boolean): (e
         const id = eventBlockId(event);
         void registerEvent(id, event)
             .then(() => blocks.fire(id, payload === undefined ? {} : { payload }))
+            // quiet: emit is fire-and-forget, with no caller to hear it; the daemon's log keeps what the service wrote
             .catch((err) => console.error(`[Service:${panelId}] Failed to emit event '${event}':`, err));
         // TRANSITIONAL (Actions removal): a page still listening with actionsApi.on hears it too
         if (legacyActions) {
+            // quiet: TRANSITIONAL (Actions removal): the deprecated Actions page is the only one listening
             actionsApi.emit(event, payload, panelId).catch((err) => console.error(`[Service:${panelId}] Failed to emit event '${event}':`, err));
         }
     };
@@ -337,6 +340,7 @@ function answerTheDaemon(panelId: string, options: AnyOptions, ctx: ServiceConte
     const hear = (type: string, hook: string, run: (message: any) => unknown) => {
         process.on("message", (message: any) => {
             if (message?.type !== type) return;
+            // quiet: the daemon doesn't wait on an after-hook, so its failure has no caller; the daemon's log keeps what the service wrote
             void (async () => run(message))().catch((err) => console.error(`[Service:${panelId}] ${hook} failed:`, err));
         });
     };
