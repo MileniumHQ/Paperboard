@@ -36,6 +36,8 @@ export interface BackupProvider {
     submitLabel: string;
     busyLabel: string;
     connect: (values: Record<string, string>, toggles: Record<string, boolean>, computerId: string) => Promise<unknown>;
+    /** stops a connect that waits on the person (a browser sign-in); its connect then rejects */
+    cancel?: () => Promise<unknown>;
 }
 
 function S3Logo(): JSX.Element {
@@ -70,6 +72,7 @@ export const BACKUP_PROVIDERS: readonly BackupProvider[] = [
         busyLabel: "Waiting for Google...",
         connect: (v, _t, computerId) =>
             shellIpc().invoke("backup-gdrive-connect", { computerId, label: v.label ?? "" }),
+        cancel: () => shellIpc().invoke("backup-gdrive-cancel"),
     },
     {
         kind: "s3",

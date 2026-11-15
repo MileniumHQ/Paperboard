@@ -1,13 +1,12 @@
 // Connecting Google Drive for backups: Google's installed-app sign-in with
 // PKCE and a loopback redirect, with Paperboard's own "Desktop app" client so
 // Google's screen asks for Paperboard. The browser comes back to a one-shot
-// listener on 127.0.0.1; the
-// refresh token it yields goes from here to the daemon's vault and never
-// passes through a renderer. Electron-free so it can be tested.
+// listener on 127.0.0.1 (loopbackRedirect.ts); the refresh token it yields
+// goes from here to the daemon's vault and never passes through a renderer.
+// Electron-free so it can be tested.
 import * as crypto from "crypto";
-import * as http from "http";
-import { once } from "events";
 import { logger } from "../../papercrane/logger";
+import { listenForRedirect } from "./loopbackRedirect";
 
 export const DRIVE_FILE_SCOPE = "https://www.googleapis.com/auth/drive.file";
 const SIGN_IN_TIMEOUT_MS = 5 * 60_000;
@@ -50,101 +49,93 @@ export interface GoogleSignInDeps {
 
 const base64url = (buf: Buffer) => buf.toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 
-// one sign-in at a time: each holds a listening socket and a browser tab
-let signingIn = false;
+// the sign-in waiting for the browser, if any: one at a time, and a newer
+// one replaces it, since a tab the person closed never comes back to say so
+let pending: AbortController | null = null;
+
+/** Stops the sign-in waiting for the browser, if one is. It rejects as canceled. */
+export function cancelGoogleSignIn(): void {
+    pending?.abort();
+}
 
 /**
  * Signs in, exchanges the code for a refresh token, and hands the token to
  * `persist` (the daemon keeping it). Resolves with what persist resolves
- * with. The browser tab is answered last, with the real outcome: "connected"
- * only once persist succeeded, otherwise "not-connected" with the reason.
+ * with. Cancels the sign-in already waiting, if any. The browser tab is
+ * answered last, with the real outcome: "connected" only once persist
+ * succeeded, otherwise "not-connected" with the reason.
  */
 export async function signInToGoogleDrive<T>(
     client: GoogleClient,
     deps: GoogleSignInDeps,
     persist: (refreshToken: string) => Promise<T>,
 ): Promise<T> {
-    if (signingIn) throw new Error("A Google sign-in is already open in your browser");
-    signingIn = true;
+    pending?.abort();
+    const controller = new AbortController();
+    pending = controller;
     const endpoints = deps.endpoints ?? GOOGLE_OAUTH;
     const verifier = base64url(crypto.randomBytes(32));
     const state = base64url(crypto.randomBytes(16));
-    let finish!: (outcome: { code: string } | { error: string }) => void;
-    const outcome = new Promise<{ code: string } | { error: string }>((resolve) => (finish = resolve));
-    // answers the tab that came back from Google, once, when the outcome is known
-    let answered = false;
-    const tab: { respond: ((outcome: "connected" | "not-connected", reason?: string) => Promise<void>) | null } = { respond: null };
-    const server = http.createServer((req, res) => {
-        const url = new URL(req.url ?? "/", "http://127.0.0.1");
-        if (url.pathname !== "/callback" || url.searchParams.get("state") !== state) {
-            res.writeHead(404).end();
-            return;
-        }
-        const code = url.searchParams.get("code");
-        const error = url.searchParams.get("error");
-        if (tab.respond) {
-            res.writeHead(404).end();
-            return;
-        }
-        tab.respond = (outcome, reason) =>
-            new Promise<void>((resolve) => {
-                if (answered) return resolve();
-                answered = true;
-                res.writeHead(200, { "content-type": "text/html; charset=utf-8" }).end(deps.page(outcome, reason), () => resolve());
-            });
-        finish(code ? { code } : { error: error === "access_denied" ? "Google access was not allowed" : `Google sign-in failed: ${error ?? "no code"}` });
-    });
-    const timer = setTimeout(() => finish({ error: "The Google sign-in was not finished within 5 minutes" }), deps.timeoutMs ?? SIGN_IN_TIMEOUT_MS);
+    let tab: ((page: string) => Promise<void>) | null = null;
     try {
-        server.listen(0, "127.0.0.1");
-        await once(server, "listening");
-        const redirectUri = `http://127.0.0.1:${(server.address() as { port: number }).port}/callback`;
-        const auth = new URL(endpoints.authUrl);
-        auth.search = new URLSearchParams({
-            client_id: client.clientId,
-            redirect_uri: redirectUri,
-            response_type: "code",
-            scope: DRIVE_FILE_SCOPE,
-            access_type: "offline",
-            prompt: "consent",
-            state,
-            code_challenge: base64url(crypto.createHash("sha256").update(verifier).digest()),
-            code_challenge_method: "S256",
-        }).toString();
-        await deps.openExternal(auth.toString());
-        const result = await outcome;
-        if ("error" in result) throw new Error(result.error);
-
-        const res = await fetch(endpoints.tokenUrl, {
-            method: "POST",
-            headers: { "content-type": "application/x-www-form-urlencoded" },
-            body: new URLSearchParams({
-                code: result.code,
-                client_id: client.clientId,
-                client_secret: client.clientSecret,
-                redirect_uri: redirectUri,
-                grant_type: "authorization_code",
-                code_verifier: verifier,
-            }),
-            signal: AbortSignal.timeout(30_000),
+        const listener = await listenForRedirect({
+            port: 0,
+            pathname: "/callback",
+            accept: (requested) => requested.searchParams.get("state") === state,
+            signal: controller.signal,
+            timeoutMs: deps.timeoutMs ?? SIGN_IN_TIMEOUT_MS,
         });
-        const body = (await res.json().catch((err) => {
-            logger.warn("[backups] Google's token answer was not JSON:", err);
-            return null;
-        })) as { refresh_token?: unknown; error_description?: unknown; error?: unknown } | null;
-        if (!body) throw new Error(`Google sent an unreadable answer (HTTP ${res.status})`);
-        if (!res.ok) throw new Error(`Google refused the sign-in: ${String(body?.error_description ?? body?.error ?? `HTTP ${res.status}`)}`);
-        if (typeof body?.refresh_token !== "string") throw new Error("Google did not grant offline access, so backups could not run later");
-        const saved = await persist(body.refresh_token);
-        await tab.respond?.("connected");
-        return saved;
-    } catch (err) {
-        await tab.respond?.("not-connected", (err as Error)?.message ?? String(err));
-        throw err;
+        try {
+            const redirectUri = `http://127.0.0.1:${listener.port}/callback`;
+            const auth = new URL(endpoints.authUrl);
+            auth.search = new URLSearchParams({
+                client_id: client.clientId,
+                redirect_uri: redirectUri,
+                response_type: "code",
+                scope: DRIVE_FILE_SCOPE,
+                access_type: "offline",
+                prompt: "consent",
+                state,
+                code_challenge: base64url(crypto.createHash("sha256").update(verifier).digest()),
+                code_challenge_method: "S256",
+            }).toString();
+            await deps.openExternal(auth.toString());
+            const caught = await listener.caught();
+            tab = caught.answer;
+            const code = caught.requested.searchParams.get("code");
+            const error = caught.requested.searchParams.get("error");
+            if (!code) throw new Error(error === "access_denied" ? "Google access was not allowed" : `Google sign-in failed: ${error ?? "no code"}`);
+
+            const res = await fetch(endpoints.tokenUrl, {
+                method: "POST",
+                headers: { "content-type": "application/x-www-form-urlencoded" },
+                body: new URLSearchParams({
+                    code,
+                    client_id: client.clientId,
+                    client_secret: client.clientSecret,
+                    redirect_uri: redirectUri,
+                    grant_type: "authorization_code",
+                    code_verifier: verifier,
+                }),
+                signal: AbortSignal.any([controller.signal, AbortSignal.timeout(30_000)]),
+            });
+            const body = (await res.json().catch((err) => {
+                logger.warn("[backups] Google's token answer was not JSON:", err);
+                return null;
+            })) as { refresh_token?: unknown; error_description?: unknown; error?: unknown } | null;
+            if (!body) throw new Error(`Google sent an unreadable answer (HTTP ${res.status})`);
+            if (!res.ok) throw new Error(`Google refused the sign-in: ${String(body?.error_description ?? body?.error ?? `HTTP ${res.status}`)}`);
+            if (typeof body?.refresh_token !== "string") throw new Error("Google did not grant offline access, so backups could not run later");
+            const saved = await persist(body.refresh_token);
+            await tab(deps.page("connected"));
+            return saved;
+        } catch (err) {
+            await tab?.(deps.page("not-connected", (err as Error)?.message ?? String(err)));
+            throw err;
+        } finally {
+            await listener.close();
+        }
     } finally {
-        clearTimeout(timer);
-        signingIn = false;
-        server.closeAllConnections();
-        server.close();
+        if (pending === controller) pending = null;
     }
 }

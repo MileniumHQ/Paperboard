@@ -8,7 +8,8 @@
 // newer one, and count the probes; make the next forget fail; hold or fail the saves of panel permissions, which it
 // keeps in the store main keeps them in; push what main pushes on its own
 // (the update queue's states, a permission it couldn't decide),
-// making the next Stop and update fail; and break discovery's socket.
+// making the next Stop and update fail; and break discovery's socket. A
+// Google Drive sign-in is main's own, its browser a tab the person closed.
 //
 // The test drives it over stdin, one JSON command per line, and reads each
 // answer as one stdout line starting with ANSWER (the daemon client logs to
@@ -30,6 +31,7 @@ import { PanelPermissionStore } from "../../../src/main/panelPermissions";
 import type { PanelPermission, PermissionAnswer } from "../../../src/shared/panelPermissions";
 import { initialAppUpdateState } from "../../../src/shared/appUpdate";
 import { initialUpdateQueueState, type UpdateQueueState } from "../../../src/shared/updateQueue";
+import { cancelGoogleSignIn, signInToGoogleDrive } from "../../../src/main/googleOAuth";
 import { ANSWER } from "./protocol";
 
 const rendererDir = process.argv[2];
@@ -104,6 +106,26 @@ invoke["panel-permission-set"] = (args) => {
         for (const wake of permissionSaveWaiters.splice(0)) wake();
     });
 };
+// a Google Drive sign-in runs as main runs it; the browser it opens is
+// counted and never comes back, and nothing past it is reachable
+let googleSignIns = 0;
+const googleSignInWaiters: (() => void)[] = [];
+invoke["backup-gdrive-connect"] = () =>
+    signInToGoogleDrive(
+        { clientId: "browser-suite", clientSecret: "browser-suite" },
+        {
+            endpoints: { authUrl: "http://127.0.0.1:9/auth", tokenUrl: "http://127.0.0.1:9/token" },
+            page: () => "",
+            openExternal: async () => {
+                googleSignIns++;
+                for (const wake of googleSignInWaiters.splice(0)) wake();
+            },
+        },
+        async () => {
+            throw new Error("The browser suite keeps no Google sign-in");
+        },
+    );
+invoke["backup-gdrive-cancel"] = () => cancelGoogleSignIn();
 // main applies the saved theme and login item to the OS; nothing to apply here
 invoke["app-settings-changed"] = () => null;
 
@@ -139,6 +161,7 @@ type Command =
     | { cmd: "push-update-queue"; state: UpdateQueueState }
     | { cmd: "fail-release"; message: string }
     | { cmd: "next-release" }
+    | { cmd: "google-sign-ins"; atLeast: number }
     | { cmd: "fail-mdns"; message: string }
     | { cmd: "push"; channel: string; payload: unknown };
 
@@ -200,6 +223,10 @@ async function run(command: Command): Promise<unknown> {
             // resolves with the keys of the oldest Stop and update that ran, once one has
             while (releases.length === 0) await new Promise<void>((wake) => releaseWaiters.push(wake));
             return releases.shift();
+        case "google-sign-ins":
+            // resolves with how many Google sign-ins opened a browser, once at least that many have
+            while (googleSignIns < command.atLeast) await new Promise<void>((wake) => googleSignInWaiters.push(wake));
+            return googleSignIns;
         case "fail-mdns":
             failMdns(command.message);
             return true;

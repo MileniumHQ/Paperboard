@@ -30,6 +30,7 @@ export const SHELL_INVOKE_CHANNELS = [
     "panel-loopback-redirect",
     "panel-loopback-redirect-cancel",
     "backup-gdrive-connect",
+    "backup-gdrive-cancel",
     "panel-permission-answer",
     "panel-permissions-list",
     "panel-permission-set",

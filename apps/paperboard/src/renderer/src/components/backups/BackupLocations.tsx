@@ -61,16 +61,28 @@ const BackupLocations: Component<{ computerId: string; computerName: string }> =
     // signing a Google Drive location in again keeps its folder and backups
     const [reconnecting, setReconnecting] = createSignal<string | null>(null);
     const [reconnectError, setReconnectError] = createSignal("");
+    // a reconnect that was canceled drops its answer
+    let reconnects = 0;
     const reconnect = async (location: BackupLocation) => {
+        const mine = ++reconnects;
         setReconnecting(location.id);
         setReconnectError("");
         try {
             await shellIpc().invoke("backup-gdrive-connect", { computerId: props.computerId, locationId: location.id });
-            await load();
+            if (mine === reconnects) await load();
         } catch (err) {
-            setReconnectError(`${location.label} could not be reconnected: ${errorMessage(err)}`);
+            if (mine === reconnects) setReconnectError(`${location.label} could not be reconnected: ${errorMessage(err)}`);
         } finally {
-            setReconnecting(null);
+            if (mine === reconnects) setReconnecting(null);
+        }
+    };
+    const cancelReconnect = async () => {
+        reconnects++;
+        setReconnecting(null);
+        try {
+            await shellIpc().invoke("backup-gdrive-cancel");
+        } catch (err) {
+            setReconnectError(`The sign-in could not be canceled: ${errorMessage(err)}`);
         }
     };
 
@@ -162,7 +174,10 @@ const BackupLocations: Component<{ computerId: string; computerName: string }> =
                                         {reconnecting() === location.id ? "Waiting for Google..." : "Reconnect"}
                                     </PaperButton>
                                 </Show>
-                                <Show when={location.removable}>
+                                <Show when={reconnecting() === location.id}>
+                                    <PaperButton variant="text" onClick={() => void cancelReconnect()}>Cancel</PaperButton>
+                                </Show>
+                                <Show when={location.removable && reconnecting() !== location.id}>
                                     <PaperButton variant="text" onClick={() => { setRemoveError(""); setRemoving(location); }}>Remove</PaperButton>
                                 </Show>
                             </PaperFlex>

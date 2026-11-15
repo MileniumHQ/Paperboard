@@ -19,7 +19,7 @@ import { SHARED_SHELL_INVOKE_CHANNELS } from "./shellChannels";
 import { runPanelImport, runPanelExport, type PanelFileTransferDeps } from "../panelFileTransfer";
 import { poolEndpoint } from "../panelFileEndpoint";
 import type { FileTypeFilter } from "../../shared/fileTransfer";
-import { paperboardGoogleClient, signInToGoogleDrive } from "../googleOAuth";
+import { cancelGoogleSignIn, paperboardGoogleClient, signInToGoogleDrive } from "../googleOAuth";
 import { googleSignInPage, loopbackRedirectPage } from "../googleSignInPage";
 import { catchLoopbackRedirect, LoopbackRedirectFailure } from "../loopbackRedirect";
 import type { PanelLoopbackRedirectResult } from "../../shared/loopbackRedirect";
@@ -199,7 +199,8 @@ export default function registerShellIpc(ipcMain: IpcMain) {
         const google = paperboardGoogleClient(import.meta.env);
         if (!google) throw new Error("This build of Paperboard has no Google sign-in. Use a release build to connect Google Drive.");
         const client = connectionPool.getClient(computerId);
-        // the browser tab is answered after the daemon keeps the sign-in
+        // the browser tab is answered after the daemon keeps the sign-in; a
+        // sign-in still waiting for the browser is replaced
         return signInToGoogleDrive(
             google,
             {
@@ -211,6 +212,10 @@ export default function registerShellIpc(ipcMain: IpcMain) {
                     ? client.call("backup:destination-reconnect", { destinationId: locationId, ...google, refreshToken }, 120_000)
                     : client.call("backup:destination-add", { destination: { kind: "gdrive", label, ...google, refreshToken } }, 120_000),
         );
+    });
+    ipcMain.handle("backup-gdrive-cancel", (event) => {
+        assertShellFrame(event, "backup-gdrive-cancel");
+        cancelGoogleSignIn();
     });
 
     ipcMain.handle("update-queue", (event) => {

@@ -1,7 +1,7 @@
 import { afterAll, describe, expect, setDefaultTimeout, test } from "bun:test";
 import * as crypto from "node:crypto";
 import { PaperCraneEngine } from "../../papercrane/engine";
-import { DRIVE_FILE_SCOPE, signInToGoogleDrive } from "../../src/main/googleOAuth";
+import { cancelGoogleSignIn, DRIVE_FILE_SCOPE, signInToGoogleDrive } from "../../src/main/googleOAuth";
 import { dataDir } from "./support/fs";
 import { serve } from "./support/release";
 import { TEST_TIMEOUT_MS } from "./support/wait";
@@ -113,5 +113,39 @@ describe("Google Drive sign-in", () => {
 		expect(forged.status).toBe(404);
 		expect((await tab).status).toBe(200);
 		expect(google.exchanges.some((e) => e.get("code") === "stolen")).toBe(false);
+	});
+
+	// Inventory: Core contracts — a sign-in whose tab was closed never blocks the next one.
+	test("a sign-in whose tab was closed is replaced by a new one, and canceling stops the one waiting", async () => {
+		// the person closed the tab: the browser never comes back
+		let abandonedRedirect!: string;
+		const abandoned = signInToGoogleDrive(
+			client,
+			{ endpoints: google.endpoints, page, openExternal: async (url) => void (abandonedRedirect = new URL(url).searchParams.get("redirect_uri")!) },
+			async (token) => token,
+		);
+		const abandonedFailure = abandoned.then(() => null, (err: Error) => err.message);
+		while (!abandonedRedirect) await new Promise((resolve) => setImmediate(resolve));
+
+		// signing in again goes through, and the abandoned one stops listening
+		let tab!: Promise<Response>;
+		const again = signInToGoogleDrive(client, { endpoints: google.endpoints, page, openExternal: browser(google, "code-4", (res) => (tab = res)) }, async (token) => token);
+		expect(await again).toBe("refresh-for-code-4");
+		expect(await (await tab).text()).toBe("connected");
+		expect(await abandonedFailure).toBe("The sign-in was canceled");
+		await expect(fetch(abandonedRedirect)).rejects.toThrow();
+
+		// Cancel stops the one waiting
+		let waitingRedirect!: string;
+		const waiting = signInToGoogleDrive(
+			client,
+			{ endpoints: google.endpoints, page, openExternal: async (url) => void (waitingRedirect = new URL(url).searchParams.get("redirect_uri")!) },
+			async (token) => token,
+		);
+		const waitingFailure = waiting.then(() => null, (err: Error) => err.message);
+		while (!waitingRedirect) await new Promise((resolve) => setImmediate(resolve));
+		cancelGoogleSignIn();
+		expect(await waitingFailure).toBe("The sign-in was canceled");
+		await expect(fetch(waitingRedirect)).rejects.toThrow();
 	});
 });

@@ -36,24 +36,38 @@ const AddLocationModal: Component<{
     // swap the form while the window animates out
     createEffect(on(() => props.open, (open) => open && choose(BACKUP_PROVIDERS[0].kind)));
 
+    // a connect that was canceled drops its answer
+    let attempt = 0;
+
+    // while a connect waits on the person, closing cancels it if its provider can
     const close = () => {
-        if (!busy()) props.onClose();
+        if (!busy()) return props.onClose();
+        const cancel = provider().cancel;
+        if (!cancel) return;
+        attempt++;
+        setBusy(false);
+        cancel().then(
+            () => props.onClose(),
+            (err) => setError(`The sign-in could not be canceled: ${errorMessage(err)}`),
+        );
     };
 
     const submit = async () => {
+        const mine = ++attempt;
         setBusy(true);
         setError("");
         try {
             const chosen = provider();
             const named = chosen.defaultLabel ? { label: uniqueLocationLabel(chosen.defaultLabel, props.takenLabels), ...values() } : values();
             await chosen.connect(named, toggles(), props.computerId);
+            if (mine !== attempt) return;
             setBusy(false);
             close();
             props.onAdded();
         } catch (err) {
-            setError(errorMessage(err));
+            if (mine === attempt) setError(errorMessage(err));
         } finally {
-            setBusy(false);
+            if (mine === attempt) setBusy(false);
         }
     };
 
@@ -65,7 +79,7 @@ const AddLocationModal: Component<{
             size="small"
             footer={
                 <>
-                    <PaperButton variant="text" disabled={busy()} onClick={close}>Cancel</PaperButton>
+                    <PaperButton variant="text" disabled={busy() && !provider().cancel} onClick={close}>Cancel</PaperButton>
                     <PaperButton disabled={busy() || blocked()} onClick={() => void submit()}>
                         {busy() ? provider().busyLabel : provider().submitLabel}
                     </PaperButton>
