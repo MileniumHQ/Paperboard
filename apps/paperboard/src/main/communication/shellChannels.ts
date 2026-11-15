@@ -1,6 +1,7 @@
 // retained channels; preload allowlist must be built from these
 
-export const SHELL_INVOKE_CHANNELS = [
+// served by every shell host: Electron IPC and the browser-mode bridge (shellHandlers.ts)
+export const SHARED_SHELL_INVOKE_CHANNELS = [
     "crane-credentials",
     "computers-list",
     "computer-probe",
@@ -15,6 +16,10 @@ export const SHELL_INVOKE_CHANNELS = [
     "app-version",
     "launch-options",
     "graphics",
+] as const;
+
+export const SHELL_INVOKE_CHANNELS = [
+    ...SHARED_SHELL_INVOKE_CHANNELS,
     "app-update-state",
     "update-queue",
     "update-release",

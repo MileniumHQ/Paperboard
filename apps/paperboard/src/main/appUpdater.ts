@@ -89,15 +89,15 @@ export function appUpdateDownloadUrl(): string {
     return linuxInstall()?.download ?? "https://paperboard.dev/downloads/";
 }
 
+// a package install is out (its password prompt is open): a second press
+// joins it instead of asking for the password twice
+let installing = false;
+
 /**
  * Restart to update: once every page with unsaved work agreed to the quit,
  * restarts into the downloaded update. Resolves false when a page kept it
  * open; throws when there is no update to install.
  */
-// a package install is out (its password prompt is open): a second press
-// joins it instead of asking for the password twice
-let installing = false;
-
 export async function restartToUpdate(): Promise<boolean> {
     if (getAppUpdateState().status !== "ready") throw new Error("No app update has been downloaded");
     if (installing) return true;

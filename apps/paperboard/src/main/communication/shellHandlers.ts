@@ -15,6 +15,7 @@ import { servePanelAsset } from "../panelServe";
 import type { LaunchOptions } from "../../shared/launchOptions";
 import type { Graphics } from "../../shared/graphics";
 import { isListingFilePath, LISTING_FILE_MAX_BYTES } from "../../shared/listingFile";
+import type { SHARED_SHELL_INVOKE_CHANNELS } from "./shellChannels";
 
 export interface ShellHandlerDeps {
     appVersion: () => string;
@@ -25,24 +26,6 @@ export interface ShellHandlerDeps {
 }
 
 export type ShellInvokeHandler = (args: unknown) => unknown;
-
-// channels served by every shell host (a subset of SHELL_INVOKE_CHANNELS)
-export const SHARED_SHELL_INVOKE_CHANNELS = [
-    "crane-credentials",
-    "computers-list",
-    "computer-probe",
-    "computer-pair",
-    "computer-update",
-    "computer-remove",
-    "computer-switch",
-    "computer-reorder",
-    "discovery-list",
-    "open-panel-folder",
-    "panel-listing-file",
-    "app-version",
-    "launch-options",
-    "graphics",
-] as const;
 
 export type SharedShellInvokeChannel = (typeof SHARED_SHELL_INVOKE_CHANNELS)[number];
 
