@@ -27,6 +27,17 @@ function tempFor(file: string): string {
     return `${file}.${randomBytes(6).toString("hex")}.tmp`;
 }
 
+const TEMP_NAME = /\.[0-9a-f]{12}\.tmp$/;
+
+/**
+ * Whether `name` (a file name or a path) is one of writeFileAtomic's temp
+ * files: a write still landing, or one a crash left behind. A file list
+ * hides them, and a sweep at startup, before anything writes, may delete them.
+ */
+export function isWriteFileAtomicTemp(name: string): boolean {
+    return TEMP_NAME.test(name);
+}
+
 /** the permission bits of a mode, which may be a whole stat() mode */
 function permissions(options: WriteFileAtomicOptions): number | undefined {
     return options.mode === undefined ? undefined : options.mode & 0o7777;

@@ -1,12 +1,13 @@
 // The small helpers every panel reaches for, page and service alike.
 import { afterEach, describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import fsp from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { errorCode, errorMessage } from "../src/errors";
-import { writeFileAtomic, writeFileAtomicSync } from "../src/fs";
+import { isWriteFileAtomicTemp, writeFileAtomic, writeFileAtomicSync } from "../src/fs";
 import { isRecord } from "../src/records";
-import { SerialQueue } from "../src/serialQueue";
+import { KeyedQueue, LimitedQueue, SerialQueue } from "../src/serialQueue";
 
 describe("errorMessage and errorCode", () => {
     test("an Error's own words, anything else as text; a code only when the failure carries one as text", () => {
@@ -75,6 +76,75 @@ describe("SerialQueue", () => {
         await settled;
         expect(done).toBe(true);
     });
+
+    test("a task knows whether a newer one is waiting behind it", async () => {
+        const queue = new SerialQueue();
+        const gate = deferred();
+        const seen: number[] = [];
+        const first = queue.run(async () => {
+            await gate.promise;
+            seen.push(queue.waiting);
+        });
+        const second = queue.run(() => seen.push(queue.waiting));
+        // neither has started yet: tasks start a step after they are queued
+        expect(queue.waiting).toBe(2);
+        gate.resolve();
+        await Promise.all([first, second]);
+        expect(seen).toEqual([1, 0]);
+        expect(queue.waiting).toBe(0);
+    });
+});
+
+describe("KeyedQueue", () => {
+    test("one key's tasks run in order, another key's beside them, and a key's line goes once it empties", async () => {
+        const queue = new KeyedQueue();
+        const log: string[] = [];
+        const gate = deferred();
+        const a1 = queue.run("a", async () => {
+            log.push("a1 starts");
+            await gate.promise;
+            throw new Error("a1 failed");
+        });
+        const a2 = queue.run("a", () => log.push("a2 runs"));
+        const b = queue.run("b", () => log.push("b runs"));
+        await b;
+        expect(log).toEqual(["a1 starts", "b runs"]);
+        expect(queue.size).toBe(1);
+        gate.resolve();
+        await expect(a1).rejects.toThrow("a1 failed");
+        await a2;
+        expect(log).toEqual(["a1 starts", "b runs", "a2 runs"]);
+        await Promise.resolve();
+        expect(queue.size).toBe(0);
+    });
+});
+
+describe("LimitedQueue", () => {
+    test("runs at most its limit at once, the next in line taking a slot as one settles, however it ended", async () => {
+        const queue = new LimitedQueue(2);
+        const gates = [deferred(), deferred(), deferred()];
+        let running = 0;
+        let most = 0;
+        const runs = gates.map((gate, i) =>
+            queue.run(async () => {
+                most = Math.max(most, ++running);
+                await gate.promise;
+                running--;
+                if (i === 0) throw new Error("first failed");
+                return i;
+            }),
+        );
+        await Promise.resolve();
+        expect(running).toBe(2);
+        expect(queue.waiting).toBe(1);
+        gates[0]!.resolve();
+        await expect(runs[0]!).rejects.toThrow("first failed");
+        gates[1]!.resolve();
+        gates[2]!.resolve();
+        expect(await Promise.all(runs.slice(1))).toEqual([1, 2]);
+        expect(most).toBe(2);
+        expect(() => new LimitedQueue(0)).toThrow("at least one");
+    });
 });
 
 describe("writeFileAtomic", () => {
@@ -113,4 +183,24 @@ describe("writeFileAtomic", () => {
             expect(readFileSync(join(file, "inside"), "utf8")).toBe("kept");
         });
     }
+
+    test("its temp files are told apart from the files beside them", async () => {
+        const file = join(tempDir(), "server.properties");
+        // the name the write lands under first, seen as it is renamed into place
+        const renamed: string[] = [];
+        const rename = fsp.rename;
+        fsp.rename = (async (from: string, to: string) => {
+            renamed.push(from);
+            return rename(from, to);
+        }) as typeof fsp.rename;
+        try {
+            await writeFileAtomic(file, "motd=Hi");
+        } finally {
+            fsp.rename = rename;
+        }
+        expect(renamed).toHaveLength(1);
+        expect(isWriteFileAtomicTemp(renamed[0]!)).toBe(true);
+        expect(isWriteFileAtomicTemp(file)).toBe(false);
+        for (const name of ["notes.tmp", "a.0123456789ab.tmp.bak", "a.0123456789AB.tmp"]) expect(isWriteFileAtomicTemp(name)).toBe(false);
+    });
 });
