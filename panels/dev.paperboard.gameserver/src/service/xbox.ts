@@ -42,7 +42,7 @@ export async function xuidForGamertag(gamertag: string): Promise<string | null> 
     const { xuid } = (await res.json()) as { xuid?: unknown };
     if (typeof xuid === "number" && Number.isSafeInteger(xuid) && xuid > 0) return String(xuid);
     if (typeof xuid === "string" && /^[1-9][0-9]*$/.test(xuid)) return xuid;
-    return null;
+    throw new Error(`GeyserMC answered the gamertag lookup for "${gamertag}" without an account number`);
 }
 
 /** the gamertag the account has now, or null when GeyserMC has none on record */
@@ -54,7 +54,8 @@ export async function gamertagForXuid(xuid: string): Promise<string | null> {
     }
     if (!res.ok) throw new Error(`GeyserMC's account lookup for ${xuid} answered: ${await errorMessage(res)}`);
     const { gamertag } = (await res.json()) as { gamertag?: unknown };
-    return typeof gamertag === "string" && gamertag ? gamertag : null;
+    if (typeof gamertag !== "string" || !gamertag) throw new Error(`GeyserMC answered the account lookup for ${xuid} without a gamertag`);
+    return gamertag;
 }
 
 /**

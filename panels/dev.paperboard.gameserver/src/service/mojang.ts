@@ -34,9 +34,10 @@ export async function fetchMojang(url: string): Promise<Response> {
     }
 }
 
-function parseProfile(body: unknown): MojangProfile | null {
+/** an answer with no account in it is not "no such player": that is a 204 or 404 */
+function parseProfile(body: unknown): MojangProfile {
     const { id, name } = (body ?? {}) as { id?: unknown; name?: unknown };
-    if (typeof id !== "string" || !UUID_BARE_RE.test(id) || typeof name !== "string") return null;
+    if (typeof id !== "string" || !UUID_BARE_RE.test(id) || typeof name !== "string") throw new Error("Mojang answered with a profile Paperboard can't read");
     return { uuid: formatUuid(id), name };
 }
 
