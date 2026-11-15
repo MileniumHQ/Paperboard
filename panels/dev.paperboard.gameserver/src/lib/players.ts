@@ -81,20 +81,11 @@ export function forgetPlayerData(name: string, uuid?: string) {
     });
 }
 
-export function queryPlayerStats(name: string) {
-    serverBridge.call(CALLS.queryPlayerStats, { player: name }).catch((err) =>
-        console.debug("[players] queryPlayerStats failed:", String(err)),
-    );
-}
+// The live polls: each asks the running game to report, and the answer
+// arrives as state. Each rejects when the game could not be asked; the
+// page that polls shows why.
+export const queryPlayerStats = (name: string): Promise<unknown> => serverBridge.call(CALLS.queryPlayerStats, { player: name });
 
-export function queryOnlinePlayers() {
-    serverBridge.call(CALLS.queryOnlinePlayers).catch((err) =>
-        console.debug("[players] queryOnlinePlayers failed:", String(err)),
-    );
-}
+export const queryOnlinePlayers = (): Promise<unknown> => serverBridge.call(CALLS.queryOnlinePlayers);
 
-export function queryPlayerPositions() {
-    serverBridge.call(CALLS.queryPlayerPositions).catch((err) =>
-        console.debug("[players] queryPlayerPositions failed:", String(err)),
-    );
-}
+export const queryPlayerPositions = (): Promise<unknown> => serverBridge.call(CALLS.queryPlayerPositions);

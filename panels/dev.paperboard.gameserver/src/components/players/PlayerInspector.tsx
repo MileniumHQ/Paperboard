@@ -8,6 +8,7 @@ import {
     PaperFlex,
     PaperGrid,
     PaperIcon,
+    PaperQuote,
     PaperSeparator,
     PaperSettingItem,
     PaperSettingList,
@@ -17,6 +18,7 @@ import {
 } from "@mileniumhq/paperui";
 import { onlinePlayerNames, playerStats, queryPlayerStats, serverStatus } from "../../lib/server";
 import type { SavedSetting } from "../../lib/saves";
+import { errorMessage } from "../../lib/failure";
 import PlayerHead from "../PlayerHead";
 import { formatDistance, formatPlaytime, playtimeSeconds, summaryOf } from "./leaderboard";
 import type { PlayerFlagField, PlayerInfo } from "./state";
@@ -55,12 +57,25 @@ export default function PlayerInspector(props: {
     // live stats for an online player: asked when their page opens or they
     // come online, then on a slow poll, never because other state arrived
     const liveName = createMemo(() => (props.player && isPlayerOnline() ? name() : undefined));
+    // why the game could not be asked, until an ask goes through
+    const [liveError, setLiveError] = createSignal("");
     createEffect(
         on(liveName, (player) => {
+            setLiveError("");
             if (!player) return;
-            queryPlayerStats(player);
-            const poll = setInterval(() => queryPlayerStats(player), LIVE_STATS_MS);
-            onCleanup(() => clearInterval(poll));
+            // an answer about the player shown before does not count
+            let current = true;
+            const ask = () =>
+                queryPlayerStats(player).then(
+                    () => current && setLiveError(""),
+                    (err) => current && setLiveError(errorMessage(err)),
+                );
+            void ask();
+            const poll = setInterval(() => void ask(), LIVE_STATS_MS);
+            onCleanup(() => {
+                current = false;
+                clearInterval(poll);
+            });
         }),
     );
 
@@ -205,6 +220,11 @@ export default function PlayerInspector(props: {
                 <PaperText size={2} weight={700} color="text-subtle">
                     Status
                 </PaperText>
+                <Show when={liveError()}>
+                    <PaperQuote variant="danger" icon="warning" title="Live stats not read">
+                        {liveError()}
+                    </PaperQuote>
+                </Show>
                 <PaperGrid min="field">
                     <PaperStatTile
                         icon="favorite"

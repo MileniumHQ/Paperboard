@@ -125,10 +125,14 @@ export function createPlayers() {
             setFeedback({ title: "Player stats not loaded", message: errorMessage(err) });
         });
 
+    // who is online arrives as state; asking can fail, and says so
+    const askOnline = () =>
+        queryOnlinePlayers().catch((err) => setFeedback({ title: "Online players not read", message: errorMessage(err) }));
+
     onMount(() => {
-        queryOnlinePlayers();
+        void askOnline();
         void reloadStats();
-        const poll = setInterval(queryOnlinePlayers, LIST_POLL_MS);
+        const poll = setInterval(() => void askOnline(), LIST_POLL_MS);
         const statsPoll = setInterval(() => void reloadStats(), STATS_POLL_MS);
         onCleanup(() => {
             clearInterval(poll);
