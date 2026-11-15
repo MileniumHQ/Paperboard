@@ -130,18 +130,35 @@ export function backupProgressText(progress: Pick<BackupProgress, "step" | "done
     return fraction === null ? `${STEP_LABELS[progress.step]}…` : `${STEP_LABELS[progress.step]} ${Math.floor(fraction * 100)}%`;
 }
 
-// one listener per panel (and source) on the computer's backup event
-function listenProgress(scope: string | undefined, panelId: string, sourceId: string | null | undefined, listener: (change: BackupProgressChange) => void): () => void {
+/** why a running backup's progress can't be heard; null once it can again */
+export type BackupProgressLost = (why: string | null) => void;
+
+// one listener per panel (and source) on the computer's backup event. The
+// event flows only to a connected socket that declared it: one that can't
+// connect yet, or dropped, tells onLost why and keeps trying, and tells it
+// null once it is back. What it missed meanwhile is read again with
+// progress() or status().
+function listenProgress(scope: string | undefined, panelId: string, sourceId: string | null | undefined, listener: (change: BackupProgressChange) => void, onLost?: BackupProgressLost): () => void {
     const transport = getTransport(scope);
     const off = transport.subscribeEvent(BACKUP_PROGRESS_EVENT, (change) => {
         if (change.panelId !== panelId) return;
         if (sourceId !== undefined && (change.sourceId ?? null) !== sourceId) return;
         listener({ panelId: change.panelId, sourceId: change.sourceId ?? null, progress: change.progress ?? null });
     });
-    // the event flows only to a connected socket that declared it: one that
-    // can't connect yet says why on its status and keeps trying
+    let lost: string | null = null;
+    const status = (s: { connected: boolean; error?: string }) => {
+        const why = s.connected ? null : (s.error ?? "The connection to the Paperboard Server dropped");
+        // a drop that is still a drop says nothing new
+        if ((why === null) === (lost === null)) return;
+        lost = why;
+        onLost?.(why);
+    };
+    if (onLost) transport.onStatus(status);
     transport.keepConnected();
-    return off;
+    return () => {
+        off();
+        if (onLost) transport.offStatus(status);
+    };
 }
 
 export interface BackupStatus {
@@ -219,9 +236,10 @@ export const backupApi = {
             delete: (backupId: string): Promise<void> => RPC_ROUTES["backup-delete"].call(scope, { ...identity, backupId }),
             setSchedule: async (schedule: { everyHours: BackupSchedule["everyHours"]; keep: number } | null): Promise<BackupStatus> => status(await RPC_ROUTES["backup-schedule-set"].call(scope, { ...identity, schedule })),
             chooseLocation: (): Promise<ChooseBackupLocationResult> => backupApi.chooseLocation(appId, sourceId),
-            /** hears this source's running backup or restore move on, and end */
-            onProgress: (listener: (change: BackupProgressChange) => void): (() => void) =>
-                listenProgress(scope, identity.panelId, identity.sourceId, listener),
+            /** hears this source's running backup or restore move on, and end;
+             * onLost hears why it can't be heard, and null once it can again */
+            onProgress: (listener: (change: BackupProgressChange) => void, onLost?: BackupProgressLost): (() => void) =>
+                listenProgress(scope, identity.panelId, identity.sourceId, listener, onLost),
         };
     },
     /** where this panel's backups go, and whether one is running */
@@ -234,9 +252,11 @@ export const backupApi = {
         RPC_ROUTES["backup-progress"].call(scope, { panelId: requirePanelId(appId) }),
 
     /** hears the panel's running backups and restores (its named sources
-     * included) move on a step, and end; returns the unsubscribe */
-    onProgress: (appId: string, listener: (change: BackupProgressChange) => void, scope?: string): (() => void) =>
-        listenProgress(scope, requirePanelId(appId), undefined, listener),
+     * included) move on a step, and end; returns the unsubscribe. onLost
+     * hears why progress can't be heard (the connection failed or dropped),
+     * and null once it can again: show it, then read progress() again. */
+    onProgress: (appId: string, listener: (change: BackupProgressChange) => void, scope?: string, onLost?: BackupProgressLost): (() => void) =>
+        listenProgress(scope, requirePanelId(appId), undefined, listener, onLost),
 
     /** backs up the panel's files and config now. The panel's service is
      * stopped while its data is copied, then started again. */

@@ -50,8 +50,13 @@ backupApi.setSchedule(
 
 /** every backup or restore running for the panel's data, its sources included */
 backupApi.progress(appId: string, scope?: string): Promise<BackupProgress[]>;
-/** returns the unsubscribe */
-backupApi.onProgress(appId: string, listener: (change: BackupProgressChange) => void, scope?: string): () => void;
+/** returns the unsubscribe; onLost hears why progress can't be heard, and null once it can again */
+backupApi.onProgress(
+    appId: string,
+    listener: (change: BackupProgressChange) => void,
+    scope?: string,
+    onLost?: (why: string | null) => void,
+): () => void;
 /** 0 to 1; null when the step can't be measured */
 backupProgressFraction(progress: BackupProgress): number | null;
 /** "Compressing 42%", or "Getting ready…" */
@@ -160,7 +165,16 @@ interface BackupSchedule {
             </PaperText>
             <PaperCode block language="tsx">
 {`const [progress, setProgress] = createSignal<BackupProgress | null>(null);
-onCleanup(backupApi.onProgress(PANEL_ID, (change) => setProgress(change.progress)));
+const [lost, setLost] = createSignal<string | null>(null);
+onCleanup(backupApi.onProgress(PANEL_ID, (change) => setProgress(change.progress), undefined, (why) => {
+    setLost(why);
+    // a backup that ended while it was lost is read again
+    if (why === null) void backupApi.status(PANEL_ID).then((now) => setProgress(now.progress));
+}));
+
+<Show when={lost()}>
+    <PaperText preset="error" role="alert">Can't follow backups: {lost()}</PaperText>
+</Show>
 
 <PaperButton disabled={progress() !== null}>
     {progress() ? backupProgressText(progress()!) : "Back Up Now"}
@@ -170,6 +184,7 @@ onCleanup(backupApi.onProgress(PANEL_ID, (change) => setProgress(change.progress
                 <li>A new step arrives at once. Byte counts arrive at most every 250 ms.</li>
                 <li>While <PaperCode>servicePaused</PaperCode> is true, the panel's service is stopped. Paperboard covers the panel page with the step and a progress bar, and reloads the page afterward if it lost its service.</li>
                 <li>A routine backup reports progress too, so a page opened in the middle of one can read <PaperCode>status().progress</PaperCode> and listen for the rest.</li>
+                <li>Progress arrives over the page's connection to the computer. When it can't connect, or drops, <PaperCode>onLost</PaperCode> hears why and Paperboard keeps trying; it hears <PaperCode>null</PaperCode> once progress can be heard again. Show it while it lasts, and read the status again when it ends: a step or an end sent meanwhile is not sent again.</li>
             </PaperTextList>
 
             <PaperText preset="subheader" as="h2" id="routine-backups">Routine backups</PaperText>
@@ -212,7 +227,7 @@ interface BackupSourceHandle {
     setSchedule(schedule: { everyHours: 1 | 3 | 6 | 12 | 24 | 48 | 168; keep: number } | null): Promise<BackupStatus>;
     chooseLocation(): Promise<ChooseBackupLocationResult>;
     /** hears this source's backups and restores only */
-    onProgress(listener: (change: BackupProgressChange) => void): () => void;
+    onProgress(listener: (change: BackupProgressChange) => void, onLost?: (why: string | null) => void): () => void;
 }`}
             </PaperCode>
             <PaperCode block language="tsx">
