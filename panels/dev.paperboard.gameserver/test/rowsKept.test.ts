@@ -90,3 +90,48 @@ describe("the Loader tab", () => {
         }
     }, 60_000);
 });
+
+describe("a Loader setting's switch", () => {
+    test("flipped twice at once, saves only the last flip, never two at the same time", async () => {
+        const served = await setUp();
+        const page = await openPage(`${served.url}/?server=s-mc`);
+        const toggle = `[...document.querySelectorAll("[class*=PaperSettingItem]")].find((el) => el.innerText.includes("Allow the End"))?.querySelector("[role=switch]")`;
+        const bukkit = path.join(daemon.dataDir, "files", PANEL_ID, SERVERS, "s-mc", "bukkit.yml");
+        // the most writes the page had waiting on an answer at once, in the order the socket saw them
+        const writing = new Set<unknown>();
+        let mostAtOnce = 0;
+        let answered = 0;
+        let answeredOne!: () => void;
+        const done = new Promise<void>((resolve) => (answeredOne = resolve));
+        const stop = page.on(({ method, params }) => {
+            const frame = String(params?.response?.payloadData ?? "");
+            if (method === "Network.webSocketFrameSent" && frame.includes("write-loader-setting")) {
+                writing.add(JSON.parse(frame).id);
+                mostAtOnce = Math.max(mostAtOnce, writing.size);
+            }
+            if (method === "Network.webSocketFrameReceived" && frame.startsWith("{") && writing.delete(JSON.parse(frame).id) && ++answered === 1) answeredOne();
+        });
+        try {
+            await page.waitFor(`document.querySelector('input[name=serverMenu][value="loader"]')`, "the server menu");
+            await page.click('input[name=serverMenu][value="loader"]');
+            await page.waitFor(`${toggle}`, "the Allow the End switch");
+            await page.settled();
+            const before = await page.evaluate<string>(`${toggle}.getAttribute("aria-checked")`);
+            await page.evaluate(`(() => { const el = ${toggle}; el.click(); el.click(); })()`);
+            // back where it started at once, and never disabled by its own saves
+            expect(await page.evaluate<string>(`${toggle}.getAttribute("aria-checked")`)).toBe(before);
+            await done;
+            await page.settled();
+            // the second flip replaced the first before its turn came: only the last is written
+            expect(page.sentFrames.filter((f) => f.includes("write-loader-setting"))).toHaveLength(1);
+            expect(mostAtOnce).toBe(1);
+            expect(fs.readFileSync(bukkit, "utf8")).toContain(`allow-end: ${before}`);
+            expect(await page.evaluate<string>(`${toggle}.getAttribute("aria-checked")`)).toBe(before);
+            expect(page.exceptions).toEqual([]);
+        } finally {
+            stop();
+            await page.close();
+            served.stop();
+        }
+    }, 60_000);
+});

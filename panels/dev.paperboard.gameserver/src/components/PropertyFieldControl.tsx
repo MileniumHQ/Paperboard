@@ -118,7 +118,7 @@ export function FieldControl(props: {
                         disabled={!hasKnownMcVersion()}
                         onInput={(e) => {
                             setDraft(e.currentTarget.value);
-                            props.onUpdate(e.currentTarget.value);
+                            if (!invalid()) props.onUpdate(e.currentTarget.value);
                         }}
                         onBlur={() => {
                             if (!invalid()) setDraft(null);
