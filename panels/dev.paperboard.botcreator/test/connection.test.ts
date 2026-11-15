@@ -21,6 +21,28 @@ describe("connection status is truthful per session", () => {
         expect(bot.triggers).toHaveLength(1);
     });
 
+    test("a login cut short by a stop ends quietly: it fires nothing and the start doesn't fail", async () => {
+        const bot = recordedSession("b-cut-short");
+        const { Client } = await import("discord.js");
+        const client = new Client({ intents: [] });
+        // a login that fails the way discord.js's does once its client is destroyed
+        let loggingIn!: () => void;
+        const asked = new Promise<void>((resolve) => (loggingIn = resolve));
+        client.login = () => {
+            loggingIn();
+            return new Promise<string>((_, fail) => {
+                client.destroy = async () => fail(new Error("The client was destroyed"));
+            });
+        };
+        const starting = bot.session.start("MTIz.cut.short", () => client);
+        await asked;
+        await bot.session.stop();
+        await starting;
+        expect(bot.triggers).toEqual([]);
+        expect(bot.session.status()).toEqual({ connected: false });
+        expect(bot.session.client).toBeNull();
+    });
+
     test("clientReady marks the bot connected and fires on-bot-ready; nothing listens to the deprecated ready", async () => {
         const fake = discord().addBot({ username: "Ready Bot", guilds: [guild("Home")] });
         const bot = recordedSession("b-ready");

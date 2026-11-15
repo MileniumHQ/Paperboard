@@ -499,20 +499,23 @@ export class BotSession {
             // whose commands are not on Discord yet is a sync problem,
             // recorded in health rather than reported as a connection failure
             await this.syncCommands();
-        } catch (err: any) {
-            const message = err instanceof Error ? err.message : String(err);
-            console.error("[DiscordService] Login failed:", message);
+        } catch (err) {
+            const message = errorToMessage(err);
             try {
                 await bot.destroy();
             } catch (destroyErr) {
                 console.error("[DiscordService] bot destroy after failed login failed:", destroyErr);
             }
-            // only clear our own attempt — a newer login may already own client
-            if (this.client === bot) this.client = null;
-            // only the newest attempt may write session status
-            if (attempt === this.connectSequence) {
-                this.connectionStatus = { connected: false, error: message };
+            // a newer start or a stop let go of this client, which is why its
+            // login failed: the session is theirs, and nothing failed that the
+            // person asked for
+            if (attempt !== this.connectSequence) {
+                console.warn("[DiscordService] superseded connect attempt ended:", message);
+                return;
             }
+            console.error("[DiscordService] Login failed:", message);
+            this.client = null;
+            this.connectionStatus = { connected: false, error: message };
             this.host.changed();
             this.emit("on-connection-error", { error: message });
             throw new Error(`Discord login failed: ${message}`);
