@@ -56,7 +56,7 @@ export async function startService(): Promise<ServiceProcess> {
         tornDown = true;
         (globalThis as any)[TEARDOWN].push(stopServices);
     }
-    const granted = (await getTransport().call("auth:panel-token", { panelId: PANEL_ID })) as { token: string };
+    const granted = await getTransport().call("auth:panel-token", { panelId: PANEL_ID });
     const env: Record<string, string | undefined> = {
         ...process.env,
         PAPERBOARD_DIR: daemon.dataDir,

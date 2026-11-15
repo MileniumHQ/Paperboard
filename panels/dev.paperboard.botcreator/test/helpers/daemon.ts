@@ -56,7 +56,7 @@ async function start(): Promise<TestDaemon> {
         port: crane.port,
         dataDir,
         async panelToken(panelId) {
-            const granted = await getTransport().call<{ token: string }>("auth:panel-token", { panelId });
+            const granted = await getTransport().call("auth:panel-token", { panelId });
             return granted.token;
         },
     };
