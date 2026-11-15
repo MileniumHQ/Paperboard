@@ -20,7 +20,9 @@ import {
 } from "../toolsContract";
 import type { ToolResult } from "./computerMcp";
 import { checkSecretName, parseServer, parseToolsConfig, secretNames, vaultName } from "./mcpConfig";
-import { HttpWire, McpClient, SseWire, StdioWire, Unauthorized, type McpTool, type ProcessHost } from "./mcpClient";
+import { McpClient, type McpTool } from "./mcpClient";
+import { HttpWire, SseWire, Unauthorized } from "./mcpHttp";
+import { StdioWire, type ProcessHost } from "./mcpStdio";
 import { Callback, SIGN_IN_MS, SignInNeeded, TokenRefused, authorizeUrl, discover, exchange, parseTokens, pkcePair, refresh, register, stale, type Tokens } from "./mcpOAuth";
 import { errorText } from "../lib/failure";
 import { SerialQueue } from "./serialQueue";
