@@ -144,8 +144,10 @@ export async function servePanelAsset(
             logger.warn(`[PanelProtocol] ${name} did not serve ${cleanPanelId}/${subpath}:`, err);
             return new Response(`${name} could not be reached: ${classifyProbeError(err)}`, { status: 502 });
         }
+        // the daemon's own reason, which the panel frame shows
         if (!res.ok) {
-            return new Response(STATUS_CODES[res.status] ?? "Error", { status: res.status });
+            const reason = new TextDecoder().decode(res.body).trim().slice(0, 2000) || (STATUS_CODES[res.status] ?? "Error");
+            return new Response(`${connectionPool.getComputer(comp)?.name ?? comp} refused ${cleanPanelId}/${subpath}: ${reason}`, { status: res.status });
         }
         const buffer = new Uint8Array(res.body);
         const ext = path.extname(subpath).toLowerCase();
