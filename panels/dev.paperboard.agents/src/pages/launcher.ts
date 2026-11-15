@@ -5,7 +5,7 @@
 import { createEffect, createSignal, on } from "solid-js";
 import { createStore, reconcile } from "solid-js/store";
 import { errorMessage } from "@mileniumhq/paperapi";
-import { createLatest } from "@mileniumhq/paperui";
+import { createLatest } from "@mileniumhq/paperui/headless";
 import type { PageInfo, PageKind } from "../contract";
 import type { Agent } from "../lib/agent";
 

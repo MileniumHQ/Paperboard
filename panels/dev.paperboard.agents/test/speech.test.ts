@@ -1,14 +1,15 @@
 // The onboarding speaker: a newer line, or leaving, interrupts what is being
 // said, and whoever waited on it hears so. A scene that waits (the face
 // shaking while the computer step waits) runs its tidy-up only on that answer.
-import { expect, mock, test } from "bun:test";
+import { expect, test } from "bun:test";
 import { createRoot } from "solid-js";
 import type { FaceController } from "../src/face/controller";
 
-// paced speech, as a person who hasn't asked for reduced motion hears it
-(globalThis as { window?: unknown }).window = { matchMedia: () => ({ matches: false }) };
-// PaperUI's page side can't load outside a page; the speaker only taps with it
-mock.module("@mileniumhq/paperui", () => import("./support/paperui"));
+// paced speech, as a person who hasn't asked for reduced motion hears it, in
+// a top-level window (its typing taps are this device's, and it has no vibrator)
+const page: { matchMedia: () => { matches: boolean }; parent?: unknown } = { matchMedia: () => ({ matches: false }) };
+page.parent = page;
+(globalThis as { window?: unknown }).window = page;
 const { createSpeaker } = await import("../src/onboarding/speech");
 
 const face = { talk() {}, express() {}, bounce() {} } as unknown as FaceController;

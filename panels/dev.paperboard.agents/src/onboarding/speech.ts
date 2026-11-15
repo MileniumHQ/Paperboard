@@ -1,5 +1,5 @@
 import { createSignal, onCleanup } from "solid-js";
-import { haptic } from "@mileniumhq/paperui";
+import { haptic } from "@mileniumhq/paperui/headless";
 import type { FaceController } from "../face/controller";
 import { EXPRESSIONS, type Expression } from "../face/expressions";
 
