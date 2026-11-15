@@ -156,31 +156,34 @@ export default function Overview(props: OverviewProps) {
                 <PaperFlex direction="row" padding="full" gap="full" align="center">
                     <DiscordAvatar url={props.bot().avatar} fallbackIcon="smart_toy" alt={props.bot().name} size="xlarge" />
                     <PaperFlex direction="column" gap="onefourth" flex minWidth={0}>
-                        <PaperFlex direction="row" gap="half" align="baseline" wrap>
-                            <PaperText preset="title">{props.bot().name}</PaperText>
-                            <Show when={tag() && tag() !== props.bot().name}>
-                                <PaperText preset="hint">@{tag()}</PaperText>
-                            </Show>
-                            <PaperBadge variant={connected() ? "success" : props.bot().connecting ? "warning" : props.bot().enabled ? "danger" : "monochrome"}>
-                                {connected() ? "Online" : props.bot().connecting ? "Connecting" : "Offline"}
-                            </PaperBadge>
+                        {/* the switch shares the name's line, so the id below gets the card's width */}
+                        <PaperFlex direction="row" gap="half" align="center">
+                            <PaperFlex direction="row" gap="half" align="baseline" wrap flex minWidth={0}>
+                                <PaperText preset="title" breakWord>{props.bot().name}</PaperText>
+                                <Show when={tag() && tag() !== props.bot().name}>
+                                    <PaperText preset="hint" breakWord>@{tag()}</PaperText>
+                                </Show>
+                                <PaperBadge variant={connected() ? "success" : props.bot().connecting ? "warning" : props.bot().enabled ? "danger" : "monochrome"}>
+                                    {connected() ? "Online" : props.bot().connecting ? "Connecting" : "Offline"}
+                                </PaperBadge>
+                            </PaperFlex>
+                            <PaperToggle
+                                checked={props.bot().enabled}
+                                aria-label={`${props.bot().name} is on`}
+                                title={props.bot().enabled ? "On: runs while Paperboard does" : "Off"}
+                                // the switch flips once the bot is on or off: its thump waits for the save
+                                onChange={setEnabled}
+                            />
                         </PaperFlex>
                         <Show when={props.bot().applicationId}>
                             {(appId) => (
                                 <PaperFlex direction="row" gap="half" align="center">
-                                    <PaperText preset="hint" family="code">{appId()}</PaperText>
+                                    <PaperText preset="hint" family="code" breakWord>{appId()}</PaperText>
                                     <PaperCopyButton text={appId()} title="Copy application ID" />
                                 </PaperFlex>
                             )}
                         </Show>
                     </PaperFlex>
-                    <PaperToggle
-                        checked={props.bot().enabled}
-                        aria-label={`${props.bot().name} is on`}
-                        title={props.bot().enabled ? "On: runs while Paperboard does" : "Off"}
-                        // the switch flips once the bot is on or off: its thump waits for the save
-                        onChange={setEnabled}
-                    />
                 </PaperFlex>
             </PaperCard>
 
@@ -269,7 +272,7 @@ export default function Overview(props: OverviewProps) {
                         <PaperText preset="heading">Recent problems</PaperText>
                         <For each={props.bot().problems}>
                             {(problem) => (
-                                <PaperText preset="text">
+                                <PaperText preset="text" breakWord>
                                     <PaperText as="span" preset="text" color="text-subtle">
                                         {new Date(problem.at).toLocaleTimeString()}:
                                     </PaperText>{" "}
@@ -289,7 +292,7 @@ export default function Overview(props: OverviewProps) {
                         </PaperText>
                         <For each={recent()}>
                             {(msg) => (
-                                <PaperText preset="text">
+                                <PaperText preset="text" breakWord>
                                     <PaperText as="span" preset="text" color="text-subtle">
                                         {msg.author}:
                                     </PaperText>{" "}

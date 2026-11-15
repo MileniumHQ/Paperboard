@@ -197,4 +197,47 @@ describe("a bot's page", () => {
             served.stop();
         }
     });
+
+    test("on a phone the Overview fits: the switch, the name and every message stay inside their cards", async () => {
+        const home = guild("Home");
+        const fake = discord.addBot({ username: "ModerationHelperBot", guilds: [home] });
+        await savedBots([{ stored: storedBot("b-phone", fake.appId, { name: "ModerationHelperBot" }), token: fake.token }]);
+        await startService({ discordApi: discord.api });
+        await stateWhere<BotsServiceState>(PANEL_ID, (s) => Boolean(s.bots[0]?.connected), "the bot to connect");
+        const served = await servePanel();
+        const page = await browser.open(served.url);
+        try {
+            await page.resize(390, 800);
+            await page.waitFor(`document.body.innerText.includes("ModerationHelperBot")`, "the bot list");
+            await clickText(page, "[class*=card], [class*=Card]", "ModerationHelperBot");
+            await page.click(`input[name=botMenu][value="overview"]`);
+            await page.waitFor(`document.body.innerText.includes("Gateway status")`, "the Overview");
+            discord.dispatch(fake, "MESSAGE_CREATE", userMessage(home, "see https://example.com/a/very/long/path/that/never/breaks/anywhere/at/all/1234567890"));
+            await page.waitFor(`document.body.innerText.includes("never/breaks")`, "the message");
+
+            const layout = await page.evaluate<{ page: number; toggle: number[]; card: number[]; name: number[]; spilled: string[] }>(`(() => {
+                const box = (el) => { const r = el.getBoundingClientRect(); return [Math.round(r.left), Math.round(r.right)]; };
+                // the Overview's own switch: the bot list's card, behind the page, has one too
+                const toggle = [...document.querySelectorAll("[aria-label='ModerationHelperBot is on']")].find((el) => el.closest("[class*=PaperCard]"));
+                const card = toggle.closest("[class*=PaperCard]");
+                const name = [...card.querySelectorAll("*")].find((el) => el.children.length === 0 && el.textContent === "ModerationHelperBot");
+                const cards = [...document.querySelectorAll("[class*=PaperCard]")].filter((el) => el.getClientRects().length > 0);
+                return {
+                    page: document.documentElement.scrollWidth,
+                    toggle: box(toggle.closest("[class*=PaperToggle]")),
+                    card: box(card),
+                    name: box(name),
+                    spilled: cards.filter((el) => el.scrollWidth > el.clientWidth).map((el) => el.innerText.slice(0, 40)),
+                };
+            })()`);
+            expect(layout.page).toBeLessThanOrEqual(390);
+            expect(layout.toggle[1]).toBeLessThanOrEqual(layout.card[1]);
+            expect(layout.name[1]).toBeLessThanOrEqual(layout.toggle[0]);
+            expect(layout.spilled).toEqual([]);
+            expect(page.exceptions).toEqual([]);
+        } finally {
+            await page.close();
+            served.stop();
+        }
+    });
 });
