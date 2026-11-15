@@ -3,7 +3,7 @@
 // server that refuses says why on the tab instead of looking banned, also
 // on a phone, where the player's page covers the roster. A ban plugin that
 // words its answer its own way is judged by the list it wrote. A head that
-// could not be looked up says why on the head.
+// could not be looked up says why on the head, and in words on the player's page.
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import * as fs from "node:fs";
 import * as path from "node:path";
@@ -85,6 +85,10 @@ describe("the Players tab's bans", () => {
             // the server takes the ban: the badge is the ban list it wrote
             await page.evaluate(openRow("Steve"));
             await page.waitFor(`!!${button("Ban")}`, "Steve's Ban button");
+            // his page says why in words too: a phone shows no tooltip
+            await page.resize(400, 820);
+            await page.waitFor(seen(`Steve's head could not be loaded: Mojang's profile for ${STEVE} answered 503`), "the head's failure on the phone's player page");
+            await page.resize(1400, 900);
             await page.evaluate(`${button("Ban")}.click()`);
             await page.waitFor(`!!${button("Ban", true)}`, "the ban dialog");
             await page.evaluate(`${button("Ban", true)}.click()`);

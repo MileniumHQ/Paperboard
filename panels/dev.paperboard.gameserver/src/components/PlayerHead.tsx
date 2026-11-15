@@ -10,6 +10,7 @@ export default function PlayerHead(props: {
     shape?: "circle" | "square" | "sharp";
     alt?: string;
     class?: string;
+    onFailure?: (reason: string | null) => void;
 }) {
     return <HeadAvatar {...props} loadHead={loadHead} />;
 }

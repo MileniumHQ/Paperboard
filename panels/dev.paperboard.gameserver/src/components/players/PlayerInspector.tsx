@@ -1,4 +1,4 @@
-import { createEffect, createMemo, on, onCleanup, Show } from "solid-js";
+import { createEffect, createMemo, createSignal, on, onCleanup, Show } from "solid-js";
 import {
     PaperBadge,
     PaperButton,
@@ -79,6 +79,8 @@ export default function PlayerInspector(props: {
         const value = stats()?.food;
         return value === undefined ? undefined : Math.round(value);
     };
+    // why the head could not be looked up, in words: a phone shows no tooltip
+    const [headFailure, setHeadFailure] = createSignal<string | null>(null);
     const healthMeter = () => {
         const value = health();
         return value === undefined ? undefined : { value, max: 20, variant: "danger" as const };
@@ -108,6 +110,7 @@ export default function PlayerInspector(props: {
                         name={name()}
                         uuid={props.player?.uuid}
                         size="xlarge"
+                        onFailure={setHeadFailure}
                     />
                     <PaperFlex
                         direction="column"
@@ -150,6 +153,9 @@ export default function PlayerInspector(props: {
                                 </PaperText>
                                 <PaperCopyButton text={props.player!.uuid!} />
                             </PaperFlex>
+                        </Show>
+                        <Show when={headFailure()}>
+                            {(reason) => <PaperText size={1} color="danger">{reason()}</PaperText>}
                         </Show>
                     </PaperFlex>
                 </PaperFlex>

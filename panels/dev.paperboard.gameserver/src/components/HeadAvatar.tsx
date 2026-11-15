@@ -1,4 +1,4 @@
-import { createMemo, createResource } from "solid-js";
+import { createEffect, createMemo, createResource, on } from "solid-js";
 import { PaperAvatar, type PaperAvatarSize } from "@mileniumhq/paperui";
 import type { HeadFetch } from "../lib/skins";
 import { errorMessage } from "../lib/failure";
@@ -21,6 +21,8 @@ function remember(key: string, head: string | null): void {
  * Renders the generic person icon until the head resolves (or when the
  * player has none), an error glyph naming the reason when the lookup
  * fails, and never another player's head while the next one loads.
+ * `onFailure` hears that reason (null once a head loads), for a page that
+ * also says it in words: a phone shows no tooltip.
  * PlayerHead is this over the panel's own bridge.
  */
 export default function HeadAvatar(props: {
@@ -31,6 +33,7 @@ export default function HeadAvatar(props: {
     shape?: "circle" | "square" | "sharp";
     alt?: string;
     class?: string;
+    onFailure?: (reason: string | null) => void;
 }) {
     const key = createMemo(() => `${(props.uuid ?? "").toLowerCase()}:${props.name.toLowerCase()}`);
     const [head] = createResource(key, async (k) => {
@@ -50,6 +53,7 @@ export default function HeadAvatar(props: {
         return latest && latest.key === key() ? latest : null;
     };
     const failed = () => loaded()?.failed ?? null;
+    createEffect(on(failed, (reason) => props.onFailure?.(reason)));
     return (
         <PaperAvatar
             src={loaded() ? loaded()!.src ?? undefined : drawn.get(key()) ?? undefined}
