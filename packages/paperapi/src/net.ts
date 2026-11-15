@@ -16,6 +16,7 @@ import https from "node:https";
 import net from "node:net";
 import os from "node:os";
 import { errorMessage } from "./errors";
+import { LimitedQueue } from "./serialQueue";
 
 // ─── which addresses are public ─────────────────────────────────────────────
 
@@ -352,4 +353,111 @@ function size(bytes: number): string {
 
 function seconds(ms: number): string {
     return ms % 1000 === 0 ? `${ms / 1000} s` : `${ms} ms`;
+}
+
+// ─── pictures for a page ────────────────────────────────────────────────────
+
+export interface PictureFetchOptions {
+    /** the most bytes one picture may be */
+    maxBytes: number;
+    /** each fetch, redirects included (default 15 s) */
+    timeoutMs?: number;
+    /** redirects followed, each checked like the first address (default 3) */
+    maxRedirects?: number;
+    /** what the pictures kept in memory add up to, in characters of their data: addresses (default 16 M); the oldest go first */
+    keepChars?: number;
+    /** pictures fetched at once (default 6, as a browser asks a site): a page of a hundred asks no harder */
+    atOnce?: number;
+}
+
+export interface PictureRequest {
+    /** the source, as a failure names it: "Couldn't load the picture from <from>: …" */
+    from: string;
+    /** origins reached without the public-address rule, as fetchPublic's trustedOrigins; never one from untrusted input */
+    trustedOrigins?: string[];
+}
+
+/** The picture at an address as a data: address, for a page to show. Throws why it couldn't be fetched, or isn't a picture. */
+export type PictureFetch = (url: URL, request: PictureRequest) => Promise<string>;
+
+/**
+ * What a picture's bytes are, by the signature they start with: a server may
+ * call a picture application/octet-stream (Steam does), and what it calls a
+ * picture may be anything. SVG has no signature; it is taken as the server
+ * names it, and an <img> draws it without running anything in it.
+ */
+function pictureType(body: Uint8Array, declared: string): string | null {
+    const text = (from: number, to: number) => String.fromCharCode(...body.subarray(from, to));
+    if (text(0, 8) === "\x89PNG\r\n\x1a\n") return "image/png";
+    if (body[0] === 0xff && body[1] === 0xd8 && body[2] === 0xff) return "image/jpeg";
+    if (text(0, 6) === "GIF87a" || text(0, 6) === "GIF89a") return "image/gif";
+    if (text(4, 8) === "ftyp" && ["avif", "avis"].includes(text(8, 12))) return "image/avif";
+    if (text(0, 4) === "RIFF" && text(8, 12) === "WEBP") return "image/webp";
+    return declared === "image/svg+xml" ? declared : null;
+}
+
+/**
+ * Pictures from elsewhere, for a service to hand its pages: a page never
+ * loads an address someone else chose, not even an image. Each is fetched
+ * with fetchPublic (public addresses only, size and time capped, every
+ * redirect checked), its type is read from its bytes, and it comes back as a
+ * data: address. Answers are kept by address, within `keepChars`, and asks
+ * for one being fetched share its fetch; a failure is not kept, so the next
+ * ask tries again. Which addresses a source may name (its hosts) is the
+ * caller's to check first.
+ */
+export function createPictureFetch(options: PictureFetchOptions): PictureFetch {
+    const keepChars = options.keepChars ?? 16 * 1024 * 1024;
+    const line = new LimitedQueue(options.atOnce ?? 6);
+    // by address, oldest first
+    const kept = new Map<string, string>();
+    let keptChars = 0;
+    const inFlight = new Map<string, Promise<string>>();
+
+    const keep = (key: string, picture: string) => {
+        kept.set(key, picture);
+        keptChars += picture.length;
+        for (const [old, value] of kept) {
+            if (keptChars <= keepChars) break;
+            kept.delete(old);
+            keptChars -= value.length;
+        }
+    };
+
+    const fetchPicture = async (href: string, request: PictureRequest): Promise<string> => {
+        let answer: PublicFetchResponse;
+        try {
+            answer = await fetchPublic(href, {
+                maxBytes: options.maxBytes,
+                timeoutMs: options.timeoutMs,
+                maxRedirects: options.maxRedirects,
+                accept: "image/*",
+                trustedOrigins: request.trustedOrigins,
+            });
+        } catch (err) {
+            throw new Error(`Couldn't load the picture from ${request.from}: ${errorMessage(err)}`);
+        }
+        const declared = answer.contentType.split(";")[0]!.trim().toLowerCase();
+        const type = pictureType(answer.body, declared);
+        if (!type) throw new Error(`${request.from} sent ${declared || "something without a type"} where a picture should be, and it isn't one`);
+        return `data:${type};base64,${Buffer.from(answer.body).toString("base64")}`;
+    };
+
+    return (url, request) => {
+        const key = url.href;
+        const have = kept.get(key);
+        if (have !== undefined) return Promise.resolve(have);
+        let pending = inFlight.get(key);
+        if (!pending) {
+            pending = line
+                .run(() => fetchPicture(key, request))
+                .then((picture) => {
+                    keep(key, picture);
+                    return picture;
+                })
+                .finally(() => inFlight.delete(key));
+            inFlight.set(key, pending);
+        }
+        return pending;
+    };
 }

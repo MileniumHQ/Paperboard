@@ -6,7 +6,7 @@ import { afterAll, describe, expect, test } from "bun:test";
 import http from "node:http";
 import type { AddressInfo } from "node:net";
 import os from "node:os";
-import { fetchPublic, publicAddressRefusal, PublicFetchError, type PublicFetchAnswer, type PublicFetchDial } from "../src/net";
+import { createPictureFetch, fetchPublic, publicAddressRefusal, PublicFetchError, type PublicFetchAnswer, type PublicFetchDial } from "../src/net";
 
 const hits: string[] = [];
 const servers: http.Server[] = [];
@@ -213,5 +213,54 @@ describe("fetchPublic", () => {
         expect(asked).toEqual([]);
         expect(await refusal(fetchPublic("https://images.example/moved", options))).toEqual({ code: "invalid-url", message: "Only https addresses are fetched, not http:" });
         expect(asked).toEqual(["https://images.example/moved"]);
+    });
+});
+
+// a 1×1 PNG's first bytes are all the type check reads
+const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13]);
+let missing = true;
+const picturesPort = await serve("pictures", (path): Answer => {
+    if (path === "/icon.png") return { headers: { "content-type": "image/png" }, body: PNG };
+    // Steam calls some of its pictures this
+    if (path === "/unnamed") return { headers: { "content-type": "application/octet-stream" }, body: PNG };
+    if (path === "/page.png") return { headers: { "content-type": "text/html" }, body: "<script>" };
+    if (path === "/later.png") return missing ? { status: 404, body: "Not found" } : { headers: { "content-type": "image/png" }, body: PNG };
+    return { headers: { "content-type": "image/png" }, body: PNG };
+});
+const PICTURES = `http://127.0.0.1:${picturesPort}`;
+const from = { from: "Test", trustedOrigins: [PICTURES] };
+
+describe("createPictureFetch", () => {
+    const asks = (path: string) => hits.filter((hit) => hit.startsWith(`pictures ${path} `)).length;
+
+    test("a picture comes back as a data: address of what its bytes are, fetched once", async () => {
+        const pictures = createPictureFetch({ maxBytes: 64 });
+        const dataUrl = `data:image/png;base64,${Buffer.from(PNG).toString("base64")}`;
+        const [a, b] = await Promise.all([pictures(new URL(`${PICTURES}/icon.png`), from), pictures(new URL(`${PICTURES}/icon.png`), from)]);
+        expect([a, b]).toEqual([dataUrl, dataUrl]);
+        expect(await pictures(new URL(`${PICTURES}/icon.png`), from)).toBe(dataUrl);
+        expect(asks("/icon.png")).toBe(1);
+        expect(await pictures(new URL(`${PICTURES}/unnamed`), from)).toBe(dataUrl);
+    });
+
+    test("what isn't a picture is refused with why, and a failure isn't kept", async () => {
+        const pictures = createPictureFetch({ maxBytes: 64 });
+        await expect(pictures(new URL(`${PICTURES}/page.png`), from)).rejects.toThrow("Test sent text/html where a picture should be, and it isn't one");
+        await expect(pictures(new URL(`${PICTURES}/big.png`), { from: "Test", trustedOrigins: [] })).rejects.toThrow("Couldn't load the picture from Test:");
+        await expect(pictures(new URL(`${PICTURES}/later.png`), from)).rejects.toThrow("Couldn't load the picture from Test:");
+        missing = false;
+        expect(await pictures(new URL(`${PICTURES}/later.png`), from)).toMatch(/^data:image\/png;base64,/);
+        await expect(createPictureFetch({ maxBytes: 4 })(new URL(`${PICTURES}/icon.png`), from)).rejects.toThrow("Couldn't load the picture from Test:");
+    });
+
+    test("what is kept stays within keepChars, the oldest going first", async () => {
+        const one = `data:image/png;base64,${Buffer.from(PNG).toString("base64")}`.length;
+        const pictures = createPictureFetch({ maxBytes: 64, keepChars: one * 2 });
+        for (const name of ["a", "b", "c"]) await pictures(new URL(`${PICTURES}/${name}.png`), from);
+        await pictures(new URL(`${PICTURES}/c.png`), from);
+        await pictures(new URL(`${PICTURES}/b.png`), from);
+        expect(asks("/b.png")).toBe(1);
+        await pictures(new URL(`${PICTURES}/a.png`), from);
+        expect(asks("/a.png")).toBe(2);
     });
 });

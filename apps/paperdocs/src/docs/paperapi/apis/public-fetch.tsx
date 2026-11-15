@@ -124,6 +124,49 @@ class PublicFetchError extends Error {
                     <tr><td><PaperCode>timeout</PaperCode></td><td>The whole fetch took longer than <PaperCode>timeoutMs</PaperCode>.</td></tr>
                 </tbody>
             </PaperTable>
+
+            <PaperText preset="subheader" as="h2" id="pictures">Pictures for a page</PaperText>
+            <PaperCode block language="tsx">
+{`createPictureFetch(options: PictureFetchOptions): PictureFetch;
+
+interface PictureFetchOptions {
+    /** the most bytes one picture may be */
+    maxBytes: number;
+    /** each fetch, redirects included (default 15000) */
+    timeoutMs?: number;
+    /** redirects followed (default 3) */
+    maxRedirects?: number;
+    /** what the kept pictures add up to, in characters of their data: addresses (default 16 M) */
+    keepChars?: number;
+    /** pictures fetched at once (default 6) */
+    atOnce?: number;
+}
+
+/** the picture at url as a data: address; from names the source in a failure */
+type PictureFetch = (url: URL, request: { from: string; trustedOrigins?: string[] }) => Promise<string>;`}
+            </PaperCode>
+            <PaperText preset="body" as="p">
+                A page never loads a picture someone else chose, such as an avatar, an add-on's icon or a map's thumbnail. The service fetches it with the function <PaperCode>createPictureFetch</PaperCode> returns and hands the page a <PaperCode>data:</PaperCode> address.
+                Make one per service and check that the address is on a host its source keeps pictures on before asking for it.
+            </PaperText>
+            <PaperCode block language="tsx">
+{`import { createPictureFetch } from "@mileniumhq/paperapi/net";
+
+const pictures = createPictureFetch({ maxBytes: 1024 * 1024, timeoutMs: 10_000 });
+
+getPicture: (_ctx, input) => {
+    const url = new URL(String(input?.url));
+    if (url.host !== "cdn.example.com") throw new Error(\`Pictures come from cdn.example.com, not \${url.host}\`);
+    return pictures(url, { from: "the CDN" });
+},`}
+            </PaperCode>
+            <PaperTextList>
+                <li>Each picture is fetched with fetchPublic, asking for <PaperCode>image/*</PaperCode>, under every rule above.</li>
+                <li>Its type is read from its bytes: PNG, JPEG, GIF, WebP and AVIF, whatever the server called it. SVG has no signature and is taken when the server names it <PaperCode>image/svg+xml</PaperCode>; an <PaperCode>{"<img>"}</PaperCode> draws it without running anything in it. Anything else is refused: <PaperCode>&lt;from&gt; sent text/html where a picture should be, and it isn't one</PaperCode>.</li>
+                <li>A fetch that fails throws <PaperCode>Couldn't load the picture from &lt;from&gt;: &lt;why&gt;</PaperCode>.</li>
+                <li>Pictures are kept by address, the oldest going first past <PaperCode>keepChars</PaperCode>. Asks for a picture being fetched share its fetch. A failure isn't kept, so the next ask tries again.</li>
+                <li>At most <PaperCode>atOnce</PaperCode> fetches run at a time, so a page of a hundred pictures asks no harder than a browser would.</li>
+            </PaperTextList>
         </PaperFlex>
     );
 }
