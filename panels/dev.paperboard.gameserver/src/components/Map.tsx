@@ -49,6 +49,17 @@ const REGION_REFRESH_MS = 15000;
 // decoded tiles held in the renderer; panning across a world must not grow
 // memory without a bound
 const MAX_TILE_CACHE = 256;
+// a marker's side in CSS px: its base at scale 1, never under the min or over the max
+const MARKER_SIZE = { base: 22, min: 18, max: 30 };
+const MARKER_OUTLINE = 2;
+
+// a canvas takes values, not var() strings; a token that isn't defined is a
+// broken stylesheet, not a reason to guess
+function token(name: string): string {
+    const value = getVar(name);
+    if (!value) throw new Error(`PaperUI token --paper-${name} is not defined`);
+    return value;
+}
 
 interface TileState {
     image: HTMLImageElement;
@@ -94,21 +105,23 @@ export default function MapView() {
         if (existing) return existing.complete && existing.naturalWidth > 0 ? existing : null;
         // reserve the slot so a redraw does not start a second lookup
         headImages.set(key, new Image());
+        // a player without a skin keeps the dot; a lookup or picture that fails says so
+        const failed = (message: string) => setError({ title: `${name}'s head didn't load`, message });
         void loadHead({ name })
             .then((dataUrl) => {
-                if (!dataUrl) {
-                    console.debug(`[Map] no head image for ${name}`);
-                    return;
-                }
+                if (!dataUrl) return;
                 const image = new Image();
                 image.onload = () => {
                     headImages.set(key, image);
                     setRevision((v) => v + 1);
                 };
-                image.onerror = () => console.error(`[Map] head decode failed for ${name}`);
+                image.onerror = () => failed("The service's picture of it could not be read.");
                 image.src = dataUrl;
             })
-            .catch((err) => console.error(`[Map] head lookup failed for ${name}:`, String(err)));
+            .catch((err) => {
+                console.error(`[Map] head lookup failed for ${name}:`, err);
+                failed(errorMessage(err));
+            });
         return null;
     };
 
@@ -157,9 +170,8 @@ export default function MapView() {
                     }
                     setRevision((v) => v + 1);
                 };
-                image.onerror = () => {
-                    console.error(`[Map] tile image decode failed for ${key}`);
-                };
+                image.onerror = () =>
+                    setError({ title: "A map tile didn't render", message: `The picture the service painted of region ${rx}, ${rz} could not be read.` });
                 image.src = dataUrl;
             })
             .catch((err) => {
@@ -197,6 +209,15 @@ export default function MapView() {
     };
 
     const draw = () => {
+        try {
+            paint();
+        } catch (err) {
+            console.error("[Map] drawing failed:", err);
+            setError({ title: "The map didn't draw", message: errorMessage(err) });
+        }
+    };
+
+    const paint = () => {
         if (!canvas) return;
         const ctx = canvas.getContext("2d");
         if (!ctx) return;
@@ -223,39 +244,41 @@ export default function MapView() {
     const drawPlayers = (ctx: CanvasRenderingContext2D) => {
         const s = scale();
         const dim = dimension();
-        const size = Math.max(18, Math.min(30, 22 * Math.max(0.8, s)));
-        // colors come from the token set, resolved to values: a canvas
-        // ignores a var() string and keeps its previous colour
-        const strokeColor = getVar("on-color");
-        const markerColor = getVar("danger");
-        const labelBg = getVar("scrim");
-        const labelText = getVar("on-color");
+        const size = Math.max(MARKER_SIZE.min, Math.min(MARKER_SIZE.max, MARKER_SIZE.base * Math.max(0.8, s)));
+        // colors and type come from the token set, resolved to values: a
+        // canvas ignores a var() string and keeps its previous value
+        const strokeColor = token("on-color");
+        const markerColor = token("danger");
+        const labelBg = token("scrim");
+        const labelText = token("on-color");
+        const fontSize = token("text-size-1");
+        ctx.font = `${token("weight-semibold")} ${fontSize} ${token("font-family")}`;
+        ctx.textBaseline = "middle";
+        // the label's box: a line and a half tall, padded by a third of the type
+        const labelHeight = parseFloat(fontSize) * 1.5;
+        const labelPad = parseFloat(fontSize) / 3;
         for (const [key, pos] of playerPositions()) {
             if (pos.dimension !== `minecraft:${dim}`) continue;
             const screenX = pos.x * s + offsetX();
             const screenY = pos.z * s + offsetY();
             const head = getHead(key);
+            ctx.lineWidth = MARKER_OUTLINE;
+            ctx.strokeStyle = strokeColor;
             if (head) {
                 ctx.drawImage(head, screenX - size / 2, screenY - size / 2, size, size);
-                ctx.lineWidth = 2;
-                ctx.strokeStyle = strokeColor;
                 ctx.strokeRect(screenX - size / 2, screenY - size / 2, size, size);
             } else {
                 ctx.beginPath();
-                ctx.arc(screenX, screenY, Math.max(4, size / 3), 0, Math.PI * 2);
+                ctx.arc(screenX, screenY, size / 3, 0, Math.PI * 2);
                 ctx.fillStyle = markerColor;
                 ctx.fill();
-                ctx.lineWidth = 2;
-                ctx.strokeStyle = strokeColor;
                 ctx.stroke();
             }
-            const label = key;
-            ctx.font = `600 ${getVar("text-size-1", "12px")} system-ui, sans-serif`;
-            const textWidth = ctx.measureText(label).width;
+            const labelX = screenX + size / 2 + labelPad;
             ctx.fillStyle = labelBg;
-            ctx.fillRect(screenX + size / 2 + 3, screenY - 9, textWidth + 8, 18);
+            ctx.fillRect(labelX, screenY - labelHeight / 2, ctx.measureText(key).width + labelPad * 2, labelHeight);
             ctx.fillStyle = labelText;
-            ctx.fillText(label, screenX + size / 2 + 7, screenY + 4);
+            ctx.fillText(key, labelX + labelPad, screenY);
         }
     };
 
