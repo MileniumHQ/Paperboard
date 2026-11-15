@@ -114,8 +114,13 @@ async function unmount(s: ActiveSession): Promise<void> {
 
 export async function closeRemoteFolder(computerId: string): Promise<void> {
     const s = active.get(computerId);
-    if (!s) return;
-    active.delete(computerId);
+    if (s) await closeSession(s);
+}
+
+// a session ends on its own: its relay or window going idle never takes
+// down a newer one for the same computer
+async function closeSession(s: ActiveSession): Promise<void> {
+    if (active.get(s.computerId) === s) active.delete(s.computerId);
     if (s.timer) clearTimeout(s.timer);
     await s.relay?.close();
     await unmount(s);
@@ -181,7 +186,7 @@ function startWatcher(s: ActiveSession, hasWindow: () => Promise<boolean>): void
             s.misses += 1;
             if (!s.seen || s.misses >= CONFIRM_MISSES) {
                 logger.info(`[RemoteFolder] explorer closed for ${s.computerId}; tearing down`);
-                await closeRemoteFolder(s.computerId);
+                await closeSession(s);
                 return;
             }
         }
@@ -252,10 +257,21 @@ async function showFolder(rec: ActiveSession, subDir: string): Promise<string | 
     return null;
 }
 
-export async function openRemoteFolder(
-    computerId: string,
-    panelId?: string,
-): Promise<{ ok: boolean; error?: string }> {
+// opens for one computer run one at a time: two at once would each mint a
+// session, and the first would be left mounted with nothing to end it
+const opening = new Map<string, Promise<unknown>>();
+
+export function openRemoteFolder(computerId: string, panelId?: string): Promise<{ ok: boolean; error?: string }> {
+    const run = (opening.get(computerId) ?? Promise.resolve()).then(() => openNow(computerId, panelId));
+    const settled = Promise.allSettled([run]);
+    opening.set(computerId, settled);
+    void settled.then(() => {
+        if (opening.get(computerId) === settled) opening.delete(computerId);
+    });
+    return run;
+}
+
+async function openNow(computerId: string, panelId?: string): Promise<{ ok: boolean; error?: string }> {
     // checked before a DAV session is minted: nothing to mount it with
     if (!remoteFolderSupported(process.platform)) return { ok: false, error: "This system can't open another computer's files as a folder." };
     const client = connectionPool.getClient(computerId);
@@ -313,8 +329,7 @@ export async function openRemoteFolder(
     };
 
     const fail = async (error: string) => {
-        active.set(computerId, rec);
-        await closeRemoteFolder(computerId);
+        await closeSession(rec);
         return { ok: false, error };
     };
 
@@ -332,7 +347,7 @@ export async function openRemoteFolder(
             pass: session.pass,
             clientAuth: process.platform === "linux" ? "peer" : process.platform === "win32" ? "path" : "basic",
             idleMs: IDLE_MS,
-            onIdle: () => void closeRemoteFolder(computerId),
+            onIdle: () => void closeSession(rec),
         });
 
         if (process.platform === "win32") {
