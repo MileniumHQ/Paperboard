@@ -16,15 +16,17 @@ import { itemText } from "../chat/AccessRequest";
 const grantKey = (g: AccessGrant) => `${g.kind}:${itemText(g).what}:${g.kind === "command" && g.anyArguments}:${g.once}:${g.at}`;
 
 export default function Access(props: { agent: Agent }) {
-    const name = () => props.agent.state.settings?.name ?? "Your agent";
+    const name = () => props.agent.name();
     // the grants are a store reconciled by what each one is, so a change pushed to the page touches only what changed
     const [grants, setGrants] = createStore<{ key: string; grant: AccessGrant }[]>([]);
     const [view, setViewState] = createSignal<{ error: string | null } | null>(null);
+    const [error, setError] = createSignal<string | null>(null);
+    // a view that arrives, by a read or a push, is what's shown: a read that failed before it is over
     const setView = (next: AccessView) => {
         setGrants(reconcile(next.grants.map((grant) => ({ key: grantKey(grant), grant })), { key: "key" }));
         setViewState({ error: next.error });
+        setError(null);
     };
-    const [error, setError] = createSignal<string | null>(null);
     const [failed, setFailed] = createSignal<string | null>(null);
 
     // a change pushed while the first read is out is newer than it: the read doesn't replace it
@@ -39,7 +41,6 @@ export default function Access(props: { agent: Agent }) {
         try {
             const next = await props.agent.access();
             if (current()) setView(next);
-            setError(null);
         } catch (e) {
             if (current()) setError(errorText(e));
         }

@@ -65,6 +65,21 @@ export default function Pages(props: { pages: Launcher; name: string; onOpened: 
                 </Match>
                 <Match when={true}>
                     <PaperFlex flex minHeight={0}>
+                        {/* a read again that failed leaves the list as it was last read: it says so */}
+                        <Show when={props.pages.listError()}>
+                            {(why) => (
+                                <PaperFlex padding="full" gap="half">
+                                    <PaperQuote variant="danger" icon="error" title="The list may be out of date" role="alert">
+                                        {why()}
+                                    </PaperQuote>
+                                    <PaperFlex direction="row">
+                                        <PaperButton onClick={() => props.pages.reload()}>
+                                            <PaperIcon>refresh</PaperIcon> Try again
+                                        </PaperButton>
+                                    </PaperFlex>
+                                </PaperFlex>
+                            )}
+                        </Show>
                         <Show when={openError()}>
                             {(shown) => (
                                 <PaperFlex padding="full">

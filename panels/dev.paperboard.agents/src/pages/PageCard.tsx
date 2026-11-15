@@ -38,6 +38,21 @@ export default function PageCard(props: { entry: PageEntry; pages: Launcher }) {
                         </PaperButton>
                     </Show>
                 </PaperFlex>
+                {/* the pages were never read: whether this one is still there isn't known, and the card says why */}
+                <Show when={props.pages.list() === null && props.pages.listError()}>
+                    {(why) => (
+                        <>
+                            <PaperQuote variant="danger" icon="error" title="The pages can't be read" role="alert">
+                                {why()}
+                            </PaperQuote>
+                            <PaperFlex direction="row">
+                                <PaperButton size="small" onClick={() => props.pages.reload()}>
+                                    Try again
+                                </PaperButton>
+                            </PaperFlex>
+                        </>
+                    )}
+                </Show>
                 <Show when={error()}>
                     {(shown) => (
                         <PaperQuote variant="danger" icon="error" title={shown().title} role="alert" onDismiss={() => setError(null)}>
