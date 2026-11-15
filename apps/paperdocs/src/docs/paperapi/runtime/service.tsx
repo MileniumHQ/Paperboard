@@ -177,6 +177,15 @@ type ContractContext<C, TState = Record<string, any>> = ServiceContext<State, Ev
     setState(patchOrUpdater: Partial<TState> | ((prev: TState) => Partial<TState>)): void;
     /** tells the panel's page something happened; other panels can't hear it */
     emit<E extends keyof TEvents>(event: E, payload: Infer<TEvents[E]>): void;
+    /** the contract's keyed state, by field */
+    readonly keyed: { [field]: KeyedEntries<Value> };
+}
+
+interface KeyedEntries<Value> {
+    get(key: string): Value | undefined;
+    set(key: string, value: Value): void;
+    delete(key: string): void;
+    keys(): string[];
 }`}
             </PaperCode>
             <PaperText preset="body" as="p">
@@ -198,10 +207,15 @@ type ContractContext<C, TState = Record<string, any>> = ServiceContext<State, Ev
                         <td><PaperCode>emit</PaperCode></td>
                         <td>Typed by the contract's <PaperCode>events</PaperCode>: the event must be one it names, with the payload it says. Anything else throws where it is emitted, <PaperCode>{"[Service:<id>] The contract has no event \"<name>\""}</PaperCode> or <PaperCode>{"The event \"<name>\" was not sent: <problem>"}</PaperCode>, and nothing is sent. Returns at once. The page hears it through its client's <PaperCode>events</PaperCode>. It fires the internal event <PaperCode>emit-&lt;kebab-name&gt;</PaperCode>, which is registered the first time it is emitted. A delivery that fails is reported as the panel's problem, <PaperCode>The panel's page missed an update</PaperCode>, with the event's name and why; see <PaperLink href="/docs/paperapi/problems/">problemsApi</PaperLink>.</td>
                     </tr>
+                    <tr>
+                        <td><PaperCode>keyed</PaperCode></td>
+                        <td>The contract's <PaperLink href="/docs/paperapi/bridge/#keyed-state">keyed state</PaperLink>. <PaperCode>set</PaperCode> checks the value against the field's shape, keeps it and sends that one key to every window; a value the shape refuses throws <PaperCode>{"[Service:<id>] The keyed state \"<field>\" was not changed: <problem>"}</PaperCode> and changes nothing. <PaperCode>delete</PaperCode> removes a key, and a window following it hears <PaperCode>undefined</PaperCode>. Sends are merged as <PaperCode>setState</PaperCode>'s are, each key once.</td>
+                    </tr>
                 </tbody>
             </PaperTable>
             <PaperText preset="body" as="p">
                 The service registers the internal value <PaperCode>panel-state</PaperCode>, which returns the whole state once the service is ready, and the internal event <PaperCode>panel-state-changed</PaperCode>. State mirrors read the value to hydrate and hear the event for each patch.
+                A contract with keyed state also registers the internal value <PaperCode>panel-state-key</PaperCode>, which returns one key's value, or a field's every key.
                 With <PaperCode>widgetChoices</PaperCode>, it also registers the internal command <PaperCode>widget-choices</PaperCode>.
             </PaperText>
 

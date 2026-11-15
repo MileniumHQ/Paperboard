@@ -129,6 +129,41 @@ calls: {
     players: async (_input, ctx, { server }) => listPlayers(server),
 },`;
 
+const UNSCOPED_TS = `export const consoleContract = defineContract(PANEL_ID, {
+    scope: { server: shape.text() },
+    calls: {
+        send: { input: shape.object({ command: shape.text() }), output: shape.nothing() },
+        /** no one server's: the servers list makes a server */
+        addServer: { input: shape.object({ name: shape.text() }), output: shape.text(), unscoped: true },
+    },
+});
+
+// the servers list, open on no server, makes its client without the scope
+const list = serviceClient(consoleContract);
+const id = await list.calls.addServer({ name: "Lobby" });
+list.calls.send({ command: "say hi" }); // type error: send needs the scope
+
+// the service: an unscoped call's handler is given no scope
+addServer: async ({ name }) => createServer(name),`;
+
+const KEYED_TS = `// the contract: each server's console, kept under the server's id
+export const consoleContract = defineContract(PANEL_ID, {
+    scope: { server: shape.text() },
+    calls: { /* ... */ },
+    keyed: {
+        consoles: shape.object({ lines: shape.list(shape.text()), online: shape.boolean() }),
+    },
+});
+
+// the service: a line changes one key, and only that key travels
+ctx.keyed.consoles.set(server, { lines: [...lines, line], online: true });
+ctx.keyed.consoles.delete(server); // a removed server
+
+// the page: one server's console, read and followed with createRead
+const client = serviceClient(consoleContract, { server: "lobby" });
+const consoles = client.keyed.consoles;
+const lobby = createRead(() => consoles.read("lobby"), { follow: consoles.follow("lobby") });`;
+
 export default function ContractApiDoc() {
     return (
         <PaperFlex direction="column" gap="double" fullWidth>
@@ -194,6 +229,8 @@ interface ContractDefinition {
     events?: Record<string, Shape>;
     /** what the service keeps and every window mirrors, and what it starts as */
     state?: { shape: ObjectShape; initial: Infer<shape> };
+    /** state kept one key at a time, each key's value of one shape */
+    keyed?: Record<string, Shape>;
 }
 
 interface CallDefinition {
@@ -202,6 +239,8 @@ interface CallDefinition {
     output: Shape;
     /** milliseconds the page waits for the answer; defaults to 30_000, null waits it out */
     timeoutMs?: number | null;
+    /** a call the scope is not about: made without it, its handler given none */
+    unscoped?: true;
 }`}
             </PaperCode>
             <PaperTable>
@@ -245,6 +284,12 @@ interface CallDefinition {
                         <td>How long the page waits for the answer. <PaperCode>null</PaperCode> waits as long as the call takes, for work such as an install.</td>
                     </tr>
                     <tr>
+                        <td><PaperCode>calls.x.unscoped</PaperCode></td>
+                        <td><PaperCode>true</PaperCode></td>
+                        <td>The call needs the scope</td>
+                        <td>A call the scope is not about, such as making a server. The page calls it without the scope, and its handler is given none. See <PaperLink href="#unscoped-calls">Unscoped calls</PaperLink>.</td>
+                    </tr>
+                    <tr>
                         <td><PaperCode>events</PaperCode></td>
                         <td><PaperCode>{"Record<string, Shape>"}</PaperCode></td>
                         <td>No events</td>
@@ -255,6 +300,12 @@ interface CallDefinition {
                         <td><PaperCode>{"{ shape: shape.object(...), initial }"}</PaperCode></td>
                         <td>The contract says nothing of the state</td>
                         <td>What the service keeps and every window mirrors. <PaperCode>initial</PaperCode> is what it starts as, checked against <PaperCode>shape</PaperCode> by the type checker and again when the contract is made.</td>
+                    </tr>
+                    <tr>
+                        <td><PaperCode>keyed</PaperCode></td>
+                        <td><PaperCode>{"Record<string, Shape>"}</PaperCode></td>
+                        <td>No keyed state</td>
+                        <td>State kept one key at a time, such as each server's own state under its id, with the shape every key's value has. A shape that allows <PaperCode>null</PaperCode> is refused. See <PaperLink href="#keyed-state">Keyed state</PaperLink>.</td>
                     </tr>
                 </tbody>
             </PaperTable>
@@ -274,10 +325,12 @@ interface ServiceClient {
     readonly events: { [name]: (onValue: (payload) => void) => () => void };
     /** the service's state; undefined for a contract that says nothing of it */
     readonly state: ServiceState<State>;
+    /** each keyed state field, read and followed one key at a time */
+    readonly keyed: { [field]: KeyedState<Value> };
 }`}
             </PaperCode>
             <PaperText preset="body" as="p">
-                Make a client where the page talks to its service. <PaperCode>scope</PaperCode> is required when the contract has one, and not taken when it doesn't.
+                Make a client where the page talks to its service. For a contract with a scope, a client made with the scope's values has every call, and one made without them has only the <PaperLink href="#unscoped-calls">unscoped</PaperLink> ones. A contract without a scope takes none.
                 It works on a panel page and in a widget. A service has no client: it answers the contract.
             </PaperText>
             <PaperTable>
@@ -308,6 +361,11 @@ interface ServiceClient {
                         <td><PaperCode>state</PaperCode></td>
                         <td><PaperCode>{"ServiceState<State>"}</PaperCode></td>
                         <td>The service's state as this window mirrors it. The mirror is made the first time <PaperCode>state</PaperCode> is read, so a client that only calls reads no state.</td>
+                    </tr>
+                    <tr>
+                        <td><PaperCode>keyed.x</PaperCode></td>
+                        <td><PaperCode>{"KeyedState<Infer<shape>>"}</PaperCode></td>
+                        <td>One keyed state field, read and followed one key at a time. See <PaperLink href="#keyed-state">Keyed state</PaperLink>.</td>
                     </tr>
                 </tbody>
             </PaperTable>
@@ -361,6 +419,61 @@ interface ServiceClient {
                 <li>The scope's values travel with each call and are checked with its input. A page that needs two servers makes two clients.</li>
             </PaperTextList>
 
+            <PaperText preset="subheader" as="h3" id="unscoped-calls">Unscoped calls</PaperText>
+            <PaperText preset="body" as="p">
+                Some calls are about none of the scope's values, such as making a new server or fetching a picture the servers list shows. Mark them <PaperCode>unscoped: true</PaperCode>.
+                A page open on no server makes its client without the scope and gets only those. Every other call needs the scope, so calling one without it is a type error.
+            </PaperText>
+            <PaperCode block language="tsx">{UNSCOPED_TS}</PaperCode>
+            <PaperTextList>
+                <li>A scoped call reached past the types on a client made without the scope rejects, saying it needs the scope, and is never sent.</li>
+                <li>The service refuses a scoped call whose scope is missing, and an unscoped call given one, like any input that breaks its shape.</li>
+                <li>An unscoped call's input may name a field the scope has. <PaperCode>unscoped</PaperCode> on a contract without a scope throws when the contract is made.</li>
+            </PaperTextList>
+
+            <PaperText preset="subheader" as="h2" id="keyed-state">Keyed state</PaperText>
+            <PaperText preset="body" as="p">
+                Keyed state is state the service keeps one key at a time, each key's value of one shape: each server's own state under its id, each document's under its path.
+                A change to one key travels alone, so a server printing to its console never resends the other servers' state. A page reads and follows only the keys it shows.
+                Every key's value is checked against the shape where it is set.
+            </PaperText>
+            <PaperCode block language="tsx">{KEYED_TS}</PaperCode>
+            <PaperText preset="body" as="p">
+                In the service, <PaperCode>ctx.keyed.x</PaperCode> holds the field's keys. It starts with none. See <PaperLink href="/docs/paperapi/service/#service-context">ServiceContext</PaperLink>.
+                On the page, <PaperCode>client.keyed.x</PaperCode> reads them:
+            </PaperText>
+            <PaperTable>
+                <thead>
+                    <tr>
+                        <th>Member</th>
+                        <th>Type</th>
+                        <th>Behavior</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><PaperCode>read(key)</PaperCode></td>
+                        <td><PaperCode>{"(key: string) => Promise<Value | undefined>"}</PaperCode></td>
+                        <td>Reads one key's value from the service. Resolves with <PaperCode>undefined</PaperCode> for a key it doesn't have. A change to the key that lands while the read is out wins over the read's answer.</td>
+                    </tr>
+                    <tr>
+                        <td><PaperCode>readAll()</PaperCode></td>
+                        <td><PaperCode>{"() => Promise<Record<string, Value>>"}</PaperCode></td>
+                        <td>Reads every key's value, for a view that shows them all. Changes that land while it is out win, as with <PaperCode>read</PaperCode>.</td>
+                    </tr>
+                    <tr>
+                        <td><PaperCode>follow(key)</PaperCode></td>
+                        <td><PaperCode>{"(key: string) => (onValue: (value: Value | undefined) => void) => () => void"}</PaperCode></td>
+                        <td>Calls <PaperCode>onValue</PaperCode> with the key's new value each time it changes, and with <PaperCode>undefined</PaperCode> once it is removed. Changes to other keys don't call it. The function it returns is what PaperUI's <PaperLink href="/docs/paperui/state/#create-read">createRead</PaperLink> takes as <PaperCode>follow</PaperCode>.</td>
+                    </tr>
+                </tbody>
+            </PaperTable>
+            <PaperTextList>
+                <li>Keyed state is not in the whole state that <PaperCode>state</PaperCode> mirrors, and the shell doesn't wait for it before it shows the panel. Read the keys a view shows as it opens.</li>
+                <li>A client listens for changes only while something reads or follows a key, so it needs no <PaperCode>dispose()</PaperCode>: stop each follow when its view goes away.</li>
+                <li>It travels on the same internal event as the state, <PaperCode>panel-state-changed</PaperCode>, and is read from the internal value <PaperCode>panel-state-key</PaperCode>. Changes to many keys made while one push travels are sent together, each key once.</li>
+            </PaperTextList>
+
             <PaperText preset="subheader" as="h2" id="checks">What is checked where</PaperText>
             <PaperTable>
                 <thead>
@@ -377,6 +490,7 @@ interface ServiceClient {
                     <tr><td>A call's answer</td><td>In the service, before it leaves</td><td>The caller rejects; the page never sees the wrong answer.</td></tr>
                     <tr><td>An event's name and payload</td><td>By <PaperCode>ctx.emit</PaperCode></td><td>It throws where it was emitted, and nothing is sent.</td></tr>
                     <tr><td>A state change</td><td>By <PaperCode>ctx.setState</PaperCode></td><td>It throws where it was made, and the state is unchanged. In a handler, the call rejects with it.</td></tr>
+                    <tr><td>A keyed state change</td><td>By <PaperCode>ctx.keyed.x.set</PaperCode>, against the field's shape</td><td>It throws where it was made, and the key keeps its value. In a handler, the call rejects with it.</td></tr>
                 </tbody>
             </PaperTable>
             <PaperText preset="body" as="p">
@@ -442,6 +556,14 @@ interface ServiceClient {
                         <td><PaperCode>setState</PaperCode> was given a field the state's shape doesn't name.</td>
                     </tr>
                     <tr>
+                        <td><PaperCode>{"[Service:<id>] The keyed state \"<field>\" was not changed: <problem>"}</PaperCode></td>
+                        <td><PaperCode>ctx.keyed.x.set</PaperCode> was given a value the field's shape doesn't allow, or a key that is not text.</td>
+                    </tr>
+                    <tr>
+                        <td><PaperCode>{"The call \"<name>\" was refused: it needs the scope (<fields>), and this client was made without it"}</PaperCode></td>
+                        <td>A scoped call was reached past the types on a client made without the scope.</td>
+                    </tr>
+                    <tr>
                         <td><PaperCode>{"[Service:<id>] The contract has no event \"<name>\""}</PaperCode></td>
                         <td><PaperCode>ctx.emit</PaperCode> was given a name the contract's <PaperCode>events</PaperCode> doesn't have.</td>
                     </tr>
@@ -460,6 +582,14 @@ interface ServiceClient {
                     <tr>
                         <td><PaperCode>{"The call \"kick\" of <id> names \"server\", which its scope already gives"}</PaperCode></td>
                         <td>A call's input repeats a scope field. Thrown by <PaperCode>defineContract</PaperCode>.</td>
+                    </tr>
+                    <tr>
+                        <td><PaperCode>{"The call \"ping\" of <id> is unscoped, but its contract has no scope"}</PaperCode></td>
+                        <td>A call is marked <PaperCode>unscoped</PaperCode> in a contract without a scope. Thrown by <PaperCode>defineContract</PaperCode>.</td>
+                    </tr>
+                    <tr>
+                        <td><PaperCode>{"The keyed state \"<field>\" of <id> can't be null: a key without a value is removed"}</PaperCode></td>
+                        <td>A keyed field's shape allows <PaperCode>null</PaperCode>, which on the wire is a removed key. Thrown by <PaperCode>defineContract</PaperCode>.</td>
                     </tr>
                     <tr>
                         <td><PaperCode>{"The service call \"<name>\" can't be named: use letters, digits and dashes, at most 59 characters"}</PaperCode></td>
