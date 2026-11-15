@@ -505,10 +505,17 @@ export class Pages {
                 console.error(`[agents] the pages' port ${saved} can't be opened (${code}); they move to a new one`);
                 await listen(0);
             }
+            const port = (server.address() as AddressInfo).port;
+            try {
+                writeAtomic(this.o.portFile, JSON.stringify({ port }));
+            } catch (e) {
+                // not kept, so not used: the next start opens a server of its own
+                await new Promise<void>((ok) => server.close(() => ok()));
+                throw e;
+            }
             this.server = server;
-            this.port = (server.address() as AddressInfo).port;
-            fs.writeFileSync(this.o.portFile, JSON.stringify({ port: this.port }));
-            return this.port;
+            this.port = port;
+            return port;
         })();
         this.starting.catch(() => (this.starting = null));
         return this.starting;

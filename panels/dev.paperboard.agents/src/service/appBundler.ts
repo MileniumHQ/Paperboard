@@ -60,6 +60,8 @@ function start(): Promise<Esbuild> {
         await esbuild.initialize({ wasmModule: wasm, worker: false });
         return esbuild;
     })();
+    // a failed start is the build's failure, and the next build tries again
+    started.catch(() => (started = null));
     return started;
 }
 
