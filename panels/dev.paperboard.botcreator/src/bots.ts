@@ -2,7 +2,8 @@
 // Blocks project, listed on the Bot Creator home screen. The panel config
 // holds the list; each token is its own vault secret. Pure, so the service,
 // the panel and their tests share one implementation.
-import { errorToMessage, readStoredCommands, type GuildSummary, type SlashCommandDefinition } from "./types";
+import { readStoredCommands, type GuildSummary, type SlashCommandDefinition } from "./types";
+import { errorMessage } from "@mileniumhq/paperapi";
 
 export const PANEL_ID = "dev.paperboard.botcreator";
 export const BOTS_VERSION = 2;
@@ -122,7 +123,7 @@ function readCommands(raw: unknown, whose: string): SlashCommandDefinition[] {
     try {
         return readStoredCommands(raw);
     } catch (err) {
-        throw new Error(`${whose}: ${errorToMessage(err)}`);
+        throw new Error(`${whose}: ${errorMessage(err)}`);
     }
 }
 

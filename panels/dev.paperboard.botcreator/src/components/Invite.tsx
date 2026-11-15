@@ -10,10 +10,10 @@ import {
     PaperQuote,
     PaperSeparator,
     usePaperPanel,
+    createLatest,
 } from "@mileniumhq/paperui";
-import { serviceApi } from "@mileniumhq/paperapi";
+import { serviceApi, errorMessage } from "@mileniumhq/paperapi";
 import { PANEL_ID, type BotSummary } from "../bots";
-import { errorToMessage } from "../types";
 import { PERMISSION_DEFINITIONS, DEFAULT_SELECTED_PERMISSIONS } from "../permissions";
 
 export default function Invite(props: { bot: () => BotSummary }) {
@@ -29,9 +29,9 @@ export default function Invite(props: { bot: () => BotSummary }) {
     );
 
     // toggles fire requests back to back: only the latest one may land
-    let inviteRequest = 0;
+    const inviteRead = createLatest();
     const updateInviteUrl = async (perms: string[]) => {
-        const request = ++inviteRequest;
+        const current = inviteRead();
         setInviteError("");
         try {
             const url = await serviceApi.call<string>(
@@ -40,13 +40,13 @@ export default function Invite(props: { bot: () => BotSummary }) {
                 { bot: props.bot().id, permissions: perms },
             );
             if (!url) throw new Error("getInviteUrl returned no link");
-            if (request === inviteRequest) setInviteUrl(url);
+            if (current()) setInviteUrl(url);
         } catch (err) {
             console.error("[Invite] invite URL generation failed:", err);
-            if (request !== inviteRequest) return;
+            if (!current()) return;
             // a link for the old permissions must not be copied as the new one
             setInviteUrl("");
-            setInviteError(errorToMessage(err));
+            setInviteError(errorMessage(err));
         }
     };
 
@@ -62,7 +62,7 @@ export default function Invite(props: { bot: () => BotSummary }) {
             setUserInstallUrl(url);
         } catch (err) {
             console.error("[Invite] user install URL generation failed:", err);
-            setUserInstallError(errorToMessage(err));
+            setUserInstallError(errorMessage(err));
         }
     };
 

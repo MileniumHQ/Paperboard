@@ -3,7 +3,7 @@
 // from Discord's CDN, and only from there, and hands the page the bytes.
 import { fetchPublic, type PublicFetchResponse } from "@mileniumhq/paperapi/net";
 import { discordCdnBase, discordOrigins } from "./discord";
-import { errorToMessage } from "./types";
+import { errorMessage } from "@mileniumhq/paperapi";
 
 const PICTURE_TYPES = new Set(["image/png", "image/jpeg", "image/gif", "image/webp"]);
 /** the size Discord is asked for: the panel never draws a picture bigger */
@@ -36,7 +36,7 @@ async function fetchPicture(url: URL): Promise<string> {
     try {
         picture = await fetchPublic(url.href, { maxBytes: MAX_PICTURE_BYTES, timeoutMs: FETCH_MS, maxRedirects: 0, accept: "image/*", trustedOrigins: discordOrigins() });
     } catch (err) {
-        throw new Error(`Discord's CDN didn't send the picture at ${url.pathname}: ${errorToMessage(err)}`);
+        throw new Error(`Discord's CDN didn't send the picture at ${url.pathname}: ${errorMessage(err)}`);
     }
     const type = picture.contentType.split(";")[0]!.trim();
     if (!PICTURE_TYPES.has(type)) throw new Error(`Discord's CDN sent ${type || "something"} that isn't a picture.`);

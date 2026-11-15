@@ -20,12 +20,12 @@ import {
     PENDING_INTERACTION_CAP,
     commandTriggerId,
     findCommandForInteraction,
-    errorToMessage,
     type SlashCommandDefinition,
     type Health,
     type GuildSummary,
 } from "./types";
 import type { BotProblem } from "./bots";
+import { errorMessage } from "@mileniumhq/paperapi";
 
 /** the background failures a bot's Overview lists, newest last */
 const PROBLEM_CAP = 20;
@@ -264,7 +264,7 @@ export class BotSession {
         const ackTimer = setTimeout(() => {
             autoAcknowledge(interaction).catch((err: unknown) =>
                 this.noteProblem(
-                    `An interaction no flow answered couldn't be acknowledged ${Date.now() - interaction.createdTimestamp} ms after Discord sent it, so Discord showed it as failed: ${errorToMessage(err)}`,
+                    `An interaction no flow answered couldn't be acknowledged ${Date.now() - interaction.createdTimestamp} ms after Discord sent it, so Discord showed it as failed: ${errorMessage(err)}`,
                 ),
             );
         }, AUTO_ACK_DELAY_MS);
@@ -389,7 +389,7 @@ export class BotSession {
         try {
             await bot.destroy();
         } catch (err) {
-            this.noteProblem(`Its connection to Discord didn't close cleanly: ${errorToMessage(err)}`);
+            this.noteProblem(`Its connection to Discord didn't close cleanly: ${errorMessage(err)}`);
         }
     }
 
@@ -465,7 +465,7 @@ export class BotSession {
             // recorded in health rather than reported as a connection failure
             await this.syncCommands();
         } catch (err) {
-            const message = errorToMessage(err);
+            const message = errorMessage(err);
             await this.destroy(bot);
             // a newer start or a stop let go of this client, which is why its
             // login failed: the session is theirs, and nothing failed that the
@@ -489,7 +489,7 @@ export class BotSession {
         try {
             return await loadDiscord();
         } catch (err) {
-            const message = `discord.js could not be loaded: ${errorToMessage(err)}`;
+            const message = `discord.js could not be loaded: ${errorMessage(err)}`;
             console.error("[DiscordService]", message);
             if (attempt === this.connectSequence) {
                 this.connectionStatus = { connected: false, error: message };
@@ -611,7 +611,7 @@ export class BotSession {
         // transient client/shard errors: in its problems and a trigger, but
         // NOT disconnected — the gateway session may still be live
         const transient = (err: Error) => {
-            const message = errorToMessage(err);
+            const message = errorMessage(err);
             this.noteProblem(`Its connection to Discord had an error: ${message}`);
             this.emit("on-connection-error", { error: message });
         };
@@ -678,7 +678,7 @@ export class BotSession {
             const errors = await syncSlashCommands(bot, this.commands, scopesToClear);
             error = errors.length > 0 ? errors.join(" ") : null;
         } catch (err) {
-            error = errorToMessage(err);
+            error = errorMessage(err);
         }
         // a newer session may own the state by now
         if (this.client === bot) this.noteSync(error);

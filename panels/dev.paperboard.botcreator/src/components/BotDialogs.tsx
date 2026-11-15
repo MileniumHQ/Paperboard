@@ -12,7 +12,8 @@ import {
     PaperText,
 } from "@mileniumhq/paperui";
 import type { DeleteBotResult } from "../bots";
-import { errorToMessage, extractApplicationIdFromToken } from "../types";
+import { extractApplicationIdFromToken } from "../types";
+import { errorMessage } from "@mileniumhq/paperapi";
 
 export const PORTAL_URL = "https://discord.com/developers/applications";
 
@@ -69,7 +70,7 @@ export function createAddBot(onAdd: (token: string) => Promise<{ id: string }>, 
         try {
             onAdded(await onAdd(token().trim()));
         } catch (err) {
-            setError(errorToMessage(err));
+            setError(errorMessage(err));
         } finally {
             setBusy(false);
         }
@@ -169,7 +170,7 @@ export function ReplaceTokenModal(props: {
             await props.onReplace(bot.id, token().trim());
             props.onClose();
         } catch (err) {
-            setError(errorToMessage(err));
+            setError(errorMessage(err));
         } finally {
             setBusy(false);
         }
@@ -232,7 +233,7 @@ export function DeleteBotModal(props: {
             if ("refused" in result) setRefused(result.refused);
             else props.onClose();
         } catch (err) {
-            setError(errorToMessage(err));
+            setError(errorMessage(err));
         } finally {
             setBusy(false);
         }

@@ -5,7 +5,8 @@ import type { BlockTypeDefinition } from "@mileniumhq/paperapi";
 import { memberRoles, messageReactions, pinnedMessages, pollResults, roleMembers } from "../botOps";
 import { MessageOps } from "../discordOps";
 import { describeChannelKind } from "../explorer";
-import { SNOWFLAKE_PATTERN, errorToMessage } from "../types";
+import { SNOWFLAKE_PATTERN } from "../types";
+import { errorMessage } from "@mileniumhq/paperapi";
 
 /** A message, by its id and the channel it is in: a message can't be found without both. */
 export interface MessageRef {
@@ -75,7 +76,7 @@ async function locate<T>(
             if (found) return { client, found };
             problems.push(`${what} not found`);
         } catch (err) {
-            problems.push(errorToMessage(err));
+            problems.push(errorMessage(err));
         }
     }
     throw new Error(`None of the connected bots can see ${what}: ${[...new Set(problems)].join("; ")}`);

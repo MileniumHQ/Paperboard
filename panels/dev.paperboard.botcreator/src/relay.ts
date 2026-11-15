@@ -2,8 +2,8 @@
 // roles, reactions, threads, voice), as the bot's Blocks events. Its
 // session hands over the client's events while the client is its own.
 import type { ClientEvents } from "discord.js";
-import { errorToMessage } from "./types";
 import type { RecentMessage } from "./session";
+import { errorMessage } from "@mileniumhq/paperapi";
 
 /** Listens to one of a client's events while it is the session's own. */
 export type On = <E extends keyof ClientEvents>(event: E, listener: (...args: ClientEvents[E]) => void) => void;
@@ -118,7 +118,7 @@ export function relayEvents(on: On, session: RelayTarget): void {
     on("messageUpdate", (_oldMsg, newMsg) => {
         const apply = async () => {
             const msg = newMsg.partial ? await newMsg.fetch().catch((err: unknown) => {
-                session.noteProblem(`An edited message in channel ${newMsg.channelId} couldn't be read, so When a Message Is Edited didn't run: ${errorToMessage(err)}`);
+                session.noteProblem(`An edited message in channel ${newMsg.channelId} couldn't be read, so When a Message Is Edited didn't run: ${errorMessage(err)}`);
                 return null;
             }) : newMsg;
             if (!msg || msg.author?.bot) return;

@@ -1,7 +1,7 @@
 // A bot's life in the service: added from a token, started, turned on and
 // off, given a new token, and deleted with everything it had.
-import { secretsApi } from "@mileniumhq/paperapi";
-import { errorToMessage, extractApplicationIdFromToken } from "./types";
+import { secretsApi, errorMessage } from "@mileniumhq/paperapi";
+import { extractApplicationIdFromToken } from "./types";
 import { MAX_BOTS, PANEL_ID, isBotId, tokenName, type BotSummary, type DeleteBotResult } from "./bots";
 import { adding, bots, logFailure, publish, requireReadable, summary, type BotEntry } from "./registry";
 import { readToken, saveBots, takeNewToken } from "./persistence";
@@ -22,7 +22,7 @@ async function savedToken(entry: BotEntry): Promise<string> {
     try {
         token = await readToken(entry.stored.id);
     } catch (err) {
-        return refuse(`Its token couldn't be read from Paperboard's vault: ${errorToMessage(err)}`);
+        return refuse(`Its token couldn't be read from Paperboard's vault: ${errorMessage(err)}`);
     }
     entry.hasToken = Boolean(token);
     return token ?? refuse("No token is saved for this bot. Replace its token in Configuration.");
@@ -61,7 +61,7 @@ export async function registerEntry(entry: BotEntry): Promise<void> {
     try {
         await registerBlocks(entry);
     } catch (err) {
-        entry.blocksError = `Its blocks couldn't be added to Blocks: ${errorToMessage(err)}`;
+        entry.blocksError = `Its blocks couldn't be added to Blocks: ${errorMessage(err)}`;
         console.error(`[DiscordService] ${entry.stored.name}:`, entry.blocksError);
     }
 }
@@ -73,7 +73,7 @@ export async function connectEntry(entry: BotEntry): Promise<void> {
         else await savedToken(entry);
     } catch (err) {
         // the reason is the bot's error, on its card and in its Overview
-        console.error(`[DiscordService] ${entry.stored.name} didn't connect:`, errorToMessage(err));
+        console.error(`[DiscordService] ${entry.stored.name} didn't connect:`, errorMessage(err));
     }
     publish();
 }
@@ -154,7 +154,7 @@ export async function replaceToken(entry: BotEntry): Promise<void> {
     try {
         user = await tokenUser(token);
     } catch (err) {
-        throw new Error(`Discord refused the new token, so the saved one is kept: ${errorToMessage(err)}`);
+        throw new Error(`Discord refused the new token, so the saved one is kept: ${errorMessage(err)}`);
     }
     if (expected && user !== expected) throw new Error(other);
     await secretsApi.set(tokenName(entry.stored.id), token, PANEL_ID);
@@ -186,7 +186,7 @@ export async function deleteBot(entry: BotEntry, anyway = false): Promise<Delete
         try {
             await entry.session.clearCommands(token);
         } catch (err) {
-            return { refused: errorToMessage(err) };
+            return { refused: errorMessage(err) };
         }
     }
     // each step lands before the next, so a retry picks up where a
@@ -212,7 +212,7 @@ export async function deleteBot(entry: BotEntry, anyway = false): Promise<Delete
         }
     } catch (err) {
         publish();
-        throw new Error(`Couldn't ${step}: ${errorToMessage(err)}`);
+        throw new Error(`Couldn't ${step}: ${errorMessage(err)}`);
     }
     publish();
     botsChanged();

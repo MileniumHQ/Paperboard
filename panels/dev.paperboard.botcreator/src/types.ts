@@ -1,3 +1,5 @@
+import { errorMessage } from "@mileniumhq/paperapi";
+
 // shared with the service's ring buffer so the UI subscription caps
 // recent messages with the exact same bound (one invariant, one number)
 export const RECENT_MESSAGE_CAP = 10;
@@ -12,10 +14,6 @@ export function count(n: number, noun: string): string {
 export function appendCapped<T>(list: T[], item: T, cap: number = RECENT_MESSAGE_CAP): T[] {
     const next = [...list, item];
     return next.length > cap ? next.slice(next.length - cap) : next;
-}
-
-export function errorToMessage(err: unknown): string {
-    return err instanceof Error ? err.message : String(err);
 }
 
 // ---------------------------------------------------------------------------
@@ -295,7 +293,7 @@ export function readStoredCommands(raw: unknown): SlashCommandDefinition[] {
         try {
             options = readStoredOptions(def.options);
         } catch (err) {
-            throw damaged(errorToMessage(err));
+            throw damaged(errorMessage(err));
         }
         return { ...def, id: def.id, name, description: def.description, scope, options, userInstall: Boolean(def.userInstall) };
     });

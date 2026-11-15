@@ -13,6 +13,7 @@ import {
     PaperInterfaceItem,
     PaperQuote,
     PaperSlidePage,
+    createPaperCompact,
 } from "@mileniumhq/paperui";
 import BotsHome from "./components/BotsHome";
 import Overview from "./components/Overview";
@@ -22,11 +23,10 @@ import Invite from "./components/Invite";
 import Configuration from "./components/Configuration";
 import SetupGuide from "./components/SetupGuide";
 import { createBots, type BotsState } from "./state";
-import { createCompact } from "./compact";
-import { errorToMessage } from "./types";
 import { DiscordAvatar } from "./picture";
 import "@mileniumhq/paperui/style.css";
 import "@mileniumhq/paperui/panel.css";
+import { errorMessage } from "@mileniumhq/paperapi";
 
 // the menu entry that leaves the bot for the home screen
 const HOME_ENTRY = "home";
@@ -93,7 +93,7 @@ function BotView(props: { id: string; bots: BotsState; compact: boolean; onHome:
 
 export default function App() {
     const bots = createBots();
-    const compact = createCompact();
+    const compact = createPaperCompact();
     const [opened, setOpened] = createSignal<string | null>(null);
     // a failed save of "the guide was skipped", shown where the guide was
     const [skipError, setSkipError] = createSignal<string | null>(null);
@@ -136,7 +136,7 @@ export default function App() {
     const guideShown = () => bots.ready() && !bots.state().botsError && !bots.state().setupGuideSeen && bots.list().length === 0 && !opened();
     const skipGuide = () => {
         setSkipError(null);
-        bots.markSetupGuideSeen().catch((err) => setSkipError(errorToMessage(err)));
+        bots.markSetupGuideSeen().catch((err) => setSkipError(errorMessage(err)));
     };
 
     return (

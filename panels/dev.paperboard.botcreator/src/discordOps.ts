@@ -14,7 +14,7 @@ import type {
 } from "discord.js";
 import { loadDiscord } from "./discord";
 import { actionRows, buildMessagePayload, buildModalPayload, embedFrom, listInput, modalFieldId, normalizeEmbeds, type MessagePayloadInput } from "./payloads";
-import { errorToMessage } from "./types";
+import { errorMessage, SerialQueue } from "@mileniumhq/paperapi";
 
 interface ComponentClickData {
     customId: string;
@@ -387,21 +387,12 @@ export const AUTO_ACK_DELAY_MS = 2_500;
 // Every operation on one interaction runs in order, so the automatic
 // acknowledgement and a flow's answer can never both claim the first
 // response. Keyed weakly: a finished interaction is collected with its chain.
-const interactionQueues = new WeakMap<object, Promise<unknown>>();
+const interactionQueues = new WeakMap<object, SerialQueue>();
 
 function serialize<T>(interaction: object, op: () => Promise<T>): Promise<T> {
-    const previous = interactionQueues.get(interaction) ?? Promise.resolve();
-    const next = previous.then(op, op);
-    // the chain only orders work; this op's failure reaches its own caller
-    // through `next`, so the next op still runs after a failed one
-    interactionQueues.set(
-        interaction,
-        next.then(
-            () => undefined,
-            () => undefined,
-        ),
-    );
-    return next;
+    let queue = interactionQueues.get(interaction);
+    if (!queue) interactionQueues.set(interaction, (queue = new SerialQueue()));
+    return queue.run(op);
 }
 
 // Interactions whose first response is not an editable reply: a click acked

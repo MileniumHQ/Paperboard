@@ -19,7 +19,7 @@ import {
     PaperCheckbox,
     PaperCopyButton,
 } from "@mileniumhq/paperui";
-import { serviceApi } from "@mileniumhq/paperapi";
+import { serviceApi, errorMessage } from "@mileniumhq/paperapi";
 import { PANEL_ID, type BotSummary } from "../bots";
 import {
     GLOBAL_SCOPE,
@@ -30,7 +30,6 @@ import {
     count,
     describeCommandOptionProblem,
     describeCommandProblem,
-    errorToMessage,
     hasDuplicateOptionName,
     isCommandDescriptionValid,
     isCommandNameValid,
@@ -214,7 +213,7 @@ export default function Commands(props: { bot: () => BotSummary }) {
             setActionError(mutationProblem(result));
         } catch (err) {
             console.error("[Commands] createCommand failed:", err);
-            setFormError(errorToMessage(err));
+            setFormError(errorMessage(err));
         } finally {
             setBusy(false);
         }
@@ -240,7 +239,7 @@ export default function Commands(props: { bot: () => BotSummary }) {
                 : mutationProblem(result));
         } catch (err) {
             console.error("[Commands] deleteCommand failed:", err);
-            setActionError({ title: `/${target.name} not deleted`, message: errorToMessage(err) });
+            setActionError({ title: `/${target.name} not deleted`, message: errorMessage(err) });
         } finally {
             setBusy(false);
         }

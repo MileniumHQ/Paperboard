@@ -3,7 +3,7 @@
 // rule it breaks, before anything reaches Discord (discordOps.ts sends them).
 import type { ButtonStyle, ColorResolvable } from "discord.js";
 import { loadDiscord } from "./discord";
-import { errorToMessage } from "./types";
+import { errorMessage } from "@mileniumhq/paperapi";
 
 type Discord = Awaited<ReturnType<typeof loadDiscord>>;
 
@@ -35,7 +35,7 @@ export function embedFrom({ EmbedBuilder }: Discord, data: DiscordEmbedData) {
         try {
             apply();
         } catch (err) {
-            throw new Error(`Embed ${field}: ${errorToMessage(err)}`);
+            throw new Error(`Embed ${field}: ${errorMessage(err)}`);
         }
     };
     if (data.title) set("title", () => embed.setTitle(data.title!));
@@ -57,7 +57,7 @@ export function normalizeEmbeds(input: unknown): DiscordEmbedData[] {
         try {
             parsed = JSON.parse(input);
         } catch (err) {
-            throw new Error(`Embeds aren't valid JSON: ${errorToMessage(err)}`);
+            throw new Error(`Embeds aren't valid JSON: ${errorMessage(err)}`);
         }
         return normalizeEmbeds(parsed);
     }
@@ -329,7 +329,7 @@ function buttonToApi({ ButtonBuilder, ButtonStyle }: Discord, component: Discord
             button.setEmoji(component.emoji);
         } catch (err) {
             throw new Error(
-                `Emoji "${component.emoji}" could not be used on button "${component.label}": ${errorToMessage(err)}`,
+                `Emoji "${component.emoji}" could not be used on button "${component.label}": ${errorMessage(err)}`,
             );
         }
     }

@@ -2,9 +2,9 @@
 // entry pairs a saved bot with its live session; the rest of the service
 // (persistence, Blocks, commands, the bot flows, the calls) works on these.
 import type { BlocksProjectHandle, ServiceContext } from "@mileniumhq/paperapi";
-import { errorToMessage } from "./types";
 import { isBotId, SETUP_GUIDE_FIELD, type BotSummary, type BotsServiceState, type StoredBot } from "./bots";
 import type { BotSession } from "./session";
+import { errorMessage } from "@mileniumhq/paperapi";
 
 export interface BotEntry {
     stored: StoredBot;
@@ -88,5 +88,5 @@ export function appIdOf(entry: BotEntry): string {
 }
 
 export function logFailure(what: string) {
-    return (err: unknown) => console.error(`[DiscordService] ${what}:`, errorToMessage(err));
+    return (err: unknown) => console.error(`[DiscordService] ${what}:`, errorMessage(err));
 }

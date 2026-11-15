@@ -2,12 +2,11 @@
 // project's events and the panel's (When a Bot Goes Online), its identity,
 // and the project its blocks are registered into.
 import type { Client } from "discord.js";
-import { blocksApi } from "@mileniumhq/paperapi";
+import { blocksApi, errorMessage } from "@mileniumhq/paperapi";
 import { InteractionOps } from "./discordOps";
 import { botBlocks, valueChanges, type BotBlocksHost } from "./blocks/bot";
 import { blockEvent, commandEvent, staticEvents } from "./blocks/events";
 import { botStatus, panelBlocks, type BotsBlocksHost } from "./blocks/bots";
-import { errorToMessage } from "./types";
 import { PANEL_ID, type StoredBot } from "./bots";
 import { BotSession } from "./session";
 import { appIdOf, bots, logFailure, panel, publish, summary, type BotEntry } from "./registry";
@@ -28,7 +27,7 @@ export async function registerPanelBlocks(host: BotsBlocksHost): Promise<void> {
         panelEventNames = new Map((own.events ?? []).map((e) => [e.id, e.name]));
         panelBlocksReady = true;
     } catch (err) {
-        panelBlocksError = errorToMessage(err);
+        panelBlocksError = errorMessage(err);
         console.error("[DiscordService] registering the Blocks types failed:", panelBlocksError);
     }
 }
@@ -62,7 +61,7 @@ export function firePanelEvent(event: string, payload: Record<string, unknown>):
     blocksApi.panel(PANEL_ID).fire(event, payload).catch((err) => {
         const entry = typeof payload.bot === "string" ? bots.get(payload.bot) : undefined;
         const name = panelEventNames.get(event) ?? event;
-        if (entry) entry.session.noteProblem(`${name} didn't run: ${errorToMessage(err)}`);
+        if (entry) entry.session.noteProblem(`${name} didn't run: ${errorMessage(err)}`);
         else logFailure(`${name} didn't run`)(err);
     });
 }
@@ -92,7 +91,7 @@ async function fireBlocksEvent(entry: BotEntry, trigger: string, output: unknown
         await entry.blocks.fire(fired.event, fired.payload);
     } catch (err) {
         const name = [...staticEvents, ...entry.stored.commands.map(commandEvent)].find((e) => e.id === event)?.name ?? event;
-        entry.session.noteProblem(`${name} didn't run: ${errorToMessage(err)}`);
+        entry.session.noteProblem(`${name} didn't run: ${errorMessage(err)}`);
     }
 }
 
@@ -106,9 +105,9 @@ export function noteIdentity(entry: BotEntry): void {
     if (name === entry.stored.name && avatar === entry.stored.avatar && user.id === entry.stored.applicationId) return;
     const renamed = name !== entry.stored.name;
     entry.stored = { ...entry.stored, name, avatar, applicationId: user.id };
-    saveBots().catch((err) => entry.session.noteProblem(`Its new name and picture weren't saved: ${errorToMessage(err)}`));
+    saveBots().catch((err) => entry.session.noteProblem(`Its new name and picture weren't saved: ${errorMessage(err)}`));
     if (renamed && entry.blocks) {
-        entry.blocks.update({ name, icon: "smart_toy" }).catch((err) => entry.session.noteProblem(`Its Blocks project wasn't renamed to ${name}: ${errorToMessage(err)}`));
+        entry.blocks.update({ name, icon: "smart_toy" }).catch((err) => entry.session.noteProblem(`Its Blocks project wasn't renamed to ${name}: ${errorMessage(err)}`));
     }
 }
 

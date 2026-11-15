@@ -18,11 +18,13 @@ import {
     PaperWidgetDot,
     PaperWidgetMessage,
     PaperWidgetStat,
+    createLatest,
+    createStateSignal,
 } from "@mileniumhq/paperui";
-import { serviceApi, defineWidgets, type WidgetContext } from "@mileniumhq/paperapi";
+import { serviceApi, defineWidgets, type WidgetContext, errorMessage } from "@mileniumhq/paperapi";
 import type { CommandActivity } from "./commandActivity";
 import type { BotWidgetStatus } from "./session";
-import { count, errorToMessage } from "./types";
+import { count } from "./types";
 import { picture } from "./picture";
 import { PANEL_ID } from "./bots";
 
@@ -35,16 +37,16 @@ type Load<T> = { kind: "loading" } | { kind: "ready"; value: T } | { kind: "fail
 // runs while Home is hidden or the widget is scrolled away. A read that
 // says what the last one said changes nothing on screen.
 function createPolledRead<T>(widget: WidgetContext, ms: number, read: () => Promise<T>) {
-    const [state, setState] = createSignal<Load<T>>({ kind: "loading" }, { equals: (a, b) => JSON.stringify(a) === JSON.stringify(b) });
+    const [state, setState] = createStateSignal<Load<T>>({ kind: "loading" });
     let timer: ReturnType<typeof setInterval> | undefined;
-    let generation = 0;
+    const latest = createLatest();
     const refresh = async () => {
-        const mine = ++generation;
+        const current = latest();
         try {
             const value = await read();
-            if (mine === generation) setState({ kind: "ready", value });
+            if (current()) setState({ kind: "ready", value });
         } catch (err) {
-            if (mine === generation) setState({ kind: "failed", message: errorToMessage(err) });
+            if (current()) setState({ kind: "failed", message: errorMessage(err) });
         }
     };
     const sync = (visible: boolean) => {
@@ -59,7 +61,6 @@ function createPolledRead<T>(widget: WidgetContext, ms: number, read: () => Prom
     onCleanup(() => {
         off();
         clearInterval(timer);
-        generation++;
     });
     const ready = () => {
         const s = state();
@@ -126,7 +127,7 @@ function BotStatus(props: { widget: WidgetContext }) {
         try {
             await serviceApi.call(PANEL_ID, "connectBot", chosenBot(props.widget));
         } catch (err) {
-            setConnectError(errorToMessage(err));
+            setConnectError(errorMessage(err));
         } finally {
             setConnecting(false);
             await refresh();

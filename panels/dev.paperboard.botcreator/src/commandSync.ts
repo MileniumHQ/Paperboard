@@ -2,7 +2,8 @@
 // exactly the stored list, or cleared when the bot is deleted.
 import type { Client, ApplicationCommandOptionData, ChatInputApplicationCommandData, REST } from "discord.js";
 import { discord, loadDiscord } from "./discord";
-import { GLOBAL_SCOPE, errorToMessage, extractApplicationIdFromToken, type SlashCommandDefinition, type SlashCommandOption } from "./types";
+import { GLOBAL_SCOPE, extractApplicationIdFromToken, type SlashCommandDefinition, type SlashCommandOption } from "./types";
+import { errorMessage } from "@mileniumhq/paperapi";
 
 function optionPayload(option: SlashCommandOption): ApplicationCommandOptionData {
     const { ApplicationCommandOptionType } = discord();
@@ -88,7 +89,7 @@ export async function syncSlashCommands(
             (byScope.get(GLOBAL_SCOPE) ?? []).map(commandPayload),
         );
     } catch (err) {
-        errors.push(`Global commands: ${errorToMessage(err)}`);
+        errors.push(`Global commands: ${errorMessage(err)}`);
     }
 
     for (const scope of new Set([...byScope.keys(), ...scopesToClear])) {
@@ -104,7 +105,7 @@ export async function syncSlashCommands(
         try {
             await guild.commands.set(definitions.map(commandPayload));
         } catch (err) {
-            errors.push(`Guild ${guild.name}: ${errorToMessage(err)}`);
+            errors.push(`Guild ${guild.name}: ${errorMessage(err)}`);
         }
     }
 
@@ -131,7 +132,7 @@ export async function clearSlashCommands(
         try {
             await rest.put(global ? Routes.applicationCommands(applicationId) : Routes.applicationGuildCommands(applicationId, scope), { body: [] });
         } catch (err) {
-            errors.push(`${global ? "Global commands" : `Guild ${guildName(scope)}`}: ${errorToMessage(err)}`);
+            errors.push(`${global ? "Global commands" : `Guild ${guildName(scope)}`}: ${errorMessage(err)}`);
         }
     }
     return errors;

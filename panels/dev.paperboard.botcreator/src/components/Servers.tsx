@@ -23,14 +23,14 @@ import {
     PaperPage,
     PaperSlidePage,
     usePaperPanel,
+    createLatest,
 } from "@mileniumhq/paperui";
-import { serviceApi } from "@mileniumhq/paperapi";
+import { serviceApi, errorMessage } from "@mileniumhq/paperapi";
 import { PANEL_ID, type BotSummary } from "../bots";
 import { DiscordAvatar, pictureIcon } from "../picture";
 import {
     CHANNEL_KIND_LABELS,
     count,
-    errorToMessage,
     type DiscordChannelKind,
     type GuildChannel,
     type GuildDetail,
@@ -114,26 +114,26 @@ export default function Servers(props: { bot: () => BotSummary }) {
 
     // only the newest look at a server may land: a slow answer for one server
     // never shows on the page of the one chosen after it
-    let detailRequest = 0;
-    let memberRequest = 0;
+    const detailRead = createLatest();
+    const memberRead = createLatest();
     // a message sent from one server's page is never confirmed on another's
-    let sendRequest = 0;
+    const sendRead = createLatest();
     const dropSend = () => {
-        sendRequest++;
+        sendRead();
         setSending(false);
         setSendError("");
         setSentTo("");
     };
 
     const selectGuild = async (guildId: string) => {
-        const request = ++detailRequest;
+        const current = detailRead();
         // reloading the server on screen (Refresh) keeps it, and what was typed or found in it, in place
         const reloading = detail()?.id === guildId;
         setSelectedId(guildId);
         setShownId(guildId);
         setDetailError("");
         if (!reloading) {
-            memberRequest++;
+            memberRead();
             dropSend();
             setMembersLoading(false);
             setDetail(null);
@@ -148,17 +148,17 @@ export default function Servers(props: { bot: () => BotSummary }) {
                 "getGuildDetail",
                 { bot: bot(), guildId },
             );
-            if (request !== detailRequest) return;
+            if (!current()) return;
             setDetail(next);
             if (!reloading || !textChannels().some((channel) => channel.id === channelId())) {
                 setChannelId(textChannels()[0]?.id ?? "");
             }
         } catch (err) {
-            if (request !== detailRequest) return;
+            if (!current()) return;
             console.error("[Servers] guild detail read failed:", err);
-            setDetailError(errorToMessage(err));
+            setDetailError(errorMessage(err));
         } finally {
-            if (request === detailRequest) setDetailLoading(false);
+            if (current()) setDetailLoading(false);
         }
     };
 
@@ -189,8 +189,8 @@ export default function Servers(props: { bot: () => BotSummary }) {
 
     const closeServer = () => {
         // an answer still on its way is for a page that is no longer open
-        detailRequest++;
-        memberRequest++;
+        detailRead();
+        memberRead();
         dropSend();
         setDetailLoading(false);
         setMembersLoading(false);
@@ -202,7 +202,7 @@ export default function Servers(props: { bot: () => BotSummary }) {
     const searchMembers = async () => {
         const id = selectedId();
         if (!id) return;
-        const request = ++memberRequest;
+        const current = memberRead();
         setMembersLoading(true);
         setMembersError("");
         try {
@@ -211,23 +211,23 @@ export default function Servers(props: { bot: () => BotSummary }) {
                 "searchGuildMembers",
                 { bot: bot(), guildId: id, query: memberQuery() },
             );
-            if (request !== memberRequest) return;
+            if (!current()) return;
             if (!Array.isArray(found)) throw new Error("searchGuildMembers returned no member list");
             setMembers(found);
         } catch (err) {
-            if (request !== memberRequest) return;
+            if (!current()) return;
             console.error("[Servers] member search failed:", err);
             setMembers(null);
-            setMembersError(errorToMessage(err));
+            setMembersError(errorMessage(err));
         } finally {
-            if (request === memberRequest) setMembersLoading(false);
+            if (current()) setMembersLoading(false);
         }
     };
 
     const sendTest = async () => {
         // Enter in the message field while one is on its way: the button is off then too
         if (sending()) return;
-        const request = ++sendRequest;
+        const current = sendRead();
         setSendError("");
         setSentTo("");
         const channel = textChannels().find((c) => c.id === channelId());
@@ -246,12 +246,12 @@ export default function Servers(props: { bot: () => BotSummary }) {
                 channel: channel.id,
                 content: content().trim(),
             });
-            if (request === sendRequest) setSentTo(`#${channel.name}`);
+            if (current()) setSentTo(`#${channel.name}`);
         } catch (err) {
             console.error("[Servers] test message send failed:", err);
-            if (request === sendRequest) setSendError(errorToMessage(err));
+            if (current()) setSendError(errorMessage(err));
         } finally {
-            if (request === sendRequest) setSending(false);
+            if (current()) setSending(false);
         }
     };
 

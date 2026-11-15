@@ -12,7 +12,8 @@ import { discordOrigins, loadDiscord } from "./discord";
 import { MessageOps, parseMoment, permissionNames, resolveGuild, resolveMember } from "./discordOps";
 import { fetchPublic, type PublicFetchResponse } from "@mileniumhq/paperapi/net";
 import { buildPoll } from "./payloads";
-import { SNOWFLAKE_PATTERN, errorToMessage } from "./types";
+import { SNOWFLAKE_PATTERN } from "./types";
+import { errorMessage } from "@mileniumhq/paperapi";
 
 // discord presence statuses — the only legal values for set-status
 export const PRESENCE_STATUSES = ["online", "idle", "dnd", "invisible"] as const;
@@ -117,7 +118,7 @@ export async function sendFile(bot: () => Client, inputs: { channel: string; url
     try {
         file = await fetchPublic(url.href, { maxBytes: uploadLimit(channel), trustedOrigins: discordOrigins() });
     } catch (err) {
-        throw new Error(`Couldn't get the file to send: ${errorToMessage(err)}`);
+        throw new Error(`Couldn't get the file to send: ${errorMessage(err)}`);
     }
     const named = typeof inputs.name === "string" ? inputs.name.trim() : "";
     const name = named || decodeURIComponent(new URL(file.url).pathname.split("/").pop() ?? "") || "file";

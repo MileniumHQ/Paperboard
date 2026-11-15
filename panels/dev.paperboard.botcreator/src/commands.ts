@@ -11,7 +11,6 @@ import {
     describeCommandProblem,
     describeCommandOptionProblem,
     normalizeCommandName,
-    errorToMessage,
     type SlashCommandDefinition,
     type SlashCommandOption,
     type CommandOptionType,
@@ -19,6 +18,7 @@ import {
 } from "./types";
 import { publish, requireReadable, type BotEntry } from "./registry";
 import { readToken, saveBots } from "./persistence";
+import { errorMessage } from "@mileniumhq/paperapi";
 
 /**
  * The one way a bot's commands change: saved, handed to the session, and
@@ -48,7 +48,7 @@ async function registerCommandTrigger(entry: BotEntry, command: SlashCommandDefi
         return null;
     } catch (err) {
         console.error(`[DiscordService] registering the Blocks event for /${command.name} failed:`, err);
-        return `Could not register the trigger for /${command.name}: ${errorToMessage(err)}`;
+        return `Could not register the trigger for /${command.name}: ${errorMessage(err)}`;
     }
 }
 
@@ -58,7 +58,7 @@ async function unregisterCommandTrigger(entry: BotEntry, command: SlashCommandDe
         return null;
     } catch (err) {
         console.error(`[DiscordService] removing the Blocks event for /${command.name} failed:`, err);
-        return `Could not remove the trigger for /${command.name}: ${errorToMessage(err)}`;
+        return `Could not remove the trigger for /${command.name}: ${errorMessage(err)}`;
     }
 }
 
@@ -140,7 +140,7 @@ export async function deleteCommand(entry: BotEntry, rawId: unknown): Promise<Co
         if (!token) throw new Error("No token is saved for this bot.");
         await entry.session.clearCommands(token, [target.scope]);
     } catch (err) {
-        syncError = `${errorToMessage(err)} /${target.name} stays on Discord.`;
+        syncError = `${errorMessage(err)} /${target.name} stays on Discord.`;
     }
     return { command: target, registered: false, syncError, triggerError };
 }

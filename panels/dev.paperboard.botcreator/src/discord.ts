@@ -4,7 +4,7 @@
 // Discord, so nothing here imports it up front: types come from
 // `import type`, values from loadDiscord() or discord().
 import type { REST } from "discord.js";
-import { errorToMessage } from "./types";
+import { errorMessage } from "@mileniumhq/paperapi";
 
 type Discord = typeof import("discord.js");
 
@@ -47,7 +47,7 @@ export function discordApiBase(env: Record<string, string | undefined> = process
     try {
         url = new URL(raw);
     } catch (err) {
-        throw new Error(`BOTCREATOR_DISCORD_API is not a web address: "${raw}" (${errorToMessage(err)})`);
+        throw new Error(`BOTCREATOR_DISCORD_API is not a web address: "${raw}" (${errorMessage(err)})`);
     }
     if (url.protocol !== "http:" && url.protocol !== "https:") {
         throw new Error(`BOTCREATOR_DISCORD_API must be an http or https address, not "${raw}"`);

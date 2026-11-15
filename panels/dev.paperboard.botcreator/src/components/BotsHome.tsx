@@ -24,8 +24,9 @@ import {
 import { DeleteBotModal, NewBotModal, ReplaceTokenModal } from "./BotDialogs";
 import type { BotsState } from "../state";
 import type { BotSummary } from "../bots";
-import { count, errorToMessage } from "../types";
+import { count } from "../types";
 import { pictureIcon } from "../picture";
+import { errorMessage } from "@mileniumhq/paperapi";
 
 /** "3 servers" for a bot online, or why it isn't, as its card says it. */
 function botStatusText(bot: BotSummary): string {
@@ -48,7 +49,7 @@ export default function BotsHome(props: { bots: BotsState; onOpen: (bot: { id: s
         try {
             await props.bots.setEnabled(bot.id, enabled);
         } catch (err) {
-            if (flips.get(bot.id) === flip) setFailure({ title: enabled ? `${bot.name} didn't come online` : `${bot.name} didn't go offline`, text: errorToMessage(err) });
+            if (flips.get(bot.id) === flip) setFailure({ title: enabled ? `${bot.name} didn't come online` : `${bot.name} didn't go offline`, text: errorMessage(err) });
         }
     };
 

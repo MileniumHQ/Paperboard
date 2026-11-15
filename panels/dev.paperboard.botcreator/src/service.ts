@@ -12,8 +12,7 @@
 //   commands.ts      making and removing slash commands
 //   lifecycle.ts     adding, starting, switching, re-tokening, deleting a bot
 //   calls.ts         the page's calls and the panel's bot blocks
-import { definePanelService, type ServiceContext } from "@mileniumhq/paperapi";
-import { errorToMessage } from "./types";
+import { definePanelService, type ServiceContext, errorMessage } from "@mileniumhq/paperapi";
 import { PANEL_ID, type BotsServiceState } from "./bots";
 import { bots, logFailure, panel, publish } from "./registry";
 import { forgetStrayTokens, loadBots, rememberGuideSeen } from "./persistence";
@@ -27,7 +26,7 @@ import { blocksBots, botChoices, serviceCalls } from "./calls";
  */
 function startBots<T>(entries: Iterable<T>, start: (entry: T) => Promise<void>): void {
     for (const entry of entries) {
-        start(entry).catch((err) => console.error("[DiscordService] starting a bot failed:", errorToMessage(err)));
+        start(entry).catch((err) => console.error("[DiscordService] starting a bot failed:", errorMessage(err)));
     }
 }
 
@@ -44,7 +43,7 @@ export const botService = definePanelService({
         try {
             await loadBots(createEntry);
         } catch (err) {
-            panel.botsError = errorToMessage(err);
+            panel.botsError = errorMessage(err);
             console.error("[DiscordService] reading the saved bots failed:", panel.botsError);
         }
         // the types first: every bot's blocks use them

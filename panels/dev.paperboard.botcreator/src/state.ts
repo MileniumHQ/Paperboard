@@ -3,7 +3,7 @@
 // change goes through the service, which saves the list and announces it.
 import { createSignal, onCleanup } from "solid-js";
 import { createStore, reconcile } from "solid-js/store";
-import { createPanelBridge, secretsApi } from "@mileniumhq/paperapi";
+import { createPanelBridge, secretsApi, errorMessage } from "@mileniumhq/paperapi";
 import { byCreation, createBotId, newTokenName, PANEL_ID, tokenName, type BotSummary, type BotsServiceState, type DeleteBotResult } from "./bots";
 
 const DEFAULT_STATE: BotsServiceState = { bots: [], botsError: null, setupGuideSeen: true };
@@ -30,7 +30,7 @@ export function createBots() {
             apply(await bridge.refreshState());
             setReady(true);
         } catch (err) {
-            setLoadError(err instanceof Error ? err.message : String(err));
+            setLoadError(errorMessage(err));
         }
     };
     void load();

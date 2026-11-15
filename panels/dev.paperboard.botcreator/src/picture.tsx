@@ -3,9 +3,8 @@
 // Discord's CDN (discordCdn.ts) and the page shows the bytes it hands over.
 import { createStore } from "solid-js/store";
 import { PaperAvatar, type PaperAvatarSize } from "@mileniumhq/paperui";
-import { serviceApi } from "@mileniumhq/paperapi";
+import { serviceApi, errorMessage } from "@mileniumhq/paperapi";
 import { PANEL_ID } from "./bots";
-import { errorToMessage } from "./types";
 
 // by address, for every view of the page: each is asked for once, and its
 // one answer (the picture, or why there is none) stands until the page
@@ -18,7 +17,7 @@ function ask(url: string): void {
     asked.add(url);
     serviceApi.call<string>(PANEL_ID, "getPicture", { url }).then(
         (data) => setShown(url, { data }),
-        (err) => setShown(url, { problem: `The picture couldn't be shown: ${errorToMessage(err)}` }),
+        (err) => setShown(url, { problem: `The picture couldn't be shown: ${errorMessage(err)}` }),
     );
 }
 

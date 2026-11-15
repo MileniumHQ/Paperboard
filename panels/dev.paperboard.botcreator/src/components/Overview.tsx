@@ -14,14 +14,14 @@ import {
     PaperCopyButton,
     PaperToggle,
     createPolling,
+    createLatest,
 } from "@mileniumhq/paperui";
-import { serviceApi } from "@mileniumhq/paperapi";
+import { serviceApi, errorMessage } from "@mileniumhq/paperapi";
 import { PANEL_ID, type BotSummary } from "../bots";
 import {
     appendCapped,
     formatDuration,
     RECENT_MESSAGE_CAP,
-    errorToMessage,
     type Health,
 } from "../types";
 import type { RecentMessage } from "../session";
@@ -51,19 +51,19 @@ export default function Overview(props: OverviewProps) {
     const connectionError = () => props.bot().lastError;
 
     // a poll and a reconnect can overlap: only the newest read is shown
-    let infoAsked = 0;
-    let healthAsked = 0;
+    const infoRead = createLatest();
+    const healthRead = createLatest();
     // the messages heard live since the newest getBotInfo was asked: its
     // snapshot may have been taken before them
     let heardSince: RecentMessage[] = [];
 
     const loadBotInfo = async () => {
-        const asked = ++infoAsked;
+        const current = infoRead();
         heardSince = [];
         setInfoError("");
         try {
             const info = await serviceApi.call<any>(PANEL_ID, "getBotInfo", { bot: props.bot().id });
-            if (asked !== infoAsked) return;
+            if (!current()) return;
             if (!info || typeof info !== "object") throw new Error("getBotInfo returned no bot details");
             setTag(typeof info.tag === "string" ? info.tag : "");
             if (Array.isArray(info.recentMessages)) {
@@ -71,27 +71,27 @@ export default function Overview(props: OverviewProps) {
                 setRecent(heardSince.filter((m) => !known.has(m.messageId)).reduce((list, m) => appendCapped(list, m, RECENT_MESSAGE_CAP), info.recentMessages as RecentMessage[]));
             }
         } catch (err) {
-            if (asked !== infoAsked) return;
+            if (!current()) return;
             console.error("[Overview] bot info read failed:", err);
-            setInfoError(errorToMessage(err));
+            setInfoError(errorMessage(err));
         }
     };
 
     const loadHealth = async () => {
-        const asked = ++healthAsked;
+        const current = healthRead();
         try {
             const next = await serviceApi.call<Health>(PANEL_ID, "getHealth", { bot: props.bot().id });
-            if (asked !== healthAsked) return;
+            if (!current()) return;
             if (!next || typeof next !== "object") {
                 throw new Error("getHealth returned no health payload");
             }
             setHealth(next);
             setHealthError("");
         } catch (err) {
-            if (asked !== healthAsked) return;
+            if (!current()) return;
             // the last good reading stays on screen under the error
             console.error("[Overview] health read failed:", err);
-            setHealthError(errorToMessage(err));
+            setHealthError(errorMessage(err));
         }
     };
 
@@ -126,14 +126,14 @@ export default function Overview(props: OverviewProps) {
     );
 
     // only the newest flip may say it failed
-    let flips = 0;
+    const flipped = createLatest();
     const setEnabled = async (enabled: boolean) => {
-        const flip = ++flips;
+        const current = flipped();
         setToggleError("");
         try {
             await props.onSetEnabled(enabled);
         } catch (err) {
-            if (flip === flips) setToggleError(errorToMessage(err));
+            if (current()) setToggleError(errorMessage(err));
         }
     };
 

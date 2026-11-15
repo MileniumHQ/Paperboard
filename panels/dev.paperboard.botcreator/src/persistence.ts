@@ -1,8 +1,8 @@
 // What the service keeps between runs: the bot list in the panel config,
 // each bot's token in the vault, and the one bot from before several bots,
 // moved into the list once.
-import { config, secretsApi } from "@mileniumhq/paperapi";
-import { errorToMessage, extractApplicationIdFromToken, type SlashCommandDefinition } from "./types";
+import { config, secretsApi, errorMessage, SerialQueue } from "@mileniumhq/paperapi";
+import { extractApplicationIdFromToken, type SlashCommandDefinition } from "./types";
 import {
     BOTS_VERSION,
     LEGACY_TOKEN_NAME,
@@ -22,10 +22,10 @@ type CreateEntry = (stored: StoredBot, hasToken: boolean) => BotEntry;
 
 // writes run one after another, each saving the list as it is then, so an
 // older write never lands after a newer one
-let writing: Promise<void> = Promise.resolve();
+const writing = new SerialQueue();
 
 export function saveBots(): Promise<void> {
-    const write = writing.then(async () => {
+    const write = writing.run(async () => {
         const document = {
             ...panel.savedExtras,
             // a computer with a bot has been through the setup guide
@@ -36,11 +36,11 @@ export function saveBots(): Promise<void> {
         try {
             await config.set(document, PANEL_ID);
         } catch (err) {
-            throw new Error(`Could not save the bots: ${errorToMessage(err)}`);
+            throw new Error(`Could not save the bots: ${errorMessage(err)}`);
         }
     });
-    // the caller hears of a failed write; the chain moves on to the next
-    writing = write.catch(logFailure("saving the bots failed"));
+    // the caller hears of a failed write, and the log too
+    write.catch(logFailure("saving the bots failed"));
     return write;
 }
 

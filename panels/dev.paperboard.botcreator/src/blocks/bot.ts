@@ -7,11 +7,12 @@ import { InteractionOps, MAX_RECENT_MESSAGES, MessageOps, findMembers, resolveMe
 import { MAX_POLL_HOURS, buildModalPayload } from "../payloads";
 import { PRESENCE_STATUSES, addRole, banUser, createChannel, createInvite, createRole, createScheduledEvent, deleteChannel, deleteRole, disconnectMember, editChannel, editRole, editThread, kickMember, leaveServer, moveMember, removeRole, removeTimeout, sendFile, sendPoll, setActivity, setChannelPermissions, setNickname, showTyping, timeoutMember, unbanUser } from "../botOps";
 import type { CommandActivity, CommandUses } from "../commandActivity";
-import { GLOBAL_SCOPE, errorToMessage, type SlashCommandDefinition } from "../types";
+import { GLOBAL_SCOPE, type SlashCommandDefinition } from "../types";
 import type { BotStatus } from "./bots";
 import { VISIBILITY, choice, contentInputs, unlessZero } from "./builders";
 import { commandEventId, staticEvents } from "./events";
 import { idOf, messageRef, optionalId, ref } from "./blockTypes";
+import { errorMessage } from "@mileniumhq/paperapi";
 
 // ─── one bot's blocks ───────────────────────────────────────────────────────
 
@@ -801,7 +802,7 @@ export function valueChanges(blocks: BlocksProjectHandle, bot: BotBlocksHost, no
         ];
         last = next;
         for (const value of changed) {
-            blocks.changed(value).catch((err) => noteProblem(`The change to ${value} did not reach Blocks: ${errorToMessage(err)}`));
+            blocks.changed(value).catch((err) => noteProblem(`The change to ${value} did not reach Blocks: ${errorMessage(err)}`));
         }
     };
 }
