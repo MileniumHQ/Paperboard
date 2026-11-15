@@ -6,6 +6,7 @@ import { defineAction, type ActionDefinition } from "@mileniumhq/paperapi";
 import { ACTION_IDS, LIMITS, TRIGGER_IDS } from "../contract";
 import { ASK_MS } from "./ask";
 import { errorText } from "../lib/failure";
+import { SerialQueue } from "./serialQueue";
 
 /** One conversation in the dropdown: its title, valued by its id. */
 export interface ConversationChoice {
@@ -169,12 +170,12 @@ export interface PublisherDeps {
 export class FlowActionsPublisher {
     /** the conversation dropdown as flows last got it */
     private published = "";
-    private publishing: Promise<void> = Promise.resolve();
+    private queue = new SerialQueue();
 
     constructor(private deps: PublisherDeps) {}
 
     publish(): Promise<void> {
-        this.publishing = this.publishing.then(async () => {
+        return this.queue.run(async () => {
             let choices: string;
             try {
                 choices = JSON.stringify(this.deps.choices());
@@ -197,6 +198,5 @@ export class FlowActionsPublisher {
             this.published = "";
             console.error("[agents] the flow actions couldn't be published:", errorText(e));
         });
-        return this.publishing;
     }
 }

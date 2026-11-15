@@ -23,6 +23,7 @@ import { checkSecretName, parseServer, parseToolsConfig, secretNames, vaultName 
 import { HttpWire, McpClient, SseWire, StdioWire, Unauthorized, type McpTool, type ProcessHost } from "./mcpClient";
 import { Callback, SIGN_IN_MS, SignInNeeded, TokenRefused, authorizeUrl, discover, exchange, parseTokens, pkcePair, refresh, register, stale, type Tokens } from "./mcpOAuth";
 import { errorText } from "../lib/failure";
+import { SerialQueue } from "./serialQueue";
 
 const WARM_MS = 25_000;
 const RETRY_AFTER_MS = 30_000;
@@ -77,7 +78,7 @@ export class McpServers {
     configError: string | null = null;
     private entries = new Map<string, Entry>();
     private signIns = new Map<string, Pending>();
-    private lock: Promise<unknown> = Promise.resolve();
+    private lock = new SerialQueue();
     private publishing = false;
     private dirty = false;
     private closed = false;
@@ -106,16 +107,6 @@ export class McpServers {
             if (entry) entry.spec = spec;
             else this.entries.set(spec.name, { spec, phase: "stopped", error: null, client: null, tools: [], starting: null, gen: 0, failedAt: 0, needsSignIn: false });
         }
-    }
-
-    private serial<T>(fn: () => Promise<T>): Promise<T> {
-        const run = this.lock.then(fn, fn);
-        // the next change waits for this one to finish, however it ended; its caller gets the failure through `run`
-        this.lock = run.then(
-            () => undefined,
-            () => undefined,
-        );
-        return run;
     }
 
     // ------------------------------------------------------------- what's there
@@ -313,7 +304,7 @@ export class McpServers {
 
     /** Add a server, or replace the one with this name. The old one stops first. */
     save(raw: unknown): Promise<ToolsView> {
-        return this.serial(async () => {
+        return this.lock.run(async () => {
             this.writable();
             await this.put(parseServer(raw));
             return this.view();
@@ -322,7 +313,7 @@ export class McpServers {
 
     /** Switch a server on or off, as it is otherwise. One that's switched on starts when the agent next needs its tools. */
     setEnabled(name: unknown, on: unknown): Promise<ToolsView> {
-        return this.serial(async () => {
+        return this.lock.run(async () => {
             this.writable();
             if (typeof on !== "boolean") throw new Error("on or off");
             const spec = this.config.servers.find((s) => s.name === name);
@@ -345,7 +336,7 @@ export class McpServers {
 
     /** Remove a server: it stops (observed), then its entry and every secret saved for it go. */
     remove(name: unknown): Promise<ToolsView> {
-        return this.serial(async () => {
+        return this.lock.run(async () => {
             this.writable();
             const spec = this.config.servers.find((s) => s.name === name);
             if (!spec) throw new Error("there's no such server");
@@ -374,7 +365,7 @@ export class McpServers {
 
     /** Stop a server and start it again now. */
     restart(name: unknown): Promise<ToolsView> {
-        return this.serial(async () => {
+        return this.lock.run(async () => {
             const e = this.entries.get(String(name));
             if (!e) throw new Error("there's no such server");
             if (!e.spec.enabled) throw new Error("it's switched off");
@@ -385,7 +376,7 @@ export class McpServers {
     }
 
     setActions(on: unknown): Promise<ToolsView> {
-        return this.serial(async () => {
+        return this.lock.run(async () => {
             this.writable();
             if (typeof on !== "boolean") throw new Error("on or off");
             await this.commit({ ...this.config, actions: on });
@@ -395,7 +386,7 @@ export class McpServers {
 
     /** Put a secret's value in the vault. The config only ever holds its name. */
     setSecret(server: unknown, name: unknown, value: unknown): Promise<ToolsView> {
-        return this.serial(async () => {
+        return this.lock.run(async () => {
             const e = this.entries.get(String(server));
             if (!e) throw new Error("add the server first");
             const secret = checkSecretName(name);
@@ -441,7 +432,7 @@ export class McpServers {
      * on the user's device, which hands it over with finishSignIn.
      */
     signIn(name: unknown): Promise<ToolsView> {
-        return this.serial(async () => {
+        return this.lock.run(async () => {
             this.writable();
             const spec = this.config.servers.find((s) => s.name === name);
             if (!spec) throw new Error("there's no such server");
@@ -553,7 +544,7 @@ export class McpServers {
         const e = this.entries.get(name);
         if (e && e.spec.enabled) {
             e.needsSignIn = false;
-            await this.serial(async () => {
+            await this.lock.run(async () => {
                 await this.stop(e);
                 await this.start(e);
             });

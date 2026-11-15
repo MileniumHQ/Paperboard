@@ -26,9 +26,10 @@ import { LOGOUT_COMMAND, STATUS_COMMAND, callbackAddress, loginCommand, loginEnv
 import type { StartOptions } from "./browser";
 import type { PackageHost } from "./browserSetup";
 import { findExistingBrain, PROGRAMS, versionFrom } from "./existingBrains";
+import { SerialQueue } from "./serialQueue";
+import { HARNESS_NAMES } from "./harness";
 
 export const BRAIN_PACKAGES: Record<Harness, string> = { codex: "codex", "claude-code": "claude-code", opencode: "opencode" };
-const NAMES: Record<Harness, string> = { codex: "Codex", "claude-code": "Claude", opencode: "OpenCode" };
 
 /** the daemon's packages, plus what the brains need to know about them */
 export interface BrainPackages extends PackageHost {
@@ -89,7 +90,7 @@ export class Brains {
     private dirs: Partial<Record<Harness, string>> = {};
     /** the program on the computer the person chose for a brain, when it isn't a package */
     private existing: Partial<Record<Harness, string>> = {};
-    private busy: Record<Harness, Promise<unknown>> = { codex: Promise.resolve(), "claude-code": Promise.resolve(), opencode: Promise.resolve() };
+    private busy: Record<Harness, SerialQueue> = { codex: new SerialQueue(), "claude-code": new SerialQueue(), opencode: new SerialQueue() };
     private logins = new Map<Harness, Login>();
 
     constructor(private deps: BrainsDeps) {}
@@ -147,27 +148,27 @@ export class Brains {
         // a look that fails is in the brain's state; one brain's trouble doesn't stop the service
         await Promise.all(
             (Object.keys(this.state) as Harness[]).map((h) =>
-                this.exclusive(h, () => this.look(h)).catch((e) => console.error(`[agents] couldn't look at ${NAMES[h]}: ${errorText(e)}`)),
+                this.busy[h].run(() => this.look(h)).catch((e) => console.error(`[agents] couldn't look at ${HARNESS_NAMES[h]}: ${errorText(e)}`)),
             ),
         );
     }
 
     /** Install the package; for a brain that runs a program on the computer, look at that again instead. */
     install(harness: Harness): Promise<void> {
-        return this.exclusive(harness, async () => (this.existing[harness] ? this.look(harness) : this.download(harness)));
+        return this.busy[harness].run(async () => (this.existing[harness] ? this.look(harness) : this.download(harness)));
     }
 
     /** Install the package even for a brain that runs a program on the computer; once it's in, it's the brain. */
     installOwn(harness: Harness): Promise<void> {
-        return this.exclusive(harness, () => this.download(harness));
+        return this.busy[harness].run(() => this.download(harness));
     }
 
     /** Have the brain run the program found on this computer. Refused when there's none, or a package is installed. */
     useFound(harness: Harness): Promise<void> {
-        return this.exclusive(harness, async () => {
-            if (await this.packageInstalled(harness)) throw new Error(`${NAMES[harness]} has its own copy installed already.`);
+        return this.busy[harness].run(async () => {
+            if (await this.packageInstalled(harness)) throw new Error(`${HARNESS_NAMES[harness]} has its own copy installed already.`);
             const found = this.found(harness);
-            if (!found) throw new Error(`${NAMES[harness]} isn't on this computer.`);
+            if (!found) throw new Error(`${HARNESS_NAMES[harness]} isn't on this computer.`);
             this.writeChoices({ ...this.readChoices(), [harness]: found });
             await this.look(harness);
         });
@@ -175,7 +176,7 @@ export class Brains {
 
     private async download(harness: Harness): Promise<void> {
         if (!this.supported) {
-            const message = `${NAMES[harness]} has no build for this computer (${this.platform}, ${this.deps.arch ?? process.arch}).`;
+            const message = `${HARNESS_NAMES[harness]} has no build for this computer (${this.platform}, ${this.deps.arch ?? process.arch}).`;
             // a brain running a program on the computer keeps running it: the refusal is the asker's, not the brain's state
             if (this.existing[harness]) throw new Error(message);
             throw this.fail(harness, message, "unsupported");
@@ -187,7 +188,7 @@ export class Brains {
             });
         } catch (e) {
             // a failed update leaves the build that was there; a failed first install leaves nothing
-            await this.look(harness, `${NAMES[harness]} didn't install: ${errorText(e)}`);
+            await this.look(harness, `${HARNESS_NAMES[harness]} didn't install: ${errorText(e)}`);
             throw e;
         }
         await this.look(harness);
@@ -196,9 +197,9 @@ export class Brains {
     /** Start the harness's own sign-in. Resolves when it has started; how it ends shows in the state. */
     signIn(harness: Harness, method: LoginMethod = "browser"): Promise<void> {
         if (harness === "opencode") throw new Error("OpenCode connects providers, not an account");
-        return this.exclusive(harness, async () => {
+        return this.busy[harness].run(async () => {
             const exe = this.resolve(harness);
-            if (!exe) throw this.fail(harness, `${NAMES[harness]} isn't installed yet.`);
+            if (!exe) throw this.fail(harness, `${HARNESS_NAMES[harness]} isn't installed yet.`);
             await this.cancel(harness);
             const { args, needsInput } = loginCommand(harness, method);
             const id = loginProcessId(harness);
@@ -228,7 +229,7 @@ export class Brains {
             } catch (e) {
                 for (const off of offs) off();
                 this.logins.delete(harness);
-                throw this.fail(harness, `${NAMES[harness]}'s sign-in didn't start: ${errorText(e)}`);
+                throw this.fail(harness, `${HARNESS_NAMES[harness]}'s sign-in didn't start: ${errorText(e)}`);
             }
             void this.finishLogin(harness, login, () => out);
         });
@@ -237,7 +238,7 @@ export class Brains {
     /** The code the sign-in page showed, for the harness that asks for it. It goes to the harness and is kept nowhere. */
     async submitCode(harness: Harness, code: unknown): Promise<void> {
         const prompt = this.state[harness].login;
-        if (!this.logins.has(harness) || !prompt?.expectsCode) throw new Error(`${NAMES[harness]} isn't waiting for a code.`);
+        if (!this.logins.has(harness) || !prompt?.expectsCode) throw new Error(`${HARNESS_NAMES[harness]} isn't waiting for a code.`);
         if (typeof code !== "string" || !code.trim() || code.trim().length > CODE_MAX || /[\r\n]/.test(code.trim())) throw new Error("That isn't a sign-in code.");
         await this.deps.host.write(loginProcessId(harness), `${code.trim()}\n`);
     }
@@ -251,7 +252,7 @@ export class Brains {
      */
     async finishAt(harness: Harness, address: unknown): Promise<void> {
         const callback = this.state[harness].login?.callback;
-        if (!this.logins.has(harness) || !callback) throw new Error(`${NAMES[harness]} isn't waiting for your browser.`);
+        if (!this.logins.has(harness) || !callback) throw new Error(`${HARNESS_NAMES[harness]} isn't waiting for your browser.`);
         const url = callbackAddress(callback, address);
         // "localhost" is the harness's own spelling for either loopback; it listens on one of them
         const hosts = url.hostname === "localhost" ? ["127.0.0.1", "[::1]"] : [url.hostname];
@@ -265,11 +266,11 @@ export class Brains {
                 unreachable = e;
             }
         }
-        if (!reply) throw new Error(`${NAMES[harness]} isn't listening for the sign-in anymore: ${errorText(unreachable)}`);
+        if (!reply) throw new Error(`${HARNESS_NAMES[harness]} isn't listening for the sign-in anymore: ${errorText(unreachable)}`);
         // a redirect is the harness's "done" page; anything 400 or above is it refusing the answer
         if (reply.status >= 400) {
             const said = outputTail((await reply.text().catch(() => "")).replace(/<[^>]+>/g, " "), 2);
-            throw new Error(`${NAMES[harness]} didn't accept that address (${reply.status})${said ? `: ${said}` : "."}`);
+            throw new Error(`${HARNESS_NAMES[harness]} didn't accept that address (${reply.status})${said ? `: ${said}` : "."}`);
         }
         await reply.body?.cancel();
     }
@@ -279,7 +280,7 @@ export class Brains {
      * harness's own status, which takes it a second to start up and say, follows and corrects it if need be.
      */
     cancelSignIn(harness: Harness): Promise<void> {
-        return this.exclusive(harness, async () => {
+        return this.busy[harness].run(async () => {
             const login = this.logins.get(harness);
             if (login) {
                 login.cancelled = true;
@@ -295,18 +296,18 @@ export class Brains {
 
     signOut(harness: Harness): Promise<void> {
         if (harness === "opencode") throw new Error("OpenCode's providers are disconnected one by one");
-        return this.exclusive(harness, async () => {
+        return this.busy[harness].run(async () => {
             const exe = this.resolve(harness);
-            if (!exe) throw this.fail(harness, `${NAMES[harness]} isn't installed.`);
+            if (!exe) throw this.fail(harness, `${HARNESS_NAMES[harness]} isn't installed.`);
             const out = await this.deps.host.exec(exe, LOGOUT_COMMAND[harness], { timeoutMs: this.deps.statusMs ?? STATUS_MS, env: this.env(harness) });
-            if (out.exitCode !== 0) throw this.fail(harness, `${NAMES[harness]} didn't sign out: ${outputTail(out.stderr || out.stdout) || `exit ${out.exitCode}`}`);
+            if (out.exitCode !== 0) throw this.fail(harness, `${HARNESS_NAMES[harness]} didn't sign out: ${outputTail(out.stderr || out.stdout) || `exit ${out.exitCode}`}`);
             await this.look(harness);
         });
     }
 
     /** Look at a harness again (after providers changed, say). */
     refresh(harness: Harness): Promise<void> {
-        return this.exclusive(harness, () => this.look(harness));
+        return this.busy[harness].run(() => this.look(harness));
     }
 
     async shutdown(): Promise<void> {
@@ -314,12 +315,6 @@ export class Brains {
     }
 
     // ------------------------------------------------------------- internals
-
-    private exclusive<T>(harness: Harness, fn: () => Promise<T>): Promise<T> {
-        const run = this.busy[harness].then(fn, fn);
-        this.busy[harness] = run.catch(() => undefined);
-        return run;
-    }
 
     private set(harness: Harness, patch: Partial<BrainState>) {
         this.state = { ...this.state, [harness]: { ...this.state[harness], ...patch } };
@@ -359,7 +354,7 @@ export class Brains {
         for (const h of Object.keys(this.state) as Harness[]) {
             const chosen = (saved as Record<string, unknown>)[h];
             if (typeof chosen === "string" && path.isAbsolute(chosen)) choices[h] = chosen;
-            else if (chosen !== undefined) throw new Error(`${this.choicesFile} doesn't name a program for ${NAMES[h]}`);
+            else if (chosen !== undefined) throw new Error(`${this.choicesFile} doesn't name a program for ${HARNESS_NAMES[h]}`);
         }
         return choices;
     }
@@ -385,7 +380,7 @@ export class Brains {
                 delete this.dirs[harness];
                 this.existing[harness] = chosen;
                 this.set(harness, { existing: chosen, found: null });
-                if (!this.resolve(harness)) throw new Error(`${NAMES[harness]} isn't at ${chosen} anymore.`);
+                if (!this.resolve(harness)) throw new Error(`${HARNESS_NAMES[harness]} isn't at ${chosen} anymore.`);
                 const version = await this.versionOf(harness, chosen);
                 this.set(harness, { version });
                 const { signedIn, account } = await this.status(harness);
@@ -398,7 +393,7 @@ export class Brains {
             const found = packaged ? null : this.found(harness);
             // no package can be built for this computer, but a program found on it can still be the brain
             if (!this.supported && !found) {
-                this.set(harness, { ...none(), phase: "unsupported", error: error ?? `${NAMES[harness]} has no build for this computer.` });
+                this.set(harness, { ...none(), phase: "unsupported", error: error ?? `${HARNESS_NAMES[harness]} has no build for this computer.` });
                 return;
             }
             if (!packaged) {
@@ -407,7 +402,7 @@ export class Brains {
                 return;
             }
             this.dirs[harness] = await host.packages.getPath(name);
-            if (!this.resolve(harness)) throw new Error(`The ${NAMES[harness]} package has no program in it.`);
+            if (!this.resolve(harness)) throw new Error(`The ${HARNESS_NAMES[harness]} package has no program in it.`);
             const [version, updateWaiting] = await Promise.all([host.packages.version(name), host.packages.updateWaiting(name)]);
             const { signedIn, account } = await this.status(harness);
             const ready = signedIn || !SIGN_IN_REQUIRED[harness];
@@ -421,7 +416,7 @@ export class Brains {
     /** The version the chosen program on the computer reports. One that won't run is a failure naming it, never skipped for the package. */
     private async versionOf(harness: Harness, exe: string): Promise<string | null> {
         const out = await this.deps.host.exec(exe, ["--version"], { timeoutMs: this.deps.statusMs ?? STATUS_MS, env: this.env(harness) });
-        if (out.exitCode !== 0) throw new Error(`${NAMES[harness]} on this computer (${exe}) didn't say its version: ${outputTail(out.stderr || out.stdout) || `exit ${out.exitCode}`}`);
+        if (out.exitCode !== 0) throw new Error(`${HARNESS_NAMES[harness]} on this computer (${exe}) didn't say its version: ${outputTail(out.stderr || out.stdout) || `exit ${out.exitCode}`}`);
         return versionFrom(out.stdout || out.stderr);
     }
 
@@ -449,9 +444,9 @@ export class Brains {
     private async finishLogin(harness: Harness, login: Login, output: () => string) {
         const timers = [
             setTimeout(() => {
-                if (!this.state[harness].login) this.stop(harness, login, `${NAMES[harness]} didn't show a sign-in page${tail(output())}`);
+                if (!this.state[harness].login) this.stop(harness, login, `${HARNESS_NAMES[harness]} didn't show a sign-in page${tail(output())}`);
             }, this.deps.pageMs ?? PAGE_MS),
-            setTimeout(() => this.stop(harness, login, `The ${NAMES[harness]} sign-in wasn't finished in time`), this.deps.loginMs ?? LOGIN_MS),
+            setTimeout(() => this.stop(harness, login, `The ${HARNESS_NAMES[harness]} sign-in wasn't finished in time`), this.deps.loginMs ?? LOGIN_MS),
         ];
         const code = await login.exited;
         for (const t of timers) clearTimeout(t);
@@ -459,9 +454,9 @@ export class Brains {
         try {
             if (login.cancelled) return;
             if (login.failure) throw new Error(login.failure);
-            if (code !== 0) throw new Error(`The ${NAMES[harness]} sign-in ended (exit ${code ?? "?"})${tail(output())}`);
-            await this.exclusive(harness, () => this.look(harness));
-            if (!this.state[harness].signedIn) throw new Error(`The ${NAMES[harness]} sign-in finished, but ${NAMES[harness]} still says it isn't signed in.`);
+            if (code !== 0) throw new Error(`The ${HARNESS_NAMES[harness]} sign-in ended (exit ${code ?? "?"})${tail(output())}`);
+            await this.busy[harness].run(() => this.look(harness));
+            if (!this.state[harness].signedIn) throw new Error(`The ${HARNESS_NAMES[harness]} sign-in finished, but ${HARNESS_NAMES[harness]} still says it isn't signed in.`);
         } catch (e) {
             this.fail(harness, errorText(e));
             console.error("[agents]", errorText(e));
@@ -470,7 +465,7 @@ export class Brains {
 
     private stop(harness: Harness, login: Login, failure: string) {
         login.failure ??= failure;
-        this.deps.host.kill(loginProcessId(harness), "SIGTERM").catch((e) => console.error(`[agents] couldn't stop the ${NAMES[harness]} sign-in: ${errorText(e)}`));
+        this.deps.host.kill(loginProcessId(harness), "SIGTERM").catch((e) => console.error(`[agents] couldn't stop the ${HARNESS_NAMES[harness]} sign-in: ${errorText(e)}`));
     }
 
     private async cancel(harness: Harness) {

@@ -24,6 +24,7 @@ import type { ToolSpec } from "./computerTools";
 import type { Toolset } from "./toolsets";
 import { writeAtomic } from "./writeAtomic";
 import { errorText } from "../lib/failure";
+import { SerialQueue } from "./serialQueue";
 
 const L = LIMITS.routines;
 const VERSION = 1;
@@ -53,7 +54,7 @@ export class Routines {
     private broken: string | null = "the routines haven't been read yet";
     private revision = 0;
     private timer: ReturnType<typeof setTimeout> | null = null;
-    private writes: Promise<unknown> = Promise.resolve();
+    private writes = new SerialQueue();
     private closed = false;
 
     constructor(private deps: RoutinesDeps) {}
@@ -81,7 +82,7 @@ export class Routines {
         this.closed = true;
         if (this.timer) clearTimeout(this.timer);
         this.timer = null;
-        return this.writes;
+        return this.writes.settled();
     }
 
     list(): Routine[] {
@@ -235,13 +236,7 @@ export class Routines {
     /** Write the routines as they are now; writes run one at a time, in order. */
     private save(): Promise<void> {
         const data = JSON.stringify({ version: VERSION, routines: this.items }, null, 2);
-        const write = async () => writeAtomic(this.deps.file, data);
-        const done = this.writes.then(write, write);
-        this.writes = done.then(
-            () => undefined,
-            () => undefined,
-        );
-        return done.finally(() => this.changed());
+        return this.writes.run(async () => writeAtomic(this.deps.file, data)).finally(() => this.changed());
     }
 
     private newId(): string {

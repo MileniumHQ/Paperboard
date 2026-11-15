@@ -31,6 +31,7 @@ import { stopChild } from "./stopChild";
 import { NO_RECORD, RECORD_FILE, executable, fetchHelium, readRecord, seedPreferences, writeRecord, type BrowserRecord, type PackageHost } from "./browserSetup";
 import { ToolError, Windows } from "./browserWindows";
 import { Downloads } from "./browserDownloads";
+import { SerialQueue } from "./serialQueue";
 
 export const BROWSER_PROC_ID = `${PANEL_ID}.browser`;
 
@@ -93,7 +94,7 @@ export class BrowserComputer {
     readonly windows: Windows;
     private downloads: Downloads;
     private record: BrowserRecord = NO_RECORD;
-    private busy: Promise<unknown> = Promise.resolve();
+    private busy = new SerialQueue();
     private abort: AbortController | null = null;
     private offs: (() => void)[] = [];
     private stderrTail = "";
@@ -165,15 +166,15 @@ export class BrowserComputer {
 
     /** Set it up from nothing: download and unpack the browser, then start it. Whatever was on it before is erased. */
     install(): Promise<void> {
-        return this.exclusive(() => this.doInstall(true));
+        return this.busy.run(() => this.doInstall(true));
     }
 
     start(): Promise<void> {
-        return this.exclusive(() => this.doStart());
+        return this.busy.run(() => this.doStart());
     }
 
     stop(): Promise<void> {
-        return this.exclusive(async () => {
+        return this.busy.run(async () => {
             this.set({ phase: "stopping" });
             await this.failing("The browser couldn't be stopped", () => this.kill());
             this.set({ phase: this.record.installed ? "stopped" : "none" });
@@ -186,13 +187,6 @@ export class BrowserComputer {
         this.abort?.abort();
         await this.kill();
         for (const off of this.offs.splice(0)) off();
-    }
-
-    private exclusive<T>(fn: () => Promise<T>): Promise<T> {
-        const run = this.busy.then(fn, fn);
-        // the caller gets the failure; the queue only waits for it to settle
-        this.busy = run.catch(() => undefined);
-        return run;
     }
 
     /** Run a step whose failure is the computer's: its state says why, and the caller still gets the failure. */
@@ -389,7 +383,7 @@ export class BrowserComputer {
     private async onConnectionLost(cdp: Cdp, why: string) {
         if (this.cdp !== cdp || this.stopping) return;
         if (this.state.phase !== "ready") return; // starting fails on its own
-        await this.exclusive(async () => {
+        await this.busy.run(async () => {
             if (this.cdp !== cdp) return;
             let stuck = "";
             try {

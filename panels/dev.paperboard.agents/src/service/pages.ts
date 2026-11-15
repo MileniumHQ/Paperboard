@@ -39,6 +39,7 @@ import type { HomeFolder } from "./homeFolder";
 import type { Toolset } from "./toolsets";
 import { errorText } from "../lib/failure";
 import { writeAtomic } from "./writeAtomic";
+import { SerialQueue } from "./serialQueue";
 
 const PAGES = "~/Pages";
 /** where pages were before they were called pages */
@@ -218,7 +219,8 @@ interface Followers {
 export class Pages {
     private server: http.Server | null = null;
     private starting: Promise<number> | null = null;
-    private installing = new Map<string, Promise<unknown>>();
+    /** one install at a time for a page: each replaces its node_modules */
+    private installing = new Map<string, SerialQueue>();
     private watchers: { home: fs.FSWatcher | null; pages: fs.FSWatcher | null } = { home: null, pages: null };
     private following = new Map<string, Followers>();
     private pinging: ReturnType<typeof setInterval> | null = null;
@@ -298,16 +300,9 @@ export class Pages {
         const { name, dir } = this.folder(n);
         if (!fs.existsSync(path.join(dir, "package.json"))) throw new Error(`there's no page called ${name}: make it with start_page first`);
         if (packages !== undefined && (!Array.isArray(packages) || packages.some((p) => typeof p !== "string"))) throw new Error("packages is a list of package names");
-        // one install at a time for a page: each replaces its node_modules
-        // (the one before's failure was its caller's to report)
-        const install = () => installPackages(dir, (packages as string[] | undefined) ?? [], this.o.registry ?? REGISTRY);
-        const before = this.installing.get(name) ?? Promise.resolve();
-        const run = before.then(install, install);
-        this.installing.set(name, run);
-        const done = await run.finally(() => {
-            forgetBuilds(dir);
-            if (this.installing.get(name) === run) this.installing.delete(name);
-        });
+        let queue = this.installing.get(name);
+        if (!queue) this.installing.set(name, (queue = new SerialQueue()));
+        const done = await queue.run(() => installPackages(dir, (packages as string[] | undefined) ?? [], this.o.registry ?? REGISTRY)).finally(() => forgetBuilds(dir));
         const list = done.direct.map((d) => `${d.name}@${d.version}`).join(", ");
         return done.direct.length
             ? `${PAGES}/${name} has ${list} (${done.count} package${done.count === 1 ? "" : "s"} in all). Its scripts import them by name.`
@@ -412,10 +407,8 @@ export class Pages {
     async remove(n: unknown): Promise<{ name: string }> {
         const { name, dir } = this.existing(n);
         // an install into it finishes first (its failure is its caller's to report)
-        await this.installing.get(name)?.then(
-            () => undefined,
-            () => undefined,
-        );
+        await this.installing.get(name)?.settled();
+        this.installing.delete(name);
         this.unfollow(name);
         forgetBuilds(dir);
         fs.rmSync(dir, { recursive: true, force: true });
