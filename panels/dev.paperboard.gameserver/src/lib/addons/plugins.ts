@@ -1,13 +1,13 @@
 import { minecraftSoftware } from "../../games/minecraft/index";
 import { serverSoftware, serverVersion } from "../server";
 import {
-    deletePlugin,
     getEcosystem,
     installProjectVersion,
     listInstalledPlugins,
     listProjectVersions,
     pluginDirName,
     searchModrinth,
+    uninstallPlugin,
 } from "../plugins";
 import { commitPlugins, discardUpload, listAdded, pickFiles, type UploadOutcome } from "./upload";
 import { modrinthHits, modrinthSource } from "./sources";
@@ -132,6 +132,6 @@ export const pluginsKind: AddonKind = {
         errorTitle: "Couldn't uninstall",
         describe: () =>
             `This moves the jar out of the server's ${pluginDirName(minecraftSoftware(serverSoftware()))}/ folder into a .trash folder inside the server folder, where it can be restored. The change takes effect after a restart.`,
-        run: (item) => deletePlugin(item.id),
+        run: (item) => uninstallPlugin(item.id),
     },
 };
