@@ -122,7 +122,7 @@ async function releaseStoppedPanels(problems: string[]): Promise<void> {
             const client = connectionPool.getClient(task.computerId);
             if (!client.getStatus().connected) continue;
             const running = await Promise.all(
-                processes.map((id) => client.call<{ running?: boolean }>("process:exists", { id }).then((r) => r?.running === true)),
+                processes.map((id) => client.call("process:exists", { id }).then((r) => r.running)),
             );
             if (running.some(Boolean)) continue;
             heldPanels.delete(key);

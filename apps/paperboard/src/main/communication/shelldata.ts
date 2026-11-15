@@ -194,8 +194,8 @@ export default function registerShellIpc(ipcMain: IpcMain) {
             return value.trim();
         };
         const computerId = field("computerId", 128);
-        const locationId = args?.locationId === undefined ? null : field("locationId", 64);
-        const label = locationId ? null : field("label", 60);
+        // a location signed in again, or a new one with its label
+        const target = args?.locationId === undefined ? { label: field("label", 60) } : { locationId: field("locationId", 64) };
         const google = paperboardGoogleClient(import.meta.env);
         if (!google) throw new Error("This build of Paperboard has no Google sign-in. Use a release build to connect Google Drive.");
         const client = connectionPool.getClient(computerId);
@@ -208,9 +208,9 @@ export default function registerShellIpc(ipcMain: IpcMain) {
                 page: (outcome, reason) => googleSignInPage(outcome, nativeTheme.shouldUseDarkColors, reason),
             },
             (refreshToken) =>
-                locationId
-                    ? client.call("backup:destination-reconnect", { destinationId: locationId, ...google, refreshToken }, 120_000)
-                    : client.call("backup:destination-add", { destination: { kind: "gdrive", label, ...google, refreshToken } }, 120_000),
+                target.locationId !== undefined
+                    ? client.call("backup:destination-reconnect", { destinationId: target.locationId, ...google, refreshToken }, 120_000)
+                    : client.call("backup:destination-add", { destination: { kind: "gdrive", label: target.label, ...google, refreshToken } }, 120_000),
         );
     });
     ipcMain.handle("backup-gdrive-cancel", (event) => {

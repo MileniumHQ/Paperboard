@@ -181,7 +181,7 @@ describe("the master token goes only to a daemon that proves itself", () => {
 			await local.connect();
 			const res = await servePanelAsset("local", "test.page", "/index.html");
 			expect(res.status).toBe(500);
-			expect(await res.text()).toBe("Error: Paperboard Server did not issue a panel credential");
+			expect(await res.text()).toBe(`Error: Paperboard Server's answer to auth:panel-token doesn't fit: the field "token" is missing`);
 			// a file that really is missing still says so
 			expect((await servePanelAsset("local", "test.page", "/gone.js")).status).toBe(404);
 			local.disconnect();
@@ -217,7 +217,8 @@ describe("the master token goes only to a daemon that proves itself", () => {
 			if (challenge) ws.send(JSON.stringify({ type: DAEMON_PROOF_TYPE, proof: daemonProof(token, challenge) }));
 			ws.on("message", (data) => {
 				const frame = JSON.parse(String(data));
-				ws.send(JSON.stringify({ type: "response", id: frame.id, result: { success: true } }));
+				// an answer that fits both auth:verify and system:info
+				ws.send(JSON.stringify({ type: "response", id: frame.id, result: { success: true, hostname: "rack", os: "linux", arch: "x64" } }));
 			});
 		});
 		const dir = dataDir();

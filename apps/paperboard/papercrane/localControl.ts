@@ -9,6 +9,7 @@ import * as fs from "fs";
 import { WebSocket } from "ws";
 import { DAEMON_CHALLENGE_HEADER, DAEMON_PROOF_TYPE, craneHandshakePath, verifyDaemonProof } from "./handshake";
 import { PROTOCOL_VERSION } from "./protocol";
+import { readResult, type RpcAction, type RpcParams, type RpcResult } from "./rpc/contract";
 import { getPaperboardDir } from "./paths";
 import { formatListenAddress } from "./tui";
 import { getDisplayHost } from "./util";
@@ -56,7 +57,8 @@ function readHandshake(): Handshake {
 
 export interface LocalDaemon {
     handshake: Handshake;
-    call<T = any>(action: string, params?: Record<string, unknown>): Promise<T>;
+    /** Asks the daemon; the answer is checked against the action's shape (rpc/contract.ts). */
+    call<A extends RpcAction>(action: A, params?: RpcParams<A>): Promise<RpcResult<A>>;
     close(): void;
 }
 
@@ -105,7 +107,7 @@ export async function connectLocalDaemon(): Promise<LocalDaemon> {
     });
 
     let nextId = 1;
-    const pending = new Map<number, { resolve: (v: any) => void; reject: (e: Error) => void; timer: ReturnType<typeof setTimeout> }>();
+    const pending = new Map<number, { resolve: (v: unknown) => void; reject: (e: unknown) => void; timer: ReturnType<typeof setTimeout> }>();
     const failAll = (err: Error) => {
         for (const [, p] of pending) { clearTimeout(p.timer); p.reject(err); }
         pending.clear();
@@ -125,14 +127,24 @@ export async function connectLocalDaemon(): Promise<LocalDaemon> {
     ws.on("close", () => failAll(new Error("The daemon closed the connection.")));
     ws.on("error", (err) => failAll(err));
 
-    const call = <T>(action: string, params: Record<string, unknown> = {}): Promise<T> => new Promise<T>((resolve, reject) => {
+    const call = <A extends RpcAction>(action: A, params?: RpcParams<A>): Promise<RpcResult<A>> => new Promise((resolve, reject) => {
         if (ws.readyState !== WebSocket.OPEN) { reject(new Error("The connection to the daemon is closed.")); return; }
         const id = nextId++;
         const timer = setTimeout(() => {
             pending.delete(id);
             reject(new Error(`The daemon did not answer ${action} within ${RPC_TIMEOUT_MS / 1000} seconds.`));
         }, RPC_TIMEOUT_MS);
-        pending.set(id, { resolve, reject, timer });
+        pending.set(id, {
+            resolve: (value) => {
+                try {
+                    resolve(readResult(action, value));
+                } catch (err) {
+                    reject(err);
+                }
+            },
+            reject,
+            timer,
+        });
         ws.send(JSON.stringify({ id, action, params: { ...params, ...(handshake.token ? { token: handshake.token } : {}), v: PROTOCOL_VERSION } }));
     });
 
@@ -140,10 +152,7 @@ export async function connectLocalDaemon(): Promise<LocalDaemon> {
     return { handshake, call, close: () => ws.close() };
 }
 
-interface PairingStatus {
-    active: boolean;
-    computers: { name?: string; pairedAt: string }[];
-}
+type PairingStatus = RpcResult<"system:pairing-status">;
 
 export interface DaemonStatus {
     running: boolean;
@@ -153,7 +162,7 @@ export interface DaemonStatus {
     hostname?: string;
     listen?: { url: string; host: string; port: number; secure: boolean };
     auth?: boolean;
-    pairing?: { active: boolean; computers: { name?: string; pairedAt: string }[] };
+    pairing?: PairingStatus;
 }
 
 export async function readDaemonStatus(): Promise<DaemonStatus> {
@@ -166,7 +175,7 @@ export async function readDaemonStatus(): Promise<DaemonStatus> {
         throw err;
     }
     try {
-        const info = await daemon.call<{ version: string; hostname: string }>("system:info");
+        const info = await daemon.call("system:info");
         const { listen, pid, token } = daemon.handshake;
         return {
             running: true,
@@ -176,7 +185,7 @@ export async function readDaemonStatus(): Promise<DaemonStatus> {
             ...(pid !== undefined ? { pid } : {}),
             ...(listen ? { listen: { url: formatListenAddress(listen.host, listen.port, listen.secure), ...listen } } : {}),
             auth: token !== null,
-            ...(token !== null ? { pairing: await daemon.call<PairingStatus>("system:pairing-status") } : {}),
+            ...(token !== null ? { pairing: await daemon.call("system:pairing-status") } : {}),
         };
     } finally {
         daemon.close();
@@ -227,9 +236,9 @@ export async function runPair(): Promise<number> {
     process.once("SIGINT", onInterrupt);
     process.once("SIGTERM", onInterrupt);
     try {
-        const before = await daemon.call<PairingStatus>("system:pairing-status");
+        const before = await daemon.call("system:pairing-status");
         const known = new Set(before.computers.map((c) => `${c.name}\n${c.pairedAt}`));
-        const { code } = await daemon.call<{ code: string }>("system:pairing-start");
+        const { code } = await daemon.call("system:pairing-start");
         const listen = daemon.handshake.listen;
         const address = listen ? `${getDisplayHost(listen.host)}:${listen.port}` : null;
         console.log(`Pairing code: ${code.slice(0, 3)} ${code.slice(3)}`);
@@ -253,7 +262,7 @@ export async function runPair(): Promise<number> {
                 console.log("Pairing cancelled.");
                 return EXIT.INTERRUPTED;
             }
-            const status = await daemon.call<PairingStatus>("system:pairing-status");
+            const status = await daemon.call("system:pairing-status");
             if (status.active) continue;
             const paired = status.computers.find((c) => !known.has(`${c.name}\n${c.pairedAt}`));
             if (paired) {

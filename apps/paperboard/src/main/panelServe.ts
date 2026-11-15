@@ -34,12 +34,7 @@ const headerValue = (value: string | string[] | undefined): string | undefined =
 // issuer refuses the document rather than substituting a master token.
 async function injectCraneCreds(html: string, comp: string, panelId: string): Promise<string> {
     const client = connectionPool.getClient("local");
-    const granted = await client.call<{ token: string }>(
-        "auth:panel-token",
-        comp === "local" ? { panelId } : { panelId, relayTo: comp },
-    );
-    const scoped = granted?.token;
-    if (typeof scoped !== "string" || !scoped) throw new Error("Paperboard Server did not issue a panel credential");
+    const { token: scoped } = await client.call("auth:panel-token", comp === "local" ? { panelId } : { panelId, relayTo: comp });
     const creds = client.getLocalCredentials();
     if (!creds) throw new Error("Paperboard Server on this computer isn't connected yet");
     return injectCraneBootstrap(html, buildCraneCredentialPayload(creds, comp, panelId, scoped));

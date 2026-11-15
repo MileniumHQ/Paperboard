@@ -9,6 +9,7 @@ import * as path from "path";
 import * as crypto from "crypto";
 import { startPaperCraneServer, ServerInstance, DEFAULT_PORT } from "../../../../papercrane";
 import { PROTOCOL_VERSION } from "../../../../papercrane/protocol";
+import { readResult, type RpcAction, type RpcParams, type RpcResult } from "../../../../papercrane/rpc/contract";
 import {
     readCraneHandshake, verifyDaemonProof,
     DAEMON_CHALLENGE_HEADER, DAEMON_PROOF_TYPE,
@@ -27,7 +28,6 @@ import { pinnableWebSocket } from "../../../../papercrane/pinnableWebSocket";
 import { bracketHost, isLoopback } from "./probeTarget";
 import { errorMessage } from "@mileniumhq/paperapi/errors";
 
-export type RpcParams = Record<string, unknown>;
 
 export interface ProgressPayload {
     stage:
@@ -629,11 +629,12 @@ export class PaperCraneConnection extends EventEmitter {
         }
     }
 
-    public async call<T = unknown>(
-        action: string,
-        params: RpcParams = {},
+    /** Asks the daemon; the answer is checked against the action's shape (rpc/contract.ts). */
+    public async call<A extends RpcAction>(
+        action: A,
+        params: RpcParams<A>,
         timeoutMs: number = DEFAULT_RPC_TIMEOUT_MS,
-    ): Promise<T> {
+    ): Promise<RpcResult<A>> {
         if (this.connectingPromise) await this.connectingPromise;
         if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
             const t = this.target ?? { host: this.host, port: this.port, token: this.token, cert: this.cert };
@@ -643,15 +644,15 @@ export class PaperCraneConnection extends EventEmitter {
             throw new Error(`Cannot connect to the Paperboard server daemon at ${bracketHost(this.host)}:${this.port}`);
         }
 
-        return this.request_<T>(action, params, timeoutMs, this.ws);
+        return this.request_(action, params, timeoutMs, this.ws);
     }
 
-    private request_<T = unknown>(
-        action: string,
-        params: RpcParams,
+    private request_<A extends RpcAction>(
+        action: A,
+        params: RpcParams<A>,
         timeoutMs: number,
         socket: WebSocket,
-    ): Promise<T> {
+    ): Promise<RpcResult<A>> {
         const id = this.requestIdCounter++;
         // token last: a params object that happens to carry a token (or a
         // typo'd field) can never clobber the real credential — same
@@ -659,13 +660,19 @@ export class PaperCraneConnection extends EventEmitter {
         // version from the shared constant; the daemon refuses unknown
         // versions with a typed BAD_PROTOCOL error instead of guessing.
         const finalParams = { ...params, token: this.token, v: PROTOCOL_VERSION };
-        return new Promise<T>((resolve, reject) => {
+        return new Promise<RpcResult<A>>((resolve, reject) => {
             const timer = setTimeout(() => {
                 this.pendingRequests.delete(id);
                 reject(new Error(`Paperboard Server RPC '${action}' timed out after ${timeoutMs}ms`));
             }, timeoutMs);
             this.pendingRequests.set(id, {
-                resolve: resolve as (val: unknown) => void,
+                resolve: (value) => {
+                    try {
+                        resolve(readResult(action, value));
+                    } catch (err) {
+                        reject(err);
+                    }
+                },
                 reject,
                 timer,
                 socket,

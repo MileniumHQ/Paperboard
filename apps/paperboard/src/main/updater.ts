@@ -208,7 +208,7 @@ async function pingComputers(): Promise<{ reached: ComputerUpdateState[]; unavai
 async function readCraneVersion(computerId: string): Promise<string | null> {
     try {
         const cfg = await withTimeout(connectionPool.getClient(computerId).getConfig("crane_version"), 2000);
-        return (cfg as { version?: string } | null)?.version ?? null;
+        return typeof cfg === "object" && cfg !== null && "version" in cfg && typeof cfg.version === "string" ? cfg.version : null;
     } catch (err) {
         // planning refuses an update over an unknown version, and says so
         logger.debug(`[Updater] could not read crane_version from ${computerId}:`, err);
