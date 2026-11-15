@@ -1,6 +1,6 @@
 // The server-list MOTD preview. Kept apart from the editor in Motd.tsx so
 // the widget page can draw it without loading the panel's bridge.
-import { createEffect, createSignal, For, onCleanup, Show } from "solid-js";
+import { createEffect, createSignal, For, onCleanup, Show, on } from "solid-js";
 import { minecraftMotd, MOTD_COLOR_CODES, parseMotd, type MotdDialect, type MotdStyle } from "../core/motd";
 import styles from "./Motd.module.css";
 
@@ -48,12 +48,14 @@ export function MotdPreview(props: { motd: string; dialect?: MotdDialect; paused
     const [frame, setFrame] = createSignal(0);
 
     // obfuscated text cycles like it does in game, unless motion is reduced
-    createEffect(() => {
-        const animated = lines().some((line) => line.some((s) => s.obfuscated));
-        if (!animated || props.paused || reducedMotion()) return;
-        const timer = setInterval(() => setFrame((n) => n + 1), OBFUSCATED_FRAME_MS);
-        onCleanup(() => clearInterval(timer));
-    });
+    const animated = () => lines().some((line) => line.some((s) => s.obfuscated));
+    createEffect(
+        on([animated, () => props.paused, reducedMotion], ([moving, paused, reduced]) => {
+            if (!moving || paused || reduced) return;
+            const timer = setInterval(() => setFrame((n) => n + 1), OBFUSCATED_FRAME_MS);
+            onCleanup(() => clearInterval(timer));
+        }),
+    );
 
     return (
         <div class={[styles.listBox, props.class].filter(Boolean).join(" ")}>

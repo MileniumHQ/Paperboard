@@ -1,9 +1,8 @@
 import { PANEL_ID } from "../service/types";
-import { createSignal, createEffect, For, Show, onCleanup } from "solid-js";
+import { createSignal, createEffect, For, Show, onCleanup, on } from "solid-js";
 import {
     PaperFlex,
     PaperButton,
-    PaperIcon,
     PaperText,
     PaperWizard,
     PaperWizardStep,
@@ -28,6 +27,7 @@ import {
 import SoftwareIcon from "./SoftwareIcon";
 import VersionPicker from "./VersionPicker";
 import { updatePanelConfig } from "../lib/server";
+import { errorMessage } from "../lib/failure";
 
 interface VersionStepProps {
     software: ServerSoftwareType;
@@ -79,7 +79,7 @@ function InstallStep(props: InstallStepProps) {
 
     const reportFailure = (err: unknown) => {
         if (disposed) return;
-        setError(err instanceof Error ? err.message : String(err));
+        setError(errorMessage(err));
         setBusy(false);
         wizard?.setOptionsShown(true);
         wizard?.setCanProceed(false);
@@ -144,7 +144,7 @@ function InstallStep(props: InstallStepProps) {
             wizard?.setOptionsShown(true);
             wizard?.setCanProceed(true);
         } catch (err) {
-            setEulaError(err instanceof Error ? err.message : String(err));
+            setEulaError(errorMessage(err));
         } finally {
             setBusy(false);
         }
@@ -171,12 +171,18 @@ function InstallStep(props: InstallStepProps) {
         wizard?.setCurrentStep(0);
     };
 
-    createEffect(() => {
-        if (wizard?.currentStep() === 2 && !started) {
-            started = true;
-            startInstallation();
-        }
-    });
+    // the install starts as its step opens
+    createEffect(
+        on(
+            () => wizard?.currentStep(),
+            (step) => {
+                if (step === 2 && !started) {
+                    started = true;
+                    startInstallation();
+                }
+            },
+        ),
+    );
 
     return (
         <>
@@ -255,7 +261,7 @@ export default function Setup(props: SetupProps) {
             await updatePanelConfig({ configured: true });
             props.onComplete?.();
         } catch (err) {
-            setSaveError(err instanceof Error ? err.message : String(err));
+            setSaveError(errorMessage(err));
         } finally {
             setSaving(false);
         }

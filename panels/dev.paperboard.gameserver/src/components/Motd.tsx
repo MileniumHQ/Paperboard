@@ -1,4 +1,4 @@
-import { createEffect, createSignal, For, onCleanup, Show } from "solid-js";
+import { createEffect, createSignal, For, onCleanup, Show, on } from "solid-js";
 import {
     PaperButton,
     PaperFlex,
@@ -228,9 +228,14 @@ export function MotdEditor(props: {
         }
     };
 
-    createEffect(() => {
-        if (props.open) void load();
-    });
+    createEffect(
+        on(
+            () => props.open,
+            (open) => {
+                if (open) void load();
+            },
+        ),
+    );
 
     document.addEventListener("selectionchange", refreshActive);
     onCleanup(() => document.removeEventListener("selectionchange", refreshActive));

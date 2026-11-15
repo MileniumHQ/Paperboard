@@ -14,7 +14,7 @@ import {
     type PaperRole,
     type PaperWidgetRow,
 } from "@mileniumhq/paperui";
-import { CALLS, PANEL_ID } from "../service/contract";
+import { CALLS } from "../service/contract";
 import { getStatusBadge } from "../core/statusBadge";
 import { SOFTWARE_NAMES } from "../lib/software";
 import type { HeadFetch } from "../lib/skins";
@@ -23,11 +23,11 @@ import { MotdPreview } from "../components/MotdPreview";
 import { useWidgetServer, type ServerView, type WidgetServer } from "./connection";
 import { consoleTail, playerCount, rosterRows, softwareLabel } from "./view";
 import styles from "./widgets.module.css";
+import { errorMessage } from "../lib/failure";
 
 type Props = { widget: WidgetContext };
 type Status = ServerView["serverStatus"];
 
-const messageOf = (err: unknown) => (err instanceof Error ? err.message : String(err));
 
 /** the status's role, or undefined for offline (a hollow dot, plain text) */
 function statusTone(status: Status): PaperRole | undefined {
@@ -102,16 +102,15 @@ function askForCap(server: WidgetServer) {
             if (!shown) asked = false;
         }),
     );
-    createEffect(() => {
-        const c = server.connection();
-        if (asked || !server.visible() || c.phase !== "ready") return;
+    createEffect(on([server.connection, server.visible], ([c, shown]) => {
+        if (asked || !shown || c.phase !== "ready") return;
         if (c.server.supportsPlayers === false) return;
         if (c.server.serverStatus !== "online" || c.server.maxPlayers !== null) return;
         asked = true;
         server.call(CALLS.queryOnlinePlayers).catch((err) =>
-            console.warn("[gameserver widget] player list query failed:", messageOf(err)),
+            console.warn("[gameserver widget] player list query failed:", errorMessage(err)),
         );
-    });
+    }));
 }
 
 // ── Server status (2x1, 2x2) ────────────────────────────────────────────
@@ -131,7 +130,7 @@ export function StatusWidget(props: Props) {
         setFailure(null);
         server
             .call(action)
-            .catch((err) => setFailure({ verb, action, message: messageOf(err) }))
+            .catch((err) => setFailure({ verb, action, message: errorMessage(err) }))
             .finally(() => setPending(false));
     };
 
@@ -261,7 +260,7 @@ function useNameCasing(server: WidgetServer) {
                     setNames(next);
                 })
                 // casing only: the roster's own names stand without it
-                .catch((err) => console.warn("[gameserver widget] usercache.json unreadable:", messageOf(err)));
+                .catch((err) => console.warn("[gameserver widget] usercache.json unreadable:", errorMessage(err)));
         }),
     );
     return (key: string) => names().get(key) ?? key;

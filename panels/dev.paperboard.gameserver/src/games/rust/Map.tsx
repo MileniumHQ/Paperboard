@@ -1,8 +1,9 @@
-import { createEffect, createSignal, on, Show } from "solid-js";
+import { batch, createEffect, createSignal, on, Show } from "solid-js";
 import { PaperButton, PaperCard, PaperFlex, PaperIcon, PaperLoader, PaperModal, PaperPageHeader, PaperQuote, PaperSettingItem, PaperSettingList, PaperTable, PaperText, PaperToggle } from "@mileniumhq/paperui";
 import { serverBridge, serverStatus } from "../../lib/server";
 import { errorMessage } from "../../lib/failure";
 import type { RustMapView } from "./index";
+import { createLatest } from "../../core/state";
 import styles from "./Map.module.css";
 
 /**
@@ -26,18 +27,27 @@ export default function RustMap(props: { active: boolean }) {
     const [drawing, setDrawing] = createSignal(false);
     const [pictureError, setPictureError] = createSignal("");
 
+    const latest = createLatest();
     const load = async () => {
         try {
-            setView(await serverBridge.call<RustMapView>("rust-map"));
-            setPicture(await serverBridge.call<string | null>("rust-map-picture"));
-            setLoadError("");
+            const answer = await latest(async () => ({
+                view: await serverBridge.call<RustMapView>("rust-map"),
+                picture: await serverBridge.call<string | null>("rust-map-picture"),
+            }));
+            if (!answer) return;
+            batch(() => {
+                setView(answer.value.view);
+                setPicture(answer.value.picture);
+                setLoadError("");
+            });
+            // a running server without a picture of its map draws one, once
+            if (answer.value.picture === null && serverStatus() === "online" && !drawing() && !pictureError()) void draw();
         } catch (err) {
             setLoadError(errorMessage(err));
         }
     };
     createEffect(on([() => props.active, serverStatus], ([active]) => { if (active) void load(); }));
 
-    // a running server without a picture of its map draws one, once
     const draw = async () => {
         setDrawing(true);
         setPictureError("");
@@ -49,9 +59,6 @@ export default function RustMap(props: { active: boolean }) {
             setDrawing(false);
         }
     };
-    createEffect(() => {
-        if (props.active && serverStatus() === "online" && picture() === null && !drawing() && !pictureError()) void draw();
-    });
 
     const ask = () => { setBlueprints(false); setError(""); setOpen(true); };
     const wipe = async () => {

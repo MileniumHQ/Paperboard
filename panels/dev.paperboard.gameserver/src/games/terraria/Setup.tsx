@@ -1,4 +1,4 @@
-import { createEffect, createSignal, For, onMount, Show } from "solid-js";
+import { createEffect, createSignal, For, onMount, Show, on } from "solid-js";
 import {
     PaperButton,
     PaperCenteredInterface,
@@ -30,12 +30,18 @@ function InstallStep(props: { software: TerrariaSoftware; version: string }) {
     const { run, wizard } = createWizardInstall(() => install.run(props.software, props.version));
     let started = false;
 
-    createEffect(() => {
-        if (wizard?.currentStep() === 2 && !started) {
-            started = true;
-            void run();
-        }
-    });
+    // the install starts as its step opens
+    createEffect(
+        on(
+            () => wizard?.currentStep(),
+            (step) => {
+                if (step === 2 && !started) {
+                    started = true;
+                    void run();
+                }
+            },
+        ),
+    );
 
     return (
         <InstallStepView

@@ -1,12 +1,4 @@
-import {
-    batch,
-    createEffect,
-    createSignal,
-    For,
-    onCleanup,
-    onMount,
-    Show,
-} from "solid-js";
+import { batch, createEffect, createSignal, For, onCleanup, onMount, Show, on, type Accessor } from "solid-js";
 import {
     PaperButton,
     PaperFlex,
@@ -477,14 +469,8 @@ export default function MapView() {
 
     // fetch newly visible tiles only when the view/dimension/refresh clock
     // changes — NOT on every position tick, so markers don't spam the service
-    createEffect(() => {
-        revision();
-        tileRefresh();
-        scale();
-        offsetX();
-        offsetY();
-        info();
-        dimension();
+    const view: Accessor<unknown>[] = [revision, tileRefresh, scale, offsetX, offsetY, info, dimension];
+    createEffect(on(view, () => {
         const dim = dimension();
         const refresh = tileRefresh();
         const { width, height } = sizeOf();
@@ -502,20 +488,10 @@ export default function MapView() {
             .sort((a, b) => fromCenter(a) - fromCenter(b))
             .map((t) => ({ dim, rx: t.rx, rz: t.rz }));
         requestWanted();
-    });
+    }));
 
     // redraw on any view or position change
-    createEffect(() => {
-        revision();
-        tileRefresh();
-        scale();
-        offsetX();
-        offsetY();
-        info();
-        dimension();
-        playerPositions();
-        draw();
-    });
+    createEffect(on([...view, playerPositions], draw));
 
     return (
         <div ref={wrapper} class={styles.map}>

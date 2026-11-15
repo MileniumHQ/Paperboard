@@ -1,4 +1,4 @@
-import { createEffect, createSignal, For, onCleanup, Show } from "solid-js";
+import { createEffect, createSignal, For, onCleanup, Show, on } from "solid-js";
 import {
     PaperButton,
     PaperFlex,
@@ -81,9 +81,14 @@ export default function Backups(props: { active: boolean; whileRunning: "quiesce
 
     // looked up again each time the tab is shown: routine backups happen
     // while it is not
-    createEffect(() => {
-        if (props.active) void load();
-    });
+    createEffect(
+        on(
+            () => props.active,
+            (active) => {
+                if (active) void load();
+            },
+        ),
+    );
 
     // the routine schedule is one setting, its switch and both menus change
     // it; a backup made now and a new location take their turn with its

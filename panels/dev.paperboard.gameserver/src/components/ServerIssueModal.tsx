@@ -11,6 +11,7 @@ import {
 import { files as fileApi } from "../lib/api";
 import { activeIssue, clearActiveIssue, killConflictingProcess, resetWorldFiles, type ServerIssue } from "../lib/diagnostics";
 import { serverPort, startServer } from "../lib/server";
+import { errorMessage } from "../lib/failure";
 
 const ServerIssueModal: Component = () => {
     const [actionError, setActionError] = createSignal<{ title: string; message: string } | null>(null);
@@ -22,7 +23,7 @@ const ServerIssueModal: Component = () => {
     // vocabulary. Order matters: a wrapped trash failure contains BOTH
     // phrases — the recoverability fact must win over the timeout fact.
     const humanizeRepairError = (err: unknown): string => {
-        const raw = err instanceof Error ? err.message : String(err);
+        const raw = errorMessage(err);
         if (/trash|remains on disk/i.test(raw)) {
             return "Resetting stopped partway: the world files were moved to a '.trash-*' folder in your server directory and are recoverable there. You can retry, or clean that folder up manually.";
         }
@@ -84,7 +85,7 @@ const ServerIssueModal: Component = () => {
     // a dismissal the service refused leaves the issue open, saying why
     const dismiss = () => {
         setActionError(null);
-        clearActiveIssue().catch((err) => setActionError({ title: "Issue not dismissed", message: err instanceof Error ? err.message : String(err) }));
+        clearActiveIssue().catch((err) => setActionError({ title: "Issue not dismissed", message: errorMessage(err) }));
     };
 
     return (

@@ -2,6 +2,7 @@ import { createSignal, Show } from "solid-js";
 import { PaperButton, PaperFlex, PaperQuote } from "@mileniumhq/paperui";
 import { CALLS } from "../service/contract";
 import { recoveryBlock, serverBridge } from "../lib/server";
+import { errorMessage } from "../lib/failure";
 
 // An interrupted install or modpack change that could not be cleaned up
 // blocks starting the server and every install. Shown wherever those are
@@ -16,7 +17,7 @@ export default function RecoveryNotice() {
         try {
             await serverBridge.call(CALLS.retryRecovery);
         } catch (err) {
-            setFailure(err instanceof Error ? err.message : String(err));
+            setFailure(errorMessage(err));
         } finally {
             setRetrying(false);
         }

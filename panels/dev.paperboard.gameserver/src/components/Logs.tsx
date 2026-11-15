@@ -1,4 +1,5 @@
-import { createSignal, For, onMount, Show } from "solid-js";
+import { batch, createSignal, For, onMount, Show } from "solid-js";
+import { createLatest } from "../core/state";
 import {
     PaperButton,
     PaperCard,
@@ -50,23 +51,26 @@ export default function Logs() {
     };
 
     // the newest read is the one shown: an older one that finishes after it is dropped
-    let reading = 0;
+    const latest = createLatest();
     const selectFile = async (name: string) => {
-        const read = ++reading;
         setSelected(name);
         setLoading(true);
         setError(null);
         try {
-            const next = await readLogFile(name);
-            if (read === reading) setContent(next);
+            const answer = await latest(() => readLogFile(name));
+            if (!answer) return;
+            batch(() => {
+                setContent(answer.value);
+                setLoading(false);
+            });
         } catch (err) {
-            if (read !== reading) return;
             const message = errorMessage(err);
             console.error(`[Logs] Failed to read "${name}":`, message);
-            setContent(null);
-            setError({ title: "Couldn't read this log", message });
-        } finally {
-            if (read === reading) setLoading(false);
+            batch(() => {
+                setContent(null);
+                setError({ title: "Couldn't read this log", message });
+                setLoading(false);
+            });
         }
     };
 

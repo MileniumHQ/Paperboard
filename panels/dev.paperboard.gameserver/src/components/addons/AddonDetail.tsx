@@ -1,4 +1,4 @@
-import { createEffect, createMemo, createSignal, For, Show, untrack, type JSX } from "solid-js";
+import { createEffect, createMemo, createSignal, For, Show, untrack, type JSX, on, batch } from "solid-js";
 import {
     PaperAvatar,
     PaperButton,
@@ -15,6 +15,8 @@ import {
 } from "@mileniumhq/paperui";
 import type { AddonKind, AddonProject, AddonTarget, InstalledAddon } from "../../lib/addons/kind";
 import type { DetailTarget } from "./state";
+import { createLatest } from "../../core/state";
+import { errorMessage } from "../../lib/failure";
 
 /** What a kind adds to its project page: buttons beside Uninstall, and a notice under the header. */
 export type DetailExtras = (entry: InstalledAddon, close: () => void) => { actions: JSX.Element; notice: JSX.Element };
@@ -40,11 +42,13 @@ export function AddonDetail<Meta>(props: {
     // what the page shows stays set while it closes, so it doesn't change under its exit
     const [kept, setKept] = createSignal<DetailTarget | null>(null);
     const [keptEntry, setKeptEntry] = createSignal<InstalledAddon | null>(null);
-    createEffect(() => {
-        if (!props.target) return;
-        setKept(props.target);
-        setKeptEntry(props.entry);
-    });
+    createEffect(
+        on([() => props.target, () => props.entry], ([target, shownEntry]) => {
+            if (!target) return;
+            setKept(target);
+            setKeptEntry(shownEntry);
+        }),
+    );
     const entry = () => (props.target ? props.entry : keptEntry());
     // a phone shows the page over the list; a modal takes no back swipe
     const panel = usePaperPanel();
@@ -52,30 +56,36 @@ export function AddonDetail<Meta>(props: {
 
     // only the newest look-up speaks: an earlier project's answer, or its
     // end, never lands on the one opened after it
-    let lookup = 0;
-    createEffect(() => {
-        const target = props.target;
-        if (!target) return;
-        const mine = ++lookup;
-        setProject(null);
-        setLoading(false);
-        setLoadError(null);
-        if (target.local) return;
-        setLoading(true);
-        props.kind.source
-            .project(target)
-            .then((next) => {
-                if (mine === lookup) setProject(next);
-            })
-            .catch((err) => {
-                // the page still shows what the list knows, and says why the rest is missing
-                console.error(`[${props.kind.title}] Failed to load project details:`, err);
-                if (mine === lookup) setLoadError(err instanceof Error ? err.message : String(err));
-            })
-            .finally(() => {
-                if (mine === lookup) setLoading(false);
-            });
-    });
+    const latest = createLatest();
+    createEffect(
+        on(
+            () => props.target,
+            (target) => {
+                if (!target) return;
+                setProject(null);
+                setLoadError(null);
+                // an add-on on disk has nothing to look up, and still replaces the look-up before it
+                setLoading(!target.local);
+                latest(async () => (target.local ? null : props.kind.source.project(target))).then(
+                    (answer) => {
+                        if (!answer) return;
+                        batch(() => {
+                            setProject(answer.value);
+                            setLoading(false);
+                        });
+                    },
+                    (err) => {
+                        // the page still shows what the list knows, and says why the rest is missing
+                        console.error(`[${props.kind.title}] Failed to load project details:`, err);
+                        batch(() => {
+                            setLoadError(errorMessage(err));
+                            setLoading(false);
+                        });
+                    },
+                );
+            },
+        ),
+    );
 
     const page = (target: DetailTarget) => {
             // made once per entry: both pieces share the state the kind creates

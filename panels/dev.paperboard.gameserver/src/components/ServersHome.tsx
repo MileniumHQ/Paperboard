@@ -24,6 +24,7 @@ import type { ServerSummary, ServersState } from "../service";
 import { gameFor, games, serverSubtitle } from "../games";
 import GamePicker from "./GamePicker";
 import { SERVER_NAME_MAX } from "../servers";
+import { errorMessage } from "../lib/failure";
 export default function ServersHome(props: {
     state: ServersState;
     /** opens a server; on a phone its page slides in first */
@@ -67,7 +68,7 @@ export default function ServersHome(props: {
                 setDialog(null);
             }
         } catch (err) {
-            setError(err instanceof Error ? err.message : String(err));
+            setError(errorMessage(err));
         } finally {
             setBusy(false);
         }

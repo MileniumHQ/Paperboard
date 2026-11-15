@@ -1,4 +1,5 @@
-import { createEffect, createSignal, For, on, Show, untrack } from "solid-js";
+import { batch, createEffect, createSignal, For, on, Show } from "solid-js";
+import { createLatest } from "../core/state";
 import {
     PaperButton,
     PaperCheckbox,
@@ -42,29 +43,31 @@ function DependencyPreview(props: InstallExtrasProps) {
     const [error, setError] = createSignal("");
 
     // a quick reselection must not show an older answer
-    const token = () => `${props.target.projectId}:${props.version?.id ?? ""}:${[...optional()].sort().join(",")}`;
+    const latest = createLatest();
     createEffect(
         on([() => props.version?.id, optional], ([versionId, checked]) => {
             setPreview(null);
             setError("");
             props.report({ ready: false, payload: checked });
-            if (!versionId) return;
-            const own = token();
-            setLoading(true);
-            previewInstall(props.target.projectId, props.target.title, versionId, checked)
-                .then((next) => {
-                    if (token() !== own) return;
-                    setPreview(next);
+            setLoading(!!versionId);
+            latest(async () => (versionId ? previewInstall(props.target.projectId, props.target.title, versionId, checked) : null)).then(
+                (answer) => {
+                    if (!answer?.value) return;
+                    const next = answer.value;
+                    batch(() => {
+                        setPreview(next);
+                        setLoading(false);
+                    });
                     props.report({ ready: !!next.mainFile && next.failures.length === 0, payload: checked });
-                })
-                .catch((err) => {
-                    if (token() !== own) return;
+                },
+                (err) => {
                     console.error(`[Plugins] Failed to resolve the dependencies of "${props.target.title}":`, err);
-                    setError(errorMessage(err));
-                })
-                .finally(() => {
-                    if (token() === own) setLoading(false);
-                });
+                    batch(() => {
+                        setError(errorMessage(err));
+                        setLoading(false);
+                    });
+                },
+            );
         }),
     );
 
@@ -235,13 +238,13 @@ export default function Plugins(props: {
 
     // the Versions tab hands off here after switching the server jar; a
     // request made while an update runs waits for it, then runs once
-    createEffect(() => {
-        if (!props.updateRequested || updating()) return;
-        untrack(() => {
+    createEffect(
+        on([() => props.updateRequested, updating], ([requested, busy]) => {
+            if (!requested || busy) return;
             props.onUpdateRequestTaken?.();
             void runUpdateCheck();
-        });
-    });
+        }),
+    );
 
     // made per opened add-on, so a message about one never shows on the next
     const configure: DetailExtras = (entry, close) => {

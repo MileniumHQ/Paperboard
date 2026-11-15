@@ -1,11 +1,4 @@
-import {
-    createSignal,
-    createEffect,
-    onMount,
-    Show,
-    For,
-    type JSX,
-} from "solid-js";
+import { createSignal, createEffect, onMount, Show, For, type JSX, on } from "solid-js";
 import {
     PaperFlex,
     PaperCard,
@@ -73,9 +66,14 @@ export default function Chat(props: { avatar: (name: string) => JSX.Element }) {
         if (scrollRef) scrollRef.scrollTop = scrollRef.scrollHeight;
     };
 
-    createEffect(() => {
-        if (chatMessages().length > 0 && atEnd) setTimeout(scrollToBottom, 0);
-    });
+    createEffect(
+        on(
+            () => chatMessages().length,
+            (count) => {
+                if (count > 0 && atEnd) setTimeout(scrollToBottom, 0);
+            },
+        ),
+    );
 
     const handleSend = (e: Event) => {
         e.preventDefault();

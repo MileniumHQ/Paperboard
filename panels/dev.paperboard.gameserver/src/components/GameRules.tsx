@@ -1,4 +1,4 @@
-import { createEffect, createMemo, createSignal, For, Show } from "solid-js";
+import { createEffect, createMemo, createSignal, For, Show, on } from "solid-js";
 import {
     PaperCard,
     PaperFlex,
@@ -61,15 +61,15 @@ export default function GameRules() {
     // running server (and re-applies offline edits at boot); responses
     // arrive through the log parser and sync into the gamerules() signal.
     // Until a response lands, the registry default is the honest fallback.
-    createEffect(() => {
-        if (!isOnline()) return;
-        serverBridge
-            .call(CALLS.queryGamerules, {
-                names: available().map((rule) => rule.name),
-            })
-            .then(() => setSyncError(""))
-            .catch((err) => setSyncError(errorMessage(err)));
-    });
+    createEffect(
+        on([isOnline, available], ([online, rules]) => {
+            if (!online) return;
+            serverBridge
+                .call(CALLS.queryGamerules, { names: rules.map((rule) => rule.name) })
+                .then(() => setSyncError(""))
+                .catch((err) => setSyncError(errorMessage(err)));
+        }),
+    );
 
     // the service owns the console and the config: online edits go live,
     // offline edits persist and re-apply at next start, and a failure to

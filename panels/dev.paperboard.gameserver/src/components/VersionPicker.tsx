@@ -1,4 +1,4 @@
-import { createEffect, createSignal, For, Show, onCleanup, untrack } from "solid-js";
+import { createEffect, createSignal, For, Show, untrack, on, batch } from "solid-js";
 import {
     PaperButton,
     PaperCheckbox,
@@ -13,6 +13,8 @@ import type { ServerSoftwareType, VersionItem } from "../lib/software";
 import { serverBridge } from "../lib/server";
 import { CALLS } from "../service/contract";
 import FailureText from "./FailureText";
+import { createLatest } from "../core/state";
+import { errorMessage } from "../lib/failure";
 
 // Shared Minecraft version picker: search, release-channel filters and the
 // version list. Used by onboarding (Setup) and the Versions tab so there is
@@ -28,8 +30,7 @@ export default function VersionPicker(props: {
     const [allVersions, setAllVersions] = createSignal<VersionItem[]>([]);
     const [loading, setLoading] = createSignal(true);
     const [error, setError] = createSignal("");
-    let generation = 0;
-    onCleanup(() => { generation++; });
+    const latest = createLatest();
 
     const [includeReleases, setIncludeReleases] = createSignal(true);
     const [includeSnapshots, setIncludeSnapshots] = createSignal(false);
@@ -39,32 +40,29 @@ export default function VersionPicker(props: {
     // parent may set it while the list loads, as the Versions tab does with
     // the installed version), and otherwise picks the newest release.
     const loadVersions = async (software = props.software) => {
-        const currentGeneration = ++generation;
         setLoading(true);
         setError("");
         setAllVersions([]);
         try {
             // the service fetches upstream: some indexes refuse cross-origin reads
-            const versions = (await serverBridge.call<VersionItem[]>(CALLS.listSoftwareVersions, { software }))
-                .filter((v) => v.installable && (v.type === "release" || v.type === "snapshot"));
-            if (currentGeneration !== generation) return;
+            const answer = await latest(() => serverBridge.call<VersionItem[]>(CALLS.listSoftwareVersions, { software }));
+            if (!answer) return;
+            const versions = answer.value.filter((v) => v.installable && (v.type === "release" || v.type === "snapshot"));
             setAllVersions(versions);
             const selected = untrack(() => props.selectedVersion);
             if (!versions.some((v) => v.id === selected)) {
                 props.onSelectVersion((versions.find((v) => v.type === "release") ?? versions[0])?.id ?? "");
             }
+            setLoading(false);
         } catch (err) {
-            if (currentGeneration !== generation) return;
-            setError(err instanceof Error ? err.message : String(err));
-        } finally {
-            if (currentGeneration === generation) setLoading(false);
+            batch(() => {
+                setError(errorMessage(err));
+                setLoading(false);
+            });
         }
     };
 
-    createEffect(() => {
-        const software = props.software;
-        untrack(() => void loadVersions(software));
-    });
+    createEffect(on(() => props.software, (software) => void loadVersions(software)));
 
     const filteredVersions = () => {
         const query = searchQuery().toLowerCase().trim();

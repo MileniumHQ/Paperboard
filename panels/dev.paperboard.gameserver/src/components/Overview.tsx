@@ -17,6 +17,7 @@ import { MotdEditor, MotdPreview } from "./Motd";
 import { fileApi } from "../lib/api";
 import { PANEL_ID } from "../service/contract";
 import { parseProperties } from "../core/properties";
+import { createLatest } from "../core/state";
 import { readServerPropertiesStrict, whitelistDefault, writeServerProperties } from "../lib/properties";
 import { DEFAULT_MOTD, minecraftMotd } from "../core/motd";
 import { countJsonEntries, joinRestriction, type JoinRestriction } from "../core/whitelist";
@@ -40,13 +41,18 @@ export default function Overview(props: {
 
     // the whitelist can lock everyone but operators out, and 26.3 turns it
     // on for new servers; say so where people look when friends can't join
+    const latestCheck = createLatest();
     const checkWhitelist = async () => {
         try {
-            const [properties, whitelist, ops] = await Promise.all([
-                fileApi.read("server.properties", PANEL_ID),
-                fileApi.read("whitelist.json", PANEL_ID),
-                fileApi.read("ops.json", PANEL_ID),
-            ]);
+            const answer = await latestCheck(() =>
+                Promise.all([
+                    fileApi.read("server.properties", PANEL_ID),
+                    fileApi.read("whitelist.json", PANEL_ID),
+                    fileApi.read("ops.json", PANEL_ID),
+                ]),
+            );
+            if (!answer) return;
+            const [properties, whitelist, ops] = answer.value;
             const parsed = properties ? parseProperties(properties) : {};
             setWorld(parsed["level-name"] || "world");
             const on = parsed["white-list"] ?? whitelistDefault();
