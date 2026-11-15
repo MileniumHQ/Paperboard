@@ -23,7 +23,7 @@ import type { ActionInfo, ProjectInfo } from "../actions";
 import type { BlockInfo, BlockProjectInfo } from "../blocks";
 import type { BlockSchema } from "../blocksSchema";
 import type { InvalidPanel } from "../panels";
-import { anyText, configPath, envMap, flag, id, InvalidParamsError, list, numeric, object, opt, panelId, readValue, text } from "./fields";
+import { anyText, configPath, envMap, flag, id, InvalidParamsError, list, numeric, object, opt, panelId, readValue, text, typed } from "./fields";
 
 /** The longest project picture: a data URL of a 256 KB server icon fits. */
 export const MAX_PROJECT_IMAGE = 512 * 1024;
@@ -88,15 +88,6 @@ export interface BackupStatusAnswer {
     running: "create" | "restore" | null;
     progress: BackupProgress | null;
     schedule: BackupSchedule | null;
-}
-
-/**
- * A value the code it goes to checks itself: a param a service validates
- * (a backup source, a port claim), or a daemon record the caller doesn't
- * look inside. Its type is what the wire carries.
- */
-function typed<T>(): Shape<T> {
-    return { check: () => null };
 }
 
 // an answer whose success its caller reads

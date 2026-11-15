@@ -11,6 +11,13 @@ import type * as osType from "os";
 import { serviceBootContext, serviceBootRefusal } from "../boot";
 import { challengeDaemon, handshakeFileIn, paperboardDirIn, readHandshake, type DaemonChallenge } from "./localHandshake";
 import { nodeBuiltin } from "./socket";
+import { isRecord } from "../records";
+
+/** What the host injected into the page it serves (window.__PAPERBOARD_CRANE), each field still to be checked; undefined when it injected nothing. */
+export function injectedCrane(): Record<string, unknown> | undefined {
+    const injected: unknown = Reflect.get(globalThis, "__PAPERBOARD_CRANE");
+    return isRecord(injected) ? injected : undefined;
+}
 
 /** How a host says where its daemon is: the loopback port it listens on, or
  * the ws(s):// URL of a daemon it reaches some other way. */
@@ -74,13 +81,13 @@ export async function resolveCredentials(sources: CredentialSources): Promise<Re
     if (!sources.isNode) {
         // Browser: credentials are injected by the host at serve time
         // (scoped to this document's computer). No fetch fallback.
-        const injected = (globalThis as any).__PAPERBOARD_CRANE;
-        if (!(injected?.port || injected?.url) || !injected?.token) {
+        const injected = injectedCrane();
+        if (!injected || !(injected.port || injected.url) || typeof injected.token !== "string" || !injected.token) {
             throw new Error("Paperboard host unavailable (no injected crane credentials)");
         }
         if (injected.computerId !== sources.computerId) {
             throw new Error(
-                `Paperboard host served credentials for "${injected.computerId}" but this panel is scoped to "${sources.computerId}"`,
+                `Paperboard host served credentials for "${String(injected.computerId)}" but this panel is scoped to "${sources.computerId}"`,
             );
         }
         return { endpoint: craneEndpoint(injected), token: injected.token };

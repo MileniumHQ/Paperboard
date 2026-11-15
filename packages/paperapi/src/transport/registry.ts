@@ -1,7 +1,8 @@
 export interface RegisteredAction {
     panelId: string;
     action: string;
-    schema?: any;
+    // sent to the daemon as given: an Actions or a Blocks schema
+    schema?: unknown;
 }
 
 export interface RegisteredProject {
@@ -12,7 +13,8 @@ export interface RegisteredProject {
     image?: string;
 }
 
-export type ActionHandler = (...args: any[]) => Promise<any> | any;
+/** A registered handler: called with the args a call carries, which it reads itself. */
+export type ActionHandler = (...args: unknown[]) => unknown;
 
 /**
  * Which daemon registry this mirrors: "actions" (v1, actions:* RPCs, entries
@@ -35,7 +37,7 @@ export class TransportRegistry {
         return this.actionHandlers.get(action);
     }
 
-    public addAction(panelId: string, actionName: string, handler: ActionHandler, schema?: any): void {
+    public addAction(panelId: string, actionName: string, handler: ActionHandler, schema?: unknown): void {
         this.actionHandlers.set(`${panelId}:${actionName}`, handler);
         this.registeredActions.set(`${panelId}:${actionName}`, {
             panelId,
@@ -79,7 +81,7 @@ export class TransportRegistry {
     // replay registrations after reconnect: projects first, since the daemon
     // refuses an action into a project it doesn't know
     public async resubscribe(
-        call: (action: string, params: Record<string, unknown>) => Promise<any>,
+        call: (action: string, params: Record<string, unknown>) => Promise<unknown>,
         onError: (label: string, err: unknown) => void,
     ): Promise<void> {
         await Promise.all(

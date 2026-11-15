@@ -12,6 +12,7 @@
 // the Node modules it needs are handed in by the caller.
 import type * as cryptoType from "crypto";
 import type * as fsType from "fs";
+import { isRecord } from "../records";
 
 export const DAEMON_CHALLENGE_HEADER = "x-papercrane-challenge";
 const PROOF_TYPE = "daemon-proof";
@@ -64,13 +65,13 @@ export function readHandshake(fs: typeof fsType, file: string): Handshake {
         }
         throw new HandshakeError(`Couldn't read ${file}: ${(err as Error).message}`, false);
     }
-    let raw: any;
+    let raw: unknown;
     try {
         raw = JSON.parse(text);
     } catch (err) {
         throw new HandshakeError(`${file} is not valid JSON: ${(err as Error).message}`, false);
     }
-    if (!raw || typeof raw !== "object" || typeof raw.port !== "number" || !Number.isInteger(raw.port) || raw.port <= 0 || raw.port > 65535) {
+    if (!isRecord(raw) || typeof raw.port !== "number" || !Number.isInteger(raw.port) || raw.port <= 0 || raw.port > 65535) {
         throw new HandshakeError(`${file} has no valid port`, false);
     }
     if (raw.token === null) {
@@ -100,13 +101,13 @@ export function challengeDaemon(crypto: typeof cryptoType, handshake: Handshake)
     return {
         headers: { [DAEMON_CHALLENGE_HEADER]: challenge },
         refusal(firstFrame) {
-            let frame: any;
+            let frame: unknown;
             try {
                 frame = JSON.parse(firstFrame);
             } catch (err) {
                 return new HandshakeError(`The listener on ${address} is not Paperboard: its first frame is not JSON (${(err as Error).message})`, false);
             }
-            const proof = frame?.type === PROOF_TYPE ? frame.proof : undefined;
+            const proof = isRecord(frame) && frame.type === PROOF_TYPE ? frame.proof : undefined;
             const proven = typeof proof === "string" && /^[a-f0-9]{64}$/.test(proof)
                 && crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(proof));
             if (proven) return null;

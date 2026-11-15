@@ -5,7 +5,9 @@ import type { ActionDefinition, ActionCategoryDefinition, CustomTypeDefinition }
 import { defineType } from "./schema";
 import { STATE_EVENT, STATE_KEY_VALUE, STATE_VALUE, WIDGET_CHOICES_COMMAND, callBlockId, eventBlockId } from "./serviceCalls";
 import { parseWidgetChoices, type WidgetChoice } from "./widgetManifest";
-import type { BackupEnded } from "./backups";
+import type { BackupEnded, BackupRecord } from "./backups";
+import { isRecord } from "./records";
+import { readValue, typed } from "./protocol";
 import { errorMessage } from "./errors";
 import { problemsApi } from "./problems";
 import {
@@ -26,7 +28,7 @@ import {
     type PanelContract,
     type StateOf,
 } from "./contract";
-import type { Infer, Shape } from "./shape";
+import { shape, type Infer, type Shape } from "./shape";
 
 type EventShapes = Record<string, Shape<any>>;
 
@@ -177,6 +179,13 @@ export interface UpdateEnded {
 }
 
 type Blocks = ReturnType<typeof blocksApi.panel>;
+
+// how a backup, restore or update ended, as the daemon tells a service
+const BACKUP_ENDED: Shape<BackupEnded> = shape.either(
+    shape.object({ sourceId: shape.optional(shape.text()), ok: shape.oneOf(true), backup: typed<BackupRecord>() }),
+    shape.object({ sourceId: shape.optional(shape.text()), ok: shape.oneOf(false), error: shape.text() }),
+);
+const UPDATE_ENDED: Shape<UpdateEnded> = shape.object({ processes: shape.list(shape.text()), ok: shape.boolean(), error: shape.optional(shape.text()) });
 type AnyOptions = DefinePanelServiceOptions<any, Record<string, ServiceCall<any>>, any>;
 
 // how long a failed state sync waits before it tries again, doubling each time
@@ -508,14 +517,14 @@ function registerLegacyActions(panelId: string, options: AnyOptions, ctx: Servic
             return actionsApi.register({
                 ...def,
                 category,
-                run: def.run ? (_c: any, inputs: any) => def.run!(ctx, inputs) : undefined,
-                listen: def.listen ? (_c: any, emitFn: (output: any) => void) => def.listen!(ctx, emitFn) : undefined,
+                run: def.run ? (_c: unknown, inputs: unknown) => def.run!(ctx, inputs) : undefined,
+                listen: def.listen ? (_c: unknown, emitFn: (output: unknown) => void) => def.listen!(ctx, emitFn) : undefined,
             }, undefined, panelId);
         });
     }
     if (options.actions) {
-        const fns: Record<string, (...args: any[]) => any> = {};
-        for (const [name, fn] of Object.entries(options.actions)) fns[name] = (...args: any[]) => fn(ctx, ...args);
+        const fns: Record<string, (...args: unknown[]) => unknown> = {};
+        for (const [name, fn] of Object.entries(options.actions)) fns[name] = (...args: unknown[]) => fn(ctx, ...args);
         return [actionsApi.registerMultiple(fns, panelId)];
     }
     return [];
@@ -526,36 +535,40 @@ function registerLegacyActions(panelId: string, options: AnyOptions, ctx: Servic
 // Then it tells the daemon it is ready, and which hooks it has.
 function answerTheDaemon(panelId: string, options: AnyOptions, ctx: ServiceContext<any>): void {
     if (typeof process === "undefined" || typeof process.send !== "function") return;
-    const answer = (type: string, run: (message: any) => unknown) => {
-        process.on("message", (message: any) => {
-            if (message?.type !== type || typeof message.requestId !== "string") return;
+    const answer = (type: string, run: (message: Record<string, unknown>) => unknown) => {
+        process.on("message", (message: unknown) => {
+            if (!isRecord(message) || message.type !== type) return;
+            const { requestId } = message;
+            if (typeof requestId !== "string") return;
             const done = `${type}-done`;
             void (async () => run(message))().then(
-                () => process.send?.({ type: done, requestId: message.requestId }),
-                (err) => process.send?.({ type: done, requestId: message.requestId, error: errorMessage(err) }),
+                () => process.send?.({ type: done, requestId }),
+                (err) => process.send?.({ type: done, requestId, error: errorMessage(err) }),
             );
         });
     };
-    // the daemon doesn't wait on an after-hook, so its failure is the panel's problem
-    const hear = (type: string, after: string, run: (message: any) => unknown) => {
-        process.on("message", (message: any) => {
-            if (message?.type !== type) return;
+    // the daemon doesn't wait on an after-hook, so its failure (or an
+    // ending it can't read) is the panel's problem
+    const hear = (type: string, after: string, run: (message: Record<string, unknown>) => unknown) => {
+        process.on("message", (message: unknown) => {
+            if (!isRecord(message) || message.type !== type) return;
             void (async () => run(message))().catch((err) =>
                 problemsApi.report(panelId, { key: `paperapi:${type}`, title: `Finishing up after ${after} failed`, message: errorMessage(err) }));
         });
     };
 
     const { beforeBackup, beforeRestore, afterBackup, afterRestore, beforeUpdate, afterUpdate } = options;
-    if (beforeBackup) answer("paperboard:before-backup", (m) => beforeBackup(ctx, { sourceId: m.sourceId }));
-    if (beforeRestore) answer("paperboard:before-restore", (m) => beforeRestore(ctx, { sourceId: m.sourceId }));
+    const sourceOf = (m: Record<string, unknown>) => ({ sourceId: typeof m.sourceId === "string" ? m.sourceId : undefined });
+    if (beforeBackup) answer("paperboard:before-backup", (m) => beforeBackup(ctx, sourceOf(m)));
+    if (beforeRestore) answer("paperboard:before-restore", (m) => beforeRestore(ctx, sourceOf(m)));
     if (beforeUpdate) {
         answer("paperboard:before-update", (m) => beforeUpdate(ctx, {
             processes: Array.isArray(m.processes) ? m.processes.filter((p: unknown): p is string => typeof p === "string") : [],
         }));
     }
-    if (afterUpdate) hear("paperboard:after-update", "an update", (m) => afterUpdate(ctx, m.ended as UpdateEnded));
-    if (afterBackup) hear("paperboard:after-backup", "a backup", (m) => afterBackup(ctx, m.ended as BackupEnded));
-    if (afterRestore) hear("paperboard:after-restore", "a restore", (m) => afterRestore(ctx, m.ended as BackupEnded));
+    if (afterUpdate) hear("paperboard:after-update", "an update", (m) => afterUpdate(ctx, readValue(UPDATE_ENDED, m.ended, "ended")));
+    if (afterBackup) hear("paperboard:after-backup", "a backup", (m) => afterBackup(ctx, readValue(BACKUP_ENDED, m.ended, "ended")));
+    if (afterRestore) hear("paperboard:after-restore", "a restore", (m) => afterRestore(ctx, readValue(BACKUP_ENDED, m.ended, "ended")));
 
     process.send({
         type: "paperboard:service-ready",

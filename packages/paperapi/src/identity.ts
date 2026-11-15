@@ -4,9 +4,10 @@
 import { serviceBootContext } from "./boot";
 import { requirePanelId } from "./panelIdentity";
 import { panelPath, parsePanelPath } from "./panelPath";
+import { injectedCrane } from "./transport/credentials";
 
 export function grantedComputerId(): string {
-    const computerId = (globalThis as any).__PAPERBOARD_CRANE?.computerId;
+    const computerId = injectedCrane()?.computerId;
     if (typeof computerId === "string" && computerId) return computerId;
     // Services and explicitly initialized shell transports connect locally.
     if (typeof window !== "undefined" && !serviceBootContext()) {
@@ -17,7 +18,7 @@ export function grantedComputerId(): string {
 
 export function resolvePanelId(): string {
     if (typeof window !== "undefined") {
-        const injected = (globalThis as any).__PAPERBOARD_CRANE?.panelId;
+        const injected = injectedCrane()?.panelId;
         return typeof injected === "string" ? injected : "";
     }
     return serviceBootContext()?.panelId ?? "";

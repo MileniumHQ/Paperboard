@@ -1,18 +1,67 @@
 // WebSocket transport bound to one computer; remote frames ride a tunnel or fail
 import { debug, debugErr } from "./debug";
-import { PROTOCOL_VERSION, readEvent, readResult, type EventPayload, type RpcAction, type RpcParams, type RpcResult } from "./protocol";
+import { PROTOCOL_VERSION, readEvent, readResult, readValue, type EventPayload, type RpcAction, type RpcParams, type RpcResult } from "./protocol";
+import { shape, type Infer } from "./shape";
 import { newClientId } from "./channels";
-import { TransportRegistry } from "./transport/registry";
+import { TransportRegistry, type ActionHandler } from "./transport/registry";
 import { grantedComputerId, resolveDefaultPanelId } from "./identity";
 import { resolveCredentials, type CraneCredentials, type ResolvedCredentials } from "./transport/credentials";
 import { webSocketImpl, type TransportSocket } from "./transport/socket";
 import { answerActionCall, currentActionCall, loadActionCallScope } from "./transport/actionCalls";
 import { errorMessage } from "./errors";
 import type { BlockSchema } from "./blocksSchema";
+import type { ActionSchema } from "./schema";
+import { isRecord } from "./records";
 
 export { craneEndpoint, type CraneCredentials } from "./transport/credentials";
 
 const LOCAL_ONLY_APP_SETTINGS = "app-settings";
+
+// the frames the daemon sends a transport, each read before it is handled;
+// a field one carries beyond these is kept, as an answer's may be
+const FRAME = shape.either(
+    shape.object({ type: shape.oneOf("tunnel"), payload: shape.text() }),
+    shape.object({ type: shape.oneOf("tunnel-open"), id: shape.text() }),
+    shape.object({ type: shape.oneOf("tunnel-closed"), id: shape.text(), reason: shape.optional(shape.text()) }),
+    shape.object({
+        type: shape.oneOf("action_call"),
+        registry: shape.optional(shape.text()),
+        callId: shape.text(),
+        // a call that names no panel is refused: no handler owns it
+        panelId: shape.optional(shape.text()),
+        action: shape.text(),
+        args: shape.optional(shape.json()),
+    }),
+    // a request's id, or the tunnel's whose opening failed; null when the
+    // daemon couldn't read the request it answers
+    shape.object({
+        type: shape.oneOf("response"),
+        id: shape.nullable(shape.either(shape.number(), shape.text())),
+        result: shape.optional(shape.json()),
+        error: shape.optional(shape.nullable(shape.text())),
+        code: shape.optional(shape.nullable(shape.text())),
+    }),
+    shape.object({ type: shape.oneOf("event"), event: shape.text(), payload: shape.optional(shape.json()) }),
+);
+type Frame = Infer<typeof FRAME>;
+
+// a frame as the daemon sent it, or null when it isn't JSON (said in the
+// debug trace) or isn't a frame this transport knows (said on the console)
+function readFrame(text: string): Frame | null {
+    let value: unknown;
+    try {
+        value = JSON.parse(text);
+    } catch {
+        debug("dropping unparseable frame");
+        return null;
+    }
+    try {
+        return readValue(FRAME, value, "frame");
+    } catch (err) {
+        debugErr("dropping a frame that doesn't fit the protocol", err);
+        return null;
+    }
+}
 
 export interface TransportOptions {
     port?: number;
@@ -31,7 +80,8 @@ type StatusListener = (status: { connected: boolean; error?: string }) => void;
 interface Pending {
     resolve: (v: unknown) => void;
     reject: (e: Error) => void;
-    timer: ReturnType<typeof setTimeout>;
+    // none for a call that waits as long as it takes
+    timer: ReturnType<typeof setTimeout> | undefined;
 }
 
 const RECONNECT_BASE_MS = 400;
@@ -72,7 +122,7 @@ export class CraneTransport {
     private isNode =
         typeof window === "undefined" &&
         typeof process !== "undefined" &&
-        !!(process as any).versions?.node;
+        typeof process.versions?.node === "string";
 
     public statusListeners = new Set<StatusListener>();
 
@@ -199,8 +249,9 @@ export class CraneTransport {
 
             ws.on("error", (err: Error) => fail(err));
 
-            ws.on("message", (raw: any) => {
-                const text = typeof raw === "string" ? raw : raw.toString("utf8");
+            ws.on("message", (raw) => {
+                // a Buffer from the ws package is its text in UTF-8
+                const text = String(raw);
                 if (awaitingProof) {
                     awaitingProof = false;
                     const refused = challenge!.refusal(text);
@@ -301,27 +352,13 @@ export class CraneTransport {
                     this.removeMessageListener(listener);
                     reject(new Error("Tunnel open timed out"));
                 }, 5_000);
-                const listener = (msg: any) => {
-                    try {
-                        const parsed = JSON.parse(msg);
-                        if (
-                            (parsed.type === "tunnel-open" ||
-                                parsed.type === "tunnel-closed" || (parsed.type === "response" && parsed.error)) &&
-                            parsed.id === id
-                        ) {
-                            clearTimeout(timeout);
-                            this.removeMessageListener(listener);
-                            if (parsed.type === "tunnel-open") {
-                                resolve();
-                            } else {
-                                reject(
-                                    new Error(
-                                        `Remote tunnel failed: ${parsed.reason ?? parsed.error ?? "closed"}`,
-                                    ),
-                                );
-                            }
-                        }
-                    } catch (err) { debugErr("tunnel handshake listener", err); }
+                const listener = (frame: Frame) => {
+                    const answers = frame.type === "tunnel-open" || frame.type === "tunnel-closed" || (frame.type === "response" && !!frame.error);
+                    if (!answers || frame.id !== id) return;
+                    clearTimeout(timeout);
+                    this.removeMessageListener(listener);
+                    if (frame.type === "tunnel-open") resolve();
+                    else reject(new Error(`Remote tunnel failed: ${(frame.type === "tunnel-closed" ? frame.reason : frame.error) ?? "closed"}`));
                 };
                 if (!this.ws) {
                     clearTimeout(timeout);
@@ -335,8 +372,8 @@ export class CraneTransport {
                     computerId,
                 });
             });
-        } catch (err: any) {
-            debug(`target=${computerId} tunnel open FAILED: ${err?.message}`);
+        } catch (err) {
+            debug(`target=${computerId} tunnel open FAILED: ${errorMessage(err)}`);
             this.tunnelId = null;
             throw err;
         }
@@ -347,13 +384,14 @@ export class CraneTransport {
 
     // ── Raw messaging ───────────────────────────────────────────────────────
 
-    private rawListeners = new Set<(msg: string) => void>();
+    // hear every frame before it is handled (the tunnel handshake waits here)
+    private rawListeners = new Set<(frame: Frame) => void>();
 
-    private addRawListener(cb: (msg: string) => void): void {
+    private addRawListener(cb: (frame: Frame) => void): void {
         this.rawListeners.add(cb);
     }
 
-    private removeMessageListener(cb: (msg: string) => void): void {
+    private removeMessageListener(cb: (frame: Frame) => void): void {
         this.rawListeners.delete(cb);
     }
 
@@ -362,76 +400,57 @@ export class CraneTransport {
     }
 
     private handleMessage(text: string): void {
-        // Raw listeners see everything first (tunnel handshake waits here)
+        let frame = readFrame(text);
+        if (!frame) return;
         for (const cb of this.rawListeners) {
             try {
-                cb(text);
+                cb(frame);
             } catch (err) { debugErr("raw listener", err); }
         }
 
-        let msg: any;
-        try {
-            msg = JSON.parse(text);
-        } catch {
-            debug("dropping unparseable frame");
-            return;
+        // Unwrap tunneled payloads into the normal pipeline
+        if (frame.type === "tunnel") {
+            frame = readFrame(frame.payload);
+            if (!frame) return;
+            debug(`target=${this.computerId} <- tunnel frame type=${frame.type}`);
         }
 
-        // Unwrap tunneled payloads into the normal pipeline
-        if (msg.type === "tunnel" && typeof msg.payload === "string") {
-            try {
-                msg = JSON.parse(msg.payload);
-                debug(`target=${this.computerId} <- tunnel frame id=${msg.id ?? ""} type=${msg.type}`);
-            } catch {
-                debug("dropping unparseable tunneled frame");
+        switch (frame.type) {
+            case "tunnel-closed":
+                // Upstream leg dropped: the socket is healthy, so reconnecting
+                // only rebuilds the tunnel and replays subscriptions through it
+                if (frame.id !== this.tunnelId) return;
+                this.tunnelId = null;
+                this.emitStatus(false, `The tunnel to ${this.computerId} closed`);
+                this.keepConnected();
+                return;
+            case "action_call":
+                // A Blocks call names its registry; an Actions call names none.
+                answerActionCall(frame.registry === "blocks" ? this.blocksRegistry : this.registry, frame, (reply) => this.frame(reply));
+                return;
+            case "response": {
+                const id = typeof frame.id === "number" ? frame.id : null;
+                const p = id === null ? undefined : this.pending.get(id);
+                if (id === null || !p) {
+                    // a response id with no pending call is a protocol anomaly
+                    // (a late reply after a timeout, or a foreign frame);
+                    // logged, not dropped silently
+                    debug(
+                        `dropping response for unknown id=${String(frame.id)} (${frame.error ? `error: ${frame.error}` : "timed-out or foreign frame"})`,
+                    );
+                    return;
+                }
+                this.pending.delete(id);
+                clearTimeout(p.timer);
+                // machine-readable code travels with the error when the
+                // daemon speaks a version that knows codes
+                if (frame.error) p.reject(Object.assign(new Error(frame.error), frame.code ? { code: frame.code } : {}));
+                else p.resolve(frame.result);
                 return;
             }
-        }
-
-        // Upstream leg dropped: the socket is healthy, so reconnecting
-        // only rebuilds the tunnel and replays subscriptions through it
-        if (msg.type === "tunnel-closed" && msg.id === this.tunnelId) {
-            this.tunnelId = null;
-            this.emitStatus(false, `The tunnel to ${this.computerId} closed`);
-            this.keepConnected();
-            return;
-        }
-
-        if (msg.type === "tunnel-open" && msg.id !== this.tunnelId) {
-            // Stale handshake for an abandoned tunnel attempt
-            return;
-        }
-
-        if (msg.type === "action_call") {
-            // A Blocks call names its registry; an Actions call names none.
-            answerActionCall(msg.registry === "blocks" ? this.blocksRegistry : this.registry, msg, (reply) => this.frame(reply));
-            return;
-        }
-
-        if (msg.type === "response") {
-            const p = this.pending.get(msg.id);
-            if (p) {
-                this.pending.delete(msg.id);
-                clearTimeout(p.timer);
-                if (msg.error) {
-                    const err = new Error(msg.error);
-                    // machine-readable code travels with the error when the
-                    // daemon speaks a version that knows codes
-                    if (msg.code) (err as any).code = msg.code;
-                    p.reject(err);
-                } else {
-                    p.resolve(msg.result);
-                }
-            } else {
-                // a response id with no pending call is a protocol anomaly
-                // (a late reply after a timeout, or a foreign frame);
-                // logged, not dropped silently
-                debug(
-                    `dropping response for unknown id=${msg.id} (${msg.error ? `error: ${msg.error}` : "timed-out or foreign frame"})`,
-                );
-            }
-        } else if (msg.type === "event") {
-            this.dispatch(msg.event, msg.payload);
+            case "event":
+                this.dispatch(frame.event, frame.payload);
+                return;
         }
     }
 
@@ -509,8 +528,7 @@ export class CraneTransport {
                           this.pending.delete(id);
                           reject(new Error(`PaperCrane '${action}' timed out`));
                       }, timeoutMs);
-            const entry = { resolve, reject, timer: timer as any };
-            this.pending.set(id, entry);
+            this.pending.set(id, { resolve, reject, timer });
             try {
                 if (!routed || this.isLocalOnlyChannel(action, finalParams)) {
                     if (!this.ws) throw new Error("PaperCrane connection closed");
@@ -520,7 +538,7 @@ export class CraneTransport {
                 }
             } catch (err) {
                 this.pending.delete(id);
-                clearTimeout(timer as any);
+                clearTimeout(timer);
                 reject(err as Error);
             }
         });
@@ -643,8 +661,8 @@ export class CraneTransport {
     public async registerAction(
         panelId: string,
         actionName: string,
-        handler: (...args: any[]) => Promise<any> | any,
-        schema?: any,
+        handler: ActionHandler,
+        schema?: ActionSchema,
     ): Promise<void> {
         this.registry.addAction(panelId, actionName, handler, schema);
         await this.ensureConnected();
@@ -653,7 +671,7 @@ export class CraneTransport {
 
     public async registerMultipleActions(
         panelId: string,
-        actionsMap: Record<string, (...args: any[]) => Promise<any> | any>,
+        actionsMap: Record<string, ActionHandler>,
     ): Promise<void> {
         const names = this.registry.addActions(panelId, actionsMap);
         await this.ensureConnected();
@@ -679,7 +697,7 @@ export class CraneTransport {
     }
 
     /** Registers one Blocks entry ("kind.id" or "project/kind.id") and its handler. */
-    public async registerBlock(panelId: string, entry: string, handler: (...args: any[]) => Promise<any> | any, schema: BlockSchema): Promise<void> {
+    public async registerBlock(panelId: string, entry: string, handler: ActionHandler, schema: BlockSchema): Promise<void> {
         this.blocksRegistry.addAction(panelId, entry, handler, schema);
         await this.ensureConnected();
         await this.call("blocks:register", { panelId, entry, schema });
@@ -727,32 +745,27 @@ export class CraneTransport {
     }
 
     /** True when frames should bypass an active tunnel (host-local state). */
-    private isLocalOnlyChannel(action: string, params: any): boolean {
-        if (action === "config:get" || action === "config:set") {
-            return params?.id === LOCAL_ONLY_APP_SETTINGS;
-        }
-        return false;
+    private isLocalOnlyChannel(action: unknown, params: unknown): boolean {
+        return (action === "config:get" || action === "config:set") && isRecord(params) && params.id === LOCAL_ONLY_APP_SETTINGS;
     }
 
-    private frame(payload: unknown): void {
+    private frame(payload: Record<string, unknown>): void {
         if (!this.ws) throw new Error("PaperCrane connection closed");
-        const action = (payload as any)?.action ?? "";
+        const action = payload.action ?? "";
         debug(`target=${this.computerId} wrapped=${!!this.tunnelId} action=${action}`);
         // Remote frames without a live tunnel must never hit the local daemon
         if (
             this.computerId !== "local" &&
             !this.tunnelId &&
-            !this.isLocalOnlyChannel(action, (payload as any)?.params)
+            !this.isLocalOnlyChannel(action, payload.params)
         ) {
             throw new Error(`No open tunnel to ${this.computerId}`);
         }
         if (this.tunnelId) {
             // the remote authenticates the tunnel itself (host-granted scope);
             // this computer's credential never travels to another computer
-            const p = payload as { params?: Record<string, unknown> };
-            const forwarded = p?.params && "token" in p.params
-                ? { ...p, params: { ...p.params, token: undefined } }
-                : payload;
+            const params = payload.params;
+            const forwarded = isRecord(params) && "token" in params ? { ...payload, params: { ...params, token: undefined } } : payload;
             this.ws.send(
                 JSON.stringify({
                     type: "tunnel",

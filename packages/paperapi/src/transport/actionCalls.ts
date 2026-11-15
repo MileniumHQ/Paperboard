@@ -3,6 +3,7 @@
 import type { AsyncLocalStorage as CallStorage } from "async_hooks";
 
 import { debugErr } from "../debug";
+import { errorMessage } from "../errors";
 import type { TransportRegistry } from "./registry";
 import { nodeBuiltin } from "./socket";
 
@@ -31,9 +32,9 @@ export function currentActionCall(): string | undefined {
 
 export interface ActionCallFrame {
     callId: string;
-    panelId: string;
+    panelId?: string;
     action: string;
-    args: unknown;
+    args?: unknown;
 }
 
 /**
@@ -72,6 +73,6 @@ export function answerActionCall(registry: TransportRegistry, call: ActionCallFr
         })
         .then(
             (result) => reply({ result: result === undefined ? null : result }),
-            (err: any) => reply({ error: err?.message || String(err) }),
+            (err) => reply({ error: errorMessage(err) }),
         );
 }
