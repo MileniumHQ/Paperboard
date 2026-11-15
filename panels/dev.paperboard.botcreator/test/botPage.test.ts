@@ -53,6 +53,11 @@ describe("a bot's page", () => {
             await page.send("Network.enable");
             await page.navigate(served.url);
             await page.waitFor(`document.body.innerText.includes("No bots yet")`, "the empty bot list");
+            // New bot is the page's action, as Servers and Projects have theirs, even with no bots yet
+            expect(await page.evaluate<boolean>(`(() => {
+                const buttons = [...document.querySelectorAll("button")].filter((b) => b.innerText.includes("New bot"));
+                return buttons.length === 1 && !buttons[0].closest("[class*=EmptyState]") && buttons[0].closest("[class*=PageHeader]") !== null;
+            })()`)).toBe(true);
             await clickText(page, "button", "New bot");
             await page.type(`input[type=password]`, fake.token);
             await clickText(page, "button", "Add bot");

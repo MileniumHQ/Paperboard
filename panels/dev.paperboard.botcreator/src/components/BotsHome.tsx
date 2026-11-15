@@ -76,8 +76,7 @@ export default function BotsHome(props: { bots: BotsState; onOpen: (bot: { id: s
         <PaperFlex fullWidth fullHeight overflowY="auto">
             <PaperPage width="wide">
                 <PaperPageHeader icon="smart_toy" title="Bots">
-                    {/* an empty page offers this in its empty state instead */}
-                    <Show when={props.bots.list().length > 0}>{newBot()}</Show>
+                    {newBot()}
                 </PaperPageHeader>
                 <Show when={failure()}>
                     {(f) => (
@@ -106,9 +105,7 @@ export default function BotsHome(props: { bots: BotsState; onOpen: (bot: { id: s
                     <Show
                         when={props.bots.list().length > 0}
                         fallback={
-                            <PaperEmptyState icon="smart_toy" title="No bots yet" description="All a bot needs is a token from the Discord Developer Portal. Then decide what it does in Blocks.">
-                                {newBot()}
-                            </PaperEmptyState>
+                            <PaperEmptyState icon="smart_toy" title="No bots yet" description="All a bot needs is a token from the Discord Developer Portal. Then decide what it does in Blocks." />
                         }
                     >
                         <PaperMediaCardGroup minCardWidth="card-min">

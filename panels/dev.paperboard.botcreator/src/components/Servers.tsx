@@ -248,7 +248,7 @@ export default function Servers(props: { bot: () => BotSummary }) {
             >
                 {/* on a phone the page's bar goes back to the list */}
                 <Show when={!compact()}>
-                    <PaperButton onClick={closeServer}>
+                    <PaperButton variant="text" onClick={closeServer}>
                         <PaperIcon>arrow_back</PaperIcon>
                         All servers
                     </PaperButton>

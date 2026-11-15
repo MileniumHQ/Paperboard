@@ -130,6 +130,11 @@ describe("a test message's answer", () => {
             await clickText(page, "button", "Send");
             await discord.request((r) => r.method === "POST" && r.path === homeMessages, "Home's message to reach Discord");
 
+            // the way back is quiet, so Refresh is the one filled action in the header
+            expect(await page.evaluate<boolean>(`(() => {
+                const fill = (text) => getComputedStyle([...document.querySelectorAll("button")].find((b) => b.innerText.includes(text))).backgroundColor;
+                return fill("All servers") === "rgba(0, 0, 0, 0)" && fill("Refresh") !== "rgba(0, 0, 0, 0)";
+            })()`)).toBe(true);
             await clickText(page, "button", "All servers");
             await page.waitFor(`document.body.innerText.includes("2 servers")`, "the server list again");
             await clickText(page, "[class*=card], [class*=Card]", "Away");
