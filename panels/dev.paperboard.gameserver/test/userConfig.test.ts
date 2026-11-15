@@ -12,6 +12,7 @@ import { applyRuntimeProperties } from "../src/service/runtimeProperties";
 import { setGamerule } from "../src/service/gamerules";
 import { startServerInstance, stopServerInstance } from "../src/service/lifecycle";
 import { readServerFile, writeServerFile } from "../src/service/serverFiles";
+import { recordPluginInstalls } from "../src/service/plugins";
 
 let daemon: TestDaemon;
 beforeAll(async () => {
@@ -116,5 +117,15 @@ describe("user config files", () => {
 
         await expect(writeServerFile("config/new.yml", "x: 1\n", saved.version, false, deps)).rejects.toThrow("does not exist");
         expect(fs.existsSync(path.join(root, "config", "new.yml"))).toBe(false);
+    });
+    test("a plugin install the Plugins tab records merges into the install records, keeping every other plugin's", async () => {
+        const record = (projectId: string) => ({ projectId, slug: projectId, version: "1.0.0" });
+        const mc = minecraftServer({ settings: { pluginInstalls: { "Old.jar": record("old"), "Kept.jar": record("kept") } } });
+        // an update replaces Old.jar with New.jar; Kept.jar is no part of it
+        await mc.run(() => recordPluginInstalls({ set: { "New.jar": record("new") }, remove: ["Old.jar"] }));
+        expect(mc.scope.server.settings.pluginInstalls).toEqual({ "Kept.jar": record("kept"), "New.jar": record("new") });
+        await expect(mc.run(() => recordPluginInstalls({ set: { "../escape.jar": record("x") } }))).rejects.toThrow();
+        await expect(mc.run(() => recordPluginInstalls({ set: { "Bad.jar": { projectId: 1 } } }))).rejects.toThrow("not one Paperboard writes");
+        expect(Object.keys(mc.scope.server.settings.pluginInstalls as object)).toEqual(["Kept.jar", "New.jar"]);
     });
 });

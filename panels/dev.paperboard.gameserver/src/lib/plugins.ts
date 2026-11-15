@@ -2,11 +2,12 @@ import { minecraftSoftware } from "../games/minecraft/index";
 import semver from "semver";
 import { fileApi, config } from "./api";
 import { PANEL_ID } from "../service/types";
-import { serverSoftware, serverVersion, updatePanelConfig, serverBridge } from "./server";
+import { serverSoftware, serverVersion, serverBridge } from "./server";
 import { behaviorVersionOf } from "./versionProfile";
 import { CALLS } from "../service/contract";
 import { SOFTWARE, type ServerSoftwareType } from "./software";
 import { sanitizeFileName } from "./filesystem";
+import { errorMessage } from "./failure";
 import {
     INSTALL_RECORDS_KEY,
     classifyPluginUpdate,
@@ -34,29 +35,21 @@ const SERVER_ENVIRONMENTS = [
     "client_or_server", "client_or_server_prefers_both",
 ];
 
+/** The install records the service keeps; a read that fails throws. */
 export async function getInstallRecords(): Promise<Record<string, InstalledRecord>> {
-    try {
-        // explicit panel id: ambient resolution resolves to last-imported
-        const saved = await config.get<Record<string, unknown>>(PANEL_ID);
-        return parseInstallRecords(saved?.[INSTALL_RECORDS_KEY]);
-    } catch (err) {
-        console.error("[Plugins] Failed to read install records:", err);
-        return {};
-    }
+    return parseInstallRecords((await config.get<Record<string, unknown> | null>(PANEL_ID))?.[INSTALL_RECORDS_KEY]);
 }
 
-async function writeInstallRecords(
-    records: Record<string, InstalledRecord>,
-): Promise<void> {
-    await updatePanelConfig({ [INSTALL_RECORDS_KEY]: records });
+/** Records installed files and forgets replaced ones; the service merges them into its records. */
+function recordInstalls(set: Record<string, InstalledRecord>, remove: string[] = []): Promise<unknown> {
+    return serverBridge.call(CALLS.recordPluginInstalls, { set, remove });
 }
 
 export async function listInstalledPlugins(): Promise<{
     plugins: InstalledPlugin[];
     warning?: string;
 }> {
-    // service-owned (service/plugins.ts): listing verifies hashes against
-    // install records, and the twin that lived here is gone
+    // service-owned (service/plugins.ts): listing verifies hashes against install records
     return serverBridge.call(CALLS.listInstalledPlugins);
 }
 
@@ -605,15 +598,15 @@ async function downloadAndRecordFile(input: {
     });
 
     if (input.record) {
-        const records = await getInstallRecords();
-        records[safe] = {
-            projectId: input.projectId,
-            slug: input.slug,
-            version: input.versionNumber || "latest",
-            title: input.title || undefined,
-            iconUrl: input.iconUrl,
-        };
-        await writeInstallRecords(records);
+        await recordInstalls({
+            [safe]: {
+                projectId: input.projectId,
+                slug: input.slug,
+                version: input.versionNumber || "latest",
+                title: input.title || undefined,
+                iconUrl: input.iconUrl,
+            },
+        });
     }
 
     return { filename: safe, version: input.versionNumber };
@@ -740,10 +733,14 @@ export async function previewInstall(
         if (depth > 0) transitive.push(dep);
         if (depth >= MAX_DEP_DEPTH || installedCount() > MAX_DEP_INSTALLS) return;
         if (!dep.versionId) return;
-        const sub = await modrinthFetch<RawVersion>(
-            `/version/${encodeURIComponent(dep.versionId)}`,
-        ).catch(() => null);
-        if (!sub) return;
+        let sub: RawVersion;
+        try {
+            sub = await modrinthFetch<RawVersion>(`/version/${encodeURIComponent(dep.versionId)}`);
+        } catch (err) {
+            // its own dependencies are unknown: the preview says so rather than leave them out
+            failures.push(`${dep.name}'s dependencies: ${errorMessage(err)}`);
+            return;
+        }
         for (const t of await resolveRawDependencies(
             (sub.dependencies ?? []).filter((r) => dependencyKindOf(r) === "required"),
         )) {
@@ -985,18 +982,16 @@ export async function updatePlugin(check: PluginUpdateCheck): Promise<void> {
         await deletePlugin(check.filename);
     }
 
-    // read after any delete so a service-side record removal is respected
-    const records = await getInstallRecords();
-    delete records[check.filename];
-    records[safe] = {
-        projectId: check.record.projectId,
-        slug: check.record.slug,
-        version: file.versionNumber || "latest",
-        title: check.record.title,
-        iconUrl: check.record.iconUrl,
-        ...(check.record.source ? { source: check.record.source } : {}),
-    };
-    await writeInstallRecords(records);
+    await recordInstalls({
+        [safe]: {
+            projectId: check.record.projectId,
+            slug: check.record.slug,
+            version: file.versionNumber || "latest",
+            title: check.record.title,
+            iconUrl: check.record.iconUrl,
+            ...(check.record.source ? { source: check.record.source } : {}),
+        },
+    }, [check.filename]);
 }
 
 /** Installs the newest build GeyserMC publishes for `source`, checked against its sha256, and records it. */
@@ -1008,19 +1003,11 @@ export async function installGeyserMCProject(source: GeyserMCSource, filename: s
         appId: PANEL_ID,
         sha256: latest.sha256,
     });
-    const records = await getInstallRecords();
-    records[latest.filename] = { projectId: source.project, slug: source.project, version: latest.versionNumber, title, source };
-    await writeInstallRecords(records);
+    await recordInstalls({ [latest.filename]: { projectId: source.project, slug: source.project, version: latest.versionNumber, title, source } });
 }
 
-export async function uninstallPlugin(filename: string): Promise<void> {
-    await deletePlugin(filename);
-    const records = await getInstallRecords();
-    if (records[filename]) {
-        delete records[filename];
-        await writeInstallRecords(records);
-    }
-}
+/** Moves a plugin to the trash; the service forgets its install record. */
+export const uninstallPlugin = deletePlugin;
 
 // trash-first removal of every jar under both plugins/ and mods/, plus the
 // install records — used when switching server software invalidates them all

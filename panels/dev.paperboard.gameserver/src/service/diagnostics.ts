@@ -78,40 +78,26 @@ export function clearActiveIssue(ctx: ServiceContext<GameServerState>): void {
     ctx.setState({ activeIssue: null });
 }
 
+/** Ends what holds the server's port; a kill that failed throws why. */
 export async function killConflictingProcess(
     ctx: ServiceContext<GameServerState>,
     port?: string,
-): Promise<boolean> {
+): Promise<void> {
     // boundary: the port arrives from UI action input — validated here, and
     // again inside killConflictingProcessWith as the last line of defense
     const targetPort = assertPort(port || ctx.state.serverPort, "port");
-    try {
-        const killed = await killConflictingProcessWith(killPortDeps, targetPort);
-        console.log(`[Service:Diagnostics] killed ${killed} process(es) listening on port ${targetPort}`);
-        return true;
-    } catch (err) {
-        // loud, and the RESULT is honest: the action must not report a
-        // kill that did not happen
-        console.error(`[Service:Diagnostics] Failed to kill process on port ${targetPort}:`, err);
-        return false;
-    }
+    const killed = await killConflictingProcessWith(killPortDeps, targetPort);
+    console.log(`[Service:Diagnostics] killed ${killed} process(es) listening on port ${targetPort}`);
 }
 
+/** Moves the active world's folders to the trash; a move that failed throws why. */
 export async function resetWorldFiles(
     ctx: ServiceContext<GameServerState>,
-): Promise<boolean> {
+): Promise<void> {
     // reset deletes live world dirs: same offline rule as the world manager
     assertServerOffline(ctx);
     // the reset follows the server's actual level-name, read fresh — a
     // renamed world must reset the renamed dirs, not hardcoded "world*"
     const levelName = await resolveLevelName();
-    try {
-        await trashRemovePathsWith(makeTrashRemoveDeps(), getWorldDirsToDelete(levelName));
-        return true;
-    } catch (err) {
-        // honest result: the UI must not believe "world directories were
-        // removed" when the remove failed or never completed
-        console.error(`[Service:Diagnostics] Failed to reset world files:`, err);
-        return false;
-    }
+    await trashRemovePathsWith(makeTrashRemoveDeps(), getWorldDirsToDelete(levelName));
 }

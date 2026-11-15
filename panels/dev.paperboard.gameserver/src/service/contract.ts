@@ -59,6 +59,7 @@ export const CALLS = {
     renderMapTile: "render-map-tile",
     listInstalledPlugins: "list-installed-plugins",
     deletePlugin: "delete-plugin",
+    recordPluginInstalls: "record-plugin-installs",
     uninstallAllPlugins: "uninstall-all-plugins",
     listDatapacks: "list-datapacks",
     listDatapackVersions: "list-datapack-versions",

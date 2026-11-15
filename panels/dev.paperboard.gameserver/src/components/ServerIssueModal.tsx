@@ -44,17 +44,8 @@ const ServerIssueModal: Component = () => {
                 return;
             }
             if (action.actionKey === "killPortAndRetry") {
-                const ok = await killConflictingProcess(serverPort());
-                // A failed repair is not a silent dead click: the reason is
-                // rendered so the user can decide between retry and manual
-                // recovery. The issue stays visibly open either way.
-                if (!ok) {
-                    setActionError({
-                        title: "Repair failed",
-                        message: "Killing the process on that port did not complete. Nothing was shut down. You can retry, or fix the port conflict manually.",
-                    });
-                    return;
-                }
+                // a kill that failed throws, and the catch below shows why
+                await killConflictingProcess(serverPort());
                 await clearActiveIssue();
                 setTimeout(() => startServer(), 600);
             } else if (action.actionKey === "acceptEula") {
@@ -62,14 +53,7 @@ const ServerIssueModal: Component = () => {
                 await clearActiveIssue();
                 setTimeout(() => startServer(), 400);
             } else if (action.actionKey === "resetWorldAndStart") {
-                const ok = await resetWorldFiles();
-                if (!ok) {
-                    setActionError({
-                        title: "Repair failed",
-                        message: "Resetting stopped partway: the world files are exactly where they started, or staged in a '.trash-*' folder in your server directory and recoverable there. You can retry.",
-                    });
-                    return;
-                }
+                await resetWorldFiles();
                 await clearActiveIssue();
                 setTimeout(() => startServer(), 500);
             } else {

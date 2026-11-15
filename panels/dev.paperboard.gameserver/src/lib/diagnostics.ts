@@ -14,13 +14,12 @@ export function clearActiveIssue(): Promise<unknown> {
     return serverBridge.call(CALLS.clearActiveIssue);
 }
 
-export async function killConflictingProcess(port: string = serverPort()): Promise<boolean> {
-    // the boolean is the service's verified outcome, not a convenience flag
-    const res = await serverBridge.call<boolean>(CALLS.killConflictingProcess, { port });
-    return res !== false;
+/** Rejects with why the service could not end what holds the port. */
+export async function killConflictingProcess(port: string = serverPort()): Promise<void> {
+    await serverBridge.call(CALLS.killConflictingProcess, { port });
 }
 
-export async function resetWorldFiles(): Promise<boolean> {
-    const res = await serverBridge.call<boolean>(CALLS.resetWorldFiles);
-    return res !== false;
+/** Rejects with why the service could not move the world to the trash. */
+export async function resetWorldFiles(): Promise<void> {
+    await serverBridge.call(CALLS.resetWorldFiles);
 }

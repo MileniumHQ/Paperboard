@@ -11,6 +11,7 @@ import { sanitizeFileName, tryListDirectory, listDirectory } from "./filesystem"
 import {
     INSTALL_RECORDS_KEY,
     collectInstalledPlugins,
+    isInstallRecord,
     parseInstallRecords,
     pluginDirName,
     validatePluginFilename,
@@ -39,26 +40,30 @@ export type { InstalledPlugin, InstalledRecord };
 export { INSTALL_RECORDS_KEY, pluginDirName };
 
 async function getInstallRecords(): Promise<Record<string, InstalledRecord>> {
-    try {
-        const saved = await config.get<Record<string, unknown>>(PANEL_ID);
-        return parseInstallRecords(saved?.[INSTALL_RECORDS_KEY]);
-    } catch (err) {
-        console.debug("[plugins] install records unreadable, starting empty:", String(err));
-        return {};
-    }
+    return parseInstallRecords((await config.get<Record<string, unknown> | null>(PANEL_ID))?.[INSTALL_RECORDS_KEY]);
 }
 
-async function writeInstallRecords(
-    records: Record<string, InstalledRecord>,
-): Promise<void> {
-    let current: Record<string, unknown> = {};
-    try {
-        const saved = await config.get<Record<string, unknown>>(PANEL_ID);
-        if (saved && typeof saved === "object") current = saved;
-    } catch (err) {
-        console.debug("[plugins] no saved panel config yet:", String(err));
+async function writeInstallRecords(records: Record<string, InstalledRecord>): Promise<void> {
+    await config.set({ ...(await config.get<Record<string, unknown> | null>(PANEL_ID)), [INSTALL_RECORDS_KEY]: records }, PANEL_ID);
+}
+
+/**
+ * Records installs the Plugins tab made (`set`) and forgets the files they
+ * replaced (`remove`), merged here so the service holds the one copy of the
+ * records and nothing else's record is written over.
+ */
+export async function recordPluginInstalls(input: { set?: unknown; remove?: unknown }): Promise<void> {
+    const set = input?.set ?? {};
+    const remove = input?.remove ?? [];
+    if (typeof set !== "object" || set === null || Array.isArray(set)) throw new Error("Install records must be an object of file names");
+    if (!Array.isArray(remove)) throw new Error("Files to forget must be a list");
+    const records = await getInstallRecords();
+    for (const name of remove) delete records[validatePluginFilename(String(name))];
+    for (const [name, record] of Object.entries(set)) {
+        if (!isInstallRecord(record)) throw new Error(`The install record for ${name} is not one Paperboard writes`);
+        records[validatePluginFilename(name)] = record;
     }
-    await config.set({ ...current, [INSTALL_RECORDS_KEY]: records }, PANEL_ID);
+    await writeInstallRecords(records);
 }
 
 export async function listInstalledPlugins(
@@ -68,8 +73,7 @@ export async function listInstalledPlugins(
     // a missing directory means "nothing installed yet", not an error: the
     // folder is only created on first install, and a warning here taught
     // users to ignore the warning bar
-    const dirExists = await fileApi.exists(dirName, PANEL_ID).catch(() => false);
-    if (!dirExists) return { plugins: [] };
+    if (!(await fileApi.exists(dirName, PANEL_ID))) return { plugins: [] };
     const records = await getInstallRecords();
     const listing = await tryListDirectory(dirName);
     const uploads = parseUploadRecords((await config.get<Record<string, unknown>>(PANEL_ID))?.[UPLOAD_RECORDS_KEY]);
@@ -222,6 +226,6 @@ export const livePluginInstallDeps: PluginInstallDeps = {
     fetchJson,
     download: ({ url, targetPath, sha1, sha512 }) => fileApi.download({ url, targetPath, sha1, checksum: { algorithm: "sha512", value: sha512 }, appId: PANEL_ID }).then(() => undefined),
     exists: (path) => fileApi.exists(path, PANEL_ID),
-    readRecords: async () => parseInstallRecords((await config.get<Record<string, unknown>>(PANEL_ID))?.[INSTALL_RECORDS_KEY]),
+    readRecords: getInstallRecords,
     writeRecords: writeInstallRecords,
 };

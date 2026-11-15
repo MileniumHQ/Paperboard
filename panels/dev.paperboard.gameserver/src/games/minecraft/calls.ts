@@ -15,7 +15,7 @@ import {
     killConflictingProcess,
     resetWorldFiles,
 } from "../../service/diagnostics";
-import { listInstalledPlugins, deletePlugin, uninstallAllPlugins } from "../../service/plugins";
+import { listInstalledPlugins, deletePlugin, recordPluginInstalls, uninstallAllPlugins } from "../../service/plugins";
 import {
     listWorldDirs,
     listWorlds,
@@ -100,12 +100,6 @@ export async function activateWorld(ctx: ServiceContext<GameServerState>, levelN
 export async function removeWorld(ctx: ServiceContext<GameServerState>, levelName: unknown): Promise<void> {
     if (!levelName || typeof levelName !== "string") throw new Error("World name is required");
     await deleteActiveWorldDirs(ctx, levelName);
-}
-
-/** Moves the active world's folders to the trash; false when that failed (the service log says why). */
-export async function resetWorld(ctx: ServiceContext<GameServerState>): Promise<boolean> {
-    const result = await resetWorldFiles(ctx);
-    return result;
 }
 
 /** Moves one plugin's jar to the trash. */
@@ -217,13 +211,10 @@ export const minecraftCalls: ServerCalls = {
         ctx: ServiceContext<GameServerState>,
         inputs: { port?: string },
     ) => {
-        // the boolean is the real outcome: a failed kill is a false,
-        // never a laundered true
-        return killConflictingProcess(ctx, inputs?.port);
+        // a failed kill throws why
+        await killConflictingProcess(ctx, inputs?.port);
     },
-    [CALLS.resetWorldFiles]: async (ctx: ServiceContext<GameServerState>) => {
-        return resetWorld(ctx);
-    },
+    [CALLS.resetWorldFiles]: (ctx: ServiceContext<GameServerState>) => resetWorldFiles(ctx),
     [CALLS.clearActiveIssue]: async (ctx: ServiceContext<GameServerState>) => {
         clearActiveIssue(ctx);
         return true;
@@ -334,6 +325,10 @@ export const minecraftCalls: ServerCalls = {
     },
     [CALLS.listInstalledPlugins]: async (ctx: ServiceContext<GameServerState>) => {
         return listInstalledPlugins(ctx);
+    },
+    [CALLS.recordPluginInstalls]: async (_ctx: ServiceContext<GameServerState>, inputs: { set?: unknown; remove?: unknown }) => {
+        await recordPluginInstalls(inputs);
+        return true;
     },
     [CALLS.uninstallAllPlugins]: async (ctx: ServiceContext<GameServerState>) => {
         return uninstallAllPlugins(ctx);

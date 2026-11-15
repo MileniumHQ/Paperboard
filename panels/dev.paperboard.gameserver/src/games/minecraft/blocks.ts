@@ -27,8 +27,8 @@ import {
     punishPlayer,
     removePlugin,
     removeWorld,
-    resetWorld,
 } from "./calls";
+import { resetWorldFiles } from "../../service/diagnostics";
 
 type Context = ServiceContext<GameServerState>;
 
@@ -235,9 +235,7 @@ export function minecraftBlocks(ctx: Context): BlockSet {
                 category: "Worlds",
                 icon: "restart_alt",
                 description: "Moves the active world to the trash, so the next start generates it fresh",
-                run: async () => {
-                    if (!(await resetWorld(ctx))) throw new Error("The world's folders could not be moved to the trash; the service log says why");
-                },
+                run: () => resetWorldFiles(ctx),
             },
             {
                 id: "install-software",
