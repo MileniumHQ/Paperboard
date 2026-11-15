@@ -123,8 +123,10 @@ export class Asker {
             if (acp) acp.line(line);
             else for (const ev of parseTurnLine(settings.harness, line)) onEvent(ev);
         };
+        // every listener goes when the run is over, whether or not it ever started
+        const offs: (() => void)[] = [];
         const exited = new Promise<number | undefined>((ok) => {
-            const offs = [
+            offs.push(
                 host.onStdout(id, (data) => {
                     buf += data;
                     for (let i = buf.indexOf("\n"); i >= 0; i = buf.indexOf("\n")) {
@@ -136,7 +138,7 @@ export class Asker {
                 host.onStderr(id, (data) => {
                     stderr = (stderr + data).slice(-4000);
                 }),
-            ];
+            );
             offs.push(
                 host.onExit(id, (code) => {
                     for (const off of offs) off();
@@ -174,6 +176,7 @@ export class Asker {
         } finally {
             clearTimeout(timer);
             removeFiles();
+            for (const off of offs) off();
         }
         if (timedOut) throw new Error(`the agent didn't answer within ${Math.round(ms / 1000)} seconds`);
         if (failures.length) throw new Error(failures[failures.length - 1]);

@@ -49,6 +49,8 @@ export class Providers {
     /** Every provider OpenCode can connect, and which are. */
     async list(): Promise<ProviderInfo[]> {
         const body = (await this.request("GET", "/api/integration")) as { data?: unknown };
+        // only looked at: the server it started goes once it's idle
+        this.arm();
         if (!Array.isArray(body?.data)) throw new ProviderError("OpenCode's provider list wasn't a list");
         const out = (body.data as RawIntegration[]).map(toProvider);
         // connected first, then by name

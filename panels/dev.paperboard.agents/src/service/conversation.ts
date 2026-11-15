@@ -731,8 +731,10 @@ export class Conversation {
             if (acp) acp.line(line);
             else for (const ev of parseTurnLine(settings.harness, line)) onEvent(ev);
         };
+        // every listener goes when the run is over, whether or not it ever started
+        const offs: (() => void)[] = [];
         const exited = new Promise<number | undefined>((ok) => {
-            const offs = [
+            offs.push(
                 this.deps.host.onStdout(TURN_PROC_ID, (data) => {
                     buf += data;
                     for (let i = buf.indexOf("\n"); i >= 0; i = buf.indexOf("\n")) {
@@ -751,7 +753,7 @@ export class Conversation {
                     log?.line("stderr", data);
                     stderr = (stderr + data).slice(-4000);
                 }),
-            ];
+            );
             offs.push(
                 this.deps.host.onExit(TURN_PROC_ID, (code) => {
                     for (const off of offs) off();
@@ -791,6 +793,7 @@ export class Conversation {
             offListed();
             for (const t of timers) clearTimeout(t);
             removeFiles();
+            for (const off of offs) off();
         }
         // Codex says how long its thread is only in its rollout
         let unmeasured: string | null = null;
