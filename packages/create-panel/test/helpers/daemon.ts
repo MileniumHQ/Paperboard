@@ -1,13 +1,14 @@
-// The real Paperboard daemon in this test process, as the desktop app
-// embeds it: loopback, a port the OS picks, headless, on the throwaway
-// PAPERBOARD_DIR the preload set. Panel services of the panels linked into
-// that folder start with it.
-import type * as DaemonModule from "../../../../apps/paperboard/papercrane/index";
-import { blocksApi } from "../../../paperapi/src/blocks";
-import { closeTransport, getTransport } from "../../../paperapi/src/ipc";
-import { STATE_VALUE } from "../../../paperapi/src/serviceCalls";
+// The real Paperboard daemon (scripts/testing/crane.ts): the crane compiled
+// from this checkout, in its own process, on a free loopback port, over the
+// throwaway PAPERBOARD_DIR the preload set. Panel services of the panels
+// linked into that folder start with it, and PaperAPI in this process finds
+// it through that folder's crane.json.
+import * as fs from "node:fs";
+import * as os from "node:os";
+import * as path from "node:path";
+import { blocksApi, closeTransport, getTransport, STATE_VALUE } from "@mileniumhq/paperapi";
+import { buildCrane, startCrane, type Crane } from "../../../../scripts/testing/crane";
 
-const DAEMON = new URL("../../../../apps/paperboard/papercrane/index.ts", import.meta.url).pathname;
 const SERVICE_DEADLINE_MS = 30_000;
 
 export interface Daemon {
@@ -18,11 +19,18 @@ export interface Daemon {
 }
 
 export async function startDaemon(): Promise<Daemon> {
-    if (!process.env.PAPERBOARD_DIR) throw new Error("PAPERBOARD_DIR is not set: the create-panel preload (test/setup.ts) did not run");
-    const { startPaperCraneServer }: typeof DaemonModule = await import(DAEMON);
-    const instance = await startPaperCraneServer({ host: "127.0.0.1", port: 0, headless: true, advertise: false });
+    const dataDir = process.env.PAPERBOARD_DIR;
+    if (!dataDir) throw new Error("PAPERBOARD_DIR is not set: the create-panel preload (test/setup.ts) did not run");
+    const binDir = fs.mkdtempSync(path.join(os.tmpdir(), "create-panel-crane-"));
+    let crane: Crane;
+    try {
+        crane = await startCrane(buildCrane(binDir), dataDir);
+    } catch (err) {
+        fs.rmSync(binDir, { recursive: true, force: true });
+        throw err;
+    }
     return {
-        port: instance.localPort,
+        port: crane.port,
         // the SDK, as the host, over the handshake the daemon wrote: a
         // registry update is the signal, the service's state value answering
         // is the proof
@@ -50,11 +58,13 @@ export async function startDaemon(): Promise<Daemon> {
                 transport.subscribeEvent("blocks:registry-updated", check);
                 check();
             }),
-        stop: () =>
-            new Promise<void>((resolve) => {
-                closeTransport();
-                instance.server.once("close", () => resolve());
-                instance.stop();
-            }),
+        stop: async () => {
+            closeTransport();
+            try {
+                await crane.stop();
+            } finally {
+                fs.rmSync(binDir, { recursive: true, force: true });
+            }
+        },
     };
 }

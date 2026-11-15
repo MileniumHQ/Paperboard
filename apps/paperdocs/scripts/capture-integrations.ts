@@ -10,9 +10,9 @@ import {
     actions,
     initPaperApi,
     closeTransport,
-} from "../../../packages/paperapi/src/index";
-import type { CanvasBlock } from "../../../panels/dev.paperboard.actions/src/lib/tree";
-import type { CanvasSaveResult, CanvasSnapshot } from "../../../panels/dev.paperboard.actions/src/lib/canvasDoc";
+} from "@mileniumhq/paperapi";
+import type { CanvasBlock } from "dev.paperboard.actions/src/lib/tree";
+import type { CanvasSaveResult, CanvasSnapshot } from "dev.paperboard.actions/src/lib/canvasDoc";
 
 // The learn pages' cross-panel Actions workflows. Each screenshot's flows are
 // saved as a real Actions project in the temporary install, opened in the

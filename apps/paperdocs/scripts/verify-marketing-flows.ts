@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
-import { actions } from "../../../packages/paperapi/src/index";
-import { executeFlow } from "../../../panels/dev.paperboard.actions/src/lib/runtime";
-import { type CanvasBlock } from "../../../panels/dev.paperboard.actions/src/lib/tree";
+import { actions } from "@mileniumhq/paperapi";
+import { executeFlow } from "dev.paperboard.actions/src/lib/runtime";
+import { type CanvasBlock } from "dev.paperboard.actions/src/lib/tree";
 import { AGENTS, GAME, buildMarketingFlows, validateMarketingFlow } from "./marketing-flows";
 
 /** Exercise the real resolver and executor. The agent's answers and Minecraft

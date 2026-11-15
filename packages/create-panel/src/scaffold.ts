@@ -21,9 +21,9 @@ import { dirname, join, relative, resolve } from "path";
 import { fileURLToPath } from "url";
 import * as readline from "readline";
 import { parseArgs } from "util";
-import { isPanelId, requirePanelId } from "../../paperapi/src/panelIdentity";
-import paperapiPackage from "../../paperapi/package.json";
-import paperuiPackage from "../../paperui/package.json";
+import { isPanelId, requirePanelId } from "@mileniumhq/paperapi/panelIdentity";
+import paperapiPackage from "@mileniumhq/paperapi/package.json";
+import paperuiPackage from "@mileniumhq/paperui/package.json";
 
 // resolves from both src/scaffold.ts (source) and dist/cli.js (bundle)
 export const TEMPLATE_DIR = resolve(dirname(fileURLToPath(import.meta.url)), "..", "template");

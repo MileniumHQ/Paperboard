@@ -512,12 +512,6 @@ const QUIET = /\/\/\s*quiet:(.*)$/;
 // Files that still reach into another package by path, each until its part
 // is moved to package imports (by repo-relative path, with why it is left).
 const KNOWN_CROSSINGS: Record<string, string> = {
-    "apps/paperdocs/scripts/capture-integrations.ts": "reads the deprecated Actions panel's source and PaperAPI's",
-    "apps/paperdocs/scripts/marketing-flows.ts": "reads the deprecated Actions panel's source and PaperAPI's",
-    "apps/paperdocs/scripts/verify-marketing-flows.ts": "reads the deprecated Actions panel's source and PaperAPI's",
-    "packages/create-panel/src/scaffold.ts": "names PaperAPI's and PaperUI's versions and panel ids from their source",
-    "packages/create-panel/test/helpers/daemon.ts": "boots the app's daemon from source",
-    "packages/create-panel/test/scaffold.test.ts": "names PaperAPI's and PaperUI's versions",
     "panels/dev.paperboard.gameserver/test/updates.test.ts": "uses the app's daemon test support (Game Server moves in a later phase)",
 };
 

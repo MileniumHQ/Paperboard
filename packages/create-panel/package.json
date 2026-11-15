@@ -16,6 +16,8 @@
         "prepublishOnly": "bun run build"
     },
     "devDependencies": {
+        "@mileniumhq/paperapi": "workspace:*",
+        "@mileniumhq/paperui": "workspace:*",
         "@types/node": "^22.20.5",
         "solid-js": "^1.9.17",
         "typescript": "~6.0.3",

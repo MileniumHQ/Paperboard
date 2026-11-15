@@ -19,7 +19,9 @@
     "solid-js": "^1.9.17"
   },
   "devDependencies": {
+    "@mileniumhq/paperapi": "workspace:*",
     "@types/node": "^22.20.5",
+    "dev.paperboard.actions": "workspace:*",
     "node-html-parser": "^7.1.0",
     "playwright": "1.61.1",
     "sharp": "0.33.5",

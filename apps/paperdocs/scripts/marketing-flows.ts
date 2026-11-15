@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
-import type { ActionInfo } from "../../../packages/paperapi/src/index";
-import { BUILTIN_DEFS } from "../../../panels/dev.paperboard.actions/src/lib/builtin";
-import { isCanvasBlock, type CanvasBlock } from "../../../panels/dev.paperboard.actions/src/lib/tree";
-import { isTypedOnlyInput } from "../../../panels/dev.paperboard.actions/src/lib/inputTypes";
+import type { ActionInfo } from "@mileniumhq/paperapi";
+import { BUILTIN_DEFS } from "dev.paperboard.actions/src/lib/builtin";
+import { isCanvasBlock, type CanvasBlock } from "dev.paperboard.actions/src/lib/tree";
+import { isTypedOnlyInput } from "dev.paperboard.actions/src/lib/inputTypes";
 
 export const GAME = "dev.paperboard.gameserver";
 export const AGENTS = "dev.paperboard.agents";

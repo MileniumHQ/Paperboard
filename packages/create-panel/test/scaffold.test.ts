@@ -3,8 +3,8 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import * as tar from "tar";
-import paperapiPackage from "../../paperapi/package.json";
-import paperuiPackage from "../../paperui/package.json";
+import paperapiPackage from "@mileniumhq/paperapi/package.json";
+import paperuiPackage from "@mileniumhq/paperui/package.json";
 import { assertRelativePanelBuild } from "../../../scripts/publishManifest";
 import { libraryDependencies, scaffoldPanel, type PanelFeatures } from "../src/scaffold";
 import { startDaemon } from "./helpers/daemon";
