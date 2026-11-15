@@ -15,6 +15,7 @@ import { gamertagOf, floodgateUuid, xuidOfFloodgateUuid, type BedrockNaming } fr
 import { uuidForPlayerName } from "./playerStats";
 import { fetchMojang, formatUuid, profileForName } from "./mojang";
 import { errorText } from "./failures";
+import { atMost } from "./inOrder";
 import { skinUrlForXuid, xuidForGamertag } from "./xbox";
 
 const PROFILE_URL = "https://sessionserver.mojang.com/session/minecraft/profile/";
@@ -39,23 +40,8 @@ const UUID_DASHED_RE =
     /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
 const UUID_BARE_RE = /^[0-9a-fA-F]{32}$/;
 
-// a small semaphore: profile + texture are two round trips per player
-let active = 0;
-const waiters: Array<() => void> = [];
-
-async function acquire(): Promise<void> {
-    if (active < MAX_CONCURRENT) {
-        active++;
-        return;
-    }
-    await new Promise<void>((resolve) => waiters.push(() => { active++; resolve(); }));
-}
-
-function release(): void {
-    active--;
-    const next = waiters.shift();
-    if (next) next();
-}
+// profile + texture are two round trips per player
+const limited = atMost(MAX_CONCURRENT);
 
 // the server's own records first: a Bedrock player who has joined is in
 // them under the name Floodgate gave them
@@ -160,14 +146,7 @@ export async function getHeadDataUrl(inputs: {
     const key = `${size}:${uuid.toLowerCase() || name.toLowerCase()}`;
     const running = inflight.get(key);
     if (running) return running;
-    const lookup = (async () => {
-        await acquire();
-        try {
-            return await resolveHead(name, uuid, size, inputs.naming);
-        } finally {
-            release();
-        }
-    })().finally(() => inflight.delete(key));
+    const lookup = limited(() => resolveHead(name, uuid, size, inputs.naming)).finally(() => inflight.delete(key));
     inflight.set(key, lookup);
     return lookup;
 }
