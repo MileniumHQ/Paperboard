@@ -81,7 +81,9 @@ processApi.write(id: string, data: string): Promise<void>;
 processApi.closeInput(id: string): Promise<void>;
 processApi.kill(id: string, signal?: string): Promise<void>;
 /** SIGTERM, then SIGKILL after 2 s; resolves once it is gone */
-processApi.stop(id: string): Promise<void>;
+processApi.stop(id: string, options?: { graceMs?: number }): Promise<void>;
+/** the same stop, for a host of the caller's own (default processApi) */
+stopProcess(id: string, options?: { host?: ProcessStopHost; graceMs?: number }): Promise<void>;
 
 processApi.onData(id: string, callback: (text: string) => void): StreamSubscription;
 processApi.onStdout(id: string, callback: (text: string) => void): StreamSubscription;
@@ -117,7 +119,8 @@ interface ProcessStartOptions {
                 <li><PaperCode>write</PaperCode> sends text as it is, with no newline added, at most 64 KB a call.</li>
                 <li><PaperCode>closeInput</PaperCode> ends the process's input once everything written before it has arrived, as the end of a pipe does. A program that reads its input to the end (<PaperCode>codex exec -</PaperCode>, <PaperCode>sort</PaperCode>) goes on. Later writes fail. A long text can go this way instead of in <PaperCode>args</PaperCode>, which every system limits in size and other users can read.</li>
                 <li><PaperCode>kill</PaperCode> sends the signal, <PaperCode>SIGTERM</PaperCode> by default. It resolves when the id is not running. Rejects with the daemon's reason when the kill is refused.</li>
-                <li><PaperCode>stop</PaperCode> is the way to end a process and know it ended. It sends <PaperCode>SIGTERM</PaperCode>, waits up to 2 seconds for the exit, sends <PaperCode>SIGKILL</PaperCode> if the process is still running, waits 2 seconds more, and resolves once the daemon says it's gone. A process that isn't running, or that ends between the check and the signal, is already stopped. A service has 3 seconds to stop, so one <PaperCode>stop</PaperCode> in its shutdown ends in time.</li>
+                <li><PaperCode>stop</PaperCode> is the way to end a process and know it ended. It sends <PaperCode>SIGTERM</PaperCode>, waits up to 2 seconds for the exit, sends <PaperCode>SIGKILL</PaperCode> if the process is still running, waits 2 seconds more, and resolves once the daemon says it's gone. A process that isn't running, or that ends between the check and the signal, is already stopped. A service has 3 seconds to stop, so one <PaperCode>stop</PaperCode> in its shutdown ends in time. A test passes a shorter <PaperCode>graceMs</PaperCode> rather than waiting the real grace.</li>
+                <li><PaperCode>stopProcess(id, {"{ host, graceMs }"})</PaperCode> is the same stop for a process host of the caller's own: anything with <PaperCode>kill</PaperCode>, <PaperCode>exists</PaperCode> and <PaperCode>onExit</PaperCode>, such as a stand-in a test injects. Without <PaperCode>host</PaperCode> it is <PaperCode>processApi.stop</PaperCode>.</li>
                 <li>Installing or updating a panel stops every process it owns.</li>
             </PaperTextList>
 

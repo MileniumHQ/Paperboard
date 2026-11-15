@@ -39,6 +39,54 @@ export interface ProcessStartOptions {
     important?: boolean;
 }
 
+/** What stopProcess needs of whatever runs the process: processApi, or a test's stand-in. */
+export interface ProcessStopHost {
+    kill(id: string, signal?: string): Promise<void>;
+    exists(id: string): Promise<boolean>;
+    /** Calls `callback` when the process exits; returns its teardown. One with `attached` (processApi's) says whether there is anything to hear. */
+    onExit(id: string, callback: (exitCode?: number) => void): (() => void) & { readonly attached?: Promise<boolean> };
+}
+
+export interface StopProcessOptions {
+    /** what runs the process (default processApi) */
+    host?: ProcessStopHost;
+    /** how long to wait after each signal for the exit, in ms (default 2000) */
+    graceMs?: number;
+}
+
+/**
+ * Stops a process: SIGTERM, then SIGKILL if it is still running after the
+ * grace, and resolves once the host says it's gone. One that isn't running,
+ * or that ends between the look and the signal, is already stopped; one still
+ * running after both signals throws.
+ */
+export async function stopProcess(id: string, options: StopProcessOptions = {}): Promise<void> {
+    const host = options.host ?? processApi;
+    const graceMs = options.graceMs ?? STOP_GRACE_MS;
+    let exited!: () => void;
+    const gone = new Promise<void>((resolve) => (exited = resolve));
+    const off = host.onExit(id, () => exited());
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+        // the daemon tells a process's exit only to connections attached to it;
+        // nothing to attach to is nothing running
+        if (off.attached && !(await off.attached)) return;
+        for (const signal of ["SIGTERM", "SIGKILL"]) {
+            if (!(await host.exists(id))) return;
+            // one that ended between the look and the signal is stopped all the same
+            await host.kill(id, signal).catch(async (err) => {
+                if (await host.exists(id)) throw err;
+            });
+            await Promise.race([gone, new Promise<void>((resolve) => (timer = setTimeout(resolve, graceMs)))]);
+            clearTimeout(timer);
+        }
+        if (await host.exists(id)) throw new Error(`The process ${id} didn't stop`);
+    } finally {
+        clearTimeout(timer);
+        off();
+    }
+}
+
 // a process stream's text, empty chunks dropped; returns its teardown
 function onText(stream: "process-data" | "process-stdout" | "process-stderr", id: string, callback: (data: string) => void): StreamSubscription {
     return on(`${stream}:${id}`, (_event: unknown, data: unknown) => {
@@ -69,32 +117,9 @@ export const processApi = {
      * Stops a supervised process: SIGTERM, then SIGKILL if it is still running
      * after a grace of 2 s, and resolves once the daemon says it's gone. One
      * that isn't running is already stopped; one still running after both
-     * signals throws.
+     * signals throws. See stopProcess for a host of the caller's own.
      */
-    stop: async (id: string): Promise<void> => {
-        let exited!: () => void;
-        const gone = new Promise<void>((resolve) => (exited = resolve));
-        const off = processApi.onExit(id, () => exited());
-        let timer: ReturnType<typeof setTimeout> | undefined;
-        try {
-            // the daemon tells a process's exit only to connections attached to it;
-            // nothing to attach to is nothing running
-            if (!(await off.attached)) return;
-            for (const signal of ["SIGTERM", "SIGKILL"]) {
-                if (!(await processApi.exists(id))) return;
-                // one that ended between the look and the signal is stopped all the same
-                await processApi.kill(id, signal).catch(async (err) => {
-                    if (await processApi.exists(id)) throw err;
-                });
-                await Promise.race([gone, new Promise<void>((resolve) => (timer = setTimeout(resolve, STOP_GRACE_MS)))]);
-                clearTimeout(timer);
-            }
-            if (await processApi.exists(id)) throw new Error(`The process ${id} didn't stop`);
-        } finally {
-            clearTimeout(timer);
-            off();
-        }
-    },
+    stop: (id: string, options?: Pick<StopProcessOptions, "graceMs">): Promise<void> => stopProcess(id, options),
 
     attach: async (id: string): Promise<{ success: boolean }> =>
         invoke<{ success: boolean }>("process-attach", { id }),

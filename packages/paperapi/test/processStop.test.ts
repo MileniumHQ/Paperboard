@@ -3,7 +3,7 @@
 // the daemon does and reports the exit when a signal ends it.
 import { afterEach, beforeEach, describe, expect, setDefaultTimeout, test } from "bun:test";
 import { closeTransport, getTransport, initPaperApi } from "../src/ipc";
-import { processApi } from "../src/process";
+import { processApi, stopProcess } from "../src/process";
 import { startWireServer, type WireServer } from "./helpers/wire";
 
 setDefaultTimeout(30_000);
@@ -50,12 +50,12 @@ describe("processApi.stop", () => {
         expect(Date.now() - started).toBeLessThan(1_500);
     });
 
-    test("a process that ignores SIGTERM gets SIGKILL once the 2 s grace has passed", async () => {
+    test("a process that ignores SIGTERM gets SIGKILL once the grace has passed", async () => {
         supervise({ running: true, ends: ["SIGKILL"] });
         const started = Date.now();
-        await processApi.stop("p");
+        await processApi.stop("p", { graceMs: 200 });
         expect(signals()).toEqual(["SIGTERM", "SIGKILL"]);
-        expect(Date.now() - started).toBeGreaterThanOrEqual(2_000);
+        expect(Date.now() - started).toBeGreaterThanOrEqual(200);
     });
 
     test("one that isn't running is already stopped, and one that ended as it was signalled too", async () => {
@@ -70,9 +70,36 @@ describe("processApi.stop", () => {
 
     test("one still running after both signals throws, and a refused kill of a running one throws its reason", async () => {
         supervise({ running: true, ends: [] });
-        await expect(processApi.stop("p")).rejects.toThrow("The process p didn't stop");
+        await expect(processApi.stop("p", { graceMs: 50 })).rejects.toThrow("The process p didn't stop");
         expect(signals()).toEqual(["SIGTERM", "SIGKILL"]);
         supervise({ running: true, ends: [], refuseKill: true });
-        await expect(processApi.stop("p")).rejects.toThrow("no such process");
+        await expect(processApi.stop("p", { graceMs: 50 })).rejects.toThrow("no such process");
+    });
+});
+
+describe("stopProcess with a host of its own", () => {
+    test("stops what the host runs, the same way: SIGTERM, then SIGKILL past the grace", async () => {
+        let running = true;
+        const sent: string[] = [];
+        const exits = new Set<() => void>();
+        const host = {
+            exists: async () => running,
+            kill: async (_id: string, signal?: string) => {
+                sent.push(signal!);
+                if (signal === "SIGKILL") {
+                    running = false;
+                    for (const exit of exits) exit();
+                }
+            },
+            // a plain teardown: no daemon to attach to
+            onExit: (_id: string, callback: () => void) => {
+                exits.add(callback);
+                return () => exits.delete(callback);
+            },
+        };
+        await stopProcess("child", { host, graceMs: 50 });
+        expect(sent).toEqual(["SIGTERM", "SIGKILL"]);
+        expect(exits.size).toBe(0);
+        expect(server.requests("process:kill")).toEqual([]);
     });
 });
