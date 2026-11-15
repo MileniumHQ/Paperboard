@@ -68,7 +68,8 @@ function base(name: string): Key | null {
         const l = lower;
         return { key: l, code: `Key${l.toUpperCase()}`, vk: l.toUpperCase().charCodeAt(0), text: l, shifted: { key: l.toUpperCase(), text: l.toUpperCase() } };
     }
-    if (/^[0-9]$/.test(name)) return { key: name, code: `Digit${name}`, vk: name.charCodeAt(0), text: name };
+    // shifted as a US keyboard has them, the layout the browser's own keyboard assumes
+    if (/^[0-9]$/.test(name)) return { key: name, code: `Digit${name}`, vk: name.charCodeAt(0), text: name, shifted: { key: ")!@#$%^&*("[Number(name)]!, text: ")!@#$%^&*("[Number(name)]! } };
     return null;
 }
 

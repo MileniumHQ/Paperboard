@@ -2,6 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { PANEL_ID } from "../src/contract";
 import { actionsToolset, type ActionEntry } from "../src/service/actionsToolset";
 import { MCP_TOKEN_ENV, startComputerMcp, type ComputerMcp } from "../src/service/computerMcp";
+import { chord } from "../src/service/keys";
 import { MAX_IMAGES, toToolResult } from "../src/service/mcpClient";
 import { toolbox, type Toolset } from "../src/service/toolsets";
 
@@ -162,5 +163,13 @@ describe("the computer's MCP endpoint", () => {
         const call = await (await rpc(mcp, `Bearer ${mcp.token}`, "tools/call", { name: "look", arguments: {} })).json();
         const sent = call.result.content.filter((c: { type: string }) => c.type === "image");
         expect(sent).toEqual(from.images!.map((i) => ({ type: "image", data: i.data, mimeType: i.type })));
+    });
+});
+
+// The agent's keys type what a keyboard would.
+describe("the computer's keys", () => {
+    test("a shifted key types its shifted character, digits too", () => {
+        const typed = (name: string) => (chord(name, "linux") as { text?: string }[]).flatMap((e) => (e.text ? [e.text] : []));
+        expect(["shift+a", "shift+1", "shift+9", "shift+slash", "1"].map(typed)).toEqual([["A"], ["!"], ["("], ["?"], ["1"]]);
     });
 });
