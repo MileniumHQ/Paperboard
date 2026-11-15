@@ -112,6 +112,11 @@ describe("the agent on the user's computer", () => {
         expect(wrote.isError).toBeFalsy();
         expect(fs.readFileSync(path.join(s.project, "src", "deep", "new.ts"), "utf8")).toBe("hi");
         expect((await s.call("user_computer_search", { path: s.project, text: "ANSWER" })).text).toContain(`${path.join("src", "index.ts")}:1:`);
+        // a file it couldn't read is said, so no match never means "not there" when it wasn't looked in
+        fs.writeFileSync(path.join(s.project, "locked.txt"), "the answer");
+        fs.chmodSync(path.join(s.project, "locked.txt"), 0o000);
+        expect((await s.call("user_computer_search", { path: s.project, text: "nowhere" })).text).toBe("No matches.\n\n[1 file couldn't be read]");
+        fs.chmodSync(path.join(s.project, "locked.txt"), 0o600);
 
         // beside the folder, and out of it with .., stay out of reach
         expect((await s.call("user_computer_read", { path: path.join(s.home, "secret.txt") })).isError).toBe(true);

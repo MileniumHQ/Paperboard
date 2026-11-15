@@ -335,8 +335,8 @@ export class Access {
                 let stat: fs.Stats;
                 try {
                     stat = fs.statSync(item.path);
-                } catch {
-                    return fault(`${item.path} doesn't exist on the user's computer`);
+                } catch (e) {
+                    return fault((e as NodeJS.ErrnoException).code === "ENOENT" ? `${item.path} doesn't exist on the user's computer` : `${item.path} can't be looked at: ${errorText(e)}`);
                 }
                 if (!stat.isDirectory()) return fault(`${item.path} is a file; ask for the folder it's in`);
             }
@@ -467,6 +467,7 @@ export class Access {
         if (!text) return fault("give the text to find");
         const hits: string[] = [];
         let files = 0;
+        let unreadable = 0;
         let stopped = "";
         const skipped = new Set<string>();
         const walk = (dir: string) => {
@@ -486,6 +487,8 @@ export class Access {
                     if (fs.statSync(full).size > SEARCH_FILE_BYTES) continue;
                     buf = fs.readFileSync(full);
                 } catch {
+                    // counted and said, so "No matches." never hides files that weren't searched
+                    unreadable++;
                     continue;
                 }
                 if (buf.subarray(0, 8000).includes(0)) continue;
@@ -497,7 +500,7 @@ export class Access {
             }
         };
         walk(root);
-        const notes = [stopped, skipped.size ? `skipped ${[...skipped].join(" and ")} folders; search one by starting in it` : ""].filter(Boolean);
+        const notes = [stopped, skipped.size ? `skipped ${[...skipped].join(" and ")} folders; search one by starting in it` : "", unreadable ? `${unreadable} file${unreadable === 1 ? "" : "s"} couldn't be read` : ""].filter(Boolean);
         return { text: `${hits.join("\n") || "No matches."}${notes.length ? `\n\n[${notes.join("; ")}]` : ""}` };
     }
 
