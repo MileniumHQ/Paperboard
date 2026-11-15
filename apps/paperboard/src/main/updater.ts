@@ -139,6 +139,12 @@ export async function runUpdateOrchestrator(): Promise<void> {
             const state = appRun ? await appRun : getAppUpdateState();
             if (state.status === "failed") failures++;
             recordRunOutcome(failures);
+        } catch (err) {
+            // the cooldown bookkeeping wasn't saved: the update list says so
+            logger.error("[Updater] could not record the update check:", err);
+            const earlier = updateQueue.snapshot().checkError;
+            const said = `Paperboard could not record this update check: ${err instanceof Error ? err.message : String(err)}`;
+            updateQueue.setChecking(false, earlier ? `${earlier} ${said}` : said);
         } finally {
             orchestratorRunning = false;
             // staged runtime updates may now wait for panels to stop
@@ -232,17 +238,20 @@ async function runOrchestratorInner(): Promise<number> {
     });
 
     // planning is electron-free (updatePlan.ts); only planned tasks run
-    const tasks = await planUpdateTasks(reached, installed.panels, registryPackages, craneDlIndex, {
+    const { tasks, refused } = await planUpdateTasks(reached, installed.panels, registryPackages, craneDlIndex, {
         registryUrl: REGISTRY_URL,
         readCraneVersion,
     });
 
-    let failures = unavailable + installed.failures;
+    for (const reason of refused) logger.warn(`[Updater] refused an update: ${reason}`);
+    let failures = unavailable + installed.failures + refused.length;
     updateQueue.setChecking(false, unavailable
         ? `Paperboard could not reach ${unavailable === 1 ? "1 computer" : `${unavailable} computers`} to check for updates.`
         : installed.failures
           ? `Paperboard could not check ${installed.failures === 1 ? "1 panel" : `${installed.failures} panels`} for updates (${installed.reasons[0]}).`
-          : null);
+          : refused.length
+            ? `Paperboard refused ${refused.length === 1 ? "1 update" : `${refused.length} updates`} it could not verify (${refused[0]}).`
+            : null);
 
     const results = (await Promise.all(tasks.map((task) => updateQueue.enqueue(taskJob(task))))).flat();
     for (const item of results) {

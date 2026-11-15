@@ -312,17 +312,19 @@ describe("update planning", () => {
 	const plan = (computers: ComputerUpdateState[], panels: Record<string, any>, crane: Record<string, any> = {}, readCraneVersion = async () => null as string | null) =>
 		planUpdateTasks(computers, panels, {}, crane, { registryUrl: origami.url, readCraneVersion });
 
-	test("no task without a 64-hex sha256, a crane signature, or a known remote crane version", async () => {
+	test("no task without a 64-hex sha256, a crane signature, or a known remote crane version, and each refusal says why", async () => {
 		const panels = { "test.a": { version: "2.0.0", sha256: "abc" }, "test.b": { version: "2.0.0", sha256: sha } };
-		const tasks = await plan([computer({ panels: [{ id: "test.a", version: "1.0.0" }, { id: "test.b", version: "1.0.0" }] })], panels);
-		expect(tasks.map((t) => t.id)).toEqual(["test.b"]);
+		const local = await plan([computer({ panels: [{ id: "test.a", name: "Panel A", version: "1.0.0" }, { id: "test.b", version: "1.0.0" }] })], panels);
+		expect(local.tasks.map((t) => t.id)).toEqual(["test.b"]);
+		expect(local.refused).toEqual(["Panel A: the registry gave no checksum"]);
 
-		const remote = (sysInfo: ComputerUpdateState["sysInfo"]) => computer({ id: "r", isLocal: false, sysInfo });
+		const remote = (sysInfo: ComputerUpdateState["sysInfo"]) => computer({ id: "r", name: "Server", isLocal: false, sysInfo });
 		const crane = { "linux-x64": { version: "9.0.0", sha256: sha } };
-		expect(await plan([remote({ os: "linux", arch: "x64", version: "1.0.0" })], {}, crane)).toEqual([]);
-		expect(await plan([remote({ os: "linux", arch: "x64" })], {}, { "linux-x64": { ...crane["linux-x64"], signature: "sig" } })).toEqual([]);
+		expect(await plan([remote({ os: "linux", arch: "x64", version: "1.0.0" })], {}, crane)).toEqual({ tasks: [], refused: ["Paperboard Server on Server: the release is not signed"] });
+		expect(await plan([remote({ os: "linux", arch: "x64" })], {}, { "linux-x64": { ...crane["linux-x64"], signature: "sig" } })).toEqual({ tasks: [], refused: ["Paperboard Server on Server: its installed version is unknown"] });
 		const signed = await plan([remote({ os: "linux", arch: "x64", version: "1.0.0" })], {}, { "linux-x64": { ...crane["linux-x64"], signature: "sig" } });
-		expect(signed.map((t) => t.type)).toEqual(["ext_crane"]);
+		expect(signed.tasks.map((t) => t.type)).toEqual(["ext_crane"]);
+		expect(signed.refused).toEqual([]);
 	});
 
 	test("unlisted panels update through their own registry record, and an unreadable record counts as a failure with its reason", async () => {
@@ -349,7 +351,7 @@ describe("update planning", () => {
 		expect(failures).toBe(2);
 		// the updater shows the registry's own reason, not a bare status
 		expect(reasons).toContain("test.broken: Registry returned HTTP 500: The registry record for test.broken could not be read");
-		const tasks = await plan(computers, panels);
+		const { tasks } = await plan(computers, panels);
 		expect(tasks.map((t) => [t.id, t.version])).toEqual([["test.unlisted", "5.0.0"]]);
 	});
 

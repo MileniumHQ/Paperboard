@@ -1,6 +1,7 @@
 // Update planning (electron-free): turns pinged computer state plus registry
 // indexes into install tasks. Checksums are planned facts, not execution
-// surprises — a registry entry without a sha256 never becomes a task.
+// surprises — a registry entry without a sha256 never becomes a task, and
+// each update refused that way is returned with its reason, to be shown.
 import { semverGt } from "../../papercrane/util";
 import { logger } from "../../papercrane/logger";
 
@@ -98,8 +99,9 @@ export async function planUpdateTasks(
         registryUrl: string;
         readCraneVersion: (computerId: string) => Promise<string | null>;
     },
-): Promise<UpdateTask[]> {
+): Promise<{ tasks: UpdateTask[]; refused: string[] }> {
     const tasks: UpdateTask[] = [];
+    const refused: string[] = [];
 
     for (const comp of computers) {
         for (const panel of comp.panels) {
@@ -114,9 +116,7 @@ export async function planUpdateTasks(
             // fact, no task. Checksum-less entries are refused here at plan
             // time, never as a confusing "Done (1 failed)" at execution.
             if (!validSha256(reg.sha256)) {
-                logger.warn(
-                    `[Updater] Refusing panel update for ${panel.id}: registry did not provide a sha256 checksum`,
-                );
+                refused.push(`${panel.name || panel.id}: the registry gave no checksum`);
                 continue;
             }
             tasks.push({
@@ -149,9 +149,7 @@ export async function planUpdateTasks(
                       ? reg.sha256
                       : undefined;
             if (!validSha256(pkgSha256)) {
-                logger.warn(
-                    `[Updater] Refusing package update for ${pkgId}: registry did not provide a sha256 checksum`,
-                );
+                refused.push(`${pkgId}: the registry gave no checksum`);
                 continue;
             }
             tasks.push({
@@ -183,22 +181,16 @@ export async function planUpdateTasks(
             // anyway contradicts "planned facts, not execution surprises".
             // The next run retries once the version is readable.
             if (!currentCraneVersion) {
-                logger.warn(
-                    `[Updater] Skipping Paperboard Server update on ${comp.name}: installed version unknown`,
-                );
+                refused.push(`Paperboard Server on ${comp.name}: its installed version is unknown`);
                 continue;
             }
             if (semverGt(craneEntry.version, currentCraneVersion)) {
                 // trust boundary: crane binary updates refuse without a
                 // checksum exactly like panels and packages
                 if (!validSha256(craneEntry.sha256)) {
-                    logger.warn(
-                        `[Updater] Refusing Paperboard Server update on ${comp.name}: registry did not provide a sha256 checksum`,
-                    );
+                    refused.push(`Paperboard Server on ${comp.name}: the registry gave no checksum`);
                 } else if (typeof craneEntry.signature !== "string" || !craneEntry.signature) {
-                    logger.warn(
-                        `[Updater] Refusing Paperboard Server update on ${comp.name}: the release is not signed`,
-                    );
+                    refused.push(`Paperboard Server on ${comp.name}: the release is not signed`);
                 } else {
                     tasks.push({
                         type: "ext_crane",
@@ -218,5 +210,5 @@ export async function planUpdateTasks(
         }
     }
 
-    return tasks;
+    return { tasks, refused };
 }
