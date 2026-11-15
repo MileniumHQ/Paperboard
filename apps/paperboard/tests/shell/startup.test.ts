@@ -18,6 +18,10 @@ const FAIL_STARTUP_READS = `(() => {
         if (url.endsWith("/_shell/invoke/launch-options") || url.endsWith("/_shell/invoke/app-version")) {
             return refuse("The host lost its command line");
         }
+        // the system refuses Run on startup, as an unapproved Mac does
+        if (url.endsWith("/_shell/invoke/app-settings-changed")) {
+            return Promise.resolve(new Response(JSON.stringify({ ok: true, result: "Allow Paperboard in Login Items" }), { status: 200 }));
+        }
         if (url.endsWith("/_shell/invoke/crane-credentials") && sessionStorage.getItem("failCredentials")) {
             return refuse("The host has no server credentials");
         }
@@ -69,6 +73,15 @@ test("opening on a computer that isn't listed opens Home and says so", async () 
     const { page } = shell;
     await page.waitFor(`window.__toasts.some((t) => t.includes("Opened Home instead"))`, "a toast saying Home opened instead");
     await page.waitFor(`document.body.innerText.includes("Edit Home")`, "Home");
+    expect(page.exceptions).toEqual([]);
+});
+
+// Inventory: Core contracts — a setting the system won't apply at start is said, not only logged.
+test("Run on startup that the system refuses at start is said on screen, and in App Settings", async () => {
+    const { page } = shell;
+    await page.waitFor(`window.__toasts.some((t) => t.includes("Settings not applied") && t.includes("Allow Paperboard in Login Items"))`, "a toast saying the settings weren't applied");
+    await page.click("[role=radio][aria-label='Settings']");
+    await page.waitFor(`[...document.querySelectorAll("[role=alert]")].some((a) => a.innerText.includes("Allow Paperboard in Login Items"))`, "App Settings saying why");
     expect(page.exceptions).toEqual([]);
 });
 

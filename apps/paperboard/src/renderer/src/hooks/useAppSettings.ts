@@ -125,13 +125,21 @@ export function useAppSettings() {
             return;
         }
         if (settingsFailure()?.kind === "save") setSettingsFailure(null);
+        await applyAppSettings();
+    };
+
+    /** main applies the saved settings to the system (start-up does too);
+     * resolves to why it couldn't, which App Settings shows, or null */
+    const applyAppSettings = async (): Promise<string | null> => {
         try {
             const refused = await notifyAppSettingsChanged();
             if (refused) setSettingsFailure({ kind: "apply", message: refused });
             else if (settingsFailure()?.kind === "apply") setSettingsFailure(null);
+            return refused;
         } catch (err) {
             logToMain("error", "Failed to apply app settings:", err);
             setSettingsFailure({ kind: "apply", message: errorMessage(err) });
+            return errorMessage(err);
         }
     };
 
@@ -139,6 +147,7 @@ export function useAppSettings() {
         appSettings,
         graphics,
         loadAppSettings,
+        applyAppSettings,
         handleAppSettingsChange,
         settingsFailure,
         retryLoadAppSettings,

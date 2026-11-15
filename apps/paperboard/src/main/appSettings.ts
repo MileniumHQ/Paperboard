@@ -69,6 +69,7 @@ export function applyRunOnStartup(settings: AppSettings): string | null {
         });
         return null;
     } catch (err: any) {
+        // the shell shows it
         logger.warn("[AppSettings] failed to set login item:", err?.message ?? err);
         return err?.message ?? String(err);
     }
@@ -145,12 +146,12 @@ export function syncTitleBarOverlays(): void {
 }
 
 export function initAppSettingsSync(): void {
-    // settings that can't be read change nothing on the system; the window
-    // says so when its own read of them fails (useAppSettings)
+    // the theme before the first window draws; Run on startup is applied
+    // when the shell has loaded the settings (useStartUp), so a refusal is
+    // said on screen. Settings that can't be read change nothing; the
+    // shell says so when its own read of them fails.
     try {
-        const settings = readAppSettings();
-        applyNativeTheme(settings);
-        applyRunOnStartup(settings);
+        applyNativeTheme(readAppSettings());
     } catch (err: any) {
         logger.error("[AppSettings] settings not applied:", err?.message ?? err);
     }

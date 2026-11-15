@@ -20,7 +20,7 @@ export interface StartUpOptions {
 // settings, computers and panels, and last where Paperboard starts.
 export function useStartUp(options: StartUpOptions) {
     const { refreshComputers, activeComputerId, computersLoaded, subscribeComputerChanges } = options.computers;
-    const { appSettings, loadAppSettings } = options.settings;
+    const { appSettings, loadAppSettings, applyAppSettings } = options.settings;
 
     onMount(async () => {
         try {
@@ -56,6 +56,11 @@ export function useStartUp(options: StartUpOptions) {
                 title: "Settings not loaded",
                 message: "Paperboard is showing the defaults, not your settings, and changes aren't saved. App Settings says why.",
             });
+        } else {
+            // the system may have changed since the last start (Run on
+            // startup points at this copy of Paperboard, or macOS asks again)
+            const refused = await applyAppSettings();
+            if (refused) showToast({ variant: "danger", title: "Settings not applied", message: refused });
         }
 
         // Launch lands on Home or the computer App Settings starts on, never
