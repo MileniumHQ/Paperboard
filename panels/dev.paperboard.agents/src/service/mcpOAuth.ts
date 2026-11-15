@@ -56,6 +56,9 @@ const LOOPBACK = new Set(["localhost", "127.0.0.1", "[::1]", "::1"]);
 
 export class SignInNeeded extends Error {}
 
+/** The sign-in server answered, and said no: unlike one that couldn't be reached, asking again won't help. */
+export class TokenRefused extends Error {}
+
 /** the endpoint is https, or http on this computer */
 function checkEndpoint(raw: unknown, what: string): string {
     if (typeof raw !== "string" || !raw) throw new Error(`the sign-in server didn't give its ${what}`);
@@ -248,7 +251,8 @@ async function tokenRequest(f: typeof fetch, t: Pick<Tokens, "tokenEndpoint" | "
     });
     if (!res.ok || !isRecord(got) || typeof got.access_token !== "string" || !got.access_token) {
         const why = isRecord(got) && typeof got.error_description === "string" ? got.error_description : isRecord(got) && typeof got.error === "string" ? got.error : `status ${res.status}`;
-        throw new Error(`${host} refused: ${why}`);
+        // a server error is a server's trouble, tried again later; a 4xx refuses the grant itself
+        throw new (res.status >= 400 && res.status < 500 ? TokenRefused : Error)(`${host} refused: ${why}`);
     }
     const expires = Number(got.expires_in);
     return {

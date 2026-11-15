@@ -21,7 +21,7 @@ import {
 import type { ToolResult } from "./computerMcp";
 import { checkSecretName, parseServer, parseToolsConfig, secretNames, vaultName } from "./mcpConfig";
 import { HttpWire, McpClient, SseWire, StdioWire, Unauthorized, type McpTool, type ProcessHost } from "./mcpClient";
-import { Callback, SIGN_IN_MS, SignInNeeded, authorizeUrl, discover, exchange, parseTokens, pkcePair, refresh, register, stale, type Tokens } from "./mcpOAuth";
+import { Callback, SIGN_IN_MS, SignInNeeded, TokenRefused, authorizeUrl, discover, exchange, parseTokens, pkcePair, refresh, register, stale, type Tokens } from "./mcpOAuth";
 import { errorText } from "../lib/failure";
 
 const WARM_MS = 25_000;
@@ -427,7 +427,10 @@ export class McpServers {
             try {
                 t = await refresh(this.fetcher, t);
             } catch (e) {
-                throw e instanceof SignInNeeded ? e : new SignInNeeded(`the sign-in couldn't be renewed (${errorText(e)}); sign in again`);
+                if (e instanceof SignInNeeded) throw e;
+                // refused, it takes a new sign-in; a server that couldn't be asked is tried again, as any failure to start is
+                if (e instanceof TokenRefused) throw new SignInNeeded(`the sign-in couldn't be renewed (${e.message}); sign in again`);
+                throw new Error(`the sign-in couldn't be renewed: ${errorText(e)}`);
             }
             await this.deps.vault.set(vaultName(server, OAUTH_SECRET), JSON.stringify(t));
         }

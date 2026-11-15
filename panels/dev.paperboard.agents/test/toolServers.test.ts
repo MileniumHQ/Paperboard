@@ -130,7 +130,7 @@ describe("tool-server config", () => {
 describe("signing in to a tool server", () => {
     /** an MCP server that wants a bearer token, and its own authorization server */
     async function oauthServer(o: { refuseRegistration?: boolean; secretOnly?: boolean } = {}) {
-        const st = { valid: "a1", issued: 0, registered: [] as string[], challenge: "", refreshes: 0, resource: "", asked: "", secretSeen: false };
+        const st = { valid: "a1", issued: 0, registered: [] as string[], challenge: "", refreshes: 0, resource: "", asked: "", secretSeen: false, tokenDown: false };
         let base = "";
         const json = (res: http.ServerResponse, status: number, body: unknown, headers: Record<string, string> = {}) => {
             res.writeHead(status, { "Content-Type": "application/json", ...headers });
@@ -172,6 +172,7 @@ describe("signing in to a tool server", () => {
                 return;
             }
             if (url.pathname === "/as/token") {
+                if (st.tokenDown) return json(res, 503, { error: "temporarily_unavailable" });
                 const p = new URLSearchParams(await read(req));
                 if (o.secretOnly && p.get("client_secret") !== "shh") return json(res, 401, { error: "invalid_client" });
                 st.secretSeen ||= p.get("client_secret") === "shh";
@@ -244,6 +245,15 @@ describe("signing in to a tool server", () => {
         expect(s.status()[0]!.phase).toBe("running");
         expect(st.refreshes).toBe(1);
         expect(JSON.parse(vault.get("mcp.web.oauth")!)).toMatchObject({ access: "a2", refresh: "r1" });
+
+        // a sign-in server that's down is a failure to start, tried again; it isn't a sign-in the user must redo
+        st.valid = "a3";
+        st.tokenDown = true;
+        await s.restart("web");
+        expect(s.status()[0]).toMatchObject({ phase: "failed", needsSignIn: false, error: expect.stringContaining("the sign-in couldn't be renewed") });
+        st.tokenDown = false;
+        await s.restart("web");
+        expect(s.status()[0]!.phase).toBe("running");
 
         // removing it takes its tokens with it
         await s.remove("web");
