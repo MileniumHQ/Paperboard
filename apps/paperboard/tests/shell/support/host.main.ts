@@ -2,12 +2,12 @@
 // Electron main is: the same browser host, shell handlers, connection pool
 // and panel server that `paperboard --browser` wires up in src/main/index.ts,
 // over the test's throwaway PAPERBOARD_DIR. Only what is a network or an OS
-// boundary is the harness's: mDNS discovery (it finds nothing here) and the
-// system work main does after a settings save. A test can hold a probe of an
-// address, to answer it after a newer one, and count the probes; make the
-// next forget fail; hold or fail the saves of panel permissions, which it
-// keeps in the store main keeps them in; and push the update queue's states,
-// making the next Stop and update fail.
+// boundary is the harness's: the network mDNS discovery browses (mdns.ts,
+// which finds nothing and can fail) and the system work main does after a
+// settings save. A test can hold a probe of an address, to answer it after a
+// newer one, and count the probes; make the next forget fail; hold or fail the saves of panel permissions, which it
+// keeps in the store main keeps them in; push the update queue's states,
+// making the next Stop and update fail; and break discovery's socket.
 //
 // The test drives it over stdin, one JSON command per line, and reads each
 // answer as one stdout line starting with ANSWER (the daemon client logs to
@@ -19,6 +19,8 @@ import { BrowserSessions } from "../../../src/main/browserSessions";
 import { createShellInvokeHandlers, SHARED_SHELL_INVOKE_CHANNELS } from "../../../src/main/communication/shellHandlers";
 import { addShellPushSink, pushToShells } from "../../../src/main/communication/shellPush";
 import connectionPool from "../../../src/main/communication/papercrane/ConnectionPool";
+import discovery from "../../../src/main/communication/discovery";
+import { failMdns } from "./mdns";
 import { servePanelAsset } from "../../../src/main/panelServe";
 import { getLocalDir } from "../../../papercrane/paths";
 import { launchOptionsFromArgv } from "../../../src/shared/launchOptions";
@@ -52,7 +54,6 @@ invoke["computer-probe"] = async (args) => {
     await held.get((args as { host: string }).host)?.promise;
     return answer;
 };
-invoke["discovery-list"] = () => [];
 let failRemove: string | null = null;
 invoke["computer-remove"] = (args) => {
     const refused = failRemove;
@@ -113,7 +114,9 @@ const host = await startBrowserHost({
     servePanel: servePanelAsset,
 });
 addShellPushSink((channel, payload) => host.push(channel, payload));
-// what communication.ts mirrors for the Electron windows
+// what communication.ts starts and mirrors for the Electron windows
+discovery.start();
+discovery.on("update", (services) => pushToShells("discovery-changed", services));
 connectionPool.on("change", () =>
     pushToShells("computers-changed", { computers: connectionPool.listComputers(), activeId: connectionPool.getActiveId() }),
 );
@@ -133,7 +136,8 @@ type Command =
     | { cmd: "release-permission-save"; fail?: string }
     | { cmd: "push-update-queue"; state: UpdateQueueState }
     | { cmd: "fail-release"; message: string }
-    | { cmd: "next-release" };
+    | { cmd: "next-release" }
+    | { cmd: "fail-mdns"; message: string };
 
 async function run(command: Command): Promise<unknown> {
     switch (command.cmd) {
@@ -193,6 +197,9 @@ async function run(command: Command): Promise<unknown> {
             // resolves with the keys of the oldest Stop and update that ran, once one has
             while (releases.length === 0) await new Promise<void>((wake) => releaseWaiters.push(wake));
             return releases.shift();
+        case "fail-mdns":
+            failMdns(command.message);
+            return true;
     }
 }
 
@@ -206,6 +213,7 @@ createInterface({ input: process.stdin }).on("line", (line) => {
 });
 process.stdin.on("end", () => {
     connectionPool.dispose();
+    discovery.stop();
     void host.close().then(() => process.exit(0));
 });
 reply(0, { result: host.origin });

@@ -26,6 +26,7 @@ export type { Page } from "../../../../../scripts/testing/chrome";
 
 const APP = path.resolve(import.meta.dir, "../../..");
 const HOST_MAIN = path.join(import.meta.dir, "host.main.ts");
+const HOST_MDNS = path.join(import.meta.dir, "mdns.ts");
 const WAIT_MS = 20_000;
 
 // a boot builds the renderer and the daemon and starts three processes
@@ -132,7 +133,7 @@ export async function bootShell(options: BootOptions = {}): Promise<Shell> {
         reaper.track();
         stops.push(() => daemon.stop());
 
-        const child: ChildProcess = spawn(process.execPath, [HOST_MAIN, rendererDir], {
+        const child: ChildProcess = spawn(process.execPath, ["--preload", HOST_MDNS, HOST_MAIN, rendererDir], {
             cwd: APP,
             env: hermeticEnv(dataDir),
             stdio: ["pipe", "pipe", "pipe"],

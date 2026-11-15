@@ -1,5 +1,5 @@
-// mDNS discovery, deduped by machine id + port. A failure is said by
-// found(), and the next refresh starts browsing again.
+// mDNS discovery, deduped by machine id + port. A failure is said by the
+// next look(), which starts browsing again.
 import { EventEmitter } from "events";
 import { Bonjour } from "bonjour-service";
 import { logger } from "../../../papercrane/logger";
@@ -45,7 +45,6 @@ export class DiscoveryService extends EventEmitter {
     public start(): void {
         if (this.started) return;
         this.started = true;
-        this.failure = null;
         try {
             this.mdns = this.openMdns();
             this.browser = this.mdns.find({ type: PAPERCRANE_MDNS_TYPE });
@@ -71,16 +70,7 @@ export class DiscoveryService extends EventEmitter {
         }
     }
 
-    public refresh(): void {
-        this.start();
-        try {
-            this.browser?.update();
-        } catch (err) {
-            this.fail(err);
-        }
-    }
-
-    // browsing stopped: found() says why until the next refresh starts it again
+    // browsing stopped: the next look() says why and starts it again
     private fail(err: unknown): void {
         logger.warn("[Discovery] mDNS browsing failed:", err);
         this.stop();
@@ -186,9 +176,18 @@ export class DiscoveryService extends EventEmitter {
         this.emit("update", this.list());
     }
 
-    /** online machines, sorted by name; throws why when browsing the network failed */
-    public found(): DiscoveredComputer[] {
-        if (this.failure) throw new Error(`Paperboard can't look for computers on this network: ${this.failure}`);
+    /** what the Add computer list shows: online machines, sorted by name, or
+     *  why browsing failed since the last look. Browsing starts again either way. */
+    public look(): DiscoveredComputer[] {
+        this.start();
+        try {
+            this.browser?.update();
+        } catch (err) {
+            this.fail(err);
+        }
+        const why = this.failure;
+        this.failure = null;
+        if (why) throw new Error(`Paperboard can't look for computers on this network: ${why}`);
         return this.list();
     }
 

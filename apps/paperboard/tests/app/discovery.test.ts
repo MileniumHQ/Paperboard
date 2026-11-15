@@ -31,20 +31,20 @@ describe("network discovery", () => {
     test("a browsing failure is said, and the next look browses again", () => {
         const net = network();
         const discovery = new DiscoveryService(net.open);
-        discovery.refresh();
+        expect(discovery.look()).toEqual([]);
         net.browsers[0]!.emit("up", server);
-        expect(discovery.found().map((c) => c.name)).toEqual(["Basement PC"]);
+        expect(discovery.look().map((c) => c.name)).toEqual(["Basement PC"]);
 
         net.browsers[0]!.emit("error", new Error("send EHOSTUNREACH 224.0.0.251:5353"));
-        expect(() => discovery.found()).toThrow("Paperboard can't look for computers on this network: send EHOSTUNREACH 224.0.0.251:5353");
         expect(net.closed()).toBe(1);
+        // the look that says why has already started browsing again
+        expect(() => discovery.look()).toThrow("Paperboard can't look for computers on this network: send EHOSTUNREACH 224.0.0.251:5353");
+        expect(net.browsers).toHaveLength(2);
+        expect(net.queries()).toBe(3);
 
         // the person opens Add computer again once the network is back
-        discovery.refresh();
-        expect(net.browsers).toHaveLength(2);
-        expect(net.queries()).toBe(2);
         net.browsers[1]!.emit("up", server);
-        expect(discovery.found().map((c) => c.name)).toEqual(["Basement PC"]);
+        expect(discovery.look().map((c) => c.name)).toEqual(["Basement PC"]);
         discovery.stop();
     });
 });

@@ -116,10 +116,7 @@ export function createShellInvokeHandlers(
             connectionPool.reorderComputers(ids);
         },
 
-        "discovery-list": () => {
-            discovery.refresh();
-            return discovery.found();
-        },
+        "discovery-list": () => discovery.look(),
 
         // local dir or panel files dir; remotes mount an ephemeral session
         // base64 so both transports (IPC structured clone, browser-mode
