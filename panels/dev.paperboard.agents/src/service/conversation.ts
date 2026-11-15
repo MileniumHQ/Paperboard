@@ -24,7 +24,7 @@
 import { randomUUID } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import { errorMessage, stopProcess } from "@mileniumhq/paperapi";
+import { errorMessage, problemsApi, stopProcess } from "@mileniumhq/paperapi";
 import { writeFileAtomicSync } from "@mileniumhq/paperapi/fs";
 import { CURRENT_CONVERSATION, LIMITS, PANEL_ID, type AccessEntry, type PageEntry, type PromptEntry, type ToolServerEntry, type ToolSignInEntry, type Attachment, type ChatEntry, type ChatState, type Harness, type PastConversation, type Settings, type SignInEntry, type WaitingMessage } from "../contract";
 import type { StartOptions } from "./browser";
@@ -170,8 +170,9 @@ export class Conversation {
         removeLeftRunFiles(this.runDir());
         const codexHome = this.deps.env("codex").CODEX_HOME;
         if (codexHome) removeLeftRunFiles(codexHome);
-        // quiet: a turn the last service generation left running is not ours to finish, and nobody waits on it
-        void stopProcess(TURN_PROC_ID, { host: this.deps.host }).catch((e) => console.error("[agents] couldn't stop a turn left from before:", errorMessage(e)));
+        // a turn the last service generation left running is not ours to finish, and nobody waits on it
+        void stopProcess(TURN_PROC_ID, { host: this.deps.host }).catch((e) =>
+            problemsApi.report(PANEL_ID, { key: "turn-left", title: "A turn left running from before couldn't be stopped", message: errorMessage(e) }));
     }
 
     /** The current conversation and what goes with it, read from its files. */

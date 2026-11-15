@@ -119,6 +119,9 @@ describe("run outcome is only the exit the daemon reported, across restarts", ()
                 const run = view.commandRuns.cmd_deadline;
                 if (run && run.state !== "running") settled(view);
             },
+            problem: (title, message) => {
+                throw new Error(`${title}: ${message}`);
+            },
             timeoutMs: 300,
         });
         await saved.init();

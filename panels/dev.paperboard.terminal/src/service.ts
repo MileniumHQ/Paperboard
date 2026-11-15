@@ -8,6 +8,7 @@ import {
     blocksApi,
     type ServiceContext,
     errorMessage,
+    problemsApi,
     SerialQueue,
 } from "@mileniumhq/paperapi";
 import * as fs from "node:fs";
@@ -138,7 +139,9 @@ async function flushScrollback(): Promise<void> {
 
 // the Blocks panel's handle, and what it was last told changed
 const blocks = blocksApi.panel(PANEL_ID);
-const announcer = new BlocksAnnouncer(blocks);
+// what fails with no command or button to show it on: the panel's problem, one per kind
+const problem = (title: string, message: string) => problemsApi.report(PANEL_ID, { key: title, title, message });
+const announcer = new BlocksAnnouncer(blocks, problem);
 
 function publishTabs(ctx: Ctx) {
     ctx.setState({ tabs: structuredClone(tabs), activeTabId, showTab: { ...showTabRequest }, layout, tabsError });
@@ -392,6 +395,7 @@ const savedCommands = new SavedCommands({
         announcer.list("saved-commands", view.savedCommands.map((c) => c.id));
     },
     onFinished: (command, outcome) => announcer.fire("saved-command-finished", finishedPayload(command, outcome)),
+    problem,
 });
 
 // the daemon stops this service with SIGTERM: the runs it started are its to

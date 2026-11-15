@@ -71,6 +71,8 @@ export interface SavedCommandsDeps {
     /** Whether the daemon still has this child. */
     exists(procId: string): Promise<boolean>;
     publish(view: SavedCommandsView): void;
+    /** Something failed that no command or button can show (a run left over from before a restart that wouldn't stop): told to the person. */
+    problem(title: string, message: string): void;
     /** A run of a command that is still saved ended: its outcome, as the view now shows it. */
     onFinished?(command: SavedCommand, outcome: Exclude<CommandRun, { state: "running" }>): void;
     now?: () => number;
@@ -452,17 +454,15 @@ export class SavedCommands {
             }
             if (!known) {
                 // removed while it ran: nothing can show it, so it must not keep running
-                // quiet: restart housekeeping with no command to show it on; nobody asked for this kill
                 await this.deps.kill(rec.procId).catch((err) =>
-                    console.error(`[TerminalService] could not stop orphaned run ${rec.procId}:`, err),
+                    this.deps.problem("A run of a removed command couldn't be stopped", `${rec.procId}: ${errorMessage(err)}`),
                 );
                 continue;
             }
             if (this.live.has(rec.commandId)) {
                 // one run per command: a second record is a stray
-                // quiet: restart housekeeping with no command to show it on; nobody asked for this kill
                 await this.deps.kill(rec.procId).catch((err) =>
-                    console.error(`[TerminalService] could not stop stray run ${rec.procId}:`, err),
+                    this.deps.problem("A second run of a command couldn't be stopped", `${rec.procId}: ${errorMessage(err)}`),
                 );
                 continue;
             }

@@ -2,8 +2,8 @@
 // library offers. The conversation dropdown lists the history as it is now,
 // so these are built again (and registered again) whenever it changes.
 
-import { defineAction, type ActionDefinition, errorMessage, SerialQueue } from "@mileniumhq/paperapi";
-import { ACTION_IDS, LIMITS, TRIGGER_IDS } from "../contract";
+import { defineAction, type ActionDefinition, errorMessage, problemsApi, SerialQueue } from "@mileniumhq/paperapi";
+import { ACTION_IDS, LIMITS, PANEL_ID, TRIGGER_IDS } from "../contract";
 import { ASK_MS } from "./ask";
 
 /** One conversation in the dropdown: its title, valued by its id. */
@@ -178,8 +178,9 @@ export class FlowActionsPublisher {
             try {
                 choices = JSON.stringify(this.deps.choices());
             } catch (e) {
-                // quiet: the dropdown keeps its last list; nobody is waiting on this publish
-                console.error("[agents] the conversation dropdown can't be listed:", String(e));
+                // the dropdown keeps its last list; nobody is waiting on this publish
+                const title = "The conversations couldn't be listed for flows";
+                problemsApi.report(PANEL_ID, { key: title, title, message: errorMessage(e) });
                 return;
             }
             if (choices === this.published) return;

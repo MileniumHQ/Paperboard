@@ -5,7 +5,7 @@
 // stops: always awaited, never assumed. A failed server stays failed, with
 // its reason, until it is restarted or the next turn retries it.
 
-import { errorMessage, SerialQueue } from "@mileniumhq/paperapi";
+import { errorMessage, problemsApi, SerialQueue } from "@mileniumhq/paperapi";
 import type { Launch } from "./which";
 import { PANEL_ID } from "../contract";
 import crypto from "node:crypto";
@@ -282,8 +282,9 @@ export class McpServers {
                     this.deps.onChange(await this.view());
                 }
             } catch (e) {
-                // quiet: the tools view keeps its last copy; nobody is waiting on this publish
-                console.error("[agents] couldn't publish the tools view:", errorMessage(e));
+                // the tools view keeps its last copy; nobody is waiting on this publish
+                const title = "The tools Agents can use couldn't be shown";
+                problemsApi.report(PANEL_ID, { key: title, title, message: errorMessage(e) });
             } finally {
                 this.publishing = false;
             }

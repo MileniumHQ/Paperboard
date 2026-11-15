@@ -1,6 +1,6 @@
 // Terminal's blocks for the Blocks panel. They run the same functions the
 // panel's page calls, which the service hands in here.
-import type { BlockSet, BlocksHandle, TerminalCommand } from "@mileniumhq/paperapi";
+import { errorMessage, type BlockSet, type BlocksHandle, type TerminalCommand } from "@mileniumhq/paperapi";
 import type { SplitDirection } from "./lib/tabs";
 import { MAX_COMMAND_LENGTH, MAX_LABEL_LENGTH, type CommandRun, type SavedCommand } from "./lib/savedCommands";
 
@@ -467,7 +467,11 @@ export class BlocksAnnouncer {
     private registered = false;
     private readonly last = new Map<string, string>();
 
-    constructor(private readonly handle: BlocksHandle) {}
+    constructor(
+        private readonly handle: BlocksHandle,
+        /** an event that didn't reach Blocks, with no user action waiting on it, told to the person */
+        private readonly problem: (title: string, message: string) => void,
+    ) {}
 
     async register(set: BlockSet, lists: Record<string, string[]>): Promise<void> {
         await this.handle.register(set);
@@ -486,7 +490,6 @@ export class BlocksAnnouncer {
 
     fire(event: string, payload: Record<string, unknown>): void {
         if (!this.registered) return;
-        // quiet: an event for Blocks with no user action waiting on it
-        this.handle.fire(event, payload).catch((err) => console.error(`[TerminalService] ${event} did not reach Blocks:`, err));
+        this.handle.fire(event, payload).catch((err) => this.problem(`Blocks didn't hear ${event}`, errorMessage(err)));
     }
 }

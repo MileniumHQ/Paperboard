@@ -2,8 +2,8 @@
 // (each told only when it reads differently from the last time) and the events
 // flows start from. Nothing is told before the blocks are registered.
 
-import { type BlocksHandle, errorMessage } from "@mileniumhq/paperapi";
-import type { MemoryList } from "../contract";
+import { type BlocksHandle, errorMessage, problemsApi } from "@mileniumhq/paperapi";
+import { PANEL_ID, type MemoryList } from "../contract";
 
 export interface BlocksSyncDeps {
     blocks: BlocksHandle;
@@ -66,8 +66,11 @@ export class BlocksSync {
     /** An event for the Blocks panel; nothing listens before the blocks are registered. */
     fire(event: string, payload: Record<string, unknown>) {
         if (!this.registered) return;
-        // quiet: an event for Blocks with no user action waiting on it
-        this.deps.blocks.fire(event, payload).catch((e) => console.error(`[agents] ${event} didn't reach Blocks:`, String(e)));
+        // no user action waits on it: one that fails is the panel's problem
+        this.deps.blocks.fire(event, payload).catch((e) => {
+            const title = `Blocks didn't hear ${event}`;
+            problemsApi.report(PANEL_ID, { key: title, title, message: errorMessage(e) });
+        });
     }
 
     private seeMemory(list: MemoryList, tell: boolean) {

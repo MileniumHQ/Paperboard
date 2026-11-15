@@ -16,9 +16,9 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { errorMessage, isRecord } from "@mileniumhq/paperapi";
+import { errorMessage, isRecord, problemsApi } from "@mileniumhq/paperapi";
 import { writeFileAtomicSync } from "@mileniumhq/paperapi/fs";
-import { LIMITS, type AccessEntry, type AccessGrant, type AccessItem, type AccessView } from "../contract";
+import { LIMITS, PANEL_ID, type AccessEntry, type AccessGrant, type AccessItem, type AccessView } from "../contract";
 import type { ToolResult } from "./computerMcp";
 import type { ToolSpec } from "./computerTools";
 import type { Launch } from "./which";
@@ -209,8 +209,9 @@ export class Access {
         try {
             this.deps.onChange(this.view());
         } catch (e) {
-            // quiet: what's allowed keeps its last copy on the page; nobody is waiting on this publish
-            console.error("[agents] couldn't publish what's allowed:", errorMessage(e));
+            // what's allowed keeps its last copy on the page; nobody is waiting on this publish
+            const title = "What Agents is allowed couldn't be shown";
+            problemsApi.report(PANEL_ID, { key: title, title, message: errorMessage(e) });
         }
     }
 
