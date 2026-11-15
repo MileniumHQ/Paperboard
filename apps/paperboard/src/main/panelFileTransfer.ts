@@ -33,7 +33,7 @@ export const PANEL_FILE_SAVE_MAX_BYTES = 2 * 1024 * 1024 * 1024;
 // a daemon that sends or accepts nothing for this long has failed the transfer
 const TRANSFER_IDLE_MS = 60_000;
 // open dialogs and transfers across every panel; each panel holds one
-export const MAX_ACTIVE_PANEL_FILE_TRANSFERS = 4;
+const MAX_ACTIVE_PANEL_FILE_TRANSFERS = 4;
 
 export interface DaemonEndpoint {
     host: string;

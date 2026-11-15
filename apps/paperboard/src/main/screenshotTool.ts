@@ -3,7 +3,7 @@ import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { isShellUrl } from "./communication/shellGuard";
 
-export function screenshotSize(width: unknown, height: unknown): { width: number; height: number } {
+function screenshotSize(width: unknown, height: unknown): { width: number; height: number } {
     if (typeof width !== "number" || typeof height !== "number" ||
         !Number.isInteger(width) || !Number.isInteger(height) ||
         width < 320 || height < 240 || width > 3840 || height > 2160) {
@@ -12,7 +12,7 @@ export function screenshotSize(width: unknown, height: unknown): { width: number
     return { width, height };
 }
 
-export function screenshotOutputSize(width: number, height: number, scale: unknown): { width: number; height: number } {
+function screenshotOutputSize(width: number, height: number, scale: unknown): { width: number; height: number } {
     if (typeof scale !== "number" || !Number.isFinite(scale) || scale < 0.25 || scale > 4) {
         throw new Error("Output scale must be between 0.25× and 4×.");
     }
@@ -21,7 +21,7 @@ export function screenshotOutputSize(width: number, height: number, scale: unkno
     return result;
 }
 
-export function isScreenshotShortcut(input: Pick<Input, "type" | "key" | "control" | "meta" | "shift" | "alt" | "isAutoRepeat">, platform = process.platform): boolean {
+function isScreenshotShortcut(input: Pick<Input, "type" | "key" | "control" | "meta" | "shift" | "alt" | "isAutoRepeat">, platform = process.platform): boolean {
     return input.type === "keyDown" && input.key === "F8" && input.shift && !input.alt &&
         !input.isAutoRepeat && (platform === "darwin" ? input.meta && !input.control : input.control && !input.meta);
 }

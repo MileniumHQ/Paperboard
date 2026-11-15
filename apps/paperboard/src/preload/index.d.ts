@@ -14,7 +14,6 @@ declare global {
         electron: {
             ipcRenderer: GuardedIpcRenderer;
         };
-        api?: unknown;
     }
 }
 

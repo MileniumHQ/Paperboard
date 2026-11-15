@@ -1,8 +1,8 @@
 // Local panel:// asset serving for the Electron shell. The resolver itself
 // lives in papercrane/panelAssets.ts (one implementation shared with the
 // daemon /panel/ route), and the document helpers live in
-// shared/panelDocument.ts for every host; this module re-exports both and
-// adds what needs Node: the host-name split and the nonce.
+// shared/panelDocument.ts for every host; this module re-exports the
+// resolver and adds the panel:// host split and the nonce.
 import * as crypto from "crypto";
 
 export {
@@ -12,8 +12,7 @@ export {
 } from "../../papercrane/panelAssets";
 
 // panel://<computerId>.<panelId>/<path> — scope is part of the origin.
-// Browser mode puts the same "<computerId>.<panelId>" prefix in front of its
-// host suffix, so both hosts split it here.
+// Browser mode serves panels by path instead (PaperAPI's parsePanelPath).
 export function parsePanelHost(
     hostname: string,
 ): { comp: string; panelId: string } | null {

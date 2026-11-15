@@ -58,7 +58,7 @@ function readCookie(req: http.IncomingMessage, name: string): string | undefined
 export const MAX_EVENT_CLIENTS = 16;
 export const MAX_BRIDGE_BODY_BYTES = 64 * 1024;
 // a tab that stops reading its stream is dropped, not buffered without bound
-export const MAX_EVENT_BACKLOG_BYTES = 1024 * 1024;
+const MAX_EVENT_BACKLOG_BYTES = 1024 * 1024;
 const EVENT_HEARTBEAT_MS = 25_000;
 
 export interface BrowserHostOptions {

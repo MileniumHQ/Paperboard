@@ -59,7 +59,7 @@ export function shouldSkipUpdate(argv: string[]): boolean {
 }
 
 function readUpdateState(): UpdateState {
-    // daemon-owned state: corrupt bytes are quarantined beside the file (not
+    // the app's own state: corrupt bytes are quarantined beside the file (not
     // silently ignored) and an unreadable file throws, so cooldown and
     // consecutive-failure bookkeeping cannot vanish without a trace
     return readStateFileSync<UpdateState>(TIMESTAMP_FILE, {}, "last_update.json");

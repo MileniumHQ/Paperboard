@@ -13,7 +13,7 @@ export interface LoginItemHost {
     set(openAtLogin: boolean): void;
 }
 
-export function autostartEntryPath(env: NodeJS.ProcessEnv): string {
+function autostartEntryPath(env: NodeJS.ProcessEnv): string {
     const config = env.XDG_CONFIG_HOME || path.join(os.homedir(), ".config");
     return path.join(config, "autostart", "dev.paperboard.paperboard.desktop");
 }
