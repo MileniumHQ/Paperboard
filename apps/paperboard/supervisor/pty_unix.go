@@ -66,7 +66,16 @@ func (w *ptyWorkload) foreground() (string, error) {
 	if groupErr != nil {
 		return "", fmt.Errorf("the terminal has no foreground job: %w", groupErr)
 	}
-	return processName(group)
+	name, err := processName(group)
+	if err != nil {
+		return "", err
+	}
+	// a shell forked a moment ago still carries the supervisor's name until
+	// it starts its program: that name is never the program in front
+	if self, selfErr := processName(os.Getpid()); selfErr == nil && name == self && group != os.Getpid() {
+		return "", fmt.Errorf("process %d has not started its program yet", group)
+	}
+	return name, nil
 }
 
 // keeps a file open for a writer that must not close it
