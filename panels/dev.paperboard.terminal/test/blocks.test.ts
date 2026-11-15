@@ -95,11 +95,11 @@ describe("the Terminal's blocks", () => {
         await startService();
         const folder = fs.mkdtempSync(path.join(work, "here "));
         await expect(run("new-tab", { name: "Nowhere", folder: path.join(work, "missing") })).rejects.toThrow("is not a folder on this computer");
-        await expect(call("create-tab", { label: "Odd", shell: "/bin/not-a-shell" })).rejects.toThrow("/bin/not-a-shell is not a shell on this computer");
+        await expect(call.createTab({ label: "Odd", shell: "/bin/not-a-shell" })).rejects.toThrow("/bin/not-a-shell is not a shell on this computer");
         // an installed program that isn't one of the computer's shells is refused too
-        await expect(call("create-tab", { label: "Odd", shell: process.execPath })).rejects.toThrow(`${process.execPath} is not a shell on this computer`);
+        await expect(call.createTab({ label: "Odd", shell: process.execPath })).rejects.toThrow(`${process.execPath} is not a shell on this computer`);
         // the test daemon's shell is a plain sh, which marks nothing: bash does
-        const tab = await call<string>("create-tab", { label: "Here", cwd: folder, shell: "/bin/bash" });
+        const tab = await call.createTab({ label: "Here", cwd: folder, shell: "/bin/bash" });
         const property = (field: string) => blocksApi.property(`${PANEL_ID}:tab`, field, tab);
         const propertyIs = (field: string, accept: (v: unknown) => boolean) => until(`the tab's ${field}`, () => property(field), accept);
         expect(await propertyIs("folder", (v) => v === folder)).toBe(folder);

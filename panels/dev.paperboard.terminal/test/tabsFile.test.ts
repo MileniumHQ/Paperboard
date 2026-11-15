@@ -51,7 +51,7 @@ describe("tabs.json", () => {
         expect(state.tabsError).toContain("could not be read");
         expect(state.tabs).toEqual([]);
 
-        await expect(call("create-tab", { label: "New" })).rejects.toThrow("could not be read");
+        await expect(call.createTab({ label: "New" })).rejects.toThrow("could not be read");
         await expect(runBlock("new-tab", { name: "New" })).rejects.toThrow("could not be read");
         await stopServices();
         expect(fs.readFileSync(path.join(dir, "tabs.json"), "utf8")).toBe(broken);
@@ -65,9 +65,9 @@ describe("tabs.json", () => {
         fs.chmodSync(dir, 0o555);
         readOnly = dir;
 
-        await expect(call("rename-tab", { id: "tab1", label: "Renamed" })).rejects.toThrow("Your tabs could not be saved");
-        await expect(call("reorder-tabs", { orderedIds: ["tab2", "tab1"] })).rejects.toThrow("Your tabs could not be saved");
-        await expect(call("create-tab", { label: "Three" })).rejects.toThrow("Your tabs could not be saved");
+        await expect(call.renameTab({ id: "tab1", label: "Renamed" })).rejects.toThrow("Your tabs could not be saved");
+        await expect(call.reorderTabs({ orderedIds: ["tab2", "tab1"] })).rejects.toThrow("Your tabs could not be saved");
+        await expect(call.createTab({ label: "Three" })).rejects.toThrow("Your tabs could not be saved");
         const state = await serviceState();
         expect(state.tabs.map((t: { id: string; label: string }) => `${t.id}:${t.label}`)).toEqual(["tab1:One", "tab2:Two"]);
         expect(await readBlock("tabs")).toEqual(["tab1", "tab2"]);
@@ -75,7 +75,7 @@ describe("tabs.json", () => {
         // once it can be saved, the same change goes through
         fs.chmodSync(dir, 0o755);
         readOnly = null;
-        await call("rename-tab", { id: "tab1", label: "Renamed" });
+        await call.renameTab({ id: "tab1", label: "Renamed" });
         expect(JSON.parse(fs.readFileSync(path.join(dir, "tabs.json"), "utf8")).tabs[0].label).toBe("Renamed");
     });
 });
@@ -84,7 +84,7 @@ describe("a tab's scrollback", () => {
     test("is there again after the service restarts, and goes when the tab closes", async () => {
         const dir = await panelFiles({ "tabs.json": TABS });
         await startService();
-        await call("open-tab", { id: "tab2" });
+        await call.openTab({ id: "tab2" });
         await runBlock("type-in-tab", { tab: "tab2", text: "echo kept-$((6*7))\n" });
         await fileHolds(path.join(scrollback(dir), "tab2.log"), "kept-42");
 
@@ -99,7 +99,7 @@ describe("a tab's scrollback", () => {
     test("holds what the shell printed just before the service stopped", async () => {
         await panelFiles({ "tabs.json": TABS });
         await startService();
-        await call("open-tab", { id: "tab1" });
+        await call.openTab({ id: "tab1" });
         await runBlock("type-in-tab", { tab: "tab1", text: "echo last-$((6*7))\n" });
         await until("the output", () => readBlock<string>("output", { tab: "tab1", lines: 100 }), (out) => out.includes("last-42"));
         // stopped at once, while the output still waits to be written
@@ -111,7 +111,7 @@ describe("a tab's scrollback", () => {
     test("that could not be read is said, and never written over", async () => {
         const dir = await panelFiles({ "tabs.json": TABS });
         await startService();
-        await call("open-tab", { id: "tab1" });
+        await call.openTab({ id: "tab1" });
         await runBlock("type-in-tab", { tab: "tab1", text: "echo kept-$((6*7))\n" });
         const file = path.join(scrollback(dir), "tab1.log");
         await fileHolds(file, "kept-42");
@@ -124,7 +124,7 @@ describe("a tab's scrollback", () => {
         await startService();
         const said = await stateWhere<any>(PANEL_ID, (s) => Boolean(s.sessionErrors?.tab1?.scrollback), "the unreadable scrollback to be said");
         expect(said.sessionErrors.tab1.scrollback).toContain("earlier output couldn't be read");
-        await call("open-tab", { id: "tab1" });
+        await call.openTab({ id: "tab1" });
         await runBlock("type-in-tab", { tab: "tab1", text: "echo new-$((6*7))\n" });
         await until("the new output", () => readBlock<string>("output", { tab: "tab1", lines: 100 }), (out) => out.includes("new-42"));
         await stopServices();
@@ -136,7 +136,7 @@ describe("a tab's scrollback", () => {
     test("is not left behind by a tab whose shell would not start", async () => {
         const dir = await panelFiles({ "tabs.json": TABS });
         await startService();
-        await expect(call("create-tab", { label: "Odd", shell: "/bin/not-a-shell" })).rejects.toThrow("is not a shell on this computer");
+        await expect(call.createTab({ label: "Odd", shell: "/bin/not-a-shell" })).rejects.toThrow("is not a shell on this computer");
         expect(fs.existsSync(scrollback(dir)) ? fs.readdirSync(scrollback(dir)) : []).toEqual([]);
     });
 

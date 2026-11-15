@@ -1,7 +1,7 @@
 // How a saved command's last run reads, in the panel and on Home. Pure, so
 // the wording is tested once: only an observed exit says "Exited", only exit
 // code 0 is shown as success, and a timeout never passes as an exit code.
-import type { CommandRun } from "./savedCommands";
+import type { CommandRun } from "./contract";
 
 export type RunTone = "idle" | "running" | "success" | "danger" | "warning";
 

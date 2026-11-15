@@ -70,17 +70,17 @@ describe("run outcome is only the exit the daemon reported, across restarts", ()
         await startService();
         const pass = heldCommand("pass", 0);
         const fail = heldCommand("fail", 3);
-        const passId = await call<string>("save-command", { label: "Pass", command: pass.command });
-        const failId = await call<string>("save-command", { label: "Fail", command: fail.command });
+        const passId = await call.saveCommand({ label: "Pass", command: pass.command });
+        const failId = await call.saveCommand({ label: "Fail", command: fail.command });
 
-        const started = await call<{ startedAt: number }>("run-saved-command", { id: passId });
-        await call("run-saved-command", { id: failId });
+        const started = await call.runSavedCommand({ id: passId });
+        await call.runSavedCommand({ id: failId });
         const running = await stateWhere<any>(PANEL_ID, (s) => runOf(passId)(s)?.state === "running" && runOf(failId)(s)?.state === "running", "both runs to show running");
         expect(runOf(passId)(running)).toEqual({ state: "running", startedAt: started.startedAt });
         expect(describeRun(runOf(passId)(running), Date.now()).tone).toBe("running");
         // accepted runs are on record, so a restarted service can take them back
         expect(fileOf(dir).running.map((r) => r.commandId).sort()).toEqual([passId, failId].sort());
-        await expect(call("run-saved-command", { id: passId })).rejects.toThrow('"Pass" is already running');
+        await expect(call.runSavedCommand({ id: passId })).rejects.toThrow('"Pass" is already running');
 
         pass.release();
         fail.release();
@@ -137,11 +137,11 @@ describe("run outcome is only the exit the daemon reported, across restarts", ()
         const dir = await panelFiles();
         await startService();
         const held = heldCommand("unrecorded", 0);
-        const id = await call<string>("save-command", { label: "Unrecorded", command: held.command });
+        const id = await call.saveCommand({ label: "Unrecorded", command: held.command });
         const before = fs.readFileSync(path.join(dir, FILE), "utf8");
         fs.chmodSync(dir, 0o555);
         try {
-            await expect(call("run-saved-command", { id })).rejects.toThrow(/"Unrecorded" was stopped: its run could not be recorded \(.*(EACCES|permission denied)/i);
+            await expect(call.runSavedCommand({ id })).rejects.toThrow(/"Unrecorded" was stopped: its run could not be recorded \(.*(EACCES|permission denied)/i);
         } finally {
             fs.chmodSync(dir, 0o755);
         }
@@ -158,8 +158,8 @@ describe("run outcome is only the exit the daemon reported, across restarts", ()
         const dir = await panelFiles();
         const first = await startService();
         const held = heldCommand("reclaimed", 0);
-        const id = await call<string>("save-command", { label: "Reclaimed", command: held.command });
-        const { startedAt } = await call<{ startedAt: number }>("run-saved-command", { id });
+        const id = await call.saveCommand({ label: "Reclaimed", command: held.command });
+        const { startedAt } = await call.runSavedCommand({ id });
         const [record] = fileOf(dir).running;
         expect(record).toMatchObject({ commandId: id, startedAt });
         await first.crash();
@@ -177,8 +177,8 @@ describe("run outcome is only the exit the daemon reported, across restarts", ()
         const dir = await panelFiles();
         const first = await startService();
         const held = heldCommand("vanished", 0);
-        const id = await call<string>("save-command", { label: "Vanished", command: held.command });
-        await call("run-saved-command", { id });
+        const id = await call.saveCommand({ label: "Vanished", command: held.command });
+        await call.runSavedCommand({ id });
         const [record] = fileOf(dir).running;
         await first.crash();
         // the child exits 0 while nobody watches
@@ -196,8 +196,8 @@ describe("run outcome is only the exit the daemon reported, across restarts", ()
         const dir = await panelFiles();
         const service = await startService();
         const held = heldCommand("stopped", 0);
-        const id = await call<string>("save-command", { label: "Stopped", command: held.command });
-        await call("run-saved-command", { id });
+        const id = await call.saveCommand({ label: "Stopped", command: held.command });
+        await call.runSavedCommand({ id });
         const [record] = fileOf(dir).running;
         await service.stop();
         await untilProcessGone(record.procId);

@@ -3,7 +3,7 @@ import { For, Show, type JSX } from "solid-js";
 import { PaperContextMenu, PaperContextMenuHeader, PaperContextMenuItem, type useContextMenuState } from "@mileniumhq/paperui";
 import type { TerminalShell } from "@mileniumhq/paperapi";
 import { shortcutLabel } from "./keys";
-import type { SplitDirection } from "./lib/tabs";
+import type { SplitDirection } from "./lib/contract";
 
 export type MenuState = ReturnType<typeof useContextMenuState>;
 

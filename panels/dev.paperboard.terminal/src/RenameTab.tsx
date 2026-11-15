@@ -2,8 +2,8 @@
 // so a refusal is shown beside the field that caused it.
 import { createSignal, Show } from "solid-js";
 import { PaperButton, PaperFlex, PaperInput, PaperModal, PaperQuote } from "@mileniumhq/paperui";
-import { serviceApi, errorMessage } from "@mileniumhq/paperapi";
-import { PANEL_ID } from "./lib/panel";
+import { errorMessage } from "@mileniumhq/paperapi";
+import { terminal } from "./client";
 
 export function createRenameTab() {
     const [tabId, setTabId] = createSignal<string | null>(null);
@@ -26,7 +26,7 @@ export function createRenameTab() {
         setSaving(true);
         try {
             // the new label arrives through the service's state
-            await serviceApi.call(PANEL_ID, "rename-tab", { id, label: value().trim() });
+            await terminal.calls.renameTab({ id, label: value().trim() });
             close();
         } catch (err) {
             setError(errorMessage(err));

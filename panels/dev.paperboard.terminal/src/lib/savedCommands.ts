@@ -11,7 +11,7 @@ import { errorMessage, SerialQueue } from "@mileniumhq/paperapi";
 // records each accepted run in its file. A service that stops cleanly kills
 // its runs (dispose); one that restarts after a crash finds the records and
 // takes the runs back with the deadline they had left (init).
-
+import type { CommandRun, SavedCommand } from "./contract";
 
 export const MAX_SAVED_COMMANDS = 32;
 export const MAX_COMMAND_LENGTH = 4096;
@@ -21,22 +21,6 @@ const RUN_TIMEOUT_MS = 10 * 60_000;
 /** After a kill, how long to wait for the exit before giving up on the run. */
 const EXIT_GRACE_MS = 30_000;
 const SAVED_COMMANDS_VERSION = 1;
-
-export interface SavedCommand {
-    id: string;
-    label: string;
-    command: string;
-}
-
-export type CommandRun =
-    | { state: "running"; startedAt: number }
-    | { state: "exited"; startedAt: number; endedAt: number; exitCode: number }
-    /** Killed after RUN_TIMEOUT_MS; the exit was observed, its code is not the command's verdict. */
-    | { state: "timed-out"; startedAt: number; endedAt: number }
-    /** Stopped on request before it finished; the exit was observed, its code is not the command's verdict. */
-    | { state: "stopped"; startedAt: number; endedAt: number }
-    /** The daemon refused the spawn, or no exit ever arrived. Not an exit code. */
-    | { state: "failed"; startedAt: number; endedAt: number; error: string };
 
 /** A child the daemon accepted and this service has not yet seen exit. */
 interface RunningRecord {

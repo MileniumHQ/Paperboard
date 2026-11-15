@@ -37,9 +37,9 @@ describe("the saved-commands file is never overwritten blindly", () => {
             expect(state.savedCommandsError).toContain(reason);
             // unknown is not empty: nothing is offered as the list
             expect(state.savedCommands).toEqual([]);
-            await expect(call("save-command", { label: "Build", command: "make" })).rejects.toThrow(reason);
-            await expect(call("remove-saved-command", { id: "cmd_a" })).rejects.toThrow(reason);
-            await expect(call("run-saved-command", { id: "cmd_a" })).rejects.toThrow(reason);
+            await expect(call.saveCommand({ label: "Build", command: "make" })).rejects.toThrow(reason);
+            await expect(call.removeSavedCommand({ id: "cmd_a" })).rejects.toThrow(reason);
+            await expect(call.runSavedCommand({ id: "cmd_a" })).rejects.toThrow(reason);
             expect(fs.readFileSync(path.join(dir, FILE), "utf8")).toBe(content);
         });
     }
@@ -47,10 +47,10 @@ describe("the saved-commands file is never overwritten blindly", () => {
     test("adds and removes sent at once are applied one after another, each saved before it shows", async () => {
         const dir = await panelFiles();
         await startService();
-        const ids = await Promise.all(["one", "two", "three", "four"].map((name) => call<string>("save-command", { label: name, command: `echo ${name}` })));
+        const ids = await Promise.all(["one", "two", "three", "four"].map((name) => call.saveCommand({ label: name, command: `echo ${name}` })));
         expect(new Set(ids).size).toBe(4);
         expect(savedFile(dir).commands.map((c: any) => c.label)).toEqual(["one", "two", "three", "four"]);
-        await Promise.all([call("remove-saved-command", { id: ids[1] }), call("save-command", { label: "five", command: "echo five" }), call("remove-saved-command", { id: ids[3] })]);
+        await Promise.all([call.removeSavedCommand({ id: ids[1] }), call.saveCommand({ label: "five", command: "echo five" }), call.removeSavedCommand({ id: ids[3] })]);
         const labels = savedFile(dir).commands.map((c: any) => c.label);
         expect(labels).toEqual(["one", "three", "five"]);
         const state = await stateWhere<any>(PANEL_ID, (s) => s.savedCommands.length === 3, "the list to show three commands");
@@ -60,14 +60,14 @@ describe("the saved-commands file is never overwritten blindly", () => {
     test("a save that fails leaves the list and the file as they were", async () => {
         const dir = await panelFiles();
         await startService();
-        const kept = await call<string>("save-command", { label: "Keep", command: "echo keep" });
+        const kept = await call.saveCommand({ label: "Keep", command: "echo keep" });
         const before = fs.readFileSync(path.join(dir, FILE), "utf8");
         // the daemon writes the file atomically beside itself: a folder it
         // can't write to fails the save
         fs.chmodSync(dir, 0o555);
         try {
-            await expect(call("save-command", { label: "New", command: "echo new" })).rejects.toThrow(/The command was not saved: .*(EACCES|permission denied)/i);
-            await expect(call("remove-saved-command", { id: kept })).rejects.toThrow(/The command was not removed: .*(EACCES|permission denied)/i);
+            await expect(call.saveCommand({ label: "New", command: "echo new" })).rejects.toThrow(/The command was not saved: .*(EACCES|permission denied)/i);
+            await expect(call.removeSavedCommand({ id: kept })).rejects.toThrow(/The command was not removed: .*(EACCES|permission denied)/i);
         } finally {
             fs.chmodSync(dir, 0o755);
         }

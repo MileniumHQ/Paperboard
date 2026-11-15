@@ -6,7 +6,8 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { blocksApi, getTransport, serviceApi, STATE_VALUE } from "@mileniumhq/paperapi";
+import { blocksApi, getTransport, serviceClient, STATE_VALUE } from "@mileniumhq/paperapi";
+import { terminalContract } from "../../src/lib/contract";
 import { testDaemon } from "./crane";
 import { within } from "./wait";
 
@@ -95,10 +96,8 @@ export function serviceState<T = any>(): Promise<T> {
     return blocksApi.read<T>(PANEL_ID, STATE_VALUE);
 }
 
-/** One of the calls the panel's own page makes. */
-export function call<T = any>(name: string, input: Record<string, unknown> = {}): Promise<T> {
-    return serviceApi.call<T>(PANEL_ID, name, input);
-}
+/** The calls the panel's own page makes, through its contract. */
+export const call = serviceClient(terminalContract).calls;
 
 /** A command block, as a person's flow runs it. */
 export function runBlock<T = any>(command: string, inputs: Record<string, unknown> = {}): Promise<T> {

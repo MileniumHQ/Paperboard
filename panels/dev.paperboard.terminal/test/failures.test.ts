@@ -45,9 +45,9 @@ describe("failures are shown", () => {
         const write = runBlock("type-in-tab", { tab: REFUSED, text: "echo hi\n" });
         await expect(write).rejects.toThrow(`Terminal session "${REFUSED}" could not be created; keystrokes were not sent:`);
         await expect(write).rejects.toThrow(DAEMON_REASON);
-        await expect(call("open-tab", { id: REFUSED, cols: 80, rows: 24 })).rejects.toThrow(DAEMON_REASON);
+        await expect(call.openTab({ id: REFUSED, cols: 80, rows: 24 })).rejects.toThrow(DAEMON_REASON);
         // the other tab is unaffected
-        expect(typeof (await call("open-tab", { id: "tab1", cols: 80, rows: 24 }))).toBe("string");
+        expect(typeof (await call.openTab({ id: "tab1", cols: 80, rows: 24 }))).toBe("string");
     });
 
     test("in the panel, a terminal that can't open, a large paste, a refused rename and a refused new tab say why", async () => {
@@ -87,7 +87,7 @@ describe("failures are shown", () => {
             await page.waitFor(`[...document.querySelectorAll("[data-context-item]")].some((i) => i.innerText.includes("Rename Tab"))`, "the tab menu");
             await page.evaluate(`[...document.querySelectorAll("[data-context-item]")].find((i) => i.innerText.includes("Rename Tab")).click()`);
             await page.waitFor(`document.querySelector("[role=dialog] input")`, "the rename modal");
-            await call("close-tab", { id: "tab1" });
+            await call.closeTab({ id: "tab1" });
             await page.waitFor(`!document.querySelector('label[data-value="tab1"]')`, "the closed tab to leave the tab bar");
             await page.evaluate(`document.querySelector("[role=dialog] input").select()`);
             await page.insertText("Renamed");
@@ -132,7 +132,7 @@ describe("failures are shown", () => {
         const dir = await panelFiles({ "tabs.json": { tabs: [{ id: "tab1", label: "One" }], activeTabId: "tab1" } });
         await startService();
         // the shell starts, and runs on while the service restarts
-        await call("open-tab", { id: "tab1", cols: 80, rows: 24 });
+        await call.openTab({ id: "tab1", cols: 80, rows: 24 });
         await stopServices();
         const file = path.join(dir, "terminal-scrollback", "tab1.log");
         fs.chmodSync(file, 0o200);

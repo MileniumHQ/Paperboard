@@ -4,7 +4,8 @@
 import { For, Show } from "solid-js";
 import { PaperButton, PaperFlex, PaperIcon, PaperList, PaperListItem, type LoaderStatus } from "@mileniumhq/paperui";
 import type { MenuState } from "./Menus";
-import { shortTitle, tabTitle, type LiveSession, type TerminalSession, type TerminalTab } from "./lib/tabs";
+import { shortTitle, tabTitle } from "./lib/tabs";
+import type { LiveSession, TerminalSession, TerminalTab } from "./lib/contract";
 
 export function TabBar(props: {
     tabs: TerminalTab[];

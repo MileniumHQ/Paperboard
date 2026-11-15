@@ -20,9 +20,9 @@ import "@xterm/xterm/css/xterm.css";
 import "./style.css";
 import TerminalComponent, { activeTerminals, copySelection, pasteClipboard } from "./Terminal";
 import styles from "./Terminal.module.css";
-import { createPanelBridge, serviceApi, terminalApi, type TerminalShell, errorMessage } from "@mileniumhq/paperapi";
+import { terminalApi, type TerminalShell, errorMessage } from "@mileniumhq/paperapi";
+import { terminal } from "./client";
 import SavedCommands from "./SavedCommands";
-import type { CommandRun, SavedCommand } from "./lib/savedCommands";
 import SoftKeys from "./SoftKeys";
 import { createKeyRow } from "./lib/keyRow";
 import { createAttention } from "./lib/attention";
@@ -31,47 +31,9 @@ import { createPasteConfirm } from "./PasteConfirm";
 import { createRenameTab } from "./RenameTab";
 import { ScreenMenu, ShellMenu, SplitMenu, TabMenu } from "./Menus";
 import { TabBar, Toolbar } from "./TabBar";
-import {
-    SESSION_ERROR_TITLES,
-    tabSessions,
-    tabTitle,
-    type LiveSession,
-    type SessionErrorKind,
-    type SessionErrors,
-    type SplitDirection,
-    type TabLayout,
-    type TerminalTab,
-} from "./lib/tabs";
-import { PANEL_ID } from "./lib/panel";
+import { SESSION_ERROR_TITLES, tabSessions, tabTitle } from "./lib/tabs";
+import type { LiveSession, SessionErrorKind, SessionErrors, SplitDirection, TabLayout, TerminalState, TerminalTab } from "./lib/contract";
 
-interface TerminalBridgeState {
-    tabs: TerminalTab[];
-    activeTabId: string;
-    live: Record<string, LiveSession>;
-    layout: TabLayout;
-    showTab: { id: string; request: string };
-    savedCommands: SavedCommand[];
-    commandRuns: Record<string, CommandRun>;
-    savedCommandsError: string;
-    tabsError: string;
-    sessionErrors: SessionErrors;
-}
-
-const bridge = createPanelBridge<TerminalBridgeState>({
-    panelId: PANEL_ID,
-    defaultState: {
-        tabs: [],
-        activeTabId: "",
-        live: {},
-        layout: "horizontal",
-        showTab: { id: "", request: "" },
-        savedCommands: [],
-        commandRuns: {},
-        savedCommandsError: "",
-        tabsError: "",
-        sessionErrors: {},
-    },
-});
 
 export default function App() {
     const [activeTab, setActiveTab] = createSignal("");
@@ -103,18 +65,18 @@ export default function App() {
     const compact = createPaperCompact();
     const mobile = createPaperMobile();
     const vertical = () => mirror.layout === "vertical" && !compact();
-    const applyTabs = (next: unknown) => {
-        if (Array.isArray(next)) setMirror("tabs", reconcile(next as TerminalTab[], { key: "id" }));
+    const applyTabs = (next: TerminalTab[] | undefined) => {
+        if (next) setMirror("tabs", reconcile(next, { key: "id" }));
     };
-    const [saved, setSaved] = createStore<Pick<TerminalBridgeState, "savedCommands" | "commandRuns" | "savedCommandsError">>({
+    const [saved, setSaved] = createStore<Pick<TerminalState, "savedCommands" | "commandRuns" | "savedCommandsError">>({
         savedCommands: [],
         commandRuns: {},
         savedCommandsError: "",
     });
-    const applySaved = (full: TerminalBridgeState) => {
-        setSaved("savedCommands", reconcile(full.savedCommands ?? [], { key: "id" }));
-        setSaved("commandRuns", reconcile(full.commandRuns ?? {}));
-        setSaved("savedCommandsError", full.savedCommandsError ?? "");
+    const applySaved = (full: TerminalState) => {
+        setSaved("savedCommands", reconcile(full.savedCommands, { key: "id" }));
+        setSaved("commandRuns", reconcile(full.commandRuns));
+        setSaved("savedCommandsError", full.savedCommandsError);
     };
 
     // which of a split tab's two shells has the keyboard, per tab
@@ -150,25 +112,25 @@ export default function App() {
         const [, kind, ...message] = key.split("\n");
         return { title: SESSION_ERROR_TITLES[kind as SessionErrorKind], message: message.join("\n") };
     };
-    const applySessionErrors = (next: unknown) => {
-        if (next && typeof next === "object") setMirror("sessionErrors", reconcile(next as SessionErrors));
+    const applySessionErrors = (next: SessionErrors | undefined) => {
+        if (next) setMirror("sessionErrors", reconcile(next));
     };
 
-    const applyLive = (next: unknown) => {
-        if (!next || typeof next !== "object") return;
-        setMirror("live", reconcile(next as Record<string, LiveSession>));
-        attention.live(next as Record<string, LiveSession>);
+    const applyLive = (next: Record<string, LiveSession> | undefined) => {
+        if (!next) return;
+        setMirror("live", reconcile(next));
+        attention.live(next);
     };
 
     // Show Tab (a block) switches every open window; a window follows each
     // request once, and one made before it opened is already its first tab
     let followedShow = "";
-    const followShow = (request: TerminalBridgeState["showTab"] | undefined) => {
-        if (!request?.request || request.request === followedShow) return;
+    const followShow = (request: TerminalState["showTab"]) => {
+        if (!request.request || request.request === followedShow) return;
         followedShow = request.request;
         if (tabs().some((t) => t.id === request.id)) setActiveTab(request.id);
     };
-    bridge.onStateChange((patch, full) => {
+    terminal.state.subscribe((full, patch) => {
         applyTabs(patch.tabs);
         applyLive(patch.live);
         applySessionErrors(patch.sessionErrors);
@@ -188,15 +150,15 @@ export default function App() {
     const hydrate = async () => {
         setHydration("loading");
         try {
-            const state = await bridge.refreshState();
+            const state = await terminal.state.refresh();
             // unreadable is not empty either: no fresh tab opens over saved ones
             setTabsUnreadable(Boolean(state.tabsError));
             if (state.tabsError) throw new Error(state.tabsError);
             applyTabs(state.tabs);
             applyLive(state.live);
             applySessionErrors(state.sessionErrors);
-            setMirror("layout", state.layout ?? "horizontal");
-            followedShow = state.showTab?.request ?? "";
+            setMirror("layout", state.layout);
+            followedShow = state.showTab.request;
             if (!activeTab()) setActiveTab(state.activeTabId || tabs()[0]?.id || "");
             setHydration("ready");
             void loadShells();
@@ -237,25 +199,18 @@ export default function App() {
         // the tab leaves when the service says it closed; a failed close
         // leaves it in place, where closing it again retries
         setFailure(null);
-        serviceApi
-            .call(PANEL_ID, "close-tab", { id: closedId })
-            .catch(report("Tab not closed"));
+        terminal.calls.closeTab({ id: closedId }).catch(report("Tab not closed"));
     };
     // a new tab opens where you are: in the folder of the shell in front
     const addTab = async (shell?: string) => {
         setFailure(null);
         try {
             const besides = currentSession();
-            const id = await serviceApi.call<string>(
-                PANEL_ID,
-                "create-tab",
-                { ...(besides ? { besides } : {}), ...(shell ? { shell } : {}) },
-            );
-            if (!id) throw new Error("The terminal service answered without a tab.");
+            const id = await terminal.calls.createTab({ besides: besides || undefined, shell });
             // the state push travels beside this answer; pull it so the new
             // tab is listed before it is shown. The pull reaches onStateChange
             // above, and a push that lands meanwhile wins over it
-            await bridge.refreshState();
+            await terminal.state.refresh();
             setActiveTab(id);
             focusSession(id);
         } catch (err) {
@@ -265,8 +220,8 @@ export default function App() {
     const handleSwitchTab = (id: string) => {
         setActiveTab(id);
         // the last used tab is what the next window opens on
-        serviceApi
-            .call(PANEL_ID, "touch-tab", { id })
+        terminal.calls
+            .touchTab({ id })
             .catch(report("Tab not remembered", ". The next window may open on another tab."));
     };
     // a shell picked in the tab list: its tab is shown, and it has the keyboard
@@ -286,22 +241,22 @@ export default function App() {
         // reorder pulls it back
         setMirror("tabs", reordered);
         setFailure(null);
-        serviceApi
-            .call(PANEL_ID, "reorder-tabs", { orderedIds: reordered.map((t) => t.id) })
+        terminal.calls
+            .reorderTabs({ orderedIds: reordered.map((t) => t.id) })
             .catch((err) => {
                 report("Tab order not saved", ". The tabs are back in their saved order.")(err);
-                bridge
-                    .refreshState()
+                terminal.state
+                    .refresh()
                     .catch(report("Tabs not reloaded", ". This window may show an order the service doesn't have."));
             });
     };
     const split = (tabId: string, direction: SplitDirection) => {
         setFailure(null);
-        serviceApi
-            .call<string>(PANEL_ID, "split-tab", { id: tabId, direction })
+        terminal.calls
+            .splitTab({ id: tabId, direction })
             .then(async (pane) => {
                 // the new shell is listed before it is shown
-                await bridge.refreshState();
+                await terminal.state.refresh();
                 setFocusedPane(tabId, pane);
                 focusSession(pane);
             })
@@ -309,14 +264,14 @@ export default function App() {
     };
     const unsplit = (tabId: string) => {
         setFailure(null);
-        serviceApi.call(PANEL_ID, "unsplit-tab", { id: tabId }).catch(report("Split not closed"));
+        terminal.calls.unsplitTab({ id: tabId }).catch(report("Split not closed"));
     };
     const toggleLayout = () => {
         setFailure(null);
         const next: TabLayout = vertical() ? "horizontal" : "vertical";
         // shown at once; the service's layout is the truth
         setMirror("layout", next);
-        serviceApi.call(PANEL_ID, "set-tab-layout", { layout: next }).catch((err) => {
+        terminal.calls.setTabLayout({ layout: next }).catch((err) => {
             setMirror("layout", next === "vertical" ? "horizontal" : "vertical");
             report("Layout not saved")(err);
         });

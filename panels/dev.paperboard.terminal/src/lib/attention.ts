@@ -3,7 +3,8 @@
 import { createEffect, on, onCleanup } from "solid-js";
 import { createStore } from "solid-js/store";
 import type { LoaderStatus } from "@mileniumhq/paperui";
-import { tabSessions, type LiveSession, type TerminalTab } from "./tabs";
+import { tabSessions } from "./tabs";
+import type { LiveSession, TerminalTab } from "./contract";
 
 // how long a hidden tab counts as busy after it last printed
 const BUSY_MS = 1500;

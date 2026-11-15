@@ -6,7 +6,8 @@ import {
     files,
     resolveOneShotShell,
     blocksApi,
-    type ServiceContext,
+    type CallHandlers,
+    type ContractContext,
     errorMessage,
     problemsApi,
     SerialQueue,
@@ -16,48 +17,13 @@ import { SCROLLBACK_CHARS, applyScrollbackCap, readWholeLines } from "./lib/scro
 import { PANEL_ID } from "./lib/panel";
 import { runShellCommand } from "./lib/shellCommand";
 import { writeTerminal } from "./lib/terminalWrite";
-import { SavedCommands, type CommandRun, type SavedCommand } from "./lib/savedCommands";
+import { SavedCommands } from "./lib/savedCommands";
+import type { CommandRun, SavedCommand } from "./lib/contract";
 import { BlocksAnnouncer, commandPayload, exitPayload, finishedPayload, tabPayload, terminalBlocks } from "./blocks";
-import {
-    findSession,
-    readLayout,
-    readSavedTabs,
-    tabSessions,
-    type LiveSession,
-    type SessionErrorKind,
-    type SessionErrors,
-    type SplitDirection,
-    type TabLayout,
-    type TerminalSession,
-    type TerminalTab,
-} from "./lib/tabs";
+import { findSession, readLayout, readSavedTabs, tabSessions } from "./lib/tabs";
+import { terminalContract, type LiveSession, type SessionErrorKind, type SessionErrors, type SplitDirection, type TabLayout, type TerminalSession, type TerminalTab } from "./lib/contract";
 
-interface TerminalServiceState {
-    // the tab list every window mirrors; which tab a window shows is that
-    // window's own choice, so open windows and computers stay in step
-    tabs: TerminalTab[];
-    activeTabId: string;
-    // what each session's shell has said: the program in front of it, its
-    // folder, and the last command it ran (keyed by session id, a split's too)
-    live: Record<string, LiveSession>;
-    // tabs along the top, or down the side; every window follows it
-    layout: TabLayout;
-    // Show Tab's request that every open window switch to a tab; each request
-    // has its own token, so a window follows it once
-    showTab: { id: string; request: string };
-    // saved commands (run from Home's "Pinned command" widget) and the last
-    // observed outcome of each
-    savedCommands: SavedCommand[];
-    commandRuns: Record<string, CommandRun>;
-    savedCommandsError: string;
-    // why tabs.json could not be read; while it is set the tabs are not
-    // written, so the file stays as it was
-    tabsError: string;
-    // what went wrong for a session where no one was waiting on it, by session id
-    sessionErrors: SessionErrors;
-}
-
-type Ctx = ServiceContext<TerminalServiceState>;
+type Ctx = ContractContext<typeof terminalContract>;
 
 const SCROLLBACK_DIR = "terminal-scrollback";
 const TABS_FILE = "tabs.json";
@@ -618,53 +584,36 @@ function savedCommand(id: string): SavedCommand {
 
 // what the panel's own page asks the service; the same things a person
 // automates are blocks (blocks.ts)
-const calls = {
-    "create-tab": (ctx: Ctx, input: { label?: string; cwd?: string; shell?: string; besides?: string }) =>
-        createTab(ctx, input?.label, { cwd: input?.cwd, shell: input?.shell, besides: input?.besides }),
-    "split-tab": (ctx: Ctx, input: { id: string; direction?: SplitDirection }) => splitTab(ctx, input?.id, input?.direction ?? "right"),
-    "unsplit-tab": (ctx: Ctx, input: { id: string }) => unsplitTab(ctx, input?.id),
-    "set-tab-layout": (ctx: Ctx, input: { layout: TabLayout }) => setLayout(ctx, input?.layout),
-    // attaches the page to a session and gives back its scrollback. Every
-    // screen a window mounts opens its session, shown or not, so opening says
-    // nothing about which tab is in front: touch-tab and show-tab say that
-    "open-tab": async (_ctx: Ctx, input: { id: string; cols?: number; rows?: number }) => {
-        const id = (input?.id || "").trim();
-        if (!findSession(tabs, id)) throw new Error(`Unknown terminal tab "${input?.id}"`);
-        await ensureSession(id, input?.cols, input?.rows);
+const calls: CallHandlers<typeof terminalContract> = {
+    createTab: (input, ctx) => createTab(ctx, input.label, { cwd: input.cwd, shell: input.shell, besides: input.besides }),
+    splitTab: (input, ctx) => splitTab(ctx, input.id, input.direction),
+    unsplitTab: (input, ctx) => unsplitTab(ctx, input.id),
+    setTabLayout: (input, ctx) => setLayout(ctx, input.layout),
+    openTab: async (input) => {
+        const id = input.id.trim();
+        if (!findSession(tabs, id)) throw new Error(`Unknown terminal tab "${input.id}"`);
+        await ensureSession(id, input.cols, input.rows);
         subscribeSession(id);
         return buffers.get(id) || "";
     },
-    "rename-tab": (ctx: Ctx, input: { id: string; label: string }) => renameTab(ctx, input?.id, input?.label),
-    "close-tab": (ctx: Ctx, input: { id: string }) => closeTab(ctx, input?.id),
-    "reorder-tabs": (ctx: Ctx, input: { orderedIds?: string[] }) => reorderTabs(ctx, input?.orderedIds),
-    // the tab the page last showed is the one a new window opens on
-    "touch-tab": async (ctx: Ctx, input: { id: string }) => {
-        const id = (input?.id || "").trim();
+    renameTab: (input, ctx) => renameTab(ctx, input.id, input.label),
+    closeTab: (input, ctx) => closeTab(ctx, input.id),
+    reorderTabs: (input, ctx) => reorderTabs(ctx, input.orderedIds),
+    touchTab: async (input, ctx) => {
+        const id = input.id.trim();
         if (!tabs.some((t) => t.id === id)) return false;
         await changeTabs(ctx, () => {
             activeTabId = id;
         });
         return true;
     },
-    "save-command": (_ctx: Ctx, input: { label?: string; command?: string }) => savedCommands.add(input?.label, input?.command),
-    "remove-saved-command": (_ctx: Ctx, input: { id?: string }) => savedCommands.remove(input?.id),
-    "run-saved-command": (_ctx: Ctx, input: { id?: string }) => savedCommands.run(input?.id),
+    saveCommand: (input) => savedCommands.add(input.label, input.command),
+    removeSavedCommand: (input) => savedCommands.remove(input.id),
+    runSavedCommand: (input) => savedCommands.run(input.id),
 };
 
 export default definePanelService({
-    id: PANEL_ID,
-    state: {
-        tabs: [] as TerminalTab[],
-        activeTabId: "",
-        live: {} as Record<string, LiveSession>,
-        layout: "horizontal" as TabLayout,
-        showTab: { id: "", request: "" },
-        savedCommands: [] as SavedCommand[],
-        commandRuns: {} as Record<string, CommandRun>,
-        savedCommandsError: "",
-        tabsError: "",
-        sessionErrors: {} as SessionErrors,
-    },
+    contract: terminalContract,
     // Home's gallery: the "Command" dropdown of the Pinned command widget
     widgetChoices: {
         "pinned-command": {

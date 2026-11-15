@@ -1,8 +1,8 @@
 // Terminal's blocks for the Blocks panel. They run the same functions the
 // panel's page calls, which the service hands in here.
 import { errorMessage, type BlockSet, type BlocksHandle, type TerminalCommand } from "@mileniumhq/paperapi";
-import type { SplitDirection } from "./lib/tabs";
-import { MAX_COMMAND_LENGTH, MAX_LABEL_LENGTH, type CommandRun, type SavedCommand } from "./lib/savedCommands";
+import type { CommandRun, SavedCommand, SplitDirection } from "./lib/contract";
+import { MAX_COMMAND_LENGTH, MAX_LABEL_LENGTH } from "./lib/savedCommands";
 
 /** What the blocks do, as the service does it. */
 export interface TerminalBlocksHost {

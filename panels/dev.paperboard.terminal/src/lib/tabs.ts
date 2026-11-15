@@ -1,47 +1,7 @@
 // The terminal's tabs, as the service keeps them and every window mirrors
 // them. A tab holds one shell, or two side by side when it is split; each
 // shell is a session with an id of its own.
-
-export type TabLayout = "horizontal" | "vertical";
-export type SplitDirection = "right" | "down";
-
-export interface TerminalSession {
-    id: string;
-    /** the shell it starts with, one of terminalApi.shells(); the computer's default when absent */
-    shell?: string;
-    /** the folder its shell was last in; a new shell for it starts there */
-    cwd?: string;
-}
-
-export interface TerminalTab extends TerminalSession {
-    label: string;
-    /**
-     * The label was chosen: the tab was named when it opened, or renamed.
-     * An unnamed tab is called by the program in front of it.
-     */
-    named?: boolean;
-    /** a second shell beside the first */
-    split?: { direction: SplitDirection; session: TerminalSession };
-}
-
-/** what a session's shell has said since it started */
-export interface LiveSession {
-    /** the program in front of it ("" until the shell is running) */
-    program: string;
-    /** the folder its shell is in ("" until it says) */
-    cwd: string;
-    /** the last command it ran; seq grows with every command any shell runs */
-    command?: { line: string; exitCode: number; seq: number };
-}
-
-/**
- * What went wrong for a session in the background, by what it was about:
- * its shell starting, its saved output, its saved folder, or its
- * screen size. Each stands until the same thing works again, so the panel
- * (and a flow reading the state) can say it while it is true.
- */
-export type SessionErrorKind = "start" | "scrollback" | "folder" | "size";
-export type SessionErrors = Record<string, Partial<Record<SessionErrorKind, string>>>;
+import type { LiveSession, SessionErrorKind, TabLayout, TerminalSession, TerminalTab } from "./contract";
 
 export const SESSION_ERROR_TITLES: Record<SessionErrorKind, string> = {
     start: "Shell not started",

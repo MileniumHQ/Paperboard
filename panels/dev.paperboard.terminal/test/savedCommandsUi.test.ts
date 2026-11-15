@@ -81,7 +81,7 @@ describe("the Pinned command widget", () => {
     test("runs its command and shows the exit, then says when the command is removed", async () => {
         await panelFiles({ "tabs.json": TABS });
         await startService();
-        const id = await call<string>("save-command", { label: "Build", command: "exit 3" });
+        const id = await call.saveCommand({ label: "Build", command: "exit 3" });
         const served = await servePanel();
         const page = await browser.open(`${served.url}/widget-host.html?command=${id}`);
         try {
@@ -90,7 +90,7 @@ describe("the Pinned command widget", () => {
             await page.evaluate(widget(`doc.querySelector('button[aria-label="Run Build"]').click()`));
             await page.waitFor(shows("Exit 3"), "the exit");
 
-            await call("remove-saved-command", { id });
+            await call.removeSavedCommand({ id });
             await page.waitFor(shows("Command removed"), "the removed command to be said");
             expect(page.exceptions).toEqual([]);
         } finally {

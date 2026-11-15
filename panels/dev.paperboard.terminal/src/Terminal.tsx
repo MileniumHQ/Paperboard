@@ -4,7 +4,8 @@ import { FitAddon } from "@xterm/addon-fit";
 import { SearchAddon } from "@xterm/addon-search";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import { copyText, createLatest, pasteText, type ActionFailure } from "@mileniumhq/paperui";
-import { serviceApi, terminalApi, errorMessage } from "@mileniumhq/paperapi";
+import { terminalApi, errorMessage } from "@mileniumhq/paperapi";
+import { terminal } from "./client";
 import { terminalKeyAction, type TerminalKeyAction } from "./keys";
 import { keyBytes, withModifiers, type Modifiers, type NamedKey } from "./lib/softKeys";
 import { joinScrollback } from "./lib/scrollback";
@@ -13,7 +14,6 @@ import { onThemeChange, screenColors, token } from "./lib/theme";
 import { writeRefusal, writeTerminal } from "./lib/terminalWrite";
 import styles from "./Terminal.module.css";
 import "@xterm/xterm/css/xterm.css";
-import { PANEL_ID } from "./lib/panel";
 
 /** what the panel can do with one session's screen */
 export interface TerminalHandle {
@@ -258,8 +258,8 @@ export function TerminalComponent(props: TerminalComponentProps) {
                 offExit();
             };
             const { cols, rows } = term;
-            serviceApi
-                .call<string>(PANEL_ID, "open-tab", { id, cols, rows })
+            terminal.calls
+                .openTab({ id, cols, rows })
                 .then((scrollback) => {
                     if (!current()) return;
                     opened = true;

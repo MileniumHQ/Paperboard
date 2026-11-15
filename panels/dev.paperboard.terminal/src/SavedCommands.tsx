@@ -19,12 +19,12 @@ import {
     createAction,
     type ActionFailure,
 } from "@mileniumhq/paperui";
-import { serviceApi, errorMessage } from "@mileniumhq/paperapi";
-import type { CommandRun, SavedCommand } from "./lib/savedCommands";
+import { errorMessage } from "@mileniumhq/paperapi";
+import { terminal } from "./client";
+import type { CommandRun, SavedCommand } from "./lib/contract";
 import { MAX_LABEL_LENGTH, MAX_SAVED_COMMANDS } from "./lib/savedCommands";
 import { describeRun, type RunTone } from "./lib/runStatus";
 import { createAgoClock } from "./lib/clock";
-import { PANEL_ID } from "./lib/panel";
 import { Menu, type MenuState } from "./Menus";
 
 const TONE_COLOR: Record<RunTone, PaperColor> = {
@@ -55,7 +55,7 @@ export default function SavedCommands(props: SavedCommandsProps & { menu: MenuSt
     const run = async (id: string) => {
         setRunError("");
         try {
-            await serviceApi.call(PANEL_ID, "run-saved-command", { id });
+            await terminal.calls.runSavedCommand({ id });
         } catch (err) {
             open(errorMessage(err));
         }
@@ -123,14 +123,13 @@ function SavedCommandsModal(props: {
     // a row's buttons never wait on another call: the service orders them,
     // and the row's run state is what says a command is already going
     const { busy, error, run } = createAction();
-    const call = (title: string, name: string, input: Record<string, unknown>) => run(title, () => serviceApi.call(PANEL_ID, name, input));
 
     const full = () => props.commands.length >= MAX_SAVED_COMMANDS;
     const canSave = () => !busy() && !props.loadError && !full() && command().trim() !== "";
 
     const save = async () => {
         if (!canSave()) return;
-        if (await call("Command not saved", "save-command", { label: label(), command: command() })) {
+        if (await run("Command not saved", () => terminal.calls.saveCommand({ label: label(), command: command() }))) {
             setLabel("");
             setCommand("");
         }
@@ -185,7 +184,7 @@ function SavedCommandsModal(props: {
                                                     disabled={props.runs[saved.id]?.state === "running"}
                                                     title={`Run ${saved.command}`}
                                                     aria-label={`Run ${saved.label}`}
-                                                    onClick={() => void call("Command not started", "run-saved-command", { id: saved.id })}
+                                                    onClick={() => void run("Command not started", () => terminal.calls.runSavedCommand({ id: saved.id }))}
                                                 >
                                                     <PaperIcon>play_arrow</PaperIcon>
                                                 </PaperButton>
@@ -195,7 +194,7 @@ function SavedCommandsModal(props: {
                                                     icon
                                                     title={`Remove ${saved.label}`}
                                                     aria-label={`Remove ${saved.label}`}
-                                                    onClick={() => void call("Command not removed", "remove-saved-command", { id: saved.id })}
+                                                    onClick={() => void run("Command not removed", () => terminal.calls.removeSavedCommand({ id: saved.id }))}
                                                 >
                                                     <PaperIcon>delete</PaperIcon>
                                                 </PaperButton>
