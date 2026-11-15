@@ -5,6 +5,7 @@ import { promisify } from "util";
 import { writeFileAtomicSync } from "./storage";
 import { getPaperboardDir } from "./paths";
 import { logger } from "./logger";
+import { errorCode } from "../../../packages/paperapi/src/errors";
 
 const promisifiedExecFile = promisify(execFile);
 
@@ -58,7 +59,7 @@ export function removePidFile() {
     } catch (err) {
         // gone already is the goal; anything else leaves a record the next
         // start reads as a stale instance to reclaim
-        if ((err as NodeJS.ErrnoException).code !== "ENOENT") logger.error("[Paperboard Server] could not remove the PID file:", err);
+        if (errorCode(err) !== "ENOENT") logger.error("[Paperboard Server] could not remove the PID file:", err);
     }
 }
 

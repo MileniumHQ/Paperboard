@@ -5,6 +5,7 @@
 import * as fs from "fs";
 import { logger } from "./logger";
 import { getPaperboardDir } from "./paths";
+import { errorCode } from "../../../packages/paperapi/src/errors";
 
 export interface SupervisorLaunch {
     command: string;
@@ -36,7 +37,7 @@ export function stopMountHolder(pid: number | undefined): void {
         try {
             cmdline = fs.readFileSync(`/proc/${pid}/cmdline`, "utf8");
         } catch (err) {
-            if ((err as NodeJS.ErrnoException).code === "ENOENT") return; // already gone
+            if (errorCode(err) === "ENOENT") return; // already gone
             logger.error(`[supervisor] could not check what process ${pid} is; leaving it running:`, err);
             return;
         }
@@ -45,7 +46,7 @@ export function stopMountHolder(pid: number | undefined): void {
     try {
         process.kill(pid, "SIGTERM");
     } catch (err) {
-        if ((err as NodeJS.ErrnoException).code !== "ESRCH") {
+        if (errorCode(err) !== "ESRCH") {
             logger.error(`[supervisor] could not stop the AppImage mount held by ${pid}:`, err);
         }
     }

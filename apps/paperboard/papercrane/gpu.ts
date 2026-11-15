@@ -6,6 +6,7 @@ import fs from "fs";
 import os from "os";
 import path from "path";
 import { logger } from "./logger";
+import { errorCode } from "../../../packages/paperapi/src/errors";
 
 export type GpuVendor = "nvidia" | "amd" | "intel" | "apple" | "other";
 
@@ -55,7 +56,7 @@ const VENDOR_IDS: Record<string, GpuVendor> = {
     "0x8086": "intel",
 };
 
-const isMissing = (err: unknown) => (err as NodeJS.ErrnoException)?.code === "ENOENT";
+const isMissing = (err: unknown) => errorCode(err) === "ENOENT";
 
 // ─── nvidia-smi (Linux, Windows) ─────────────────────────────────────────────
 

@@ -8,6 +8,7 @@ import { logger } from "./logger";
 import { checkDavAuth, davUnauthorized, type DavSessionStore, DEFAULT_IDLE_MS, mainTokenOf } from "./davAuth";
 import { receiveFileAtomic, UploadTooLargeError } from "./atomicUpload";
 import { hasOnlyRealEntriesBelow } from "./pathContainment";
+import { errorCode, errorMessage } from "../../../packages/paperapi/src/errors";
 
 // WebDAV rooted at the app-data dir, for the main token or an ephemeral
 // session (davAuth.ts)
@@ -341,7 +342,7 @@ function entryId(p: string): string | null {
         const st = fs.statSync(p, { bigint: true });
         return `${st.dev}:${st.ino}`;
     } catch (err) {
-        if ((err as NodeJS.ErrnoException).code === "ENOENT") return null;
+        if (errorCode(err) === "ENOENT") return null;
         throw err;
     }
 }
@@ -557,7 +558,7 @@ async function readSessionBody(req: http.IncomingMessage, res: http.ServerRespon
         const raw = (await readBody(req, 4096)).toString("utf-8");
         parsed = raw ? JSON.parse(raw) : {};
     } catch (err) {
-        replyText(res, 400, `The session request is not readable JSON: ${(err as Error)?.message ?? err}`);
+        replyText(res, 400, `The session request is not readable JSON: ${errorMessage(err)}`);
         return null;
     }
     if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {

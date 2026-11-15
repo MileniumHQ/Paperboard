@@ -6,6 +6,7 @@ import { Readable, Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { PAPERBOARD_USER_AGENT } from "./userAgent";
 import { LimitError } from "./storage";
+import { errorMessage } from "../../../packages/paperapi/src/errors";
 
 export interface DownloadProgressPayload {
     stage:
@@ -42,7 +43,7 @@ export async function streamToFileWithProgress(
     try {
         scheme = new URL(url).protocol;
     } catch (err) {
-        throw new Error(`Download refused: not a URL (${err instanceof Error ? err.message : String(err)})`);
+        throw new Error(`Download refused: not a URL (${errorMessage(err)})`);
     }
     if (scheme !== "https:" && scheme !== "http:") {
         throw new Error(`Download refused: only http(s) URLs are downloaded, not ${scheme}`);

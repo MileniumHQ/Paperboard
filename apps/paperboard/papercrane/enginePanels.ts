@@ -20,6 +20,7 @@ import { releaseMessage, requireReleaseSignature } from "./releaseSignature";
 import { recoverParked, rollbackFailed, swapParked } from "./parkedSwap";
 import type { WorkloadRegistry } from "./engineWorkloads";
 import { sanitizeIdOrThrow, type PackageManager, type ReleaseSource } from "./enginePackages";
+import { errorMessage } from "../../../packages/paperapi/src/errors";
 
 // what a caller expects to install (the release it showed the user or
 // planned an update to); the daemon's own registry lookup must agree
@@ -143,7 +144,7 @@ export class PanelInstaller {
                     ...(serviceError ? { serviceError } : {}),
                 } as PanelManifest);
             } catch (err) {
-                const error = err instanceof Error ? err.message : String(err);
+                const error = errorMessage(err);
                 logger.error(`[Paperboard Server] panel ${entry} is not listed: its manifest is unreadable or invalid: ${error}`);
                 invalid.push({ id: entry, error });
             }
@@ -206,7 +207,7 @@ export class PanelInstaller {
                 if (left) throw new Error(`${name} is still in use by ${left.blockedBy.length} process(es) that started during the update`);
                 onProgress?.(target, { stage: "completed", percent: 100, message: "Installed successfully" });
             } catch (err) {
-                failures[target] = err instanceof Error ? err.message : String(err);
+                failures[target] = errorMessage(err);
             }
         }
         for (const panel of panels) {
@@ -214,7 +215,7 @@ export class PanelInstaller {
             try {
                 installed.push(await this.installPanel(panel.id, panel.expected, (payload) => onProgress?.(target, payload)));
             } catch (err) {
-                failures[target] = err instanceof Error ? err.message : String(err);
+                failures[target] = errorMessage(err);
             }
         }
         const failed = Object.entries(failures);
@@ -237,7 +238,7 @@ export class PanelInstaller {
             try {
                 await this.services.prepareForUpdate(owner, ids);
             } catch (err) {
-                throw new Error(`${owner} could not stop its processes for the update: ${err instanceof Error ? err.message : String(err)}`, { cause: err });
+                throw new Error(`${owner} could not stop its processes for the update: ${errorMessage(err)}`, { cause: err });
             }
         }
         for (const id of processes) {
@@ -252,7 +253,7 @@ export class PanelInstaller {
         try {
             raw = await fetchRegistryRecord(`${this.registry.url}/panel/${encodeURIComponent(id)}.json`);
         } catch (err) {
-            throw new Error(`Install refused for "${id}": registry record unavailable (${err instanceof Error ? err.message : String(err)})`);
+            throw new Error(`Install refused for "${id}": registry record unavailable (${errorMessage(err)})`);
         }
         if (raw?.id !== id) throw new Error(`Install refused for "${id}": the registry record names a different panel`);
         if (typeof raw.sha256 !== "string" || !/^[a-f0-9]{64}$/i.test(raw.sha256)) {

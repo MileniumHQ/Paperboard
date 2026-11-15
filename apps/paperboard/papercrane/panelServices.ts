@@ -10,6 +10,7 @@ import { isPanelId, requirePanelId } from "../../../packages/paperapi/src/panelI
 import type { PaperCraneAuth } from "./auth";
 import type { MonitorLifecycle, MonitorServiceRecord } from "../../../packages/paperapi/src/monitorProtocol";
 import type { BackupEnded } from "./backups/types";
+import { errorMessage } from "../../../packages/paperapi/src/errors";
 
 type ServiceChange = Omit<MonitorServiceRecord, "type" | "at" | "panel">;
 
@@ -143,7 +144,7 @@ export class PanelServicesManager {
                 if (manifest?.autostart !== false) this.startService(id);
             } catch (err) {
                 logger.error(`[services] ${id} could not start`, err);
-                this.announce(id, { state: "failed", error: err instanceof Error ? err.message : String(err) });
+                this.announce(id, { state: "failed", error: errorMessage(err) });
             }
         }
     }
@@ -246,7 +247,7 @@ export class PanelServicesManager {
                 try { this.startService(id, crashes); }
                 catch (err) {
                     logger.error(`[services] ${id} restart failed`, err);
-                    this.announce(id, { state: "failed", error: err instanceof Error ? err.message : String(err) });
+                    this.announce(id, { state: "failed", error: errorMessage(err) });
                 }
             }, Math.min(10_000, 1000 * 2 ** (crashes - 1)));
             entry.restartTimer.unref?.();

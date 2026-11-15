@@ -3,6 +3,7 @@ import * as path from "path";
 import { logger } from "./logger";
 import { ensurePrivateDir, getLocalDir } from "./paths";
 import { getDefaultShell } from "./util";
+import { errorCode } from "../../../packages/paperapi/src/errors";
 
 // Shell integration: a terminal's shell says where each prompt starts, which
 // command it runs, how that command ended and which folder it is in, with
@@ -71,7 +72,7 @@ export function offeredShells(): OfferedShell[] {
     try {
         listed = fs.readFileSync("/etc/shells", "utf8");
     } catch (err) {
-        if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
+        if (errorCode(err) !== "ENOENT") throw err;
     }
     for (const line of listed.split("\n")) {
         const file = line.trim();
@@ -157,7 +158,7 @@ function writeScript(name: string, content: string): string {
     try {
         current = fs.readFileSync(file, "utf8");
     } catch (err) {
-        if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
+        if (errorCode(err) !== "ENOENT") throw err;
     }
     if (current !== content) fs.writeFileSync(file, content, { mode: 0o600 });
     return file;

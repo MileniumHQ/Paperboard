@@ -17,6 +17,7 @@ import * as os from "os";
 import * as path from "path";
 import { spawnSync } from "child_process";
 import { EXIT, type ServiceTarget } from "./cli";
+import { errorMessage } from "../../../packages/paperapi/src/errors";
 
 export interface InstallRequest {
     target: ServiceTarget;
@@ -320,7 +321,7 @@ async function waitForDaemon(plan: Plan): Promise<Ready> {
                 }
             } catch (err) {
                 // written atomically, so a parse failure is a real problem
-                throw new Error(`${handshake} could not be read: ${(err as Error).message}`);
+                throw new Error(`${handshake} could not be read: ${errorMessage(err)}`);
             }
         }
         if (Date.now() > deadline) {
@@ -415,7 +416,7 @@ export async function installService(request: InstallRequest): Promise<number> {
         ready = await waitForDaemon(plan);
     } catch (err) {
         const logs = recentLogs(plan, request);
-        console.error(`${(err as Error).message}${logs ? `\n\nRecent log lines:\n${logs}` : ""}`);
+        console.error(`${errorMessage(err)}${logs ? `\n\nRecent log lines:\n${logs}` : ""}`);
         console.error(`\nThe service is still installed. Fix the problem and run install-service again, or remove it with papercrane uninstall-service${request.target.scope === "system" ? " --system" : ""}${request.target.name !== "papercrane" ? ` --name ${request.target.name}` : ""}.`);
         return EXIT.FAILURE;
     }

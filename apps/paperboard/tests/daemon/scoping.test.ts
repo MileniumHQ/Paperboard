@@ -160,9 +160,9 @@ describe("config storage layout", () => {
 			(err: NodeJS.ErrnoException) => err,
 		);
 		expect(failure.message).toStartWith(`Couldn't save ${file}: `);
-		expect(failure.message).not.toContain(".tmp-");
+		expect(failure.message).not.toContain(".tmp");
 		expect(failure.code).toBeString();
-		expect(listTree(dir).filter((f) => f.includes(".tmp-"))).toEqual([]);
+		expect(listTree(dir).filter((f) => f.includes(".tmp"))).toEqual([]);
 	});
 });
 
@@ -219,7 +219,7 @@ describe("unreadable state is quarantined", () => {
 			await host.ok("secrets:set", { panelId: "test.atomic", name: "k", value: "v" });
 			await host.close();
 		}, dir);
-		expect(listTree(dir).filter((f) => f.includes(".tmp-"))).toEqual([]);
+		expect(listTree(dir).filter((f) => f.includes(".tmp"))).toEqual([]);
 	});
 
 	test("only the daemon that owns the data dir sweeps temp downloads, and an interrupted swap is put back", async () => {

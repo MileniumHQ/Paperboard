@@ -11,6 +11,7 @@ import fs from "fs";
 import os from "os";
 import { logger } from "./logger";
 import { getPaperboardDir } from "./paths";
+import { errorCode } from "../../../packages/paperapi/src/errors";
 
 export interface ProcessSample {
     ppid: number;
@@ -180,7 +181,7 @@ async function readLinuxTable(exec: ExecFn): Promise<ProcessTable> {
                 line = await fs.promises.readFile(`/proc/${pid}/stat`, "utf8");
             } catch (err) {
                 // a process that exited after the listing is simply gone
-                const code = (err as NodeJS.ErrnoException).code;
+                const code = errorCode(err);
                 if (code === "ENOENT" || code === "ESRCH") continue;
                 throw err;
             }

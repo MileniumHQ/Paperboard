@@ -14,6 +14,7 @@ import { formatListenAddress } from "./tui";
 import { getDisplayHost } from "./util";
 import { isLoopbackHost } from "./discovery";
 import { EXIT } from "./cli";
+import { errorCode, errorMessage } from "../../../packages/paperapi/src/errors";
 
 const CONNECT_TIMEOUT_MS = 3000;
 const RPC_TIMEOUT_MS = 10_000;
@@ -35,10 +36,10 @@ function readHandshake(): Handshake {
     try {
         raw = fs.readFileSync(file, "utf8");
     } catch (err) {
-        if ((err as NodeJS.ErrnoException).code === "ENOENT") {
+        if (errorCode(err) === "ENOENT") {
             throw new DaemonNotRunning(`No Paperboard server daemon is running for ${getPaperboardDir()}.`);
         }
-        throw new Error(`Could not read ${file}: ${(err as Error).message}`);
+        throw new Error(`Could not read ${file}: ${errorMessage(err)}`);
     }
     const parsed = JSON.parse(raw);
     if (typeof parsed?.port !== "number" || !Number.isInteger(parsed.port) || (parsed.token !== null && typeof parsed.token !== "string")) {
@@ -73,7 +74,7 @@ export async function connectLocalDaemon(): Promise<LocalDaemon> {
             ws.removeAllListeners();
             ws.on("error", () => { /* the rejection below reports it */ });
             ws.terminate();
-            const code = (err as NodeJS.ErrnoException).code;
+            const code = errorCode(err);
             reject(code === "ECONNREFUSED"
                 ? new DaemonNotRunning(`No Paperboard server daemon is running for ${getPaperboardDir()} (its last one stopped without cleaning up).`)
                 : err);
@@ -112,7 +113,7 @@ export async function connectLocalDaemon(): Promise<LocalDaemon> {
     ws.on("message", (data) => {
         let message: any;
         try { message = JSON.parse(String(data)); }
-        catch (err) { failAll(new Error(`The daemon sent a message that is not JSON: ${(err as Error).message}`)); return; }
+        catch (err) { failAll(new Error(`The daemon sent a message that is not JSON: ${errorMessage(err)}`)); return; }
         if (message?.type !== "response") return;
         const waiter = pending.get(message.id);
         if (!waiter) return;

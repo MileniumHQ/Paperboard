@@ -13,6 +13,8 @@ import * as fs from "fs";
 import * as path from "path";
 import { logger } from "./logger";
 import { getLocalDir } from "./paths";
+import { errorCode, errorMessage } from "../../../packages/paperapi/src/errors";
+import { writeFileAtomic } from "../../../packages/paperapi/src/fs";
 
 type BinaryReader = () => Promise<Uint8Array> | Uint8Array;
 
@@ -57,20 +59,13 @@ async function install(): Promise<string> {
     try {
         current = await fs.promises.readFile(file);
     } catch (err) {
-        if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw new Error(`The workload supervisor at ${file} could not be read: ${(err as Error).message}`);
+        if (errorCode(err) !== "ENOENT") throw new Error(`The workload supervisor at ${file} could not be read: ${errorMessage(err)}`);
     }
     if (!current || sha256(current) !== digest) {
         if (current) logger.warn(`[supervisor] ${file} is not the supervisor this build ships; replacing it`);
-        const temp = `${file}.${process.pid}.${crypto.randomUUID()}.tmp`;
-        try {
-            await fs.promises.writeFile(temp, bytes, { mode: 0o755 });
-            // the mode above is cut by the umask
-            await fs.promises.chmod(temp, 0o755);
-            await fs.promises.rename(temp, file);
-        } catch (err) {
-            await fs.promises.rm(temp, { force: true }).catch((cleanupErr) => logger.warn(`[supervisor] could not remove ${temp}:`, cleanupErr));
-            throw new Error(`The workload supervisor could not be copied to ${file}: ${(err as Error).message}`);
-        }
+        await writeFileAtomic(file, bytes, { mode: 0o755 }).catch((err) => {
+            throw new Error(`The workload supervisor could not be copied to ${file}: ${errorMessage(err)}`);
+        });
     } else if (process.platform !== "win32" && ((await fs.promises.stat(file)).mode & 0o100) === 0) {
         await fs.promises.chmod(file, 0o755);
     }

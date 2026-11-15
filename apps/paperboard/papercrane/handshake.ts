@@ -4,6 +4,7 @@ import { createHmac } from "node:crypto";
 import { secretsMatch } from "./secretCompare";
 import { getPaperboardDir } from "./paths";
 import { logger } from "./logger";
+import { errorCode } from "../../../packages/paperapi/src/errors";
 
 // Reading crane.json validates discovery metadata, not listener identity.
 // PaperCraneClient verifies the nonce proof on the same WebSocket before
@@ -56,7 +57,7 @@ export function readCraneHandshake(): CraneHandshakeFile | null {
         // missing at startup is routine (the daemon is still booting) and
         // callers treat null as not-ready; it is written atomically, so
         // anything else is a real fault the log names
-        if ((err as NodeJS.ErrnoException).code === "ENOENT") return null;
+        if (errorCode(err) === "ENOENT") return null;
         logger.warn("[handshake] crane.json unreadable:", err);
         return null;
     }
@@ -70,7 +71,7 @@ export function removeCraneHandshake(file: string, startId: string): void {
         const record = JSON.parse(fs.readFileSync(file, "utf8"));
         if (record?.startId === startId) fs.unlinkSync(file);
     } catch (err) {
-        if ((err as NodeJS.ErrnoException).code === "ENOENT") return;
+        if (errorCode(err) === "ENOENT") return;
         throw err;
     }
 }

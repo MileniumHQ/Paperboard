@@ -6,6 +6,7 @@ import { createHash, randomUUID } from "node:crypto";
 import type { PaperCraneEngine } from "../engine";
 import { writeFileAtomicSync } from "../storage";
 import { requirePanelId } from "../../../../packages/paperapi/src/panelIdentity";
+import { errorMessage } from "../../../../packages/paperapi/src/errors";
 
 export type ConfigSelector = Array<string | { id: string }>;
 export interface BackupSource {
@@ -280,7 +281,7 @@ export class BackupSources {
                 throw err;
             }
             throw new Error(
-                `The backup restore failed (${err instanceof Error ? err.message : String(err)}). Recovery is incomplete; parked files are kept at ${parked}`,
+                `The backup restore failed (${errorMessage(err)}). Recovery is incomplete; parked files are kept at ${parked}`,
                 { cause: err },
             );
         }

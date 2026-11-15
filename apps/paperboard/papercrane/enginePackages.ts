@@ -14,6 +14,7 @@ import { hostPlatformKey } from "./packageChecksum";
 import { releaseMessage, requireReleaseSignature } from "./releaseSignature";
 import { recoverParked, swapParked } from "./parkedSwap";
 import type { WorkloadRegistry, WorkloadRuntime, WorkloadUse } from "./engineWorkloads";
+import { errorMessage } from "../../../packages/paperapi/src/errors";
 
 // a verified runtime release kept beside the installed one until the
 // workloads running from the installed one have stopped
@@ -249,7 +250,7 @@ export class PackageManager implements WorkloadRuntime {
             users = this.readPackageUsers();
         } catch (err) {
             logger.error("[engine] could not read which panels use the installed packages, so none were removed:", err);
-            return [`which panels use them could not be read: ${(err as Error)?.message ?? err}`];
+            return [`which panels use them could not be read: ${errorMessage(err)}`];
         }
         for (const [name, list] of Object.entries(users)) {
             if (list.length > 0) continue;
@@ -280,7 +281,7 @@ export class PackageManager implements WorkloadRuntime {
                 logger.info(`[package:${name}] removed: no installed panel uses it`);
             } catch (err) {
                 logger.error(`[package:${name}] no panel uses it, but it could not be removed:`, err);
-                failures.push(`${name}: ${(err as Error)?.message ?? err}`);
+                failures.push(`${name}: ${errorMessage(err)}`);
             } finally {
                 this.operations.delete(key);
             }
@@ -450,7 +451,7 @@ export class PackageManager implements WorkloadRuntime {
             } catch (err) {
                 // the installed release was rolled back in place and keeps
                 // working; the update is a recorded failure, never installed
-                const error = err instanceof Error ? err.message : String(err);
+                const error = errorMessage(err);
                 this.swapFailures.set(name, { version: release.version, error });
                 logger.error(`[package:${name}] could not install the staged ${release.version}:`, err);
                 await fs.promises
@@ -572,7 +573,7 @@ export class PackageManager implements WorkloadRuntime {
         try {
             meta = await fetchRegistryRecord(metaUrl);
         } catch (err) {
-            throw new Error(`Install refused for package "${packageName}": registry record unavailable (${err instanceof Error ? err.message : String(err)})`);
+            throw new Error(`Install refused for package "${packageName}": registry record unavailable (${errorMessage(err)})`);
         }
         // only the platforms map is a release record: the signature covers
         // (name, version, platform, sha256) of exactly that entry

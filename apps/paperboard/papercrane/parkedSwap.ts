@@ -7,17 +7,16 @@
 import fs from "fs";
 import path from "path";
 import { logger } from "./logger";
+import { errorCode, errorMessage } from "../../../packages/paperapi/src/errors";
 
 /** What a parked copy is called: `.<tag>-<stamp>-<name>`, beside the live one. */
 function parkedPath(live: string, tag: string, stamp: number): string {
     return path.join(path.dirname(live), `.${tag}-${stamp}-${path.basename(live)}`);
 }
 
-const message = (err: unknown) => (err instanceof Error ? err.message : String(err));
-
 /** An operation failed and so did undoing it: one error naming both, caused by the first. */
 export function rollbackFailed(err: unknown, rollbackErr: unknown, detail = ""): Error {
-    return new Error(`${message(err)}; then the rollback failed too: ${message(rollbackErr)}${detail}`, { cause: err });
+    return new Error(`${errorMessage(err)}; then the rollback failed too: ${errorMessage(rollbackErr)}${detail}`, { cause: err });
 }
 
 /**
@@ -77,7 +76,7 @@ export function recoverParked(dir: string, tag: string): void {
     try {
         entries = fs.readdirSync(dir);
     } catch (err) {
-        if ((err as NodeJS.ErrnoException).code !== "ENOENT") logger.error(`[engine] could not look for interrupted updates in ${dir}:`, err);
+        if (errorCode(err) !== "ENOENT") logger.error(`[engine] could not look for interrupted updates in ${dir}:`, err);
         return;
     }
     const pattern = new RegExp(`^\\.${tag}-\\d+-(.+)$`);

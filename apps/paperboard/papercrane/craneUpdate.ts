@@ -8,6 +8,7 @@ import { hashFile, writeJsonAtomicSync } from "./storage";
 import { streamToFileWithProgress } from "./download";
 import { RELEASE_PUBLIC_KEY, releaseMessage, verifyRelease } from "./releaseSignature";
 import { hostPlatformKey } from "./packageChecksum";
+import { errorMessage } from "../../../packages/paperapi/src/errors";
 
 export interface CraneRelease {
     downloadUrl: string;
@@ -86,7 +87,7 @@ async function probeReplacement(file: string, version: string): Promise<void> {
                 resolve(String(stdout).trim());
             });
         } catch (err) {
-            reject(refused("could not be run", err instanceof Error ? err.message : String(err)));
+            reject(refused("could not be run", errorMessage(err)));
         }
     });
     if (reported !== version) {

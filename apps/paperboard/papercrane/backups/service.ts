@@ -19,7 +19,8 @@ import { ErrorCode } from "../protocol";
 import { RpcError, invalidParams } from "../rpc/errors";
 import { logger } from "../logger";
 import { createPanelArchive, extractPanelArchive } from "./archive";
-import { hashFile, SerialQueue } from "../storage";
+import { hashFile } from "../storage";
+import { SerialQueue } from "../../../../packages/paperapi/src/serialQueue";
 import {
     BACKUP_VAULT_OWNER,
     DESTINATION_LABEL_MAX,
@@ -52,6 +53,7 @@ import {
     type ScheduleFile,
     type ScheduleResult,
 } from "./schedules";
+import { errorMessage } from "../../../../packages/paperapi/src/errors";
 
 /** create and restore run at most this many at once, one per panel */
 export const MAX_RUNNING_BACKUP_JOBS = 2;
@@ -390,7 +392,7 @@ export class BackupService {
             ended = { ok: true, backup: record };
             return record;
         } catch (err) {
-            ended = { ok: false, error: err instanceof Error ? err.message : String(err) };
+            ended = { ok: false, error: errorMessage(err) };
             throw err;
         } finally {
             this.running.delete(panelId);
@@ -480,7 +482,7 @@ export class BackupService {
                     this.report(panelId, firstStep);
                     return this.engine.withServicePaused(this.sources.owner(panelId), async () => {
                         if (notReady !== null) {
-                            throw conflict(`The panel could not get ready for a backup: ${notReady instanceof Error ? notReady.message : String(notReady)}`);
+                            throw conflict(`The panel could not get ready for a backup: ${errorMessage(notReady)}`);
                         }
                         const panelVersion = this.engine.installedPanelVersion(this.sources.owner(panelId));
                         const packing = (done: number, total: number) => this.report(panelId, "packing", done, total);
@@ -697,7 +699,7 @@ export class BackupService {
         } catch (err) {
             // an uninstalled panel's data is kept for a reinstall, and so is
             // its schedule; it is looked at again after a full interval
-            result = { at: new Date(this.now()).toISOString(), ok: false, message: err instanceof Error ? err.message : String(err) };
+            result = { at: new Date(this.now()).toISOString(), ok: false, message: errorMessage(err) };
             return this.recordRoutine(panelId, schedule.nextRunAt, result, false);
         }
         try {
@@ -709,7 +711,7 @@ export class BackupService {
             result = {
                 at: new Date(this.now()).toISOString(),
                 ok: false,
-                message: (err instanceof Error ? err.message : String(err)).slice(0, 500),
+                message: errorMessage(err).slice(0, 500),
             };
         }
         await this.recordRoutine(panelId, schedule.nextRunAt, result, retrySoon);
@@ -742,7 +744,7 @@ export class BackupService {
             for (const record of extra) await store.remove(record);
             return { failed: null };
         } catch (err) {
-            return { failed: `Backed up, but older routine backups were not removed: ${(err instanceof Error ? err.message : String(err)).slice(0, 400)}` };
+            return { failed: `Backed up, but older routine backups were not removed: ${errorMessage(err).slice(0, 400)}` };
         }
     }
 }

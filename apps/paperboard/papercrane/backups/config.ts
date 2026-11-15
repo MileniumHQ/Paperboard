@@ -13,6 +13,7 @@ import { RpcError } from "../rpc/errors";
 import { computerHostname } from "../hostname";
 import type { S3Settings } from "./s3Store";
 import type { DriveSettings } from "./driveStore";
+import { errorCode } from "../../../../packages/paperapi/src/errors";
 
 /** vault owner for location secrets; shell-* ids are reserved, no panel holds it */
 export const BACKUP_VAULT_OWNER = "shell-backups";
@@ -102,7 +103,7 @@ export function readBackupConfig(file: string): BackupConfig {
     try {
         text = fs.readFileSync(file, "utf8");
     } catch (err) {
-        if ((err as NodeJS.ErrnoException)?.code === "ENOENT") return { version: 1, destinations: [localDestination()], panels: {} };
+        if (errorCode(err) === "ENOENT") return { version: 1, destinations: [localDestination()], panels: {} };
         throw new BackupConfigUnreadableError(file, (err as Error).message);
     }
     try {

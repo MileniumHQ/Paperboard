@@ -13,6 +13,7 @@ import * as fs from "fs";
 import * as path from "path";
 import { setSupervisorBinary } from "./supervisorBinary";
 import { getPaperboardDir } from "./paths";
+import { errorCode } from "../../../packages/paperapi/src/errors";
 
 // clean one-line startup failures instead of raw stacks
 function fatalCliError(err: any): never {
@@ -56,7 +57,7 @@ async function readSupervisor(): Promise<Uint8Array> {
     try {
         return await fs.promises.readFile(built);
     } catch (err) {
-        if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
+        if (errorCode(err) !== "ENOENT") throw err;
         throw new Error("This Paperboard Server was built without its workload supervisor, so it cannot start anything. Build it with `bun scripts/supervisor.ts`, and compile the server with the built file beside main.ts.");
     }
 }

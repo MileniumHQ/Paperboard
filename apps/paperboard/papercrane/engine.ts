@@ -20,6 +20,7 @@ import { WorkloadRegistry, type ProcessStreams, type TerminalStreams } from "./e
 import { PackageManager, sanitizeIdOrThrow, type PackageInstallOutcome, type PackageUpdateWait, type ReleaseSource } from "./enginePackages";
 import { PanelInstaller, type ExpectedPanelRelease, type UninstallResult } from "./enginePanels";
 import type { PanelManifest } from "./types";
+import { errorCode } from "../../../packages/paperapi/src/errors";
 
 export type { ProcessStreams, TerminalStreams } from "./engineWorkloads";
 export type { StagedPackage, PackageUpdateWait, PackageInstallOutcome } from "./enginePackages";
@@ -98,7 +99,8 @@ export class PaperCraneEngine {
         );
     }
 
-    // Removes interrupted download/install artifacts (*.tmp-*, *.staging-*)
+    // Removes interrupted download/install artifacts (*.tmp-*, *.staging-*,
+    // and writeFileAtomic's *.<12 hex>.tmp)
     // and recovers swaps a crash interrupted (parkedSwap.ts), in packages,
     // panel releases and restored panel data.
     //
@@ -110,7 +112,7 @@ export class PaperCraneEngine {
         for (const dir of [this.packagesDir, this.panelsDir]) {
             try {
                 for (const entry of fs.readdirSync(dir)) {
-                    if (/\.(tmp|staging)-\d+/.test(entry)) {
+                    if (/\.(tmp|staging)-\d+|\.[0-9a-f]{12}\.tmp$/.test(entry)) {
                         fs.rmSync(path.join(dir, entry), {
                             recursive: true,
                             force: true,
@@ -118,7 +120,7 @@ export class PaperCraneEngine {
                     }
                 }
             } catch (err) {
-                if ((err as NodeJS.ErrnoException).code !== "ENOENT") {
+                if (errorCode(err) !== "ENOENT") {
                     logger.warn(`[engine] interrupted downloads in ${dir} could not be cleared and stay on disk:`, err);
                 }
             }

@@ -9,6 +9,7 @@ import * as path from "path";
 import { randomUUID } from "crypto";
 import { Transform } from "stream";
 import { pipeline } from "stream/promises";
+import { errorCode } from "../../../packages/paperapi/src/errors";
 
 export class UploadTooLargeError extends Error {
     constructor(readonly cap: number) {
@@ -104,7 +105,7 @@ function removeStagedFile(
     else {
         let current: fs.BigIntStats | undefined;
         try { current = fs.lstatSync(parent, { bigint: true }); }
-        catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }
+        catch (error) { if (errorCode(error) !== "ENOENT") throw error; }
         if (current && isParent(current)) dir = parent;
         else {
             const grandparent = path.dirname(parent);
@@ -112,7 +113,7 @@ function removeStagedFile(
                 const candidate = path.join(grandparent, name);
                 let stat: fs.BigIntStats;
                 try { stat = fs.lstatSync(candidate, { bigint: true }); }
-                catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT") continue; throw error; }
+                catch (error) { if (errorCode(error) === "ENOENT") continue; throw error; }
                 if (isParent(stat)) { dir = candidate; break; }
             }
         }
@@ -121,7 +122,7 @@ function removeStagedFile(
     const file = path.join(dir, tmpName);
     let stat: fs.BigIntStats;
     try { stat = fs.lstatSync(file, { bigint: true }); }
-    catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT") return; throw error; }
+    catch (error) { if (errorCode(error) === "ENOENT") return; throw error; }
     if (stat.dev !== created.dev || stat.ino !== created.ino) throw new Error(`staged upload ${tmpName} was replaced; leaving it in place`);
     fs.unlinkSync(file);
 }

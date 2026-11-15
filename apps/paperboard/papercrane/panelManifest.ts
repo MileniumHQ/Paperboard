@@ -2,6 +2,7 @@
 import * as path from "path";
 import { requirePanelId } from "../../../packages/paperapi/src/panelIdentity";
 import { validateWidgetDeclarations } from "../../../packages/paperapi/src/widgetManifest";
+import { errorMessage } from "../../../packages/paperapi/src/errors";
 
 export interface PanelManifestLike {
     id: string;
@@ -81,7 +82,7 @@ export function validatePanelManifest(
         const widgets = validateWidgetDeclarations(record.widgets);
         if (widgets.length > 0) manifest.widgets = widgets;
     } catch (err) {
-        throw new Error(`Invalid widgets in manifest for ${id}: ${err instanceof Error ? err.message : String(err)}`);
+        throw new Error(`Invalid widgets in manifest for ${id}: ${errorMessage(err)}`);
     }
 
     // unknown manifest fields are dropped

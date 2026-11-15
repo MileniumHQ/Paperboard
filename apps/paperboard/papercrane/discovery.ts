@@ -7,6 +7,7 @@ import { Bonjour } from "bonjour-service";
 import { logger } from "./logger";
 import { getPaperboardDir } from "./paths";
 import pkg from "../package.json";
+import { errorCode, errorMessage } from "../../../packages/paperapi/src/errors";
 
 export const PAPERCRANE_MDNS_TYPE = "papercrane";
 // version travels with the app package.json — one source, never a drift
@@ -39,7 +40,7 @@ export function paperCraneMachineId(): string {
         const raw = JSON.parse(fs.readFileSync(file, "utf8")) as { id?: unknown };
         if (typeof raw?.id === "string" && raw.id.length >= 8) return raw.id;
     } catch (err) {
-        if ((err as NodeJS.ErrnoException).code !== "ENOENT") {
+        if (errorCode(err) !== "ENOENT") {
             logger.warn(`[Paperboard Server] the machine id in ${file} is unreadable; a new one replaces it, so paired computers see this one as new:`, err);
         }
     }
@@ -168,7 +169,7 @@ export function advertisePaperCrane(
             }
         }, UP_TIMEOUT_MS);
         service.on("error", (err: unknown) => {
-            const msg = err instanceof Error ? err.message : String(err);
+            const msg = errorMessage(err);
             if (!isUp && /already in use/i.test(msg) && attempt < MAX_ATTEMPTS && !stopped) {
                 logger.warn(
                     `[Paperboard Server] mDNS name "${name}" is taken. Retrying as "${baseName} (${attempt + 1})"`,

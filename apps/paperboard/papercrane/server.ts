@@ -29,6 +29,7 @@ import { PanelServicesManager } from "./panelServices";
 import { backupServiceFor } from "./rpc/backups";
 import { readDaemonStatus } from "./localControl";
 import { killStalePaperCrane, removePidFile, writePidFile } from "./pidFile";
+import { errorMessage } from "../../../packages/paperapi/src/errors";
 
 export const DEFAULT_PORT =
     Number(process.env.PAPERCRANE_PORT) || DEFAULT_LISTEN_PORT;
@@ -99,7 +100,7 @@ async function refuseRunningDaemon(): Promise<void> {
         status = await readDaemonStatus();
     } catch (err) {
         logger.warn(
-            `[Paperboard Server] ${craneHandshakePath()} names no daemon that answers for this data directory (${(err as Error)?.message ?? err}); starting a new one.`,
+            `[Paperboard Server] ${craneHandshakePath()} names no daemon that answers for this data directory (${errorMessage(err)}); starting a new one.`,
         );
         return;
     }

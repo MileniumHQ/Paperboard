@@ -9,6 +9,7 @@ import { supervisorBinary } from "./supervisorBinary";
 import { logger } from "./logger";
 import { LimitError, unrefTimer } from "./storage";
 import { getLogsDir } from "./paths";
+import { errorMessage } from "../../../packages/paperapi/src/errors";
 
 // Live supervised workload budget: each client is a detached supervisor
 // process plus a socket and metadata files, so minting unique ids must not
@@ -155,7 +156,7 @@ export async function spawnSupervisedClient(
         client.destroy(); clientsMap.delete(id);
         let stderr: string;
         try { stderr = startupStderr.tail(); }
-        catch (err) { stderr = `(its stderr could not be read: ${err instanceof Error ? err.message : String(err)})`; }
+        catch (err) { stderr = `(its stderr could not be read: ${errorMessage(err)})`; }
         startupStderr.discard();
         await stopSpawnedSupervisor(id, supervisorProc);
         throw new Error(`Supervisor ${id} did not become ready: ${cause}${stderr ? `\n${stderr}` : ""}`);

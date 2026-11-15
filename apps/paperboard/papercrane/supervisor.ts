@@ -62,6 +62,7 @@ export interface SupervisorMetadata {
 
 export { getPaperboardDir } from "./paths";
 import { ensurePrivateDir, getSocketsDir } from "./paths";
+import { errorMessage } from "../../../packages/paperapi/src/errors";
 
 // Endpoint names are one-to-one with ids. The old scheme replaced every
 // character outside [a-zA-Z0-9_-] with "_", so "a.b" and "a_b" shared one
@@ -208,7 +209,7 @@ export class SupervisedProcessClient {
                 socket = connectEndpoint(this.socketPath);
             } catch (err) {
                 logger.debug(`[supervisor] could not open a connection to ${this.socketPath}:`, err);
-                this.connectError = err instanceof Error ? err.message : String(err);
+                this.connectError = errorMessage(err);
                 resolve(false);
                 return;
             }

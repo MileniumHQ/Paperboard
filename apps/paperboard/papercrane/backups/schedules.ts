@@ -7,6 +7,7 @@ import { writeFileAtomic } from "../storage";
 import { invalidParams } from "../rpc/errors";
 import { isPanelId } from "../../../../packages/paperapi/src/panelIdentity";
 import { MAX_ROUTINE_BACKUPS_KEPT, ROUTINE_BACKUP_HOURS, ROUTINE_BACKUP_LABEL } from "../../../../packages/paperapi/src/backups";
+import { errorMessage } from "../../../../packages/paperapi/src/errors";
 
 export const SCHEDULE_FILE_VERSION = 1;
 export const MAX_SCHEDULES = 64;
@@ -61,7 +62,7 @@ export function readSchedules(file: string): ScheduleFile {
     try {
         data = JSON.parse(text);
     } catch (err) {
-        throw new Error(`The routine backup schedules (${file}) are not readable JSON: ${err instanceof Error ? err.message : String(err)}`);
+        throw new Error(`The routine backup schedules (${file}) are not readable JSON: ${errorMessage(err)}`);
     }
     if (data?.version !== SCHEDULE_FILE_VERSION || !data.panels || typeof data.panels !== "object") {
         throw new Error(`The routine backup schedules (${file}) are in a format this Paperboard does not know`);

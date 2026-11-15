@@ -9,6 +9,7 @@
 import { resolveRegistryUrl } from "./util";
 import { logger } from "./logger";
 import { fetchRegistryRecord } from "./registryRecord";
+import { errorMessage } from "../../../packages/paperapi/src/errors";
 
 const REGISTRY_URL = resolveRegistryUrl();
 
@@ -75,7 +76,7 @@ export async function resolvePackageSha256(
         body = await fetchRegistryRecord(url, deps?.fetchFn);
     } catch (err) {
         throw new Error(
-            `Install refused for package "${clean}": registry metadata unreadable (${err instanceof Error ? err.message : String(err)})`,
+            `Install refused for package "${clean}": registry metadata unreadable (${errorMessage(err)})`,
         );
     }
     const entry = (body as any)?.platforms?.[key];
