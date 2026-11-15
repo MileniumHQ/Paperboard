@@ -10,10 +10,9 @@
 
 import crypto from "node:crypto";
 import net from "node:net";
-import { errorMessage } from "@mileniumhq/paperapi";
+import { errorMessage, stopProcess } from "@mileniumhq/paperapi";
 import type { ProviderAttempt, ProviderAttemptStatus, ProviderField, ProviderInfo, ProviderMethod } from "../contract";
 import type { BrainsHost } from "./brains";
-import { stopChild } from "./stopChild";
 
 export const SERVER_PROCESS_ID = "brain-opencode-server";
 const READY_MS = 30_000;
@@ -129,7 +128,7 @@ export class Providers {
         this.pending.clear();
         this.server = null;
         this.starting = null;
-        await stopChild(this.deps.host, SERVER_PROCESS_ID);
+        await stopProcess(SERVER_PROCESS_ID, { host: this.deps.host });
     }
 
     // ------------------------------------------------------------- internals
@@ -202,7 +201,7 @@ export class Providers {
             }
         } catch (e) {
             this.unsubscribe();
-            await stopChild(this.deps.host, SERVER_PROCESS_ID).catch((k) => {
+            await stopProcess(SERVER_PROCESS_ID, { host: this.deps.host }).catch((k) => {
                 throw new ProviderError(`${errorMessage(e)}; and it couldn't be closed: ${errorMessage(k)}`);
             });
             throw e;

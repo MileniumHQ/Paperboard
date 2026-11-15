@@ -24,7 +24,7 @@
 import { randomUUID } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import { errorMessage } from "@mileniumhq/paperapi";
+import { errorMessage, stopProcess } from "@mileniumhq/paperapi";
 import { writeFileAtomicSync } from "@mileniumhq/paperapi/fs";
 import { CURRENT_CONVERSATION, LIMITS, PANEL_ID, type AccessEntry, type PageEntry, type PromptEntry, type ToolServerEntry, type ToolSignInEntry, type Attachment, type ChatEntry, type ChatState, type Harness, type PastConversation, type Settings, type SignInEntry, type WaitingMessage } from "../contract";
 import type { StartOptions } from "./browser";
@@ -33,7 +33,6 @@ import { sizeText } from "../lib/files";
 import { HARNESS_NAMES, codexContext, instructions, removeLeftRunFiles, runFilesDir, turnLaunch, type TurnLaunch } from "./harness";
 import { harnessFailure, runHarness } from "./harnessRun";
 import type { TurnLog } from "./turnLog";
-import { stopChild } from "./stopChild";
 import { ATTACHMENTS, CARRY, History, summary, THREADS } from "./history";
 import { said, Transcript, TRANSCRIPT, type Said } from "./transcript";
 import type { Sections, TurnMode } from "./toolsets";
@@ -172,7 +171,7 @@ export class Conversation {
         const codexHome = this.deps.env("codex").CODEX_HOME;
         if (codexHome) removeLeftRunFiles(codexHome);
         // quiet: a turn the last service generation left running is not ours to finish, and nobody waits on it
-        void stopChild(this.deps.host, TURN_PROC_ID).catch((e) => console.error("[agents] couldn't stop a turn left from before:", errorMessage(e)));
+        void stopProcess(TURN_PROC_ID, { host: this.deps.host }).catch((e) => console.error("[agents] couldn't stop a turn left from before:", errorMessage(e)));
     }
 
     /** The current conversation and what goes with it, read from its files. */
@@ -725,7 +724,7 @@ export class Conversation {
     }
 
     private killTurn() {
-        return stopChild(this.deps.host, TURN_PROC_ID);
+        return stopProcess(TURN_PROC_ID, { host: this.deps.host });
     }
 
     /** An empty folder: no project files and no AGENTS.md or CLAUDE.md for the harness to pick up. */

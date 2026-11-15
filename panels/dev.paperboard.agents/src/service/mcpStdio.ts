@@ -1,8 +1,7 @@
 // An MCP server run on this computer as a daemon-owned child: one JSON-RPC
 // message per line on its stdin and stdout.
 
-import { errorMessage } from "@mileniumhq/paperapi";
-import { stopChild } from "./stopChild";
+import { errorMessage, stopProcess } from "@mileniumhq/paperapi";
 import { lineReader } from "./lines";
 import { MAX_MESSAGE, MAX_PENDING, McpRpcError, writeLine, type McpWire } from "./mcpClient";
 
@@ -41,7 +40,7 @@ export class StdioWire implements McpWire {
     /** Start the child. Its output is subscribed before it runs, so nothing is missed. */
     static async start(host: ProcessHost, o: { id: string; command: string; args: string[]; env?: Record<string, string> }): Promise<StdioWire> {
         // a child the last service generation left behind is not ours to talk to
-        await stopChild(host, o.id).catch((e) => {
+        await stopProcess(o.id, { host }).catch((e) => {
             throw new Error(`an earlier copy of this server is still running and won't stop: ${errorMessage(e)}`);
         });
         const wire = new StdioWire(host, o.id);
@@ -150,7 +149,7 @@ export class StdioWire implements McpWire {
     /** Ask it to stop, then make it, and return once the daemon says it's gone. */
     async close(): Promise<void> {
         this.closing = true;
-        await stopChild(this.host, this.id);
+        await stopProcess(this.id, { host: this.host });
         this.finish(this.failure ?? "stopped");
     }
 }

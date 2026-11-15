@@ -20,14 +20,13 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import { errorMessage, SerialQueue } from "@mileniumhq/paperapi";
+import { errorMessage, SerialQueue, stopProcess } from "@mileniumhq/paperapi";
 import { LIMITS, PANEL_ID, SETUP_STEPS, type ComputerState, type SetupStep, type SetupStepId } from "../contract";
 import { Cdp } from "./cdp";
 import { chromiumMajor, heliumSupported, userAgent } from "./helium";
 import type { HomeFolder } from "./homeFolder";
 import { WEBRTC_CANDIDATES_JS } from "./pageScripts";
 import { startProxy, type Proxy } from "./proxy";
-import { stopChild } from "./stopChild";
 import { NO_RECORD, RECORD_FILE, executable, fetchHelium, readRecord, seedPreferences, writeRecord, type BrowserRecord, type PackageHost } from "./browserSetup";
 import { ToolError, Windows } from "./browserWindows";
 import { Downloads } from "./browserDownloads";
@@ -410,7 +409,7 @@ export class BrowserComputer {
     private async kill() {
         this.stopping = true;
         try {
-            await stopChild(this.deps.host, BROWSER_PROC_ID);
+            await stopProcess(BROWSER_PROC_ID, { host: this.deps.host });
             // its exit was seen already, unless it was gone before it was asked to stop
             if (this.running) this.onExited();
         } finally {
