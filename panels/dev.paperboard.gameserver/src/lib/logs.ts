@@ -1,8 +1,8 @@
-import type { PaperConsoleEntry } from "@mileniumhq/paperui";
 import stripAnsi from "strip-ansi";
 import type { ChatMessage } from "../core/state";
+import type { ConsoleLine } from "../service/types";
 
-export function parseLogLine(rawLine: string): PaperConsoleEntry {
+export function parseLogLine(rawLine: string): ConsoleLine {
     const clean = stripAnsi(rawLine);
     const upper = clean.toUpperCase();
 

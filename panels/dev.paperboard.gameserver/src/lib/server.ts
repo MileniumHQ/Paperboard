@@ -106,7 +106,10 @@ serverState.onChange((patch) => {
     applyStatePatch(patch, currentSetters());
 });
 
-/* Initial projection is requested after App resolves the selected server. */
+/** reads the server's own state into the page; App does it before it shows the server's game */
+export async function loadServerState() {
+    applyStatePatch(await serverState.refresh(), currentSetters());
+}
 
 // config lives in the service, which owns every read-merge-write of it. The
 // UI only triggers a reload and pulls the resulting state.

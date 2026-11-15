@@ -12,8 +12,8 @@ import {
     keepUnchanged,
     createPaperCompact,
 } from "@mileniumhq/paperui";
-import { serversBridge, selectedServerId, selectedServer, openServer } from "./lib/api";
-import { loadServerConfig } from "./lib/server";
+import { serversState, selectedServerId, selectedServer, openServer } from "./lib/api";
+import { loadServerConfig, loadServerState } from "./lib/server";
 import type { ServersState } from "./service";
 import ServersHome from "./components/ServersHome";
 import { serverSoftware, serverVersion, gameSettings, initFailure, recoveryBlock } from "./lib/server";
@@ -177,14 +177,20 @@ export default function App() {
         // each push is a fresh copy: a server it did not change keeps its card
         setServers((prev) => keepUnchanged(prev, state));
     };
+    // a push before the first load has its server's state still unread: the load applies it
+    let loaded = false;
     const load = async () => {
         try {
-            apply(await serversBridge.refreshState());
+            // the server's own state first: its game's page never renders with another game's software
+            if (selectedServerId) await loadServerState();
+            apply(await serversState.refresh());
+            loaded = true;
             if (selectedServerId) await loadServerConfig();
         } catch (err) { fail("loading the servers", err); }
     };
     onMount(() => {
-        const off = serversBridge.onStateChange((_patch, full) => {
+        const off = serversState.subscribe((full) => {
+            if (!loaded) return;
             try { apply(full); } catch (err) { fail("applying the servers' state", err); }
         });
         onCleanup(off);

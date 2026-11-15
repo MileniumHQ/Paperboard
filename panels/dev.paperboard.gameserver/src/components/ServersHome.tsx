@@ -19,7 +19,7 @@ import {
     PaperText,
     useContextMenuState,
 } from "@mileniumhq/paperui";
-import { callsFor, openServer, serverCalls } from "../lib/api";
+import { callsFor, openServer, panelCalls } from "../lib/api";
 import type { ServerSummary, ServersState } from "../service";
 import { gameFor, games, serverSubtitle } from "../games";
 import GamePicker from "./GamePicker";
@@ -57,7 +57,7 @@ export default function ServersHome(props: {
             if (kind === "add") {
                 const chosen = game();
                 if (chosen === null) throw new Error("Choose a game for the server");
-                const added = await serverCalls.addServer({ name: name(), game: chosen });
+                const added = await panelCalls.addServer({ name: name(), game: chosen });
                 // the page goes to the new server: the dialog stays busy until it has
                 openServer(added.id);
                 return;

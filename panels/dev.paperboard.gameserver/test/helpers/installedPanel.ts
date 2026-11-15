@@ -2,13 +2,14 @@
 // leaves it (panels/<id>/manifest.json and the built dist/service.js with the
 // parts it loads later beside it, built as package.json builds them), so the
 // daemon runs the panel's real service itself, restarts it, and backs it up.
-// Its state is watched through the panel bridge, as the panel's page does.
+// Each server's state is read and followed through the panel's contract, as
+// its page does.
 import { spawnSync } from "node:child_process";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { createPanelBridge, invoke } from "@mileniumhq/paperapi";
+import { invoke, serviceClient } from "@mileniumhq/paperapi";
 import { PANEL_ID } from "../../src/servers";
-import type { ServersState } from "../../src/service";
+import { gameServerContract } from "../../src/service/contract";
 import type { GameServerState } from "../../src/service/types";
 
 const PANEL = path.resolve(import.meta.dir, "../..");
@@ -31,10 +32,9 @@ export type ServerView = GameServerState;
 
 /** the service's published state, read and watched as its page does */
 export function servicesState() {
-    const bridge = createPanelBridge<ServersState>({ panelId: PANEL_ID });
-    const server = (state: ServersState, id: string) => (state as Record<string, unknown>)[`server:${id}`] as ServerView | undefined;
+    const servers = serviceClient(gameServerContract).keyed.server;
     return {
-        server: async (id: string) => server(await bridge.refreshState(), id),
+        server: (id: string) => servers.read(id),
         /** resolves once `ready` holds for server `id`, checked now and on every pushed change */
         waitFor: (id: string, ready: (s: ServerView) => boolean, what: string, timeoutMs = 20_000) =>
             new Promise<ServerView>((resolve, reject) => {
@@ -48,17 +48,16 @@ export function servicesState() {
                     else resolve(s!);
                 };
                 const timer = setTimeout(() => {
-                    void bridge.refreshState().then(
-                        (state) => finish(new Error(`Timed out waiting for ${what}; the server shows:\n${JSON.stringify(server(state, id))?.slice(0, 3000)}`)),
+                    void servers.read(id).then(
+                        (state) => finish(new Error(`Timed out waiting for ${what}; the server shows:\n${JSON.stringify(state)?.slice(0, 3000)}`)),
                         (err) => finish(new Error(`Timed out waiting for ${what}, and the state could not be read: ${err}`)),
                     );
                 }, timeoutMs);
-                const check = (state: ServersState) => {
-                    const s = server(state, id);
+                const check = (s: ServerView | undefined) => {
                     if (s && ready(s)) finish(null, s);
                 };
-                const off = bridge.onStateChange((_patch, full) => check(full));
-                bridge.refreshState().then(check, (err) => finish(err instanceof Error ? err : new Error(String(err))));
+                const off = servers.follow(id)(check);
+                servers.read(id).then(check, (err) => finish(err instanceof Error ? err : new Error(String(err))));
             }),
     };
 }

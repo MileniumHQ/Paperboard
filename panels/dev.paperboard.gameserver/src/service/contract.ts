@@ -4,9 +4,9 @@
 // from gameServerContract (lib/api.ts); a name or an input the contract
 // doesn't have is a compile error, and the service refuses it too.
 //
-// The servers' pushed state is not on the contract yet: each server's
-// state sits under a key of its own id, which a contract's state can't
-// name. It still travels on the panel's state bridge.
+// The service's state is on it too: the saved servers, as the servers list
+// shows them, and each server's own state under its id, which travels one
+// server at a time so a busy console never resends the other servers'.
 import { defineContract, shape, type CallDefinition, type Infer, type Shape } from "@mileniumhq/paperapi";
 import { parseModpackRecord } from "../core/modpack";
 
@@ -241,7 +241,7 @@ const steamId = shape.object({ steamId: shape.text() });
 /** The saved servers, and the pictures every page shows: no server's game answers these. */
 const serversCalls = {
     /** makes a server, as New server does */
-    addServer: { input: shape.object({ name: shape.text(), game: shape.text() }), output: shape.object({ id: shape.text() }) },
+    addServer: { input: shape.object({ name: shape.text(), game: shape.text() }), output: shape.object({ id: shape.text() }), unscoped: true },
     renameServer: { input: shape.object({ name: shape.text() }), output: done },
     /** stops the server and forgets it; its folder and backups are kept */
     removeServer: { output: shape.object({ removed: shape.text() }) },
@@ -250,7 +250,7 @@ const serversCalls = {
     /** sets up a server whose setup failed again */
     retryInitialize: { output: done },
     /** a picture from elsewhere as a data: address: a page never loads an address it was handed (service/pictures.ts) */
-    servedPicture: { input: shape.object({ from: shape.oneOf("modrinth", "steam-workshop", "web"), url: shape.text() }), output: text },
+    servedPicture: { input: shape.object({ from: shape.oneOf("modrinth", "steam-workshop", "web"), url: shape.text() }), output: text, unscoped: true },
 } satisfies Record<string, CallDefinition>;
 
 /** Every game's calls, and Minecraft's own. */
@@ -722,16 +722,150 @@ const rustCalls = {
     rustUnban: { input: steamId, output: done },
 } satisfies Record<string, CallDefinition>;
 
+// ─── The state the pages mirror ─────────────────────────────────────────────
+
+const serverStatus = shape.oneOf("offline", "starting", "online", "stopping", "restarting");
+
+/** A server's own state, as its pages and widgets show it. */
+export const serverStateShape = shape.object({
+    serverStatus,
+    /** the console, as the game printed it and the service said, the last MAX_BUFFERED_ENTRIES lines */
+    serverEntries: shape.list(
+        shape.object({
+            id: shape.optional(shape.either(shape.text(), shape.number())),
+            type: shape.optional(shape.oneOf("command", "output", "error", "warn", "info", "return")),
+            content: shape.text(),
+            timestamp: shape.optional(shape.either(shape.text(), shape.number())),
+        }),
+    ),
+    chatMessages: shape.list(
+        shape.object({
+            id: shape.text(),
+            /** the line as the game printed it */
+            text: shape.text(),
+            timestamp: shape.text(),
+            /** the player a message, join or leave is about */
+            sender: shape.optional(shape.text()),
+            /** what was said, without the sender */
+            content: shape.optional(shape.text()),
+            /** set for a join, a leave or a message from the server console; unset for player chat */
+            event: shape.optional(shape.oneOf("join", "leave", "server")),
+        }),
+    ),
+    localIp: shape.text(),
+    serverPort: shape.text(),
+    serverMotd: shape.text(),
+    serverSoftware: shape.text(),
+    gameSettings: shape.record(shape.json()),
+    serverVersion: shape.text(),
+    ramAllocation: shape.number(),
+    onlinePlayers: texts,
+    /** the running server's player cap, from its `list` answer; null while offline or until it has answered */
+    maxPlayers: shape.nullable(shape.number()),
+    /**
+     * when the server came online, in milliseconds since 1970; null while it
+     * is not online. Kept with the console history, so it survives a restart
+     * of Paperboard that left the server running
+     */
+    onlineSince: shape.nullable(shape.number()),
+    /** the map the running server plays, for games that change maps while running; null while offline or for games without maps */
+    serverLevel: shape.nullable(shape.text()),
+    seenPlayers: texts,
+    playerStats: shape.record(
+        shape.object({ health: shape.optional(shape.number()), food: shape.optional(shape.number()), xpLevel: shape.optional(shape.number()), xpProgress: shape.optional(shape.number()) }),
+    ),
+    playerPlaytime: shape.record(shape.number()),
+    /** latest known x/y/z and dimension per player key, read from the running server for the map; empty when offline */
+    playerPositions: shape.record(shape.object({ x: shape.number(), y: shape.number(), z: shape.number(), dimension: shape.text() })),
+    /** live gamerule values read from the running server (and optimistic offline edits) */
+    gamerules: shape.record(shape.text()),
+    /**
+     * live download progress of an install; null when none is running.
+     * "preparing" is work with no measure yet: a downloader starting, or
+     * making room for the files before it downloads them
+     */
+    installProgress: shape.nullable(
+        shape.object({
+            stage: shape.oneOf("preparing", "downloading", "verifying", "installing", "completed", "error"),
+            percent: shape.number(),
+            /** how much of how much, when the download says */
+            bytes: shape.optional(shape.object({ done: shape.number(), total: shape.number() })),
+        }),
+    ),
+    /** live progress of a modpack install, counting files while downloading; null when none has run */
+    modpackProgress: shape.nullable(
+        shape.object({
+            stage: shape.oneOf("preparing", "downloading", "installing-server", "placing", "completed", "error"),
+            done: shape.number(),
+            total: shape.number(),
+        }),
+    ),
+    activeIssue: shape.nullable(
+        shape.object({
+            id: shape.text(),
+            title: shape.text(),
+            description: shape.text(),
+            variant: shape.optional(shape.oneOf("danger", "warning", "brand")),
+            actions: shape.list(
+                shape.object({
+                    label: shape.text(),
+                    variant: shape.optional(shape.oneOf("danger", "warning", "brand", "primary")),
+                    icon: shape.optional(shape.text()),
+                    /** the repair, then a start once the failed one has ended */
+                    actionKey: shape.oneOf("killPortAndRetry", "acceptEula"),
+                }),
+            ),
+        }),
+    ),
+    /** why an interrupted install or modpack change could not be settled; starting and installing refuse while set. null when settled */
+    recoveryBlock: shape.nullable(shape.text()),
+    /** why the server could not be set up when the service started or it was made; every call but setting it up again refuses while set */
+    initFailure: shape.nullable(shape.text()),
+});
+
+/** A saved server as the servers list, Home's widgets and the server's own page show it. */
+const serverSummary = shape.object({
+    id: shape.text(),
+    name: shape.text(),
+    game: shape.text(),
+    directory: shape.text(),
+    createdAt: shape.number(),
+    configured: shape.boolean(),
+    icon: shape.nullable(shape.text()),
+    state: shape.object({
+        serverStatus,
+        serverSoftware: shape.text(),
+        serverVersion: shape.text(),
+        serverPort: shape.text(),
+        recoveryBlock: shape.nullable(shape.text()),
+        initFailure: shape.nullable(shape.text()),
+        maxPlayers: shape.nullable(shape.number()),
+        playerCount: shape.number(),
+    }),
+});
+export type ServerSummary = Infer<typeof serverSummary>;
+
 /**
- * Everything a page asks the service. Every call but those about the saved
- * servers is about the server the page is open on, which its client is made
- * with; the servers list and the pictures it shows are no one server's, so
- * the scope's server is optional, and a call about a server refuses without
- * one.
+ * Everything a page asks the service, and the state it mirrors. Every call
+ * is about the server the page is open on, which its client is made with,
+ * but making a server and the pictures a page shows, which are no one
+ * server's: the servers list makes its client without a server, and has
+ * only those.
  */
 export const gameServerContract = defineContract(PANEL_ID, {
-    scope: { server: shape.optional(shape.text()) },
+    scope: { server: shape.text() },
     calls: { ...serversCalls, ...minecraftCalls, ...steamCalls, ...sourceCalls, ...terrariaCalls, ...palworldCalls, ...rustCalls },
+    state: {
+        shape: shape.object({
+            servers: shape.list(serverSummary),
+            /** why the saved servers could not be read; every call refuses while set */
+            serversError: shape.nullable(shape.text()),
+            /** the server a widget from before several servers shows */
+            legacyServer: shape.nullable(shape.text()),
+        }),
+        initial: { servers: [], serversError: null, legacyServer: null },
+    },
+    keyed: { server: serverStateShape },
 });
 
 export type CallName = keyof typeof gameServerContract.calls;

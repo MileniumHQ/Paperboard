@@ -7,12 +7,12 @@ import {
     type ServiceContext,
     type CallHandlers,
     type ContractContext,
+    type StateOf,
     type BlocksHandle,
     SerialQueue,
 } from "@mileniumhq/paperapi";
 import {
     PANEL_ID,
-    serverStateKey,
     MAX_SERVERS,
     createServerId,
     readServersConfig,
@@ -27,7 +27,7 @@ import { announceChanges, bindBlocks, fireBackupEnded, fireTrigger, mergeBlocks,
 import { SERVER_EVENTS, serverType, serversBlocks, type ServersBlocksHost } from "./service/serversBlocks";
 import { processApi as scopedProcess, errorMessage } from "./service/api";
 import { type GameServerState, appendCapped } from "./service/types";
-import { SERVERS_CALLS, gameServerContract, type CallName } from "./service/contract";
+import { SERVERS_CALLS, gameServerContract, type CallName, type ServerSummary } from "./service/contract";
 import type { GameContractCalls } from "./games/serviceTypes";
 import { pictureCall } from "./service/pictures";
 import { handleProcessData, handleProcessExit, stopServerInstance, cancelReadiness, restartServerInstance, startServerInstance } from "./service/lifecycle";
@@ -42,22 +42,12 @@ import { livePortDeps } from "./service/portDeps";
 import { report, waitUntil } from "./games/serviceKit";
 export * from "./service/types";
 
-export interface ServerSummary extends Omit<StoredServer, "settings"> {
-    configured: boolean;
-    icon: string | null;
-    state: Pick<
-        GameServerState,
-        "serverStatus" | "serverSoftware" | "serverVersion" | "serverPort" | "recoveryBlock" | "initFailure" | "maxPlayers"
-    > & { playerCount: number };
-}
-export interface ServersState extends Record<string, unknown> {
-    servers: ServerSummary[];
-    serversError: string | null;
-    legacyServer?: string;
-}
+export type { ServerSummary };
+/** The saved servers, as the pages mirror them; each server's own state is the contract's keyed state. */
+export type ServersState = StateOf<typeof gameServerContract>;
 const entries = new Map<string, ServerScope>();
 let saved: ServersConfig = readServersConfig(null);
-let rootContext: ContractContext<typeof gameServerContract, ServersState>;
+let rootContext: ContractContext<typeof gameServerContract>;
 // server changes, and the config writes inside them, one at a time
 const serial = new SerialQueue().run;
 const configWrites = new SerialQueue().run;
@@ -126,11 +116,12 @@ function publish(changed?: ServerScope): void {
     const patch: Partial<ServersState> = {};
     if (JSON.stringify(rootContext.state.servers) !== JSON.stringify(servers))
         patch.servers = servers;
-    if (rootContext.state.legacyServer !== saved.legacyServer)
-        patch.legacyServer = saved.legacyServer;
+    const legacyServer = saved.legacyServer ?? null;
+    if (rootContext.state.legacyServer !== legacyServer)
+        patch.legacyServer = legacyServer;
+    if (Object.keys(patch).length > 0) rootContext.setState(patch);
     for (const scope of changed ? [changed] : entries.values())
-        patch[serverStateKey(scope.server.id)] = scope.ctx.state;
-    rootContext.setState(patch);
+        rootContext.keyed.server.set(scope.server.id, scope.ctx.state);
     announceServers();
 }
 function requireServer(id: unknown): ServerScope {
@@ -218,6 +209,8 @@ function createScope(server: StoredServer): ServerScope {
             emit: (event: string): void => {
                 throw new Error(`${server.name} has no event "${event}" to tell its page`);
             },
+            // a server's state is itself one key of the panel's keyed state
+            keyed: {},
         } as ServiceContext<GameServerState>,
         trigger(id, output) {
             const failed = (what: string, err: unknown) => report(scope.ctx, what, err);
@@ -428,7 +421,7 @@ function removeServer(server: unknown): Promise<void> {
             for (const off of scope.unsubscribe) off();
             entries.delete(id);
             icons.delete(id);
-            rootContext.setState({ [serverStateKey(id)]: null });
+            rootContext.keyed.server.delete(id);
             publish();
         } catch (err) {
             scope.removing = false;
@@ -499,7 +492,6 @@ const serverCalls = Object.fromEntries(
 ) as Omit<Handlers, (typeof SERVERS_CALLS)[number]>;
 export const gameServerService = definePanelService({
     contract: gameServerContract,
-    state: { servers: [], serversError: null } as ServersState,
     calls: {
         ...serverCalls,
         ...serversCalls,

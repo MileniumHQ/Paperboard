@@ -56,7 +56,7 @@ describe("the server page", () => {
 
             // a start pushes status and every console line; a config edit pushes settings
             await serverCalls("s-mc").startServer();
-            await page.received((f) => f.includes('"server:s-mc":{"serverStatus":"online"'), "the server's online state");
+            await page.received((f) => f.includes('"s-mc":{"serverStatus":"online"'), "the server's online state");
             await serverCalls("s-mc").updatePanelConfig({ patch: { ramGB: 3 } });
             await page.received((f) => f.includes('"ramAllocation":3'), "the edited settings");
 

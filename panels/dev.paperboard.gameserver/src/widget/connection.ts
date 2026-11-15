@@ -1,14 +1,14 @@
-// One widget frame's view of the Game Server service. The bridge exists only
-// while the widget can be seen: hidden, it is disposed and nothing arrives;
-// shown again, it re-reads the state. "unavailable" is the service failing to
-// answer, never an empty server.
+// One widget frame's view of the Game Server service. The client exists only
+// while the widget can be seen: hidden, it is closed and nothing arrives;
+// shown again, it re-reads the servers and the chosen server's state. Only
+// the chosen server's changes reach it. "unavailable" is the service failing
+// to answer, never an empty server.
 import { createStateSignal, createLatest } from "@mileniumhq/paperui/headless";
 import { createSignal, onCleanup, type Accessor } from "solid-js";
-import { createPanelBridge, serviceClient, type ServiceCalls, type WidgetContext } from "@mileniumhq/paperapi";
+import { serviceClient, type ServiceCalls, type ServiceClient, type WidgetContext } from "@mileniumhq/paperapi";
 import { gameFor } from "../games";
-import { serverStateOf } from "../servers";
-import { PANEL_ID, gameServerContract } from "../service/contract";
-import type { ServersState } from "../service";
+import { gameServerContract } from "../service/contract";
+import type { ServersState, ServerSummary } from "../service";
 import type { GameServerState } from "../service/types";
 import { errorMessage } from "../lib/failure";
 
@@ -41,35 +41,37 @@ export type Connection =
     | { phase: "ready"; server: ServerView }
     | { phase: "unavailable"; message: string };
 
+const NOT_CHOSEN = "No server is chosen, or it was removed. Choose a Server in the widget options.";
+
 /** The option is explicit; only widgets from before several servers use the legacy server. */
-export function selectedWidgetServer(state: ServersState, option: string | undefined, widgetId?: string): { id: string; view: ServerView } {
+function chosenServer(state: ServersState, option: string | undefined): ServerSummary {
     if (state.serversError) throw new Error(state.serversError);
     const id = option || state.legacyServer;
     const server = state.servers.find((s) => s.id === id);
-    if (!server) throw new Error("No server is chosen, or it was removed. Choose a Server in the widget options.");
+    if (!server) throw new Error(NOT_CHOSEN);
+    return server;
+}
+
+function serverView(server: ServerSummary, snapshot: GameServerState, widgetId: string | undefined): ServerView {
     const game = gameFor(server.game);
-    const snapshot = serverStateOf(state, server.id);
     const options = { software: snapshot.serverSoftware, version: snapshot.serverVersion, settings: snapshot.gameSettings };
     const features = game.describe(options);
     if (widgetId && !features.widgets.includes(widgetId)) throw new Error(`${game.name} does not support the ${widgetId} widget`);
     return {
-        id: server.id,
-        view: {
-            serverStatus: snapshot.serverStatus,
-            serverSoftware: snapshot.serverSoftware,
-            serverVersion: snapshot.serverVersion,
-            onlinePlayers: snapshot.onlinePlayers,
-            maxPlayers: snapshot.maxPlayers,
-            serverMotd: snapshot.serverMotd,
-            serverEntries: snapshot.serverEntries.slice(-TAIL_ENTRIES),
-            localIp: snapshot.localIp,
-            serverPort: snapshot.serverPort,
-            activeIssue: snapshot.activeIssue,
-            supportsPlayers: features.widgets.includes("players"),
-            softwareLabel: game.softwareLabel(options),
-            heads: features.calls.includes("getPlayerSkin"),
-            nameBook: features.nameBook,
-        },
+        serverStatus: snapshot.serverStatus,
+        serverSoftware: snapshot.serverSoftware,
+        serverVersion: snapshot.serverVersion,
+        onlinePlayers: snapshot.onlinePlayers,
+        maxPlayers: snapshot.maxPlayers,
+        serverMotd: snapshot.serverMotd,
+        serverEntries: snapshot.serverEntries.slice(-TAIL_ENTRIES),
+        localIp: snapshot.localIp,
+        serverPort: snapshot.serverPort,
+        activeIssue: snapshot.activeIssue,
+        supportsPlayers: features.widgets.includes("players"),
+        softwareLabel: game.softwareLabel(options),
+        heads: features.calls.includes("getPlayerSkin"),
+        nameBook: features.nameBook,
     };
 }
 
@@ -81,59 +83,95 @@ export interface WidgetServer {
     call<R>(run: (calls: ServiceCalls<typeof gameServerContract>) => Promise<R>): Promise<R>;
 }
 
+/** The widget's open client, and what it has heard of the chosen server. */
+interface Session {
+    client: ServiceClient<typeof gameServerContract, "unscoped">;
+    /** the server whose state it follows */
+    chosen: string | null;
+    snapshot: GameServerState | undefined;
+    /** whether a read has landed: pushes before it are not a whole view */
+    loaded: boolean;
+    offServer: (() => void) | null;
+    offState: () => void;
+}
+
 /** Must run inside a Solid root: it cleans up with it. */
 export function useWidgetServer(widget: WidgetContext): WidgetServer {
     const [visible, setVisible] = createSignal(widget.visible());
-    // every server's activity is pushed to every widget: a push that leaves
-    // this widget's view as it was keeps the view, and the widget stays put
+    // a push that leaves this widget's view as it was keeps the view, and the widget stays put
     const [connection, setConnection] = createStateSignal<Connection>({ phase: "loading" });
-    // what a bridge reports counts only while it is the open one
-    let bridge: ReturnType<typeof createPanelBridge<ServersState>> | null = null;
+    // what a client reports counts only while it is the open one
+    let open: Session | null = null;
 
     const close = () => {
-        bridge?.dispose();
-        bridge = null;
+        if (!open) return;
+        open.offServer?.();
+        open.offState();
+        open.client.state.dispose();
+        open = null;
     };
 
-    let chosen: string | null = null;
-    const project = (state: ServersState): ServerView => {
-        const selected = selectedWidgetServer(state, widget.options.server, widget.widgetId);
-        chosen = selected.id;
-        return selected.view;
+    const failed = (session: Session, err: unknown) => {
+        if (open === session) setConnection({ phase: "unavailable", message: errorMessage(err) });
+    };
+    // follows one server's state: a change of the chosen server reads again
+    const follow = (session: Session, id: string) => {
+        if (session.chosen === id) return;
+        session.offServer?.();
+        session.chosen = id;
+        session.snapshot = undefined;
+        session.offServer = session.client.keyed.server.follow(id)((snapshot) => {
+            session.snapshot = snapshot;
+            if (session.loaded) show(session);
+        });
+    };
+    const show = (session: Session) => {
+        if (open !== session) return;
+        try {
+            const server = chosenServer(session.client.state.current(), widget.options.server);
+            if (server.id !== session.chosen) {
+                refresh();
+                return;
+            }
+            if (!session.snapshot) throw new Error(NOT_CHOSEN);
+            setConnection({ phase: "ready", server: serverView(server, session.snapshot, widget.widgetId) });
+        } catch (err) {
+            failed(session, err);
+        }
     };
     // a retry replaces the read before it
     const latest = createLatest();
     const refresh = () => {
-        const current = bridge;
-        if (!current) return;
+        const session = open;
+        if (!session) return;
         const newest = latest();
-        current
-            .refreshState()
-            .then((answer) => {
-                if (newest() && bridge === current) setConnection({ phase: "ready", server: project(answer) });
-            })
-            .catch((err) => {
-                if (newest() && bridge === current) setConnection({ phase: "unavailable", message: errorMessage(err) });
-            });
+        void (async () => {
+            const servers = await session.client.state.refresh();
+            follow(session, chosenServer(servers, widget.options.server).id);
+            return session.client.keyed.server.read(session.chosen!);
+        })().then(
+            (snapshot) => {
+                if (!newest() || open !== session) return;
+                session.snapshot = snapshot;
+                session.loaded = true;
+                show(session);
+            },
+            (err) => newest() && failed(session, err),
+        );
     };
 
-    const open = () => {
+    const start = () => {
         close();
-        const next = createPanelBridge<ServersState>({ panelId: PANEL_ID });
-        bridge = next;
-        // pushes before the first full read are partial; wait for it
-        next.onStateChange((_patch, full) => {
-            if (bridge === next && next.getStatus().ready) {
-                try { setConnection({ phase: "ready", server: project(full) }); }
-                catch (err) { setConnection({ phase: "unavailable", message: errorMessage(err) }); }
-            }
-        });
+        const client = serviceClient(gameServerContract);
+        const session: Session = { client, chosen: null, snapshot: undefined, loaded: false, offServer: null, offState: () => {} };
+        open = session;
+        session.offState = client.state.subscribe(() => session.loaded && show(session));
         refresh();
     };
 
     const sync = (shown: boolean) => {
         setVisible(shown);
-        if (shown) open();
+        if (shown) start();
         else close();
     };
     const off = widget.onVisibilityChange(sync);
@@ -147,11 +185,11 @@ export function useWidgetServer(widget: WidgetContext): WidgetServer {
         connection,
         visible,
         retry: () => {
-            if (!bridge) return;
+            if (!open) return;
             setConnection({ phase: "loading" });
             refresh();
         },
         call: (run) =>
-            bridge && chosen ? run(serviceClient(gameServerContract, { server: chosen }).calls) : Promise.reject(new Error("Choose a server in the widget options")),
+            open?.chosen ? run(serviceClient(gameServerContract, { server: open.chosen }).calls) : Promise.reject(new Error("Choose a server in the widget options")),
     };
 }

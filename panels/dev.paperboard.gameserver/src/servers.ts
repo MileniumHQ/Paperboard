@@ -1,5 +1,4 @@
 import { defaultGame, gameFor } from "./games";
-import type { GameServerState } from "./service/types";
 // A server's id is also its Blocks project id. Files stay where they were
 // created: the migrated server owns the original panel folder.
 export const PANEL_ID = "dev.paperboard.gameserver";
@@ -118,10 +117,3 @@ export function readServersConfig(saved: unknown): ServersConfig {
     };
 }
 
-/** Separate state channels keep a busy console from resending every server's logs. */
-export const serverStateKey = (id: string) => `server:${id}`;
-export function serverStateOf(state: Record<string, unknown>, id: string): GameServerState {
-    const value = state[serverStateKey(id)];
-    if (!value || typeof value !== "object") throw new Error("The server's state has not loaded");
-    return value as GameServerState;
-}

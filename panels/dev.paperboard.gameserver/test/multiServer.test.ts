@@ -166,7 +166,7 @@ describe("Home's widgets", () => {
             terraria = await running("s-ter", () => ter.evaluate(`${button("Start", WIDGET_DOC)}.click()`));
             await waitForWidget(ter, `${button("Stop", WIDGET_DOC)} && ${WIDGET_TEXT}.includes("Online")`, "Island's widget online");
             // the other widget hears the push, and still shows its own server stopped
-            await mc.received((f) => f.includes('"server:s-ter"') && f.includes('"online"'), "the push of Island going online");
+            await mc.received((f) => f.includes('"s-ter":{"serverStatus"') && f.includes('"online"'), "the push of Island going online");
             expect(await mc.evaluate<string>(WIDGET_TEXT)).toContain("Offline");
             expect(await mc.evaluate<boolean>(`!!${button("Start", WIDGET_DOC)}`)).toBe(true);
             expect((await state().server("s-mc"))!.serverStatus).toBe("offline");

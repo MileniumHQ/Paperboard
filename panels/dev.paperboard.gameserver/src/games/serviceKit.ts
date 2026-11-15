@@ -11,8 +11,7 @@ import { files, processApi, readSettings, updateSettings, type ServiceContext } 
 import { fileApi as rawFiles, problemsApi, secretsApi, errorMessage } from "@mileniumhq/paperapi";
 import { currentServer, emitTrigger, serverLocal, serverOf } from "../service/scope";
 import { TRIGGER_IDS } from "../service/contract";
-import type { PaperConsoleEntry } from "@mileniumhq/paperui";
-import { appendCapped, PANEL_ID, type ChatMessage, type GameServerState } from "../service/types";
+import { appendCapped, PANEL_ID, type ChatMessage, type ConsoleLine, type GameServerState } from "../service/types";
 import { chatId } from "../lib/logs";
 import type { GameDefinition, GameOptions } from "./types";
 import type { GameService, PortSpec } from "./serviceTypes";
@@ -272,7 +271,7 @@ export class ConsoleBuffer {
             const lines = this.pending;
             this.pending = [];
             // added to what is published now: a line written in between keeps the old progress line
-            let entries: PaperConsoleEntry[] = ctx.state.serverEntries;
+            let entries: ConsoleLine[] = ctx.state.serverEntries;
             for (const content of lines) entries = addConsoleLine(entries, { type: this.isError(content) ? "error" : "info", content }, (entry) => String(entry.content));
             ctx.setState({ serverEntries: entries.slice(-CONSOLE_LINES) });
         }, 100);

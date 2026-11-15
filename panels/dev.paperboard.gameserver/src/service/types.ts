@@ -1,4 +1,4 @@
-import type { PaperConsoleEntry } from "@mileniumhq/paperui";
+import type { Infer } from "@mileniumhq/paperapi";
 import type { ServerSoftwareType } from "../lib/software";
 import type { ServerStatus as CoreServerStatus, ChatMessage as CoreChatMessage, InstallProgress, ModpackProgress } from "../core/state";
 import {
@@ -10,7 +10,7 @@ import type { PlayerPosition as CorePlayerPosition } from "../core/players";
 import type { ServerIssue as CoreServerIssue, ServerIssueAction as CoreServerIssueAction } from "../core/diagnostics";
 import { WORLD_NAME_PATTERN as CORE_WORLD_NAME_PATTERN } from "../core/worlds";
 import type { InstalledRecord as CoreInstalledRecord, InstalledPlugin as CoreInstalledPlugin } from "../core/plugins";
-import { PANEL_ID } from "./contract";
+import { PANEL_ID, type serverStateShape } from "./contract";
 
 export type ServerStatus = CoreServerStatus;
 export type ChatMessage = CoreChatMessage;
@@ -24,50 +24,10 @@ export type InstalledPlugin = CoreInstalledPlugin;
 // contract.ts owns the id now; types.ts re-exports for the renderer
 export { PANEL_ID } from "./contract";
 
-export interface GameServerState {
-    serverStatus: ServerStatus;
-    serverEntries: PaperConsoleEntry[];
-    chatMessages: ChatMessage[];
-    localIp: string;
-    serverPort: string;
-    serverMotd: string;
-    serverSoftware: string;
-    gameSettings: Readonly<Record<string, unknown>>;
-    serverVersion: string;
-    ramAllocation: number;
-    onlinePlayers: string[];
-    // the running server's player cap, from its `list` answer; null while
-    // offline or until it has answered
-    maxPlayers: number | null;
-    // when the server came online, in milliseconds since 1970; null while it
-    // is not online. Kept with the console history, so it survives a restart
-    // of Paperboard that left the server running
-    onlineSince: number | null;
-    // the map the running server plays, for games that change maps while
-    // running; null while offline or for games without maps
-    serverLevel: string | null;
-    seenPlayers: string[];
-    playerStats: Record<string, PlayerStatData>;
-    playerPlaytime: Record<string, number>;
-    // latest known x/y/z + dimension per player key, read from the running
-    // server for the map; empty when offline
-    playerPositions: Record<string, PlayerPosition>;
-    // live gamerule values read from the running server (and optimistic
-    // offline edits); synced to the Game Rules tab through the bridge
-    gamerules: Record<string, string>;
-    // live jar-download progress during installServerVersion; null when no
-    // install is running. The Versions modal reads this for its row.
-    installProgress: InstallProgress | null;
-    // live modpack install progress; null when none has run
-    modpackProgress: ModpackProgress | null;
-    activeIssue: ServerIssue | null;
-    // why an interrupted install or modpack change could not be settled;
-    // starting and installing refuse while set. null when settled.
-    recoveryBlock: string | null;
-    // why the server could not be set up when the service started or it was
-    // made; every call but setting it up again refuses while set
-    initFailure: string | null;
-}
+/** A server's own state, as the contract's keyed state carries it. */
+export type GameServerState = Infer<typeof serverStateShape>;
+/** A console line as the service keeps it: text only, as it travels as JSON. */
+export type ConsoleLine = GameServerState["serverEntries"][number];
 
 export const SERVER_PROC_ID = CORE_SERVER_PROC_ID;
 export const MAX_BUFFERED_ENTRIES = 1000;

@@ -70,19 +70,19 @@ export async function withScenarioDaemon(prefix: string, work: (scenario: Scenar
     const servers: ScenarioServer[] = [];
     try {
         await until(() => { if (daemon.exitCode !== null) throw new Error(`The daemon exited before it listened:\n${log}`); return /Listening on https?:\/\/127\.0\.0\.1:\d+/.test(log); }, "the daemon to listen", 30_000);
-        const bridge = api.createPanelBridge<Record<string, unknown>>({ panelId: PANEL });
+        const panel = api.serviceClient(gameServerContract);
         // quiet: polled until the service answers; a failure here is it still starting
-        await until(async () => Array.isArray((await bridge.refreshState().catch(() => ({} as Record<string, unknown>))).servers), "the panel's service", 60_000);
+        await until(async () => Array.isArray((await panel.state.refresh().catch(() => null))?.servers), "the panel's service", 60_000);
         await work({
             root,
             async addServer(name, game, processId) {
-                const { id } = await api.serviceClient(gameServerContract, {}).calls.addServer({ name, game });
+                const { id } = await panel.calls.addServer({ name, game });
                 const stored = (await api.config.get<any>(PANEL)).servers.find((s: any) => s.id === id);
                 processes.push(`${id}-${processId}`);
                 const state = async () => {
-                    const value = (await bridge.refreshState())[`server:${id}`];
+                    const value = await panel.keyed.server.read(id);
                     if (!value) throw new Error("The server's state has not loaded");
-                    return value as GameServerState;
+                    return value;
                 };
                 const server: ScenarioServer = {
                     id, directory: await api.fileApi.getPath(stored.directory, PANEL), state,

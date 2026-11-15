@@ -2,7 +2,7 @@
 // page must not load, but the picture the service fetched (service/pictures.ts)
 // as a data: address.
 import { createResource } from "solid-js";
-import { serverCalls } from "./api";
+import { panelCalls } from "./api";
 import { errorMessage } from "./failure";
 import type { PictureSource } from "../service/contract";
 
@@ -16,7 +16,7 @@ export async function servedPicture(from: PictureSource, url: string): Promise<s
     const key = `${from} ${url}`;
     const have = kept.get(key);
     if (have !== undefined) return have;
-    const picture = await serverCalls.servedPicture({ from, url });
+    const picture = await panelCalls.servedPicture({ from, url });
     kept.set(key, picture);
     if (kept.size > MAX_KEPT) kept.delete(kept.keys().next().value!);
     return picture;
