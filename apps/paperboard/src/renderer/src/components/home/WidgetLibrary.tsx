@@ -9,7 +9,7 @@ import {
     PaperSelectMenuItem,
     PaperText,
     getVarCss,
-    createLatest,
+    createRead,
 } from "@mileniumhq/paperui";
 import { type Component, createMemo, createSignal, For, type JSX, onCleanup, onMount, Show } from "solid-js";
 import {
@@ -20,9 +20,8 @@ import {
     type WidgetDeclaration,
     type WidgetOptionValues,
     type WidgetSize,
-    errorMessage,
 } from "@mileniumhq/paperapi";
-import { type ComputerInfo, logToMain } from "../../lib/shell";
+import type { ComputerInfo } from "../../lib/shell";
 import PanelIcon from "../computer/PanelIcon";
 import type { LoadQueue } from "../../lib/loadQueue";
 import { BUILTIN_WIDGETS, BuiltinView, builtinWidget } from "./builtins";
@@ -296,50 +295,32 @@ const WidgetCard: Component<WidgetLibraryProps & { widget: WidgetDeclaration; en
     // when the card appears; a built-in's are its own. Until every option has
     // a value there is nothing to add
     const declared = () => props.widget.options ?? [];
-    const [choices, setChoices] = createSignal<
-        { kind: "loading" } | { kind: "ready"; lists: Record<string, WidgetChoice[]> } | { kind: "failed"; message: string }
-    >({ kind: "loading" });
-    const [chosen, setChosen] = createSignal<WidgetOptionValues>({});
-    const latest = createLatest();
-    const loadChoices = async () => {
+    const choices = createRead(async () => {
         const from = props.entryAt(size());
-        if (declared().length === 0) return;
-        const current = latest();
-        setChoices({ kind: "loading" });
-        try {
-            const offered =
-                from.source === "builtin"
-                    ? declared().map((option) => builtinWidget(props.widget.id)?.choices?.[option.id] ?? [])
-                    : await Promise.all(
-                          declared().map((option) => getWidgetChoices(from.computerId, from.panelId, props.widget.id, option.id)),
-                      );
-            if (!current()) return;
-            const lists: Record<string, WidgetChoice[]> = {};
-            const next: WidgetOptionValues = {};
-            declared().forEach((option, index) => {
-                lists[option.id] = offered[index];
-                // what was picked stays picked while it is still offered
-                const kept = offered[index].find((choice) => choice.value === chosen()[option.id]) ?? offered[index][0];
-                if (kept) next[option.id] = kept.value;
-            });
-            setChosen(next);
-            setChoices({ kind: "ready", lists });
-        } catch (err) {
-            if (!current()) return;
-            logToMain("warn", `Couldn't load choices for widget ${props.widget.id}:`, err);
-            setChoices({ kind: "failed", message: errorMessage(err) });
+        const offered =
+            from.source === "builtin"
+                ? declared().map((option) => builtinWidget(props.widget.id)?.choices?.[option.id] ?? [])
+                : await Promise.all(declared().map((option) => getWidgetChoices(from.computerId, from.panelId, props.widget.id, option.id)));
+        return Object.fromEntries(declared().map((option, index) => [option.id, offered[index]])) as Record<string, WidgetChoice[]>;
+    }, { key: "value" });
+    const phase = () => (choices.loading() ? "loading" : choices.error() ? "failed" : choices.value() ? "ready" : "loading");
+    const listOf = (optionId: string) => (phase() === "ready" ? (choices.value()?.[optionId] ?? []) : []);
+    // what was picked stays picked while it is still offered; else the first choice
+    const [picked, setPicked] = createSignal<WidgetOptionValues>({});
+    const chosen = createMemo<WidgetOptionValues>(() => {
+        const next: WidgetOptionValues = {};
+        for (const option of declared()) {
+            const list = listOf(option.id);
+            const kept = list.find((choice) => choice.value === picked()[option.id]) ?? list[0];
+            if (kept) next[option.id] = kept.value;
         }
-    };
-    onMount(() => void loadChoices());
-    const listOf = (optionId: string) => {
-        const state = choices();
-        return state.kind === "ready" ? (state.lists[optionId] ?? []) : [];
-    };
+        return next;
+    });
     /** the chosen values once every declared option has one; null until then */
     const options = createMemo<WidgetOptionValues | null>(() => {
         if (declared().length === 0) return {};
         const values = chosen();
-        return choices().kind === "ready" && declared().every((option) => values[option.id]) ? values : null;
+        return phase() === "ready" && declared().every((option) => values[option.id]) ? values : null;
     });
     const unavailable = () => props.full || options() === null;
     const entry = (): LibraryEntry => {
@@ -479,9 +460,9 @@ const WidgetCard: Component<WidgetLibraryProps & { widget: WidgetDeclaration; en
                             name={`${previewId}-${option.id}`}
                             fullWidth
                             value={chosen()[option.id]}
-                            onValueChange={(value) => setChosen((previous) => ({ ...previous, [option.id]: String(value) }))}
+                            onValueChange={(value) => setPicked((previous) => ({ ...previous, [option.id]: String(value) }))}
                             disabled={listOf(option.id).length === 0}
-                            placeholder={choices().kind === "loading" ? "Loading…" : "Nothing to choose yet"}
+                            placeholder={phase() === "loading" ? "Loading…" : "Nothing to choose yet"}
                         >
                             <For each={listOf(option.id)}>
                                 {(choice) => <PaperSelectMenuItem value={choice.value}>{choice.label}</PaperSelectMenuItem>}
@@ -490,15 +471,15 @@ const WidgetCard: Component<WidgetLibraryProps & { widget: WidgetDeclaration; en
                     </div>
                 )}
             </For>
-            <Show when={declared().length > 0 && choices().kind !== "loading" && options() === null}>
-                <div class={styles.optionNote} role={choices().kind === "failed" ? "alert" : "status"}>
-                    <PaperText preset={choices().kind === "failed" ? "error" : "hint"}>
-                        {choices().kind === "failed"
-                            ? `Couldn't load this widget's choices: ${(choices() as { message: string }).message}`
+            <Show when={declared().length > 0 && phase() !== "loading" && options() === null}>
+                <div class={styles.optionNote} role={phase() === "failed" ? "alert" : "status"}>
+                    <PaperText preset={phase() === "failed" ? "error" : "hint"}>
+                        {phase() === "failed"
+                            ? `Couldn't load this widget's choices: ${choices.error()}`
                             : `There is nothing to choose yet. Set this up in ${props.entryAt(size()).sourceName}, then check again.`}
                     </PaperText>
-                    <PaperButton size="tiny" variant="text" onClick={() => void loadChoices()}>
-                        {choices().kind === "failed" ? "Retry" : "Check again"}
+                    <PaperButton size="tiny" variant="text" onClick={() => void choices.reload()}>
+                        {phase() === "failed" ? "Retry" : "Check again"}
                     </PaperButton>
                 </div>
             </Show>

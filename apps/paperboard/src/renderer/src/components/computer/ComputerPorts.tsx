@@ -1,32 +1,23 @@
-import { type Component, createSignal, For, onMount, Show } from "solid-js";
-import { PaperButton, PaperCard, PaperFlex, PaperSectionHeader, PaperSettingItem, PaperSettingList, PaperText, PaperToggle, createSavedValue } from "@mileniumhq/paperui";
-import { portSettingsApi, type PortClaim, type PortPolicy, type PortProtocol, errorMessage } from "@mileniumhq/paperapi";
+import { type Component, createSignal, For, Show } from "solid-js";
+import { PaperButton, PaperCard, PaperFlex, PaperSectionHeader, PaperSettingItem, PaperSettingList, PaperText, PaperToggle, createRead, createSavedValue } from "@mileniumhq/paperui";
+import { portSettingsApi, type PortPolicy, type PortProtocol, errorMessage } from "@mileniumhq/paperapi";
 
 const PROTOCOL_NAMES: Record<PortProtocol, string> = { tcp: "TCP", udp: "UDP", "tcp+udp": "TCP and UDP" };
 
 // The Ports section of a computer's Computer Info: the network ports its
 // panels hold, and what happens when one a panel asks for is taken.
 const ComputerPorts: Component<{ computerId: string }> = (props) => {
-    const [claims, setClaims] = createSignal<PortClaim[] | null>(null);
-    const [savedPolicy, setSavedPolicy] = createSignal<PortPolicy>("next-free");
-    const policy = createSavedValue(savedPolicy, async (next) => {
+    const ports = createRead(
+        async () => {
+            const state = await portSettingsApi.all(props.computerId);
+            return { claims: [...state.claims].sort((a, b) => a.port - b.port), policy: state.policy };
+        },
+        { message: (err) => `Ports could not be loaded: ${errorMessage(err)}` },
+    );
+    const policy = createSavedValue<PortPolicy>(() => ports.value()?.policy ?? "next-free", async (next) => {
         await portSettingsApi.setPolicy(next, props.computerId);
     });
-    const [loadError, setLoadError] = createSignal("");
     const [saveError, setSaveError] = createSignal("");
-
-    const load = async () => {
-        setLoadError("");
-        try {
-            const state = await portSettingsApi.all(props.computerId);
-            setClaims([...state.claims].sort((a, b) => a.port - b.port));
-            setSavedPolicy(state.policy);
-        } catch (err) {
-            setClaims(null);
-            setLoadError(`Ports could not be loaded: ${errorMessage(err)}`);
-        }
-    };
-    onMount(() => void load());
 
     const setRefuse = (refuse: boolean) => {
         setSaveError("");
@@ -40,15 +31,15 @@ const ComputerPorts: Component<{ computerId: string }> = (props) => {
             <PaperSectionHeader icon="lan" title="Ports" />
 
             <PaperFlex direction="column" gap="full" fullWidth>
-                <Show when={loadError()}>
+                <Show when={ports.error()}>
                     <PaperCard accent="danger" padding="inset">
                         <PaperFlex direction="row" gap="full" align="center" justify="space-between">
-                            <PaperText preset="error">{loadError()}</PaperText>
-                            <PaperButton onClick={() => void load()}>Try Again</PaperButton>
+                            <PaperText preset="error">{ports.error()}</PaperText>
+                            <PaperButton onClick={() => void ports.reload()}>Try Again</PaperButton>
                         </PaperFlex>
                     </PaperCard>
                 </Show>
-                <Show when={claims()}>
+                <Show when={ports.value()?.claims}>
                     {(list) => (
                         <>
                             <PaperSettingList autoHeight>
@@ -79,7 +70,7 @@ const ComputerPorts: Component<{ computerId: string }> = (props) => {
                         </>
                     )}
                 </Show>
-                <Show when={!claims() && !loadError()}>
+                <Show when={!ports.value() && !ports.error()}>
                     <PaperText preset="hint" inset>Loading ports…</PaperText>
                 </Show>
             </PaperFlex>

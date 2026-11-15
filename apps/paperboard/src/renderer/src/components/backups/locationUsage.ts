@@ -1,22 +1,19 @@
 // How full a backup location is, in words, for the chooser and settings.
-import { backupLocationsApi, type BackupLocationUsage, errorMessage } from "@mileniumhq/paperapi";
+import type { Accessor } from "solid-js";
+import { backupLocationsApi, type BackupLocationUsage } from "@mileniumhq/paperapi";
+import { createRead, type Read } from "@mileniumhq/paperui";
 import { formatBytes } from "../../lib/formatBytes";
-import { logToMain } from "../../lib/shell";
 
-export type UsageState = { kind: "loading" } | { kind: "ready"; usage: BackupLocationUsage } | { kind: "failed"; message: string };
-
-export function usageText(state: UsageState): string {
-    if (state.kind === "loading") return "Checking space…";
-    if (state.kind === "failed") return `Unavailable: ${state.message}`;
-    const used = `${formatBytes(state.usage.used)} of backups`;
-    return state.usage.available === null ? `${used}, no space limit reported` : `${used}, ${formatBytes(state.usage.available)} free`;
+/** A location's usage, read as it appears and again each time `round` changes. */
+export function createLocationUsage(locationId: string, computerId: string, round?: Accessor<number>): Read<BackupLocationUsage> {
+    return createRead(() => backupLocationsApi.usage(locationId, computerId), round ? { source: round } : {});
 }
 
-export async function loadUsage(locationId: string, computerId: string): Promise<UsageState> {
-    try {
-        return { kind: "ready", usage: await backupLocationsApi.usage(locationId, computerId) };
-    } catch (err) {
-        logToMain("warn", `The usage of backup location ${locationId} is unavailable:`, err);
-        return { kind: "failed", message: errorMessage(err) };
-    }
+export function usageText(usage: Read<BackupLocationUsage>): string {
+    const failed = usage.error();
+    if (failed) return `Unavailable: ${failed}`;
+    const now = usage.value();
+    if (!now) return "Checking space…";
+    const used = `${formatBytes(now.used)} of backups`;
+    return now.available === null ? `${used}, no space limit reported` : `${used}, ${formatBytes(now.available)} free`;
 }
