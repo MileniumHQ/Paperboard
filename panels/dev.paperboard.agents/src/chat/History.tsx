@@ -20,15 +20,19 @@ export default function History(props: { agent: Agent; open: boolean; onClose: (
     const [chosen, setChosen] = createSignal(CURRENT);
     const all = () => (list() ? [...(list()!.current ? [list()!.current!] : []), ...list()!.past] : []);
 
+    // latest read wins: an older answer (the modal opened, closed and opened again) never replaces a newer one
+    let reads = 0;
     const load = async () => {
+        const mine = ++reads;
         setReadError(null);
         setOpenError(null);
         setList(null);
         setChosen(CURRENT);
         try {
-            setList(await props.agent.conversations());
+            const next = await props.agent.conversations();
+            if (mine === reads) setList(next);
         } catch (e) {
-            setReadError(errorText(e));
+            if (mine === reads) setReadError(errorText(e));
         }
     };
 

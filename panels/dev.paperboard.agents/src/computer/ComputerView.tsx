@@ -56,29 +56,37 @@ export default function ComputerView(props: { agent: Agent }) {
     const [chosen, setChosen] = createSignal<number | null>(null);
     let timer: ReturnType<typeof setTimeout> | undefined;
     let disposed = false;
-    const refresh = async () => {
+    // one poll at a time: starting another, or stopping, makes an answer still on its way the old poll's, and it is dropped
+    let poll = 0;
+    const stopPolling = () => {
+        poll++;
         clearTimeout(timer);
+    };
+    const refresh = async () => {
+        stopPolling();
+        const mine = poll;
         if (disposed || !ready() || listError()) return;
         if (!document.hidden) {
             try {
                 // tabs go by id, so a tab never jumps (and the window being used never loses focus to a move)
                 const list = (await props.agent.windows()).sort((a, b) => a.id - b.id);
+                if (mine !== poll) return;
                 setWindows(reconcile(list, { key: "id" }));
                 setListed(true);
             } catch (e) {
                 // shown once, until the user tries again; polling a failure would only repeat it
-                setListError(errorText(e));
+                if (mine === poll) setListError(errorText(e));
                 return;
             }
         }
-        if (!disposed) timer = setTimeout(() => void refresh(), WINDOWS_POLL_MS);
+        timer = setTimeout(() => void refresh(), WINDOWS_POLL_MS);
     };
     createEffect(
         on(ready, (on) => {
             setListError(null);
             if (on) void refresh();
             else {
-                clearTimeout(timer);
+                stopPolling();
                 setWindows([]);
                 setListed(false);
             }
@@ -86,7 +94,7 @@ export default function ComputerView(props: { agent: Agent }) {
     );
     onCleanup(() => {
         disposed = true;
-        clearTimeout(timer);
+        stopPolling();
     });
     const retryList = () => {
         setListError(null);
@@ -125,18 +133,20 @@ export default function ComputerView(props: { agent: Agent }) {
             .finally(() => (taking = null));
         await taking;
     };
-    createEffect(() => {
-        if (!holding()) return;
-        const renew = setInterval(
-            () =>
-                void props.agent.control(true).catch((e) => {
-                    setHolding(false);
-                    setError(failure("Control lost", e));
-                }),
-            RENEW_MS,
-        );
-        onCleanup(() => clearInterval(renew));
-    });
+    createEffect(
+        on(holding, (held) => {
+            if (!held) return;
+            const renew = setInterval(
+                () =>
+                    void props.agent.control(true).catch((e) => {
+                        setHolding(false);
+                        setError(failure("Control lost", e));
+                    }),
+                RENEW_MS,
+            );
+            onCleanup(() => clearInterval(renew));
+        }),
+    );
     // the lease ended elsewhere (the computer stopped)
     createEffect(on(() => c().userControl, (now, before) => before && !now && setHolding(false)));
     onCleanup(handBack);

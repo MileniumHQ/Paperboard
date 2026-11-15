@@ -3,11 +3,11 @@
 // OpenCode itself (service/providers.ts); nothing here names a provider.
 // A key goes from its field to OpenCode and is kept nowhere else.
 
-import { For, Match, Show, Switch, createEffect, createResource, createSignal, on, onCleanup } from "solid-js";
-import { PaperButton, PaperCopyButton, PaperFlex, PaperInput, PaperLink, PaperLoader, PaperModal, PaperQuote, PaperSectionHeader, PaperSelectMenu, PaperSelectMenuItem, PaperText } from "@mileniumhq/paperui";
+import { For, Match, Show, Switch, createEffect, createResource, createSignal, on } from "solid-js";
+import { createPolling, PaperButton, PaperCopyButton, PaperFlex, PaperInput, PaperLink, PaperLoader, PaperModal, PaperQuote, PaperSectionHeader, PaperSelectMenu, PaperSelectMenuItem, PaperText } from "@mileniumhq/paperui";
 import type { ProviderAttempt, ProviderField, ProviderInfo, ProviderMethod } from "../contract";
 import type { Agent } from "../lib/agent";
-import { failure, type Failure } from "../lib/failure";
+import { errorText, failure, type Failure } from "../lib/failure";
 
 const POLL_MS = 2_000;
 
@@ -82,22 +82,22 @@ export default function Providers(props: { agent: Agent; open: boolean; onClose:
         else if (body.status === "failed") setError({ title, message: body.message ?? "OpenCode didn't say why" });
         else if (body.status === "expired") setError({ title, message: "The sign-in page expired. Start again." });
     };
+    // an answer for a sign-in that was canceled or replaced since is dropped: it would end the new one with the old one's error
     const check = async (withCode?: string) => {
         const a = attempt();
         if (!a) return;
+        const still = () => attempt()?.info.id === a.info.id;
         try {
             const status = await props.agent.providerAttempt(a.provider, a.info.id, withCode);
-            if (status.status !== "pending") await finishAttempt(`${current()?.name ?? "Provider"} not connected`, status);
+            if (still() && status.status !== "pending") await finishAttempt(`${current()?.name ?? "Provider"} not connected`, status);
         } catch (e) {
+            if (!still()) return;
             setAttempt(null);
             setError(failure(`${current()?.name ?? "Provider"} not connected`, e));
         }
     };
-    // an automatic sign-in finishes on OpenCode's side: ask until it has
-    const timer = setInterval(() => {
-        if (attempt() && attempt()!.info.mode === "auto") void check();
-    }, POLL_MS);
-    onCleanup(() => clearInterval(timer));
+    // an automatic sign-in finishes on OpenCode's side: ask until it has, one question at a time
+    createPolling(() => (attempt()?.info.mode === "auto" ? check() : undefined), POLL_MS);
 
     const cancel = async () => {
         const a = attempt();
@@ -119,7 +119,7 @@ export default function Providers(props: { agent: Agent; open: boolean; onClose:
                 <Switch>
                     <Match when={providers.error}>
                         <PaperQuote variant="danger" icon="error" title="Providers not listed" role="alert">
-                            {failure("", providers.error).message}
+                            {errorText(providers.error)}
                         </PaperQuote>
                         <PaperFlex direction="row">
                             <PaperButton onClick={() => void refetch()}>Look again</PaperButton>
