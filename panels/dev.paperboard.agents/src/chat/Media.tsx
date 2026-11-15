@@ -209,7 +209,7 @@ function WebImage(props: { url: string; alt: string; title?: string }) {
 }
 
 /** A file of the conversation, by id: looked up from the service, then shown for what it is. */
-export function FileView(props: { id: string; caption?: string }) {
+function FileView(props: { id: string; caption?: string }) {
     const media = useMedia();
     const [info] = createResource(
         () => props.id,
@@ -234,7 +234,7 @@ export function FileView(props: { id: string; caption?: string }) {
 }
 
 /** A file named in a sentence: a chip with its icon and name that opens it. */
-export function FileChip(props: { id: string; label: string }) {
+function FileChip(props: { id: string; label: string }) {
     const media = useMedia();
     const [info] = createResource(
         () => props.id,

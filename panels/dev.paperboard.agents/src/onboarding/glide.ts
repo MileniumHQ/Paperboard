@@ -7,9 +7,14 @@
 // re-centers, and a ResizeObserver reports it after layout but before the
 // frame is painted, so the jump is never drawn.
 
-function durationMs(value: string): number {
-    const v = value.trim();
-    if (!v) return 0;
+/** a PaperUI token as the element has it: one that isn't set means PaperUI's styles didn't load, which is an error, never a guess */
+function token(style: CSSStyleDeclaration, name: string): string {
+    const v = style.getPropertyValue(name).trim();
+    if (!v) throw new Error(`The PaperUI token ${name} isn't set`);
+    return v;
+}
+
+function durationMs(v: string): number {
     return v.endsWith("ms") ? parseFloat(v) || 0 : (parseFloat(v) || 0) * 1000;
 }
 
@@ -45,13 +50,13 @@ export function glideWhenRecentered(spacer: Element, target: () => HTMLElement |
         if (Math.abs(moved) < 1) return;
         const style = getComputedStyle(el);
         // the token is 0s under reduced motion: then it simply moves
-        const duration = durationMs(style.getPropertyValue("--paper-medium-transition"));
+        const duration = durationMs(token(style, "--paper-medium-transition"));
         if (duration <= 0) return;
         const from = moved + (glide?.playState === "running" ? drawnOffset(el) : 0);
         glide?.cancel();
         glide = el.animate([{ translate: `0 ${from}px` }, { translate: "0 0" }], {
             duration,
-            easing: style.getPropertyValue("--paper-ease-emphasized").trim() || "ease-out",
+            easing: token(style, "--paper-ease-emphasized"),
         });
     });
     observer.observe(spacer);

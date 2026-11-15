@@ -58,13 +58,10 @@ export function stateText(s: ServerState): string {
     }
 }
 
+/** a server's web address as the person reads it: its host. The service keeps only an http(s) address it parsed (mcpConfig). */
+export const hostOf = (url: string) => new URL(url).host;
+
 /** where a server is: a web address's host, or the program it runs */
 export function whereText(spec: ServerSpec): string {
-    if (spec.transport === "stdio") return [spec.command, ...spec.args].join(" ");
-    try {
-        return new URL(spec.url).host;
-    } catch (e) {
-        console.warn("[agents] a tool server's address isn't a URL:", spec.url, e);
-        return spec.url;
-    }
+    return spec.transport === "stdio" ? [spec.command, ...spec.args].join(" ") : hostOf(spec.url);
 }

@@ -4,7 +4,7 @@ import type { ToolSignInEntry } from "../contract";
 import { createAction } from "../lib/action";
 import { createTools } from "../tools/api";
 import SignInSteps from "../tools/SignInSteps";
-import { stateOf, stateText } from "../tools/status";
+import { hostOf, stateOf, stateText } from "../tools/status";
 
 /** The agent asking the user to sign in to one of its tool servers. How it's going is read live, so an old card says how it is now. */
 export default function ToolSignIn(props: { entry: ToolSignInEntry; name: string }) {
@@ -20,14 +20,6 @@ export default function ToolSignIn(props: { entry: ToolSignInEntry; name: string
         const s = state();
         return s?.kind === "failed" ? s.error : null;
     };
-    const host = () => {
-        try {
-            return new URL(e().url).host;
-        } catch (err) {
-            console.warn("[agents] a tool server's address isn't a URL:", e().url, err);
-            return e().url;
-        }
-    };
     const { busy, error, run: act } = createAction();
 
     return (
@@ -38,7 +30,7 @@ export default function ToolSignIn(props: { entry: ToolSignInEntry; name: string
                     <PaperFlex gap="onefourth" minWidth={0}>
                         <PaperText preset="label">Sign in to {e().server}</PaperText>
                         <PaperText preset="hint" breakWord>
-                            {props.name} needs you to sign in at {host()} to use its tools.
+                            {props.name} needs you to sign in at {hostOf(e().url)} to use its tools.
                         </PaperText>
                     </PaperFlex>
                 </PaperFlex>

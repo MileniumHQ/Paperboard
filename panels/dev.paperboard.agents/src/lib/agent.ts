@@ -35,7 +35,7 @@ import {
     type AccessView,
 } from "../contract";
 
-export type Hydration = "loading" | "ready" | "failed";
+type Hydration = "loading" | "ready" | "failed";
 
 export function createAgent() {
     const bridge = createPanelBridge<AiState>({ panelId: PANEL_ID, defaultState: DEFAULT_STATE });
