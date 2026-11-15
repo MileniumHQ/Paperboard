@@ -22,7 +22,8 @@ import {
 } from "../core/configEdit";
 import { parseProperties } from "../core/properties";
 import { isListableDirArg } from "../core/dirs";
-import { serializedFileTask, writeFileAtomic } from "./fileWrites";
+import { serializedFileTask } from "./fileWrites";
+import { writeFileAtomic } from "@mileniumhq/paperapi/fs";
 
 // The Loader tab's owner: finds the config file each setting lives in,
 // reads current values, and writes one validated value at a time. Every
@@ -33,11 +34,7 @@ const MAX_CONFIG_BYTES = 2 * 1024 * 1024;
 
 export interface LoaderFs {
     readFile(path: string, encoding: "utf8"): Promise<string>;
-    writeFile(path: string, data: string): Promise<void>;
-    rename(from: string, to: string): Promise<void>;
     stat(path: string): Promise<{ size: number }>;
-    rm(path: string, opts: { force: true }): Promise<void>;
-    mkdir(path: string, opts: { recursive: true }): Promise<unknown>;
 }
 
 export interface LoaderDeps {
@@ -224,14 +221,9 @@ export async function writeSchemaSetting(
     const absolute = nodePath.join(root, ...relative.split("/"));
 
     return serializedFileTask(absolute, async () => {
-        let text = "";
-        if (found) {
-            text = await readCapped(fs, absolute);
-        } else {
-            await fs.mkdir(nodePath.dirname(absolute), { recursive: true });
-        }
-        // written whole or not at all: the server reads this file at start
-        await writeFileAtomic(fs, absolute, await writeValue(file, text, setting, value));
+        const text = found ? await readCapped(fs, absolute) : "";
+        // written whole or not at all, its folder made if it's new: the server reads this file at start
+        await writeFileAtomic(absolute, await writeValue(file, text, setting, value));
         return { id: setting.id, value, path: relative };
     });
 }

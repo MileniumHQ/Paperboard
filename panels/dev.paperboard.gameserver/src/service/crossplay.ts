@@ -16,7 +16,8 @@ import {
 import { MOD_DESCRIPTORS, modIdFrom, PLUGIN_DESCRIPTORS, pluginNameFrom } from "./addonConfig";
 import { readJarEntries } from "./jarEntries";
 import { readSchemaSettings, writeSchemaSetting, type LoaderDeps, type LoaderGroupView } from "./loaderSettings";
-import { serializedFileTask, writeFileAtomic } from "./fileWrites";
+import { serializedFileTask } from "./fileWrites";
+import { writeFileAtomic } from "@mileniumhq/paperapi/fs";
 import { listServerFiles, ServerFileMissingError } from "./serverFiles";
 import { unlessMissing } from "./failures";
 
@@ -212,7 +213,7 @@ export async function allowUnsignedChat(deps: LoaderDeps): Promise<void> {
         const next = line.test(text)
             ? text.replace(line, "$1false")
             : `${text}${text === "" || text.endsWith("\n") ? "" : "\n"}enforce-secure-profile=false\n`;
-        await writeFileAtomic(fs, file, next);
+        await writeFileAtomic(file, next);
     });
 }
 

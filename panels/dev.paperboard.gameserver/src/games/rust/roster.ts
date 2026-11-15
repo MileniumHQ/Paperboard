@@ -1,7 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { SerialQueue } from "@mileniumhq/paperapi";
-import { writeFileAtomic } from "../../service/fileWrites";
+import { writeFileAtomic } from "@mileniumhq/paperapi/fs";
 import type { RustPlayer } from "./webrcon";
 import { unlessMissing } from "../../service/failures";
 
@@ -66,7 +66,7 @@ export class RustRoster {
         return this.queue.run(async () => {
             const byId = new Map((await this.seen()).map((p) => [p.steamId, p]));
             for (const p of players) byId.set(p.steamId, { steamId: p.steamId, name: p.name, lastSeen: now });
-            await writeFileAtomic(fs, this.file, JSON.stringify([...byId.values()], null, 2));
+            await writeFileAtomic(this.file, JSON.stringify([...byId.values()], null, 2));
         });
     }
 }

@@ -4,7 +4,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { SerialQueue } from "@mileniumhq/paperapi";
-import { writeFileAtomic } from "../../service/fileWrites";
+import { writeFileAtomic } from "@mileniumhq/paperapi/fs";
 import { unlessMissing } from "../../service/failures";
 
 export type ConsoleEvent =
@@ -113,7 +113,7 @@ export class PlayerStore {
             const previous = players.find((p) => sameName(p.name, name));
             const next: SeenPlayer = { name, lastSeen: Date.now(), address: address ?? previous?.address };
             const rest = players.filter((p) => p !== previous);
-            await writeFileAtomic(fs, this.seenFile, `${JSON.stringify([...rest, next], null, 2)}\n`);
+            await writeFileAtomic(this.seenFile, `${JSON.stringify([...rest, next], null, 2)}\n`);
         });
     }
 
@@ -136,7 +136,7 @@ export class PlayerStore {
             const address = hostOf(player.address);
             const bans = await this.readBans();
             if (bans.some((ban) => ban.address === address)) throw new Error(`${player.name}'s address is already banned`);
-            await writeFileAtomic(fs, this.banFile, formatBanlist([...bans, { name: player.name, address }]));
+            await writeFileAtomic(this.banFile, formatBanlist([...bans, { name: player.name, address }]));
         });
     }
 
@@ -146,7 +146,7 @@ export class PlayerStore {
             const bans = await this.readBans();
             const kept = bans.filter((ban) => !sameName(ban.name, name));
             if (kept.length === bans.length) throw new Error(`${name} is not banned`);
-            await writeFileAtomic(fs, this.banFile, formatBanlist(kept));
+            await writeFileAtomic(this.banFile, formatBanlist(kept));
         });
     }
 }

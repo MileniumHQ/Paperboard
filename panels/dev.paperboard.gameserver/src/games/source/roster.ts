@@ -1,7 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { SerialQueue } from "@mileniumhq/paperapi";
-import { writeFileAtomic } from "../../service/fileWrites";
+import { writeFileAtomic } from "@mileniumhq/paperapi/fs";
 import { unlessMissing } from "../../service/failures";
 
 /** What a player has done on the server, read from its game log. */
@@ -68,7 +68,7 @@ export class SourceRoster {
             const byId = new Map((await this.seen()).map((p) => [p.steamId, p]));
             const known = byId.get(steamId);
             byId.set(steamId, { ...known, steamId, name: name || known?.name || steamId, lastSeen: now });
-            await writeFileAtomic(fs, this.seenFile, JSON.stringify([...byId.values()], null, 2));
+            await writeFileAtomic(this.seenFile, JSON.stringify([...byId.values()], null, 2));
         });
     }
 
@@ -83,7 +83,7 @@ export class SourceRoster {
                 if (!player) throw new Error(`${steamId} has not been seen on this server`);
                 for (const key of STAT_KEYS) if (stats[key]) player[key] = (player[key] ?? 0) + stats[key]!;
             }
-            await writeFileAtomic(fs, this.seenFile, JSON.stringify(seen, null, 2));
+            await writeFileAtomic(this.seenFile, JSON.stringify(seen, null, 2));
         });
     }
 
@@ -92,7 +92,7 @@ export class SourceRoster {
             const bans = await this.bans();
             if (bans.some((b) => b.steamId === steamId)) return;
             const name = (await this.seen()).find((p) => p.steamId === steamId)?.name ?? steamId;
-            await writeFileAtomic(fs, this.banFile, JSON.stringify([...bans, { steamId, name, at: now }], null, 2));
+            await writeFileAtomic(this.banFile, JSON.stringify([...bans, { steamId, name, at: now }], null, 2));
         });
     }
 
@@ -100,7 +100,7 @@ export class SourceRoster {
         return this.serial(async () => {
             const bans = await this.bans();
             if (!bans.some((b) => b.steamId === steamId)) throw new Error(`${steamId} is not banned`);
-            await writeFileAtomic(fs, this.banFile, JSON.stringify(bans.filter((b) => b.steamId !== steamId), null, 2));
+            await writeFileAtomic(this.banFile, JSON.stringify(bans.filter((b) => b.steamId !== steamId), null, 2));
         });
     }
 }

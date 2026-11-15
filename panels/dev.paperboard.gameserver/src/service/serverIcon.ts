@@ -4,7 +4,8 @@ import * as nodeFs from "node:fs/promises";
 import * as nodePath from "node:path";
 import type { PNG as Png } from "pngjs";
 import { loadPng } from "../core/lazy";
-import { serializedFileTask, writeFileAtomic } from "./fileWrites";
+import { serializedFileTask } from "./fileWrites";
+import { writeFileAtomic } from "@mileniumhq/paperapi/fs";
 import { SERVER_ICON_FILE, SERVER_ICON_SIZE } from "../core/serverIcon";
 
 // The server list icon: server-icon.png in the server folder. The game only
@@ -48,7 +49,7 @@ export async function setServerIcon(png: unknown, deps: ServerIconDeps): Promise
         );
     }
     const file = nodePath.join(await deps.serverDir(), SERVER_ICON_FILE);
-    await serializedFileTask(file, () => writeFileAtomic(nodeFs, file, bytes));
+    await serializedFileTask(file, () => writeFileAtomic(file, bytes));
     return dataUrl(bytes);
 }
 

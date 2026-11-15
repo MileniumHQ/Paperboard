@@ -1,5 +1,5 @@
 import * as nodeFs from "node:fs/promises";
-import * as nodePath from "node:path";
+import { writeFileAtomic } from "@mileniumhq/paperapi/fs";
 import type { ChatMessage, GameServerState } from "./types";
 import { unlessMissing } from "./failures";
 
@@ -66,11 +66,8 @@ export async function readHistory(file: string): Promise<ServerHistory> {
 }
 
 /** Written beside and renamed over, so a crash mid-write never leaves half a file. */
-export async function writeHistory(file: string, history: ServerHistory): Promise<void> {
-    await nodeFs.mkdir(nodePath.dirname(file), { recursive: true });
-    const temp = `${file}.${process.pid}.tmp`;
-    await nodeFs.writeFile(temp, JSON.stringify({ version: VERSION, ...historyOf(history) }));
-    await nodeFs.rename(temp, file);
+export function writeHistory(file: string, history: ServerHistory): Promise<void> {
+    return writeFileAtomic(file, JSON.stringify({ version: VERSION, ...historyOf(history) }));
 }
 
 /**

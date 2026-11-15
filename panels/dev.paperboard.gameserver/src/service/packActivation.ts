@@ -5,6 +5,7 @@ import * as nodePath from "node:path";
 import { safePackPath } from "../core/modpack";
 import { moveNoClobber, type ActivationFs } from "./activation";
 import { trashDirName } from "./trash";
+import { writeFileAtomic } from "@mileniumhq/paperapi/fs";
 
 // Placing a modpack's files, as a transaction on the server folder. The
 // software install (activation.ts) swaps whole top-level entries; a pack
@@ -123,10 +124,7 @@ export async function activatePack(request: PackActivationRequest): Promise<Pack
 
     const journal: PackJournal = { version: 1, staged, displaced, createdDirs: [...createdDirs].sort() };
     // written whole or not at all; a missing journal means nothing moved
-    const journalTmp = nodePath.join(stagingDir, `${JOURNAL_FILE}.tmp`);
-    await fs.mkdir(stagingDir, { recursive: true });
-    await fs.writeFile(journalTmp, JSON.stringify(journal));
-    await fs.rename(journalTmp, nodePath.join(stagingDir, JOURNAL_FILE));
+    await writeFileAtomic(nodePath.join(stagingDir, JOURNAL_FILE), JSON.stringify(journal));
 
     try {
         // everything displaced leaves before anything arrives: rollback

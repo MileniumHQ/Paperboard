@@ -1,7 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { SerialQueue } from "@mileniumhq/paperapi";
-import { writeFileAtomic } from "../../service/fileWrites";
+import { writeFileAtomic } from "@mileniumhq/paperapi/fs";
 import { unlessMissing } from "../../service/failures";
 import type { PalworldPlayer } from "./rest";
 
@@ -47,7 +47,7 @@ export class PalworldRoster {
         return this.serial(async () => {
             const byId = new Map((await this.seen()).map((p) => [p.userId, p]));
             for (const p of players) byId.set(p.userId, { userId: p.userId, name: p.name, accountName: p.accountName, level: p.level, lastSeen: now });
-            await writeFileAtomic(fs, this.file, JSON.stringify([...byId.values()], null, 2));
+            await writeFileAtomic(this.file, JSON.stringify([...byId.values()], null, 2));
         });
     }
 

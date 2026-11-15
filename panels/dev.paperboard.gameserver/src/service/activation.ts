@@ -4,6 +4,7 @@ import * as nodeFs from "node:fs/promises";
 import * as nodePath from "node:path";
 import { isInstallArtifactName } from "../core/installFiles";
 import { trashDirName } from "./trash";
+import { writeFileAtomic } from "@mileniumhq/paperapi/fs";
 
 // Swapping one server software for another, as a transaction on the server
 // folder.
@@ -37,7 +38,6 @@ export interface ActivationFs {
     rename(from: string, to: string): Promise<void>;
     readdir(path: string): Promise<string[]>;
     rm(path: string, opts: { recursive: true; force: true }): Promise<void>;
-    writeFile(path: string, data: string): Promise<void>;
     readFile(path: string, encoding: "utf8"): Promise<string>;
     lstat(path: string): Promise<unknown>;
 }
@@ -130,9 +130,7 @@ export async function activateStagedInstall(request: ActivationRequest): Promise
     const journal: ActivationJournal = { version: 1, staged, displaced, replaced };
     // written whole or not at all: a torn journal would strand the folder,
     // and a missing one correctly means nothing has moved yet
-    const journalTmp = nodePath.join(stagingDir, `${JOURNAL_FILE}.tmp`);
-    await fs.writeFile(journalTmp, JSON.stringify(journal));
-    await fs.rename(journalTmp, nodePath.join(stagingDir, JOURNAL_FILE));
+    await writeFileAtomic(nodePath.join(stagingDir, JOURNAL_FILE), JSON.stringify(journal));
 
     try {
         await fs.mkdir(nodePath.join(stagingDir, PARKED_DIR), { recursive: true });

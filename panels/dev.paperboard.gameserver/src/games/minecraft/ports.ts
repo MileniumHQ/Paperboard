@@ -7,7 +7,8 @@ import { parseProperties, stringifyServerProperties } from "../../core/propertie
 import type { ServerSoftwareType } from "../../software/catalog";
 import { BEDROCK_PORT_SETTING_ID, CROSSPLAY, crossplaySetting, NETHERNET_PORT_SETTING_ID } from "../../software/crossplay";
 import { findCrossplayJars, readBedrockTransport, settleBedrockTransport } from "../../service/crossplay";
-import { serializedFileTask, writeFileAtomic } from "../../service/fileWrites";
+import { serializedFileTask } from "../../service/fileWrites";
+import { writeFileAtomic } from "@mileniumhq/paperapi/fs";
 import { writeSchemaSetting, type LoaderDeps, type LoaderFs } from "../../service/loaderSettings";
 import { unlessMissing } from "../../service/failures";
 
@@ -45,7 +46,7 @@ async function writeJavaPort(port: number, deps: LoaderDeps): Promise<void> {
     const file = await propertiesPath(deps);
     await serializedFileTask(file, async () => {
         const text = await unlessMissing(fs.readFile(file, "utf8"), "");
-        await writeFileAtomic(fs, file, stringifyServerProperties({ ...parseProperties(text), "server-port": String(port) }));
+        await writeFileAtomic(file, stringifyServerProperties({ ...parseProperties(text), "server-port": String(port) }));
     });
 }
 
