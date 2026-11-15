@@ -12,6 +12,7 @@ import { logger } from "../../../../papercrane/logger";
 import { pinnedRequest } from "../../../../papercrane/pinnedTls";
 import { bareHost, bracketHost, checkProbeTarget } from "./probeTarget";
 import { PaperCraneClient } from "./PaperCraneClient";
+import { errorMessage } from "../../../../../../packages/paperapi/src/errors";
 
 export interface StoredComputer {
     id: string;
@@ -143,7 +144,7 @@ export class ConnectionPool extends EventEmitter {
                 distroName: info.distroName,
             });
             return null;
-        }, (err) => (err instanceof Error ? err.message : String(err)));
+        }, (err) => errorMessage(err));
     }
 
     // never a default id: operations must not land on the wrong machine.
@@ -307,7 +308,7 @@ export class ConnectionPool extends EventEmitter {
                 // the remote issued a token we could not keep: say so, and
                 // keep memory equal to disk (the pairing did not stick here)
                 this.computers.delete(id);
-                throw new Error(`Paired, but this computer could not save the pairing: ${err instanceof Error ? err.message : String(err)}`);
+                throw new Error(`Paired, but this computer could not save the pairing: ${errorMessage(err)}`);
             }
             this.getClient(id);
             this.emit("change");
@@ -372,7 +373,7 @@ export class ConnectionPool extends EventEmitter {
                 await client.call("auth:revoke-self", {}, 5000);
             } catch (err) {
                 logger.warn(`[ConnectionPool] ${id} wasn't told it is forgotten:`, err);
-                return err instanceof Error ? err.message : String(err);
+                return errorMessage(err);
             }
         }
         if (client) {

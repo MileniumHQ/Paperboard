@@ -4,6 +4,7 @@ import { EventEmitter } from "events";
 import { Bonjour } from "bonjour-service";
 import { logger } from "../../../papercrane/logger";
 import { PAPERCRANE_MDNS_TYPE } from "../../../papercrane/discovery";
+import { errorMessage } from "../../../../../packages/paperapi/src/errors";
 
 export interface DiscoveredComputer {
     /** stable service identity — dedupe key */
@@ -74,7 +75,7 @@ export class DiscoveryService extends EventEmitter {
     private fail(err: unknown): void {
         logger.warn("[Discovery] mDNS browsing failed:", err);
         this.stop();
-        this.failure = err instanceof Error ? err.message : String(err);
+        this.failure = errorMessage(err);
     }
 
     private serviceKey(service: any): string | null {

@@ -8,6 +8,7 @@ import { collectPackageUpdates } from "./packageUpdates";
 import { updateQueue } from "./updateQueue";
 import { failedItem, heldPanels, inUseJob, taskJob } from "./updateTasks";
 import type { UpdateHold, UpdateItem } from "../shared/updateQueue";
+import { errorMessage } from "../../../../packages/paperapi/src/errors";
 
 const HOLD_REFRESH_MS = 30_000;
 
@@ -63,8 +64,6 @@ export function refreshHolds(): Promise<void> {
     return looking;
 }
 
-const reason = (err: unknown) => (err instanceof Error ? err.message : String(err));
-
 async function readPackageHolds(problems: string[]): Promise<void> {
     try {
         const packages = await collectPackageUpdates();
@@ -108,7 +107,7 @@ async function readPackageHolds(problems: string[]): Promise<void> {
         }
     } catch (err) {
         logger.error("[Updater] could not read held package updates:", err);
-        problems.push(`${reason(err)}.`);
+        problems.push(`${errorMessage(err)}.`);
     }
 }
 
@@ -130,7 +129,7 @@ async function releaseStoppedPanels(problems: string[]): Promise<void> {
             void updateQueue.enqueue(taskJob(task));
         } catch (err) {
             logger.warn(`[Updater] could not look at what holds ${task.id} back:`, err);
-            problems.push(`Couldn't check whether ${task.name}${task.computerName ? ` on ${task.computerName}` : ""} can update now: ${reason(err)}.`);
+            problems.push(`Couldn't check whether ${task.name}${task.computerName ? ` on ${task.computerName}` : ""} can update now: ${errorMessage(err)}.`);
         }
     }
 }

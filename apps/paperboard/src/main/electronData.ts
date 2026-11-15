@@ -9,6 +9,7 @@ import * as os from "os";
 import * as path from "path";
 import type { App } from "electron";
 import { getLocalDir } from "../../papercrane/paths";
+import { errorCode, errorMessage } from "../../../../packages/paperapi/src/errors";
 
 export function electronDataDir(): string {
     return path.join(getLocalDir(), "electron");
@@ -24,7 +25,7 @@ function profileInUse(dir: string): boolean {
     try {
         target = fs.readlinkSync(path.join(dir, "SingletonLock"));
     } catch (err) {
-        if ((err as NodeJS.ErrnoException).code === "ENOENT") return false;
+        if (errorCode(err) === "ENOENT") return false;
         throw err;
     }
     const cut = target.lastIndexOf("-");
@@ -37,7 +38,7 @@ function profileInUse(dir: string): boolean {
         process.kill(pid, 0);
         return true;
     } catch (err) {
-        const code = (err as NodeJS.ErrnoException).code;
+        const code = errorCode(err);
         if (code === "ESRCH") return false;
         // alive, but another account's: still somebody's open profile
         if (code === "EPERM") return true;
@@ -59,7 +60,7 @@ export function moveElectronData(from: string, to: string): ElectronDataMove {
     try {
         fs.renameSync(from, to);
     } catch (err) {
-        if ((err as NodeJS.ErrnoException).code !== "EXDEV") throw err;
+        if (errorCode(err) !== "EXDEV") throw err;
         // another filesystem: copy, then drop the original only once the
         // copy is whole; a partial copy is removed so the next launch retries
         try {
@@ -92,8 +93,8 @@ export function relocateElectronData(app: App): Error | null {
         const copied = fs.existsSync(dir);
         error = new Error(
             copied
-                ? `Moved Paperboard's Electron data to ${dir}, but could not remove ${legacy}: ${(err as Error).message}. You can delete it yourself.`
-                : `Could not move Paperboard's Electron data from ${legacy} to ${dir}: ${(err as Error).message}. ` +
+                ? `Moved Paperboard's Electron data to ${dir}, but could not remove ${legacy}: ${errorMessage(err)}. You can delete it yourself.`
+                : `Could not move Paperboard's Electron data from ${legacy} to ${dir}: ${errorMessage(err)}. ` +
                       "Paperboard is using the old folder for now and tries again on the next launch.",
         );
         if (!copied) return error;

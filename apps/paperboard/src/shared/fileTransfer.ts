@@ -3,6 +3,7 @@
 // path in its own file storage and how the dialog should look. Electron
 // main and the browser-mode host both parse with this one function.
 import { isPanelId } from "../../../../packages/paperapi/src/panelIdentity";
+import { errorMessage } from "../../../../packages/paperapi/src/errors";
 
 export interface FileTypeFilter {
     name: string;
@@ -127,5 +128,5 @@ export function parsePanelFileTransferRequest(args: unknown): PanelFileTransferR
 
 export function failedResult(err: unknown): PanelFileTransferResult {
     if (err instanceof PanelFileTransferError) return { status: "failed", code: err.code, message: err.message };
-    return { status: "failed", code: "failed", message: err instanceof Error ? err.message : String(err) };
+    return { status: "failed", code: "failed", message: errorMessage(err) };
 }

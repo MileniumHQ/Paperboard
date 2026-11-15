@@ -4,6 +4,7 @@
 // each update refused that way is returned with its reason, to be shown.
 import { semverGt } from "../../papercrane/util";
 import { logger } from "../../papercrane/logger";
+import { errorMessage } from "../../../../packages/paperapi/src/errors";
 
 export type UpdateTaskType =
     | "local_panel"
@@ -83,7 +84,7 @@ export async function withInstalledRecords(
             const record = await fetchRecord(id);
             if (record?.id === id) panels[id] = record;
         } catch (err) {
-            const reason = err instanceof Error ? err.message : String(err);
+            const reason = errorMessage(err);
             reasons.push(`${id}: ${reason}`);
             logger.warn(`[Updater] could not read the registry record for ${id}:`, reason);
         }

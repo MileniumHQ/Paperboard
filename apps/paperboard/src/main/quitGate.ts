@@ -7,6 +7,7 @@
 import { app, BrowserWindow, dialog, type WebContents } from "electron";
 import { askShell } from "./shellAsk";
 import { logger } from "../../papercrane/logger";
+import { errorMessage } from "../../../../packages/paperapi/src/errors";
 
 // each window holding unsaved work, with what drops it once the window is gone
 const unsaved = new Map<WebContents, () => void>();
@@ -78,7 +79,7 @@ export function holdQuit(event: { preventDefault(): void }): boolean {
         app.quit();
     }, (err) => {
         logger.error("[Main] the quit could not ask about unsaved work, so Paperboard stays open:", err);
-        dialog.showErrorBox("Paperboard didn't quit", `It couldn't ask the open pages about their unsaved work: ${err instanceof Error ? err.message : String(err)}`);
+        dialog.showErrorBox("Paperboard didn't quit", `It couldn't ask the open pages about their unsaved work: ${errorMessage(err)}`);
     });
     return true;
 }

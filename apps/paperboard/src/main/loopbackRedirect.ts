@@ -9,6 +9,7 @@
 import * as http from "http";
 import { logger } from "../../papercrane/logger";
 import { LOOPBACK_REDIRECT_TIMEOUT_MS, parseLoopbackRedirectUri, type LoopbackRedirectFailureCode } from "../shared/loopbackRedirect";
+import { errorCode } from "../../../../packages/paperapi/src/errors";
 
 export class LoopbackRedirectFailure extends Error {
     constructor(
@@ -71,7 +72,7 @@ function closeServer(server: http.Server): Promise<void> {
 }
 
 function listenFailure(err: unknown, port: number, where: string): LoopbackRedirectFailure {
-    if ((err as NodeJS.ErrnoException)?.code === "EADDRINUSE") return new LoopbackRedirectFailure("in-use", `Another program on this device is using port ${port}${where}`);
+    if (errorCode(err) === "EADDRINUSE") return new LoopbackRedirectFailure("in-use", `Another program on this device is using port ${port}${where}`);
     return new LoopbackRedirectFailure("failed", `Could not listen on port ${port}${where}: ${(err as Error)?.message ?? String(err)}`);
 }
 
@@ -147,7 +148,7 @@ export async function listenForRedirect(options: RedirectListenOptions): Promise
             try {
                 await listen(v6, "::1", port);
             } catch (err) {
-                const code = (err as NodeJS.ErrnoException)?.code;
+                const code = errorCode(err);
                 // this device has no IPv6 loopback: the browser cannot go there either
                 if (code !== "EADDRNOTAVAIL" && code !== "EAFNOSUPPORT") throw listenFailure(err, port, " on [::1]");
             }

@@ -18,6 +18,7 @@ import { updateQueue } from "./updateQueue";
 import { refreshHolds, resumeHoldRefresh, stopHoldRefresh } from "./updateHolds";
 import { PING_TIMEOUT_MS, taskJob } from "./updateTasks";
 import type { AppUpdateState } from "../shared/appUpdate";
+import { errorMessage } from "../../../../packages/paperapi/src/errors";
 
 // registry override policy shared with the daemon: env override honored only
 // outside production (dev/preview here) or with --allow-registry-override
@@ -49,7 +50,7 @@ export function shouldSkipUpdate(argv: string[]): boolean {
         // an unreadable state file is not "no cooldown": don't run the
         // updater on bookkeeping we cannot trust, and say so in the top bar
         logger.warn("[Updater] update state unreadable; skipping this run:", err);
-        updateQueue.setChecking(false, `Paperboard didn't look for updates: ${err instanceof Error ? err.message : String(err)}`);
+        updateQueue.setChecking(false, `Paperboard didn't look for updates: ${errorMessage(err)}`);
         return true;
     }
     const { lastUpdate } = state;
@@ -133,7 +134,7 @@ export async function runUpdateOrchestrator(): Promise<void> {
     } catch (err) {
         failures++;
         logger.error("[Updater] update check failed:", err);
-        updateQueue.setChecking(false, `Paperboard could not check for updates: ${err instanceof Error ? err.message : String(err)}`);
+        updateQueue.setChecking(false, `Paperboard could not check for updates: ${errorMessage(err)}`);
     } finally {
         try {
             const state = appRun ? await appRun : getAppUpdateState();
@@ -143,7 +144,7 @@ export async function runUpdateOrchestrator(): Promise<void> {
             // the cooldown bookkeeping wasn't saved: the update list says so
             logger.error("[Updater] could not record the update check:", err);
             const earlier = updateQueue.snapshot().checkError;
-            const said = `Paperboard could not record this update check: ${err instanceof Error ? err.message : String(err)}`;
+            const said = `Paperboard could not record this update check: ${errorMessage(err)}`;
             updateQueue.setChecking(false, earlier ? `${earlier} ${said}` : said);
         } finally {
             orchestratorRunning = false;

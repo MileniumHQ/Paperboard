@@ -5,6 +5,7 @@
 import connectionPool from "./communication/papercrane/ConnectionPool";
 import { withTimeout } from "../../papercrane/util";
 import { logger } from "../../papercrane/logger";
+import { errorMessage } from "../../../../packages/paperapi/src/errors";
 
 // a runtime package update that is downloaded and verified on a computer
 // but not installed yet: it waits for the panels whose processes still run
@@ -63,7 +64,7 @@ export async function collectPackageUpdates(): Promise<PackageUpdatesState> {
             }
         } catch (err) {
             logger.warn(`[PackageUpdates] could not read waiting package updates on ${name}:`, err);
-            state.failures.push({ computerId: id, computerName: name, error: err instanceof Error ? err.message : String(err) });
+            state.failures.push({ computerId: id, computerName: name, error: errorMessage(err) });
         }
     });
     return state;

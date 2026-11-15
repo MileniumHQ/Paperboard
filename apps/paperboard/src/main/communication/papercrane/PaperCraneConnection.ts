@@ -25,6 +25,7 @@ import {
 import type { TLSSocket } from "tls";
 import { pinnableWebSocket } from "../../../../papercrane/pinnableWebSocket";
 import { bracketHost, isLoopback } from "./probeTarget";
+import { errorMessage } from "../../../../../../packages/paperapi/src/errors";
 
 export type RpcParams = Record<string, unknown>;
 
@@ -315,7 +316,7 @@ export class PaperCraneConnection extends EventEmitter {
         } catch (err) {
             this.embeddedServer?.stop();
             this.embeddedServer = null;
-            throw new Error(`Paperboard Server couldn't start on this computer: ${err instanceof Error ? err.message : String(err)}`, { cause: err });
+            throw new Error(`Paperboard Server couldn't start on this computer: ${errorMessage(err)}`, { cause: err });
         }
     }
 
@@ -336,7 +337,7 @@ export class PaperCraneConnection extends EventEmitter {
         // this computer is offline
         const failBeforeSocket = (err: unknown, retry: boolean): never => {
             if (gen === this.generation) {
-                this.lastError = err instanceof Error ? err.message : String(err);
+                this.lastError = errorMessage(err);
                 this.emit("status", this.getStatus());
                 if (retry) this.scheduleReconnect();
             }
@@ -365,7 +366,7 @@ export class PaperCraneConnection extends EventEmitter {
                   ));
         } catch (err) {
             // an unreadable pinned certificate fails the same way every time
-            failBeforeSocket(new Error(`Cannot connect to ${bracketHost(host)}:${this.port}: ${err instanceof Error ? err.message : String(err)}`, { cause: err }), false);
+            failBeforeSocket(new Error(`Cannot connect to ${bracketHost(host)}:${this.port}: ${errorMessage(err)}`, { cause: err }), false);
         }
         return new Promise((resolve, reject) => {
             this.ws = ws;
@@ -414,7 +415,7 @@ export class PaperCraneConnection extends EventEmitter {
                         await this.request_("auth:verify", {}, AUTH_TIMEOUT_MS, ws);
                     } catch (err) {
                         if (!current()) return superseded();
-                        const reason = err instanceof Error ? err.message : String(err);
+                        const reason = errorMessage(err);
                         if (err instanceof DaemonRefusal) {
                             this.credentialRejected = true;
                             fail(`${host} refused this app's pairing (${reason}). Remove this computer and pair it again`);

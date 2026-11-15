@@ -1,5 +1,6 @@
 import type { AppUpdateState } from "../shared/appUpdate";
 import { initialAppUpdateState } from "../shared/appUpdate";
+import { errorMessage } from "../../../../packages/paperapi/src/errors";
 
 interface AppUpdater {
     on(event: string, listener: (...args: any[]) => void): unknown;
@@ -60,7 +61,7 @@ export class AppUpdateSession {
 
     private fail(err: unknown) {
         this.failedRun = true;
-        this.set({ status: "failed", percent: null, error: err instanceof Error ? err.message : String(err) });
+        this.set({ status: "failed", percent: null, error: errorMessage(err) });
     }
 
     check(): Promise<AppUpdateState> {

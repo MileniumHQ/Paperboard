@@ -1,5 +1,6 @@
 import * as fs from "fs";
 import * as path from "path";
+import { errorCode } from "../../../../packages/paperapi/src/errors";
 
 const DOWNLOAD_BASE = "https://i.paperboard.dev/pb";
 
@@ -24,7 +25,7 @@ export function linuxPackageInstall(resourcesPath: string, arch: string): LinuxP
     try {
         packageType = fs.readFileSync(path.join(resourcesPath, "package-type"), "utf8").trim();
     } catch (err) {
-        if ((err as NodeJS.ErrnoException).code === "ENOENT") return { feedUrl, download: null, packageType: null };
+        if (errorCode(err) === "ENOENT") return { feedUrl, download: null, packageType: null };
         throw err;
     }
     const ours = packageType === "deb" || packageType === "rpm" ? packageType : null;

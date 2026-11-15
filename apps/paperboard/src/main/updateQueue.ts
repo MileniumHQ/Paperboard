@@ -11,6 +11,7 @@ import {
     type UpdateStage,
 } from "../shared/updateQueue";
 import { pushToShells } from "./communication/shellPush";
+import { errorMessage } from "../../../../packages/paperapi/src/errors";
 
 export type UpdateItemIdentity = Pick<UpdateItem, "key" | "kind" | "computerId" | "computerName" | "panelId" | "name" | "version">;
 
@@ -177,7 +178,7 @@ export class UpdateQueue {
                     }
                 } catch (err) {
                     for (const key of keys) {
-                        const why = err instanceof PartialUpdateError ? err.failures[key] : err instanceof Error ? err.message : String(err);
+                        const why = err instanceof PartialUpdateError ? err.failures[key] : errorMessage(err);
                         finished.set(key, why === undefined ? done : { status: "failed", stage: null, error: why });
                     }
                 }

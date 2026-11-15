@@ -42,6 +42,7 @@ import { installTextEditContextMenu } from "./contextMenu";
 import { relocateElectronData } from "./electronData";
 import { relaunchOnX11IfNeeded } from "./displayBackend";
 import { setSupervisorBinary } from "../../papercrane/supervisorBinary";
+import { errorMessage } from "../../../../packages/paperapi/src/errors";
 
 const log = logger;
 // the workload supervisor ships in the app's resources (scripts/supervisor.ts
@@ -342,7 +343,7 @@ app.whenReady().then(async () => {
     // computer's OS details, which the rail and updates go without
     await connectionPool.init().then(
         () => log.info("[Main] ConnectionPool ready"),
-        (err) => log.error("[Main]", err instanceof Error ? err.message : String(err)),
+        (err) => log.error("[Main]", errorMessage(err)),
     );
 
     // teardown wired into before-quit: the mDNS browser must not outlive
@@ -377,7 +378,7 @@ app.whenReady().then(async () => {
 }).catch((err) => {
     // a start that broke halfway may have no window to say it in
     log.error("[Main] Paperboard couldn't start:", err);
-    dialog.showErrorBox("Paperboard couldn't start", err instanceof Error ? err.message : String(err));
+    dialog.showErrorBox("Paperboard couldn't start", errorMessage(err));
     quitWithoutAsking();
 });
 

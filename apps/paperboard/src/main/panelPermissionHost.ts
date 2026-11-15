@@ -25,6 +25,7 @@ import {
     type PermissionAnswer,
 } from "./panelPermissions";
 import type { PermissionFailure, ScreenSource, SystemBlock } from "../shared/panelPermissions";
+import { errorMessage } from "../../../../packages/paperapi/src/errors";
 
 const SYSTEM_SETTINGS: Record<"darwin" | "win32", Partial<Record<PanelPermission, string>>> = {
     darwin: {
@@ -101,7 +102,7 @@ export function installPanelPermissions(ses: Session, store: PanelPermissionStor
     // a failure to decide (an answers file that can't be read or saved)
     // refuses, and the window the panel is in says why
     const refuse = (wc: WebContents | null, asker: PanelAsker, permissions: PanelPermission[]) => (err: unknown): false => {
-        const message = err instanceof Error ? err.message : String(err);
+        const message = errorMessage(err);
         logger.error(`[Main] panel ${permissions.join(" and ")} for ${asker.panelId} refused:`, message);
         if (wc && !wc.isDestroyed()) {
             const failure: PermissionFailure = { ...asker, permissions, message };
