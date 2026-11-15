@@ -2,7 +2,7 @@
 // one's payload.
 import { createHash } from "node:crypto";
 import type { BlockEventDefinition } from "@mileniumhq/paperapi";
-import { MAX_MODAL_FIELDS } from "../discordOps";
+import { MAX_MODAL_FIELDS } from "../payloads";
 import { describeChannelKind } from "../explorer";
 import { GLOBAL_SCOPE, commandTriggerId, type CommandOptionType, type SlashCommandDefinition } from "../types";
 import type { MessageRef } from "./blockTypes";

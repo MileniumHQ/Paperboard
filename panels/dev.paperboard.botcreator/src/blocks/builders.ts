@@ -1,7 +1,7 @@
 // The builders that never reach Discord (embeds, buttons, menus, modal
 // fields): the panel's own, shared by every bot.
 import type { BlockChoice, BlockValueDefinition } from "@mileniumhq/paperapi";
-import { MAX_SELECT_OPTIONS, MAX_MODAL_FIELDS, buildButtonComponent, buildComponentRow, buildDiscordEmbed, buildModalField, buildSelectMenuComponent } from "../discordOps";
+import { MAX_SELECT_OPTIONS, MAX_MODAL_FIELDS, buildButtonComponent, buildComponentRow, buildDiscordEmbed, buildModalField, buildSelectMenuComponent } from "../payloads";
 
 // ─── the builders: every bot shares them ────────────────────────────────────
 

@@ -4,7 +4,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { blocksApi } from "@mileniumhq/paperapi";
 import type { BotsServiceState } from "../src/bots";
-import { fileFromUrl } from "../src/discordOps";
+import { fileFromUrl } from "../src/payloads";
 import { guild, startFakeDiscord, type FakeDiscord } from "./helpers/discord";
 import { PANEL_ID, savedBots, startService, stopServices, storedBot } from "./helpers/service";
 import { stateWhere } from "./helpers/wait";

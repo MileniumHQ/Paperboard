@@ -1,7 +1,7 @@
 // An embed a flow builds goes out whole or not at all: a field Discord would
 // refuse, or embeds that aren't embeds, stop the send and say which.
 import { describe, expect, test } from "bun:test";
-import { buildDiscordEmbed, buildMessagePayload, normalizeEmbeds } from "../src/discordOps";
+import { buildDiscordEmbed, buildMessagePayload, normalizeEmbeds } from "../src/payloads";
 
 describe("embeds fail loudly", () => {
     test("a color, link or image Discord would refuse is refused by name", async () => {

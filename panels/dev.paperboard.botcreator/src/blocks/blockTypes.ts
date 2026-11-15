@@ -2,7 +2,8 @@
 // with the fields Blocks reads off them, and the ids they are typed as.
 import type { Client } from "discord.js";
 import type { BlockTypeDefinition } from "@mileniumhq/paperapi";
-import { fetchMessageIn, memberRoles, messageReactions, pinnedMessages, pollResults, roleMembers } from "../botOps";
+import { memberRoles, messageReactions, pinnedMessages, pollResults, roleMembers } from "../botOps";
+import { MessageOps } from "../discordOps";
 import { describeChannelKind } from "../explorer";
 import { SNOWFLAKE_PATTERN, errorToMessage } from "../types";
 
@@ -112,7 +113,7 @@ function finder(clients: ConnectedClients) {
         message: async (value: MessageRef) => {
             const message = messageRef(value);
             const { client } = await finder(clients).channel(message.channel);
-            return { client, found: await fetchMessageIn(client, message.channel, message.id), ref: message };
+            return { client, found: await new MessageOps(client).fetchMessage(message.channel, message.id), ref: message };
         },
     };
 }

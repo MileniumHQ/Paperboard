@@ -1,10 +1,11 @@
 // One bot's commands and values, bound to its live session. What each
-// block does is botOps.ts and discordOps.ts; this file only says what it
-// takes and gives.
+// block does is botOps.ts, discordOps.ts and payloads.ts; this file only
+// says what it takes and gives.
 import type { Client } from "discord.js";
 import type { BlockCommandDefinition, BlockSet, BlockValueDefinition, BlocksProjectHandle } from "@mileniumhq/paperapi";
-import { InteractionOps, MAX_RECENT_MESSAGES, MAX_POLL_HOURS, MessageOps, buildModalPayload, findMembers, resolveMember } from "../discordOps";
-import { PRESENCE_STATUSES, addRole, banUser, createChannel, createInvite, createRole, createScheduledEvent, deleteChannel, deleteRole, disconnectMember, editChannel, editRole, editThread, fetchMessageIn, kickMember, leaveServer, moveMember, removeRole, removeTimeout, sendFile, sendPoll, setActivity, setChannelPermissions, setNickname, showTyping, timeoutMember, unbanUser } from "../botOps";
+import { InteractionOps, MAX_RECENT_MESSAGES, MessageOps, findMembers, resolveMember } from "../discordOps";
+import { MAX_POLL_HOURS, buildModalPayload } from "../payloads";
+import { PRESENCE_STATUSES, addRole, banUser, createChannel, createInvite, createRole, createScheduledEvent, deleteChannel, deleteRole, disconnectMember, editChannel, editRole, editThread, kickMember, leaveServer, moveMember, removeRole, removeTimeout, sendFile, sendPoll, setActivity, setChannelPermissions, setNickname, showTyping, timeoutMember, unbanUser } from "../botOps";
 import type { CommandActivity, CommandUses } from "../commandActivity";
 import { GLOBAL_SCOPE, errorToMessage, type SlashCommandDefinition } from "../types";
 import type { BotStatus } from "./bots";
@@ -736,7 +737,7 @@ export function botBlocks(bot: BotBlocksHost): BlockSet {
             text: "Message {id} in {channel}",
             inputs: { id: { type: "text", name: "ID" }, channel },
             type: "message",
-            read: async (i) => ref(await fetchMessageIn(bot.client(), idOf(i.channel, "Channel"), idOf(i.id, "Message"))),
+            read: async (i) => ref(await new MessageOps(bot.client()).fetchMessage(idOf(i.channel, "Channel"), idOf(i.id, "Message"))),
         },
         {
             id: "recent-messages",

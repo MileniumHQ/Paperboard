@@ -9,15 +9,8 @@ import type {
     Message,
 } from "discord.js";
 import { loadDiscord } from "./discord";
-import {
-    MessageOps,
-    buildPoll,
-    fileFromUrl,
-    parseMoment,
-    permissionNames,
-    resolveGuild,
-    resolveMember,
-} from "./discordOps";
+import { MessageOps, parseMoment, permissionNames, resolveGuild, resolveMember } from "./discordOps";
+import { buildPoll, fileFromUrl } from "./payloads";
 import { SNOWFLAKE_PATTERN } from "./types";
 
 // discord presence statuses — the only legal values for set-status
@@ -38,16 +31,6 @@ export const MAX_LISTED_MEMBERS = 100;
 
 // ─── finding things ─────────────────────────────────────────────────────────
 
-export async function fetchMessageIn(bot: Client, channelId: string, messageId: string): Promise<Message> {
-    const channel = await bot.channels.fetch(channelId.trim());
-    if (channel && "messages" in channel) {
-        const msg = await (channel as any).messages.fetch(messageId.trim());
-        if (!msg) throw new Error(`Message ${messageId} not found`);
-        return msg;
-    }
-    throw new Error(`Channel ${channelId} not found or not text-based`);
-}
-
 /** A member's roles, highest first, without the server's everyone role. */
 export function memberRoles(member: GuildMember) {
     return [...member.roles.cache.values()]
@@ -66,8 +49,7 @@ export async function roleMembers(bot: Client, roleId: string, guildId?: string)
 }
 
 export async function pinnedMessages(bot: Client, channelId: string): Promise<{ message: any; pinnedAt: Date }[]> {
-    const channel = await new MessageOps(bot).fetchChannel(channelId);
-    if (!("messages" in channel)) throw new Error(`Channel ${channelId} not found or not text-based`);
+    const channel = await new MessageOps(bot).textChannel(channelId);
     const pins = await channel.messages.fetchPins();
     return pins.items;
 }
