@@ -10,6 +10,7 @@ import {
     PaperText,
     PaperToggle,
     keepUnchanged,
+    createLatest,
 } from "@mileniumhq/paperui";
 import ConfigSettings from "./ConfigSettings";
 import { errorMessage } from "../lib/failure";
@@ -19,7 +20,6 @@ import { localIp, serverBridge, serverSoftware, serverStatus } from "../lib/serv
 import { CALLS } from "../service/contract";
 import type { CrossplayView } from "../service/crossplay";
 import { BEDROCK_PORT_SETTING_ID } from "../software/crossplay";
-import { createLatest } from "../core/state";
 
 // Crossplay: one switch for Geyser and Floodgate, then their settings.
 // Turning it off removes the jars and keeps their settings folders, so
@@ -34,11 +34,12 @@ export default function Crossplay(props: { active: boolean }) {
     const show = (next: CrossplayView) => setView((prev) => keepUnchanged(prev, next));
     const load = async () => {
         setLoadError("");
+        const current = latest();
         try {
-            const answer = await latest(readCrossplay);
-            if (answer) show(answer.value);
+            const answer = await readCrossplay();
+            if (current()) show(answer);
         } catch (err) {
-            setLoadError(errorMessage(err));
+            if (current()) setLoadError(errorMessage(err));
         }
     };
 

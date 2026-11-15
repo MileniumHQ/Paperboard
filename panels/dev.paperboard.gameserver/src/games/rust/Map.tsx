@@ -1,9 +1,8 @@
 import { batch, createEffect, createSignal, on, Show } from "solid-js";
-import { PaperButton, PaperCard, PaperFlex, PaperIcon, PaperLoader, PaperModal, PaperPageHeader, PaperQuote, PaperSettingItem, PaperSettingList, PaperTable, PaperText, PaperToggle } from "@mileniumhq/paperui";
+import { PaperButton, PaperCard, PaperFlex, PaperIcon, PaperLoader, PaperModal, PaperPageHeader, PaperQuote, PaperSettingItem, PaperSettingList, PaperTable, PaperText, PaperToggle, createLatest } from "@mileniumhq/paperui";
 import { serverBridge, serverStatus } from "../../lib/server";
 import { errorMessage } from "../../lib/failure";
 import type { RustMapView } from "./index";
-import { createLatest } from "../../core/state";
 import styles from "./Map.module.css";
 
 /**
@@ -29,21 +28,20 @@ export default function RustMap(props: { active: boolean }) {
 
     const latest = createLatest();
     const load = async () => {
+        const current = latest();
         try {
-            const answer = await latest(async () => ({
-                view: await serverBridge.call<RustMapView>("rust-map"),
-                picture: await serverBridge.call<string | null>("rust-map-picture"),
-            }));
-            if (!answer) return;
+            const view = await serverBridge.call<RustMapView>("rust-map");
+            const picture = await serverBridge.call<string | null>("rust-map-picture");
+            if (!current()) return;
             batch(() => {
-                setView(answer.value.view);
-                setPicture(answer.value.picture);
+                setView(view);
+                setPicture(picture);
                 setLoadError("");
             });
             // a running server without a picture of its map draws one, once
-            if (answer.value.picture === null && serverStatus() === "online" && !drawing() && !pictureError()) void draw();
+            if (picture === null && serverStatus() === "online" && !drawing() && !pictureError()) void draw();
         } catch (err) {
-            setLoadError(errorMessage(err));
+            if (current()) setLoadError(errorMessage(err));
         }
     };
     createEffect(on([() => props.active, serverStatus], ([active]) => { if (active) void load(); }));

@@ -8,6 +8,7 @@ import {
     PaperContextMenu,
     PaperContextMenuItem,
     useContextMenuState,
+    createLatest,
 } from "@mileniumhq/paperui";
 import { ramAllocation, serverStatus, serverMotd, serverSoftware, serverVersion, loadServerConfig } from "../lib/server";
 import { createUptime, overviewStats } from "./overviewStats";
@@ -17,7 +18,6 @@ import { MotdEditor, MotdPreview } from "./Motd";
 import { fileApi } from "../lib/api";
 import { PANEL_ID } from "../service/contract";
 import { parseProperties } from "../core/properties";
-import { createLatest } from "../core/state";
 import { readServerPropertiesStrict, whitelistDefault, writeServerProperties } from "../lib/properties";
 import { DEFAULT_MOTD, minecraftMotd } from "../core/motd";
 import { countJsonEntries, joinRestriction, type JoinRestriction } from "../core/whitelist";
@@ -43,22 +43,21 @@ export default function Overview(props: {
     // on for new servers; say so where people look when friends can't join
     const latestCheck = createLatest();
     const checkWhitelist = async () => {
+        const current = latestCheck();
         try {
-            const answer = await latestCheck(() =>
-                Promise.all([
-                    fileApi.read("server.properties", PANEL_ID),
-                    fileApi.read("whitelist.json", PANEL_ID),
-                    fileApi.read("ops.json", PANEL_ID),
-                ]),
-            );
-            if (!answer) return;
-            const [properties, whitelist, ops] = answer.value;
+            const [properties, whitelist, ops] = await Promise.all([
+                fileApi.read("server.properties", PANEL_ID),
+                fileApi.read("whitelist.json", PANEL_ID),
+                fileApi.read("ops.json", PANEL_ID),
+            ]);
+            if (!current()) return;
             const parsed = properties ? parseProperties(properties) : {};
             setWorld(parsed["level-name"] || "world");
             const on = parsed["white-list"] ?? whitelistDefault();
             setRestriction(joinRestriction(on === "true", countJsonEntries(whitelist), countJsonEntries(ops)));
             setWhitelistError("");
         } catch (err) {
+            if (!current()) return;
             // unreadable files make no claim either way, and say so
             setRestriction(null);
             setWhitelistError(errorMessage(err));

@@ -5,6 +5,7 @@ import {
     PaperModal,
     PaperQuote,
     PaperSwatch,
+    createLatest,
 } from "@mileniumhq/paperui";
 import {
     applyCode,
@@ -23,7 +24,6 @@ import {
     type MotdStyle,
 } from "../core/motd";
 import { errorMessage } from "../lib/failure";
-import { createLatest } from "../core/state";
 import { motdClasses } from "./MotdPreview";
 import styles from "./Motd.module.css";
 
@@ -219,17 +219,18 @@ export function MotdEditor(props: {
         setLoaded(false);
         setLoadError("");
         setSaveError("");
+        const current = latest();
         try {
-            const answer = await latest(props.load);
-            if (!answer) return;
-            doc = props.dialect.parse(answer.value);
+            const answer = await props.load();
+            if (!current()) return;
+            doc = props.dialect.parse(answer);
             undo.length = 0;
             redo.length = 0;
             pending = null;
             if (root) renderDoc(root, doc, props.dialect.defaultColor);
             setLoaded(true);
         } catch (err) {
-            setLoadError(errorMessage(err));
+            if (current()) setLoadError(errorMessage(err));
         }
     };
 

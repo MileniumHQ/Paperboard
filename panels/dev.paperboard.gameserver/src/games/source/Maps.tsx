@@ -11,10 +11,10 @@ import {
     PaperPageHeader,
     PaperQuote,
     PaperText,
+    createLatest,
 } from "@mileniumhq/paperui";
 import { serverBridge, serverLevel, serverStatus } from "../../lib/server";
 import { errorMessage } from "../../lib/failure";
-import { createLatest } from "../../core/state";
 import { mapMode, sourceCalls, type SourceGameSpec, type SourceMapCycle } from "./index";
 import MapCards, { MapPicturesCredit, MapPicturesFailure, mapChoices, mapNames, type MapChoice } from "./MapCards";
 import { createMapPictures } from "./useMapPictures";
@@ -48,11 +48,12 @@ export default function SourceMaps(props: { spec: SourceGameSpec; active: boolea
     const latest = createLatest();
     const load = async () => {
         setLoadError("");
+        const current = latest();
         try {
-            const answer = await latest(() => serverBridge.call<SourceMapCycle>(ids.mapCycle));
-            if (answer) setView(answer.value);
+            const answer = await serverBridge.call<SourceMapCycle>(ids.mapCycle);
+            if (current()) setView(answer);
         } catch (err) {
-            setLoadError(errorMessage(err));
+            if (current()) setLoadError(errorMessage(err));
         }
     };
     createEffect(on([() => props.active, serverStatus], ([active]) => { if (active) void load(); }));
@@ -62,11 +63,13 @@ export default function SourceMaps(props: { spec: SourceGameSpec; active: boolea
         setWorking(true);
         setError(null);
         setNotice("");
+        const current = latest();
         try {
-            const answer = await latest(() => serverBridge.call<SourceMapCycle>(ids.mapCycleSet, { maps }));
-            if (answer) setView(answer.value);
+            const answer = await serverBridge.call<SourceMapCycle>(ids.mapCycleSet, { maps });
+            if (current()) setView(answer);
             return true;
         } catch (err) {
+            if (!current()) return true;
             setError({ title, message: errorMessage(err) });
             // whatever did land is what the page shows
             await load();

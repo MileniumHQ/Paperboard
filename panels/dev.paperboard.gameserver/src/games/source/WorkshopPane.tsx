@@ -1,8 +1,7 @@
 import { batch, createMemo, createSignal, For, onMount, Show } from "solid-js";
-import { PaperButton, PaperFlex, PaperInput, PaperLink, PaperQuote, PaperText } from "@mileniumhq/paperui";
+import { PaperButton, PaperFlex, PaperInput, PaperLink, PaperQuote, PaperText, createLatest } from "@mileniumhq/paperui";
 import { serverBridge } from "../../lib/server";
 import { errorMessage } from "../../lib/failure";
-import { createLatest } from "../../core/state";
 import { formatCount } from "../../lib/addons/presentation";
 import { sourceCalls, type SourceGameSpec } from "./index";
 import MapCards from "./MapCards";
@@ -38,14 +37,16 @@ export default function WorkshopPane(props: {
     const search = async () => {
         setSearching(true);
         setError("");
+        const current = latest();
         try {
-            const answer = await latest(() => serverBridge.call<SourceWorkshopResults>(ids.workshopFind, { query: query() }, { timeoutMs: 30_000 }));
-            if (!answer) return;
+            const answer = await serverBridge.call<SourceWorkshopResults>(ids.workshopFind, { query: query() }, { timeoutMs: 30_000 });
+            if (!current()) return;
             batch(() => {
-                setResults(answer.value);
+                setResults(answer);
                 setSearching(false);
             });
         } catch (err) {
+            if (!current()) return;
             batch(() => {
                 setError(errorMessage(err));
                 setSearching(false);

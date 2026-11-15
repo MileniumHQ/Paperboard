@@ -14,6 +14,7 @@ import {
     PaperText,
     PaperToggle,
     createStateSignal,
+    createLatest,
 } from "@mileniumhq/paperui";
 import {
     backupApi,
@@ -29,7 +30,6 @@ import { selectedServerId } from "../lib/api";
 import { PANEL_ID } from "../service/contract";
 import { errorMessage, type Outcome } from "../lib/failure";
 import { createSaves } from "../lib/saves";
-import { createLatest } from "../core/state";
 
 // Backups of the whole server folder (worlds, settings, plugins, mods),
 // made now or routinely by this computer's Paperboard Server, which makes
@@ -73,21 +73,19 @@ export default function Backups(props: { active: boolean; whileRunning: "quiesce
     const latest = createLatest();
     const load = async () => {
         setLoadError("");
+        const current = latest();
         try {
             stopProgress ??= backupsApi.onProgress((change) => setProgress(change.progress));
-            const answer = await latest(async () => {
-                const now = await backupsApi.status();
-                return { now, list: now.location ? await backupsApi.list() : [] };
-            });
-            if (!answer) return;
-            const { now, list } = answer.value;
+            const now = await backupsApi.status();
+            const list = now.location ? await backupsApi.list() : [];
+            if (!current()) return;
             batch(() => {
                 setStatus(now);
                 setProgress(now.progress);
                 setBackups(list);
             });
         } catch (err) {
-            setLoadError(`Backups could not be loaded: ${errorMessage(err)}`);
+            if (current()) setLoadError(`Backups could not be loaded: ${errorMessage(err)}`);
         }
     };
 

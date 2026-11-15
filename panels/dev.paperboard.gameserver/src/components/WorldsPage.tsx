@@ -16,10 +16,10 @@ import {
     PaperSettingList,
     PaperText,
     keepUnchanged,
+    createLatest,
 } from "@mileniumhq/paperui";
 import { serverStatus } from "../lib/server";
 import { errorMessage, type Outcome } from "../lib/failure";
-import { createLatest } from "../core/state";
 
 /** What every game's Worlds tab knows about a world. */
 export interface WorldEntry {
@@ -120,13 +120,15 @@ export default function WorldsPage<W extends WorldEntry>(props: { list: () => Pr
 
     const latest = createLatest();
     const refresh = async () => {
+        const current = latest();
         try {
-            const answer = await latest(props.list);
-            if (!answer) return;
+            const answer = await props.list();
+            if (!current()) return;
             // an unchanged world stays the row it is
-            setWorlds((prev) => keepUnchanged(prev, answer.value));
+            setWorlds((prev) => keepUnchanged(prev, answer));
             setListError("");
         } catch (err) {
+            if (!current()) return;
             console.error("[Worlds] Failed to list worlds:", err);
             setListError(errorMessage(err));
         }

@@ -1,5 +1,4 @@
 import { batch, createSignal, For, onMount, Show } from "solid-js";
-import { createLatest } from "../core/state";
 import {
     PaperButton,
     PaperCard,
@@ -12,6 +11,7 @@ import {
     PaperQuote,
     PaperSelectMenu,
     PaperSelectMenuItem,
+    createLatest,
 } from "@mileniumhq/paperui";
 import {
     listLogFiles,
@@ -42,10 +42,10 @@ export default function Logs() {
     const latestList = createLatest();
     const loadFiles = async (selectName?: string) => {
         setError(null);
+        const current = latestList();
         try {
-            const answer = await latestList(listLogFiles);
-            if (!answer) return;
-            const list = answer.value;
+            const list = await listLogFiles();
+            if (!current()) return;
             setFiles(list);
             const wanted =
                 selectName && list.some((f) => f.name === selectName)
@@ -54,6 +54,7 @@ export default function Logs() {
             if (wanted) await selectFile(wanted);
             else setContent(null);
         } catch (err) {
+            if (!current()) return;
             console.error("[Logs] Failed to list log files:", err);
             setError({ title: "Couldn't list the logs", message: errorMessage(err) });
         }
@@ -64,14 +65,16 @@ export default function Logs() {
         setSelected(name);
         setLoading(true);
         setError(null);
+        const current = latest();
         try {
-            const answer = await latest(() => readLogFile(name));
-            if (!answer) return;
+            const answer = await readLogFile(name);
+            if (!current()) return;
             batch(() => {
-                setContent(answer.value);
+                setContent(answer);
                 setLoading(false);
             });
         } catch (err) {
+            if (!current()) return;
             const message = errorMessage(err);
             console.error(`[Logs] Failed to read "${name}":`, message);
             batch(() => {

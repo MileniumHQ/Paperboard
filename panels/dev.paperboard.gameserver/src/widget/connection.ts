@@ -2,7 +2,7 @@
 // while the widget can be seen: hidden, it is disposed and nothing arrives;
 // shown again, it re-reads the state. "unavailable" is the service failing to
 // answer, never an empty server.
-import { createStateSignal } from "@mileniumhq/paperui";
+import { createStateSignal, createLatest } from "@mileniumhq/paperui";
 import { createSignal, onCleanup, type Accessor } from "solid-js";
 import { createPanelBridge, serviceApi, type WidgetContext } from "@mileniumhq/paperapi";
 import { gameFor } from "../games";
@@ -10,7 +10,6 @@ import { serverStateOf } from "../servers";
 import { CALLS, PANEL_ID } from "../service/contract";
 import type { ServersState } from "../service";
 import type { GameServerState } from "../service/types";
-import { createLatest } from "../core/state";
 import { errorMessage } from "../lib/failure";
 
 /** the last log lines a widget keeps; the console tail shows two */
@@ -107,12 +106,14 @@ export function useWidgetServer(widget: WidgetContext): WidgetServer {
     const refresh = () => {
         const current = bridge;
         if (!current) return;
-        latest(() => current.refreshState())
+        const newest = latest();
+        current
+            .refreshState()
             .then((answer) => {
-                if (answer && bridge === current) setConnection({ phase: "ready", server: project(answer.value) });
+                if (newest() && bridge === current) setConnection({ phase: "ready", server: project(answer) });
             })
             .catch((err) => {
-                if (bridge === current) setConnection({ phase: "unavailable", message: errorMessage(err) });
+                if (newest() && bridge === current) setConnection({ phase: "unavailable", message: errorMessage(err) });
             });
     };
 

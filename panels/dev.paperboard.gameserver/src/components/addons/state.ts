@@ -1,7 +1,6 @@
-import { createStateSignal } from "@mileniumhq/paperui";
+import { createStateSignal, createLatest } from "@mileniumhq/paperui";
 import { batch, createEffect, createSignal, on, onCleanup, type Accessor } from "solid-js";
 import { errorMessage } from "../../lib/failure";
-import { createLatest } from "../../core/state";
 import { versionLabel } from "../../lib/addons/presentation";
 import {
     defaultVersion,
@@ -27,14 +26,16 @@ export function createAddonListing<Meta>(kind: Accessor<AddonKind<Meta>>) {
     const [error, setError] = createSignal("");
     const latest = createLatest();
     const reload = async () => {
+        const current = latest();
         try {
-            const answer = await latest(() => kind().list());
-            if (!answer) return;
+            const answer = await kind().list();
+            if (!current()) return;
             batch(() => {
-                setListing(answer.value);
+                setListing(answer);
                 setError("");
             });
         } catch (err) {
+            if (!current()) return;
             console.error(`[${kind().title}] Failed to list what is installed:`, err);
             batch(() => {
                 setListing(null);
@@ -100,11 +101,12 @@ export function createAddonInstall<Meta>(
     // a kind's dialog extras (dependency checks) hold the install until they are ready
     const [ready, setReady] = createSignal(true);
     const [payload, setPayload] = createSignal<unknown>(undefined);
+    const latestVersions = createLatest();
 
     createEffect(
         on(target, (next) => {
-            // made for this target: the next one (or none) drops its answer
-            const latest = createLatest();
+            // the next target (or none) drops this one's answer
+            const current = latestVersions();
             setVersions(null);
             setVersionId("");
             setError("");
@@ -112,16 +114,18 @@ export function createAddonInstall<Meta>(
             setPayload(undefined);
             setLoading(next !== null);
             if (!next) return;
-            latest(() => kind().versions(next.projectId))
+            kind()
+                .versions(next.projectId)
                 .then((answer) => {
-                    if (!answer) return;
+                    if (!current()) return;
                     batch(() => {
-                        setVersions(answer.value);
-                        setVersionId(defaultVersion(kind(), answer.value)?.id ?? "");
+                        setVersions(answer);
+                        setVersionId(defaultVersion(kind(), answer)?.id ?? "");
                         setLoading(false);
                     });
                 })
                 .catch((err) => {
+                    if (!current()) return;
                     console.error(`[${kind().title}] Failed to load versions of "${next.title}":`, err);
                     batch(() => {
                         setError(errorMessage(err));

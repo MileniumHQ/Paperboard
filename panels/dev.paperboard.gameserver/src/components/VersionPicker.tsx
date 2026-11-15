@@ -8,12 +8,12 @@ import {
     PaperListItem,
     PaperQuote,
     PaperText,
+    createLatest,
 } from "@mileniumhq/paperui";
 import type { ServerSoftwareType, VersionItem } from "../lib/software";
 import { serverBridge } from "../lib/server";
 import { CALLS } from "../service/contract";
 import FailureText from "./FailureText";
-import { createLatest } from "../core/state";
 import { errorMessage } from "../lib/failure";
 
 // Shared Minecraft version picker: search, release-channel filters and the
@@ -43,11 +43,12 @@ export default function VersionPicker(props: {
         setLoading(true);
         setError("");
         setAllVersions([]);
+        const current = latest();
         try {
             // the service fetches upstream: some indexes refuse cross-origin reads
-            const answer = await latest(() => serverBridge.call<VersionItem[]>(CALLS.listSoftwareVersions, { software }));
-            if (!answer) return;
-            const versions = answer.value.filter((v) => v.installable && (v.type === "release" || v.type === "snapshot"));
+            const answer = await serverBridge.call<VersionItem[]>(CALLS.listSoftwareVersions, { software });
+            if (!current()) return;
+            const versions = answer.filter((v) => v.installable && (v.type === "release" || v.type === "snapshot"));
             setAllVersions(versions);
             const selected = untrack(() => props.selectedVersion);
             if (!versions.some((v) => v.id === selected)) {
@@ -55,6 +56,7 @@ export default function VersionPicker(props: {
             }
             setLoading(false);
         } catch (err) {
+            if (!current()) return;
             batch(() => {
                 setError(errorMessage(err));
                 setLoading(false);

@@ -14,9 +14,9 @@ import {
     PaperText,
     type PaperAvatarSize,
     keepUnchanged,
+    createLatest,
 } from "@mileniumhq/paperui";
 import PlayerRoster, { statusColor } from "./PlayerRoster";
-import { createLatest } from "../core/state";
 import { createSaves } from "../lib/saves";
 import { onlinePlayerNames, serverStatus } from "../lib/server";
 import { errorMessage, type Outcome } from "../lib/failure";
@@ -44,15 +44,17 @@ export function createRosterState<R>(read: () => Promise<R>) {
     const latest = createLatest();
 
     const reload = async () => {
+        const current = latest();
         try {
-            const answer = await latest(read);
-            if (!answer) return;
+            const answer = await read();
+            if (!current()) return;
             batch(() => {
                 // a roster read again unchanged is no news
-                setRoster((prev) => keepUnchanged(prev, answer.value));
+                setRoster((prev) => keepUnchanged(prev, answer));
                 setLoadFailure(undefined);
             });
         } catch (err) {
+            if (!current()) return;
             console.error("[Players] Failed to read the roster:", err);
             setLoadFailure({ title: "Players not loaded", message: errorMessage(err) });
         }

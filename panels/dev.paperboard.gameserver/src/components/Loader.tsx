@@ -1,13 +1,12 @@
 import { minecraftSoftware } from "../games/minecraft/index";
 import { createEffect, createSignal, on, Show } from "solid-js";
-import { PaperButton, PaperFlex, PaperPageHeader, PaperQuote, keepUnchanged } from "@mileniumhq/paperui";
+import { PaperButton, PaperFlex, PaperPageHeader, PaperQuote, keepUnchanged, createLatest } from "@mileniumhq/paperui";
 import ConfigSettings from "./ConfigSettings";
 import { serverBridge, serverSoftware, serverStatus } from "../lib/server";
 import { CALLS } from "../service/contract";
 import { SOFTWARE_NAMES } from "../lib/software";
 import type { LoaderSettingsView } from "../service/loaderSettings";
 import { errorMessage } from "../lib/failure";
-import { createLatest } from "../core/state";
 
 // Loader: the installed software's own settings files (Paper's YAML,
 // NeoForge/Forge TOML). The service owns reading and writing; this tab
@@ -19,12 +18,13 @@ export default function Loader(props: { active: boolean }) {
     const latest = createLatest();
     const load = async () => {
         setLoadError("");
+        const current = latest();
         try {
-            const answer = await latest(() => serverBridge.call<LoaderSettingsView>(CALLS.readLoaderSettings));
+            const answer = await serverBridge.call<LoaderSettingsView>(CALLS.readLoaderSettings);
             // a setting read again unchanged keeps its row
-            if (answer) setSettings((prev) => keepUnchanged(prev, answer.value));
+            if (current()) setSettings((prev) => keepUnchanged(prev, answer));
         } catch (err) {
-            setLoadError(errorMessage(err));
+            if (current()) setLoadError(errorMessage(err));
         }
     };
 

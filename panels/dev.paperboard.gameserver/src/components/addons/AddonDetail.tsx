@@ -12,10 +12,10 @@ import {
     PaperText,
     usePaperPanel,
     type MarkdownImage,
+    createLatest,
 } from "@mileniumhq/paperui";
 import type { AddonKind, AddonProject, AddonTarget, InstalledAddon } from "../../lib/addons/kind";
 import type { DetailTarget } from "./state";
-import { createLatest } from "../../core/state";
 import { errorMessage } from "../../lib/failure";
 import { createServedPicture } from "../../lib/pictures";
 import PictureAvatar from "../PictureAvatar";
@@ -92,15 +92,18 @@ export function AddonDetail<Meta>(props: {
                 setLoadError(null);
                 // an add-on on disk has nothing to look up, and still replaces the look-up before it
                 setLoading(!target.local);
-                latest(async () => (target.local ? null : props.kind.source.project(target))).then(
+                const current = latest();
+                if (target.local) return;
+                props.kind.source.project(target).then(
                     (answer) => {
-                        if (!answer) return;
+                        if (!current()) return;
                         batch(() => {
-                            setProject(answer.value);
+                            setProject(answer);
                             setLoading(false);
                         });
                     },
                     (err) => {
+                        if (!current()) return;
                         // the page still shows what the list knows, and says why the rest is missing
                         console.error(`[${props.kind.title}] Failed to load project details:`, err);
                         batch(() => {

@@ -2,7 +2,7 @@
 // everyone with data in this world), the names players have now, who is
 // banned, which player is open, and every change to them. The tab draws it;
 // every failure lands in `feedback`.
-import { keepUnchanged } from "@mileniumhq/paperui";
+import { keepUnchanged, createLatest } from "@mileniumhq/paperui";
 import { batch, createEffect, createMemo, createSignal, on, onCleanup, onMount } from "solid-js";
 import {
     forgetPlayerData,
@@ -17,7 +17,6 @@ import {
 import { CALLS, type CallName } from "../../service/contract";
 import type { BedrockNaming } from "../../core/bedrock";
 import { errorMessage, type Outcome } from "../../lib/failure";
-import { createLatest } from "../../core/state";
 
 const LIST_POLL_MS = 15000;
 const STATS_POLL_MS = 30000;
@@ -102,10 +101,11 @@ export function createPlayers() {
     // are the truth, so this runs again after anything that changes them
     const latestRoster = createLatest();
     const loadRoster = async (): Promise<void> => {
+        const current = latestRoster();
         try {
-            const answer = await latestRoster(() => serverBridge.call<RosterEntry[]>(CALLS.listRoster));
-            if (!answer) return;
-            const roster = answer.value ?? [];
+            const answer = await serverBridge.call<RosterEntry[]>(CALLS.listRoster);
+            if (!current()) return;
+            const roster = answer ?? [];
             const listed = withCurrentNames(roster.map(({ banned: _banned, ...player }) => player));
             batch(() => {
                 setPlayers(listed);
@@ -113,6 +113,7 @@ export function createPlayers() {
             });
             refreshNames(roster.map((p) => p.uuid));
         } catch (err) {
+            if (!current()) return;
             console.error("[Players] list-roster failed:", err);
             setFeedback({ title: "Players not loaded", message: errorMessage(err) });
         }

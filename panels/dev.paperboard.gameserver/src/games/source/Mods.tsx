@@ -11,11 +11,11 @@ import {
     PaperText,
     PaperToggle,
     sameData,
+    createLatest,
 } from "@mileniumhq/paperui";
 import { serverBridge, serverStatus } from "../../lib/server";
 import { errorMessage } from "../../lib/failure";
 import { createSaves } from "../../lib/saves";
-import { createLatest } from "../../core/state";
 import { discardUpload, listAdded, newStage, pickFiles, stageFolder } from "../../lib/addons/upload";
 import { sourceCalls, type SourceGameSpec, type SourceModView } from "./index";
 import type { SourcePlugin } from "./sourcemod";
@@ -41,11 +41,12 @@ export default function SourceMods(props: { spec: SourceGameSpec; active: boolea
     const latest = createLatest();
     const load = async () => {
         setLoadError("");
+        const current = latest();
         try {
-            const answer = await latest(() => serverBridge.call<SourceModView>(ids.sourcemod));
-            if (answer) setView(answer.value);
+            const answer = await serverBridge.call<SourceModView>(ids.sourcemod);
+            if (current()) setView(answer);
         } catch (err) {
-            setLoadError(errorMessage(err));
+            if (current()) setLoadError(errorMessage(err));
         }
     };
     createEffect(on([() => props.active, serverStatus], ([active]) => { if (active) void load(); }));
@@ -64,10 +65,12 @@ export default function SourceMods(props: { spec: SourceGameSpec; active: boolea
     });
     /** saves through `work`, and on a failure shows whatever did land */
     const answer = async (work: () => Promise<SourceModView>) => {
+        const current = latest();
         try {
-            const saved = await latest(work);
-            if (saved) setView(saved.value);
+            const saved = await work();
+            if (current()) setView(saved);
         } catch (err) {
+            if (!current()) return;
             await load();
             throw err;
         }

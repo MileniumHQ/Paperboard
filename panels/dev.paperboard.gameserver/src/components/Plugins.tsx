@@ -1,5 +1,4 @@
 import { batch, createEffect, createSignal, For, on, Show } from "solid-js";
-import { createLatest } from "../core/state";
 import {
     PaperButton,
     PaperCheckbox,
@@ -10,6 +9,7 @@ import {
     PaperQuote,
     PaperText,
     type PaperFileReveal,
+    createLatest,
 } from "@mileniumhq/paperui";
 import { serverVersion } from "../lib/server";
 import { locateAddonConfig } from "../lib/files";
@@ -50,10 +50,11 @@ function DependencyPreview(props: InstallExtrasProps) {
             setError("");
             props.report({ ready: false, payload: checked });
             setLoading(!!versionId);
-            latest(async () => (versionId ? previewInstall(props.target.projectId, props.target.title, versionId, checked) : null)).then(
-                (answer) => {
-                    if (!answer?.value) return;
-                    const next = answer.value;
+            const current = latest();
+            if (!versionId) return;
+            previewInstall(props.target.projectId, props.target.title, versionId, checked).then(
+                (next) => {
+                    if (!current()) return;
                     batch(() => {
                         setPreview(next);
                         setLoading(false);
@@ -61,6 +62,7 @@ function DependencyPreview(props: InstallExtrasProps) {
                     props.report({ ready: !!next.mainFile && next.failures.length === 0, payload: checked });
                 },
                 (err) => {
+                    if (!current()) return;
                     console.error(`[Plugins] Failed to resolve the dependencies of "${props.target.title}":`, err);
                     batch(() => {
                         setError(errorMessage(err));
