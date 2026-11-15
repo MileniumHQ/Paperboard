@@ -3,7 +3,7 @@
 // new notifies no one, and one that does is seen once, all together.
 import { createStateSignal, keepUnchanged } from "@mileniumhq/paperui";
 import { describe, expect, test } from "bun:test";
-import { createEffect, createRoot, createSignal } from "solid-js";
+import { createEffect, createRoot, createSignal, on } from "solid-js";
 import { applyStatePatch, type StateSetters } from "../src/core/state";
 
 /** the page's state signals, made the way lib/server.ts and lib/players.ts make them */
@@ -105,10 +105,7 @@ describe("state pushes", () => {
         const dispose = createRoot((dispose) => {
             for (const [key, [get]] of Object.entries(signals)) {
                 runs[key] = 0;
-                createEffect(() => {
-                    get();
-                    runs[key]++;
-                });
+                createEffect(on(get, () => runs[key]++));
             }
             return dispose;
         });
@@ -130,12 +127,7 @@ describe("state pushes", () => {
         applyStatePatch(push(), setters);
         let runs = 0;
         const dispose = createRoot((dispose) => {
-            createEffect(() => {
-                signals.onlinePlayers[0]();
-                signals.serverStatus[0]();
-                signals.maxPlayers[0]();
-                runs++;
-            });
+            createEffect(on([signals.onlinePlayers[0], signals.serverStatus[0], signals.maxPlayers[0]], () => runs++));
             return dispose;
         });
         expect(runs).toBe(1);

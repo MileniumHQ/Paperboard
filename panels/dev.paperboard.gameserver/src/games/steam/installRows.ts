@@ -1,4 +1,4 @@
-import { createEffect, createSignal } from "solid-js";
+import { createEffect, createSignal, on } from "solid-js";
 import type { LoaderStatus } from "@mileniumhq/paperui";
 import type { InstallLoaderItem } from "../../components/InstallLoaders";
 import { installProgress, serverBridge, setInstallProgress } from "../../lib/server";
@@ -38,10 +38,10 @@ export function createSteamInstall(action: string) {
     const ROW: Record<string, number> = { preparing: 0, downloading: 0, verifying: 1, installing: 2, completed: 3 };
     // the furthest step reached; a failure keeps it, so the failed row is the one shown failing
     const [reached, setReached] = createSignal(-1);
-    createEffect(() => {
-        const at = ROW[installProgress()?.stage ?? ""] ?? -1;
+    createEffect(on(installProgress, (progress) => {
+        const at = ROW[progress?.stage ?? ""] ?? -1;
         if (at > reached()) setReached(at);
-    });
+    }));
     const current = () => Math.max(0, reached());
     /** the row's own progress, while it is the one running */
     const live = (step: number) => {

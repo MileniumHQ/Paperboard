@@ -15,6 +15,7 @@ function gate() {
     });
     return { done, open, fail };
 }
+// quiet: lets the saves' promise jobs run; no outcome is waited out by time
 const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
 
 /** a tab whose stored settings change only when a save's answer says so */

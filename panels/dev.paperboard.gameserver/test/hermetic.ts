@@ -59,7 +59,7 @@ async function endSupervisors(): Promise<void> {
     const deadline = Date.now() + 10_000;
     while (pids.some(alive)) {
         if (Date.now() > deadline) throw new Error(`supervisor processes ${pids.filter(alive).join(", ")} did not end`);
-        await Bun.sleep(50);
+        await Bun.sleep(50); // quiet: a deadline-bound poll for the processes to end
     }
 }
 
@@ -83,7 +83,7 @@ async function removeBuild(dir: string): Promise<void> {
     const deadline = Date.now() + 10_000;
     while (pids.some(alive)) {
         if (Date.now() > deadline) throw new Error(`processes ${pids.filter(alive).join(", ")} run from ${dir} did not end`);
-        await Bun.sleep(50);
+        await Bun.sleep(50); // quiet: a deadline-bound poll for the processes to end
     }
     fs.rmSync(dir, { recursive: true, force: true });
 }

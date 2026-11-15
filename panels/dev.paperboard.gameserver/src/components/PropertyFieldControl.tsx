@@ -1,4 +1,4 @@
-import { createEffect, createSignal, For, Show, type JSX } from "solid-js";
+import { createEffect, createSignal, For, on, Show, type JSX } from "solid-js";
 import {
     PaperFlex,
     PaperInput,
@@ -104,7 +104,7 @@ export function FieldControl(props: {
                 if (field.max !== undefined && num > field.max) return true;
                 return false;
             };
-            createEffect(() => props.onProblem?.(invalid() ? numberRange(field) : ""));
+            createEffect(on(() => (invalid() ? numberRange(field) : ""), (problem) => props.onProblem?.(problem)));
             return (
                 <PaperFlex width="field">
                     <PaperInput

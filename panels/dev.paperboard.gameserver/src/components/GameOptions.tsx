@@ -1,4 +1,4 @@
-import { createEffect, createMemo, createSignal, onMount, For, Show, untrack } from "solid-js";
+import { createEffect, createMemo, createSignal, on, onMount, For, Show, untrack } from "solid-js";
 import {
     PaperButton,
     PaperCard,
@@ -56,7 +56,7 @@ export function GameOptionControl(props: {
             const [draft, setDraft] = createSignal<string | null>(null);
             const shown = () => draft() ?? String(props.value ?? "");
             const valid = (raw: string) => raw.trim() !== "" && fitsNumber(field("number"), Number(raw));
-            createEffect(() => props.onProblem?.(valid(shown()) ? "" : `${numberRule(field("number"))}.`));
+            createEffect(on(() => (valid(shown()) ? "" : `${numberRule(field("number"))}.`), (problem) => props.onProblem?.(problem)));
             return (
                 // every number field is as wide as a menu, whatever its range
                 <PaperFlex width="field">

@@ -67,6 +67,7 @@ export async function withScenarioDaemon(prefix: string, work: (scenario: Scenar
     try {
         await until(() => { if (daemon.exitCode !== null) throw new Error(`The daemon exited before it listened:\n${log}`); return /Listening on https?:\/\/127\.0\.0\.1:\d+/.test(log); }, "the daemon to listen", 30_000);
         const bridge = api.createPanelBridge<Record<string, unknown>>({ panelId: PANEL });
+        // quiet: polled until the service answers; a failure here is it still starting
         await until(async () => Array.isArray((await bridge.refreshState().catch(() => ({} as Record<string, unknown>))).servers), "the panel's service", 60_000);
         await work({
             root,
@@ -94,6 +95,7 @@ export async function withScenarioDaemon(prefix: string, work: (scenario: Scenar
         throw err;
     } finally {
         // workloads run under supervisors that outlive the daemon by design: end them through it first
+        // quiet: cleanup after the scenario; its own outcome is already thrown or returned
         for (const id of processes) if (await api.processApi.exists(id).catch(() => false)) await api.processApi.kill(id, "SIGKILL").catch((err) => console.error(`Could not end ${id}: ${err}`));
         // the wire would otherwise keep trying to reach a daemon that is gone
         api.closeTransport("local");

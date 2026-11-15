@@ -107,6 +107,7 @@ function askForCap(server: WidgetServer) {
         if (!c.server.supportsPlayers) return;
         if (c.server.serverStatus !== "online" || c.server.maxPlayers !== null) return;
         asked = true;
+        // quiet: the widget shows the players as unknown, and asks again the next time it is shown
         server.call(CALLS.queryOnlinePlayers).catch((err) =>
             console.warn("[gameserver widget] player list query failed:", errorMessage(err)),
         );

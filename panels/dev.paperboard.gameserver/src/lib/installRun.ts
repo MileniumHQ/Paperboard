@@ -1,4 +1,4 @@
-import { createEffect, createSignal } from "solid-js";
+import { createEffect, createSignal, on } from "solid-js";
 import type { LoaderStatus } from "@mileniumhq/paperui";
 import { CALLS } from "../service/contract";
 import type { InstallOutcome } from "../games/minecraft/softwareInstall";
@@ -33,10 +33,8 @@ export function createInstallRun() {
 
     // map the service's published progress while this run owns it;
     // terminal failure stays with run()'s catch
-    createEffect(() => {
-        if (!active()) return;
-        const progress = installProgress();
-        if (!progress) return;
+    createEffect(on([active, installProgress], ([owned, progress]) => {
+        if (!owned || !progress) return;
         switch (progress.stage) {
             case "downloading":
             case "verifying":
@@ -55,7 +53,7 @@ export function createInstallRun() {
                 installer.setPercent(100);
                 break;
         }
-    });
+    }));
 
     const reset = () => {
         javaDownload.setPercent(0);

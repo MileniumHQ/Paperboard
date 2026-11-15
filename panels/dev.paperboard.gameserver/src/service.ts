@@ -83,12 +83,13 @@ function announceServers(): void {
     const ids = JSON.stringify(saved.servers.map((server) => server.id));
     if (!panelBlocks || ids === announcedServers) return;
     announcedServers = ids;
+    // quiet: a change notice is only a hint; Blocks reads the list itself whenever it runs
     panelBlocks.changed("servers").catch((err) => console.error("[gameserver] the change to the server list did not reach Blocks:", err));
 }
 /** One of the panel's own server events, for the server it happened to. */
-function fireServerEvent(id: string, server: string): void {
+function fireServerEvent(id: string, server: string, failed: (what: string, err: unknown) => void): void {
     if (!panelBlocks || !SERVER_EVENTS.includes(id)) return;
-    panelBlocks.fire(id, { server }).catch((err) => console.error(`[gameserver] ${id} for ${server} did not reach Blocks:`, err));
+    panelBlocks.fire(id, { server }).catch((err) => failed(`${id} did not reach Blocks`, err));
 }
 // each server's console and chat, kept on disk so a service restart (an
 // update, a crash, a reboot) opens with what was last said
@@ -200,8 +201,9 @@ function createScope(server: StoredServer): ServerScope {
             emit: (event, payload) => rootContext.emit(event, { server: server.id, payload }),
         } as ServiceContext<GameServerState>,
         trigger(id, output) {
-            fireTrigger(scope.blocks, id, output, server.name);
-            fireServerEvent(id, server.id);
+            const failed = (what: string, err: unknown) => report(scope.ctx, what, err);
+            fireTrigger(scope.blocks, id, output, failed);
+            fireServerEvent(id, server.id, failed);
         },
         updateSettings: async (change) => {
             let next: Record<string, unknown> = {};
@@ -234,6 +236,7 @@ async function removeOldHeadStore(): Promise<void> {
     try {
         await nodeFs.rm(await fileApi.getPath(dir, PANEL_ID), { recursive: true, force: true });
     } catch (err) {
+        // quiet: a stale cache left on disk harms nothing, and it is tried again at the next start
         console.error("[gameserver] the old player head cache could not be removed:", err);
     }
 }
@@ -291,9 +294,7 @@ async function initialize(scope: ServerScope): Promise<ServerScope> {
             icons.set(server.id, (await game.readIcon?.()) ?? null);
             // the server runs either way; only the Blocks Library keeps the game's art
             if (icons.get(server.id)) {
-                await blocks.update(blocksProject(server)).catch((err) =>
-                    console.error(`[gameserver] the Blocks Library can't show ${server.name}'s icon:`, err),
-                );
+                await blocks.update(blocksProject(server)).catch((err) => report(scope.ctx, "The Blocks Library can't show this server's icon", err));
             }
             // the server was running when this service last saw it and nobody
             // stopped it: it went down while Paperboard was not watching (the
@@ -301,7 +302,7 @@ async function initialize(scope: ServerScope): Promise<ServerScope> {
             if (wasRunning && !running) {
                 const restart = automation.restartAfterCrash;
                 scope.ctx.setState((prev) => ({ serverEntries: appendCapped(prev.serverEntries, { type: "warn", content: `[Server] The server stopped while Paperboard was not running.${restart ? " Starting it again." : ""}` }) }));
-                // a launch that fails says so in the console itself
+                // quiet: startServerInstance puts its own failure in the console
                 if (restart) void startServerInstance(scope.ctx).catch((err) => console.error(`[gameserver] ${server.name} could not start again:`, err));
             }
         });
@@ -506,6 +507,7 @@ export const gameServerService = definePanelService({
                 try {
                     await initialize(scope);
                 } catch (err) {
+                    // quiet: initialize puts its failure on the server's page (initFailure) and in its console
                     console.error(`[gameserver] ${scope.server.name} could not initialize:`, err);
                 }
             }
@@ -537,7 +539,7 @@ export const gameServerService = definePanelService({
             const why = ok
                 ? { type: "info" as const, content: "[Server] Updated. Starting again." }
                 : { type: "warn" as const, content: `[Server] The update failed, so nothing changed: ${error ?? "no reason given"}. Starting again.` };
-            // a launch that fails says so in the console itself
+            // quiet: startServerInstance puts its own failure in the console
             await inServer(scope, () => startServerInstance(scope.ctx, [why])).catch((err) =>
                 console.error(`[gameserver] ${scope.server.name} could not start again after the update:`, err),
             );
@@ -552,7 +554,7 @@ export const gameServerService = definePanelService({
     // a server's backup fires its Blocks events; a backup of the whole panel is no one server's
     afterBackup(_ctx, ended) {
         const scope = ended.sourceId === undefined ? undefined : entries.get(ended.sourceId);
-        if (scope) fireBackupEnded(scope.blocks, ended, scope.server.name);
+        if (scope) fireBackupEnded(scope.blocks, ended, (what, err) => report(scope.ctx, what, err));
     },
     async beforeBackup(_ctx, { sourceId }) {
         const paused: ServerScope[] = [];

@@ -73,6 +73,7 @@ describe("leaving a tab", () => {
             await page.waitFor(`!${fieldIn("Prompt")}`, "the Resource Pack tab to close");
             // the save is sent as the tab goes; the file holds it once it lands
             const deadline = Date.now() + 5_000;
+            // quiet: a deadline-bound poll for the file; the expects below say what was missing
             while (!properties().includes("Grab the pack") && Date.now() < deadline) await Bun.sleep(25);
             await page.settled();
             expect(properties()).toContain("resource-pack-prompt=");
@@ -235,7 +236,7 @@ describe("leaving Files with an unsaved edit asks first", () => {
             const deadline = Date.now() + 5_000;
             while (!(await page.evaluate<boolean>(inPlace))) {
                 if (Date.now() > deadline) throw new Error(`The ${name} page never slid into place`);
-                await Bun.sleep(25);
+                await Bun.sleep(25); // quiet: a deadline-bound poll for the page to slide into place
             }
             await page.evaluate(`${back(name)}.dataset.test = "back"`);
             await page.click('[data-test="back"]');

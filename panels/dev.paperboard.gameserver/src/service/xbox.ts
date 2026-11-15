@@ -24,6 +24,7 @@ async function answerOf(res: Response): Promise<string> {
         const body = (await res.json()) as { message?: unknown };
         if (typeof body?.message === "string") return body.message;
     } catch (err) {
+        // quiet: an answer that isn't JSON is told by its HTTP status instead
         console.debug("[Service:Xbox] error body is not JSON:", String(err));
     }
     return `HTTP ${res.status}`;

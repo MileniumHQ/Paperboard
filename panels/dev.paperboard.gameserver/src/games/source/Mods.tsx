@@ -113,6 +113,7 @@ export default function SourceMods(props: { spec: SourceGameSpec; active: boolea
             setNotice(`${listAdded(added)} ${added.length === 1 ? "is" : "are"} on.`);
         } catch (err) {
             setError({ title: "Plugins not added", message: errorMessage(err) });
+            // quiet: the upload's own failure is on screen; a stage left behind holds no user data
             await discardUpload(stage).catch((cleanup) => console.error(`[Mods] Failed to discard upload ${stage}:`, cleanup));
             await load();
         } finally {

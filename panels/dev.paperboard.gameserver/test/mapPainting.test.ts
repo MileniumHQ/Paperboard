@@ -43,6 +43,7 @@ describe("painting the map leaves the service answering", () => {
         const log: string[] = [];
         const paint = (name: string) => async () => {
             log.push(`${name} starts`);
+            // quiet: a pause inside the paint, so two running at once would overlap; nothing waits on it
             await new Promise((resolve) => setTimeout(resolve, 5));
             log.push(`${name} ends`);
             return name;

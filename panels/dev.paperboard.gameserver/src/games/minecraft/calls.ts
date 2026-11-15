@@ -101,6 +101,7 @@ async function banCommand(ctx: ServiceContext<GameServerState>, verb: "ban" | "p
             answer.cancel();
             return;
         }
+        // quiet: said's failure is read below, where it is awaited
         await Promise.race([said.catch(() => undefined), new Promise((resolve) => setTimeout(resolve, BAN_LIST_POLL_MS))]);
     }
     let line: string;

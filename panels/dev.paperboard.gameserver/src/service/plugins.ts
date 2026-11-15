@@ -151,6 +151,7 @@ export async function uninstallAllPlugins(
             try {
                 paths.push(`${dir}/${validatePluginFilename(safe)}`);
             } catch (err) {
+                // quiet: a file whose name isn't safe is no plugin the panel acts on
                 console.debug(`[Service:Plugins] skipping unsafe entry "${entry}":`, String(err));
             }
         }

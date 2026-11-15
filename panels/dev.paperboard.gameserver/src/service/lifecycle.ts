@@ -370,6 +370,7 @@ export function handleProcessExit(ctx: ServiceContext<GameServerState>, exitCode
             }),
         });
         // the game takes back what the last start set aside before the next one sets it again
+        // quiet: startServerInstance puts its own failure in the console
         const restart = () => void startServerInstance(ctx).catch(err => console.error("[gameserver] restart failed:", err));
         const released = releaseServer(ctx);
         if (released) void released.then(restart);

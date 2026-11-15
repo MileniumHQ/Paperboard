@@ -575,6 +575,7 @@ export function announceChanges(blocks: BlocksProjectHandle | undefined, before:
         if (before.onlinePlayers.length !== after.onlinePlayers.length) changed.push("player-count");
     }
     for (const value of changed) {
+        // quiet: a change notice is only a hint; Blocks reads the value itself whenever it runs
         blocks.changed(value).catch((err) => console.error(`[gameserver] ${serverName}: the change to ${value} did not reach Blocks:`, err));
     }
 }
@@ -589,21 +590,24 @@ const EVENT_VALUES: Record<TriggerId, (output: unknown) => Record<string, unknow
     [TRIGGER_IDS.serverCrashed]: () => ({}),
 };
 
+/** An event that didn't reach Blocks, said in the server's console: what depends on it didn't run. */
+export type BlocksFailure = (what: string, err: unknown) => void;
+
 /** Fires When a Backup Finishes or When a Backup Fails for how a backup of the server ended. */
-export function fireBackupEnded(blocks: BlocksProjectHandle | undefined, ended: BackupEnded, serverName: string): void {
+export function fireBackupEnded(blocks: BlocksProjectHandle | undefined, ended: BackupEnded, failed: BlocksFailure): void {
     if (!blocks) return;
     const event = ended.ok ? BACKUP_EVENTS.finished : BACKUP_EVENTS.failed;
     blocks.fire(event, ended.ok ? { backup: ended.backup } : { error: ended.error })
-        .catch((err) => console.error(`[gameserver] ${serverName}: ${event} did not reach Blocks:`, err));
+        .catch((err) => failed(`${event} did not reach Blocks`, err));
 }
 
 /** Fires the Blocks event for a trigger a game emitted. */
-export function fireTrigger(blocks: BlocksProjectHandle | undefined, id: string, output: unknown, serverName: string): void {
+export function fireTrigger(blocks: BlocksProjectHandle | undefined, id: string, output: unknown, failed: BlocksFailure): void {
     if (!blocks) return;
     const values = EVENT_VALUES[id as TriggerId];
     if (!values) {
-        console.error(`[gameserver] ${serverName}: the trigger ${id} has no Blocks event`);
+        failed(`${id} did not reach Blocks`, new Error(`the trigger ${id} has no Blocks event`));
         return;
     }
-    blocks.fire(id, values(output)).catch((err) => console.error(`[gameserver] ${serverName}: ${id} did not reach Blocks:`, err));
+    blocks.fire(id, values(output)).catch((err) => failed(`${id} did not reach Blocks`, err));
 }

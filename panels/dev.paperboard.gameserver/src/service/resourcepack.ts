@@ -123,6 +123,7 @@ const ZIP_MAGIC = [0x50, 0x4b, 0x03, 0x04];
 /** Downloads the pack at `url`, up to the server's size limit, and returns the sha1 of its bytes. */
 export async function hashResourcePack(url: string, deps: Pick<ResourcePackDeps, "fetchPack">): Promise<{ sha1: string; size: number }> {
     const res = await deps.fetchPack(url);
+    // quiet: the refusal is the failure thrown; a cancel that fails changes nothing about it
     const cancel = () => res.body?.cancel().catch((err) => console.debug("[Service:ResourcePack] body cancel failed:", String(err)));
     if (!res.ok) {
         cancel();

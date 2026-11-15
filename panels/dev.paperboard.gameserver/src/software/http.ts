@@ -11,6 +11,7 @@ const CHECKSUM_MAX_BYTES = 1024;
 // Releases a response we are refusing. The refusal is already the failure
 // being thrown; a cancel that itself fails changes nothing about it.
 function release(cancel: () => Promise<void>): void {
+    // quiet: the refusal is the failure thrown; a cancel that fails changes nothing about it
     cancel().catch((err) => console.debug("[software/http] body cancel failed:", String(err)));
 }
 
