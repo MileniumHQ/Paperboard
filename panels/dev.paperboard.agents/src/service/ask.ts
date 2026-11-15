@@ -9,19 +9,16 @@
 import { randomUUID } from "node:crypto";
 import fs from "node:fs";
 import { LIMITS, PANEL_ID, type Harness, type Settings } from "../contract";
-import { AcpTurn, type AcpEvent } from "./acp";
-import { askInstructions, askLaunch, feed, HARNESS_NAMES, parseTurnLine, removeLeftRunFiles, runFilesDir, writeRunFiles } from "./harness";
+import { askInstructions, askLaunch, HARNESS_NAMES, removeLeftRunFiles, runFilesDir } from "./harness";
 import type { TurnLog } from "./turnLog";
-import { writeLine } from "./mcpClient";
 import type { TurnHost } from "./conversation";
 import { errorText } from "../lib/failure";
-import { lineReader } from "./lines";
+import { harnessFailure, runHarness } from "./harnessRun";
 
 /** under the 30 s a flow gives an action, so the ask fails with its own reason first */
 export const ASK_MS = 28_000;
 /** questions answered at once; past this, an ask is refused rather than queued past its flow's deadline */
 const MAX_ASKING = 4;
-const MAX_LINE = 16 * 1024 * 1024;
 
 export interface AskDeps {
     host: TurnHost;
@@ -90,92 +87,33 @@ export class Asker {
     private async run(id: string, settings: Settings, command: string, question: string, instructions: string | null, lines: string[] | null): Promise<string> {
         const { host } = this.deps;
         const filesDir = runFilesDir(settings.harness, this.deps.env(settings.harness), this.deps.filesDir);
-        const launch = askLaunch({ harness: settings.harness, command, model: settings.model, name: settings.name, question, instructions, filesDir });
         const messages: string[] = [];
-        const failures: string[] = [];
-        let answered = false;
-        let timedOut = false;
-        let stderr = "";
-        const onEvent = (ev: AcpEvent) => {
-            if (ev.type === "message") messages.push(ev.text);
-            else if (ev.type === "failed") failures.push(ev.message);
-            else if (ev.type === "done") {
-                // OpenCode waits for another prompt once it has answered
-                answered = true;
-                void host.kill(id, "SIGTERM").catch((e) => console.error(`[agents] couldn't stop OpenCode after its answer: ${errorText(e)}`));
-            }
-        };
-        const acp =
-            settings.harness === "opencode"
-                ? new AcpTurn({
-                      cwd: this.deps.workdir,
-                      thread: null,
-                      model: settings.model,
-                      message: question,
-                      // no tool servers to wait for
-                      ready: async () => {},
-                      write: (line) => writeLine(host.write, id, line),
-                      emit: onEvent,
-                  })
-                : null;
-        const onLine = (line: string) => {
-            lines?.push(line);
-            if (acp) acp.line(line);
-            else for (const ev of parseTurnLine(settings.harness, line)) onEvent(ev);
-        };
-        const stdout = lineReader(MAX_LINE, onLine, () => failures.push(`${HARNESS_NAMES[settings.harness]} printed a line over ${MAX_LINE / 1024 / 1024} MB, which couldn't be read`));
-        // every listener goes when the run is over, whether or not it ever started
-        const offs: (() => void)[] = [];
-        const exited = new Promise<number | undefined>((ok) => {
-            offs.push(
-                host.onStdout(id, stdout.push),
-                host.onStderr(id, (data) => {
-                    stderr = (stderr + data).slice(-4000);
-                }),
-            );
-            offs.push(
-                host.onExit(id, (code) => {
-                    for (const off of offs) off();
-                    ok(code);
-                }),
-            );
-        });
-        fs.mkdirSync(this.deps.workdir, { recursive: true });
         const ms = this.deps.askMs ?? ASK_MS;
-        let timer: ReturnType<typeof setTimeout> | undefined;
-        let code: number | undefined;
-        // the question the harness couldn't be handed, if it ended first: its own exit says why, when it failed
-        let unfed: Error | null = null;
-        const removeFiles = writeRunFiles(launch.files);
-        try {
-            await host.start({
-                id,
-                command: launch.command,
-                args: launch.args,
-                cwd: this.deps.workdir,
-                env: { ...this.deps.env(settings.harness), ...launch.env },
-            });
-            timer = setTimeout(() => {
-                timedOut = true;
-                void host.kill(id, "SIGKILL").catch((e) => console.error(`[agents] couldn't stop a question past its time: ${errorText(e)}`));
-            }, ms);
-            // Codex and Claude read the question to the end of their input; ACP talks over it
-            const fed = launch.input === null ? null : feed(host, id, launch.input).catch((e: Error) => void (unfed = e));
-            const driven = acp?.run();
-            code = await exited;
-            await fed;
-            stdout.end();
-            acp?.close();
-            await driven;
-        } finally {
-            clearTimeout(timer);
-            removeFiles();
-            for (const off of offs) off();
-        }
-        if (timedOut) throw new Error(`the agent didn't answer within ${Math.round(ms / 1000)} seconds`);
-        if (failures.length) throw new Error(failures[failures.length - 1]);
-        if (code !== 0 && !answered) throw new Error(`${HARNESS_NAMES[settings.harness]} ended with exit ${code ?? "?"}${stderr.trim() ? `: ${stderr.trim().split("\n").slice(-3).join(" ").slice(0, 400)}` : ""}`);
-        if (unfed) throw new Error(`${HARNESS_NAMES[settings.harness]} ended before it took the question: ${errorText(unfed)}`);
+        fs.mkdirSync(this.deps.workdir, { recursive: true });
+        const r = await runHarness({
+            host,
+            id,
+            harness: settings.harness,
+            launch: askLaunch({ harness: settings.harness, command, model: settings.model, name: settings.name, question, instructions, filesDir }),
+            cwd: this.deps.workdir,
+            env: this.deps.env(settings.harness),
+            ms,
+            // no tool servers to wait for
+            acp: settings.harness === "opencode" ? { cwd: this.deps.workdir, thread: null, model: settings.model, message: question, ready: async () => {} } : null,
+            onEvent: (ev) => {
+                if (ev.type === "message") messages.push(ev.text);
+            },
+            stop: () => host.kill(id, "SIGKILL"),
+            unstopped: (e) => console.error(`[agents] couldn't stop a question past its time: ${errorText(e)}`),
+            line: lines
+                ? (stream, text) => {
+                      if (stream === "stdout") lines.push(text);
+                  }
+                : undefined,
+        });
+        if (r.timedOut) throw new Error(`the agent didn't answer within ${Math.round(ms / 1000)} seconds`);
+        const failed = harnessFailure(r, settings.harness, HARNESS_NAMES[settings.harness], "question");
+        if (failed) throw new Error(failed);
         // what it said before searching ("let me look that up") isn't the answer; its last message is
         const answer = messages.map((m) => m.trim()).filter(Boolean).at(-1);
         if (!answer) throw new Error("the agent gave no answer");

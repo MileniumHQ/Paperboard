@@ -26,24 +26,22 @@ import fs from "node:fs";
 import path from "node:path";
 import { CURRENT_CONVERSATION, LIMITS, PANEL_ID, type AccessEntry, type PageEntry, type PromptEntry, type ToolServerEntry, type ToolSignInEntry, type Attachment, type ChatEntry, type ChatState, type Harness, type PastConversation, type Settings, type SignInEntry, type WaitingMessage } from "../contract";
 import type { StartOptions } from "./browser";
-import { Attachments, sizeText } from "./attachments";
-import { AcpTurn, type AcpEvent } from "./acp";
-import { HARNESS_NAMES, codexContext, feed, instructions, parseTurnLine, removeLeftRunFiles, runFilesDir, turnLaunch, writeRunFiles, type TurnLaunch } from "./harness";
+import { Attachments } from "./attachments";
+import { sizeText } from "../lib/files";
+import { HARNESS_NAMES, codexContext, instructions, removeLeftRunFiles, runFilesDir, turnLaunch, type TurnLaunch } from "./harness";
+import { harnessFailure, runHarness } from "./harnessRun";
 import type { TurnLog } from "./turnLog";
-import { writeLine } from "./mcpClient";
 import { writeAtomic } from "./writeAtomic";
 import { stopChild } from "./stopChild";
 import { ATTACHMENTS, CARRY, History, summary, THREADS } from "./history";
 import { said, Transcript, TRANSCRIPT, type Said } from "./transcript";
 import { errorText } from "../lib/failure";
 import type { Sections, TurnMode } from "./toolsets";
-import { lineReader } from "./lines";
 
 export const TURN_PROC_ID = `${PANEL_ID}.turn`;
 const RUN = "run";
 const MAX_QUEUED = 20;
 const MAX_NOTICES = 10;
-const MAX_LINE = 16 * 1024 * 1024; // one event can carry a screenshot
 const TURN_MS = 30 * 60_000;
 const TOOLS_MS = 30_000; // how long OpenCode gets to connect to the panel's tools
 const TOOLS_SETTLE_MS = 300; // OpenCode reloads its tools 100 ms after they change; then the next step has them
@@ -560,120 +558,46 @@ export class Conversation {
     /** A turn whose harness is ready to start, run until it's over. */
     private async launched(settings: Settings, launch: TurnLaunch, mcp: ReturnType<ConversationDeps["mcp"]>, message: string) {
         const log = this.deps.log ?? null;
-        let stderr = "";
-        const failures: string[] = [];
         const plain = this.plain;
-        const timers = new Set<ReturnType<typeof setTimeout>>();
-        let answered = false;
         const context: Context = { harness: settings.harness, used: null, size: null };
         this.context = context;
-        const onEvent = (ev: AcpEvent) => {
-            if (ev.type === "thread") this.saveThread(settings.harness, ev.id);
-            else if (ev.type === "context") {
-                if (ev.used !== undefined) context.used = ev.used;
-                if (ev.size !== undefined) context.size = ev.size;
-            }
-            else if (ev.type === "message") plain.push(ev.text);
-            else if (ev.type === "failed") failures.push(ev.message);
-            else if (ev.type === "typing") this.setTyping(true);
-            else if (ev.type === "working") this.working();
-            else if (ev.type === "done") {
-                // the prompt is answered; OpenCode would wait for the next one
-                answered = true;
-                void this.killTurn().catch((e) => console.warn(`[agents] couldn't stop OpenCode after its answer (the turn's time limit still will): ${errorText(e)}`));
-            }
-        };
         // OpenCode connects to the panel's tools in the background: its prompt waits until it has listed them
-        let listed = false;
-        let onListed: (() => void) | null = null;
-        const offListed = mcp.onToolsListed(() => {
-            listed = true;
-            onListed?.();
-        });
+        const timers: ReturnType<typeof setTimeout>[] = [];
+        let listed!: () => void;
+        const tools = new Promise<void>((ok) => (listed = ok));
+        const offListed = mcp.onToolsListed(() => listed());
         const ready = () =>
             new Promise<void>((ok, fail) => {
-                const timeout = setTimeout(() => fail(new Error("OpenCode didn't connect to the panel's tools")), TOOLS_MS);
-                timers.add(timeout);
-                const go = () => {
-                    clearTimeout(timeout);
-                    timers.add(setTimeout(ok, TOOLS_SETTLE_MS));
-                };
-                if (listed) go();
-                else onListed = go;
+                timers.push(setTimeout(() => fail(new Error("OpenCode didn't connect to the panel's tools")), TOOLS_MS));
+                void tools.then(() => timers.push(setTimeout(ok, TOOLS_SETTLE_MS)));
             });
-        const acp =
-            settings.harness === "opencode"
-                ? new AcpTurn({
-                      cwd: this.workdir(),
-                      thread: launch.thread,
-                      model: settings.model,
-                      message,
-                      ready,
-                      write: (line) => {
-                          log?.line("stdin", line);
-                          return writeLine(this.deps.host.write, TURN_PROC_ID, line);
-                      },
-                      emit: onEvent,
-                  })
-                : null;
-        const onLine = (line: string) => {
-            log?.line("stdout", line);
-            if (acp) acp.line(line);
-            else for (const ev of parseTurnLine(settings.harness, line)) onEvent(ev);
-        };
-        // a line past the cap is dropped to its end, and the turn says so
-        const stdout = lineReader(MAX_LINE, onLine, () => failures.push(`${HARNESS_NAMES[settings.harness]} printed a line over ${MAX_LINE / 1024 / 1024} MB, which couldn't be read`));
-        // every listener goes when the run is over, whether or not it ever started
-        const offs: (() => void)[] = [];
-        const exited = new Promise<number | undefined>((ok) => {
-            offs.push(
-                this.deps.host.onStdout(TURN_PROC_ID, stdout.push),
-                this.deps.host.onStderr(TURN_PROC_ID, (data) => {
-                    log?.line("stderr", data);
-                    stderr = (stderr + data).slice(-4000);
-                }),
-            );
-            offs.push(
-                this.deps.host.onExit(TURN_PROC_ID, (code) => {
-                    for (const off of offs) off();
-                    ok(code);
-                }),
-            );
-        });
-        let timer: ReturnType<typeof setTimeout> | undefined;
         const turnMs = this.deps.turnMs ?? TURN_MS;
-        let timedOut = false;
-        let code: number | undefined;
-        // the message the harness couldn't be handed, if it ended first: its own exit says why, when it failed
-        let unfed: Error | null = null;
-        const removeFiles = writeRunFiles(launch.files);
-        try {
-            await this.deps.host.start({
-                id: TURN_PROC_ID,
-                command: launch.command,
-                args: launch.args,
-                cwd: this.workdir(),
-                env: { ...this.deps.env(settings.harness), ...launch.env, [launch.tokenEnv]: mcp.token },
-            });
-            timer = setTimeout(() => {
-                timedOut = true;
-                this.killTurn().catch((e) => this.put({ id: this.newId(), at: Date.now(), kind: "error", title: "Not stopped", text: `The turn ran past ${minutes(turnMs)} and couldn't be stopped: ${errorText(e)}` }));
-            }, turnMs);
-            // Codex and Claude read the message to the end of their input before they start; ACP talks over it
-            const fed = launch.input === null ? null : feed(this.deps.host, TURN_PROC_ID, launch.input).catch((e: Error) => void (unfed = e));
-            const driven = acp?.run();
-            code = await exited;
-            await fed;
-            stdout.end();
-            acp?.close();
-            await driven;
-        } finally {
-            clearTimeout(timer);
+        const cwd = this.workdir();
+        const r = await runHarness({
+            host: this.deps.host,
+            id: TURN_PROC_ID,
+            harness: settings.harness,
+            launch,
+            cwd,
+            env: { ...this.deps.env(settings.harness), [launch.tokenEnv]: mcp.token },
+            ms: turnMs,
+            acp: settings.harness === "opencode" ? { cwd, thread: launch.thread, model: settings.model, message, ready } : null,
+            onEvent: (ev) => {
+                if (ev.type === "thread") this.saveThread(settings.harness, ev.id);
+                else if (ev.type === "context") {
+                    if (ev.used !== undefined) context.used = ev.used;
+                    if (ev.size !== undefined) context.size = ev.size;
+                } else if (ev.type === "message") plain.push(ev.text);
+                else if (ev.type === "typing") this.setTyping(true);
+                else if (ev.type === "working") this.working();
+            },
+            stop: () => this.killTurn(),
+            unstopped: (e) => this.put({ id: this.newId(), at: Date.now(), kind: "error", title: "Not stopped", text: `The turn ran past ${minutes(turnMs)} and couldn't be stopped: ${errorText(e)}` }),
+            line: log ? (stream, text) => log.line(stream, text) : undefined,
+        }).finally(() => {
             offListed();
             for (const t of timers) clearTimeout(t);
-            removeFiles();
-            for (const off of offs) off();
-        }
+        });
         // Codex says how long its thread is only in its rollout
         let unmeasured: string | null = null;
         const codexThread = this.threads.codex;
@@ -685,10 +609,9 @@ export class Conversation {
             }
         }
         if (this.stopRequested) return;
-        if (timedOut) throw new Error(`the turn ran past ${minutes(turnMs)}, so it was stopped`);
-        if (failures.length) throw new Error(failures[failures.length - 1]);
-        if (code !== 0 && !answered) throw new Error(`the turn ended with exit ${code ?? "?"}${stderr.trim() ? `: ${lastLines(stderr)}` : ""}`);
-        if (unfed) throw new Error(`${HARNESS_NAMES[settings.harness]} ended before it took the message: ${errorText(unfed)}`);
+        if (r.timedOut) throw new Error(`the turn ran past ${minutes(turnMs)}, so it was stopped`);
+        const failed = harnessFailure(r, settings.harness, "the turn", "message");
+        if (failed) throw new Error(failed);
         if (unmeasured) throw new Error(`Couldn't tell how long the conversation is, so it can't be compacted: ${unmeasured}`);
     }
 
@@ -839,8 +762,4 @@ export class Conversation {
 function minutes(ms: number) {
     const [n, unit] = ms >= 60_000 ? [Math.round(ms / 60_000), "minute"] : [Math.ceil(ms / 1000), "second"];
     return `${n} ${unit}${n === 1 ? "" : "s"}`;
-}
-
-function lastLines(s: string) {
-    return s.trim().split("\n").slice(-3).join(" ").slice(0, 400);
 }
