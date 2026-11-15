@@ -29,4 +29,4 @@ export function panelCspNonce(): string {
     return crypto.randomBytes(16).toString("base64");
 }
 
-export { withCspNonce, buildPanelCsp, remotePanelHtmlCsp, buildCraneCredentialPayload } from "../shared/panelDocument";
+export { buildPanelCsp, remotePanelHtmlCsp, buildCraneCredentialPayload } from "../shared/panelDocument";

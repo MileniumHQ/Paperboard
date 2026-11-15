@@ -42,7 +42,7 @@ import { launchOptionsFromArgv } from "../shared/launchOptions";
 import { emulatePhone, mobileWindowOptions } from "./mobileMock";
 import { applySavedAppSettings } from "./communication/shelldata";
 import { addShellPushSink } from "./communication/shellPush";
-import { keepAliveWithoutWindows, secondLaunchAction } from "./instancePolicy";
+import { secondLaunchAction } from "./instancePolicy";
 import { createDesktopTray, destroyDesktopTray, hasDesktopTray, refreshDesktopTray } from "./tray";
 import { pollTrayCount } from "./trayCount";
 import icon from "../../resources/icon.png?asset";
@@ -467,8 +467,9 @@ app.whenReady().then(async () => {
     });
     // Electron ships no default context menu, so a right click on a text field
     // is inert. Give editable fields the standard edit menu; a bare text
-    // selection gets copy/select-all. Non-text UI returns null so custom DOM
-    // menus keep owning their own right clicks.
+    // selection gets copy (contextMenu.ts says why there is no select-all).
+    // Non-text UI returns null so custom DOM menus keep owning their own
+    // right clicks.
     app.on("web-contents-created", (_event, contents) => {
         installTextEditContextMenu(contents, (template) => {
             const window = BrowserWindow.fromWebContents(contents);
@@ -556,12 +557,10 @@ app.whenReady().then(async () => {
 
 app.on("window-all-closed", () => {
     // With a tray, the app lives on with no windows so services keep
-    // running; without one (browser mode is windowless anyway) the platform
-    // rule decides, as before.
-    if (browserMode || hasDesktopTray()) return;
-    if (!keepAliveWithoutWindows(process.platform, browserMode)) {
-        app.quit();
-    }
+    // running (browser mode is windowless anyway); without one, macOS apps
+    // outlive their windows and every other platform quits.
+    if (browserMode || hasDesktopTray() || process.platform === "darwin") return;
+    app.quit();
 });
 
 // kill local processes and disconnect clients on quit

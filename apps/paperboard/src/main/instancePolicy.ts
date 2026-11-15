@@ -12,11 +12,3 @@ export function secondLaunchAction(argv: readonly string[], hasWindow: boolean):
     if (argv.includes("--browser")) return "browser";
     return hasWindow ? "focus" : "window";
 }
-
-// A browser-mode process is the only windowless process allowed to outlive
-// its windows. A host started from a second `--browser` launch while the
-// desktop app was running must not turn that app into a zombie after its
-// window closes.
-export function keepAliveWithoutWindows(platform: NodeJS.Platform, browserMode: boolean): boolean {
-    return platform === "darwin" || browserMode;
-}

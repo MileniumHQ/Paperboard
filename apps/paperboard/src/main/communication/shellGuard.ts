@@ -22,13 +22,6 @@ export function allowDevShellOrigin(url: string): void {
     devShellOrigin = new URL(url).origin;
 }
 
-export function isPanelOrigin(url: unknown): boolean {
-    return (
-        typeof url === "string" &&
-        (url === "panel://" || url.startsWith("panel://"))
-    );
-}
-
 export function isShellUrl(url: unknown): boolean {
     if (typeof url !== "string") return false;
     if (url === SHELL_ORIGIN || url.startsWith(`${SHELL_ORIGIN}/`)) return true;

@@ -35,14 +35,16 @@ export const remotePanelHtmlCsp = (servedCsp: string | null | undefined, nonce: 
 export const injectCspNonce = (html: string, nonce: string) =>
     html.replaceAll("<script", `<script nonce="${nonce}"`);
 
+// first in <head>, or first in a document without one, so it comes before
+// any of the panel's own scripts and styles
+function insertAtHeadStart(html: string, snippet: string): string {
+    if (/<head[^>]*>/i.test(html)) return html.replace(/<head[^>]*>/i, (m) => `${m}${snippet}`);
+    return `${snippet}${html}`;
+}
+
 // panels render outside shell styles; keep the same no-select baseline
-export const injectUnselectable = (html: string): string => {
-    const style = `<style>html{-webkit-user-select:none;user-select:none}input,textarea,select,[contenteditable="true"],[contenteditable=""]{-webkit-user-select:text;user-select:text}code,pre,kbd,samp,[data-selectable="true"]{-webkit-user-select:text;user-select:text}</style>`;
-    if (/<head[^>]*>/i.test(html)) {
-        return html.replace(/<head[^>]*>/i, (m) => `${m}${style}`);
-    }
-    return `${style}${html}`;
-};
+export const injectUnselectable = (html: string): string =>
+    insertAtHeadStart(html, `<style>html{-webkit-user-select:none;user-select:none}input,textarea,select,[contenteditable="true"],[contenteditable=""]{-webkit-user-select:text;user-select:text}code,pre,kbd,samp,[data-selectable="true"]{-webkit-user-select:text;user-select:text}</style>`);
 
 /** the daemon a panel's credential is for: a loopback port, or a URL */
 export type PanelCraneEndpoint = { port: number; url?: undefined } | { url: string; port?: undefined };
@@ -71,12 +73,7 @@ export function buildCraneCredentialPayload(
 
 // the credential runs before any of the panel's own scripts
 export function injectCraneBootstrap(html: string, payload: string): string {
-    const bootstrap = `<script>window.__PAPERBOARD_CRANE=${payload};</script>`;
-    if (/<head[^>]*>/i.test(html)) {
-        return html.replace(/<head[^>]*>/i, (m) => `${m}${bootstrap}`);
-    }
-    // no <head> — prepend; scripts run before body anyway
-    return `${bootstrap}${html}`;
+    return insertAtHeadStart(html, `<script>window.__PAPERBOARD_CRANE=${payload};</script>`);
 }
 
 /** PaperUI's MOBILE_ATTRIBUTE */
@@ -86,9 +83,5 @@ const MOBILE_ATTRIBUTE = "data-paper-mobile";
 // of its own scripts or styles run, so a panel's first paint is already right.
 // The shell tells the frame again if it changes (PaperAPI's MOBILE_MODE_MESSAGE).
 export function injectMobileMode(html: string, mobile: boolean): string {
-    const stamp = `<script>document.documentElement.setAttribute("${MOBILE_ATTRIBUTE}","${mobile}");</script>`;
-    if (/<head[^>]*>/i.test(html)) {
-        return html.replace(/<head[^>]*>/i, (m) => `${m}${stamp}`);
-    }
-    return `${stamp}${html}`;
+    return insertAtHeadStart(html, `<script>document.documentElement.setAttribute("${MOBILE_ATTRIBUTE}","${mobile}");</script>`);
 }

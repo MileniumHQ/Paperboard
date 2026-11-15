@@ -6,7 +6,8 @@
 // writes into the real log directory.
 //
 // A suite that needs its own data dir may override PAPERBOARD_DIR, but must
-// restore the previous value (see tests/machineid.test.ts for the pattern).
+// restore the previous value (withDataDir in tests/daemon/handshake.test.ts
+// is the pattern).
 import { afterAll } from "bun:test";
 import * as fs from "node:fs";
 import * as os from "node:os";
