@@ -1,0 +1,8 @@
+{
+    "name": "Weather Station",
+    "id": "dev.paperboard.testproblems",
+    "version": "0.0.1",
+    "description": "A shell test fixture: a service whose background work fails. Not released.",
+    "publisher": "Paperboard",
+    "service": "./dist/service.js"
+}

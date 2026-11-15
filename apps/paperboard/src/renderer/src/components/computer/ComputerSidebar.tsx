@@ -1,9 +1,11 @@
 import { type Component, For, Show } from "solid-js";
 import { PaperButton, PaperFlex, PaperList, PaperListItem, PaperQuote, getVarCss } from "@mileniumhq/paperui";
-import type { InvalidPanel, PanelItem } from "@mileniumhq/paperapi";
+import { problemsApi, type InvalidPanel, type PanelItem } from "@mileniumhq/paperapi";
 import type { ComputerInfo } from "../../lib/shell";
+import { followPanelProblems } from "../../lib/panelProblems";
 import ComputerHeader from "./ComputerHeader";
 import PanelIcon from "./PanelIcon";
+import PanelProblems from "./PanelProblems";
 import styles from "./ComputerSidebar.module.css";
 
 export interface ComputerSidebarProps {
@@ -31,7 +33,8 @@ export interface ComputerSidebarProps {
 }
 
 // The active computer's column beside the rail: its header (info, library)
-// and its installed panels, with what couldn't be listed or switched to.
+// and its installed panels, with what couldn't be listed or switched to and
+// what went wrong with each panel.
 // Every computer keeps its column, hidden while another is active, so a
 // switch back finds its list as it was left.
 const ComputerSidebar: Component<ComputerSidebarProps> = (props) => (
@@ -50,6 +53,7 @@ const ComputerSidebar: Component<ComputerSidebarProps> = (props) => (
                 const tab = () => props.selectedTab(comp.id);
                 const panels = () => props.panelsByComputer[comp.id] || [];
                 const updating = (panel: PanelItem) => props.updatingPanels.has(`${comp.id}::${panel.id}`);
+                const problems = followPanelProblems(comp.id, () => comp.name, () => props.panelsLoadError[comp.id] === "");
                 return (
                     <PaperFlex
                         direction="column"
@@ -84,6 +88,13 @@ const ComputerSidebar: Component<ComputerSidebarProps> = (props) => (
                                         title={updating(panel) ? `${panel.name} is updating` : undefined}
                                         onClick={props.onActivateTab}
                                         icon={<PanelIcon computerId={comp.id} panel={panel} />}
+                                        actions={
+                                            <PanelProblems
+                                                panelName={panel.name}
+                                                problems={problems(panel.id)}
+                                                onDismiss={(key) => problemsApi.clear(panel.id, key, comp.id)}
+                                            />
+                                        }
                                         onContextMenu={(e: MouseEvent) => {
                                             e.preventDefault();
                                             e.stopPropagation();

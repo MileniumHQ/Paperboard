@@ -15,12 +15,14 @@ import { handleSystem } from "./rpc/system";
 import { handleSecrets } from "./rpc/secrets";
 import { backupServiceFor, handleBackups } from "./rpc/backups";
 import { handlePorts } from "./rpc/ports";
+import { handleProblems, problemsFor } from "./rpc/problems";
 import { PROTOCOL_VERSION, ErrorCode } from "./protocol";
 import { rpcErrorCode, assertPanelId } from "./rpc/params";
 import { TrafficMonitor } from "./monitor";
 import { secretsMatch } from "./secretCompare";
 import { MONITOR_PROTOCOL, MONITOR_SUBSCRIBE, MONITOR_UNSUBSCRIBE } from "../../../packages/paperapi/src/monitorProtocol";
 import { BACKUP_PROGRESS_EVENT } from "../../../packages/paperapi/src/channels";
+import { PROBLEMS_EVENT } from "../../../packages/paperapi/src/problemShape";
 import { HANDSHAKE_TIMEOUT_MS, MAX_WS_PAYLOAD, sendBounded } from "./wsFrames";
 import { EventSubscriptions } from "./wsEvents";
 import { SocketIdentities, SocketIdentity } from "./wsIdentity";
@@ -88,6 +90,8 @@ export function setupWebSocketServer(
     const events = new EventSubscriptions(monitor);
     // a running backup stops its panel's service: the shell says why, and how far along it is
     const offBackupProgress = backupServiceFor(engine).onProgress((change) => events.deliver(BACKUP_PROGRESS_EVENT, change, null));
+    // a panel's problems changed: the shell shows them by its name, and its page may follow its own
+    const offProblems = problemsFor(engine).onChange((panelId, problems) => events.deliver(PROBLEMS_EVENT, { panelId, problems }, panelId));
     wss.options.maxPayload = Math.min(wss.options.maxPayload ?? MAX_WS_PAYLOAD, MAX_WS_PAYLOAD);
     const revokeSockets = (sockets?: Set<WebSocket>) => {
         for (const socket of sockets ?? []) {
@@ -99,6 +103,7 @@ export function setupWebSocketServer(
     wss.once("close", () => {
         offRevocations();
         offBackupProgress();
+        offProblems();
         identities.clear();
         events.clear();
         monitor.clear();
@@ -288,7 +293,8 @@ export function setupWebSocketServer(
                     (await handleSystem(action, id, params, rpcCtx)) ||
                     (await handleSecrets(action, id, params, rpcCtx)) ||
                     (await handleBackups(action, id, params, rpcCtx)) ||
-                    (await handlePorts(action, id, params, rpcCtx))
+                    (await handlePorts(action, id, params, rpcCtx)) ||
+                    (await handleProblems(action, id, params, rpcCtx))
                 ) {
                     return;
                 }

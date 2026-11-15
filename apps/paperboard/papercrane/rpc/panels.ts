@@ -2,6 +2,7 @@ import type { RpcContext } from "./context";
 import { logger } from "../logger";
 import { assertConfigPath, assertId, assertPanelId, assertOptStr, rpcErrorCode } from "./params";
 import { requireHost, resourcePanelId } from "../principal";
+import { problemsFor } from "./problems";
 
 function effectivePanelId(requested: string, action: string, ctx: RpcContext): string {
     return resourcePanelId(ctx.callerPanelId(), requested, action)!;
@@ -91,6 +92,8 @@ export async function handlePanels(action: string, id: unknown, params: any, ctx
                     // deleting data is opt-in and only an explicit true
                     // enables it; anything else keeps the user's data
                     const result = await engine.uninstallPanel(panelId, { deleteData: params?.deleteData === true });
+                    // what went wrong with it went with it
+                    problemsFor(engine).clear(panelId);
                     reply(id, { success: true, ...result });
                 } catch (err: any) {
                     reply(id, null, `Uninstall failed: ${err?.message}`);
