@@ -19,6 +19,12 @@
             "import": "./dist/paperui.es.js",
             "require": "./dist/paperui.cjs"
         },
+        "./headless": {
+            "types": "./dist/headless.d.ts",
+            "solid": "./dist/headless.es.js",
+            "import": "./dist/headless.es.js",
+            "require": "./dist/headless.cjs"
+        },
         "./style.css": "./dist/paperui.css",
         "./panel.css": "./dist/panel.css",
         "./package.json": "./package.json"

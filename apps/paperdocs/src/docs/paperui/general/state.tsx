@@ -14,10 +14,21 @@ export default function StateDoc() {
                 Four Solid helpers for what every view does with its service: read something without an older answer landing over a newer one, run an action that shows why it didn't happen, save a control the one way controls save, and take pushed state without rebuilding the rows that didn't change.
                 Each imports from <PaperCode>@mileniumhq/paperui</PaperCode> and is called where a component is created.
             </PaperText>
+            <PaperText preset="body" as="p">
+                They also import from <PaperCode>@mileniumhq/paperui/headless</PaperCode>, which loads without a page: no component and no CSS, only Solid.
+                Code that a Bun test runs, such as a page's store or a launcher's logic, imports them from there. The haptics (<PaperCode>haptic</PaperCode>, <PaperCode>playHaptic</PaperCode>, <PaperCode>setHapticPlayer</PaperCode>) are in it too. Both entries share the same modules, so a value made through one is the value the other sees.
+            </PaperText>
 
             <PaperText preset="subheader" as="h2" id="create-latest">createLatest</PaperText>
             <PaperCode block language="tsx">
-{`createLatest(): () => () => boolean;`}
+{`createLatest(): Latest;
+
+interface Latest {
+    /** starts a read; current() is true while it is the newest and the view is there */
+    (): () => boolean;
+    /** drops the read in flight without starting a new one */
+    cancel(): void;
+}`}
             </PaperCode>
             <PaperText preset="body" as="p">
                 Late answers lose. Each call of the function it returns starts a read and hands back <PaperCode>current()</PaperCode>, which is true while no newer read has started and the component is still there.
@@ -39,12 +50,13 @@ const load = async () => {
             </PaperCode>
             <PaperTextList>
                 <li>A read that a newer one replaced is dropped, whether it answered or failed.</li>
-                <li>Every read is dropped once the component that made it is gone. Made outside a component, only a newer read replaces one.</li>
+                <li>Every read is dropped once the component that made it is gone. Made outside a component, only a newer read or <PaperCode>cancel()</PaperCode> replaces one.</li>
+                <li><PaperCode>cancel()</PaperCode> drops the read in flight when nothing replaces it: the person closed the dialog, went back a step, or picked nothing.</li>
             </PaperTextList>
 
             <PaperText preset="subheader" as="h2" id="create-action">createAction</PaperText>
             <PaperCode block language="tsx">
-{`createAction(): Action;
+{`createAction(options?: { message?: (err: unknown) => string }): Action;
 
 interface Action {
     busy: Accessor<boolean>;
@@ -78,6 +90,8 @@ const remove = createAction();
             <PaperTextList>
                 <li><PaperCode>busy</PaperCode> is true while any run is going.</li>
                 <li>A run clears the last error as it starts. A failure becomes the title and the error's own message.</li>
+                <li>Pass <PaperCode>message</PaperCode> when a failure's own words aren't what the view shows, such as a system code like <PaperCode>EACCES</PaperCode> said as a sentence about the file. Give one formatter to every action of a panel.</li>
+                <li>Under a field, show only <PaperCode>error()?.message</PaperCode>: the field says what the action was.</li>
                 <li><PaperCode>run</PaperCode> resolves <PaperCode>true</PaperCode> when <PaperCode>fn</PaperCode> went through and <PaperCode>false</PaperCode> when it failed. It never rejects.</li>
                 <li>Pass <PaperCode>setFailure</PaperCode> to show a run's failure somewhere else, such as inside a confirmation that stays open. The action's own <PaperCode>error</PaperCode> is left alone.</li>
             </PaperTextList>

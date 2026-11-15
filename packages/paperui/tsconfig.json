@@ -15,7 +15,8 @@
     "jsxImportSource": "solid-js",
     "paths": {
       "@mileniumhq/paperui/style.css": ["./src/styles/styles.css"],
-      "@mileniumhq/paperui": ["./src/index.ts"]
+      "@mileniumhq/paperui": ["./src/index.ts"],
+      "@mileniumhq/paperui/headless": ["./src/headless.ts"]
     }
   },
   "include": ["src"]

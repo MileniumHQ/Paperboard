@@ -1,4 +1,4 @@
-import { createEffect, createRoot, createSignal } from "solid-js";
+import { createEffect, createRoot, createSignal, on } from "solid-js";
 import { fireEvent, render } from "@solidjs/testing-library";
 import { afterEach, describe, expect, test } from "vitest";
 import { PaperToggle } from "../components/PaperToggle";
@@ -55,6 +55,14 @@ describe("createLatest", () => {
         dispose();
         expect(read()).toBe(false);
     });
+
+    test("cancel drops the read in flight, and the next read is current again", () => {
+        const latest = inRoot(() => createLatest());
+        const read = latest();
+        latest.cancel();
+        expect(read()).toBe(false);
+        expect(latest()()).toBe(true);
+    });
 });
 
 describe("createAction", () => {
@@ -85,6 +93,12 @@ describe("createAction", () => {
         expect(shown).toEqual({ title: "Not renamed", message: "taken" });
         expect(action.error()).toBeNull();
     });
+
+    test("a failure's words come from the action's own formatter when it has one", async () => {
+        const action = inRoot(() => createAction({ message: (err) => `Said plainly: ${String(err)}` }));
+        expect(await action.run("Not saved", () => Promise.reject("EACCES"))).toBe(false);
+        expect(action.error()).toEqual({ title: "Not saved", message: "Said plainly: EACCES" });
+    });
 });
 
 describe("keepUnchanged", () => {
@@ -112,7 +126,7 @@ describe("keepUnchanged", () => {
         const seen: unknown[] = [];
         const [rows, setRows] = inRoot(() => {
             const signal = createStateSignal([{ id: 1, name: "Ada" }]);
-            createEffect(() => seen.push(signal[0]()));
+            createEffect(on(signal[0], (rows) => seen.push(rows)));
             return signal;
         });
         const first = rows()[0];

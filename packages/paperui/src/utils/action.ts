@@ -24,8 +24,18 @@ export interface Action {
     run: (title: string, fn: () => Promise<unknown>, setFailure?: (failure: ActionFailure | null) => void) => Promise<boolean>;
 }
 
+export interface ActionOptions {
+    /**
+     * A failure's words, as the view shows them (default its own message).
+     * A panel whose failures carry codes says them as sentences here, such as
+     * EACCES as "Paperboard isn't allowed to open server.properties".
+     */
+    message?: (err: unknown) => string;
+}
+
 /** An action a button starts: busy while it runs, and its own error when it didn't happen. Make one per action. */
-export function createAction(): Action {
+export function createAction(options: ActionOptions = {}): Action {
+    const message = options.message ?? errorMessage;
     const [running, setRunning] = createSignal(0);
     const [error, setError] = createSignal<ActionFailure | null>(null);
     const run: Action["run"] = async (title, fn, setFailure = setError) => {
@@ -35,7 +45,7 @@ export function createAction(): Action {
             await fn();
             return true;
         } catch (err) {
-            setFailure({ title, message: errorMessage(err) });
+            setFailure({ title, message: message(err) });
             return false;
         } finally {
             setRunning((n) => n - 1);

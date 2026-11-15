@@ -27,9 +27,14 @@ export default defineConfig({
         // does nothing). Fonts opt out per-URL with ?no-inline in
         // src/styles/fonts.css — do not remove those markers.
         lib: {
-            entry: path.resolve(__dirname, "src/index.ts"),
-            name: "PaperUI",
-            fileName: (format) => format === "es" ? "paperui.es.js" : "paperui.cjs",
+            // headless is the part that loads without a page (no component,
+            // no CSS); the modules both entries share land in one chunk, so
+            // each is one instance whichever entry imported it
+            entry: {
+                index: path.resolve(__dirname, "src/index.ts"),
+                headless: path.resolve(__dirname, "src/headless.ts"),
+            },
+            fileName: (format, entry) => `${entry === "index" ? "paperui" : entry}.${format === "es" ? "es.js" : "cjs"}`,
             formats: ["es", "cjs"],
         },
         rollupOptions: {
