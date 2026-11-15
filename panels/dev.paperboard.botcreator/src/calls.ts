@@ -4,7 +4,8 @@
 import { loadDiscord } from "./discord";
 import { MessageOps, permissionNames, searchMembers } from "./discordOps";
 import type { BotsBlocksHost } from "./blocks/bots";
-import { DEFAULT_SELECTED_PERMISSIONS, MEMBER_SEARCH_LIMIT } from "./types";
+import { MEMBER_SEARCH_LIMIT } from "./types";
+import { DEFAULT_SELECTED_PERMISSIONS } from "./permissions";
 import { byCreation, type BotSummary } from "./bots";
 import { buildGuildDetail, buildMemberSummaries } from "./explorer";
 import { discordPicture } from "./discordCdn";
@@ -139,10 +140,7 @@ export const serviceCalls = {
 };
 
 // what a widget's "Bot" dropdown offers in Home's gallery
-export const botChoices = () =>
-    [...bots.values()]
-        .sort((a, b) => a.stored.createdAt - b.stored.createdAt)
-        .map((entry) => ({ value: entry.stored.id, label: entry.stored.name }));
+export const botChoices = () => byCreation([...bots.values()].map(summary)).map((bot) => ({ value: bot.id, label: bot.name }));
 
 /** A bot a Blocks block names, or why it can't be found. */
 function blocksBot(id: unknown): BotEntry {

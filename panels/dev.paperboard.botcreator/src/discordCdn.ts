@@ -2,7 +2,7 @@
 // their own avatar, so a page never loads one itself: the service fetches it
 // from Discord's CDN, and only from there, and hands the page the bytes.
 import { fetchPublic, type PublicFetchResponse } from "@mileniumhq/paperapi/net";
-import { discordCdnBase, discordOrigins } from "./session";
+import { discordCdnBase, discordOrigins } from "./discord";
 import { errorToMessage } from "./types";
 
 const PICTURE_TYPES = new Set(["image/png", "image/jpeg", "image/gif", "image/webp"]);

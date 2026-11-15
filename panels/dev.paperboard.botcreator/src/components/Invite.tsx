@@ -13,11 +13,8 @@ import {
 } from "@mileniumhq/paperui";
 import { serviceApi } from "@mileniumhq/paperapi";
 import { PANEL_ID, type BotSummary } from "../bots";
-import {
-    PERMISSION_DEFINITIONS,
-    DEFAULT_SELECTED_PERMISSIONS,
-    errorToMessage,
-} from "../types";
+import { errorToMessage } from "../types";
+import { PERMISSION_DEFINITIONS, DEFAULT_SELECTED_PERMISSIONS } from "../permissions";
 
 export default function Invite(props: { bot: () => BotSummary }) {
     // the phone layout of the panel this page is in
