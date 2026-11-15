@@ -54,6 +54,15 @@ test("a computer list pushed while a new name is being typed keeps every compute
     expect(page.exceptions).toEqual([]);
 });
 
+// Inventory: Core contracts — a computer that refuses a panel file says why, in its own words.
+test("a panel file another computer refuses answers with that computer's reason", async () => {
+    const answer = await shell.page.evaluate<[number, string]>(
+        `fetch("/_panel/${workshop.id}/dev.example.missing/index.html").then(async (r) => [r.status, await r.text()])`,
+    );
+    expect(answer[0]).toBe(404);
+    expect(answer[1]).toMatch(/^\w+ refused dev\.example\.missing\/index\.html: File Not Found$/);
+});
+
 // Inventory: Core contracts — a check that answers late never stands for what is typed now.
 test("Add Computer: a check of an earlier address that answers late does not enable Next", async () => {
     const { page } = shell;
