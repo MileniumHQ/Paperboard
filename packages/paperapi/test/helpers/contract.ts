@@ -1,5 +1,6 @@
 // The contract of the test panel's page and service: both import this file.
-import { defineContract, shape } from "../../src/contract";
+import { defineContract } from "../../src/contract";
+import { shape } from "../../src/shape";
 
 export const NOTES = "dev.test.notes";
 

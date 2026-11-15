@@ -1,4 +1,4 @@
-import { invoke, invokeIn } from "./ipc";
+import { RPC_ROUTES } from "./ipc";
 
 // system info of whichever computer the transport is scoped to
 export interface SystemInfo {
@@ -65,20 +65,20 @@ export interface UsageReport {
 
 export const systemApi = {
     /** primary LAN IPv4 address */
-    getLocalIP: (): Promise<string> => invoke<string>("system-get-ip"),
+    getLocalIP: (): Promise<string> => RPC_ROUTES["system-get-ip"].call(undefined, {}),
 
     /** full system info */
-    getInfo: (): Promise<SystemInfo> => invoke<SystemInfo>("system-info"),
+    getInfo: (): Promise<SystemInfo> => RPC_ROUTES["system-info"].call(undefined, {}),
 
     /** GPUs of the computer, with memory where the OS reports it */
-    getGpus: (): Promise<GpuReport> => invoke<GpuReport>("system-gpus"),
+    getGpus: (): Promise<GpuReport> => RPC_ROUTES["system-gpus"].call(undefined, {}),
 
     /**
      * CPU and memory use of a computer, split by panel, with its disk,
      * network and uptime. Host only: a panel's
      * scoped token is refused.
      */
-    getUsage: (computerId?: string): Promise<UsageReport> => invokeIn<UsageReport>(computerId, "system-usage"),
+    getUsage: (computerId?: string): Promise<UsageReport> => RPC_ROUTES["system-usage"].call(computerId, {}),
 };
 
 export const system = systemApi;

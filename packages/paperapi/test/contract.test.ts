@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, setDefaultTimeout, test } from "bun:test";
 import { blocksApi } from "../src/blocks";
-import { defineContract, serviceClient, shape, type ServiceClient } from "../src/contract";
+import { defineContract, serviceClient, type ServiceClient } from "../src/contract";
+import { shape } from "../src/shape";
 import { closeTransport, getTransport } from "../src/ipc";
 import { STATE_EVENT, callBlockId } from "../src/serviceCalls";
 import { NOTES, notesContract } from "./helpers/contract";

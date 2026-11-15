@@ -198,7 +198,7 @@ describe("remote-computer traffic never leaks outside its tunnel", () => {
 
     test("a closed or refused tunnel sends no plain frame, and later calls wait for a new tunnel", async () => {
         const t = transport({ computerId: "remote-1" });
-        await t.call("ping", {});
+        await t.call("term:write", { id: "ping", data: "" });
         const firstTunnel = (await server.next("the first tunnel", (f) => f.msg?.type === "remote:open")).msg.id;
 
         server.refuseTunnels = true;
@@ -213,7 +213,8 @@ describe("remote-computer traffic never leaks outside its tunnel", () => {
         expect(plainRequests()).toEqual([]);
 
         server.refuseTunnels = false;
-        expect(await t.call("file:read", { targetPath: "y" })).toEqual({});
+        server.answer = (action) => (action === "file:read" ? { content: null } : {});
+        expect(await t.call("file:read", { targetPath: "y" })).toEqual({ content: null });
         const read = await server.next("file:read inside the new tunnel", (f) => f.msg?.action === "file:read");
         expect(read.tunnel).not.toBeNull();
         expect(read.tunnel).not.toBe(firstTunnel);
@@ -222,7 +223,7 @@ describe("remote-computer traffic never leaks outside its tunnel", () => {
 
     test("a tunnel that closes and can't reopen is reported, then reopens and replays attaches on its own", async () => {
         const t = transport({ computerId: "remote-1" });
-        await t.call("ping", {});
+        await t.call("term:write", { id: "ping", data: "" });
         t.trackProcess("proc-1");
         const firstTunnel = (await server.next("the first tunnel", (f) => f.msg?.type === "remote:open")).msg.id;
         const heard = (what: string, match: (s: { connected: boolean; error?: string }) => boolean) =>
@@ -259,7 +260,7 @@ describe("remote-computer traffic never leaks outside its tunnel", () => {
 
     test("after a socket drop it reconnects, reopens the tunnel and replays terminal attaches through it", async () => {
         const t = transport({ computerId: "remote-1" });
-        await t.call("ping", {});
+        await t.call("term:write", { id: "ping", data: "" });
         t.trackTerminal("term-1");
         await server.dropConnections();
         const reopened = await server.next("the tunnel on the new socket", (f) => f.conn === 1 && f.msg?.type === "remote:open");
@@ -541,7 +542,7 @@ describe("failures reach the caller", () => {
         await initPaperApi({ port: server.port, token: server.token });
         server.answer = (action) => {
             if (action === "process:run") throw new Error("env PATH is not allowed");
-            return {};
+            return action === "system:ip" ? { ip: "10.0.0.2" } : {};
         };
         const unhandled: unknown[] = [];
         const onUnhandled = (reason: unknown) => unhandled.push(reason);

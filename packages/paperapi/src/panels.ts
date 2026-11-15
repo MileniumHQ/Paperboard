@@ -1,4 +1,5 @@
-import { invokeIn } from "./ipc";
+import { RPC_ROUTES } from "./ipc";
+import { panelInstallParams } from "./transport/params";
 import { REGISTRY_URL, fetchRegistryIndex } from "./config";
 import { mergeRegistryWithInstalled, type PanelItem } from "./panelMerge";
 
@@ -22,10 +23,10 @@ export interface InvalidPanel {
 // bound, else the one this context was granted (identity.ts)
 export const panelsApi = {
     list: (scope?: string): Promise<PanelItem[]> =>
-        invokeIn<PanelItem[]>(scope, "panels-list"),
+        RPC_ROUTES["panels-list"].call(scope, {}),
     /** every installed panel: the ones that load, and the ones whose manifest is broken, with why */
     listInstalled: (scope?: string): Promise<{ panels: PanelItem[]; invalid: InvalidPanel[] }> =>
-        invokeIn(scope, "panels-list-installed"),
+        RPC_ROUTES["panels-list-installed"].call(scope, {}),
 
     /** merges registry index with installed panels */
     registry: async (scope?: string): Promise<PanelItem[]> => {
@@ -52,8 +53,8 @@ export const panelsApi = {
     },
 
     /** resolves with the installed panel's manifest */
-    install: (panelId: string, scope?: string): Promise<PanelItem> =>
-        invokeIn<PanelItem>(scope, "panel-install", panelId),
+    install: async (panelId: string, scope?: string): Promise<PanelItem> =>
+        RPC_ROUTES["panel-install"].call(scope, await panelInstallParams(panelId)),
     /**
      * Removes the panel's code. Config, files and saved credentials are
      * kept unless `deleteData` is explicitly true. Rejects when the panel
@@ -66,10 +67,10 @@ export const panelsApi = {
         scope?: string,
         options?: { deleteData?: boolean },
     ): Promise<UninstallResult> =>
-        invokeIn<UninstallResult>(scope, "panel-uninstall", panelId, options?.deleteData === true),
+        RPC_ROUTES["panel-uninstall"].call(scope, { panelId, deleteData: options?.deleteData === true }),
     /** Restarts the panel's service; false when it declares none. */
     restartService: (panelId: string, scope?: string): Promise<boolean> =>
-        invokeIn<boolean>(scope, "panel-restart-service", panelId),
+        RPC_ROUTES["panel-restart-service"].call(scope, { panelId }),
 };
 
 export const panels = panelsApi;

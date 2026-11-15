@@ -3,7 +3,8 @@
 // panel. The service, or the page, reports one; the computer's Paperboard
 // Server keeps the newest few of each panel; the shell shows them by the
 // panel's name until they are fixed or dismissed.
-import { getTransport, invokeIn } from "./ipc";
+import { getTransport, RPC_ROUTES } from "./ipc";
+import type { EventPayload, RpcParams } from "./protocol";
 import { newClientId } from "./channels";
 import { errorCode, errorMessage } from "./errors";
 import { requirePanelId } from "./panelIdentity";
@@ -11,7 +12,8 @@ import { clipProblemReport, PROBLEMS_EVENT, problemKey, readProblemReport, type 
 
 export { PROBLEMS_PER_PANEL, type PanelProblem, type ProblemReport } from "./problemShape";
 
-type Op = { action: "problems:report" | "problems:clear"; params: Record<string, unknown> };
+type Op = { action: "problems:report"; params: RpcParams<"problems:report"> } | { action: "problems:clear"; params: RpcParams<"problems:clear"> };
+type ProblemsChange = EventPayload<typeof PROBLEMS_EVENT>;
 
 // how long a report that could not reach the daemon waits before it tries
 // again, doubling each time
@@ -52,7 +54,8 @@ class Delivery {
         while (this.waiting.size > 0) {
             const [slot, op] = this.waiting.entries().next().value!;
             try {
-                await getTransport(this.scope).call(op.action, op.params);
+                const transport = getTransport(this.scope);
+                await (op.action === "problems:report" ? transport.call(op.action, op.params) : transport.call(op.action, op.params));
                 this.failures = 0;
             } catch (err) {
                 if (!REFUSALS.has(errorCode(err) ?? "")) {
@@ -83,11 +86,6 @@ function delivery(scope: string | undefined): Delivery {
 const slotOf = (panelId: string, key: string) => `${panelId}\u0000${key}`;
 const isPanels = (panelId: string) => (slot: string) => slot.startsWith(`${panelId}\u0000`);
 
-function problemList(value: unknown): PanelProblem[] {
-    if (!Array.isArray(value)) throw new Error("The Paperboard Server answered a problem list with something that is not one");
-    return value as PanelProblem[];
-}
-
 /**
  * Follows problems as they change: `heard` takes each change, `list` reads
  * them whole. The whole list is read once the event is heard
@@ -95,7 +93,7 @@ function problemList(value: unknown): PanelProblem[] {
  * missed. A read that fails goes to onError, and is tried at the next
  * reconnect.
  */
-function follow<T>(scope: string | undefined, list: () => Promise<T>, heard: (payload: any) => void, got: (value: T) => void, onError: (err: unknown) => void): () => void {
+function follow<T>(scope: string | undefined, list: () => Promise<T>, heard: (change: ProblemsChange) => void, got: (value: T) => void, onError: (err: unknown) => void): () => void {
     const transport = getTransport(scope);
     let live = true;
     let request = 0;
@@ -112,8 +110,8 @@ function follow<T>(scope: string | undefined, list: () => Promise<T>, heard: (pa
     // the daemon answers a read and sends its events in the order they
     // happen, on this one connection: an event heard after a read's answer
     // is newer than it
-    const off = transport.subscribeSource(PROBLEMS_EVENT, (payload) => {
-        if (live) heard(payload);
+    const off = transport.subscribeEvent(PROBLEMS_EVENT, (change) => {
+        if (live) heard(change);
     });
     const status = (s: { connected: boolean }) => {
         if (s.connected) void read();
@@ -158,7 +156,7 @@ export const problemsApi = {
 
     /** The panel's problems, the one reported longest ago first. */
     list: async (panelId: string, scope?: string): Promise<PanelProblem[]> =>
-        problemList(await invokeIn(scope, "problems-list", { panelId: requirePanelId(panelId) })),
+        RPC_ROUTES["problems-list"].call(scope, { panelId: requirePanelId(panelId) }),
 
     /**
      * Hears the panel's problems, whole, now and each time they change.
@@ -170,8 +168,8 @@ export const problemsApi = {
         return follow(
             scope,
             () => problemsApi.list(owner, scope),
-            (payload) => {
-                if (payload?.panelId === owner) listener(problemList(payload.problems));
+            (change) => {
+                if (change.panelId === owner) listener(change.problems);
             },
             listener,
             onError,
@@ -186,13 +184,11 @@ export const problemsApi = {
         let byPanel: Record<string, PanelProblem[]> = {};
         return follow(
             scope,
-            async () => (await invokeIn<{ panels: Record<string, PanelProblem[]> }>(scope, "problems-every")).panels,
-            (payload) => {
-                if (typeof payload?.panelId !== "string") return;
+            () => RPC_ROUTES["problems-every"].call(scope, {}),
+            (change) => {
                 const next = { ...byPanel };
-                const problems = problemList(payload.problems);
-                if (problems.length > 0) next[payload.panelId] = problems;
-                else delete next[payload.panelId];
+                if (change.problems.length > 0) next[change.panelId] = change.problems;
+                else delete next[change.panelId];
                 listener((byPanel = next));
             },
             (all) => listener((byPanel = all)),

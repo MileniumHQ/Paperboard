@@ -1,4 +1,4 @@
-import { invoke } from "./ipc";
+import { RPC_ROUTES } from "./ipc";
 
 function assertVaultArg(value: unknown, what: string): asserts value is string {
     if (typeof value !== "string" || value.length === 0) {
@@ -18,31 +18,31 @@ export const secretsApi = {
         if (typeof value !== "string") {
             throw new Error("[paperapi] secrets API requires a string secret value");
         }
-        return invoke<true>("secrets-set", { name, value, panelId });
+        return RPC_ROUTES["secrets-set"].call(undefined, { name, value, panelId });
     },
 
     get: (name: string, panelId: string): Promise<{ found: boolean; value: string | null }> => {
         assertVaultArg(name, "secret name");
         assertVaultArg(panelId, "panelId");
-        return invoke<{ found: boolean; value: string | null }>("secrets-get", { name, panelId });
+        return RPC_ROUTES["secrets-get"].call(undefined, { name, panelId });
     },
 
     delete: (name: string, panelId: string): Promise<boolean> => {
         assertVaultArg(name, "secret name");
         assertVaultArg(panelId, "panelId");
-        return invoke<boolean>("secrets-delete", { name, panelId });
+        return RPC_ROUTES["secrets-delete"].call(undefined, { name, panelId });
     },
 
     // names only, never values, and only the calling panel's keys: there
     // is no cross-panel widening flag on the wire
     list: (panelId: string): Promise<string[]> => {
         assertVaultArg(panelId, "panelId");
-        return invoke<string[]>("secrets-list", { panelId });
+        return RPC_ROUTES["secrets-list"].call(undefined, { panelId });
     },
 
     purge: (panelId: string): Promise<number> => {
         assertVaultArg(panelId, "panelId");
-        return invoke<number>("secrets-purge", { panelId });
+        return RPC_ROUTES["secrets-purge"].call(undefined, { panelId });
     },
 };
 

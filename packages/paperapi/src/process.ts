@@ -1,4 +1,5 @@
-import { invoke, send, on, type StreamSubscription } from "./ipc";
+import { RPC_ROUTES, send, on, type StreamSubscription } from "./ipc";
+import { processRunParams } from "./transport/params";
 import { newClientId } from "./channels";
 import { errorMessage } from "./errors";
 
@@ -97,8 +98,8 @@ function onText(stream: "process-data" | "process-stdout" | "process-stderr", id
 // supervised background processes
 export const processApi = {
     // the router shapes the wire params, one place for every start option
-    start: async (options: ProcessStartOptions): Promise<{ success: boolean }> =>
-        invoke("process-start", options),
+    start: (options: ProcessStartOptions): Promise<{ success: boolean }> =>
+        RPC_ROUTES["process-start"].call(undefined, processRunParams(options)),
 
     write: (id: string, data: string): Promise<void> =>
         send("process-write", { id, data }),
@@ -110,8 +111,7 @@ export const processApi = {
     kill: (id: string, signal: string = "SIGTERM"): Promise<void> =>
         send("process-kill", { id, signal }),
 
-    exists: async (id: string): Promise<boolean> =>
-        invoke<boolean>("process-exists", { id }),
+    exists: (id: string): Promise<boolean> => RPC_ROUTES["process-exists"].call(undefined, { id }),
 
     /**
      * Stops a supervised process: SIGTERM, then SIGKILL if it is still running
@@ -121,8 +121,7 @@ export const processApi = {
      */
     stop: (id: string, options?: Pick<StopProcessOptions, "graceMs">): Promise<void> => stopProcess(id, options),
 
-    attach: async (id: string): Promise<{ success: boolean }> =>
-        invoke<{ success: boolean }>("process-attach", { id }),
+    attach: (id: string): Promise<{ success: boolean }> => RPC_ROUTES["process-attach"].call(undefined, { id }),
 
     onData: (id: string, callback: (data: string) => void): StreamSubscription => onText("process-data", id, callback),
 
@@ -185,13 +184,7 @@ export const processApi = {
         });
 
         try {
-            await invoke<{ success: boolean }>("process-run", {
-                id,
-                command: options.command,
-                args: options.args || [],
-                cwd: options.cwd,
-                env: options.env,
-            });
+            await RPC_ROUTES["process-run"].call(undefined, processRunParams<ProcessStartOptions>({ id, command: options.command, args: options.args, cwd: options.cwd, env: options.env }));
             startDeadline();
             return await exitPromise;
         } finally {

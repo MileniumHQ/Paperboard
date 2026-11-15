@@ -3,7 +3,6 @@ import { debugErr } from "./debug";
 import {
     type ActionDefinition,
     type ActionSchema,
-    type CustomTypeDefinition,
     defineType,
     listTypes,
     isTypeCompatible,
@@ -298,7 +297,7 @@ export const actionsApi = {
         const transport = getTransport();
         await transport.ensureConnected();
         const res = await transport.call("actions:projects", { panelId: filterPanelId });
-        return (res?.projects || []) as ProjectInfo[];
+        return res.projects;
     },
 
     /**
@@ -315,14 +314,9 @@ export const actionsApi = {
      */
     onRegistryChange: (callback: (data?: any) => void): (() => void) => {
         const transport = getTransport();
-        const listener = (data: any) => {
-            callback(data);
-        };
-        transport.subscribeEvent("actions:registry-updated", listener);
+        const off = transport.subscribeEvent("actions:registry-updated", (change) => callback(change));
         transport.ensureConnected().catch((err) => debugErr("ensure connected on subscribe", err));
-        return () => {
-            transport.unsubscribeEvent("actions:registry-updated", listener);
-        };
+        return off;
     },
 
     /**
@@ -336,7 +330,7 @@ export const actionsApi = {
         const res = await transport.call("actions:list", {
             panelId: filterPanelId,
         });
-        return (res?.actions || []) as ActionInfo[];
+        return res.actions;
     },
 
     /**
@@ -415,13 +409,9 @@ export const actionsApi = {
         }
 
         const source = `actions:${targetPanel}:${targetEvent}`;
-        const scopedListener = (payload: any) => callback(payload);
-        transport.subscribeEvent(source, scopedListener);
+        const off = transport.subscribeEvent(source, (payload) => callback(payload));
         transport.ensureConnected().catch((err) => debugErr("ensure connected on subscribe", err));
-
-        return () => {
-            transport.unsubscribeEvent(source, scopedListener);
-        };
+        return off;
     },
 
     /**
@@ -469,13 +459,13 @@ export const actionsApi = {
         }
 
         const source = `triggers:${targetPanel}:${targetTrigger}`;
-        const scopedListener = (output: T) => callback(output, { panelId: targetPanel, trigger: targetTrigger, output });
-        transport.subscribeEvent(source, scopedListener);
+        // a trigger's output is what the panel that fired it said; T is what its listener reads it as
+        const off = transport.subscribeEvent(source, (fired) => {
+            const output = fired as T;
+            callback(output, { panelId: targetPanel, trigger: targetTrigger, output });
+        });
         transport.ensureConnected().catch((err) => debugErr("ensure connected on subscribe", err));
-
-        return () => {
-            transport.unsubscribeEvent(source, scopedListener);
-        };
+        return off;
     },
 };
 

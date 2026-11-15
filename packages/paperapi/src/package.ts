@@ -1,4 +1,4 @@
-import { invoke } from "./ipc";
+import { RPC_ROUTES } from "./ipc";
 import { followProgress } from "./progress";
 import { newClientId } from "./channels";
 
@@ -22,7 +22,8 @@ export interface InstalledPackageRecord {
 export interface PendingPackageUpdate {
     name: string;
     version: string;
-    blockedBy: Array<{ processId: string; owner: string | null }>;
+    /** what runs from the current release; holds: it is important or long running, and the update waits for it (left out by a Paperboard Server before 0.4) */
+    blockedBy: Array<{ processId: string; owner: string | null; holds?: boolean }>;
     error?: string;
 }
 
@@ -35,7 +36,7 @@ export const packageApi = {
         const downloadId = newClientId(packageName);
         const off = onProgress ? followProgress(`package-progress:${downloadId}`, onProgress) : undefined;
         try {
-            return await invoke<string>("package-download", { packageName, downloadId });
+            return await RPC_ROUTES["package-download"].call(undefined, { packageName, downloadId });
         } catch (err) {
             off?.();
             throw err;
@@ -43,20 +44,20 @@ export const packageApi = {
     },
 
     isInstalled: (packageName: string, version?: string): Promise<boolean> =>
-        invoke<boolean>("package-is-installed", { packageName, version }),
+        RPC_ROUTES["package-is-installed"].call(undefined, { packageName, version }),
 
     getIndex: (): Promise<Record<string, InstalledPackageRecord | string>> =>
-        invoke<Record<string, InstalledPackageRecord | string>>("package-get-index"),
+        RPC_ROUTES["package-get-index"].call(undefined, {}),
 
     getPath: (packageName: string): Promise<string> =>
-        invoke<string>("package-get-path", packageName),
+        RPC_ROUTES["package-get-path"].call(undefined, { packageName }),
 
     /**
      * Updates the caller's own processes hold back. Stop those processes and
      * the daemon installs the update; starting one again picks it up.
      */
     pendingUpdates: (): Promise<PendingPackageUpdate[]> =>
-        invoke<PendingPackageUpdate[]>("package-pending"),
+        RPC_ROUTES["package-pending"].call(undefined, {}),
 };
 
 export const packages = packageApi;

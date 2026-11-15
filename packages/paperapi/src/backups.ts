@@ -3,7 +3,8 @@
 // for the panel: this computer, an S3-compatible bucket, or Google Drive.
 // The user chooses the location in a window Paperboard shows; a panel can
 // open it with chooseLocation, never set it itself.
-import { getTransport, invokeIn } from "./ipc";
+import { getTransport, RPC_ROUTES } from "./ipc";
+import type { BackupStatusAnswer } from "./protocol";
 import { BACKUP_PROGRESS_EVENT } from "./channels";
 import { requirePanelId } from "./panelIdentity";
 import { requestShell } from "./shellRequest";
@@ -132,10 +133,10 @@ export function backupProgressText(progress: Pick<BackupProgress, "step" | "done
 // one listener per panel (and source) on the computer's backup event
 function listenProgress(scope: string | undefined, panelId: string, sourceId: string | null | undefined, listener: (change: BackupProgressChange) => void): () => void {
     const transport = getTransport(scope);
-    const off = transport.subscribeSource(BACKUP_PROGRESS_EVENT, (payload: any) => {
-        if (payload?.panelId !== panelId) return;
-        if (sourceId !== undefined && (payload.sourceId ?? null) !== sourceId) return;
-        listener({ panelId: payload.panelId, sourceId: payload.sourceId ?? null, progress: payload.progress ?? null });
+    const off = transport.subscribeEvent(BACKUP_PROGRESS_EVENT, (change) => {
+        if (change.panelId !== panelId) return;
+        if (sourceId !== undefined && (change.sourceId ?? null) !== sourceId) return;
+        listener({ panelId: change.panelId, sourceId: change.sourceId ?? null, progress: change.progress ?? null });
     });
     // the event flows only to a connected socket that declared it
     // quiet: the transport's status tells the page it is offline, and its next connect declares the event again
@@ -184,7 +185,7 @@ function named(location: BackupLocation | null): BackupLocation | null {
     return location && { ...location, label: backupLocationLabel(location, currentFrameSession()?.computerName) };
 }
 
-const status = (r: any): BackupStatus => ({ location: named(r?.destination ?? null), running: r?.running ?? null, progress: r?.progress ?? null, schedule: r?.schedule ?? null });
+const status = (r: BackupStatusAnswer): BackupStatus => ({ location: named(r.destination ?? null), running: r.running ?? null, progress: r.progress ?? null, schedule: r.schedule ?? null });
 
 /** A named subset of a panel's files and config, with its own backup history. */
 export interface BackupSource {
@@ -207,16 +208,16 @@ function requireSourceId(value: unknown): string {
 
 export const backupApi = {
     defineSource: (appId: string, source: BackupSource, scope?: string): Promise<void> =>
-        invokeIn<void>(scope, "backup-source-define", { panelId: requirePanelId(appId), source }),
+        RPC_ROUTES["backup-source-define"].call(scope, { panelId: requirePanelId(appId), source }),
     forSource: (appId: string, sourceId: string, scope?: string) => {
         const identity = { panelId: requirePanelId(appId), sourceId: requireSourceId(sourceId) };
         return {
-            status: async (): Promise<BackupStatus> => status(await invokeIn(scope, "backup-status", identity)),
-            list: (): Promise<BackupRecord[]> => invokeIn(scope, "backup-list", identity),
-            create: (options: { label?: string } = {}): Promise<BackupRecord> => invokeIn(scope, "backup-create", { ...identity, label: options.label }),
-            restore: (backupId: string): Promise<BackupRecord> => invokeIn(scope, "backup-restore", { ...identity, backupId }),
-            delete: (backupId: string): Promise<void> => invokeIn(scope, "backup-delete", { ...identity, backupId }),
-            setSchedule: async (schedule: { everyHours: BackupSchedule["everyHours"]; keep: number } | null): Promise<BackupStatus> => status(await invokeIn(scope, "backup-schedule-set", { ...identity, schedule })),
+            status: async (): Promise<BackupStatus> => status(await RPC_ROUTES["backup-status"].call(scope, identity)),
+            list: (): Promise<BackupRecord[]> => RPC_ROUTES["backup-list"].call(scope, identity),
+            create: (options: { label?: string } = {}): Promise<BackupRecord> => RPC_ROUTES["backup-create"].call(scope, { ...identity, label: options.label }),
+            restore: (backupId: string): Promise<BackupRecord> => RPC_ROUTES["backup-restore"].call(scope, { ...identity, backupId }),
+            delete: (backupId: string): Promise<void> => RPC_ROUTES["backup-delete"].call(scope, { ...identity, backupId }),
+            setSchedule: async (schedule: { everyHours: BackupSchedule["everyHours"]; keep: number } | null): Promise<BackupStatus> => status(await RPC_ROUTES["backup-schedule-set"].call(scope, { ...identity, schedule })),
             chooseLocation: (): Promise<ChooseBackupLocationResult> => backupApi.chooseLocation(appId, sourceId),
             /** hears this source's running backup or restore move on, and end */
             onProgress: (listener: (change: BackupProgressChange) => void): (() => void) =>
@@ -225,12 +226,12 @@ export const backupApi = {
     },
     /** where this panel's backups go, and whether one is running */
     status: async (appId: string, scope?: string): Promise<BackupStatus> =>
-        status(await invokeIn(scope, "backup-status", { panelId: requirePanelId(appId) })),
+        status(await RPC_ROUTES["backup-status"].call(scope, { panelId: requirePanelId(appId) })),
 
     /** every backup or restore running now for the panel's data, its
      * named sources included */
     progress: (appId: string, scope?: string): Promise<BackupProgress[]> =>
-        invokeIn<BackupProgress[]>(scope, "backup-progress", { panelId: requirePanelId(appId) }),
+        RPC_ROUTES["backup-progress"].call(scope, { panelId: requirePanelId(appId) }),
 
     /** hears the panel's running backups and restores (its named sources
      * included) move on a step, and end; returns the unsubscribe */
@@ -240,24 +241,24 @@ export const backupApi = {
     /** backs up the panel's files and config now. The panel's service is
      * stopped while its data is copied, then started again. */
     create: (appId: string, options: { label?: string } = {}, scope?: string): Promise<BackupRecord> =>
-        invokeIn<BackupRecord>(scope, "backup-create", { panelId: requirePanelId(appId), label: options.label }),
+        RPC_ROUTES["backup-create"].call(scope, { panelId: requirePanelId(appId), label: options.label }),
 
     /** newest first */
     list: (appId: string, scope?: string): Promise<BackupRecord[]> =>
-        invokeIn<BackupRecord[]>(scope, "backup-list", { panelId: requirePanelId(appId) }),
+        RPC_ROUTES["backup-list"].call(scope, { panelId: requirePanelId(appId) }),
 
     /** replaces the panel's files and config with the backup's */
     restore: (appId: string, backupId: string, scope?: string): Promise<BackupRecord> =>
-        invokeIn<BackupRecord>(scope, "backup-restore", { panelId: requirePanelId(appId), backupId }),
+        RPC_ROUTES["backup-restore"].call(scope, { panelId: requirePanelId(appId), backupId }),
 
     delete: (appId: string, backupId: string, scope?: string): Promise<void> =>
-        invokeIn<void>(scope, "backup-delete", { panelId: requirePanelId(appId), backupId }),
+        RPC_ROUTES["backup-delete"].call(scope, { panelId: requirePanelId(appId), backupId }),
 
     /** turns routine backups on, changes them, or (with null) turns them
      * off. The first runs one interval from now; a backup location must be
      * chosen first. Changing only `keep` leaves the next one when it was. */
     setSchedule: async (appId: string, schedule: { everyHours: BackupSchedule["everyHours"]; keep: number } | null, scope?: string): Promise<BackupStatus> =>
-        status(await invokeIn(scope, "backup-schedule-set", { panelId: requirePanelId(appId), schedule })),
+        status(await RPC_ROUTES["backup-schedule-set"].call(scope, { panelId: requirePanelId(appId), schedule })),
 
     /** shows Paperboard's backup location window for this panel. Call it
      * from the panel page, not a widget. */
@@ -284,19 +285,19 @@ export type NewBackupLocation =
 /** Paperboard's own settings: the locations a computer offers. These need
  * the host's credential; a panel's is refused. */
 export const backupLocationsApi = {
-    list: (scope?: string): Promise<BackupLocation[]> => invokeIn<BackupLocation[]>(scope, "backup-locations"),
+    list: (scope?: string): Promise<BackupLocation[]> => RPC_ROUTES["backup-locations"].call(scope, {}),
     /** why the computer's locations file cannot be used; null when it can */
-    problem: (scope?: string): Promise<string | null> => invokeIn<string | null>(scope, "backup-locations-problem"),
+    problem: (scope?: string): Promise<string | null> => RPC_ROUTES["backup-locations-problem"].call(scope, {}),
     /** sets an unreadable locations file aside (it is kept) and starts a
      * fresh list; panels that used a location choose again */
-    recover: (scope?: string): Promise<{ keptAs: string }> => invokeIn<{ keptAs: string }>(scope, "backup-locations-recover"),
+    recover: (scope?: string): Promise<{ keptAs: string }> => RPC_ROUTES["backup-locations-recover"].call(scope, {}),
     usage: (locationId: string, scope?: string): Promise<BackupLocationUsage> =>
-        invokeIn<BackupLocationUsage>(scope, "backup-location-usage", { destinationId: locationId }),
+        RPC_ROUTES["backup-location-usage"].call(scope, { destinationId: locationId }),
     add: (location: NewBackupLocation, scope?: string): Promise<BackupLocation> =>
-        invokeIn<BackupLocation>(scope, "backup-location-add", { destination: location }),
+        RPC_ROUTES["backup-location-add"].call(scope, { destination: location }),
     remove: (locationId: string, scope?: string): Promise<void> =>
-        invokeIn<void>(scope, "backup-location-remove", { destinationId: locationId }),
+        RPC_ROUTES["backup-location-remove"].call(scope, { destinationId: locationId }),
     /** null clears the panel's choice */
     setForPanel: async (panelId: string, locationId: string | null, scope?: string, sourceId?: string): Promise<BackupStatus> =>
-        status(await invokeIn(scope, "backup-panel-location-set", { panelId: requirePanelId(panelId), destinationId: locationId, sourceId })),
+        status(await RPC_ROUTES["backup-panel-location-set"].call(scope, { panelId: requirePanelId(panelId), destinationId: locationId, sourceId })),
 };

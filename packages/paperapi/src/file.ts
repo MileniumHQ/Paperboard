@@ -1,4 +1,5 @@
-import { invoke } from "./ipc";
+import { RPC_ROUTES } from "./ipc";
+import { fileDownloadParams } from "./transport/params";
 import { followProgress } from "./progress";
 import { newClientId } from "./channels";
 import { requirePanelId } from "./panelIdentity";
@@ -43,15 +44,7 @@ export const fileApi = {
         const off = opts.onProgress ? followProgress(`file-progress:${downloadId}`, opts.onProgress) : undefined;
 
         try {
-            return await invoke("file-download", {
-                url: opts.url,
-                targetPath: opts.targetPath,
-                appId,
-                downloadId,
-                sha1: opts.sha1,
-                sha256: opts.sha256,
-                checksum: opts.checksum,
-            });
+            return await RPC_ROUTES["file-download"].call(undefined, fileDownloadParams({ ...opts, appId, downloadId }));
         } catch (err) {
             off?.();
             throw err;
@@ -59,22 +52,22 @@ export const fileApi = {
     },
 
     getPath: (targetPath: string, appId: string): Promise<string> =>
-        invoke("file-get-path", { targetPath, appId: owner(appId) }),
+        RPC_ROUTES["file-get-path"].call(undefined, { targetPath, appId: owner(appId) }),
 
     exists: (targetPath: string, appId: string): Promise<boolean> =>
-        invoke("file-exists", { targetPath, appId: owner(appId) }),
+        RPC_ROUTES["file-exists"].call(undefined, { targetPath, appId: owner(appId) }),
 
     write: (targetPath: string, content: string, appId: string): Promise<string> =>
-        invoke("file-write", { targetPath, content, appId: owner(appId) }),
+        RPC_ROUTES["file-write"].call(undefined, { targetPath, content, appId: owner(appId) }),
 
     read: (targetPath: string, appId: string): Promise<string | null> =>
-        invoke("file-read", { targetPath, appId: owner(appId) }),
+        RPC_ROUTES["file-read"].call(undefined, { targetPath, appId: owner(appId) }),
 
     delete: (targetPath: string, appId: string): Promise<boolean> =>
-        invoke("file-delete", { targetPath, appId: owner(appId) }),
+        RPC_ROUTES["file-delete"].call(undefined, { targetPath, appId: owner(appId) }),
 
     clear: (appId: string): Promise<boolean> =>
-        invoke("file-clear", { appId: owner(appId) }),
+        RPC_ROUTES["file-clear"].call(undefined, { appId: owner(appId) }),
 
     /** asks the user where to save a copy of sourcePath from the panel's storage */
     exportFile,

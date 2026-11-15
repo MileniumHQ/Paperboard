@@ -1,4 +1,4 @@
-import { invokeIn } from "./ipc";
+import { RPC_ROUTES } from "./ipc";
 import {
     REGISTRY_INDEX_MAX_BYTES,
     REGISTRY_INDEX_TIMEOUT_MS,
@@ -43,11 +43,14 @@ function requireConfigId(id: unknown): string {
 // the panel's own files dir, files/<panelId>/<path>.json. Values are JSON
 // and bounded; workspaces are not a blob store.
 export const config = {
-    get: <T = any>(id: string, path?: string, scope?: string): Promise<T> =>
-        invokeIn<T>(scope, "config-get", { id: requireConfigId(id), path }),
+    get: async <T = any>(id: string, path?: string, scope?: string): Promise<T> => {
+        // the document as it was saved: T is what its caller reads it as
+        const data: unknown = await RPC_ROUTES["config-get"].call(scope, { id: requireConfigId(id), path });
+        return data as T;
+    },
     /** resolves with true once the value is written; a failed write rejects */
     set: (data: any, id: string, path?: string, scope?: string): Promise<true> =>
-        invokeIn<true>(scope, "config-set", { id: requireConfigId(id), data, path }),
+        RPC_ROUTES["config-set"].call(scope, { id: requireConfigId(id), data, path }),
 };
 
 export const configApi = config;

@@ -40,7 +40,7 @@
         "./panelMerge": "./src/panelMerge.ts",
         "./panelPath": "./src/panelPath.ts",
         "./problemShape": "./src/problemShape.ts",
-        "./protocol": "./src/protocol.ts",
+        "./protocol": "./src/protocol/index.ts",
         "./registryFetch": "./src/registryFetch.ts",
         "./serialQueue": "./src/serialQueue.ts",
         "./storeListing": "./src/storeListing.ts",

@@ -134,9 +134,11 @@ async function subscribe(options: MonitorOptions, onRecord: (record: MonitorReco
     connection.onFrame((frame) => {
         if (frame?.type === MONITOR_FRAME && frame.record) onRecord(frame.record as MonitorRecord);
     });
-    let answer: { protocol?: unknown };
+    let protocol: unknown;
     try {
-        answer = await connection.request(MONITOR_SUBSCRIBE, options.panel ? { panelId: options.panel } : {});
+        // the monitor speaks its own protocol (monitorProtocol.ts), versioned in its answer
+        const answer = await connection.request(MONITOR_SUBSCRIBE, options.panel ? { panelId: options.panel } : {});
+        protocol = typeof answer === "object" && answer !== null && "protocol" in answer ? answer.protocol : undefined;
     } catch (err) {
         connection.close();
         if (err instanceof DaemonError && err.code === "NOT_FOUND") {
@@ -147,10 +149,10 @@ async function subscribe(options: MonitorOptions, onRecord: (record: MonitorReco
         }
         throw err;
     }
-    if (answer?.protocol !== MONITOR_PROTOCOL) {
+    if (protocol !== MONITOR_PROTOCOL) {
         connection.close();
         throw new CliError(
-            `The Paperboard on ${connection.address} speaks monitor protocol ${String(answer?.protocol)}, this paperapi speaks ${MONITOR_PROTOCOL}`,
+            `The Paperboard on ${connection.address} speaks monitor protocol ${String(protocol)}, this paperapi speaks ${MONITOR_PROTOCOL}`,
             "Update whichever of the two is older.",
         );
     }

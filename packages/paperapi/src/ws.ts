@@ -1,6 +1,6 @@
 // WebSocket transport bound to one computer; remote frames ride a tunnel or fail
 import { debug, debugErr } from "./debug";
-import { PROTOCOL_VERSION } from "./protocol";
+import { PROTOCOL_VERSION, readEvent, readResult, type EventPayload, type RpcAction, type RpcParams, type RpcResult } from "./protocol";
 import { newClientId } from "./channels";
 import { TransportRegistry } from "./transport/registry";
 import { grantedComputerId, resolveDefaultPanelId } from "./identity";
@@ -8,6 +8,7 @@ import { resolveCredentials, type CraneCredentials, type ResolvedCredentials } f
 import { webSocketImpl, type TransportSocket } from "./transport/socket";
 import { answerActionCall, currentActionCall, loadActionCallScope } from "./transport/actionCalls";
 import { errorMessage } from "./errors";
+import type { BlockSchema } from "./blocksSchema";
 
 export { craneEndpoint, type CraneCredentials } from "./transport/credentials";
 
@@ -24,10 +25,11 @@ export interface TransportOptions {
     craneJsonPath?: string;
 }
 
-type Listener = (payload: any) => void;
+type Listener = (payload: unknown) => void;
+type StatusListener = (status: { connected: boolean; error?: string }) => void;
 
 interface Pending {
-    resolve: (v: any) => void;
+    resolve: (v: unknown) => void;
     reject: (e: Error) => void;
     timer: ReturnType<typeof setTimeout>;
 }
@@ -72,7 +74,7 @@ export class CraneTransport {
         typeof process !== "undefined" &&
         !!(process as any).versions?.node;
 
-    public statusListeners = new Set<Listener>();
+    public statusListeners = new Set<StatusListener>();
 
     constructor(opts: TransportOptions = {}) {
         this.opts = opts;
@@ -81,11 +83,11 @@ export class CraneTransport {
 
     // ── Connection lifecycle ────────────────────────────────────────────────
 
-    public onStatus(cb: Listener): void {
+    public onStatus(cb: StatusListener): void {
         this.statusListeners.add(cb);
     }
 
-    public offStatus(cb: Listener): void {
+    public offStatus(cb: StatusListener): void {
         this.statusListeners.delete(cb);
     }
 
@@ -278,7 +280,6 @@ export class CraneTransport {
         // clean slate.
         this.statusListeners.clear();
         this.listeners.clear();
-        this.sourceSubs.clear();
         this.rawListeners.clear();
         this.attachedTerminals.clear();
         this.attachedProcesses.clear();
@@ -430,7 +431,7 @@ export class CraneTransport {
         }
     }
 
-    private dispatch(event: string, payload: any): void {
+    private dispatch(event: string, payload: unknown): void {
         const set = this.listeners.get(event);
         if (!set) return;
         // per-listener isolation: one throwing panel listener must not
@@ -460,12 +461,27 @@ export class CraneTransport {
     // refuses with a typed error.
     private static readonly MAX_PENDING_CALLS = 1000;
 
-    public async call(action: string, params: Record<string, unknown> = {}, timeoutMs: number | null = 30_000): Promise<any> {
-        await this.ensureConnected();
-        return this.request(action, params, timeoutMs);
+    /** Asks the daemon; the answer is checked against the action's shape (protocol/rpc.ts). */
+    public call<A extends RpcAction>(action: A, params: RpcParams<A>, timeoutMs?: number | null): Promise<RpcResult<A>>;
+    /**
+     * @deprecated Name no type: the action's own answer type is the one above.
+     * The answer is checked all the same; T is what its caller reads it as.
+     */
+    public call<T = never>(action: RpcAction, params: [T] extends [never] ? never : Record<string, unknown>, timeoutMs?: number | null): Promise<T>;
+    public call(action: RpcAction, params: Record<string, unknown>, timeoutMs: number | null = 30_000): Promise<unknown> {
+        return this.callAsGiven(action, params, timeoutMs);
     }
 
-    private request(action: string, params: Record<string, unknown> = {}, timeoutMs: number | null = 30_000, routed = true): Promise<any> {
+    /**
+     * Asks the daemon with params as a caller of invoke() gave them, which
+     * the daemon checks; the answer is checked as call's is.
+     */
+    public async callAsGiven<A extends RpcAction>(action: A, params: Record<string, unknown>, timeoutMs: number | null = 30_000): Promise<RpcResult<A>> {
+        await this.ensureConnected();
+        return readResult(action, await this.request(action, params, timeoutMs));
+    }
+
+    private request(action: string, params: Record<string, unknown> = {}, timeoutMs: number | null = 30_000, routed = true): Promise<unknown> {
         if (this.pending.size >= CraneTransport.MAX_PENDING_CALLS) {
             throw new Error(
                 `PaperCrane transport has ${this.pending.size} outstanding calls (cap ${CraneTransport.MAX_PENDING_CALLS}); refusing to queue '${action}'`,
@@ -480,7 +496,7 @@ export class CraneTransport {
         const duringCall = currentActionCall();
         if (duringCall) params = { ...params, duringCall };
         const finalParams = { ...params, token: this.token, v: PROTOCOL_VERSION };
-        return new Promise((resolve, reject) => {
+        return new Promise<unknown>((resolve, reject) => {
             // null timeoutMs waits indefinitely (long-running operations)
             const timer =
                 timeoutMs === null
@@ -506,61 +522,29 @@ export class CraneTransport {
         });
     }
 
-    public subscribeEvent(event: string, cb: Listener): void {
+    /**
+     * Hears an event, its payload read against its shape (protocol/events.ts)
+     * first: one that doesn't fit is reported and not heard. Any number of
+     * listeners may hear one event; the daemon is told of it once. Returns
+     * the unsubscribe.
+     */
+    public subscribeEvent<E extends string>(event: E, cb: (payload: EventPayload<E>) => void): () => void {
         let set = this.listeners.get(event);
         if (!set) {
             set = new Set();
             this.listeners.set(event, set);
             this.scheduleSubSync();
         }
-        set.add(cb);
+        const listener: Listener = (payload) => cb(readEvent(event, payload));
+        set.add(listener);
+        return () => this.unsubscribeEvent(event, listener);
     }
 
-    public unsubscribeEvent(event: string, cb?: Listener): void {
-        if (!cb) {
-            if (this.listeners.delete(event)) this.scheduleSubSync();
-        } else {
-            const set = this.listeners.get(event);
-            if (!set) return;
-            set.delete(cb);
-            if (set.size <= 0) {
-                this.listeners.delete(event);
-                this.scheduleSubSync();
-            }
-        }
-    }
-
-    // fan-out for channels sharing one upstream event
-    private sourceSubs = new Map<string, Set<Listener>>();
-
-    public subscribeSource(
-        source: string,
-        cb: Listener,
-    ): () => void {
-        let set = this.sourceSubs.get(source);
-        if (!set) {
-            set = new Set();
-            this.sourceSubs.set(source, set);
-            const live = set;
-            this.subscribeEvent(source, (payload) => {
-                for (const inner of live) inner(payload);
-            });
-        }
-        set.add(cb);
-        return () => this.unsubscribeSource(source, cb);
-    }
-
-    public unsubscribeSource(
-        source: string,
-        cb: Listener,
-    ): void {
-        const set = this.sourceSubs.get(source);
-        if (!set || !set.has(cb)) return;
-        set.delete(cb);
-        if (set.size <= 0) {
-            this.unsubscribeEvent(source);
-            this.sourceSubs.delete(source);
-        }
+    private unsubscribeEvent(event: string, cb: Listener): void {
+        const set = this.listeners.get(event);
+        if (!set || !set.delete(cb) || set.size > 0) return;
+        this.listeners.delete(event);
+        this.scheduleSubSync();
     }
 
     // ── Broadcast subscription sync ──────────────────────────────────────────
@@ -691,7 +675,7 @@ export class CraneTransport {
     }
 
     /** Registers one Blocks entry ("kind.id" or "project/kind.id") and its handler. */
-    public async registerBlock(panelId: string, entry: string, handler: (...args: any[]) => Promise<any> | any, schema: unknown): Promise<void> {
+    public async registerBlock(panelId: string, entry: string, handler: (...args: any[]) => Promise<any> | any, schema: BlockSchema): Promise<void> {
         this.blocksRegistry.addAction(panelId, entry, handler, schema);
         await this.ensureConnected();
         await this.call("blocks:register", { panelId, entry, schema });

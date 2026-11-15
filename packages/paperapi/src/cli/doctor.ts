@@ -175,7 +175,7 @@ async function checkDaemon(id: string, manifest: Record<string, any>, linked: bo
         }
         // a service answers its page's state read once it has started
         try {
-            await connection.request("blocks:call", { panelId: id, entry: `value.${STATE_VALUE}`, request: { inputs: {} }, timeoutMs: 10_000 }, 15_000);
+            await connection.call("blocks:call", { panelId: id, entry: `value.${STATE_VALUE}`, request: { inputs: {} }, timeoutMs: 10_000 }, 15_000);
             checks.push({ name: "Service", status: "ok", detail: "answering" });
         } catch (err) {
             if (!(err instanceof DaemonError)) throw err;

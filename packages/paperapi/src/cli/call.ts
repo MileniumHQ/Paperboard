@@ -73,7 +73,7 @@ function describeInputs(inputs: ListedInputs | undefined): string {
 }
 
 async function listBlocks(connection: HostConnection, panel: string, output: Output): Promise<number> {
-    const { entries } = await connection.request<{ entries: ListedBlock[] }>("blocks:list", { panelId: panel });
+    const entries: ListedBlock[] = (await connection.call("blocks:list", { panelId: panel })).entries;
     const runnable = entries.filter((e) => BLOCK_ENTRY.test(e.entry));
     if (runnable.length === 0) {
         throw new CliError(
@@ -121,10 +121,10 @@ export async function runCall(panelArg: string, name: string | undefined, inputT
         if (entry === undefined) return await listBlocks(connection, panel, output);
         const request = { inputs: block ? (input ?? {}) : input === undefined ? {} : { input } };
         const started = performance.now();
-        let answer: { result?: unknown };
+        let answer: { result: unknown };
         try {
             // the daemon's own deadline answers first; this one only guards a silent socket
-            answer = await connection.request("blocks:call", { panelId: panel, entry, request, timeoutMs }, timeoutMs === null ? null : timeoutMs + 5_000);
+            answer = await connection.call("blocks:call", { panelId: panel, entry, request, timeoutMs }, timeoutMs === null ? null : timeoutMs + 5_000);
         } catch (err) {
             if (!(err instanceof DaemonError)) throw err;
             const missing = /not registered or unavailable/.test(err.message);
@@ -134,7 +134,7 @@ export async function runCall(panelArg: string, name: string | undefined, inputT
             );
         }
         output.success(`${panel} ${name} ${output.err.dim(`· ${elapsed(started)}`)}`);
-        if (answer?.result !== undefined && answer.result !== null) output.line(JSON.stringify(answer.result, null, 2));
+        if (answer.result !== undefined && answer.result !== null) output.line(JSON.stringify(answer.result, null, 2));
         return EXIT_OK;
     } finally {
         connection.close();
@@ -146,10 +146,10 @@ export async function runRestart(panelArg: string | undefined, output: Output): 
     const connection = await HostConnection.open();
     try {
         const started = performance.now();
-        let answer: { restarted?: boolean };
+        let answer: { restarted: boolean };
         try {
             // stopping takes up to 6 s and getting ready up to 20 s
-            answer = await connection.request("panel:restartService", { panelId: panel }, 60_000);
+            answer = await connection.call("panel:restartService", { panelId: panel }, 60_000);
         } catch (err) {
             if (!(err instanceof DaemonError)) throw err;
             const reason = err.message.replace(/^Restart failed: /, "");
@@ -158,7 +158,7 @@ export async function runRestart(panelArg: string | undefined, output: Output): 
                 /is not installed/.test(reason) ? "Link it first: paperapi link" : `Watch it start: paperapi monitor --panel ${panel}`,
             );
         }
-        if (!answer?.restarted) {
+        if (!answer.restarted) {
             throw new CliError(`${panel} has no service to restart`, "Its manifest.json declares no \"service\".");
         }
         output.success(`Restarted ${panel}'s service ${output.err.dim(`· ready in ${elapsed(started)}`)}`);

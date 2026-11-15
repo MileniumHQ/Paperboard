@@ -43,7 +43,7 @@ describe("CraneTransport with a daemon URL", () => {
             ws.on("message", (raw) => {
                 const frame = JSON.parse(String(raw));
                 seen.frames.push(frame);
-                const result = frame.action === "auth:verify" ? { success: true } : { echoed: frame.params?.value };
+                const result = frame.action === "auth:verify" ? { success: true } : { data: frame.params?.id };
                 ws.send(JSON.stringify({ type: "response", id: frame.id, result }));
             });
         });
@@ -51,11 +51,11 @@ describe("CraneTransport with a daemon URL", () => {
         const transport = new CraneTransport({ computerId: "local" });
         transport.credentialProvider = async () => ({ url: `ws://127.0.0.1:${port}/_crane`, token: "pbw_test" });
         await transport.ensureConnected();
-        const answer = await transport.call("test:echo", { value: "hi" });
+        const answer = await transport.call("config:get", { id: "dev.echo" });
         transport.close();
         expect(seen.path).toBe("/_crane");
         expect(seen.frames[0]).toMatchObject({ action: "auth:verify", params: { token: "pbw_test" } });
-        expect(answer).toEqual({ echoed: "hi" });
+        expect(answer).toEqual({ data: "dev.echo" });
     });
 });
 

@@ -4,7 +4,7 @@
 import crypto from "crypto";
 import fs from "fs";
 import WebSocket from "ws";
-import { PROTOCOL_VERSION } from "../protocol";
+import { PROTOCOL_VERSION, readResult, type RpcAction, type RpcParams, type RpcResult } from "../protocol";
 import { challengeDaemon, HandshakeError, NOT_RUNNING_HINT, readHandshake as readHandshakeFile, type Handshake } from "../transport/localHandshake";
 import { CliError } from "./output";
 import { handshakePath } from "./paths";
@@ -44,7 +44,7 @@ export class DaemonError extends Error {
 }
 
 interface Pending {
-    resolve: (value: any) => void;
+    resolve: (value: unknown) => void;
     reject: (err: Error) => void;
     timer?: ReturnType<typeof setTimeout>;
 }
@@ -105,11 +105,16 @@ export class HostConnection {
         return `127.0.0.1:${this.handshake.port}`;
     }
 
+    /** Asks the daemon; the answer is checked against the action's shape (protocol/rpc.ts). */
+    async call<A extends RpcAction>(action: A, params: RpcParams<A>, timeoutMs: number | null = DEFAULT_REQUEST_TIMEOUT_MS): Promise<RpcResult<A>> {
+        return readResult(action, await this.request(action, params, timeoutMs));
+    }
+
     /** Sends a request and resolves with its result, or rejects with the daemon's error. */
-    request<T = any>(action: string, params: Record<string, unknown> = {}, timeoutMs: number | null = DEFAULT_REQUEST_TIMEOUT_MS): Promise<T> {
+    request(action: string, params: Record<string, unknown> = {}, timeoutMs: number | null = DEFAULT_REQUEST_TIMEOUT_MS): Promise<unknown> {
         if (this.closed) return Promise.reject(new CliError("The connection to Paperboard is closed"));
         const id = this.nextId++;
-        return new Promise<T>((resolve, reject) => {
+        return new Promise<unknown>((resolve, reject) => {
             const call: Pending = { resolve, reject };
             if (timeoutMs !== null) {
                 call.timer = setTimeout(() => {

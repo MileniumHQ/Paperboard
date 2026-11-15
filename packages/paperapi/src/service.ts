@@ -20,14 +20,13 @@ import {
     type CallScope,
     type CallsOf,
     type EventsOf,
-    type Infer,
     type KeyedOf,
     type KeyedPatch,
     type AnyContract,
     type PanelContract,
-    type Shape,
     type StateOf,
 } from "./contract";
+import type { Infer, Shape } from "./shape";
 
 type EventShapes = Record<string, Shape<any>>;
 

@@ -1,4 +1,5 @@
-import { invoke, send, on, type StreamSubscription } from "./ipc";
+import { RPC_ROUTES, send, on, type StreamSubscription } from "./ipc";
+import type { TerminalShell } from "./protocol";
 import "./readiness";
 import "./swipeBack";
 import "./haptics";
@@ -38,22 +39,15 @@ export * from "./actions";
 export * from "./blocks";
 export * from "./service";
 export * from "./serviceCalls";
+export * from "./shape";
 export * from "./contract";
 export * from "./bridge";
 export * from "./channels";
-export * from "./protocol";
+export { PROTOCOL_VERSION, type TerminalShell } from "./protocol";
 export * from "./shell";
 export * from "./widgetManifest";
 export { defineWidgets, type WidgetContext, type WidgetMount } from "./widget";
 export { getWidgetChoices } from "./widgetChoices";
-
-/** a shell this computer has, as terminalApi.shells() lists it */
-export interface TerminalShell {
-    /** the program; pass it as create()'s shell */
-    path: string;
-    /** what the user calls it ("zsh", "PowerShell 7") */
-    name: string;
-}
 
 /** a command a terminal's shell ran, once it has ended */
 export interface TerminalCommand {
@@ -80,7 +74,7 @@ export const terminalApi = {
     ): Promise<void> => send("terminal-create", { ...options, id }),
 
     /** the shells a terminal can start with on this computer, its default first */
-    shells: (): Promise<TerminalShell[]> => invoke<TerminalShell[]>("terminal-shells"),
+    shells: (): Promise<TerminalShell[]> => RPC_ROUTES["terminal-shells"].call(undefined, {}),
 
     write: (id: string, data: string): Promise<void> =>
         send("terminal-write", { id, data }),
@@ -90,8 +84,7 @@ export const terminalApi = {
 
     destroy: (id: string): Promise<void> => send("terminal-destroy", { id }),
 
-    exists: async (id: string): Promise<boolean> =>
-        invoke<boolean>("terminal-exists", { id }),
+    exists: (id: string): Promise<boolean> => RPC_ROUTES["terminal-exists"].call(undefined, { id }),
 
     onData: (id: string, callback: (data: string) => void): StreamSubscription => {
         return on(`terminal-data:${id}`, (_event: unknown, data: unknown) => {
@@ -114,9 +107,7 @@ export const terminalApi = {
      * and PowerShell say so; another shell (sh, cmd) says nothing.
      */
     onCommand: (id: string, callback: (finished: TerminalCommand) => void): StreamSubscription => {
-        return on(`terminal-command:${id}`, (_event: unknown, finished: unknown) => {
-            if (finished && typeof finished === "object") callback(finished as TerminalCommand);
-        });
+        return on(`terminal-command:${id}`, (_event: unknown, finished: TerminalCommand) => callback(finished));
     },
 
     /** the folder the terminal's shell is in, each time it changes and once on subscribing */

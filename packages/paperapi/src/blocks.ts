@@ -3,6 +3,7 @@
 // them, runs commands, reads values and properties, and listens for events.
 // It is its own registry: Actions (v1, actionsApi) keeps working untouched.
 import { getTransport, getPanelId } from "./ipc";
+import type { EventPayload } from "./protocol";
 import { debugErr } from "./debug";
 import {
     blockEntry,
@@ -351,15 +352,14 @@ async function callEntry<T>(panelId: string, entry: string, request: unknown, op
     await transport.ensureConnected();
     const timeoutMs = options?.timeoutMs === undefined ? 30_000 : options.timeoutMs;
     const res = await transport.call("blocks:call", { panelId, entry, request, timeoutMs }, timeoutMs);
-    return res?.result as T;
+    return res.result as T;
 }
 
-function subscribe(source: string, callback: (payload: any) => void): () => void {
+function subscribe<E extends string>(source: E, callback: (payload: EventPayload<E>) => void): () => void {
     const transport = getTransport();
-    const listener = (payload: any) => callback(payload);
-    transport.subscribeEvent(source, listener);
+    const off = transport.subscribeEvent(source, callback);
     transport.ensureConnected().catch((err) => debugErr(`ensure connected on subscribe ${source}`, err));
-    return () => transport.unsubscribeEvent(source, listener);
+    return off;
 }
 
 export const blocksApi = {
@@ -383,14 +383,14 @@ export const blocksApi = {
         const transport = getTransport();
         await transport.ensureConnected();
         const res = await transport.call("blocks:list", { panelId });
-        return (res?.entries ?? []) as BlockInfo[];
+        return res.entries;
     },
 
     projects: async (panelId?: string): Promise<BlockProjectInfo[]> => {
         const transport = getTransport();
         await transport.ensureConnected();
         const res = await transport.call("blocks:projects", { panelId });
-        return (res?.projects ?? []) as BlockProjectInfo[];
+        return res.projects;
     },
 
     /** Runs a command; its inputs and result are checked by the panel that owns it. */
@@ -427,8 +427,14 @@ export const blocksApi = {
     },
 
     /** Calls back each time a panel's event fires, with its payload. */
-    onEvent: (panelId: string, event: string, callback: (payload: Record<string, unknown>) => void, project?: string): (() => void) =>
-        subscribe(`blocks:${panelId}:${blockEntry("event", event, project)}`, callback),
+    onEvent: (panelId: string, event: string, callback: (payload: Record<string, unknown>) => void, project?: string): (() => void) => {
+        const source = `blocks:${panelId}:${blockEntry("event", event, project)}`;
+        // an event fires with its values, which the panel that fired it checked
+        return subscribe(source, (payload) => {
+            if (typeof payload !== "object" || payload === null || Array.isArray(payload)) throw new Error(`${source} fired without its values: ${JSON.stringify(payload)}`);
+            callback({ ...payload });
+        });
+    },
 
     /** Calls back each time a panel says one of its values changed. */
     onChange: (panelId: string, value: string, callback: () => void, project?: string): (() => void) =>
