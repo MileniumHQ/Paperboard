@@ -210,6 +210,31 @@ describe("each server is a Blocks project with its game's blocks", () => {
         expect(await read("online-players")).toEqual(["bob"]);
     });
 
+    test("Stop the Server is done once the server is offline, so a Start right after it brings the server back", async () => {
+        const state = servicesState();
+        const plan = path.join(serverDir, "fake-server.json");
+        const normal = fs.readFileSync(plan, "utf8");
+        // the next run saves slowly on a stop: it exits once release-stop is there
+        fs.writeFileSync(plan, JSON.stringify({ ...JSON.parse(normal), holdStop: "release-stop" }));
+        await run("stop-server");
+        expect(await read("server-status")).toBe("offline");
+        await run("start-server");
+        await state.waitFor("s-a", (s) => s.serverStatus === "online", "s-a online with the slow stop");
+        fs.writeFileSync(plan, normal);
+
+        let done = false;
+        const stopped = run("stop-server").then(() => { done = true; });
+        await state.waitFor("s-a", (s) => s.serverStatus === "stopping", "s-a stopping");
+        // the server is still saving, so the stop is not done
+        expect(await read("server-status")).toBe("stopping");
+        expect(done).toBe(false);
+        fs.writeFileSync(path.join(serverDir, "release-stop"), "");
+        await stopped;
+        expect(await read("server-status")).toBe("offline");
+        await run("start-server");
+        await state.waitFor("s-a", (s) => s.serverStatus === "online", "s-a online again");
+    });
+
     test("Terraria's joins and chat fire as Blocks events with the player and what they said", async () => {
         const state = servicesState();
         const started = nextEvent("server-started", "s-t");

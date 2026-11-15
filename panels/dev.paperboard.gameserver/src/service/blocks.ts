@@ -16,6 +16,7 @@ import type { ServerScope } from "./scope";
 import { currentServer, inServer } from "./scope";
 import { CALLS, TRIGGER_IDS, type TriggerId } from "./contract";
 import { restartServerInstance, sendServerCommand, startServerInstance, stopServerInstance } from "./lifecycle";
+import { waitUntil } from "../games/serviceKit";
 import { listLogFiles, readLogFile } from "./logs";
 import { sayInChat, serverBackups } from "./calls";
 import { automationView, readAutomation, writeAutomation } from "./automation";
@@ -115,6 +116,14 @@ const DAILY_RESTART_CHOICES = [
         return { label: `at ${at}`, value: at };
     }),
 ];
+
+/** Stops a server, as Stop the Server does: done once it is offline, so a Start after it starts it. */
+export async function stopFromBlocks(ctx: Context): Promise<void> {
+    if (ctx.state.serverStatus === "restarting") throw new Error("The server is restarting; stop it once it is online");
+    await stopServerInstance(ctx);
+    // the game's own stop wait, then the force-kill and its confirmation
+    await waitUntil(() => ctx.state.serverStatus === "offline", (currentGameService().stopTimeoutMs ?? 15_000) + 15_000, "the server to stop");
+}
 
 /** Restarts a server that is online, as Restart the Server does. */
 export async function restartFromBlocks(ctx: Context): Promise<void> {
@@ -229,8 +238,8 @@ export function sharedBlocks(ctx: Context): BlockSet {
                 name: "Stop the Server",
                 category: "Server",
                 icon: "stop",
-                description: "Saves and stops the server",
-                run: () => stopServerInstance(ctx),
+                description: "Saves and stops the server; done once it is offline",
+                run: () => stopFromBlocks(ctx),
             },
             {
                 id: "restart-server",

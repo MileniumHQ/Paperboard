@@ -113,7 +113,10 @@ function server(): void {
                 log("Stopping server");
                 log("Saving players");
                 log("Saving worlds");
-                process.exit(0);
+                // a server slow to save: it exits once the test leaves this file
+                if (plan.holdStop) setInterval(() => { if (fs.existsSync(path.join(cwd, plan.holdStop))) process.exit(0); }, 20);
+                else process.exit(0);
+                return;
             case "list":
                 log(`There are ${players.length} of a max of ${plan.maxPlayers ?? 20} players online: ${players.join(", ")}`);
                 return;
