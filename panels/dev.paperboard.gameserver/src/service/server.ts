@@ -43,7 +43,18 @@ type Timer = ReturnType<typeof setTimeout>;
 export class Server {
     /** the saved entry; the panel replaces it when the saved servers change */
     stored: StoredServer;
-    /** the one server from before there were several: its processes and ports keep their old names */
+    /**
+     * The one server from before there were several (ServersConfig.legacyServer).
+     * It keeps the names it had: its process is the game's bare id ("mc-server"),
+     * its ports the bare names ("java"), its folder the panel's own, and its
+     * backups the panel's original history. They are never migrated: the
+     * daemon and the port registry can't rename a process or a claim, so a
+     * server running through the update that made it legacy (Paperboard's
+     * servers outlive its restarts) could only take new names by stopping,
+     * and a deferred migration would need this same switch until it did.
+     * Its process name is made in processId, its port names in serverPortName
+     * (which the page uses too, knowing the server by its folder).
+     */
     readonly legacy: boolean;
     readonly definition: GameDefinition;
     /** the server's own part of its game, made for it alone */

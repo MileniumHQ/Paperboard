@@ -17,7 +17,7 @@ export interface ServersConfig {
     /** Reserved once, so legacy backups never exclude a pre-existing user directory. */
     serversDirectory: string;
     servers: StoredServer[];
-    /** The server migrated from before several servers: it keeps its original process, port and backup names, and it is what a widget with no server chosen shows. */
+    /** The server from before several servers (see Server.legacy), and what a widget with no server chosen shows. */
     legacyServer?: string;
 }
 export function isServerId(id: unknown): id is string {
