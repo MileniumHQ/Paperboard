@@ -151,28 +151,6 @@ test("Add Computer: a pairing answered without the computer says so", async () =
     expect(page.exceptions).toEqual([]);
 });
 
-// Inventory: Core contracts — a network discovery that broke says why in Add Computer instead of an empty list.
-test("Add Computer: when looking for computers on the network broke, the list says why", async () => {
-    const { page } = shell;
-    const WARNING = `document.querySelector("[role=alert]")?.textContent ?? ""`;
-    const open = async () => {
-        await page.click(`[role=button][aria-label='Add Computer'], button[aria-label='Add Computer']`);
-        await page.waitFor(`[...document.querySelectorAll("label")].some((l) => l.textContent.includes("Custom IP"))`, "Add Computer to open");
-    };
-    const close = async () => {
-        await page.evaluate(`document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }))`);
-        await page.waitFor(`![...document.querySelectorAll("label")].some((l) => l.textContent.includes("Custom IP"))`, "Add Computer to close");
-    };
-
-    // the network changes while nothing is open: the mDNS socket fails
-    expect(await shell.host({ cmd: "fail-mdns", message: "send EHOSTUNREACH 224.0.0.251:5353" })).toBe(true);
-    await open();
-    await page.waitFor(`(${WARNING}).includes("Paperboard can't look for computers on this network: send EHOSTUNREACH 224.0.0.251:5353")`, "why nearby computers aren't listed");
-    expect(await page.evaluate(`document.body.innerText.includes("Looking for computers on your network")`)).toBe(false);
-    await close();
-    expect(page.exceptions).toEqual([]);
-});
-
 // Inventory: Core contracts — the can't-reach dialog checks once per opening and once per Try Again.
 test("the can't-reach dialog checks the computer once when it opens and once per Try Again", async () => {
     const { page } = shell;

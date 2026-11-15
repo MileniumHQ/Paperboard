@@ -41,7 +41,8 @@ await connectionPool.init();
 
 const shared = createShellInvokeHandlers({
     appVersion: () => "0.0.0-test",
-    launchOptions: () => launchOptionsFromArgv([]),
+    // as main reads them: a phone boot starts this host with --mobile
+    launchOptions: () => launchOptionsFromArgv(process.argv),
     graphics: () => ({ gpu: true }),
     openPath: async () => "Opening folders is not part of the browser suite",
 });

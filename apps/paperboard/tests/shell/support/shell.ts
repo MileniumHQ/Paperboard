@@ -7,6 +7,15 @@
 //
 // Under `bun test` solid-js resolves to its server build, which does not
 // react, so a shell component can only be tested this way.
+//
+// The shell opens in its desktop layout. `bootShell({ phone: true })` opens
+// it in the phone layout the way `paperboard --mobile` does: the host is
+// started with --mobile, so the shell and every panel document it serves are
+// told the phone layout, and the page is an iPhone 16 Pro's viewport with
+// touch, as the mobile mock's window is. A phone lists only paired
+// computers, so a phone boot opens on the welcome until a test pairs one
+// (pairComputer). Check phone-width UI this way, not with resize(): a
+// narrow desktop window is still the desktop layout.
 import { spawn, type ChildProcess } from "node:child_process";
 import * as fs from "node:fs";
 import * as os from "node:os";
@@ -17,6 +26,7 @@ import { build } from "vite";
 import { openChrome, type Page } from "../../../../../scripts/testing/chrome";
 import { buildCrane, startCrane, type Crane } from "../../../../../scripts/testing/crane";
 import { installDevPanelInto, type DevPanel } from "../../../scripts/devPanel";
+import { IPHONE_16_PRO } from "../../../src/main/mobileMock";
 import viteConfig from "../../../electron.vite.config";
 import { ANSWER } from "./protocol";
 import { reapOnExit, type Reaper } from "./reaper";
@@ -94,6 +104,8 @@ export interface BootOptions {
     init?: string;
     /** writes what the data dir holds before the daemon starts, as a computer that already has it */
     seed?: (dataDir: string) => void;
+    /** the phone layout, as `paperboard --mobile` opens it (see the top of this file) */
+    phone?: boolean;
 }
 
 /** the shell over a fresh data dir; its temp root goes on close(), or with this process however it ends */
@@ -133,7 +145,7 @@ export async function bootShell(options: BootOptions = {}): Promise<Shell> {
         reaper.track();
         stops.push(() => daemon.stop());
 
-        const child: ChildProcess = spawn(process.execPath, ["--preload", HOST_MDNS, HOST_MAIN, rendererDir], {
+        const child: ChildProcess = spawn(process.execPath, ["--preload", HOST_MDNS, HOST_MAIN, rendererDir, ...(options.phone ? ["--mobile"] : [])], {
             cwd: APP,
             env: hermeticEnv(dataDir),
             stdio: ["pipe", "pipe", "pipe"],
@@ -175,8 +187,20 @@ export async function bootShell(options: BootOptions = {}): Promise<Shell> {
 
         const page = await openChrome(await host<string>({ cmd: "sign-in-url" }), { init: options.init });
         stops.push(() => page.close());
-        // the shell is up once its rail lists this computer
-        await page.waitFor(`document.querySelector("[role=radio][aria-label$='(127.0.0.1)']")`, "the shell to list this computer");
+        if (options.phone) {
+            // the mobile mock's viewport and touch (mobileMock.ts emulatePhone);
+            // page.click stays a mouse, so a test taps with touch events itself
+            await page.send("Emulation.setDeviceMetricsOverride", { ...IPHONE_16_PRO, deviceScaleFactor: 1, mobile: true });
+            await page.send("Emulation.setTouchEmulationEnabled", { enabled: true, maxTouchPoints: 5 });
+            // the shell is up once it shows the phone's welcome or its rail
+            await page.waitFor(
+                `document.documentElement.getAttribute("data-paper-mobile") === "true" && document.querySelector("#mobile-welcome-title, [aria-label='Add Computer']")`,
+                "the shell to open in the phone layout",
+            );
+        } else {
+            // the shell is up once its rail lists this computer
+            await page.waitFor(`document.querySelector("[role=radio][aria-label$='(127.0.0.1)']")`, "the shell to list this computer");
+        }
 
         const pairComputer = async (name: string) => {
             const otherDir = path.join(root, `computer-${nextId}`);
