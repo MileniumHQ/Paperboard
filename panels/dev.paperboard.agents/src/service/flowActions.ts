@@ -4,6 +4,7 @@
 
 import { defineAction, type ActionDefinition } from "@mileniumhq/paperapi";
 import { ACTION_IDS, LIMITS, TRIGGER_IDS } from "../contract";
+import { ASK_MS } from "./ask";
 
 /** One conversation in the dropdown: its title, valued by its id. */
 export interface ConversationChoice {
@@ -48,7 +49,7 @@ const instructionsInput = {
     type: "string",
     label: "Instructions",
     description: "Added to what the agent is told for this. Replaces the instructions for automations in the Agent panel's settings; leave it empty to use those.",
-    placeholder: "Instructions from settings",
+    placeholder: "Instructions",
     maxLength: LIMITS.instructions,
     multiline: true,
 };
@@ -118,7 +119,7 @@ export function flowActions(host: FlowHost, conversations: ConversationChoice[])
             name: "Get Answer from Agent",
             category: CATEGORY,
             description:
-                "Asks the agent one question and returns its answer. It's answered on its own: no conversation, no memory and no computer, only web search, and nothing shows in the chat. Fails if the answer takes longer than 28 seconds.",
+                `Asks the agent one question and returns its answer. It's answered on its own: no conversation, no memory and no computer, only web search, and nothing shows in the chat. Fails if the answer takes longer than ${ASK_MS / 1000} seconds.`,
             template: "Ask the agent {question}",
             inputs: {
                 question: { type: "string", label: "Question", required: true, placeholder: "Question", maxLength: LIMITS.message, multiline: true },

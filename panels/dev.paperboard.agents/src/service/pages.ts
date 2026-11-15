@@ -249,7 +249,7 @@ export class Pages {
                     if (name === "add_package") return { text: await this.addPackage(args.page, args.packages) };
                     if (name === "show_page") return { text: await this.show(args.page) };
                     if (name === "delete_page") {
-                        const { name: page } = this.remove(args.page);
+                        const { name: page } = await this.remove(args.page);
                         return { text: `${PAGES}/${page} is deleted. A checkpoint from before now still has it.` };
                     }
                     return { text: `unknown tool ${name}`, isError: true };
@@ -304,7 +304,10 @@ export class Pages {
         const before = this.installing.get(name) ?? Promise.resolve();
         const run = before.then(install, install);
         this.installing.set(name, run);
-        const done = await run.finally(() => forgetBuilds(dir));
+        const done = await run.finally(() => {
+            forgetBuilds(dir);
+            if (this.installing.get(name) === run) this.installing.delete(name);
+        });
         const list = done.direct.map((d) => `${d.name}@${d.version}`).join(", ");
         return done.direct.length
             ? `${PAGES}/${name} has ${list} (${done.count} package${done.count === 1 ? "" : "s"} in all). Its scripts import them by name.`
@@ -406,8 +409,13 @@ export class Pages {
     }
 
     /** Delete a page for good: its folder, its title and description, and its picture. */
-    remove(n: unknown): { name: string } {
+    async remove(n: unknown): Promise<{ name: string }> {
         const { name, dir } = this.existing(n);
+        // an install into it finishes first (its failure is its caller's to report)
+        await this.installing.get(name)?.then(
+            () => undefined,
+            () => undefined,
+        );
         this.unfollow(name);
         forgetBuilds(dir);
         fs.rmSync(dir, { recursive: true, force: true });

@@ -6,6 +6,7 @@ import { DEFAULT_MODEL, HARNESSES, LIMITS, SIGN_IN_REQUIRED, type PageInfo, type
 import type { ServerStatus } from "../toolsContract";
 import { DAY_NAMES, describeSchedule, localStamp } from "../routineText";
 import type { FlowHost, MessageReceived } from "./flowActions";
+import { ASK_MS } from "./ask";
 import { HARNESS_NAMES } from "./harness";
 import type { Memory } from "./memory";
 import { parseSchedule, type Routines } from "./routines";
@@ -505,7 +506,7 @@ export function flowBlocks(host: BlocksHost): BlockSet {
                 category: CATEGORY.agent,
                 icon: "question_answer",
                 description:
-                    "Asks the agent one question and gives back its answer. It's answered on its own: no conversation, no memory and no computer, only web search. Fails if the answer takes longer than 28 seconds.",
+                    `Asks the agent one question and gives back its answer. It's answered on its own: no conversation, no memory and no computer, only web search. Fails if the answer takes longer than ${ASK_MS / 1000} seconds.`,
                 text: "ask the agent {question} following {instructions}",
                 inputs: {
                     question: { type: "text", name: "Question", maxLength: LIMITS.message },
@@ -730,7 +731,7 @@ export function flowBlocks(host: BlocksHost): BlockSet {
                 description: "Deletes one of the agent's pages for good: its folder and its picture. Cards that showed it can't open it anymore.",
                 text: "delete {app}",
                 inputs: { app: { type: "app", name: "Page" } },
-                run: ({ app: name }: { app: string }) => ready(() => void host.pages.remove(page(name).name)),
+                run: ({ app: name }: { app: string }) => ready(async () => void (await host.pages.remove(page(name).name))),
             },
             {
                 id: "start-computer",
