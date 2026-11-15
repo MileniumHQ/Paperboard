@@ -68,6 +68,9 @@ export interface BotProblem {
     text: string;
 }
 
+/** What deleting a bot came to: deleted, or kept because Discord refused to take its slash commands off. */
+export type DeleteBotResult = { deleted: string } | { refused: string };
+
 export interface BotsServiceState {
     bots: BotSummary[];
     /** why the saved bots could not be read; nothing is written over them meanwhile */

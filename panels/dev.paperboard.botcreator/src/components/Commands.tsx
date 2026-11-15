@@ -232,7 +232,12 @@ export default function Commands(props: { bot: () => BotSummary }) {
                 "deleteCommand",
                 { bot: bot(), id: target.id },
             );
-            setActionError(mutationProblem(result));
+            // a bot that is on says what its sync refused above; one that is
+            // off clears the command now, and says here if it couldn't
+            const kept = props.bot().connected ? null : result.syncError;
+            setActionError(kept
+                ? { title: `/${target.name} is still on Discord`, message: [kept, result.triggerError].filter(Boolean).join(" ") }
+                : mutationProblem(result));
         } catch (err) {
             console.error("[Commands] deleteCommand failed:", err);
             setActionError({ title: `/${target.name} not deleted`, message: errorToMessage(err) });

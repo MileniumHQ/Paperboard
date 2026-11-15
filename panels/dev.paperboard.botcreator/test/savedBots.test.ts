@@ -121,18 +121,47 @@ describe("deleting a bot", () => {
         ].sort());
     });
 
-    test("a bot that is off stays when Discord refuses to clear its commands, saying why", async () => {
+    test("a bot whose token Discord refuses is kept, saying why, until it is deleted anyway", async () => {
         const home = guild("Home");
-        const fake = discord.addBot({ username: "Stuck", guilds: [home] });
-        await savedBots([{ stored: storedBot("b-stuck", fake.appId, { name: "Stuck", enabled: false, commands: [{ ...command("hello"), scope: home.id }] }), token: fake.token }]);
+        const fake = discord.addBot({ username: "Revoked", guilds: [home] });
+        // the token was reset in the Developer Portal: the saved one names the application but no longer works
+        const revoked = `${fake.token.slice(0, -1)}${fake.token.endsWith("x") ? "y" : "x"}`;
+        await savedBots([{ stored: storedBot("b-revoked", fake.appId, { name: "Revoked", enabled: false, commands: [{ ...command("hello"), scope: home.id }] }), token: revoked }]);
         await startService({ discordApi: discord.api });
-        await stateWhere<BotsServiceState>(PANEL_ID, (s) => s.bots[0]?.name === "Stuck", "Stuck");
-        // the bot was removed from the server on Discord's side
-        fake.guilds = [];
+        await stateWhere<BotsServiceState>(PANEL_ID, (s) => s.bots[0]?.name === "Revoked", "Revoked");
 
-        await expect(call("deleteBot", { bot: "b-stuck" })).rejects.toThrow(`Couldn't remove its slash commands from Discord: Guild ${home.id}: Missing Access`);
-        const state = await stateWhere<BotsServiceState>(PANEL_ID, () => true, "the bots");
-        expect(state.bots.map((b) => b.id)).toEqual(["b-stuck"]);
-        expect((await secretsApi.get(tokenName("b-stuck"), PANEL_ID)).found).toBe(true);
+        expect(await call("deleteBot", { bot: "b-revoked" })).toEqual({ refused: `Guild ${home.id}: 401: Unauthorized` });
+        expect((await stateWhere<BotsServiceState>(PANEL_ID, () => true, "the bots")).bots.map((b) => b.id)).toEqual(["b-revoked"]);
+        expect((await secretsApi.get(tokenName("b-revoked"), PANEL_ID)).found).toBe(true);
+
+        // anyway skips Discord: the bot, its token and its list entry go
+        const before = discord.requests.length;
+        expect(await call("deleteBot", { bot: "b-revoked", anyway: true })).toEqual({ deleted: "b-revoked" });
+        expect(discord.requests.slice(before)).toEqual([]);
+        expect((await stateWhere<BotsServiceState>(PANEL_ID, (s) => s.bots.length === 0, "the bot to go")).bots).toEqual([]);
+        expect((await secretsApi.get(tokenName("b-revoked"), PANEL_ID)).found).toBe(false);
+        expect(JSON.parse(fs.readFileSync(await configFile(), "utf8")).bots).toEqual([]);
+    });
+});
+
+// A command deleted while its bot is off is gone from Discord: the next login
+// sets only the scopes that still have commands.
+describe("deleting a command while the bot is off", () => {
+    test("a server's last command is cleared with the token at once, and stays gone when the bot logs in", async () => {
+        const home = guild("Home");
+        const fake = discord.addBot({ username: "Napper", guilds: [home] });
+        const hello = { ...command("hello"), id: "c-home", scope: home.id };
+        await savedBots([{ stored: storedBot("b-nap", fake.appId, { name: "Napper", enabled: false, commands: [command("ping"), hello] }), token: fake.token }]);
+        await startService({ discordApi: discord.api });
+        await stateWhere<BotsServiceState>(PANEL_ID, (s) => s.bots[0]?.name === "Napper", "Napper");
+        const guildCommands = `/applications/${fake.appId}/guilds/${home.id}/commands`;
+
+        expect(await call("deleteCommand", { bot: "b-nap", id: "c-home" })).toMatchObject({ registered: false, syncError: null, triggerError: null });
+        const cleared = discord.requests.filter((r) => r.method === "PUT" && r.path === guildCommands);
+        expect(cleared.map((r) => [r.bot, r.body])).toEqual([[fake.token, []]]);
+
+        await call("connectBot", { bot: "b-nap" });
+        await discord.request((r) => r.method === "PUT" && r.path === `/applications/${fake.appId}/commands`, "the commands synced at login");
+        expect(discord.requests.filter((r) => r.method === "PUT" && r.path === guildCommands).map((r) => r.body)).toEqual([[]]);
     });
 });

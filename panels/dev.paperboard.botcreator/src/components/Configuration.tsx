@@ -7,12 +7,12 @@ import {
     PaperSettingItem,
 } from "@mileniumhq/paperui";
 import { DeleteBotModal, ReplaceTokenModal } from "./BotDialogs";
-import type { BotSummary } from "../bots";
+import type { BotSummary, DeleteBotResult } from "../bots";
 
 export interface ConfigurationProps {
     bot: () => BotSummary;
     onReplaceToken: (id: string, token: string) => Promise<unknown>;
-    onDelete: (id: string) => Promise<unknown>;
+    onDelete: (id: string, anyway: boolean) => Promise<DeleteBotResult>;
 }
 
 export default function Configuration(props: ConfigurationProps) {

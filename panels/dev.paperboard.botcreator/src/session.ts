@@ -882,12 +882,12 @@ export class BotSession {
     }
 
     /**
-     * Takes every stored command off Discord with the bot's token alone, over
-     * REST with no gateway login, so a bot that is off is cleared too; throws
-     * what Discord refused.
+     * Sets each of `scopes` (by default every scope with a stored command) to
+     * no commands on Discord with the bot's token alone, over REST with no
+     * gateway login, so a bot that is off is cleared too; throws what
+     * Discord refused.
      */
-    async unregisterCommands(token: string): Promise<void> {
-        const scopes = [...new Set(this.commands.map((c) => c.scope))];
+    async clearCommands(token: string, scopes = [...new Set(this.commands.map((c) => c.scope))]): Promise<void> {
         if (scopes.length === 0) return;
         const { REST } = await loadDiscord();
         const api = discordApiBase();

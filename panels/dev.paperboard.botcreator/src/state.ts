@@ -4,7 +4,7 @@
 import { createSignal, onCleanup } from "solid-js";
 import { createStore, reconcile } from "solid-js/store";
 import { createPanelBridge, secretsApi } from "@mileniumhq/paperapi";
-import { byCreation, createBotId, PANEL_ID, tokenName, type BotSummary, type BotsServiceState } from "./bots";
+import { byCreation, createBotId, PANEL_ID, tokenName, type BotSummary, type BotsServiceState, type DeleteBotResult } from "./bots";
 
 const DEFAULT_STATE: BotsServiceState = { bots: [], botsError: null, setupGuideSeen: true };
 
@@ -62,6 +62,7 @@ export function createBots() {
         /** the setup guide was finished or skipped: it never shows again */
         markSetupGuideSeen: () => call<boolean>("markSetupGuideSeen", {}),
         setEnabled: (bot: string, enabled: boolean) => call<boolean>(enabled ? "connectBot" : "disconnectBot", { bot }),
-        remove: (bot: string) => call<{ deleted: string }>("deleteBot", { bot }),
+        /** `anyway` deletes it even though Discord refused to take its slash commands off */
+        remove: (bot: string, anyway = false) => call<DeleteBotResult>("deleteBot", { bot, anyway }),
     };
 }

@@ -11,6 +11,7 @@ import {
     PaperQuote,
     PaperText,
 } from "@mileniumhq/paperui";
+import type { DeleteBotResult } from "../bots";
 import { errorToMessage, extractApplicationIdFromToken } from "../types";
 
 export const PORTAL_URL = "https://discord.com/developers/applications";
@@ -186,12 +187,14 @@ export function ReplaceTokenModal(props: {
 }
 
 export function DeleteBotModal(props: {
-    bot: { id: string; name: string; connected: boolean; commands: readonly unknown[] } | null;
-    onDelete: (id: string) => Promise<unknown>;
+    bot: { id: string; name: string; hasToken: boolean; commands: readonly unknown[] } | null;
+    onDelete: (id: string, anyway: boolean) => Promise<DeleteBotResult>;
     onClose: () => void;
 }) {
     const [busy, setBusy] = createSignal(false);
     const [error, setError] = createSignal<string | null>(null);
+    // why Discord kept its commands: Delete anyway removes the bot regardless
+    const [refused, setRefused] = createSignal<string | null>(null);
     // what was asked can't be taken back: the dialog stays for its answer
     const close = () => {
         if (!busy()) props.onClose();
@@ -199,16 +202,19 @@ export function DeleteBotModal(props: {
     createEffect(on(() => props.bot?.id, (id) => {
         if (!id) return;
         setError(null);
+        setRefused(null);
         setBusy(false);
     }));
     const confirm = async () => {
         const bot = props.bot;
         if (!bot || busy()) return;
+        const anyway = refused() !== null;
         setBusy(true);
         setError(null);
         try {
-            await props.onDelete(bot.id);
-            props.onClose();
+            const result = await props.onDelete(bot.id, anyway);
+            if ("refused" in result) setRefused(result.refused);
+            else props.onClose();
         } catch (err) {
             setError(errorToMessage(err));
         } finally {
@@ -224,21 +230,25 @@ export function DeleteBotModal(props: {
             footer={
                 <PaperFlex direction="row" gap="half" justify="end" fullWidth>
                     <PaperButton variant="text" disabled={busy()} onClick={close}>Cancel</PaperButton>
-                    <PaperButton variant="danger" disabled={busy()} onClick={() => void confirm()}>Delete</PaperButton>
+                    <PaperButton variant="danger" disabled={busy()} onClick={() => void confirm()}>
+                        {refused() === null ? "Delete" : "Delete anyway"}
+                    </PaperButton>
                 </PaperFlex>
             }
         >
             <PaperFlex direction="column" gap="half">
                 <PaperText preset="text">
-                    {props.bot?.connected && props.bot.commands.length > 0
+                    {props.bot?.hasToken && props.bot.commands.length > 0
                         ? `${props.bot.name}'s slash commands are removed from Discord, it goes offline, and`
                         : `${props.bot?.name} goes offline and`} its token is deleted from Paperboard.
                     Flows that use it stop working. The application stays in the Discord Developer Portal.
                 </PaperText>
-                <Show when={props.bot && !props.bot.connected && props.bot.commands.length > 0}>
-                    <PaperQuote variant="warning" icon="cloud_off" title="Its commands stay on Discord">
-                        The bot is offline, so it can't take its slash commands off Discord. Turn it on first to remove them.
-                    </PaperQuote>
+                <Show when={refused()}>
+                    {(why) => (
+                        <PaperQuote variant="warning" icon="cloud_off" title="Discord kept its slash commands" role="alert">
+                            Discord said "{why()}". Delete anyway removes the bot from Paperboard, and its slash commands stay on Discord.
+                        </PaperQuote>
+                    )}
                 </Show>
                 <Show when={error()}>
                     {(text) => <PaperQuote variant="danger" icon="error" title="Not deleted" role="alert">{text()}</PaperQuote>}

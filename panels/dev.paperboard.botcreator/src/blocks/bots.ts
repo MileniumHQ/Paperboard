@@ -198,7 +198,7 @@ export function botsBlocks(host: BotsBlocksHost): BlockSet {
             name: "Delete Bot",
             category: "Bots",
             icon: "delete",
-            description: "Removes the bot's slash commands from Discord while it's online, stops it, and removes it and its token from Bot Creator. Its flows stop working",
+            description: "Removes the bot's slash commands from Discord, stops it, and removes it and its token from Bot Creator. Its flows stop working. If Discord won't take its commands off, the bot is kept",
             text: "Delete {bot}",
             inputs: { bot: botInput },
             run: (i) => host.remove(idOfBot(i.bot)),

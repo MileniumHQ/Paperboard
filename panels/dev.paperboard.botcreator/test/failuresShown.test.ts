@@ -97,4 +97,67 @@ describe("failures are shown, never guessed", () => {
             served.stop();
         }
     });
+
+    test("an offline bot's Delete says its commands come off Discord, and a refusal offers Delete anyway", async () => {
+        const home = guild("Home");
+        const fake = discord.addBot({ username: "Revoked", guilds: [home] });
+        // reset in the Developer Portal: the saved token names the application but Discord refuses it
+        const revoked = `${fake.token.slice(0, -1)}${fake.token.endsWith("x") ? "y" : "x"}`;
+        const hello = { id: "c-hello", name: "hello", description: "Says hello", scope: home.id, options: [], userInstall: false };
+        await savedBots([{ stored: storedBot("b-revoked", fake.appId, { name: "Revoked", enabled: false, commands: [hello] }), token: revoked }]);
+        await startService({ discordApi: discord.api });
+        await stateWhere<BotsServiceState>(PANEL_ID, (s) => s.bots[0]?.name === "Revoked", "Revoked");
+        const served = await servePanel();
+        const page = await browser.open(served.url);
+        const dialog = () => page.evaluate<string>(`document.querySelector("[role=dialog]")?.innerText ?? ""`);
+        try {
+            await page.waitFor(`document.body.innerText.includes("Revoked")`, "the bot list");
+            await clickText(page, "[class*=card], [class*=Card]", "Revoked");
+            await openTab(page, "config");
+            await clickText(page, "button", "Delete");
+            await page.waitFor(`document.querySelector("[role=dialog]")?.innerText.includes("Delete bot?")`, "the delete confirmation");
+            // off, it is cleared with its token all the same
+            expect(await dialog()).toContain("Revoked's slash commands are removed from Discord, it goes offline, and its token is deleted from Paperboard.");
+            expect(await dialog()).not.toContain("stay on Discord");
+
+            await clickText(page, "[role=dialog] button", "Delete");
+            await page.waitFor(quoteShows("Discord kept its slash commands", "401: Unauthorized"), "the refusal");
+            expect(await dialog()).toContain("Delete anyway removes the bot from Paperboard, and its slash commands stay on Discord.");
+            expect((await stateWhere<BotsServiceState>(PANEL_ID, () => true, "the bots")).bots.map((b) => b.id)).toEqual(["b-revoked"]);
+
+            await clickText(page, "[role=dialog] button", "Delete anyway");
+            await page.waitFor(`!document.querySelector("[role=dialog]")?.innerText.includes("Delete bot?")`, "the modal to close");
+            expect((await stateWhere<BotsServiceState>(PANEL_ID, (s) => s.bots.length === 0, "the bot to go")).bots).toEqual([]);
+            expect(page.exceptions).toEqual([]);
+        } finally {
+            await page.close();
+            served.stop();
+        }
+    });
+
+    test("an offline bot's last server command that Discord won't clear says it is still on Discord", async () => {
+        const home = guild("Home");
+        const fake = discord.addBot({ username: "Napper", guilds: [home] });
+        const revoked = `${fake.token.slice(0, -1)}${fake.token.endsWith("x") ? "y" : "x"}`;
+        const hello = { id: "c-hello", name: "hello", description: "Says hello", scope: home.id, options: [], userInstall: false };
+        await savedBots([{ stored: storedBot("b-nap", fake.appId, { name: "Napper", enabled: false, commands: [hello] }), token: revoked }]);
+        await startService({ discordApi: discord.api });
+        await stateWhere<BotsServiceState>(PANEL_ID, (s) => s.bots[0]?.name === "Napper", "Napper");
+        const served = await servePanel();
+        const page = await browser.open(served.url);
+        try {
+            await page.waitFor(`document.body.innerText.includes("Napper")`, "the bot list");
+            await clickText(page, "[class*=card], [class*=Card]", "Napper");
+            await openTab(page, "commands");
+            await page.waitFor(`document.body.innerText.includes("/hello")`, "the command list");
+            await page.click(`button[title="Delete command"]`);
+            await clickText(page, "[role=dialog] button", "Delete");
+            await page.waitFor(quoteShows("/hello is still on Discord", "401: Unauthorized"), "the kept command");
+            expect(await body(page)).toContain("/hello stays on Discord.");
+            expect(page.exceptions).toEqual([]);
+        } finally {
+            await page.close();
+            served.stop();
+        }
+    });
 });

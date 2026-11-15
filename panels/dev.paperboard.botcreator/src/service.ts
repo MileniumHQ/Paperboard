@@ -48,6 +48,7 @@ import {
     readBotsConfig,
     tokenName,
     type BotSummary,
+    type DeleteBotResult,
     type BotsServiceState,
     type StoredBot,
 } from "./bots";
@@ -506,11 +507,24 @@ async function deleteCommand(entry: BotEntry, rawId: unknown): Promise<CommandMu
     const next = entry.stored.commands.filter((c) => c.id !== id);
     // a scope with no commands left cannot be inferred from the list, so it
     // is explicitly cleared on Discord
-    const scopesToClear = next.some((c) => c.scope === target.scope) ? [] : [target.scope];
+    const emptied = !next.some((c) => c.scope === target.scope);
     await setCommands(entry, next);
     const triggerError = await unregisterCommandTrigger(entry, target);
-    const sync = await entry.session.syncCommands(scopesToClear);
-    return { command: target, ...sync, triggerError };
+    if (!emptied || entry.session.connected()) {
+        return { command: target, ...(await entry.session.syncCommands(emptied ? [target.scope] : [])), triggerError };
+    }
+    // a bot that is off syncs only the scopes it still has commands in when
+    // it next logs in, so an emptied one is cleared now with its token, as
+    // deleting the bot does
+    let syncError: string | null = null;
+    try {
+        const token = await readToken(entry.stored.id);
+        if (!token) throw new Error("No token is saved for this bot.");
+        await entry.session.clearCommands(token, [target.scope]);
+    } catch (err) {
+        syncError = `${errorToMessage(err)} /${target.name} stays on Discord.`;
+    }
+    return { command: target, registered: false, syncError, triggerError };
 }
 
 // ---------------------------------------------------------------------------
@@ -624,19 +638,29 @@ async function replaceToken(entry: BotEntry): Promise<void> {
     else publish();
 }
 
-/** Clears a bot's commands on Discord, stops it and removes it, its token and its Blocks project; gives its id. */
-async function deleteBot(entry: BotEntry): Promise<string> {
+/**
+ * Clears a bot's commands on Discord, stops it and removes it, its token and
+ * its Blocks project. When Discord refuses the clear (a reset token, a
+ * deleted application) the bot stays and the refusal is given, unless
+ * `anyway`: then the clear is skipped and its commands stay on Discord.
+ */
+async function deleteBot(entry: BotEntry, anyway = false): Promise<DeleteBotResult> {
     requireReadable();
     const id = entry.stored.id;
+    // with its saved token, online or off; a bot with no token has nothing
+    // left to reach Discord with
+    const token = anyway ? null : await readToken(id);
+    if (token) {
+        try {
+            await entry.session.clearCommands(token);
+        } catch (err) {
+            return { refused: errorToMessage(err) };
+        }
+    }
     // each step lands before the next, so a retry picks up where a
     // failed one stopped
-    let step = "remove its slash commands from Discord";
+    let step = "stop the bot";
     try {
-        // with its saved token, online or off; a bot with no token has
-        // nothing left to reach Discord with
-        const token = await readToken(id);
-        if (token) await entry.session.unregisterCommands(token);
-        step = "stop the bot";
         await entry.session.stop();
         step = "remove its blocks from Blocks";
         if (entry.blocks) {
@@ -661,7 +685,7 @@ async function deleteBot(entry: BotEntry): Promise<string> {
     publish();
     botsChanged();
     firePanelEvent("bot-deleted", { name: entry.stored.name });
-    return id;
+    return { deleted: id };
 }
 
 // a widget with no bot chosen can't say which one to show
@@ -730,8 +754,8 @@ export const serviceCalls = {
         return true;
     },
 
-    /** Stops a bot and removes it, its token, its commands and its Blocks project. */
-    deleteBot: async (_ctx: unknown, input: any) => ({ deleted: await deleteBot(requireBot(input?.bot)) }),
+    /** Stops a bot and removes it, its token, its commands and its Blocks project; `anyway` leaves its commands on Discord. */
+    deleteBot: (_ctx: unknown, input: any) => deleteBot(requireBot(input?.bot), input?.anyway === true),
 
     /** The setup guide was finished or skipped: it never shows again. Saved with the bots. */
     markSetupGuideSeen: async () => {
@@ -805,7 +829,8 @@ const blocksBots: BotsBlocksHost = {
         };
     },
     remove: async (id) => {
-        await deleteBot(blocksBot(id));
+        const result = await deleteBot(blocksBot(id));
+        if ("refused" in result) throw new Error(`Couldn't remove its slash commands from Discord, so the bot is kept: ${result.refused} Delete it in Bot Creator to remove it anyway.`);
     },
     setOn: async (id, on) => {
         requireReadable();
