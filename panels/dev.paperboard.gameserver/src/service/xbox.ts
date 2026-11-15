@@ -3,6 +3,7 @@
 // a gamertag once its player has joined some Geyser server. A missing account
 // or skin is null; a request that could not be answered throws, so callers
 // can tell "no such player" apart from "GeyserMC was unreachable".
+import { errorText } from "./failures";
 import { apiFetch } from "../lib/userAgent";
 
 const GLOBAL_API = "https://api.geysermc.org/v2";
@@ -14,7 +15,7 @@ async function fetchGeyserMC(path: string): Promise<Response> {
     try {
         return await apiFetch(`${GLOBAL_API}${path}`, { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
     } catch (err) {
-        throw new Error(`GeyserMC could not be reached: ${err instanceof Error ? err.message : String(err)}`, { cause: err });
+        throw new Error(`GeyserMC could not be reached: ${errorText(err)}`, { cause: err });
     }
 }
 

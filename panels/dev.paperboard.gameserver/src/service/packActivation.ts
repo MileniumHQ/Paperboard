@@ -1,7 +1,8 @@
+import { errorCode, errorText, exists } from "./failures";
 import * as nodeFs from "node:fs/promises";
 import * as nodePath from "node:path";
 import { safePackPath } from "../core/modpack";
-import { exists, moveNoClobber, type ActivationFs } from "./activation";
+import { moveNoClobber, type ActivationFs } from "./activation";
 import { trashDirName } from "./trash";
 
 // Placing a modpack's files, as a transaction on the server folder. The
@@ -18,7 +19,7 @@ import { trashDirName } from "./trash";
 //   3. moves the prepared files into place
 //
 // Any failure moves everything back. Once the caller has recorded the new
-// pack, commit() sends every parked file to a `.trash-<ts>` folder (an
+// pack, commit() sends every parked file to a `.trash-<ts>-<random>` folder (an
 // edited config the pack overwrote stays recoverable) and removes the
 // staging folder. A crash leaves the journal: recoverStagedPacks() at
 // service start commits the staging folder the pack record names and
@@ -69,12 +70,9 @@ function assertPaths(paths: readonly string[], what: string): void {
 
 const inDir = (dir: string, path: string) => nodePath.join(dir, ...path.split("/"));
 
-function errorCode(err: unknown): string | undefined {
-    return (err as { code?: string } | null)?.code;
-}
 
 function messageOf(err: unknown): string {
-    return err instanceof Error ? err.message : String(err);
+    return errorText(err);
 }
 
 function ancestors(path: string): string[] {
@@ -109,7 +107,7 @@ export async function activatePack(request: PackActivationRequest): Promise<Pack
     const candidates = [...new Set([...request.replace, ...staged])];
     const present: string[] = [];
     for (const path of candidates) {
-        if (await exists(fs, inDir(root, path))) present.push(path);
+        if (await exists(inDir(root, path), fs)) present.push(path);
     }
     // a path inside another parked path leaves with it
     const presentSet = new Set(present);
@@ -118,7 +116,7 @@ export async function activatePack(request: PackActivationRequest): Promise<Pack
     const createdDirs = new Set<string>();
     for (const path of staged) {
         for (const dir of ancestors(path)) {
-            if (!createdDirs.has(dir) && !(await exists(fs, inDir(root, dir)))) createdDirs.add(dir);
+            if (!createdDirs.has(dir) && !(await exists(inDir(root, dir), fs))) createdDirs.add(dir);
         }
     }
 
@@ -174,14 +172,14 @@ export async function rollbackPack(
     for (const path of [...journal.staged].reverse()) {
         const live = inDir(root, path);
         const home = inDir(filesDir, path);
-        if (!(await exists(fs, home)) && (await exists(fs, live))) {
+        if (!(await exists(home, fs)) && (await exists(live, fs))) {
             await fs.mkdir(nodePath.dirname(home), { recursive: true });
             await fs.rename(live, home);
         }
     }
     for (const path of [...journal.displaced].reverse()) {
         const parked = inDir(parkedDir, path);
-        if (await exists(fs, parked)) {
+        if (await exists(parked, fs)) {
             await fs.mkdir(nodePath.dirname(inDir(root, path)), { recursive: true });
             await moveNoClobber(fs, parked, inDir(root, path));
         }
@@ -211,7 +209,7 @@ export async function commitPack(
     let trash: string | null = null;
     for (const path of journal.displaced) {
         const parked = inDir(parkedDir, path);
-        if (!(await exists(fs, parked))) continue;
+        if (!(await exists(parked, fs))) continue;
         trash ??= trashDirName();
         const target = inDir(nodePath.join(root, trash), path);
         await fs.mkdir(nodePath.dirname(target), { recursive: true });

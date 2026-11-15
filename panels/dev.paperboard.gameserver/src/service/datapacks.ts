@@ -1,3 +1,4 @@
+import { errorCode, exists } from "./failures";
 import { serverLocal } from "./scope";
 import * as nodeFs from "node:fs/promises";
 import * as nodePath from "node:path";
@@ -68,19 +69,7 @@ export interface DatapackListing {
     truncated: boolean;
 }
 
-function errorCode(err: unknown): string | undefined {
-    return (err as { code?: string } | null)?.code;
-}
 
-async function exists(fs: DatapackFs, path: string): Promise<boolean> {
-    try {
-        await fs.lstat(path);
-        return true;
-    } catch (err) {
-        if (errorCode(err) === "ENOENT") return false;
-        throw err;
-    }
-}
 
 export async function datapacksDir(deps: Pick<DatapackDeps, "levelName">): Promise<{ world: string; relative: string }> {
     const world = await deps.levelName();
@@ -97,7 +86,7 @@ export async function listDatapacks(deps: DatapackDeps): Promise<DatapackListing
     const { world, relative } = await datapacksDir(deps);
     // level.dat, not the folder: installing a pack creates <world>/datapacks/
     // before the server has generated anything
-    const worldExists = await exists(fs, nodePath.join(root, world, "level.dat"));
+    const worldExists = await exists(nodePath.join(root, world, "level.dat"), fs);
     let entries: Awaited<ReturnType<DatapackFs["readdir"]>>;
     try {
         entries = await fs.readdir(nodePath.join(root, ...relative.split("/")), { withFileTypes: true });
@@ -194,7 +183,7 @@ export async function installDatapack(
     const root = await deps.serverDir();
     const { world, relative } = await datapacksDir(deps);
     const target = `${relative}/${file.filename}`;
-    if (await exists(fs, nodePath.join(root, ...target.split("/")))) {
+    if (await exists(nodePath.join(root, ...target.split("/")), fs)) {
         throw new Error(`${file.filename} is already in ${relative}/`);
     }
     await deps.download({ url: file.url, targetPath: target, sha1: file.sha1, sha512: file.sha512 });

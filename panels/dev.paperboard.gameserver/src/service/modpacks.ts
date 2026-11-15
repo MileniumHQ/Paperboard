@@ -1,3 +1,4 @@
+import { errorCode, errorText } from "./failures";
 import * as nodeFs from "node:fs/promises";
 import * as nodePath from "node:path";
 import {
@@ -83,12 +84,9 @@ function fsOf(deps: ModpackDeps): PackFs {
 }
 
 function messageOf(err: unknown): string {
-    return err instanceof Error ? err.message : String(err);
+    return errorText(err);
 }
 
-function errorCode(err: unknown): string | undefined {
-    return (err as { code?: string } | null)?.code;
-}
 
 const inDir = (dir: string, path: string) => nodePath.join(dir, ...path.split("/"));
 

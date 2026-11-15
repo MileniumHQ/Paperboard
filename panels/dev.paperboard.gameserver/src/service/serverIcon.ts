@@ -1,3 +1,4 @@
+import { errorText } from "./failures";
 import * as nodeFs from "node:fs/promises";
 import * as nodePath from "node:path";
 import type { PNG as Png } from "pngjs";
@@ -42,7 +43,7 @@ export async function setServerIcon(png: unknown, deps: ServerIconDeps): Promise
     try {
         image = PNG.sync.read(bytes);
     } catch (err) {
-        throw new Error(`The icon isn't a readable PNG: ${err instanceof Error ? err.message : String(err)}`);
+        throw new Error(`The icon isn't a readable PNG: ${errorText(err)}`);
     }
     if (image.width !== SERVER_ICON_SIZE || image.height !== SERVER_ICON_SIZE) {
         throw new Error(

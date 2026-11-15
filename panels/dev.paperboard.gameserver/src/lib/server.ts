@@ -1,3 +1,4 @@
+import { errorText } from "./failure";
 import { PANEL_ID, CALLS } from "../service/contract";
 import { createSignal } from "solid-js";
 import { createPanelBridge } from "./api";
@@ -131,7 +132,7 @@ export async function initServerListeners() {
 }
 
 function reportActionError(action: string, err: unknown): void {
-    const message = err instanceof Error ? err.message : String(err);
+    const message = errorText(err);
     console.error(`[ServerBridge] ${action} failed:`, message);
     setServerActionError(message);
 }

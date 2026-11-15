@@ -1,3 +1,4 @@
+import { errorText } from "./failures";
 import { serverLocal } from "./scope";
 import * as nodeFs from "node:fs/promises";
 import * as nodePath from "node:path";
@@ -217,7 +218,7 @@ async function readZip(archive: string, onFile: (file: UnzipFile) => void, settl
             try {
                 unzip.push(buffer.slice(0, bytesRead), final);
             } catch (err) {
-                throw new Error(`This zip is damaged: ${err instanceof Error ? err.message : String(err)}`);
+                throw new Error(`This zip is damaged: ${errorText(err)}`);
             }
             await settle();
             if (final) break;

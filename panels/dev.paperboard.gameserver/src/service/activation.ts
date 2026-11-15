@@ -1,3 +1,4 @@
+import { errorCode, errorText, exists } from "./failures";
 import * as nodeFs from "node:fs/promises";
 import * as nodePath from "node:path";
 import { isInstallArtifactName } from "../core/installFiles";
@@ -18,7 +19,7 @@ import { trashDirName } from "./trash";
 // Any failure moves everything back. Once the caller has recorded the new
 // install, commit() deletes the previous software's own files, sends
 // displaced entries the previous install did not own (a runtime `libraries/`
-// cache, say) to a `.trash-<ts>` folder, and removes the staging directory.
+// cache, say) to a `.trash-<ts>-<random>` folder, and removes the staging directory.
 //
 // A crash mid-way leaves the journal behind. recoverStagedInstalls() runs at
 // service start: a staging directory whose id the recorded install names is
@@ -65,23 +66,11 @@ export function stagedFilesPath(staging: string): string {
 }
 
 
-function errorCode(err: unknown): string | undefined {
-    return (err as { code?: string } | null)?.code;
-}
 
-export async function exists(fs: ActivationFs, path: string): Promise<boolean> {
-    try {
-        await fs.lstat(path);
-        return true;
-    } catch (err) {
-        if (errorCode(err) === "ENOENT") return false;
-        throw err;
-    }
-}
 
 // rename overwrites a file target on POSIX; a move here must never clobber
 export async function moveNoClobber(fs: ActivationFs, from: string, to: string): Promise<void> {
-    if (await exists(fs, to)) {
+    if (await exists(to, fs)) {
         throw new Error(`Refusing to overwrite ${nodePath.basename(to)} while moving install files`);
     }
     await fs.rename(from, to);
@@ -128,11 +117,11 @@ export async function activateStagedInstall(request: ActivationRequest): Promise
         if (!isInstallArtifactName(name)) {
             throw new Error(`The recorded install claims ${JSON.stringify(name)}; refusing to remove it`);
         }
-        if (await exists(fs, nodePath.join(root, name))) replaced.push(name);
+        if (await exists(nodePath.join(root, name), fs)) replaced.push(name);
     }
     const displaced = [...replaced];
     for (const name of staged) {
-        if (!displaced.includes(name) && (await exists(fs, nodePath.join(root, name)))) {
+        if (!displaced.includes(name) && (await exists(nodePath.join(root, name), fs))) {
             displaced.push(name);
         }
     }
@@ -174,7 +163,7 @@ export async function activateStagedInstall(request: ActivationRequest): Promise
 }
 
 function messageOf(err: unknown): string {
-    return err instanceof Error ? err.message : String(err);
+    return errorText(err);
 }
 
 /**
@@ -195,14 +184,14 @@ export async function rollbackStaging(
     for (const name of [...journal.staged].reverse()) {
         const live = nodePath.join(root, name);
         const home = nodePath.join(stagedDir, name);
-        if (!(await exists(fs, home)) && (await exists(fs, live))) {
+        if (!(await exists(home, fs)) && (await exists(live, fs))) {
             await fs.mkdir(stagedDir, { recursive: true });
             await fs.rename(live, home);
         }
     }
     for (const name of [...journal.displaced].reverse()) {
         const parked = nodePath.join(parkedDir, name);
-        if (await exists(fs, parked)) {
+        if (await exists(parked, fs)) {
             await moveNoClobber(fs, parked, nodePath.join(root, name));
         }
     }
@@ -223,7 +212,7 @@ export async function commitStaging(
     let trash: string | null = null;
     for (const name of journal.displaced) {
         const parked = nodePath.join(parkedDir, name);
-        if (!(await exists(fs, parked))) continue;
+        if (!(await exists(parked, fs))) continue;
         if (replaced.has(name)) {
             // the previous software's own code: uninstalled with it
             await fs.rm(parked, { recursive: true, force: true });

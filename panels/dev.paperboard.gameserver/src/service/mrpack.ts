@@ -1,3 +1,4 @@
+import { errorText } from "./failures";
 import * as nodeFs from "node:fs/promises";
 import * as nodePath from "node:path";
 import type { UnzipFile } from "fflate";
@@ -135,7 +136,7 @@ export async function extractMrpack(opts: {
             try {
                 unzip.push(buffer.slice(0, bytesRead), final);
             } catch (err) {
-                failure ??= fail(`the archive is damaged (${err instanceof Error ? err.message : String(err)})`);
+                failure ??= fail(`the archive is damaged (${errorText(err)})`);
             }
             // the writes this chunk produced finish before the next is read:
             // memory holds one chunk's worth of inflated data at most
@@ -161,7 +162,7 @@ export async function extractMrpack(opts: {
     try {
         index = JSON.parse(text);
     } catch (err) {
-        throw fail(`its index is not JSON (${err instanceof Error ? err.message : String(err)})`);
+        throw fail(`its index is not JSON (${errorText(err)})`);
     }
     return { index, layers, kept };
 }

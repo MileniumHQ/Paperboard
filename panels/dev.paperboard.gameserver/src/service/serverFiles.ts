@@ -1,3 +1,4 @@
+import { errorCode } from "./failures";
 import * as nodeFs from "node:fs/promises";
 import * as nodePath from "node:path";
 import { isUtf8 } from "node:buffer";
@@ -45,9 +46,6 @@ const IMAGE_TYPES: Record<string, string> = {
 /** the path, or a folder on the way to it, is not there */
 export class ServerFileMissingError extends Error {}
 
-function errorCode(err: unknown): string | undefined {
-    return (err as { code?: string } | null)?.code;
-}
 
 function assertPath(path: unknown, what: "folder" | "file"): string {
     if (!isListableDirArg(path) || (what === "file" && path === "")) {

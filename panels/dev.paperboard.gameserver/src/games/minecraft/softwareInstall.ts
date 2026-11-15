@@ -1,3 +1,4 @@
+import { errorText } from "../../service/failures";
 import { serverLocal } from "../../service/scope";
 import * as nodeFs from "node:fs/promises";
 import * as nodePath from "node:path";
@@ -230,7 +231,7 @@ async function install(
             await activation.rollback();
             activation = null;
             throw new Error(
-                `Could not record the new install, so the previous server was restored: ${err instanceof Error ? err.message : String(err)}`,
+                `Could not record the new install, so the previous server was restored: ${errorText(err)}`,
             );
         }
         // recorded: from here the new install is the server. A failed
@@ -239,7 +240,7 @@ async function install(
         try {
             await activation.commit();
         } catch (err) {
-            warning = `${name} ${version} is installed, but removing the previous server files failed (${err instanceof Error ? err.message : String(err)}). Paperboard retries when the panel service restarts.`;
+            warning = `${name} ${version} is installed, but removing the previous server files failed (${errorText(err)}). Paperboard retries when the panel service restarts.`;
             console.error("[Service:Install] commit cleanup failed:", err);
         }
         publish({ stage: "completed", percent: 100 });

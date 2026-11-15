@@ -1,3 +1,4 @@
+import { errorText } from "./failures";
 import { serverLocal } from "./scope";
 import type { ServiceContext } from "./api";
 import { recoverInterruptedInstall } from "../games/minecraft/softwareInstall";
@@ -50,7 +51,7 @@ async function run(ctx: ServiceContext<GameServerState>, steps: RecoverySteps): 
                 console.log(`[gameserver] settled interrupted ${what}:`, JSON.stringify(recovered));
             }
         } catch (err) {
-            const reason = err instanceof Error ? err.message : String(err);
+            const reason = errorText(err);
             console.error(`[gameserver] interrupted ${what} could not be settled:`, reason);
             setRecoveryBlock(`${what}: ${reason}`);
             ctx.setState({

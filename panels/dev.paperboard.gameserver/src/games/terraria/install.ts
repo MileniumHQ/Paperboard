@@ -1,3 +1,4 @@
+import { exists } from "../../service/failures";
 import { PANEL_ID } from "../../service/contract";
 import fs from "node:fs/promises";
 import path from "node:path";
@@ -50,10 +51,6 @@ export async function unpackTmodloader(archive: Uint8Array, target: string, vers
         }
     }
     if (!(await fs.stat(path.join(target, TMODLOADER_ENTRYPOINT))).isFile()) throw new Error("tModLoader archive has no tModLoader.dll");
-}
-async function exists(file: string): Promise<boolean> {
-    try { await fs.access(file); return true; }
-    catch (err) { if ((err as NodeJS.ErrnoException).code === "ENOENT") return false; throw err; }
 }
 /** Both names contain only managed release files, never worlds or settings. */
 export async function recoverRelease(target: string): Promise<void> {

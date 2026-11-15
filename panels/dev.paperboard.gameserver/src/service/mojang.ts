@@ -2,6 +2,7 @@
 // and a uuid to the name it has now. Names change; uuids do not. A missing
 // account is null, a request that could not be answered throws, so callers
 // can tell "no such player" apart from "Mojang was unreachable".
+import { errorText } from "./failures";
 import { apiFetch } from "../lib/userAgent";
 
 const PROFILE_URL = "https://sessionserver.mojang.com/session/minecraft/profile/";
@@ -27,7 +28,7 @@ export async function fetchMojang(url: string): Promise<Response> {
     try {
         return await apiFetch(url, { signal: controller.signal });
     } catch (err) {
-        throw new Error(`Mojang could not be reached: ${err instanceof Error ? err.message : String(err)}`, { cause: err });
+        throw new Error(`Mojang could not be reached: ${errorText(err)}`, { cause: err });
     } finally {
         clearTimeout(timer);
     }

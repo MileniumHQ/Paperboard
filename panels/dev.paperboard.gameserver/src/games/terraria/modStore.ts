@@ -1,3 +1,4 @@
+import { errorText } from "../../service/failures";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { inflateRawSync } from "node:zlib";
@@ -239,7 +240,7 @@ export class ModStore {
                 const info = await readTmod(path.join(this.dir, file));
                 return { file, info, enabled: enabled.includes(info.name), record: records[file] };
             } catch (err) {
-                return { file, info: null, problem: err instanceof Error ? err.message : String(err), enabled: false, record: records[file] };
+                return { file, info: null, problem: errorText(err), enabled: false, record: records[file] };
             }
         }));
     }
@@ -371,7 +372,7 @@ export class ModStore {
                     this.compatible(info, name);
                     incoming.push({ source, info, record: { title: info.displayName, uploaded: true } });
                 } catch (err) {
-                    problems.push(`${name}: ${err instanceof Error ? err.message : String(err)}`);
+                    problems.push(`${name}: ${errorText(err)}`);
                 }
             }
             if (problems.length) throw new Error(`Nothing was added. ${problems.join(" ")}`);

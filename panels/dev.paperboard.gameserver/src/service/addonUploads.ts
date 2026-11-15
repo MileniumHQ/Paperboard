@@ -1,5 +1,5 @@
+import { errorText, exists } from "./failures";
 import * as nodeFs from "node:fs/promises";
-import { exists } from "../games/serviceKit";
 import * as nodePath from "node:path";
 import { SOFTWARE, type ServerSoftwareType } from "../software/catalog";
 import {
@@ -49,8 +49,6 @@ interface UploadPlan {
     problem(entry: StagedEntry): Promise<string | null>;
 }
 
-const errorMessage = (err: unknown) => (err instanceof Error ? err.message : String(err));
-
 
 /** the problem with a staged zip file as an add-on of `kind`, or null */
 async function zipProblem(entry: StagedEntry, kind: ArchiveKind): Promise<string | null> {
@@ -60,12 +58,12 @@ async function zipProblem(entry: StagedEntry, kind: ArchiveKind): Promise<string
     try {
         await assertZipFile(entry.path, entry.name);
     } catch (err) {
-        return `${errorMessage(err)}.`;
+        return `${errorText(err)}.`;
     }
     try {
         return archiveProblem(await zipEntryNames(entry.path), kind, entry.name);
     } catch (err) {
-        return `${entry.name} could not be read: ${errorMessage(err)}.`;
+        return `${entry.name} could not be read: ${errorText(err)}.`;
     }
 }
 
@@ -123,7 +121,7 @@ async function commit(deps: UploadDeps, stage: unknown, plan: UploadPlan): Promi
             });
         } catch (err) {
             await putBack();
-            throw new Error(`${errorMessage(err)}. Nothing was added.`);
+            throw new Error(`${errorText(err)}. Nothing was added.`);
         }
         return { added: entries.map((e) => e.name) };
     } finally {
@@ -182,7 +180,7 @@ export async function uploadDatapacks(stage: unknown, deps: UploadDeps): Promise
             try {
                 assertDatapackName(entry.name);
             } catch (err) {
-                return `${entry.name} cannot be used as a datapack name (${errorMessage(err)}).`;
+                return `${entry.name} cannot be used as a datapack name (${errorText(err)}).`;
             }
             if (entry.isDirectory) return folderProblem(entry);
             if (!entry.name.toLowerCase().endsWith(".zip")) return `${entry.name} is not a datapack: upload a .zip or a folder.`;

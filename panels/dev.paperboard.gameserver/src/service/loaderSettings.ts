@@ -1,3 +1,4 @@
+import { errorCode, errorText } from "./failures";
 import * as nodeFs from "node:fs/promises";
 import * as nodePath from "node:path";
 import type { ServerSoftwareType } from "../software/catalog";
@@ -77,9 +78,6 @@ export interface LoaderSettingsView {
     missing: string[];
 }
 
-function errorCode(err: unknown): string | undefined {
-    return (err as { code?: string } | null)?.code;
-}
 
 function fsOf(deps: LoaderDeps): LoaderFs {
     return deps.fs ?? (nodeFs as unknown as LoaderFs);
@@ -200,7 +198,7 @@ export async function readSchemaSettings(
                 label: file.label,
                 path: relative,
                 settings: [],
-                error: err instanceof Error ? err.message : String(err),
+                error: errorText(err),
             });
         }
     }

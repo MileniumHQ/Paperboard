@@ -1,3 +1,4 @@
+import { errorText } from "../../service/failures";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { randomInt } from "node:crypto";
@@ -130,7 +131,7 @@ async function pollPlayers(ctx: Context) {
     let players: RustPlayer[];
     try { players = parsePlayers(await rcon().exec("playerlist")); }
     catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
+        const message = errorText(err);
         // one notice in the console per failure, not one every few seconds
         if (message !== local().pollError && ctx.state.serverStatus === "online") report(ctx, "Could not list Rust's players", err);
         else console.debug(`[rust] players poll failed again: ${message}`);
