@@ -12,26 +12,18 @@
 // The agent acts through the browser's own input (Input.dispatch*), and reads
 // pages in an isolated world the page's scripts can't see or change. Its home
 // folder (homeFolder.ts) holds what the browser downloads and what it's given.
+// This file is the browser itself: setting it up, running it, its windows and
+// the input they take. What the agent does with them is browserTools.ts; what
+// the user sees and does, browserView.ts.
 
-import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import { LIMITS, PANEL_ID, SETUP_STEPS, type PageDialog, type ComputerPhase, type ComputerState, type SetupStep, type SetupStepId } from "../contract";
+import { LIMITS, PANEL_ID, SETUP_STEPS, type PageDialog, type ComputerState, type SetupStep, type SetupStepId } from "../contract";
 import { Cdp } from "./cdp";
-import type { ToolResult } from "./computerMcp";
 import { HELIUM_PACKAGE, chromiumMajor, findExecutable, heliumSupported, userAgent } from "./helium";
 import type { HomeFolder } from "./homeFolder";
 import { chord } from "./keys";
-import {
-    EDITABLE_JS,
-    MARKS_JS,
-    REMOVE_OVERLAY_JS,
-    SIGN_IN_FOCUS_JS,
-    SIGN_IN_MOVED_JS,
-    WEBRTC_CANDIDATES_JS,
-    overlayJs,
-    type Mark,
-} from "./pageScripts";
+import { WEBRTC_CANDIDATES_JS, type Mark } from "./pageScripts";
 import { startProxy, type Proxy } from "./proxy";
 import { errorText } from "../lib/failure";
 import { writeAtomic } from "./writeAtomic";
@@ -43,27 +35,13 @@ const RECORD_VERSION = 1;
 const START_MS = 30_000;
 const STOP_GRACE_MS = 2_000; // the daemon gives the whole service 3 s to stop
 const LOAD_MS = 15_000;
-const SETTLE_MS = 400; // after an action, for what it opens or changes to show
 const MAX_TABS = 16;
 const MAX_CALLS = 4;
-// the user's view polls frames from every open shell; it gets its own few slots so it never starves the agent
-const MAX_VIEW_CALLS = 3;
 const MAX_DOWNLOADS = 8;
 const DOWNLOAD_MAX_BYTES = 2 * 1024 * 1024 * 1024;
 const NOTES_MAX = 20;
-const SCROLL_PX = 60;
-const SCROLL_MAX = 50;
-const SIZE_MAX = 8192;
-const ZOOM_MAX = 6;
-const GRID_STEPS = [2, 5, 10, 20, 25, 50, 100, 200];
-const VIEW_MAX_EVENTS = 64;
-const VIEW_MAX_TEXT = 2000;
-const KEYS_MAX = 16;
-const UPLOAD_MAX = 10;
 /** control lasts this long past the last renewal, so a closed shell can't hold the agent off */
 const CONTROL_LEASE_MS = 20_000;
-const VIEW_TOOLS = ["view_windows", "view_frame", "view_input", "view_go", "view_close", "view_sign_in"] as const;
-export type ViewTool = (typeof VIEW_TOOLS)[number];
 
 /** A daemon-supervised child (processApi.start). */
 export interface StartOptions {
@@ -116,9 +94,11 @@ export interface BrowserDeps {
     startMs?: number;
 }
 
-class ToolError extends Error {}
+/** A tool's refusal, told to the agent as it is. */
+/** A refusal the agent reads as the tool's answer. */
+export class ToolError extends Error {}
 
-interface Tab {
+export interface Tab {
     id: number;
     targetId: string;
     sessionId: string | null;
@@ -155,7 +135,6 @@ interface PendingSignIn {
 }
 
 const BUTTON_BITS = { left: 1, right: 2, middle: 4 } as const;
-const BUTTON_NAMES = { 1: "left", 2: "middle", 3: "right" } as const;
 
 export class BrowserComputer {
     state: ComputerState = { phase: "none", installed: false, steps: [], error: null, userControl: false };
@@ -170,15 +149,17 @@ export class BrowserComputer {
     private stopping = false;
     private cdp: Cdp | null = null;
     private proxy: Proxy | null = null;
-    private tabs = new Map<string, Tab>();
+    tabs = new Map<string, Tab>();
     private byId = new Map<number, string>();
     private nextId = 1;
     private downloads = new Map<string, Download>();
-    private notes: string[] = [];
-    private signIn: PendingSignIn | null = null;
+    notes: string[] = [];
+    /** the sign-in the agent prepared (browserTools.ts), waiting for the user's values (browserView.ts) */
+    signIn: PendingSignIn | null = null;
     private calls = 0;
     private callQueue: (() => void)[] = [];
-    private viewCalls = 0;
+    /** the user's view's calls running now (browserView.ts) */
+    viewCalls = 0;
     private control: ReturnType<typeof setTimeout> | null = null;
 
     constructor(private deps: BrowserDeps) {
@@ -190,6 +171,10 @@ export class BrowserComputer {
     }
     private get supported() {
         return heliumSupported(this.platform, this.deps.arch ?? process.arch);
+    }
+    /** started, and its DevTools connection open */
+    get on() {
+        return this.state.phase === "ready" && !!this.cdp?.open;
     }
 
     // ------------------------------------------------------------- lifecycle
@@ -362,7 +347,7 @@ export class BrowserComputer {
 
     private async doStart() {
         if (!this.record.installed) throw new Error("Set up the computer first.");
-        if (this.state.phase === "ready" && this.cdp?.open) return;
+        if (this.on) return;
         const abort = (this.abort = new AbortController());
         try {
             if (!(await this.executable())) {
@@ -672,7 +657,7 @@ export class BrowserComputer {
         void this.session(tab).catch((e) => console.warn(`[agents] couldn't attach to window ${tab.id} yet:`, errorText(e)));
     }
 
-    private untrack(targetId: string) {
+    untrack(targetId: string) {
         const t = this.tabs.get(targetId);
         if (!t) return;
         for (const w of t.loads) w();
@@ -680,7 +665,7 @@ export class BrowserComputer {
         this.byId.delete(t.id);
     }
 
-    private session(tab: Tab): Promise<string> {
+    session(tab: Tab): Promise<string> {
         if (tab.sessionId) return Promise.resolve(tab.sessionId);
         tab.attaching ??= (async () => {
             const cdp = this.connection();
@@ -699,13 +684,13 @@ export class BrowserComputer {
     }
 
     /** the title and address as they are now, not as the last event left them */
-    private async refreshInfo(tab: Tab) {
+    async refreshInfo(tab: Tab) {
         const { targetInfo } = await this.connection().send<any>("Target.getTargetInfo", { targetId: tab.targetId });
         Object.assign(tab, { title: String(targetInfo?.title ?? ""), url: String(targetInfo?.url ?? "") });
     }
 
     /** every window's title and address as the browser has them: a change event can be missed, a listing can't be */
-    private async refreshAll() {
+    async refreshAll() {
         const { targetInfos } = await this.connection().send<any>("Target.getTargets", {});
         for (const info of Array.isArray(targetInfos) ? targetInfos : []) {
             const t = this.tabs.get(info?.targetId);
@@ -713,18 +698,18 @@ export class BrowserComputer {
         }
     }
 
-    private connection(): Cdp {
+    connection(): Cdp {
         if (!this.cdp?.open) throw new ToolError("Your browser isn't running.");
         return this.cdp;
     }
 
-    private async measure(tab: Tab) {
+    async measure(tab: Tab) {
         const m = await this.connection().send<any>("Page.getLayoutMetrics", {}, tab.sessionId!);
         const v = m.cssLayoutViewport ?? m.layoutViewport;
         if (v?.clientWidth && v?.clientHeight) tab.size = { width: Math.round(v.clientWidth), height: Math.round(v.clientHeight) };
     }
 
-    private tab(window: unknown): Tab {
+    tab(window: unknown): Tab {
         const id = Number(window);
         const targetId = Number.isInteger(id) ? this.byId.get(id) : undefined;
         const tab = targetId ? this.tabs.get(targetId) : undefined;
@@ -733,7 +718,7 @@ export class BrowserComputer {
     }
 
     /** Run a script in the tab's own isolated world: the page's scripts can't see it or change what it reads. */
-    private async evaluate(tab: Tab, expression: string, timeoutMs = 10_000): Promise<any> {
+    async evaluate(tab: Tab, expression: string, timeoutMs = 10_000): Promise<any> {
         const s = await this.session(tab);
         const cdp = this.connection();
         for (let attempt = 0; ; attempt++) {
@@ -801,34 +786,10 @@ export class BrowserComputer {
         }
     }
 
-    // ------------------------------------------------------------- tools
+    // ------------------------------------------------------------- input, for browserTools.ts and browserView.ts
 
-    async callTool(name: string, args: Record<string, unknown>): Promise<ToolResult> {
-        if (this.state.phase !== "ready" || !this.cdp?.open) {
-            const why: Partial<Record<ComputerPhase, string>> = {
-                none: "You don't have a computer yet; the user can set one up from the Agent panel.",
-                unsupported: `This machine can't run your computer: ${this.state.error ?? "unsupported"}`,
-                installing: "Your computer is still being set up.",
-                starting: "Your computer is still starting up; try again in a moment.",
-            };
-            return { isError: true, text: why[this.state.phase] ?? "Your computer is off right now." };
-        }
-        if (this.state.userControl) {
-            return { isError: true, text: "The user has taken control of your computer. Wait until they hand it back, or ask them if they need you." };
-        }
-        const tool = TOOLS[name];
-        if (!tool) return { isError: true, text: `unknown tool ${name}` };
-        await this.slot();
-        try {
-            return await tool.call(this, args ?? {});
-        } catch (e) {
-            return { isError: true, text: errorText(e) };
-        } finally {
-            this.release();
-        }
-    }
-
-    private async slot() {
+    /** one of the agent's few calls at once; the rest wait their turn */
+    async slot() {
         if (this.calls < MAX_CALLS) {
             this.calls++;
             return;
@@ -836,53 +797,13 @@ export class BrowserComputer {
         await new Promise<void>((ok) => this.callQueue.push(ok));
     }
 
-    private release() {
+    release() {
         const next = this.callQueue.shift();
         if (next) next();
         else this.calls--;
     }
 
-    /** What happened since `before`: windows that opened or closed, downloads, a dialog that's waiting. */
-    private changes(before: Set<number>, tab?: Tab): string {
-        const now = new Set([...this.tabs.values()].map((t) => t.id));
-        const out: string[] = [];
-        for (const t of this.tabs.values()) if (!before.has(t.id)) out.push(`Window ${t.id} "${t.title || t.url}" opened.`);
-        for (const id of before) if (!now.has(id)) out.push(`Window ${id} closed.`);
-        out.push(...this.notes.splice(0));
-        if (tab?.dialog && this.tabs.has(tab.targetId)) out.push(dialogNote(tab));
-        if (tab?.chooser && this.tabs.has(tab.targetId)) out.push("A file picker opened: pick files from your home folder with `upload`.");
-        return out.length ? ` ${out.join(" ")}` : "";
-    }
-
-    private ids() {
-        return new Set([...this.tabs.values()].map((t) => t.id));
-    }
-
-    private async settle() {
-        await new Promise((r) => setTimeout(r, SETTLE_MS));
-    }
-
-    private point(tab: Tab, args: Record<string, unknown>, keys = { mark: "mark", x: "x", y: "y" }): { x: number; y: number } {
-        if (args[keys.mark] !== undefined) {
-            const ms = tab.marks;
-            if (!ms) throw new ToolError("look at the window first so its marks are fresh");
-            const n = Number(args[keys.mark]);
-            if (!Number.isInteger(n) || n < 1 || n > ms.length) throw new ToolError(`mark ${String(args[keys.mark])} doesn't exist; the last look had ${ms.length}`);
-            const m = ms[n - 1]!;
-            return { x: m.x + Math.floor(m.w / 2), y: m.y + Math.floor(m.h / 2) };
-        }
-        if (args[keys.x] !== undefined && args[keys.y] !== undefined) {
-            const x = Number(args[keys.x]);
-            const y = Number(args[keys.y]);
-            if (!Number.isInteger(x) || !Number.isInteger(y) || x < 0 || y < 0 || x >= tab.size.width || y >= tab.size.height) {
-                throw new ToolError(`that point is outside the window (${tab.size.width}x${tab.size.height})`);
-            }
-            return { x, y };
-        }
-        throw new ToolError("give a mark number, or x and y inside the window");
-    }
-
-    private async mouse(tab: Tab, type: string, at: { x: number; y: number }, extra: Record<string, unknown> = {}) {
+    async mouse(tab: Tab, type: string, at: { x: number; y: number }, extra: Record<string, unknown> = {}) {
         const s = await this.session(tab);
         await this.dispatch(tab, "Input.dispatchMouseEvent", { type, x: at.x, y: at.y, buttons: tab.pointer.buttons, ...extra }, s);
         tab.pointer.x = at.x;
@@ -913,17 +834,17 @@ export class BrowserComputer {
         });
     }
 
-    private async press(tab: Tab, at: { x: number; y: number }, button: keyof typeof BUTTON_BITS, clickCount: number) {
+    async press(tab: Tab, at: { x: number; y: number }, button: keyof typeof BUTTON_BITS, clickCount: number) {
         tab.pointer.buttons |= BUTTON_BITS[button];
         await this.mouse(tab, "mousePressed", at, { button, clickCount });
     }
 
-    private async lift(tab: Tab, at: { x: number; y: number }, button: keyof typeof BUTTON_BITS, clickCount: number) {
+    async lift(tab: Tab, at: { x: number; y: number }, button: keyof typeof BUTTON_BITS, clickCount: number) {
         tab.pointer.buttons &= ~BUTTON_BITS[button];
         await this.mouse(tab, "mouseReleased", at, { button, clickCount });
     }
 
-    private async keys(tab: Tab, names: string[]) {
+    async keys(tab: Tab, names: string[]) {
         const s = await this.session(tab);
         for (const name of names) {
             if (tab.dialog) {
@@ -947,7 +868,7 @@ export class BrowserComputer {
         tab.dialog = null;
     }
 
-    private async text(tab: Tab, text: string) {
+    async text(tab: Tab, text: string) {
         const s = await this.session(tab);
         if (tab.dialog) {
             if (tab.dialog.type !== "prompt") throw new ToolError(dialogNote(tab));
@@ -958,7 +879,7 @@ export class BrowserComputer {
     }
 
     /** Wait for the tab's next load, up to a limit; true when it loaded. */
-    private loaded(tab: Tab, ms = LOAD_MS): { done: Promise<boolean>; cancel: () => void } {
+    loaded(tab: Tab, ms = LOAD_MS): { done: Promise<boolean>; cancel: () => void } {
         let cancel = () => {};
         const done = new Promise<boolean>((ok) => {
             const t = setTimeout(() => {
@@ -979,7 +900,7 @@ export class BrowserComputer {
         return { done, cancel };
     }
 
-    private async navigate(tab: Tab, url: string) {
+    async navigate(tab: Tab, url: string) {
         const s = await this.session(tab);
         const load = this.loaded(tab);
         const r = await this.connection().send<any>("Page.navigate", { url }, s, LOAD_MS);
@@ -993,37 +914,19 @@ export class BrowserComputer {
         return ok ? "" : " It's still loading.";
     }
 
-    // the tools themselves, in COMPUTER_TOOLS order (computerTools.ts)
-
-    async windows(): Promise<ToolResult> {
-        await this.refreshAll();
-        const list = [...this.tabs.values()].sort((a, b) => a.id - b.id);
-        if (!list.length) return { text: "No windows are open." };
-        return {
-            text: list
-                .map((t) => `${t.id}: ${t.title || "(untitled)"} <${t.url}> size ${t.size.width}x${t.size.height}${t.dialog ? ` (${dialogNote(t)})` : ""}`)
-                .join("\n"),
-        };
-    }
+    // ------------------------------------------------------------- windows
 
     /** What's open as a turn starts, for the agent's instructions: windows it left open are its to close. */
     async openWindowsNote(): Promise<string> {
-        if (this.state.phase !== "ready" || !this.cdp?.open) return `Your browser isn't running (${this.state.phase}).`;
+        if (!this.on) return `Your browser isn't running (${this.state.phase}).`;
         await this.refreshAll();
         const list = [...this.tabs.values()].sort((a, b) => a.id - b.id);
         if (!list.length) return "No browser windows are open.";
         return `Browser windows open now (close the ones you're done with):\n${list.map((t) => `- ${t.id}: ${t.title || "(untitled)"} <${t.url}>`).join("\n")}`;
     }
 
-    async open(args: Record<string, unknown>): Promise<ToolResult> {
-        const url = webAddress(args.what, true);
-        const before = this.ids();
-        const { tab, still } = await this.openWindow(url);
-        return { text: `Opened window ${tab.id} "${tab.title || tab.url}" <${tab.url}>.${still}` + this.changes(new Set([...before, tab.id]), tab) };
-    }
-
     /** A window of its own at an address, once its page has loaded (or is still loading: `still` says so). */
-    private async openWindow(url: string): Promise<{ tab: Tab; still: string }> {
+    async openWindow(url: string): Promise<{ tab: Tab; still: string }> {
         if (this.tabs.size >= MAX_TABS) throw new ToolError(`${MAX_TABS} windows are open already; close some first.`);
         // a window of its own, not a tab: a headless browser draws only its front tab, so a background tab never
         // answers a screenshot (the user's view of it hung), and resizing one tab's window resized them all
@@ -1047,193 +950,9 @@ export class BrowserComputer {
         return { tab, still };
     }
 
-    async go(args: Record<string, unknown>): Promise<ToolResult> {
-        const tab = this.tab(args.window);
-        const to = typeof args.to === "string" ? args.to.trim() : "";
-        const before = this.ids();
-        const s = await this.session(tab);
-        const cdp = this.connection();
-        let still = "";
-        if (to === "back" || to === "forward") {
-            const h = await cdp.send<any>("Page.getNavigationHistory", {}, s);
-            const entry = h.entries?.[h.currentIndex + (to === "back" ? -1 : 1)];
-            if (!entry) throw new ToolError(`there's no page to go ${to} to`);
-            const load = this.loaded(tab);
-            await cdp.send("Page.navigateToHistoryEntry", { entryId: entry.id }, s);
-            still = (await load.done) ? "" : " It's still loading.";
-        } else if (to === "reload") {
-            const load = this.loaded(tab);
-            await cdp.send("Page.reload", {}, s);
-            still = (await load.done) ? "" : " It's still loading.";
-        } else {
-            still = await this.navigate(tab, webAddress(to, false));
-        }
-        await this.refreshInfo(tab);
-        return { text: `Window ${tab.id} is at <${tab.url}> "${tab.title}".${still}` + this.changes(before, tab) };
-    }
-
-    async look(args: Record<string, unknown>): Promise<ToolResult> {
-        const tab = this.tab(args.window);
-        const s = await this.session(tab);
-        await this.connection().send("Target.activateTarget", { targetId: tab.targetId });
-        if (tab.dialog) return { text: `Window ${tab.id} "${tab.title}": ${dialogNote(tab)} The page is paused until it's answered.` };
-        const page = await this.evaluate(tab, MARKS_JS);
-        tab.marks = page.marks as Mark[];
-        tab.size = { width: page.width, height: page.height };
-        const image = await this.shot(tab, overlayJs({ boxes: tab.marks.map((m, i) => ({ ...m, label: String(i + 1) })) }), { format: "png" }, s);
-        const listing = tab.marks.map((m, i) => (m.name ? `${i + 1}. ${m.kind} "${m.name}"` : `${i + 1}. ${m.kind}`)).join("\n");
-        let head = `Window ${tab.id} "${page.title}" <${page.url}> (${page.width}x${page.height} px; x/y coordinates are pixels from its top-left).`;
-        if (page.crossFrames) head += `\n${page.crossFrames} embedded frame${page.crossFrames === 1 ? " is" : "s are"} from other sites, so ${page.crossFrames === 1 ? "its" : "their"} insides aren't marked: zoom in and use x/y there.`;
-        if (tab.chooser) head += "\nA file picker is open: pick files from your home folder with `upload`.";
-        return { text: head + (tab.marks.length ? "\nMarks:\n" + listing : "\nNo marks."), images: [{ data: image, type: "image/png" }] };
-    }
-
-    /** A screenshot with something drawn over the page for it, taken away again whatever happens. */
-    private async shot(tab: Tab, overlay: string, params: Record<string, unknown>, s: string): Promise<string> {
-        await this.evaluate(tab, overlay);
-        try {
-            const { data } = await this.connection().send<{ data: string }>("Page.captureScreenshot", params, s);
-            return data;
-        } finally {
-            // a page that navigated away took the overlay with it; anything else that fails here is the call's failure
-            await this.evaluate(tab, REMOVE_OVERLAY_JS);
-        }
-    }
-
-    async zoom(args: Record<string, unknown>): Promise<ToolResult> {
-        const tab = this.tab(args.window);
-        const s = await this.session(tab);
-        if (tab.dialog) throw new ToolError(dialogNote(tab));
-        await this.measure(tab);
-        const x = Math.max(0, Math.floor(Number(args.x)));
-        const y = Math.max(0, Math.floor(Number(args.y)));
-        const w = Math.min(Math.floor(Number(args.width)), tab.size.width - x);
-        const h = Math.min(Math.floor(Number(args.height)), tab.size.height - y);
-        if (!(w >= 8 && h >= 8)) throw new ToolError(`that region is outside the window (${tab.size.width}x${tab.size.height})`);
-        const scale = Math.max(1, Math.min(ZOOM_MAX, 1280 / Math.max(w, h)));
-        const step = GRID_STEPS.find((g) => g * scale >= 60) ?? GRID_STEPS.at(-1)!;
-        // the latest look's marks keep their numbers here, so either way of clicking works
-        const boxes = (tab.marks ?? [])
-            .map((m, i) => ({ ...m, label: String(i + 1) }))
-            .filter((m) => m.x < x + w && m.x + m.w > x && m.y < y + h && m.y + m.h > y);
-        const { visualViewport: vv } = await this.connection().send<any>("Page.getLayoutMetrics", {}, s);
-        const image = await this.shot(tab, overlayJs({ boxes, color: "blue", grid: { x, y, w, h, step, scale } }), {
-            format: "png",
-            // the clip is in the page's coordinates: the viewport's scroll offset moves it to what's on screen
-            clip: { x: x + (vv?.pageX ?? 0), y: y + (vv?.pageY ?? 0), width: w, height: h, scale },
-        }, s);
-        return {
-            text: `Region ${x},${y} to ${x + w},${y + h} of window ${tab.id}, enlarged ${scale.toFixed(1)}x. Grid lines every ${step} px are labelled in window coordinates: click with those x/y.`,
-            images: [{ data: image, type: "image/png" }],
-        };
-    }
-
-    async click(args: Record<string, unknown>): Promise<ToolResult> {
-        const tab = this.tab(args.window);
-        if (tab.dialog) throw new ToolError(dialogNote(tab));
-        const at = this.point(tab, args);
-        const button = (["left", "middle", "right"] as const).find((b) => b === (args.button ?? "left"));
-        if (!button) throw new ToolError("button is left, middle or right");
-        const before = this.ids();
-        await this.mouse(tab, "mouseMoved", at);
-        await this.press(tab, at, button, 1);
-        await this.lift(tab, at, button, 1);
-        if (args.double === true) {
-            await this.press(tab, at, button, 2);
-            await this.lift(tab, at, button, 2);
-        }
-        await this.settle();
-        return { text: `Clicked at ${at.x},${at.y} in window ${tab.id}.` + this.changes(before, tab) };
-    }
-
-    async hover(args: Record<string, unknown>): Promise<ToolResult> {
-        const tab = this.tab(args.window);
-        if (tab.dialog) throw new ToolError(dialogNote(tab));
-        const at = this.point(tab, args);
-        await this.mouse(tab, "mouseMoved", at);
-        await new Promise((r) => setTimeout(r, 600));
-        return { text: `Pointer resting at ${at.x},${at.y}.` };
-    }
-
-    async drag(args: Record<string, unknown>): Promise<ToolResult> {
-        const tab = this.tab(args.window);
-        if (tab.dialog) throw new ToolError(dialogNote(tab));
-        const from = this.point(tab, args);
-        if (args.to_mark === undefined && (args.to_x === undefined || args.to_y === undefined)) throw new ToolError("give to_mark, or to_x and to_y");
-        const to = this.point(tab, args, { mark: "to_mark", x: "to_x", y: "to_y" });
-        const before = this.ids();
-        await this.mouse(tab, "mouseMoved", from);
-        await this.press(tab, from, "left", 1);
-        try {
-            // in steps, so the page sees a drag rather than a jump
-            for (let i = 1; i <= 10; i++) {
-                await this.mouse(tab, "mouseMoved", { x: from.x + Math.round(((to.x - from.x) * i) / 10), y: from.y + Math.round(((to.y - from.y) * i) / 10) });
-                await new Promise((r) => setTimeout(r, 20));
-            }
-        } finally {
-            await this.lift(tab, to, "left", 1);
-        }
-        await this.settle();
-        return { text: `Dragged from ${from.x},${from.y} to ${to.x},${to.y}.` + this.changes(before, tab) };
-    }
-
-    async type(args: Record<string, unknown>): Promise<ToolResult> {
-        const tab = this.tab(args.window);
-        const before = this.ids();
-        await this.text(tab, String(args.text ?? ""));
-        if (args.enter === true && !tab.dialog) await this.keys(tab, ["Return"]);
-        await this.settle();
-        return { text: "Typed." + this.changes(before, tab) };
-    }
-
-    async key(args: Record<string, unknown>): Promise<ToolResult> {
-        const tab = this.tab(args.window);
-        const names = String(args.keys ?? "").split(/\s+/).filter(Boolean);
-        if (!names.length || names.length > KEYS_MAX) throw new ToolError(`press 1 to ${KEYS_MAX} keys at a time`);
-        const before = this.ids();
-        await this.keys(tab, names);
-        await this.settle();
-        return { text: `Pressed ${names.join(" ")}.` + this.changes(before, tab) };
-    }
-
-    async scroll(args: Record<string, unknown>): Promise<ToolResult> {
-        const tab = this.tab(args.window);
-        if (tab.dialog) throw new ToolError(dialogNote(tab));
-        const at = args.mark !== undefined || args.x !== undefined ? this.point(tab, args) : { x: Math.floor(tab.size.width / 2), y: Math.floor(tab.size.height / 2) };
-        const amount = args.amount === undefined ? 5 : Number(args.amount);
-        if (!Number.isInteger(amount) || !amount || Math.abs(amount) > SCROLL_MAX) throw new ToolError(`amount is 1 to ${SCROLL_MAX} steps, negative to scroll up`);
-        await this.mouse(tab, "mouseWheel", at, { deltaX: 0, deltaY: amount * SCROLL_PX });
-        await this.settle();
-        return { text: `Scrolled ${amount > 0 ? "down" : "up"} ${Math.abs(amount)}.` };
-    }
-
-    async place(args: Record<string, unknown>): Promise<ToolResult> {
-        const tab = this.tab(args.window);
-        const width = args.width === undefined ? tab.size.width : Number(args.width);
-        const height = args.height === undefined ? tab.size.height : Number(args.height);
-        if (![width, height].every((n) => Number.isInteger(n) && n >= 200 && n <= SIZE_MAX)) throw new ToolError(`sizes are 200 to ${SIZE_MAX} px`);
-        const cdp = this.connection();
-        const { windowId, bounds } = await cdp.send<any>("Browser.getWindowForTarget", { targetId: tab.targetId });
-        // the window's own frame around the page, the same before and after
-        const dx = bounds.width - tab.size.width;
-        const dy = bounds.height - tab.size.height;
-        await cdp.send("Browser.setWindowBounds", { windowId, bounds: { width: width + dx, height: height + dy } });
-        await this.settle();
-        await this.measure(tab);
-        tab.marks = null;
-        return { text: `Window ${tab.id} is ${tab.size.width}x${tab.size.height} now.` };
-    }
-
-    async close(args: Record<string, unknown>): Promise<ToolResult> {
-        const tab = this.tab(args.window);
-        await this.connection().send("Target.closeTarget", { targetId: tab.targetId });
-        this.untrack(tab.targetId);
-        return { text: "Closed." };
-    }
-
     /** A JPEG of a page, taken in a window opened for it and closed again: an app's picture on its card. */
     async picture(url: string): Promise<string> {
-        if (this.state.phase !== "ready" || !this.cdp?.open) throw new Error("your computer is off, and a page's picture is taken in its browser");
+        if (!this.on) throw new Error("your computer is off, and a page's picture is taken in its browser");
         const { tab } = await this.openWindow(url);
         try {
             const s = await this.session(tab);
@@ -1247,7 +966,7 @@ export class BrowserComputer {
 
     /** A page printed to a PDF, as its own print CSS lays it out: in a window of its own, closed after. */
     async pdf(url: string): Promise<Buffer> {
-        if (this.state.phase !== "ready" || !this.cdp?.open) throw new Error("the agent's computer is off, and a page is saved as a PDF in its browser. Start it in the agent's Computer page");
+        if (!this.on) throw new Error("the agent's computer is off, and a page is saved as a PDF in its browser. Start it in the agent's Computer page");
         const { tab } = await this.openWindow(url);
         try {
             const s = await this.session(tab);
@@ -1258,108 +977,6 @@ export class BrowserComputer {
         } finally {
             await this.connection().send("Target.closeTarget", { targetId: tab.targetId });
             this.untrack(tab.targetId);
-        }
-    }
-
-    async upload(args: Record<string, unknown>): Promise<ToolResult> {
-        const tab = this.tab(args.window);
-        const chooser = tab.chooser;
-        if (!chooser) throw new ToolError("No file picker is open in that window: click the page's upload button first.");
-        const files = Array.isArray(args.files) ? args.files : [args.files];
-        if (!files.length || files.length > UPLOAD_MAX) throw new ToolError(`pick 1 to ${UPLOAD_MAX} files`);
-        if (files.length > 1 && !chooser.multiple) throw new ToolError("this picker takes one file");
-        const paths = files.map((f) => {
-            const full = this.home.resolve(f);
-            if (!fs.statSync(full, { throwIfNoEntry: false })?.isFile()) throw new ToolError(`there's no file at ${this.home.shown(full)}`);
-            return full;
-        });
-        const before = this.ids();
-        await this.connection().send("DOM.setFileInputFiles", { files: paths, backendNodeId: chooser.backendNodeId }, await this.session(tab));
-        tab.chooser = null;
-        await this.settle();
-        return { text: `Picked ${paths.map((p) => this.home.shown(p)).join(", ")}.` + this.changes(before, tab) };
-    }
-
-    // ------------------------------------------------------------- sign-in
-
-    /** The agent's picks for a sign-in, checked against its latest look: the page's site and a picture of them. */
-    async signInPrepare(args: Record<string, unknown>): Promise<ToolResult> {
-        const rid = String(args.id ?? "");
-        if (!/^[a-z0-9]{6,32}$/.test(rid)) throw new ToolError("a sign-in id is lowercase letters and digits");
-        const tab = this.tab(args.window);
-        const ms = tab.marks;
-        if (!ms) throw new ToolError("look at the browser window first so its marks are fresh");
-        const fields = args.fields;
-        if (!Array.isArray(fields) || fields.length < 1 || fields.length > LIMITS.signIn.fields) throw new ToolError(`pick 1 to ${LIMITS.signIn.fields} fields`);
-        const mark = (n: unknown) => {
-            const i = Number(n);
-            if (!Number.isInteger(i) || i < 1 || i > ms.length) throw new ToolError(`mark ${String(n)} doesn't exist; the last look had ${ms.length}`);
-            return [i, ms[i - 1]!] as const;
-        };
-        const picked = fields.map(mark);
-        // no button marked: Enter is pressed in the last field (a page whose button is greyed out until typed in)
-        const submit = args.submit !== undefined && args.submit !== null ? mark(args.submit) : null;
-        const numbers = [...picked.map(([n]) => n), ...(submit ? [submit[0]] : [])];
-        if (new Set(numbers).size !== numbers.length) throw new ToolError("each field, and the submit button, is a different mark");
-        for (const [n, m] of picked) if (!["entry", "text", "password text"].includes(m.kind)) throw new ToolError(`mark ${n} is a ${m.kind}, not a text field`);
-        const site = siteOf(tab.url);
-        const boxes = [...picked.map(([, m], i) => ({ ...m, label: String(i + 1) })), ...(submit ? [{ ...submit[1], label: "submit" }] : [])];
-        const s = await this.session(tab);
-        const image = await this.shot(tab, overlayJs({ boxes }), { format: "png" }, s);
-        const centre = (m: Mark) => ({ x: m.x + Math.floor(m.w / 2), y: m.y + Math.floor(m.h / 2) });
-        this.signIn = { id: rid, targetId: tab.targetId, window: tab.id, site, fields: picked.map(([, m]) => centre(m)), submit: submit ? centre(submit[1]) : null };
-        return { text: JSON.stringify({ site, fields: picked.map(([, m]) => ({ secret: m.kind === "password text" })) }), images: [{ data: image, type: "image/png" }] };
-    }
-
-    /** The user's values, typed into the fields the waiting request named, then submit pressed. Used once. */
-    private async signInFill(args: Record<string, unknown>) {
-        const p = this.signIn;
-        if (!p || p.id !== args.id) throw new ToolError("that sign-in isn't waiting anymore");
-        const values = args.values;
-        if (!Array.isArray(values) || values.length !== p.fields.length || !values.every((v) => typeof v === "string" && v.length <= LIMITS.signIn.valueChars)) {
-            throw new ToolError(`one value per field, each at most ${LIMITS.signIn.valueChars} characters`);
-        }
-        this.signIn = null; // used once, whatever happens next
-        const tab = this.tabs.get(p.targetId);
-        if (!tab) throw new ToolError("that page isn't open anymore");
-        const onSite = async () => {
-            const [origin] = await this.evaluate(tab, EDITABLE_JS);
-            if (siteOf(origin) !== p.site) throw new ToolError(`the page isn't on ${p.site} anymore`);
-        };
-        if (siteOf(tab.url) !== p.site) throw new ToolError(`the page isn't on ${p.site} anymore`);
-        const s = await this.session(tab);
-        for (const [i, at] of p.fields.entries()) {
-            const value = values[i] as string;
-            await this.mouse(tab, "mouseMoved", at);
-            await this.press(tab, at, "left", 1);
-            await this.lift(tab, at, "left", 1);
-            await new Promise((r) => setTimeout(r, 150));
-            const [origin, editable, maxLength] = await this.evaluate(tab, EDITABLE_JS);
-            if (siteOf(origin) !== p.site) throw new ToolError(`the page isn't on ${p.site} anymore`);
-            if (!editable) throw new ToolError(`field ${i + 1} didn't take the cursor; the page may have changed`);
-            if (maxLength > 0 && maxLength < value.length) await this.typeSplit(tab, s, value);
-            else await this.connection().send("Input.insertText", { text: value }, s);
-        }
-        await onSite();
-        if (p.submit) {
-            await this.mouse(tab, "mouseMoved", p.submit);
-            await this.press(tab, p.submit, "left", 1);
-            await this.lift(tab, p.submit, "left", 1);
-        } else await this.keys(tab, ["Return"]); // the last field still has the cursor
-        return { ok: true };
-    }
-
-    /** A code longer than its box: a key at a time, moving to the next box whenever the site leaves the cursor in a full one. */
-    private async typeSplit(tab: Tab, s: string, value: string) {
-        const chars = [...value];
-        for (const [i, c] of chars.entries()) {
-            await this.evaluate(tab, SIGN_IN_FOCUS_JS);
-            const code = /^[0-9]$/.test(c) ? `Digit${c}` : /^[a-z]$/i.test(c) ? `Key${c.toUpperCase()}` : "";
-            const vk = /^[a-z0-9]$/i.test(c) ? c.toUpperCase().charCodeAt(0) : 0;
-            await this.connection().send("Input.dispatchKeyEvent", { type: "keyDown", key: c, code, windowsVirtualKeyCode: vk, text: c, unmodifiedText: c }, s);
-            await this.connection().send("Input.dispatchKeyEvent", { type: "keyUp", key: c, code, windowsVirtualKeyCode: vk }, s);
-            await new Promise((r) => setTimeout(r, 30)); // the site's own handler moves the cursor
-            if (i < chars.length - 1 && (await this.evaluate(tab, SIGN_IN_MOVED_JS))) await this.keys(tab, ["Tab"]);
         }
     }
 
@@ -1376,110 +993,7 @@ export class BrowserComputer {
         return this.home.write(file, data);
     }
 
-    // ------------------------------------------------------------- the user's view
-
-    /** The user looking at (and, with control, using) the browser's windows. */
-    async view(tool: ViewTool, args: Record<string, unknown>): Promise<unknown> {
-        if (!VIEW_TOOLS.includes(tool)) throw new Error(`not a view: ${tool}`);
-        if ((tool === "view_input" || tool === "view_go") && !this.state.userControl) throw new Error("Take control of the computer first.");
-        if (this.state.phase !== "ready" || !this.cdp?.open) throw new Error("The computer isn't on.");
-        if (this.viewCalls >= MAX_VIEW_CALLS) throw new Error("The computer is busy showing other views; try again.");
-        this.viewCalls++;
-        try {
-            switch (tool) {
-                case "view_windows":
-                    await this.refreshAll();
-                    return {
-                        windows: [...this.tabs.values()]
-                            .sort((a, b) => a.id - b.id)
-                            .map((t) => ({ id: t.id, title: t.title || t.url, url: t.url, app: "Helium", width: t.size.width, height: t.size.height })),
-                    };
-                case "view_frame":
-                    return await this.frame(args);
-                case "view_input":
-                    return await this.input(args);
-                case "view_go":
-                    await this.go(args);
-                    return { ok: true };
-                case "view_close":
-                    await this.close(args);
-                    return { ok: true };
-                case "view_sign_in":
-                    return await this.signInFill(args);
-            }
-        } catch (e) {
-            throw e instanceof ToolError ? new Error(e.message) : e;
-        } finally {
-            this.viewCalls--;
-        }
-    }
-
-    private async frame(args: Record<string, unknown>) {
-        const tab = this.tab(args.window);
-        // a page waiting on a dialog can't be pictured: the last picture stands, with the dialog to answer
-        if (tab.dialog) return { same: true, hash: typeof args.since === "string" ? args.since : "", dialog: tab.dialog };
-        const s = await this.session(tab);
-        const quality = Math.max(30, Math.min(90, Number.isInteger(args.quality) ? (args.quality as number) : 72));
-        const { data } = await this.connection().send<{ data: string }>("Page.captureScreenshot", { format: "jpeg", quality }, s, 10_000);
-        const hash = createHash("sha256").update(data).digest("hex").slice(0, 24);
-        if (args.since === hash) return { same: true, hash, dialog: null };
-        await this.measure(tab);
-        return { frame: data, hash, width: tab.size.width, height: tab.size.height, dialog: null };
-    }
-
-    private async input(args: Record<string, unknown>) {
-        const tab = this.tab(args.window);
-        const events = args.events;
-        if (!Array.isArray(events) || events.length > VIEW_MAX_EVENTS) throw new ToolError(`send at most ${VIEW_MAX_EVENTS} events at a time`);
-        const inside = (e: Record<string, unknown>) => {
-            const x = Number(e.x);
-            const y = Number(e.y);
-            if (!Number.isFinite(x) || !Number.isFinite(y) || x < 0 || y < 0 || x >= tab.size.width || y >= tab.size.height) throw new ToolError("that point is outside the window");
-            return { x: Math.floor(x), y: Math.floor(y) };
-        };
-        for (const raw of events) {
-            const e = (raw ?? {}) as Record<string, unknown>;
-            switch (e.type) {
-                case "move":
-                    if (!tab.dialog) await this.mouse(tab, "mouseMoved", inside(e));
-                    break;
-                case "down":
-                case "up": {
-                    const button = BUTTON_NAMES[Number(e.button) as 1 | 2 | 3];
-                    if (!button) throw new ToolError("unknown mouse button");
-                    if (tab.dialog) break;
-                    const at = e.x !== undefined ? inside(e) : { x: tab.pointer.x, y: tab.pointer.y };
-                    if (e.type === "down") {
-                        const last = tab.pointer.lastDown;
-                        const again = last && last.button === Number(e.button) && Date.now() - last.at < 500 && Math.abs(last.x - at.x) <= 4 && Math.abs(last.y - at.y) <= 4;
-                        const count = again ? Math.min(3, last.count + 1) : 1;
-                        tab.pointer.lastDown = { at: Date.now(), x: at.x, y: at.y, button: Number(e.button), count };
-                        await this.press(tab, at, button, count);
-                    } else await this.lift(tab, at, button, tab.pointer.lastDown?.count ?? 1);
-                    break;
-                }
-                case "scroll": {
-                    if (tab.dialog) break;
-                    const dy = Math.max(-20, Math.min(20, Math.trunc(Number(e.dy ?? 0)) || 0));
-                    const dx = Math.max(-20, Math.min(20, Math.trunc(Number(e.dx ?? 0)) || 0));
-                    if (dy || dx) await this.mouse(tab, "mouseWheel", inside(e), { deltaX: dx * SCROLL_PX, deltaY: dy * SCROLL_PX });
-                    break;
-                }
-                case "key":
-                    await this.keys(tab, [String(e.keys ?? "")]);
-                    break;
-                case "text": {
-                    const text = String(e.text ?? "");
-                    if (text.length > VIEW_MAX_TEXT) throw new ToolError(`type at most ${VIEW_MAX_TEXT} characters at a time`);
-                    await this.text(tab, text);
-                    break;
-                }
-                default:
-                    throw new ToolError(`unknown input ${JSON.stringify(e.type)}`);
-            }
-        }
-        return { ok: true };
-    }
+    // ------------------------------------------------------------- the user's control
 
     /** Take control, or renew it: the agent's hands wait until it's released or the lease runs out. */
     takeControl() {
@@ -1497,56 +1011,10 @@ export class BrowserComputer {
     }
 }
 
-const TOOLS: Record<string, { call: (c: BrowserComputer, args: Record<string, unknown>) => ToolResult | Promise<ToolResult> }> = {
-    windows: { call: (c) => c.windows() },
-    open: { call: (c, a) => c.open(a) },
-    go: { call: (c, a) => c.go(a) },
-    look: { call: (c, a) => c.look(a) },
-    zoom: { call: (c, a) => c.zoom(a) },
-    click: { call: (c, a) => c.click(a) },
-    hover: { call: (c, a) => c.hover(a) },
-    drag: { call: (c, a) => c.drag(a) },
-    type: { call: (c, a) => c.type(a) },
-    key: { call: (c, a) => c.key(a) },
-    scroll: { call: (c, a) => c.scroll(a) },
-    place: { call: (c, a) => c.place(a) },
-    close: { call: (c, a) => c.close(a) },
-    upload: { call: (c, a) => c.upload(a) },
-    // the service's half of a sign-in; the agent reaches it only through ask_to_sign_in
-    sign_in_prepare: { call: (c, a) => c.signInPrepare(a) },
-};
-
-function dialogNote(tab: Tab): string {
+export function dialogNote(tab: Tab): string {
     const d = tab.dialog!;
     const what = d.type === "beforeunload" ? "The page asks whether to leave it" : `The page shows a ${d.type} dialog${d.message ? `: "${d.message}"` : ""}`;
     return `${what}. Press Return to accept${d.type === "prompt" ? " (or type an answer)" : ""} or Escape to dismiss it.`;
-}
-
-/** What the user is told they're signing in to: the host, with the scheme only when it isn't https. */
-function siteOf(url: string): string {
-    let u: URL;
-    try {
-        u = new URL(url);
-    } catch {
-        throw new ToolError("that page isn't a website");
-    }
-    if ((u.protocol !== "https:" && u.protocol !== "http:") || !u.hostname) throw new ToolError("that page isn't a website");
-    return u.protocol === "https:" ? u.hostname : `http://${u.hostname}`;
-}
-
-/** A web address the agent gave, made whole (example.com is https://example.com), or why it isn't one. */
-export function webAddress(what: unknown, blankAllowed: boolean): string {
-    const s = typeof what === "string" ? what.trim() : "";
-    if (blankAllowed && (s === "" || s === "browser" || s === "helium" || s === "about:blank")) return "about:blank";
-    if (/^https?:\/\//i.test(s)) {
-        try {
-            return new URL(s).href;
-        } catch {
-            throw new ToolError(`${s} isn't a web address`);
-        }
-    }
-    if (/^[^\s/:]+\.[^\s/:]+(:\d+)?([/?#]\S*)?$/.test(s)) return new URL(`https://${s}`).href;
-    throw new ToolError(`Open a web address (https://…)${blankAllowed ? ", or `browser` for a blank page" : ""}: your computer is a web browser.`);
 }
 
 function navigationError(url: string, error: string): string {

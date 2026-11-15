@@ -25,6 +25,8 @@ import { Checkpoints } from "./checkpoints";
 import { shellToolset } from "./shell";
 import { Pages } from "./pages";
 import { BrowserComputer, type ComputerHost } from "./browser";
+import { browserTool } from "./browserTools";
+import { browserView } from "./browserView";
 import { Brains, type BrainPackages } from "./brains";
 import { errorText } from "../lib/failure";
 import { Providers } from "./providers";
@@ -208,8 +210,8 @@ export class AiApp {
             },
         });
         this.signIns = new SignIns({
-            prepare: (args) => this.computer.callTool("sign_in_prepare", args),
-            fill: (args) => this.computer.view("view_sign_in", args),
+            prepare: (args) => browserTool(this.computer, "sign_in_prepare", args),
+            fill: (args) => browserView(this.computer, "view_sign_in", args),
             post: (entry) => this.conversation.post(entry),
             notice: (text) => this.conversation.notice(text),
         });
@@ -272,7 +274,7 @@ export class AiApp {
         pages.watch();
         const checkpoints = new Checkpoints({ home, dir: path.join(root, "checkpoints") });
         const tools = toolbox([
-            { id: "computer", tools: () => COMPUTER_TOOLS, call: (name, args) => this.computer.callTool(name, args), instructions: () => COMPUTER_INSTRUCTIONS, context: () => this.computer.openWindowsNote() },
+            { id: "computer", tools: () => COMPUTER_TOOLS, call: (name, args) => browserTool(this.computer, name, args), instructions: () => COMPUTER_INSTRUCTIONS, context: () => this.computer.openWindowsNote() },
             messagesToolset({ say: (text, replyTo, files) => this.conversation.say(text, replyTo, files) }),
             shellToolset(home),
             pages.toolset(),
@@ -803,24 +805,24 @@ export class AiApp {
     // ------------------------------------------------------------- the user's view
 
     windows() {
-        return this.computer.view("view_windows", {});
+        return browserView(this.computer, "view_windows", {});
     }
 
     frame(i: Record<string, unknown>) {
-        return this.computer.view("view_frame", { window: i.window, since: i.since, quality: i.quality });
+        return browserView(this.computer, "view_frame", { window: i.window, since: i.since, quality: i.quality });
     }
 
     input(i: Record<string, unknown>) {
-        return this.computer.view("view_input", { window: i.window, events: i.events });
+        return browserView(this.computer, "view_input", { window: i.window, events: i.events });
     }
 
     closeWindow(i: Record<string, unknown>) {
-        return this.computer.view("view_close", { window: i.window });
+        return browserView(this.computer, "view_close", { window: i.window });
     }
 
     /** The user, in control, sends a window somewhere: an address, back, forward or reload. */
     go(i: Record<string, unknown>) {
-        return this.computer.view("view_go", { window: i.window, to: i.to });
+        return browserView(this.computer, "view_go", { window: i.window, to: i.to });
     }
 
     /** take (or renew) control with take: true; hand it back with take: false */
