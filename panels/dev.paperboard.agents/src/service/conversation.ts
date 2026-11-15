@@ -114,6 +114,8 @@ export interface ConversationDeps {
     onTurnFailed?: (error: string) => void;
     /** a turn is over, whatever became of it: what was allowed for it lapses */
     onTurnEnd?: () => void;
+    /** the conversation is about to be left (started over, or another made current): what's waiting on it lapses */
+    onLeave?: () => void;
     onState: (s: ChatState) => void;
     /** Codex's home, where its rollouts say how long a thread is; null leaves Codex's threads unmeasured */
     codexHome: string | null;
@@ -244,7 +246,7 @@ export class Conversation {
         this.pump();
     }
 
-    /** Add or update a card: a sign-in, access or prompt request (signIn.ts, access.ts and prompts.ts own them; this only shows them) or an app shown to the user. */
+    /** Add or update a card: a sign-in, access, prompt or tool-server request (signIn.ts, access.ts, prompts.ts and serverTools.ts own them; this only shows them) or a page shown to the user. */
     post(entry: SignInEntry | AccessEntry | PromptEntry | ToolServerEntry | ToolSignInEntry | PageEntry) {
         if (this.closed) return;
         this.put(entry);
@@ -271,7 +273,7 @@ export class Conversation {
     /** Start over: stop, forget the conversation and the harness's threads. Asked for explicitly; it can't be undone. */
     async clear() {
         this.notices = [];
-        await this.swap(() => {
+        await this.swap(null, () => {
             this.transcript.clear();
             this.threads = {};
             this.setCarry(null);
@@ -283,13 +285,16 @@ export class Conversation {
 
     /** Put the current conversation in the history and start a new one. An empty one is just left. */
     newConversation() {
-        return this.swap(() => {
-            if (this.entries.length === 0) return;
-            if (this.archive.ids().length >= LIMITS.pastConversations) {
-                throw new Error(`You have ${LIMITS.pastConversations} past conversations; delete some from the history first.`);
-            }
-            this.putAway();
-        }).then(() => ({ started: true }));
+        return this.swap(
+            () => {
+                if (this.entries.length > 0 && this.archive.ids().length >= LIMITS.pastConversations) {
+                    throw new Error(`You have ${LIMITS.pastConversations} past conversations; delete some from the history first.`);
+                }
+            },
+            () => {
+                if (this.entries.length > 0) this.putAway();
+            },
+        ).then(() => ({ started: true }));
     }
 
     /**
@@ -312,15 +317,17 @@ export class Conversation {
 
     /** Make a past conversation the current one, to continue it; the current one goes into the history. */
     async open(id: unknown) {
-        this.archive.folder(id); // an id that's no conversation's is refused before the turn is stopped
-        await this.swap(() => {
-            this.archive.restore(id, () => {
-                if (this.entries.length > 0) this.putAway();
-                // files uploaded and never sent belong to no message: they don't come along
-                else fs.rmSync(path.join(this.deps.dir, ATTACHMENTS), { recursive: true, force: true });
-            });
-            this.loadCurrent();
-        });
+        await this.swap(
+            () => this.archive.find(id),
+            () => {
+                this.archive.restore(id, () => {
+                    if (this.entries.length > 0) this.putAway();
+                    // files uploaded and never sent belong to no message: they don't come along
+                    else fs.rmSync(path.join(this.deps.dir, ATTACHMENTS), { recursive: true, force: true });
+                });
+                this.loadCurrent();
+            },
+        );
         return { opened: true };
     }
 
@@ -388,11 +395,14 @@ export class Conversation {
 
     /**
      * Stop the running turn, then change which conversation is current. Messages waiting for the old one are
-     * dropped with it; the service's notices wait for the next turn, in whichever conversation that is.
+     * dropped with it; the service's notices wait for the next turn, in whichever conversation that is. A
+     * switch `check` refuses stops, drops and lapses nothing.
      */
-    private async swap(change: () => void) {
+    private async swap(check: (() => void) | null, change: () => void) {
         if (this.closed) throw new Error("the conversation is shutting down");
         while (this.switching) await this.switching.catch(() => undefined);
+        check?.();
+        this.deps.onLeave?.();
         const run = (async () => {
             this.queue = [];
             this.attachments.closeUploads();

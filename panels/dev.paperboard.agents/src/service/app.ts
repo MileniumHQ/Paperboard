@@ -326,6 +326,7 @@ export class AiApp {
             },
             onTurnFailed: (error) => this.blocks.fire("turn-failed", { error, conversation: this.conversation.id() }),
             onTurnEnd: () => this.access.turnEnded(),
+            onLeave: () => this.lapseRequests(),
             onState: (chat) => this.ctx.setState({ chat }),
             codexHome: this.brains.homes.codex,
         });
@@ -506,7 +507,6 @@ export class AiApp {
     }
 
     async startOver() {
-        this.lapseRequests();
         const r = await this.conversation.clear();
         this.ctx.emit(EVENTS.cleared, {});
         this.publish();
@@ -515,7 +515,6 @@ export class AiApp {
 
     /** Start a new conversation, or continue a past one: what's waiting belongs to the one being put away. */
     async newConversation() {
-        this.lapseRequests();
         const r = await this.conversation.newConversation();
         this.ctx.emit(EVENTS.switched, {});
         this.publish();
@@ -523,7 +522,6 @@ export class AiApp {
     }
 
     async openConversation(id: unknown) {
-        this.lapseRequests();
         const r = await this.conversation.open(id);
         this.ctx.emit(EVENTS.switched, {});
         this.publish();

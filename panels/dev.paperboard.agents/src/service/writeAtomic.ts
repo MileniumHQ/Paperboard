@@ -6,6 +6,7 @@
 import { randomBytes } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
+import { errorText } from "../lib/failure";
 
 /** Replace `file` with `data` in one step; its folder is made if it's missing. `mode` is a new file's permissions. */
 export function writeAtomic(file: string, data: string | Uint8Array, mode = 0o666) {
@@ -21,8 +22,12 @@ export function writeAtomic(file: string, data: string | Uint8Array, mode = 0o66
         }
         fs.renameSync(tmp, file);
     } catch (e) {
-        // a failed cleanup throws instead of hiding the write's own failure
-        fs.rmSync(tmp, { force: true });
+        // a failed cleanup is told, never thrown in place of the write's own failure
+        try {
+            fs.rmSync(tmp, { force: true });
+        } catch (cleanup) {
+            console.error(`[agents] couldn't remove ${tmp} after a failed write: ${errorText(cleanup)}`);
+        }
         throw e;
     }
 }

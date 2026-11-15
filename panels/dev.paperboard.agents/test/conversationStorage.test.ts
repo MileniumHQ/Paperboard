@@ -3,8 +3,9 @@ import * as crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { LIMITS } from "../src/contract";
-import { conversationRig, said, settled, type Rig } from "./support/rig";
-import { SLOW } from "./support/host";
+import { writeAtomic } from "../src/service/writeAtomic";
+import { conversationRig, said, settled, turnId, type Rig } from "./support/rig";
+import { release, SLOW, tempDir } from "./support/host";
 
 const cryptoAsItWas = { ...crypto };
 // the ids a test wants randomUUID to hand out next; past them, it's random as ever
@@ -172,18 +173,28 @@ describe("the history", () => {
         expect(rig.host.started.at(-1)!.args.filter((a) => a === "exec" || a === "resume")).toEqual(["exec", "resume"]);
     }, SLOW);
 
-    test("a full history refuses a new conversation rather than drop an old one", async () => {
-        rig = await conversationRig();
+    test("a refused switch is a no-op: the turn keeps running, nothing waiting is dropped, nothing lapses", async () => {
+        let left = 0;
+        rig = await conversationRig({ onLeave: () => left++ });
         const past = path.join(rig.dir, "past");
         for (let i = 0; i < LIMITS.pastConversations; i++) {
             const id = i.toString(16).padStart(12, "0");
             fs.mkdirSync(path.join(past, id), { recursive: true });
             fs.writeFileSync(path.join(past, id, "meta.json"), JSON.stringify({ id, title: `old ${i}`, startedAt: i, endedAt: i, messages: 1 }));
         }
-        rig.conversation.send("the current one");
-        await settled(rig);
+        rig.conversation.send("the current one [[hold]]");
+        await rig.host.printed(turnId, "fake.holding");
+        rig.conversation.send("from a flow", null, [], { fromFlow: true });
+        // the history is full, or the one picked was just deleted
         await expect(rig.conversation.newConversation()).rejects.toThrow(/delete some from the history first/);
-        expect(rig.conversation.history().map((e) => e.kind)).toEqual(["user", "agent"]);
+        await expect(rig.conversation.open("ffffffffffff")).rejects.toThrow(/isn't in the history anymore/);
+        expect(left).toBe(0);
+        expect(rig.host.kills).toEqual([]);
+        expect(rig.states.last()!.waiting.map((w) => w.text)).toEqual(["from a flow"]);
+        release(rig.root);
+        await rig.states.until(() => rig!.turns().length === 2, "the flow's turn");
+        await settled(rig);
+        expect(said(rig)).toHaveLength(2);
         expect(rig.conversation.past()).toHaveLength(LIMITS.pastConversations);
     }, SLOW);
 
@@ -222,5 +233,17 @@ describe("the history", () => {
             expect(() => rig!.conversation.attachments.read(id, 0)).toThrow("that isn't a file's id");
         }
         expect(() => rig!.conversation.send("hi", null, ["../escape"])).toThrow("that isn't a file's id");
+    });
+});
+
+describe("writing a file", () => {
+    test("a write that fails throws its own failure, even when its temp file can't be removed either", () => {
+        const dir = tempDir("write");
+        try {
+            // the file's name fits; its temp file's is too long to open, and so to remove
+            expect(() => writeAtomic(path.join(dir, "a".repeat(245)), "x")).toThrow(expect.objectContaining({ code: "ENAMETOOLONG", syscall: "open" }));
+        } finally {
+            fs.rmSync(dir, { recursive: true, force: true });
+        }
     });
 });

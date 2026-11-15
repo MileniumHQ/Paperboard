@@ -73,7 +73,7 @@ export class History {
     }
 
     /** A past conversation's folder; throws for what isn't a conversation's id. */
-    folder(id: unknown): string {
+    private folder(id: unknown): string {
         if (typeof id !== "string" || !PAST_ID.test(id)) throw new Error("that isn't a conversation's id");
         return path.join(this.pastDir(), id);
     }
@@ -97,10 +97,16 @@ export class History {
         fs.rmSync(path.join(this.dir, ID), { force: true });
     }
 
-    /** Move a past conversation back to be the current one, once `vacate` has moved the current one's files out of the way. */
-    restore(id: unknown, vacate: () => void) {
+    /** A past conversation's folder; throws for one that isn't in the history. */
+    find(id: unknown): string {
         const dir = this.folder(id);
         if (!fs.existsSync(dir)) throw new Error("That conversation isn't in the history anymore.");
+        return dir;
+    }
+
+    /** Move a past conversation back to be the current one, once `vacate` has moved the current one's files out of the way. */
+    restore(id: unknown, vacate: () => void) {
+        const dir = this.find(id);
         vacate();
         const files = path.join(dir, ATTACHMENTS);
         if (fs.existsSync(files)) fs.renameSync(files, path.join(this.dir, ATTACHMENTS));
@@ -123,8 +129,7 @@ export class History {
 
     /** Delete a past conversation for good. */
     delete(id: unknown) {
-        const dir = this.folder(id);
-        if (!fs.existsSync(dir)) throw new Error("That conversation isn't in the history anymore.");
+        const dir = this.find(id);
         fs.rmSync(dir, { recursive: true });
     }
 
