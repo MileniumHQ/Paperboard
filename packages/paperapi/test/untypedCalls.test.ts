@@ -26,14 +26,8 @@ const STILL_UNTYPED = [
     "panels/dev.paperboard.ai/src/widget/state.ts",
     "panels/dev.paperboard.gameserver/scripts/scenarioDaemon.ts",
     "panels/dev.paperboard.gameserver/src/lib/api.ts",
-    "panels/dev.paperboard.gameserver/src/lib/server.ts",
-    "panels/dev.paperboard.gameserver/src/service.ts",
     "panels/dev.paperboard.gameserver/src/widget/connection.ts",
-    "panels/dev.paperboard.gameserver/test/contracts.test.ts",
     "panels/dev.paperboard.gameserver/test/helpers/installedPanel.ts",
-    "panels/dev.paperboard.gameserver/test/helpers/serverCall.ts",
-    "panels/dev.paperboard.gameserver/test/serviceRestarts.test.ts",
-    "panels/dev.paperboard.gameserver/test/updates.test.ts",
 ];
 
 // PaperAPI itself and its docs name them to define and deprecate them
