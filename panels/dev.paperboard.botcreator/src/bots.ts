@@ -56,6 +56,16 @@ export interface BotSummary {
     commands: SlashCommandDefinition[];
     /** why its commands aren't all on Discord, as of the last sync; null when they are */
     commandSyncError: string | null;
+    /** what went wrong in the background (a flow event that didn't run), newest last; shown in its Overview */
+    problems: BotProblem[];
+}
+
+/** One thing that went wrong while the bot ran, with no button to say it under. */
+export interface BotProblem {
+    id: number;
+    /** when, in ms since the epoch */
+    at: number;
+    text: string;
 }
 
 export interface BotsServiceState {

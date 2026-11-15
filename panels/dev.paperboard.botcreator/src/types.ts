@@ -546,8 +546,6 @@ export interface Health {
     cachedChannels: number;
     commandsReceived: number;
     pendingInteractions: number;
-    /** null when every stored command matched Discord; the error otherwise */
-    commandSyncError: string | null;
 }
 
 export interface GuildSummary {

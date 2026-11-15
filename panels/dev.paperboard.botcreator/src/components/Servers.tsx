@@ -25,7 +25,7 @@ import {
 } from "@mileniumhq/paperui";
 import { serviceApi } from "@mileniumhq/paperapi";
 import { PANEL_ID, type BotSummary } from "../bots";
-import { picture } from "../picture";
+import { picture, pictureProblem } from "../picture";
 import {
     CHANNEL_KIND_LABELS,
     count,
@@ -339,6 +339,8 @@ export default function Servers(props: { bot: () => BotSummary }) {
                             <PaperFlex direction="row" padding="full" gap="full" align="center">
                                 <PaperAvatar
                                     src={picture(guild().icon)}
+                                    title={pictureProblem(guild().icon)}
+                                    accent={pictureProblem(guild().icon) ? "danger" : undefined}
                                     fallbackIcon="dns"
                                     size="xlarge"
                                 />
@@ -467,7 +469,7 @@ export default function Servers(props: { bot: () => BotSummary }) {
                                                         align="center"
                                                         fullWidth
                                                     >
-                                                        <PaperAvatar src={picture(member.avatar)} size="medium" fallbackIcon="person" />
+                                                        <PaperAvatar src={picture(member.avatar)} title={pictureProblem(member.avatar)} accent={pictureProblem(member.avatar) ? "danger" : undefined} size="medium" fallbackIcon="person" />
                                                         <PaperFlex direction="column" gap="onefourth" flex minWidth={0}>
                                                             <PaperFlex
                                                                 direction="row"

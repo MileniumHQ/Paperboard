@@ -42,7 +42,7 @@ describe("sync is declarative and reports what it couldn't do", () => {
         expect(login.body).toEqual([expect.objectContaining({ name: "hello", integration_types: [0] })]);
         // a guild with no commands and no reason to clear is left alone
         expect(puts(0, fake.appId).map(scopeOf).sort()).toEqual([GLOBAL_SCOPE, home.id].sort());
-        expect(bot.session.health().commandSyncError).toBeNull();
+        expect(bot.session.syncError()).toBeNull();
 
         // the last command of a scope removed: that scope is set to empty, the rest in full
         const before = discord().requests.length;
@@ -66,7 +66,7 @@ describe("sync is declarative and reports what it couldn't do", () => {
         const result = await bot.session.syncAfterMutation();
         const message = `Guild ${gone} is not in this bot's server list; its commands were not registered.`;
         expect(result).toEqual({ registered: false, syncError: message });
-        expect(bot.session.health().commandSyncError).toBe(message);
+        expect(bot.session.syncError()).toBe(message);
         expect(puts(before, fake.appId).map(scopeOf).sort()).toEqual([GLOBAL_SCOPE, home.id].sort());
     });
 

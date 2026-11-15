@@ -5,7 +5,7 @@
 import { afterAll, afterEach, beforeAll, describe, expect, setDefaultTimeout, test } from "bun:test";
 import type { BotsServiceState } from "../src/bots";
 import { panelBrowser, servePanel, type Page } from "./helpers/browser";
-import { guild, startFakeDiscord, userMessage, type FakeDiscord } from "./helpers/discord";
+import { guild, slashCommand, startFakeDiscord, userMessage, type FakeDiscord } from "./helpers/discord";
 import { call, PANEL_ID, savedBots, startService, stopServices, storedBot } from "./helpers/service";
 import { stateWhere } from "./helpers/wait";
 
@@ -105,6 +105,63 @@ describe("a bot's page", () => {
             expect(await page.evaluate<boolean>(`document.body.innerText.includes("heard live")`)).toBe(true);
             expect(page.exceptions).toEqual([]);
         } finally {
+            await page.close();
+            served.stop();
+        }
+    });
+
+    test("a bot being added keeps its dialog until the service answers, then opens", async () => {
+        await savedBots([]);
+        await startService({ discordApi: discord.api });
+        await call("markSetupGuideSeen");
+        const fake = discord.addBot({ username: "Patient" });
+        const served = await servePanel();
+        const page = await browser.open(served.url);
+        try {
+            await page.waitFor(`document.body.innerText.includes("No bots yet")`, "the empty bot list");
+            await clickText(page, "button", "New bot");
+            await page.type(`input[type=password]`, fake.token);
+            const release = discord.hold((r) => r.path === "/gateway/bot" && r.bot === fake.token);
+            await clickText(page, "button", "Add bot");
+            await discord.request((r) => r.path === "/gateway/bot" && r.bot === fake.token, "the new bot's login");
+            await page.waitFor(`document.querySelector("[role=dialog]")?.innerText.includes("Connecting…")`, "the dialog to wait");
+            // neither Cancel nor Escape leaves an answer with no dialog to land in
+            await clickText(page, "[role=dialog] button", "Cancel");
+            await page.send("Input.dispatchKeyEvent", { type: "keyDown", key: "Escape", code: "Escape", windowsVirtualKeyCode: 27 });
+            await page.send("Input.dispatchKeyEvent", { type: "keyUp", key: "Escape", code: "Escape", windowsVirtualKeyCode: 27 });
+            expect(await page.evaluate<boolean>(`Boolean(document.querySelector("[role=dialog][aria-modal=true]")?.innerText.includes("Connecting…"))`)).toBe(true);
+            release();
+            await page.waitFor(`document.body.innerText.includes("Patient") && document.body.innerText.includes("Gateway status")`, "the new bot's Overview");
+            expect(page.exceptions).toEqual([]);
+        } finally {
+            await page.close();
+            served.stop();
+        }
+    });
+
+    test("what went wrong with no button to say it under is in the bot's Overview, and a picture that couldn't be fetched says why", async () => {
+        const home = guild("Home");
+        const fake = discord.addBot({ username: "Troubled", guilds: [home] });
+        // every default avatar is missing from the CDN
+        for (let n = 0; n < 6; n++) discord.cdnAnswers.set(`/cdn/embed/avatars/${n}.png`, () => new Response("gone", { status: 404 }));
+        await savedBots([{ stored: storedBot("b-trouble", fake.appId, { name: "Troubled" }), token: fake.token }]);
+        await startService({ discordApi: discord.api });
+        await stateWhere<BotsServiceState>(PANEL_ID, (s) => Boolean(s.bots[0]?.connected), "Troubled to connect");
+        const served = await servePanel();
+        const page = await browser.open(served.url);
+        try {
+            await page.waitFor(`document.body.innerText.includes("Troubled")`, "the bot list");
+            await clickText(page, "[class*=card], [class*=Card]", "Troubled");
+            await page.waitFor(`document.body.innerText.includes("Gateway status")`, "the Overview");
+
+            // a command Discord still has but the bot doesn't: no flow runs, and the Overview says so
+            discord.dispatch(fake, "INTERACTION_CREATE", slashCommand(fake, { guild: home, name: "ghost" }));
+            await page.waitFor(`document.body.innerText.includes("Recent problems") && document.body.innerText.includes("/ghost")`, "the problem in the Overview");
+
+            await page.waitFor(`[...document.querySelectorAll("[title]")].some((el) => /picture couldn't be shown: .*404/.test(el.title))`, "the avatar to say why it's empty");
+            expect(page.exceptions).toEqual([]);
+        } finally {
+            for (let n = 0; n < 6; n++) discord.cdnAnswers.delete(`/cdn/embed/avatars/${n}.png`);
             await page.close();
             served.stop();
         }

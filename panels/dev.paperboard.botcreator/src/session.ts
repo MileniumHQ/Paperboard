@@ -24,6 +24,10 @@ import {
     type Health,
     type GuildSummary,
 } from "./types";
+import type { BotProblem } from "./bots";
+
+/** the background failures a bot's Overview lists, newest last */
+const PROBLEM_CAP = 20;
 
 // connection state is explicit, never inferred: a failed login nulls the
 // client and records the typed error here (surfaced via getBotInfo and
@@ -197,6 +201,10 @@ export class BotSession {
     private sessionStartedAt: number | null = null;
     private commandsReceived = 0;
     private commandSyncError: string | null = null;
+    // what went wrong in the background, capped like the messages; it
+    // outlives reconnects, so a failure stays readable after a blip
+    private problemLog: BotProblem[] = [];
+    private problemCount = 0;
 
     constructor(
         readonly id: string,
@@ -214,6 +222,17 @@ export class BotSession {
 
     connected(): boolean {
         return this.client !== null && this.connectionStatus.connected;
+    }
+
+    /** Logs a failure that no button waits for, for the bot's Overview to show. */
+    noteProblem(text: string): void {
+        console.error(`[DiscordService] ${this.id}: ${text}`);
+        this.problemLog = appendCapped(this.problemLog, { id: ++this.problemCount, at: Date.now(), text }, PROBLEM_CAP);
+        this.host.changed();
+    }
+
+    problems(): BotProblem[] {
+        return this.problemLog;
     }
 
     getRecentMessages(): RecentMessage[] {
@@ -271,9 +290,8 @@ export class BotSession {
         const timer = setTimeout(() => this.dropEntry(key), INTERACTION_TTL_MS);
         const ackTimer = setTimeout(() => {
             autoAcknowledge(interaction).catch((err: unknown) =>
-                console.error(
-                    `[DiscordService] automatic acknowledgement failed ${Date.now() - interaction.createdTimestamp} ms after Discord created the interaction:`,
-                    errorToMessage(err),
+                this.noteProblem(
+                    `An interaction no flow answered couldn't be acknowledged ${Date.now() - interaction.createdTimestamp} ms after Discord sent it, so Discord showed it as failed: ${errorToMessage(err)}`,
                 ),
             );
         }, AUTO_ACK_DELAY_MS);
@@ -345,7 +363,6 @@ export class BotSession {
             cachedChannels: bot?.channels?.cache?.size ?? 0,
             commandsReceived: this.commandsReceived,
             pendingInteractions: this.pending.size,
-            commandSyncError: this.commandSyncError,
         };
     }
 
@@ -634,10 +651,7 @@ export class BotSession {
             if (!ownsSession()) return;
             const apply = async () => {
                 const msg = newMsg.partial ? await newMsg.fetch().catch((err: unknown) => {
-                    console.error(
-                        "[DiscordService] edited message fetch failed:",
-                        errorToMessage(err),
-                    );
+                    this.noteProblem(`An edited message in channel ${newMsg.channelId} couldn't be read, so When a Message Is Edited didn't run: ${errorToMessage(err)}`);
                     return null;
                 }) : newMsg;
                 if (!msg || msg.author?.bot) return;
@@ -763,9 +777,7 @@ export class BotSession {
                 // an interaction for a command this panel does not manage:
                 // there is no trigger to fire and no stored definition to
                 // answer with
-                console.error(
-                    `[DiscordService] ignored interaction for unknown command /${interaction.commandName}; no trigger is registered for it`,
-                );
+                this.noteProblem(`Someone used /${interaction.commandName}, which isn't one of this bot's commands, so no flow ran.`);
                 return;
             }
 

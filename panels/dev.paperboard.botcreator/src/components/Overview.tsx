@@ -22,7 +22,7 @@ import {
     type Health,
 } from "../types";
 import type { RecentMessage } from "../session";
-import { picture } from "../picture";
+import { picture, pictureProblem } from "../picture";
 
 const HEALTH_POLL_MS = 10000;
 
@@ -126,12 +126,15 @@ export default function Overview(props: OverviewProps) {
         }),
     );
 
+    // only the newest flip may say it failed
+    let flips = 0;
     const setEnabled = async (enabled: boolean) => {
+        const flip = ++flips;
         setToggleError("");
         try {
             await props.onSetEnabled(enabled);
         } catch (err) {
-            setToggleError(errorToMessage(err));
+            if (flip === flips) setToggleError(errorToMessage(err));
         }
     };
 
@@ -152,7 +155,7 @@ export default function Overview(props: OverviewProps) {
         <>
             <PaperCard>
                 <PaperFlex direction="row" padding="full" gap="full" align="center">
-                    <PaperAvatar src={picture(props.bot().avatar)} fallbackIcon="smart_toy" alt={props.bot().name} size="xlarge" />
+                    <PaperAvatar src={picture(props.bot().avatar)} title={pictureProblem(props.bot().avatar)} accent={pictureProblem(props.bot().avatar) ? "danger" : undefined} fallbackIcon="smart_toy" alt={props.bot().name} size="xlarge" />
                     <PaperFlex direction="column" gap="onefourth" flex minWidth={0}>
                         <PaperFlex direction="row" gap="half" align="baseline" wrap>
                             <PaperText preset="title">{props.bot().name}</PaperText>
@@ -254,11 +257,30 @@ export default function Overview(props: OverviewProps) {
                         )}
                     </Show>
 
-                    <Show when={health()?.commandSyncError}>
+                    <Show when={props.bot().commandSyncError}>
                         {(text) => <PaperQuote variant="warning" icon="warning" title="Command sync">{text()}</PaperQuote>}
                     </Show>
                 </PaperFlex>
             </PaperCard>
+
+            {/* what went wrong with no button to say it under: a flow event that didn't run */}
+            <Show when={props.bot().problems.length > 0}>
+                <PaperCard>
+                    <PaperFlex direction="column" gap="half" padding="full">
+                        <PaperText preset="heading">Recent problems</PaperText>
+                        <For each={props.bot().problems}>
+                            {(problem) => (
+                                <PaperText preset="text">
+                                    <PaperText as="span" preset="text" color="text-subtle">
+                                        {new Date(problem.at).toLocaleTimeString()}:
+                                    </PaperText>{" "}
+                                    {problem.text}
+                                </PaperText>
+                            )}
+                        </For>
+                    </PaperFlex>
+                </PaperCard>
+            </Show>
 
             <Show when={recent().length > 0}>
                 <PaperCard>

@@ -16,7 +16,7 @@ import {
     type ServiceContext,
 } from "@mileniumhq/paperapi";
 import { botBlocks, valueChanges, type BotBlocksHost } from "./blocks/bot";
-import { blockEvent, commandEvent, commandEventId } from "./blocks/events";
+import { blockEvent, commandEvent, commandEventId, staticEvents } from "./blocks/events";
 import { botStatus, panelBlocks, type BotsBlocksHost } from "./blocks/bots";
 import { randomUUID } from "node:crypto";
 import {
@@ -108,6 +108,8 @@ let botsError: string | null = null;
 let panelBlocksError: string | null = null;
 // the panel's own blocks are registered, so its events can fire
 let panelBlocksReady = false;
+// the panel's own events by id, as a flow names them
+let panelEventNames = new Map<string, string>();
 let serviceCtx: ServiceContext<BotsServiceState> | null = null;
 
 function summary(entry: BotEntry): BotSummary {
@@ -128,6 +130,7 @@ function summary(entry: BotEntry): BotSummary {
         createdAt: stored.createdAt,
         commands: stored.commands,
         commandSyncError: session.syncError(),
+        problems: session.problems(),
     };
 }
 
@@ -192,7 +195,7 @@ function sessionHost(id: string, entry: () => BotEntry) {
         emit(trigger: string, output: unknown) {
             // a bot's Overview shows its messages live
             if (trigger === "on-message") serviceCtx?.emit("message", { bot: id, ...(output as object) });
-            fireBlocksEvent(entry(), trigger, output).catch(logFailure(`Blocks event ${id}/${trigger} failed`));
+            void fireBlocksEvent(entry(), trigger, output);
             if (trigger === "on-connection-error" && bots.has(id)) {
                 firePanelEvent("bot-connection-failed", { bot: id, error: String((output as { error?: unknown } | null)?.error ?? "") });
             }
@@ -207,10 +210,18 @@ function sessionHost(id: string, entry: () => BotEntry) {
     };
 }
 
-/** One of the panel's own Blocks events, once the panel's blocks are registered. */
+/**
+ * One of the panel's own Blocks events, once the panel's blocks are
+ * registered. One that fails is in the bot's Overview while the bot is there.
+ */
 function firePanelEvent(event: string, payload: Record<string, unknown>): void {
     if (!panelBlocksReady) return;
-    blocksApi.panel(PANEL_ID).fire(event, payload).catch(logFailure(`Blocks event ${event} failed`));
+    blocksApi.panel(PANEL_ID).fire(event, payload).catch((err) => {
+        const entry = typeof payload.bot === "string" ? bots.get(payload.bot) : undefined;
+        const name = panelEventNames.get(event) ?? event;
+        if (entry) entry.session.noteProblem(`${name} didn't run: ${errorToMessage(err)}`);
+        else logFailure(`${name} didn't run`)(err);
+    });
 }
 
 /** Tells Blocks the list of bots changed. */
@@ -228,11 +239,18 @@ function noteOnline(entry: BotEntry): void {
     else firePanelEvent("bot-offline", { bot: entry.stored.id, error: entry.session.status().error ?? null });
 }
 
-/** The trigger as the bot's Blocks event, once the bot's blocks are registered. */
+/** The trigger as the bot's Blocks event, once the bot's blocks are registered; one that fails is in its Overview. */
 async function fireBlocksEvent(entry: BotEntry, trigger: string, output: unknown): Promise<void> {
     if (!entry.blocks) return;
-    const { event, payload } = blockEvent(trigger, output, entry.stored.commands);
-    await entry.blocks.fire(event, payload);
+    let event = trigger;
+    try {
+        const fired = blockEvent(trigger, output, entry.stored.commands);
+        event = fired.event;
+        await entry.blocks.fire(fired.event, fired.payload);
+    } catch (err) {
+        const name = [...staticEvents, ...entry.stored.commands.map(commandEvent)].find((e) => e.id === event)?.name ?? event;
+        entry.session.noteProblem(`${name} didn't run: ${errorToMessage(err)}`);
+    }
 }
 
 // the bot's name and avatar are Discord's: kept as of the last login, so the
@@ -245,9 +263,9 @@ function noteIdentity(entry: BotEntry): void {
     if (name === entry.stored.name && avatar === entry.stored.avatar && user.id === entry.stored.applicationId) return;
     const renamed = name !== entry.stored.name;
     entry.stored = { ...entry.stored, name, avatar, applicationId: user.id };
-    saveBots().catch(logFailure(`saving ${name}'s identity failed`));
+    saveBots().catch((err) => entry.session.noteProblem(`Its new name and picture weren't saved: ${errorToMessage(err)}`));
     if (renamed && entry.blocks) {
-        entry.blocks.update({ name, icon: "smart_toy" }).catch(logFailure(`renaming ${name}'s Blocks project failed`));
+        entry.blocks.update({ name, icon: "smart_toy" }).catch((err) => entry.session.noteProblem(`Its Blocks project wasn't renamed to ${name}: ${errorToMessage(err)}`));
     }
 }
 
@@ -835,7 +853,9 @@ export const botService = definePanelService({
         }
         // the types first: every bot's blocks use them
         try {
-            await blocksApi.panel(PANEL_ID).register(panelBlocks(connectedClients, blocksBots));
+            const own = panelBlocks(connectedClients, blocksBots);
+            await blocksApi.panel(PANEL_ID).register(own);
+            panelEventNames = new Map((own.events ?? []).map((e) => [e.id, e.name]));
             panelBlocksReady = true;
         } catch (err) {
             panelBlocksError = errorToMessage(err);
