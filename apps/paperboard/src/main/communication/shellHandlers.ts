@@ -57,6 +57,15 @@ function requireString(value: unknown, name: string): string {
     return value;
 }
 
+// a port as typed: the pool checks its range
+function typedPort(args: unknown): number | string | undefined {
+    const port = field(args, "port");
+    if (port !== undefined && typeof port !== "number" && typeof port !== "string") {
+        throw new Error("port must be a number or a string");
+    }
+    return port;
+}
+
 export function createShellInvokeHandlers(
     deps: ShellHandlerDeps,
 ): Record<SharedShellInvokeChannel, ShellInvokeHandler> {
@@ -75,33 +84,16 @@ export function createShellInvokeHandlers(
         }),
 
         "computer-probe": async (args) => {
-            const host = requireString(field(args, "host"), "host");
-            const port = field(args, "port");
-            if (port !== undefined && typeof port !== "number" && typeof port !== "string") {
-                throw new Error("port must be a number or a string");
-            }
-            return await connectionPool.probe(host, port);
+            return await connectionPool.probe(requireString(field(args, "host"), "host"), typedPort(args));
         },
 
         "computer-pair": async (args) => {
             const host = requireString(field(args, "host"), "host");
             const code = requireString(field(args, "code"), "code");
-            return await connectionPool.pairComputer(
-                host,
-                field(args, "port") as number | undefined,
-                code,
-                field(args, "name") as string | undefined,
-            );
+            return await connectionPool.pairComputer(host, typedPort(args), code, field(args, "name"));
         },
 
-        // only the fields the caller sent change
-        "computer-update": (args) => {
-            const id = requireString(field(args, "id"), "id");
-            const updates: { name?: string; port?: number } = {};
-            if (field(args, "name") !== undefined) updates.name = field(args, "name") as string;
-            if (field(args, "port") !== undefined) updates.port = field(args, "port") as number;
-            return connectionPool.updateComputer(id, updates);
-        },
+        "computer-update": (args) => connectionPool.renameComputer(requireString(field(args, "id"), "id"), field(args, "name")),
 
         // renderer input is validated here, not trusted from the caller's types
         "computer-remove": (args) => connectionPool.unpairComputer(requireString(field(args, "id"), "id"), field(args, "evenIfUntold") === true),

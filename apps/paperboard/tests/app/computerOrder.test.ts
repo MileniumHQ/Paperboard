@@ -58,29 +58,43 @@ describe("computer order and names", () => {
 
     test("This Computer keeps the name it was given across launches", async () => {
         const pool = await openPool();
-        expect(pool.updateComputer("local", { name: "  Workstation  " })).toBe(true);
+        expect(pool.renameComputer("local", "  Workstation  ")).toBe(true);
         const reopened = await openPool();
         expect(reopened.getComputer("local")?.name).toBe("Workstation");
         expect(reopened.getComputer("local")?.isLocal).toBe(true);
     });
 
-    // computer-update forwards every field it knows, sent or not
     test("renaming a paired computer keeps its pairing across launches", async () => {
         const pool = await openPool();
-        expect(pool.updateComputer("remote-a", { name: "Game Box", port: undefined })).toBe(true);
+        expect(pool.renameComputer("remote-a", "Game Box")).toBe(true);
         const saved = stored().computers.find((c) => c.id === "remote-a") as Record<string, unknown> | undefined;
         expect(saved).toMatchObject({ name: "Game Box", port: 45464, token: "token-remote-a", cert: "cert-remote-a" });
         const reopened = await openPool();
         expect(reopened.getComputer("remote-a")).toMatchObject({ name: "Game Box", port: 45464, token: "token-remote-a" });
-        expect(reopened.updateComputer("local", { name: "Workstation", port: undefined })).toBe(true);
+        expect(reopened.renameComputer("local", "Workstation")).toBe(true);
         expect((await openPool()).getComputer("local")?.name).toBe("Workstation");
     });
 
-    test("a blank or overlong name, or a port that isn't one, is refused with why and the old one kept", async () => {
+    test("a blank or overlong name is refused with why and the old one kept", async () => {
         const pool = await openPool();
-        expect(() => pool.updateComputer("remote-a", { name: "   " })).toThrow("A computer needs a name.");
-        expect(() => pool.updateComputer("remote-a", { name: "x".repeat(65) })).toThrow("at most 64 characters");
-        expect(() => pool.updateComputer("remote-a", { port: 70000 })).toThrow("A port is a whole number from 1 to 65535, not 70000.");
+        expect(() => pool.renameComputer("remote-a", "   ")).toThrow("A computer needs a name.");
+        expect(() => pool.renameComputer("remote-a", "x".repeat(65))).toThrow("at most 64 characters");
+        expect(() => pool.renameComputer("remote-a", 7)).toThrow("A computer name must be text.");
         expect(stored().computers.find((c) => c.id === "remote-a")).toMatchObject({ name: "remote-a", port: 45464 });
+    });
+
+    // a pairing saved with a port the next launch can't read is lost then
+    test("a pairing with a port that isn't one, or a blank or overlong name, is refused with why before anything is dialed", async () => {
+        const pool = await openPool();
+        const before = fs.readFileSync(file(), "utf8");
+        // ::1 is dialed as a pinned remote; nothing listens on port 1
+        for (const port of [70000, 0, "abc", 1.5]) {
+            await expect(pool.pairComputer("::1", port, "123456")).rejects.toThrow("That isn't a valid port");
+        }
+        await expect(pool.pairComputer("::1", 1, "123456", "   ")).rejects.toThrow("A computer needs a name.");
+        await expect(pool.pairComputer("::1", 1, "123456", "x".repeat(65))).rejects.toThrow("at most 64 characters");
+        await expect(pool.pairComputer("not a host!", 1, "123456")).rejects.toThrow("That isn't a valid address");
+        expect(fs.readFileSync(file(), "utf8")).toBe(before);
+        expect(ids(pool)).toEqual(["local", "remote-a", "remote-b"]);
     });
 });

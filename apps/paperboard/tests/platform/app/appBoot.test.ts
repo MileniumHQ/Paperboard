@@ -3,8 +3,9 @@ import * as path from "node:path";
 import { beforeAll, describe, expect, test } from "bun:test";
 import { BUILD_TIMEOUT_MS, buildApp, buildCrane, type BuiltApp, type BuiltCrane } from "./support/build";
 import { CraneSocket, readHandshake, startCrane, WAIT_MS } from "./support/crane";
-import { domCondition, launchElectron } from "./support/electron";
-import { tempDir } from "./support/temp";
+import { spawn } from "node:child_process";
+import { domCondition, electronBinary, launchElectron, shellReady } from "./support/electron";
+import { ownChild, tempDir } from "./support/temp";
 
 const SHELL = "paperboard://shell/";
 
@@ -90,6 +91,29 @@ describe("desktop app boot", () => {
         expect(electron.failures()).toEqual([]);
         expect(await electron.quit()).toEqual({ code: 0, signal: null });
         expect(errorLines(dataDir)).toEqual([]);
+    }, WAIT_MS * 3);
+
+    // Closing the window hides Paperboard in the tray; launching it again
+    // from the Start menu or the app launcher must bring the window back.
+    test("launching Paperboard again shows the window that was closed to the tray", async () => {
+        const dataDir = tempDir("app-second-launch");
+        const electron = await launchElectron({ appDir: app.dir, dataDir, args: ["--skip-update"] });
+        await shellReady(electron);
+        // the harness keeps windows hidden and reports each show it held back
+        await electron.evalMain(`electron.BrowserWindow.getAllWindows().find((w) => w.webContents.getURL().startsWith("${SHELL}")).close(); return true;`);
+        const before = electron.events.length;
+        const env: NodeJS.ProcessEnv = { ...process.env, PAPERBOARD_DIR: dataDir, XDG_CONFIG_HOME: path.join(dataDir, "xdg-config") };
+        delete env.ELECTRON_RUN_AS_NODE;
+        const second = ownChild(spawn(electronBinary(), [app.dir, `--user-data-dir=${electron.userDataDir}`, "--skip-update"], {
+            env,
+            stdio: "ignore",
+            windowsHide: true,
+        }));
+        // it finds Paperboard running, hands it the launch, and leaves
+        expect(await new Promise((resolve) => second.once("exit", (code) => resolve(code)))).toBe(0);
+        await electron.waitEvent("the window shown again", (e) => electron.events.indexOf(e) >= before && e.event === "window-show-suppressed" && e.method === "show");
+        expect(electron.failures()).toEqual([]);
+        expect(await electron.quit()).toEqual({ code: 0, signal: null });
     }, WAIT_MS * 3);
 });
 

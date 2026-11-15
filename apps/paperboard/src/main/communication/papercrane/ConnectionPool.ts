@@ -68,8 +68,8 @@ export class ConnectionPool extends EventEmitter {
     private clients: Map<string, PaperCraneClient> = new Map();
     private activeId: string = "local";
     private configPath: string;
-    /** resolves once this computer's record carries its OS details; init() awaits it */
-    public readonly localRecorded: Promise<void>;
+    /** resolves once this computer's record carries its OS details, or to why it can't */
+    public readonly localRecorded: Promise<string | null>;
 
     constructor() {
         super();
@@ -79,7 +79,6 @@ export class ConnectionPool extends EventEmitter {
     }
 
     public async init(): Promise<void> {
-        await this.localRecorded;
         // warm local daemon so panels find a live endpoint
         try {
             await this.getClient("local").connect("127.0.0.1");
@@ -87,6 +86,8 @@ export class ConnectionPool extends EventEmitter {
             // the rail shows this computer offline, with the reason
             logger.warn("[ConnectionPool] the local Paperboard server is not answering yet:", err);
         }
+        const failure = await this.localRecorded;
+        if (failure) throw new Error(`This computer's OS details couldn't be read: ${failure}`);
     }
 
     private loadConfig() {
@@ -121,8 +122,9 @@ export class ConnectionPool extends EventEmitter {
         writeJsonAtomicSync(this.configPath, data, { mode: 0o600 });
     }
 
-    private async ensureLocalComputer() {
-        const info = await getDetailedOsInfo();
+    // this computer is always listed, so a failure to read its OS details
+    // (init() throws it) never turns into "Unknown computer: local"
+    private ensureLocalComputer(): Promise<string | null> {
         const localComp: StoredComputer = {
             id: "local",
             // a name the person gave this computer outlives the refresh
@@ -130,14 +132,18 @@ export class ConnectionPool extends EventEmitter {
             host: "127.0.0.1",
             port: DEFAULT_PORT,
             isLocal: true,
-            os: info.os,
-            osVersion: info.osVersion,
-            distroId: info.distroId,
-            distroName: info.distroName,
             arch: os.arch(),
         };
-
         this.computers.set("local", localComp);
+        return getDetailedOsInfo().then((info) => {
+            Object.assign(localComp, {
+                os: info.os,
+                osVersion: info.osVersion,
+                distroId: info.distroId,
+                distroName: info.distroName,
+            });
+            return null;
+        }, (err) => (err instanceof Error ? err.message : String(err)));
     }
 
     // never a default id: operations must not land on the wrong machine.
@@ -240,17 +246,23 @@ export class ConnectionPool extends EventEmitter {
         }
     }
 
+    // the address, port and name are checked as probe and updateComputer
+    // check them: a record saved with a bad port is skipped on the next
+    // load, which loses the pairing
     public async pairComputer(
         host: string,
-        port = DEFAULT_PORT,
+        port: number | string = DEFAULT_PORT,
         code: string,
-        customName?: string,
+        customName?: unknown,
     ): Promise<StoredComputer> {
+        const checked = checkProbeTarget(host, port);
+        if ("error" in checked) throw new Error(checked.error);
+        const name = customName === undefined ? undefined : checkComputerName(customName);
         // kept as sockets dial it: "[::1]" as typed is ::1
         host = bareHost(host);
         const tempClient = new PaperCraneClient();
         try {
-            await tempClient.connectForPairing(host, port);
+            await tempClient.connectForPairing(host, checked.port);
             // send our hostname, never the server name; customName stays local-only
             const pairRes = await tempClient.pair(code, os.hostname().replace(/\.local$/i, "") || "Paperboard App");
             if (!pairRes.success || !pairRes.token) {
@@ -264,9 +276,9 @@ export class ConnectionPool extends EventEmitter {
             const id = `remote-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
             const comp: StoredComputer = {
                 id,
-                name: customName || pairRes.hostname || host,
+                name: name || pairRes.hostname || host,
                 host,
-                port,
+                port: checked.port,
                 token: pairRes.token,
                 cert,
                 os: pairRes.os,
@@ -298,28 +310,16 @@ export class ConnectionPool extends EventEmitter {
         }
     }
 
-    public updateComputer(id: string, updates: Partial<StoredComputer>): boolean {
-        // validate at the boundary that owns the record: a bad port through
-        // computer-update previously poisoned the persisted record until
-        // the next session's loader silently skipped it
-        if (
-            updates.port !== undefined &&
-            (!Number.isInteger(updates.port) || updates.port < 1 || updates.port > 65535)
-        ) {
-            throw new Error(`A port is a whole number from 1 to 65535, not ${JSON.stringify(updates.port)}.`);
-        }
-        // an absent field is not a change: assigning undefined would drop
-        // it from the saved record, and a record without its port is skipped
-        // on the next load, which loses the pairing
-        updates = Object.fromEntries(Object.entries(updates).filter(([, value]) => value !== undefined));
-        if (updates.name !== undefined) updates = { ...updates, name: checkComputerName(updates.name) };
+    // the name the rail and every header show; false for a computer that's gone
+    public renameComputer(id: string, name: unknown): boolean {
+        const checked = checkComputerName(name);
         const comp = this.computers.get(id);
         if (!comp) return false;
-        const before = { ...comp };
-        Object.assign(comp, updates);
+        const before = comp.name;
+        comp.name = checked;
         try { this.saveConfig(); }
         catch (err) {
-            this.computers.set(id, before);
+            comp.name = before;
             throw err;
         }
         this.emit("change");

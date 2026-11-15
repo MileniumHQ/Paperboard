@@ -46,7 +46,7 @@ const RenameComputerModal: Component<RenameComputerModalProps> = (props) => {
         setSaving(true);
         setError(null);
         try {
-            if (!(await computersApi.update(computer.id, { name: trimmed() }))) {
+            if (!(await computersApi.rename(computer.id, trimmed()))) {
                 throw new Error("Paperboard doesn't know this computer anymore.");
             }
             props.onClose();

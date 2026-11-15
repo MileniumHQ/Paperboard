@@ -42,7 +42,6 @@ import { launchOptionsFromArgv } from "../shared/launchOptions";
 import { emulatePhone, mobileWindowOptions } from "./mobileMock";
 import { applySavedAppSettings } from "./communication/shelldata";
 import { addShellPushSink } from "./communication/shellPush";
-import { secondLaunchAction } from "./instancePolicy";
 import { createDesktopTray, destroyDesktopTray, hasDesktopTray, refreshDesktopTray } from "./tray";
 import { pollTrayCount } from "./trayCount";
 import icon from "../../resources/icon.png?asset";
@@ -126,25 +125,14 @@ if (!app.requestSingleInstanceLock()) {
     // window hooks below for a process that is already quitting
     process.exit(0);
 }
+// `--web` and `--browser` ask for the browser shell; anything else is the
+// desktop app, even when this process is in browser mode, so a stale
+// browser session never swallows a later launch. A closed window is
+// hidden in the tray, so it is shown, not only focused.
 app.on("second-instance", (_event, argv) => {
-    // `--browser` asks for the browser shell; anything else is the desktop
-    // app, even when this process is in browser mode. Otherwise a stale
-    // browser session would silently swallow every later launch.
-    switch (secondLaunchAction(argv, Boolean(mainWindowRef && !mainWindowRef.isDestroyed()))) {
-        case "web":
-            void openInBrowser();
-            return;
-        case "browser":
-            void serveBrowserShell();
-            return;
-        case "focus":
-            if (mainWindowRef!.isMinimized()) mainWindowRef!.restore();
-            mainWindowRef!.focus();
-            return;
-        case "window":
-            createWindow();
-            return;
-    }
+    if (argv.includes("--web")) void openInBrowser();
+    else if (argv.includes("--browser")) void serveBrowserShell();
+    else showMainWindow();
 });
 
 process.on("uncaughtException", (err) => {
@@ -287,11 +275,12 @@ function createWindow(): void {
         }
     }
 
-    if (is.dev && process.env["ELECTRON_RENDERER_URL"]) {
-        mainWindow.loadURL(process.env["ELECTRON_RENDERER_URL"]);
-    } else {
-        mainWindow.loadURL(`${SHELL_ORIGIN}/index.html`);
-    }
+    const shellUrl = is.dev && process.env["ELECTRON_RENDERER_URL"] ? process.env["ELECTRON_RENDERER_URL"] : `${SHELL_ORIGIN}/index.html`;
+    // a shell that didn't load is an empty window: say why
+    mainWindow.loadURL(shellUrl).catch((err) => {
+        log.error("[Main] the window couldn't load", shellUrl, err);
+        dialog.showErrorBox("Paperboard couldn't load its window", `${shellUrl}\n\n${err?.message || err}`);
+    });
 }
 
 // ── Browser mode ────────────────────────────────────────────────────────────
@@ -491,15 +480,12 @@ app.whenReady().then(async () => {
     powerMonitor.on("resume", () => connectionPool.wake());
     powerMonitor.on("unlock-screen", () => connectionPool.wake());
 
-    try {
-        await connectionPool.init();
-        log.info("[Main] ConnectionPool ready");
-    } catch (e: any) {
-        log.warn(
-            "[Paperboard] ConnectionPool initialization warning:",
-            e.message,
-        );
-    }
+    // every computer stays listed either way; the failure is this
+    // computer's OS details, which the rail and updates go without
+    await connectionPool.init().then(
+        () => log.info("[Main] ConnectionPool ready"),
+        (err) => log.error("[Main]", err instanceof Error ? err.message : String(err)),
+    );
 
     // teardown wired into before-quit: the mDNS browser must not outlive
     // its owner (bounded everything)
