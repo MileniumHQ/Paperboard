@@ -29,7 +29,8 @@ import { listMapRegions, renderMapTile } from "../../service/map";
 import { discardWorldTransfer, exportWorld, importWorld } from "../../service/worldTransfer";
 import type { MapDimension } from "../../core/map";
 import { listPlayerStats } from "../../service/playerStats";
-import { currentPlayerNames, listRoster, setPlayerFlag, type PlayerFlag } from "../../service/playerLists";
+import { currentPlayerNames, isBanned, listRoster, setPlayerFlag, type PlayerFlag } from "../../service/playerLists";
+import { errorText } from "../../service/failures";
 import { getHeadDataUrl } from "../../service/skins";
 import { queryGamerules, setGamerule } from "../../service/gamerules";
 import { readGameOptions, writeGameOptions } from "./gameOptions";
@@ -75,12 +76,18 @@ const bedrockNaming = (ctx: ServiceContext<GameServerState>) =>
 
 // The server writes banned-players.json as it takes a ban or a pardon, then
 // says so: "Banned Steve: reason" and "Unbanned Steve" (1.12 adds "player").
-// A refusal is a line of its own, which the call fails with.
+// A refusal is a line of its own, which the call fails with. A plugin may
+// say it in words of its own, so the list it wrote is the record: watched
+// while the line is awaited, and read once more when none came.
 const BAN_ANSWER_MS = 15_000;
+const BAN_LIST_POLL_MS = 250;
 const BAN_REFUSED = /Nothing changed|That player does not exist|Unknown player|No player was found|Could not (un)?ban/i;
 
 async function banCommand(ctx: ServiceContext<GameServerState>, verb: "ban" | "pardon", name: string, command: string): Promise<void> {
     const done = new RegExp(`\\b${verb === "ban" ? "Banned" : "Unbanned"} (player )?${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i");
+    const recorded = async () => (await isBanned(name)) === (verb === "ban");
+    // a list that already shows it can only be refused, and the refusal says why
+    const watchList = !(await recorded());
     const answer = waitForLine((line) => done.test(line) || BAN_REFUSED.test(line), BAN_ANSWER_MS, verb === "ban" ? `the ban of ${name}` : `the pardon of ${name}`);
     try {
         await sendServerCommand(ctx, command);
@@ -88,7 +95,22 @@ async function banCommand(ctx: ServiceContext<GameServerState>, verb: "ban" | "p
         answer.cancel();
         throw err;
     }
-    const line = await answer.done;
+    let answered = false;
+    const said = answer.done.finally(() => (answered = true));
+    while (watchList && !answered) {
+        if (await recorded()) {
+            answer.cancel();
+            return;
+        }
+        await Promise.race([said.catch(() => undefined), new Promise((resolve) => setTimeout(resolve, BAN_LIST_POLL_MS))]);
+    }
+    let line: string;
+    try {
+        line = await said;
+    } catch (err) {
+        if (await recorded()) return;
+        throw new Error(`${errorText(err)}, and the ban list ${verb === "ban" ? "does not have" : "still has"} ${name}`);
+    }
     if (!done.test(line)) throw new Error(`The server refused: ${line.replace(/^\[[^\]]*\]\s*(\[[^\]]*\]:?\s*)?/, "")}`);
 }
 

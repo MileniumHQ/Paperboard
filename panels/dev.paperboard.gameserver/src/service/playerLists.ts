@@ -9,6 +9,7 @@
 // accounts Mojang does not know: the vanilla `whitelist` cannot find them,
 // so a running server whitelists them through Floodgate's `fwhitelist`, and
 // a stopped one gets the uuid Floodgate derives from their XUID written in.
+import { errorText } from "./failures";
 import { createHash } from "node:crypto";
 import { files as fileApi, type ServiceContext } from "./api";
 import { serverLocal } from "./scope";
@@ -72,6 +73,12 @@ async function readList(path: string): Promise<ListEntry[]> {
     }
     if (!Array.isArray(parsed)) throw new Error(`${path} is not a list of players`);
     return parsed.filter((entry): entry is ListEntry => !!entry && typeof entry === "object");
+}
+
+/** Whether banned-players.json, as the server last wrote it, has a player of this name. */
+export async function isBanned(name: string): Promise<boolean> {
+    const wanted = name.toLowerCase();
+    return (await readList(LIST_FILES.banned)).some((entry) => typeof entry.name === "string" && entry.name.toLowerCase() === wanted);
 }
 
 function entryUuid(entry: ListEntry): string | null {
@@ -176,7 +183,7 @@ export async function currentPlayerNames(rawUuids: unknown, naming: BedrockNamin
                 rememberName(uuid, name);
                 result[uuid] = name;
             } catch (err) {
-                failures.push(err instanceof Error ? err.message : String(err));
+                failures.push(errorText(err));
             }
         }
     };

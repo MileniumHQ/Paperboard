@@ -162,7 +162,8 @@ function server(): void {
                 const kept = bans.filter((entry) => entry.uuid !== known.uuid);
                 const reason = rest.slice(1).join(" ") || "Banned by an operator.";
                 fs.writeFileSync(file, JSON.stringify(verb === "ban" ? [...kept, { uuid: known.uuid, name: known.name, reason }] : kept));
-                log(verb === "ban" ? `Banned ${known.name}: ${reason}` : `Unbanned ${known.name}`);
+                // a ban plugin's own words for a pardon, when the plan names them
+                log(verb === "ban" ? `Banned ${known.name}: ${reason}` : plan.pardonSays ?? `Unbanned ${known.name}`);
                 return;
             }
             case "crash":

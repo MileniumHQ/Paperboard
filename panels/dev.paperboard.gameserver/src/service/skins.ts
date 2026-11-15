@@ -13,11 +13,11 @@ import { apiFetch } from "../lib/userAgent";
 import { composeHeadFromSkin, clampHeadSize } from "../core/skin";
 import { gamertagOf, floodgateUuid, xuidOfFloodgateUuid, type BedrockNaming } from "../core/bedrock";
 import { uuidForPlayerName } from "./playerStats";
-import { formatUuid, profileForName } from "./mojang";
+import { fetchMojang, formatUuid, profileForName } from "./mojang";
+import { errorText } from "./failures";
 import { skinUrlForXuid, xuidForGamertag } from "./xbox";
 
 const PROFILE_URL = "https://sessionserver.mojang.com/session/minecraft/profile/";
-const FETCH_TIMEOUT_MS = 10_000;
 const MAX_CONCURRENT = 4;
 const MAX_SKIN_BYTES = 1_024 * 1_024;
 const SKIN_TTL_MS = 60_000;
@@ -57,89 +57,54 @@ function release(): void {
     if (next) next();
 }
 
-async function fetchWithTimeout(url: string): Promise<Response | null> {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
-    try {
-        return await apiFetch(url, { signal: controller.signal });
-    } catch (err) {
-        console.debug(`[skins] request failed for ${url}:`, String(err));
-        return null;
-    } finally {
-        clearTimeout(timer);
-    }
-}
-
 // the server's own records first: a Bedrock player who has joined is in
 // them under the name Floodgate gave them
 async function uuidFromName(name: string, naming: () => Promise<BedrockNaming | null>): Promise<string | null> {
     const local = await uuidForPlayerName(name);
     if (local) return local;
-    try {
-        const gamertag = gamertagOf(name, await naming());
-        if (gamertag) {
-            const xuid = await xuidForGamertag(gamertag);
-            return xuid ? floodgateUuid(xuid) : null;
-        }
-        return (await profileForName(name))?.uuid ?? null;
-    } catch (err) {
-        console.debug(`[skins] name lookup for "${name}" failed:`, String(err));
-        return null;
+    const gamertag = gamertagOf(name, await naming());
+    if (gamertag) {
+        const xuid = await xuidForGamertag(gamertag);
+        return xuid ? floodgateUuid(xuid) : null;
     }
+    return (await profileForName(name))?.uuid ?? null;
 }
 
 async function mojangSkinUrl(uuid: string): Promise<string | null> {
-    const res = await fetchWithTimeout(`${PROFILE_URL}${uuid.replace(/-/g, "")}`);
-    if (!res || !res.ok) {
-        if (res) console.debug(`[skins] profile for ${uuid} returned ${res.status}`);
-        return null;
-    }
+    const res = await fetchMojang(`${PROFILE_URL}${uuid.replace(/-/g, "")}`);
+    if (res.status === 204 || res.status === 404) return null;
+    if (!res.ok) throw new Error(`Mojang's profile for ${uuid} answered ${res.status}`);
     const body = (await res.json()) as {
         properties?: Array<{ name?: unknown; value?: unknown }>;
     };
     const encoded = body?.properties?.find((p) => p?.name === "textures")?.value;
-    if (typeof encoded !== "string") return null;
+    if (encoded === undefined) return null;
+    let decoded: { textures?: { SKIN?: { url?: unknown } } };
     try {
-        const decoded = JSON.parse(
-            Buffer.from(encoded, "base64").toString("utf8"),
-        ) as { textures?: { SKIN?: { url?: unknown } } };
-        const url = decoded?.textures?.SKIN?.url;
-        if (typeof url !== "string" || !url.startsWith("http")) return null;
-        // Mojang still hands back http://; the CDN serves it over https
-        return url.replace(/^http:\/\//, "https://");
+        decoded = JSON.parse(Buffer.from(String(encoded), "base64").toString("utf8"));
     } catch (err) {
-        console.debug(`[skins] undecodable texture property for ${uuid}:`, String(err));
-        return null;
+        throw new Error(`Mojang's skin record for ${uuid} could not be read: ${errorText(err)}`);
     }
+    // an account on the default skin has none of its own
+    const url = decoded?.textures?.SKIN?.url;
+    if (url === undefined) return null;
+    if (typeof url !== "string" || !url.startsWith("http")) throw new Error(`Mojang's skin record for ${uuid} has no skin address`);
+    // Mojang still hands back http://; the CDN serves it over https
+    return url.replace(/^http:\/\//, "https://");
 }
 
-async function skinUrlForUuid(uuid: string): Promise<string | null> {
+function skinUrlForUuid(uuid: string): Promise<string | null> {
     const xuid = xuidOfFloodgateUuid(uuid);
-    if (!xuid) return mojangSkinUrl(uuid);
-    try {
-        return await skinUrlForXuid(xuid);
-    } catch (err) {
-        console.debug(`[skins] Bedrock skin for ${uuid} failed:`, String(err));
-        return null;
-    }
+    return xuid ? skinUrlForXuid(xuid) : mojangSkinUrl(uuid);
 }
 
-async function fetchSkinBytes(url: string): Promise<Uint8Array | null> {
-    const res = await fetchWithTimeout(url);
-    if (!res || !res.ok) {
-        if (res) console.debug(`[skins] texture fetch returned ${res.status}`);
-        return null;
-    }
+async function fetchSkinBytes(url: string): Promise<Uint8Array> {
+    const res = await fetchMojang(url);
+    if (!res.ok) throw new Error(`The skin download answered ${res.status}`);
     const declared = Number(res.headers.get("content-length") ?? "0");
-    if (Number.isFinite(declared) && declared > MAX_SKIN_BYTES) {
-        console.debug(`[skins] skin exceeds size cap (${declared} bytes)`);
-        return null;
-    }
+    if (Number.isFinite(declared) && declared > MAX_SKIN_BYTES) throw new Error(`The skin is ${declared} bytes, more than the ${MAX_SKIN_BYTES} a skin can be`);
     const buffer = new Uint8Array(await res.arrayBuffer());
-    if (buffer.byteLength > MAX_SKIN_BYTES) {
-        console.debug(`[skins] skin exceeds size cap (${buffer.byteLength} bytes)`);
-        return null;
-    }
+    if (buffer.byteLength > MAX_SKIN_BYTES) throw new Error(`The skin is ${buffer.byteLength} bytes, more than the ${MAX_SKIN_BYTES} a skin can be`);
     return buffer;
 }
 
@@ -160,28 +125,25 @@ async function resolveHead(
 
     let skin = skins.get(resolved);
     if (!skin || Date.now() - skin.at >= SKIN_TTL_MS) {
-        const url = await skinUrlForUuid(resolved);
-        skin = { url, at: Date.now() };
-        // a failed lookup is asked again next time, not remembered as "no skin"
-        if (url) keep(skins, resolved, skin);
+        // a lookup that throws is asked again next time, never remembered as "no skin"
+        skin = { url: await skinUrlForUuid(resolved), at: Date.now() };
+        keep(skins, resolved, skin);
     }
     if (!skin.url) return null;
     const headKey = `${size}:${skin.url}`;
     const kept = heads.get(headKey);
     if (kept) return kept;
-    const bytes = await fetchSkinBytes(skin.url);
-    if (!bytes) return null;
-    const head = await composeHeadFromSkin(bytes, size);
-    if (!head) return null;
+    const head = await composeHeadFromSkin(await fetchSkinBytes(skin.url), size);
+    if (!head) throw new Error("The skin is not a Minecraft skin picture");
     const dataUrl = `data:image/png;base64,${Buffer.from(head).toString("base64")}`;
     keep(heads, headKey, dataUrl);
     return dataUrl;
 }
 
 /**
- * A layered head data URL for a player, or null when none is available.
- * A null (no skin, no UUID, network failure) is a documented degradation:
- * callers fall back to the generic person icon, and the failure is logged.
+ * A layered head data URL for a player, or null when they have no skin of
+ * their own (or no account): the generic person icon is then the right
+ * picture. A lookup that fails throws why, for the page to show.
  * `naming` is Floodgate's, read only when a name has to be looked up.
  */
 export async function getHeadDataUrl(inputs: {
@@ -192,7 +154,7 @@ export async function getHeadDataUrl(inputs: {
 }): Promise<string | null> {
     const name = typeof inputs?.name === "string" ? inputs.name.trim() : "";
     const uuid = typeof inputs?.uuid === "string" ? inputs.uuid.trim() : "";
-    if (!name && !uuid) return null;
+    if (!name && !uuid) throw new Error("A player's head needs their name or uuid");
 
     const size = clampHeadSize(inputs?.size);
     const key = `${size}:${uuid.toLowerCase() || name.toLowerCase()}`;
@@ -201,9 +163,7 @@ export async function getHeadDataUrl(inputs: {
     const lookup = (async () => {
         await acquire();
         try {
-            const dataUrl = await resolveHead(name, uuid, size, inputs.naming);
-            if (!dataUrl) console.debug(`[skins] no head for ${uuid || name}`);
-            return dataUrl;
+            return await resolveHead(name, uuid, size, inputs.naming);
         } finally {
             release();
         }

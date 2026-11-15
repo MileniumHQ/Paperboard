@@ -1,7 +1,9 @@
 // A ban or a pardon on the Players tab is done once the running server has
 // recorded it: the badge comes from the ban list the server wrote, and a
 // server that refuses says why on the tab instead of looking banned, also
-// on a phone, where the player's page covers the roster.
+// on a phone, where the player's page covers the roster. A ban plugin that
+// words its answer its own way is judged by the list it wrote. A head that
+// could not be looked up says why on the head.
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import * as fs from "node:fs";
 import * as path from "node:path";
@@ -11,6 +13,7 @@ import { callServer } from "./helpers/serverCall";
 import { openPage, servePanel } from "./helpers/browser";
 import { installFakeJava } from "./helpers/fakeJava";
 import { writeTree } from "./helpers/tmp";
+import { loopbackServer, routeHost } from "./helpers/http";
 import { PANEL_ID } from "../src/servers";
 import { javaPackageFor } from "../src/lib/versionProfile";
 
@@ -26,6 +29,15 @@ const SERVERS = "servers-0123456789ab";
 const STEVE = "8667ba71-b85a-4004-af54-457a9734eed7";
 // on the whitelist, but not an account the server can find
 const GHOST = "ec561538-f3fd-461d-aff5-086b22154bce";
+
+// Mojang's profiles: Steve's lookup fails, Ghost has no account
+const mojang = loopbackServer((_req, url) =>
+    url.pathname.endsWith(STEVE.replace(/-/g, "")) ? new Response("busy", { status: 503 }) : new Response(null, { status: 204 }),
+);
+routeHost("sessionserver.mojang.com", mojang);
+/** the head in `name`'s roster row: its tooltip, and the glyph it shows */
+const head = (name: string) =>
+    `(() => { const row = document.querySelector('input[name=playersList][value="${name}"]').closest("label, li, [role=radio]"); const avatar = row.querySelector("[class*=PaperAvatar]"); return avatar && { title: avatar.getAttribute("title"), glyph: avatar.innerText.trim() }; })()`;
 
 const openRow = (name: string) => `document.querySelector('input[name=playersList][value="${name}"]').closest("label, li, [role=radio]").click()`;
 /** the enabled button whose last line of text is `label`: on the page, or in the open dialog */
@@ -51,6 +63,7 @@ describe("the Players tab's bans", () => {
             "server.properties": "online-mode=false\n",
             "whitelist.json": JSON.stringify([{ uuid: STEVE, name: "Steve" }, { uuid: GHOST, name: "Ghost" }]),
             "usercache.json": JSON.stringify([{ name: "Steve", uuid: STEVE, expiresOn: "2030-01-01 00:00:00 +0000" }]),
+            "fake-server.json": JSON.stringify({ pardonSays: "[BanPlugin] Steve may join again." }),
         });
         installFakeJava(javaPackageFor("1.21.1")!);
         const { gameServerService } = await import("../src/service");
@@ -64,6 +77,10 @@ describe("the Players tab's bans", () => {
             await page.waitFor(`document.body.innerText.includes("ONLINE")`, "the server online");
             await page.click('input[name=serverMenu][value="players"]');
             await page.waitFor(`document.querySelector('input[name=playersList][value="Steve"]') && document.querySelector('input[name=playersList][value="Ghost"]')`, "both whitelisted players in the roster");
+            // a failed lookup is an error on the head, with Mojang's answer; no account is the plain icon
+            await page.waitFor(`${head("Steve")}?.title?.includes("answered 503")`, "Steve's head to say why it failed");
+            expect(await page.evaluate(head("Steve"))).toEqual({ title: "Steve's head could not be loaded: Mojang's profile for " + STEVE + " answered 503", glyph: "error" });
+            expect(await page.evaluate(head("Ghost"))).toEqual({ title: null, glyph: "person" });
 
             // the server takes the ban: the badge is the ban list it wrote
             await page.evaluate(openRow("Steve"));
@@ -90,12 +107,13 @@ describe("the Players tab's bans", () => {
             await page.waitFor(seen("Ghost was not banned"), "the refusal on the phone's player page");
             await page.resize(1400, 900);
 
-            // a pardon is read back the same way
+            // a pardon the ban plugin words its own way is done once the list no longer has him
             await page.evaluate(openRow("Steve"));
             await page.waitFor(`!!${button("Pardon")}`, "Steve's Pardon button");
             await page.evaluate(`${button("Pardon")}.click()`);
             await page.waitFor(inspectorShows("Steve", false), "Steve shown pardoned");
             expect(banned()).toEqual([]);
+            expect(await page.evaluate<boolean>(`document.body.innerText.includes("was not pardoned")`)).toBe(false);
             expect(page.exceptions).toEqual([]);
         } finally {
             await page.close();
