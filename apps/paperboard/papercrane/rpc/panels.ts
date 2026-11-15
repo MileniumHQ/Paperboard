@@ -1,149 +1,76 @@
 import type { RpcContext } from "./context";
-import { logger } from "../logger";
-import { assertConfigPath, assertId, assertPanelId, assertOptStr, rpcErrorCode } from "./params";
-import { requireHost, resourcePanelId } from "../principal";
+import { Refusal } from "./errors";
+import { rpcModule } from "./dispatch";
+import { resourcePanelId } from "../principal";
 import { problemsFor } from "./problems";
+import { errorMessage } from "@mileniumhq/paperapi/errors";
 
-function effectivePanelId(requested: string, action: string, ctx: RpcContext): string {
+// a scoped caller reaches only its own panel
+function ownPanel(requested: string, action: string, ctx: RpcContext): string {
     return resourcePanelId(ctx.callerPanelId(), requested, action)!;
 }
 
-export async function handlePanels(action: string, id: unknown, params: any, ctx: RpcContext): Promise<boolean> {
-    const { engine, reply } = ctx;
+// a failure of the operation itself is answered as what failed, with no code
+async function failedAs<T>(what: string, run: () => Promise<T>): Promise<T> {
     try {
-        switch (action) {
-            case "panel:list": {
-                reply(id, await engine.listPanels());
-                return true;
-            }
-            case "service:count": {
-                // control-plane readout for the shell tray; a scoped panel
-                // token must not learn the whole machine's service count
-                requireHost(ctx.callerPanelId(), action);
-                reply(id, { running: engine.runningServiceCount() });
-                return true;
-            }
-            case "panel:install": {
-                const panelId = assertPanelId(params?.panelId);
-                // installing a panel is a host action, never panel equipment:
-                // a scoped token grants one panel claim and no wider reach
-                requireHost(ctx.callerPanelId(), action);
-                // the daemon resolves the release and its bytes from its own
-                // registry; version/sha256 are what the caller expects, and
-                // a disagreement refuses. Any downloadUrl sent is ignored.
-                const expected = {
-                    allowDowngrade: params?.allowDowngrade === true,
-                    version: assertOptStr(params?.version, "version", 64),
-                    sha256: assertOptStr(params?.sha256, "sha256", 128),
-                };
-                const downloadId = assertOptStr(params?.downloadId, "downloadId", 128);
-                const progress = downloadId
-                    ? (payload: object) => ctx.sendEvent("progress", { ...payload, downloadId })
-                    : undefined;
-                // ifUnused (the updater): a panel running something people
-                // rely on (important or long running) is held, and the reply
-                // names those processes; anything else it runs is stopped
-                // for the install and started again by the panel
-                if (params?.ifUnused === true) {
-                    const processes = engine.panelWorkloads(panelId);
-                    const holding = processes.filter((processId) => engine.holdsUpdates(processId));
-                    if (holding.length > 0) {
-                        reply(id, { held: { processes: holding } });
-                        return true;
-                    }
-                    if (processes.length > 0) {
-                        const { installed, failures } = await engine.updateInUse({ panels: [{ id: panelId, expected }] }, (_target, payload) => progress?.(payload));
-                        const failure = failures[`panel:${panelId}`];
-                        if (failure) throw new Error(failure);
-                        reply(id, { panel: installed[0] });
-                        return true;
-                    }
-                }
-                const manifest = await engine.installPanel(panelId, expected, progress);
-                reply(id, { panel: manifest });
-                return true;
-            }
-            case "update:inUse": {
-                // Stop and update: stops what the updates wait for, then
-                // installs every panel and swaps in every staged package
-                requireHost(ctx.callerPanelId(), action);
-                if (!Array.isArray(params?.panels ?? []) || !Array.isArray(params?.packages ?? [])) {
-                    throw new Error("panels and packages must be lists");
-                }
-                const panels = ((params?.panels ?? []) as any[]).map((panel) => ({
-                    id: assertPanelId(panel?.id),
-                    expected: {
-                        version: assertOptStr(panel?.version, "version", 64),
-                        sha256: assertOptStr(panel?.sha256, "sha256", 128),
-                    },
-                }));
-                const packages = ((params?.packages ?? []) as unknown[]).map((name) => assertId(name, "packageName"));
-                const downloadId = assertOptStr(params?.downloadId, "downloadId", 128);
-                const { installed, failures } = await engine.updateInUse(
-                    { panels, packages },
-                    downloadId ? (target, payload) => ctx.sendEvent("progress", { ...payload, target, downloadId }) : undefined,
-                );
-                reply(id, { panels: installed, failures });
-                return true;
-            }
-            case "panel:uninstall": {
-                const panelId = effectivePanelId(assertPanelId(params?.panelId), action, ctx);
-                try {
-                    // deleting data is opt-in and only an explicit true
-                    // enables it; anything else keeps the user's data
-                    const result = await engine.uninstallPanel(panelId, { deleteData: params?.deleteData === true });
-                    // what went wrong with it went with it
-                    problemsFor(engine).clear(panelId);
-                    reply(id, { success: true, ...result });
-                } catch (err: any) {
-                    reply(id, null, `Uninstall failed: ${err?.message}`);
-                }
-                return true;
-            }
-            case "panel:restartService": {
-                const panelId = effectivePanelId(assertPanelId(params?.panelId), action, ctx);
-                try {
-                    reply(id, { restarted: await engine.restartPanelService(panelId) });
-                } catch (err: any) {
-                    reply(id, null, `Restart failed: ${err?.message}`);
-                }
-                return true;
-            }
-            case "config:get": {
-                try {
-                    // config ids are panel-scoped (default config in
-                    // configs/, an explicit path in the panel's files dir);
-                    // a scoped caller may only touch its own claim.
-                    // Assertion inside the try so traversal ids and paths
-                    // are refused with the typed INVALID_PARAMS shape.
-                    const requested = assertId(params?.id, "config id");
-                    const panelId = effectivePanelId(requested, action, ctx);
-                    const configPath = assertConfigPath(params?.path);
-                    reply(id, { data: await engine.getConfig(panelId, configPath) });
-                } catch (err: any) {
-                    logger.debug("[panels] config:get refused:", err?.message || err);
-                    reply(id, null, err?.message || "Invalid config id", rpcErrorCode(err));
-                }
-                return true;
-            }
-            case "config:set": {
-                try {
-                    const requested = assertId(params?.id, "config id");
-                    const panelId = effectivePanelId(requested, action, ctx);
-                    const configPath = assertConfigPath(params?.path);
-                    reply(id, { success: await engine.setConfig(panelId, params?.data, configPath) });
-                } catch (err: any) {
-                    logger.debug("[panels] config:set refused:", err?.message || err);
-                    reply(id, null, err?.message || "Invalid config id", rpcErrorCode(err));
-                }
-                return true;
-            }
-            default:
-                return false;
-        }
-    } catch (err: any) {
-        // codes travel on the error (RpcError, InvalidParams) — see rpc/errors.ts
-        reply(id, null, err?.message || "Panel operation failed", rpcErrorCode(err));
-        return true;
+        return await run();
+    } catch (err) {
+        throw new Refusal(`${what} failed: ${errorMessage(err)}`);
     }
 }
+
+export const panelsRpc = rpcModule({
+    "panel:list": (_, ctx) => ctx.engine.listPanels(),
+    // control-plane readout for the shell tray; a scoped panel token must
+    // not learn the whole machine's service count
+    "service:count": (_, ctx) => ({ running: ctx.engine.runningServiceCount() }),
+    "panel:install": async ({ panelId, version, sha256, downloadId, allowDowngrade, ifUnused }, ctx) => {
+        // installing a panel is a host action, never panel equipment. The
+        // daemon resolves the release and its bytes from its own registry;
+        // any downloadUrl sent is ignored.
+        const expected = { allowDowngrade: allowDowngrade === true, version, sha256 };
+        const progress = downloadId ? (payload: object) => ctx.sendEvent("progress", { ...payload, downloadId }) : undefined;
+        // ifUnused (the updater): a panel running something people rely on
+        // (important or long running) is held, and the reply names those
+        // processes; anything else it runs is stopped for the install and
+        // started again by the panel
+        if (ifUnused) {
+            const processes = ctx.engine.panelWorkloads(panelId);
+            const holding = processes.filter((processId) => ctx.engine.holdsUpdates(processId));
+            if (holding.length > 0) return { held: { processes: holding } };
+            if (processes.length > 0) {
+                const { installed, failures } = await ctx.engine.updateInUse({ panels: [{ id: panelId, expected }] }, (_target, payload) => progress?.(payload));
+                const failure = failures[`panel:${panelId}`];
+                if (failure) throw new Error(failure);
+                return { panel: installed[0] };
+            }
+        }
+        return { panel: await ctx.engine.installPanel(panelId, expected, progress) };
+    },
+    // Stop and update: stops what the updates wait for, then installs
+    // every panel and swaps in every staged package
+    "update:inUse": async ({ panels, packages, downloadId }, ctx) => {
+        const { installed, failures } = await ctx.engine.updateInUse(
+            { panels: (panels ?? []).map(({ id, version, sha256 }) => ({ id, expected: { version, sha256 } })), packages: packages ?? [] },
+            downloadId ? (target, payload) => ctx.sendEvent("progress", { ...payload, target, downloadId }) : undefined,
+        );
+        return { panels: installed, failures };
+    },
+    "panel:uninstall": ({ panelId, deleteData }, ctx, action) => {
+        const owned = ownPanel(panelId, action, ctx);
+        return failedAs("Uninstall", async () => {
+            const result = await ctx.engine.uninstallPanel(owned, { deleteData: deleteData === true });
+            // what went wrong with it went with it
+            problemsFor(ctx.engine).clear(owned);
+            return { success: true, ...result };
+        });
+    },
+    "panel:restartService": ({ panelId }, ctx, action) => {
+        const owned = ownPanel(panelId, action, ctx);
+        return failedAs("Restart", async () => ({ restarted: await ctx.engine.restartPanelService(owned) }));
+    },
+    // config ids are panel-scoped (default config in configs/, an explicit
+    // path in the panel's files dir); a scoped caller may only touch its own claim
+    "config:get": async ({ id, path }, ctx, action) => ({ data: await ctx.engine.getConfig(ownPanel(id, action, ctx), path) }),
+    "config:set": async ({ id, path, data }, ctx, action) => ({ success: await ctx.engine.setConfig(ownPanel(id, action, ctx), data, path) }),
+}, "Panel operation failed");

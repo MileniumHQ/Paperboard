@@ -14,13 +14,13 @@ import { computerHostname } from "../hostname";
 import type { S3Settings } from "./s3Store";
 import type { DriveSettings } from "./driveStore";
 import { errorCode } from "@mileniumhq/paperapi/errors";
+import { LOCAL_DESTINATION_ID, isDestinationId } from "./types";
 
 /** vault owner for location secrets; shell-* ids are reserved, no panel holds it */
 export const BACKUP_VAULT_OWNER = "shell-backups";
-export const LOCAL_DESTINATION_ID = "local";
+export { LOCAL_DESTINATION_ID, isDestinationId } from "./types";
 export const MAX_DESTINATIONS = 16;
 export const DESTINATION_LABEL_MAX = 60;
-const DESTINATION_ID_RE = /^d-[0-9a-f]{12}$/;
 
 export type Destination =
     | { id: string; kind: "local"; label: string }
@@ -36,10 +36,6 @@ export interface BackupConfig {
 
 export function localDestination(): Destination {
     return { id: LOCAL_DESTINATION_ID, kind: "local", label: computerHostname() };
-}
-
-export function isDestinationId(value: unknown): value is string {
-    return typeof value === "string" && (value === LOCAL_DESTINATION_ID || DESTINATION_ID_RE.test(value));
 }
 
 function str(v: unknown, max: number): v is string {

@@ -140,7 +140,7 @@ const computerId = grantedComputerId();`}
                     <tr><td><PaperCode>AUTH_REQUIRED</PaperCode></td><td>The credential is missing, wrong or revoked.</td></tr>
                     <tr><td><PaperCode>BAD_PROTOCOL</PaperCode></td><td>The SDK and the daemon speak different protocol versions.</td></tr>
                     <tr><td><PaperCode>NOT_FOUND</PaperCode></td><td>The method or thing named does not exist, such as <PaperCode>Unknown action: system:nope</PaperCode> or an unclaimed port.</td></tr>
-                    <tr><td><PaperCode>INVALID_PARAMS</PaperCode></td><td>An argument breaks a rule: a bad name, a value over a limit, a bad path.</td></tr>
+                    <tr><td><PaperCode>INVALID_PARAMS</PaperCode></td><td>An argument breaks a rule: a bad name, a value over a limit, a bad path. The message names the field and ends with the method, such as <PaperCode>Parameter "id" exceeds 128 characters (in term:create)</PaperCode>.</td></tr>
                     <tr><td><PaperCode>FORBIDDEN</PaperCode></td><td>The credential may not do this, such as naming another panel or calling a host-only method.</td></tr>
                     <tr><td><PaperCode>CONFLICT</PaperCode></td><td>The state does not allow it now: a port is taken, no backup location is chosen, a block is already registered by another connection.</td></tr>
                     <tr><td><PaperCode>INTERNAL</PaperCode></td><td>Anything else the daemon reports, including refused file paths.</td></tr>

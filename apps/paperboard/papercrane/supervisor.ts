@@ -10,8 +10,9 @@ import { logger } from "./logger";
 import { ShellMarks } from "./shellIntegration";
 import { unrefTimer } from "./storage";
 
-export const INPUT_ENCODINGS = ["utf8", "utf16le"] as const;
-export type InputEncoding = (typeof INPUT_ENCODINGS)[number];
+import type { InputEncoding } from "./supervisorTypes";
+
+export { INPUT_ENCODINGS, type InputEncoding } from "./supervisorTypes";
 
 export interface SupervisorSpawnConfig {
     command?: string;

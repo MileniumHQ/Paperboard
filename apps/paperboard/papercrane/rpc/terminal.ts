@@ -1,6 +1,6 @@
 import type { RpcContext } from "./context";
 import { claimClient, checkClientOwnership, checkSpawnEnv } from "./ownership";
-import { assertStr, assertOptStr, assertNum, assertEnvMap } from "./params";
+import { rpcModule } from "./dispatch";
 import { offeredShells } from "../shellIntegration";
 import type { TerminalStreams } from "../engine";
 
@@ -15,74 +15,41 @@ function terminalEvents(termId: string, sendEvent: RpcContext["sendEvent"]): Ter
     };
 }
 
-export async function handleTerminal(action: string, id: unknown, params: any, ctx: RpcContext): Promise<boolean> {
-    const { engine, reply, sendEvent } = ctx;
-    switch (action) {
-        case "term:create": {
-            const termId = assertStr(params?.id, "id", 128);
-            const cols = assertNum(params?.cols, "cols", 80);
-            const rows = assertNum(params?.rows, "rows", 24);
-            const env = assertEnvMap(params?.env, "env");
-            checkSpawnEnv(env, ctx, "term:create");
-            await claimClient(termId, ctx, "term:create", () => engine.createTerminal(
-                termId,
-                {
-                    cols,
-                    rows,
-                    cwd: assertOptStr(params?.cwd, "cwd", 1024),
-                    env,
-                    shell: assertOptStr(params?.shell, "shell", 1024),
-                },
-                terminalEvents(termId, sendEvent),
-                ctx.ws,
-            ));
-            reply(id, { success: true });
-            return true;
-        }
-        case "term:write": {
-            const termId = assertStr(params?.id, "id", 128);
-            checkClientOwnership(termId, ctx, "term:write");
-            engine.writeTerminal(termId, assertStr(params?.data, "data", 65536, true));
-            reply(id, { success: true });
-            return true;
-        }
-        case "term:resize": {
-            const termId = assertStr(params?.id, "id", 128);
-            checkClientOwnership(termId, ctx, "term:resize");
-            engine.resizeTerminal(termId, assertNum(params?.cols, "cols"), assertNum(params?.rows, "rows"));
-            reply(id, { success: true });
-            return true;
-        }
-        case "term:attach": {
-            const termId = assertStr(params?.id, "id", 128);
-            checkClientOwnership(termId, ctx, "term:attach");
-            const success = await engine.attachTerminal(termId, ctx.ws, terminalEvents(termId, sendEvent));
-            // what was said before this socket listened
-            const known = engine.terminalState(termId);
-            if (known.foreground) sendEvent("term:foreground", { id: termId, name: known.foreground });
-            if (known.cwd) sendEvent("term:cwd", { id: termId, cwd: known.cwd });
-            reply(id, { success });
-            return true;
-        }
-        case "term:shells": {
-            reply(id, { shells: offeredShells() });
-            return true;
-        }
-        case "term:exists": {
-            const termId = assertStr(params?.id, "id", 128);
-            checkClientOwnership(termId, ctx, "term:exists");
-            const running = await engine.isTerminalRunning(termId);
-            reply(id, { running });
-            return true;
-        }
-        case "term:destroy": {
-            const termId = assertStr(params?.id, "id", 128);
-            checkClientOwnership(termId, ctx, "term:destroy");
-            await engine.destroyTerminal(termId);
-            reply(id, { success: true });
-            return true;
-        }
-        default:
-            return false;
-    }
-}
+export const terminalRpc = rpcModule({
+    "term:create": async ({ id, cols, rows, cwd, env, shell }, ctx, action) => {
+        checkSpawnEnv(env, ctx, action);
+        await claimClient(id, ctx, action, () =>
+            ctx.engine.createTerminal(id, { cols: cols ?? 80, rows: rows ?? 24, cwd, env, shell }, terminalEvents(id, ctx.sendEvent), ctx.ws),
+        );
+        return { success: true };
+    },
+    "term:write": ({ id, data }, ctx, action) => {
+        checkClientOwnership(id, ctx, action);
+        ctx.engine.writeTerminal(id, data);
+        return { success: true };
+    },
+    "term:resize": ({ id, cols, rows }, ctx, action) => {
+        checkClientOwnership(id, ctx, action);
+        ctx.engine.resizeTerminal(id, cols, rows);
+        return { success: true };
+    },
+    "term:attach": async ({ id }, ctx, action) => {
+        checkClientOwnership(id, ctx, action);
+        const success = await ctx.engine.attachTerminal(id, ctx.ws, terminalEvents(id, ctx.sendEvent));
+        // what was said before this socket listened
+        const known = ctx.engine.terminalState(id);
+        if (known.foreground) ctx.sendEvent("term:foreground", { id, name: known.foreground });
+        if (known.cwd) ctx.sendEvent("term:cwd", { id, cwd: known.cwd });
+        return { success };
+    },
+    "term:shells": () => ({ shells: offeredShells() }),
+    "term:exists": async ({ id }, ctx, action) => {
+        checkClientOwnership(id, ctx, action);
+        return { running: await ctx.engine.isTerminalRunning(id) };
+    },
+    "term:destroy": async ({ id }, ctx, action) => {
+        checkClientOwnership(id, ctx, action);
+        await ctx.engine.destroyTerminal(id);
+        return { success: true };
+    },
+});

@@ -1,8 +1,8 @@
 import type { PaperCraneEngine } from "../engine";
 import type { RpcContext } from "./context";
-import { assertPanelId, rpcErrorCode } from "./params";
+import { rpcModule } from "./dispatch";
 import { invalidParams } from "./errors";
-import { requireHost, resourcePanelId } from "../principal";
+import { resourcePanelId } from "../principal";
 import { PanelProblems } from "../problems";
 import { problemKey, readProblemReport } from "@mileniumhq/paperapi/problemShape";
 import { errorMessage } from "@mileniumhq/paperapi/errors";
@@ -27,37 +27,19 @@ function checked<T>(read: () => T): T {
 
 // A panel reports and clears its own problems; the shell (the host) reads
 // every panel's, and dismisses them.
-export async function handleProblems(action: string, id: unknown, params: any, ctx: RpcContext): Promise<boolean> {
-    if (!action.startsWith("problems:")) return false;
-    const problems = problemsFor(ctx.engine);
-    const panelId = () => resourcePanelId(ctx.callerPanelId(), assertPanelId(params?.panelId), action)!;
-    try {
-        switch (action) {
-            case "problems:report": {
-                const report = checked(() => readProblemReport(params));
-                if (report.key === undefined) throw invalidParams("A problem needs a key");
-                problems.report(panelId(), { key: report.key, title: report.title, message: report.message });
-                ctx.reply(id, { success: true });
-                return true;
-            }
-            case "problems:clear": {
-                const key = params?.key === undefined ? undefined : checked(() => problemKey(params.key));
-                problems.clear(panelId(), key);
-                ctx.reply(id, { success: true });
-                return true;
-            }
-            case "problems:list":
-                ctx.reply(id, { problems: problems.list(panelId()) });
-                return true;
-            case "problems:every":
-                requireHost(ctx.callerPanelId(), action);
-                ctx.reply(id, { panels: problems.every() });
-                return true;
-            default:
-                return false;
-        }
-    } catch (err: any) {
-        ctx.reply(id, null, err?.message || "Problem operation failed", rpcErrorCode(err));
-        return true;
-    }
-}
+const problemsOf = (panelId: string, action: string, ctx: RpcContext) => resourcePanelId(ctx.callerPanelId(), panelId, action)!;
+
+export const problemsRpc = rpcModule({
+    "problems:report": (params, ctx, action) => {
+        const report = checked(() => readProblemReport(params));
+        if (report.key === undefined) throw invalidParams("A problem needs a key");
+        problemsFor(ctx.engine).report(problemsOf(params.panelId, action, ctx), { key: report.key, title: report.title, message: report.message });
+        return { success: true };
+    },
+    "problems:clear": ({ panelId, key }, ctx, action) => {
+        problemsFor(ctx.engine).clear(problemsOf(panelId, action, ctx), key === undefined ? undefined : checked(() => problemKey(key)));
+        return { success: true };
+    },
+    "problems:list": ({ panelId }, ctx, action) => ({ problems: problemsFor(ctx.engine).list(problemsOf(panelId, action, ctx)) }),
+    "problems:every": (_, ctx) => ({ panels: problemsFor(ctx.engine).every() }),
+}, "Problem operation failed");

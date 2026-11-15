@@ -1,169 +1,82 @@
 import { actionsRegistry } from "../actions";
-import { ErrorCode } from "../protocol";
-import type { RpcContext } from "./context";
-import { resourcePanelId } from "../principal";
-import { assertPanelId, assertStr, assertOptStr, assertNum, InvalidParamsError, rpcErrorCode } from "./params";
+import { rpcModule, type RpcHandler } from "./dispatch";
+import { InvalidParamsError } from "./params";
+import { answeredAs, ownNamespace, ownedElsewhere } from "./blocks";
 
-// outstanding calls cap from the registry surface (mirrors the client's
-// PaperAPI MAX_PENDING_CALLS = 1000)
-const ACTIONS_CALL_TIMEOUT_MAX_MS = 60_000;
-
-// A numeric timeout longer than this is refused at the rpc boundary, not
-// clamped silently: typed INVALID_PARAMS below, the wire answers the caller.
-// An explicit `null` opts the call out of the deadline entirely — long work
-// (installing a runtime) reports progress and completion through panel state
-// rather than holding a caller's socket open, but callers that must wait may
-// do so. The outstanding-call cap, not the timer, is the budget then.
-export function assertCallTimeout(value: unknown, name: string, fallback?: number): number | null {
-    if (value === null) return null;
-    const n = assertNum(value, name, fallback);
-    if (n > ACTIONS_CALL_TIMEOUT_MAX_MS) {
-        throw new InvalidParamsError(
-            `Parameter "${name}" exceeds ${ACTIONS_CALL_TIMEOUT_MAX_MS} ms cap`,
+// The Actions registry (Blocks' predecessor). Malformed calls are refused
+// by their shapes (rpc/contract.ts); registry conflicts answer CONFLICT,
+// and registry call failures answer as they are.
+const register: RpcHandler<"actions:register" | "action:register"> = ({ panelId, action: act, actions: acts, schema }, ctx, action) => {
+    const owner = ownNamespace(panelId, action, ctx);
+    if (acts) {
+        ownedElsewhere(
+            actionsRegistry.registerMultiple(owner, acts, ctx.ws),
+            `Registry namespace is owned by another socket: action registration for panel "${owner}" conflicts`,
         );
+    } else if (act) {
+        ownedElsewhere(
+            actionsRegistry.register(owner, act, ctx.ws, schema),
+            `Registry namespace is owned by another socket: action "${act}" for panel "${owner}" conflicts`,
+        );
+    } else {
+        // a registration naming nothing must not answer success:
+        // success means registered, and nothing was
+        throw new InvalidParamsError('actions:register requires "action" or "actions"');
     }
-    return n;
-}
+    ctx.broadcastEvent("actions:registry-updated", { type: "action:registered", panelId: owner, action: act, actions: acts });
+    return { success: true };
+};
 
-// The namespace a socket writes to (register, unregister, emit) is the
-// token claim: a scoped caller naming another panel is refused. Host
-// callers carry no claim and keep the explicit parameter.
-function ownPanelId(params: any, action: string, ctx: RpcContext): string {
-    return resourcePanelId(ctx.callerPanelId(), assertPanelId(params?.panelId), action)!;
-}
+const unregister: RpcHandler<"actions:unregister" | "action:unregister"> = ({ panelId, action: act }, ctx, action) => {
+    const owner = ownNamespace(panelId, action, ctx);
+    ownedElsewhere(
+        actionsRegistry.unregister(owner, act, ctx.ws),
+        `Registry namespace is owned by another socket: cannot unregister action "${act}" for panel "${owner}"`,
+    );
+    ctx.broadcastEvent("actions:registry-updated", { type: "action:unregistered", panelId: owner, action: act });
+    return { success: true };
+};
 
-// Malformed calls throw InvalidParamsError and the WS dispatcher answers
-// INVALID_PARAMS — no per-case catch needed. Registry conflicts keep
-// their CONFLICT shape below; registry call failures answer untyped,
-// exactly like before.
-export async function handleActions(action: string, id: unknown, params: any, ctx: RpcContext): Promise<boolean> {
-    const { ws, reply, broadcastEvent } = ctx;
-    switch (action) {
-        case "actions:register":
-        case "action:register": {
-            const panelId = ownPanelId(params, action, ctx);
-            const act = assertOptStr(params?.action, "action", 256);
-            const acts = params?.actions;
-            const schema = params?.schema;
-            if (Array.isArray(acts)) {
-                for (const name of acts) assertStr(name, "actions[]", 256);
-                const result = actionsRegistry.registerMultiple(panelId, acts, ws);
-                if (!result.ok) {
-                    reply(
-                        id,
-                        null,
-                        `Registry namespace is owned by another socket: action registration for panel "${panelId}" conflicts`,
-                        ErrorCode.CONFLICT,
-                    );
-                    return true;
-                }
-            } else if (act) {
-                const result = actionsRegistry.register(panelId, act, ws, schema);
-                if (!result.ok) {
-                    reply(
-                        id,
-                        null,
-                        `Registry namespace is owned by another socket: action "${act}" for panel "${panelId}" conflicts`,
-                        ErrorCode.CONFLICT,
-                    );
-                    return true;
-                }
-            } else {
-                // a registration naming nothing must not answer success:
-                // success means registered, and nothing was
-                throw new InvalidParamsError(
-                    'actions:register requires "action" or "actions"',
-                );
-            }
-            broadcastEvent("actions:registry-updated", { type: "action:registered", panelId, action: act, actions: acts });
-            reply(id, { success: true });
-            return true;
-        }
-        case "actions:unregister":
-        case "action:unregister": {
-            const panelId = ownPanelId(params, action, ctx);
-            const act = assertOptStr(params?.action, "action", 256);
-            const result = actionsRegistry.unregister(panelId, act, ws);
-            if (!result.ok) {
-                reply(
-                    id,
-                    null,
-                    `Registry namespace is owned by another socket: cannot unregister action "${act}" for panel "${panelId}"`,
-                    ErrorCode.CONFLICT,
-                );
-                return true;
-            }
-            broadcastEvent("actions:registry-updated", { type: "action:unregistered", panelId, action: act });
-            reply(id, { success: true });
-            return true;
-        }
-        case "actions:project-define": {
-            const panelId = ownPanelId(params, action, ctx);
-            const projectId = assertStr(params?.project, "project", 64);
-            const name = assertStr(params?.name, "name", 128);
-            const icon = assertOptStr(params?.icon, "icon", 128);
-            const result = actionsRegistry.defineProject(panelId, { id: projectId, name, icon }, ws);
-            if (!result.ok) {
-                reply(id, null, `Project "${projectId}" for panel "${panelId}" is owned by another socket`, ErrorCode.CONFLICT);
-                return true;
-            }
-            broadcastEvent("actions:registry-updated", { type: "project:defined", panelId, project: projectId });
-            reply(id, { success: true });
-            return true;
-        }
-        case "actions:project-remove": {
-            const panelId = ownPanelId(params, action, ctx);
-            const projectId = assertStr(params?.project, "project", 64);
-            const result = actionsRegistry.removeProject(panelId, projectId, ws);
-            if (!result.ok) {
-                reply(id, null, `Project "${projectId}" for panel "${panelId}" is owned by another socket`, ErrorCode.CONFLICT);
-                return true;
-            }
-            broadcastEvent("actions:registry-updated", { type: "project:removed", panelId, project: projectId });
-            reply(id, { success: true });
-            return true;
-        }
-        case "actions:projects": {
-            reply(id, { projects: actionsRegistry.listProjects(assertOptStr(params?.panelId, "panelId", 128)) });
-            return true;
-        }
-        case "actions:call":
-        case "action:call": {
-            const panelId = assertPanelId(params?.panelId);
-            const act = assertStr(params?.action, "action", 256);
-            const args = params?.args;
-            const timeoutMs = assertCallTimeout(params?.timeoutMs, "timeoutMs", 30_000);
-            try {
-                const result = await actionsRegistry.call(panelId, act, Array.isArray(args) ? args : [], ws, timeoutMs, ctx.callerPanelId());
-                reply(id, { result });
-            } catch (err: any) {
-                reply(id, null, err?.message || String(err), rpcErrorCode(err));
-            }
-            return true;
-        }
-        case "actions:list":
-        case "action:list": {
-            reply(id, { actions: actionsRegistry.list(assertOptStr(params?.panelId, "panelId", 128)) });
-            return true;
-        }
-        case "actions:emit":
-        case "action:emit":
-        case "event:emit": {
-            const panelId = ownPanelId(params, action, ctx);
-            const evt = assertStr(params?.event, "event", 256);
-            broadcastEvent(`actions:${panelId}:${evt}`, params?.payload);
-            reply(id, { success: true });
-            return true;
-        }
-        case "triggers:emit":
-        case "trigger:emit": {
-            const panelId = ownPanelId(params, action, ctx);
-            const trigger = assertStr(params?.trigger, "trigger", 256);
-            broadcastEvent(`triggers:${panelId}:${trigger}`, params?.output);
-            reply(id, { success: true });
-            return true;
-        }
-        default:
-            return false;
-    }
-}
+const call: RpcHandler<"actions:call" | "action:call"> = ({ panelId, action: act, args, timeoutMs }, ctx) =>
+    answeredAs(() => actionsRegistry.call(panelId, act, Array.isArray(args) ? args : [], ctx.ws, timeoutMs === undefined ? 30_000 : timeoutMs, ctx.callerPanelId()));
+
+const list: RpcHandler<"actions:list" | "action:list"> = ({ panelId }) => ({ actions: actionsRegistry.list(panelId) });
+
+const emit: RpcHandler<"actions:emit" | "action:emit" | "event:emit"> = ({ panelId, event, payload }, ctx, action) => {
+    ctx.broadcastEvent(`actions:${ownNamespace(panelId, action, ctx)}:${event}`, payload);
+    return { success: true };
+};
+
+const trigger: RpcHandler<"triggers:emit" | "trigger:emit"> = ({ panelId, trigger: name, output }, ctx, action) => {
+    ctx.broadcastEvent(`triggers:${ownNamespace(panelId, action, ctx)}:${name}`, output);
+    return { success: true };
+};
+
+export const actionsRpc = rpcModule({
+    "actions:register": register,
+    "action:register": register,
+    "actions:unregister": unregister,
+    "action:unregister": unregister,
+    "actions:project-define": ({ panelId, project, name, icon }, ctx, action) => {
+        const owner = ownNamespace(panelId, action, ctx);
+        ownedElsewhere(actionsRegistry.defineProject(owner, { id: project, name, icon }, ctx.ws), `Project "${project}" for panel "${owner}" is owned by another socket`);
+        ctx.broadcastEvent("actions:registry-updated", { type: "project:defined", panelId: owner, project });
+        return { success: true };
+    },
+    "actions:project-remove": ({ panelId, project }, ctx, action) => {
+        const owner = ownNamespace(panelId, action, ctx);
+        ownedElsewhere(actionsRegistry.removeProject(owner, project, ctx.ws), `Project "${project}" for panel "${owner}" is owned by another socket`);
+        ctx.broadcastEvent("actions:registry-updated", { type: "project:removed", panelId: owner, project });
+        return { success: true };
+    },
+    "actions:projects": ({ panelId }) => ({ projects: actionsRegistry.listProjects(panelId) }),
+    "actions:call": call,
+    "action:call": call,
+    "actions:list": list,
+    "action:list": list,
+    "actions:emit": emit,
+    "action:emit": emit,
+    "event:emit": emit,
+    "triggers:emit": trigger,
+    "trigger:emit": trigger,
+});

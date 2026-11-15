@@ -1,8 +1,8 @@
 import type { RpcContext } from "./context";
 import { claimClient, checkClientOwnership, checkSpawnEnv } from "./ownership";
-import { INPUT_ENCODINGS } from "../supervisor";
 import type { ProcessStreams } from "../engineWorkloads";
-import { assertStr, assertOptStr, assertEnvMap, InvalidParamsError } from "./params";
+import { InvalidParamsError } from "./params";
+import { rpcModule } from "./dispatch";
 
 // a process's streams as the events its socket receives
 function streamsTo(procId: string, sendEvent: RpcContext["sendEvent"]): ProcessStreams {
@@ -13,91 +13,43 @@ function streamsTo(procId: string, sendEvent: RpcContext["sendEvent"]): ProcessS
     };
 }
 
-export async function handleProcess(action: string, id: unknown, params: any, ctx: RpcContext): Promise<boolean> {
-    const { engine, reply, sendEvent } = ctx;
-    switch (action) {
-        case "process:run": {
-            const procId = assertStr(params?.id, "id", 128);
-            const command = assertStr(params?.command, "command");
-            // refuse, don't coerce: a non-string arg is a caller bug, and
-            // silently dropping it would run a different command than asked
-            const rawArgs = params?.args ?? [];
-            if (!Array.isArray(rawArgs)) {
-                throw new InvalidParamsError('Invalid parameter: args must be an array of strings');
-            }
-            const args = rawArgs.map((a: unknown) => {
-                if (typeof a !== "string") {
-                    throw new InvalidParamsError("Invalid parameter: every arg must be a string");
-                }
-                return a;
-            });
-            const env = assertEnvMap(params?.env, "env");
-            if (params?.stdin !== undefined && typeof params.stdin !== "boolean") {
-                throw new InvalidParamsError("Invalid parameter: stdin must be a boolean");
-            }
-            const inputEncoding = params?.inputEncoding;
-            if (inputEncoding !== undefined && !INPUT_ENCODINGS.includes(inputEncoding)) {
-                throw new InvalidParamsError(`Invalid parameter: inputEncoding must be one of ${INPUT_ENCODINGS.join(", ")}`);
-            }
-            if (inputEncoding !== undefined && params?.stdin === false) {
-                throw new InvalidParamsError("Invalid parameter: a process started with no input has no inputEncoding");
-            }
-            if (params?.consoleInput !== undefined && typeof params.consoleInput !== "boolean") {
-                throw new InvalidParamsError("Invalid parameter: consoleInput must be a boolean");
-            }
-            if (params?.important !== undefined && typeof params.important !== "boolean") {
-                throw new InvalidParamsError("Invalid parameter: important must be a boolean");
-            }
-            checkSpawnEnv(env, ctx, "process:run");
-            await claimClient(procId, ctx, "process:run", () => engine.startProcess(
-                procId,
-                command,
-                args,
-                assertOptStr(params?.cwd, "cwd", 1024),
-                env,
-                ctx.ws,
-                streamsTo(procId, sendEvent),
-                { stdin: params?.stdin, inputEncoding, consoleInput: params?.consoleInput, important: params?.important === true },
-            ));
-            reply(id, { success: true });
-            return true;
+export const processRpc = rpcModule({
+    "process:run": async ({ id, command, args, cwd, env, stdin, inputEncoding, consoleInput, important }, ctx, action) => {
+        if (inputEncoding !== undefined && stdin === false) {
+            throw new InvalidParamsError("Invalid parameter: a process started with no input has no inputEncoding");
         }
-        case "process:write": {
-            const procId = assertStr(params?.id, "id", 128);
-            checkClientOwnership(procId, ctx, "process:write");
-            engine.writeProcess(procId, assertStr(params?.data, "data", 65536, true));
-            reply(id, { success: true });
-            return true;
-        }
-        case "process:close-input": {
-            const procId = assertStr(params?.id, "id", 128);
-            checkClientOwnership(procId, ctx, "process:close-input");
-            engine.closeProcessInput(procId);
-            reply(id, { success: true });
-            return true;
-        }
-        case "process:kill": {
-            const procId = assertStr(params?.id, "id", 128);
-            checkClientOwnership(procId, ctx, "process:kill");
-            await engine.killProcess(procId, assertOptStr(params?.signal, "signal", 32) ?? "SIGTERM");
-            reply(id, { success: true });
-            return true;
-        }
-        case "process:exists": {
-            const procId = assertStr(params?.id, "id", 128);
-            checkClientOwnership(procId, ctx, "process:exists");
-            const running = await engine.isProcessRunning(procId);
-            reply(id, { running });
-            return true;
-        }
-        case "process:attach": {
-            const procId = assertStr(params?.id, "id", 128);
-            checkClientOwnership(procId, ctx, "process:attach");
-            const success = await engine.attachProcess(procId, ctx.ws, streamsTo(procId, sendEvent));
-            reply(id, { success });
-            return true;
-        }
-        default:
-            return false;
-    }
-}
+        checkSpawnEnv(env, ctx, action);
+        await claimClient(id, ctx, action, () =>
+            ctx.engine.startProcess(id, command, args ?? [], cwd, env, ctx.ws, streamsTo(id, ctx.sendEvent), {
+                stdin,
+                inputEncoding,
+                consoleInput,
+                important: important === true,
+            }),
+        );
+        return { success: true };
+    },
+    "process:write": ({ id, data }, ctx, action) => {
+        checkClientOwnership(id, ctx, action);
+        ctx.engine.writeProcess(id, data);
+        return { success: true };
+    },
+    "process:close-input": ({ id }, ctx, action) => {
+        checkClientOwnership(id, ctx, action);
+        ctx.engine.closeProcessInput(id);
+        return { success: true };
+    },
+    "process:kill": async ({ id, signal }, ctx, action) => {
+        checkClientOwnership(id, ctx, action);
+        await ctx.engine.killProcess(id, signal ?? "SIGTERM");
+        return { success: true };
+    },
+    "process:exists": async ({ id }, ctx, action) => {
+        checkClientOwnership(id, ctx, action);
+        return { running: await ctx.engine.isProcessRunning(id) };
+    },
+    "process:attach": async ({ id }, ctx, action) => {
+        checkClientOwnership(id, ctx, action);
+        return { success: await ctx.engine.attachProcess(id, ctx.ws, streamsTo(id, ctx.sendEvent)) };
+    },
+});

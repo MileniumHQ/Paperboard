@@ -12,13 +12,7 @@ export interface RpcContext {
     // full-authority caller (master/host token or noAuth dev mode).
     // Handlers derive identity from this, never from a caller parameter.
     callerPanelId: () => string | null;
-    sendEvent: (event: string, payload: any) => void;
-    broadcastEvent: (event: string, payload: any) => void;
-    reply: (id: unknown, result: any, error?: string, code?: string) => void;
+    sendEvent: (event: string, payload: unknown) => void;
+    broadcastEvent: (event: string, payload: unknown) => void;
+    reply: (id: unknown, result: unknown, error?: string, code?: string) => void;
 }
-
-export type RpcHandler = (
-    id: unknown,
-    params: any,
-    ctx: RpcContext,
-) => Promise<void> | void;

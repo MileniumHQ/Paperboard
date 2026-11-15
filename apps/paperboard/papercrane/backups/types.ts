@@ -67,6 +67,15 @@ export function backupArchiveDownloadCap(size: number): number {
 
 export const MAX_LISTED_BACKUPS = 500;
 export const BACKUP_LABEL_MAX = 100;
+
+/** the computer's own folder, the location every computer has */
+export const LOCAL_DESTINATION_ID = "local";
+const DESTINATION_ID_RE = /^d-[0-9a-f]{12}$/;
+
+export function isDestinationId(value: unknown): value is string {
+    return typeof value === "string" && (value === LOCAL_DESTINATION_ID || DESTINATION_ID_RE.test(value));
+}
+
 export const BACKUP_ID_RE = /^\d{8}-\d{6}-[0-9a-f]{6}$/;
 const SHA256_RE = /^[0-9a-f]{64}$/;
 

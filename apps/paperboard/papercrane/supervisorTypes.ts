@@ -1,3 +1,7 @@
+// how a workload's input is encoded on its way in
+export const INPUT_ENCODINGS = ["utf8", "utf16le"] as const;
+export type InputEncoding = (typeof INPUT_ENCODINGS)[number];
+
 // client surface shared by both supervisor runtimes
 export interface PaperCraneClientLike {
     id: string;

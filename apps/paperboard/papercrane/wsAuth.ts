@@ -6,7 +6,7 @@ import type { WebSocket } from "ws";
 import type { PaperCraneAuth } from "./auth";
 import { getDetailedOsInfo } from "./osInfo";
 import { ErrorCode } from "./protocol";
-import { assertPanelId, assertStr } from "./rpc/params";
+import { readParams } from "./rpc/contract";
 import { requireHost } from "./principal";
 import type { SocketIdentity } from "./wsIdentity";
 
@@ -91,18 +91,16 @@ export async function handleAuth(action: unknown, params: any, ctx: AuthContext)
     // host token remains attached for live revocation.
     if (action === "auth:scope") {
         requireHost(identity.panelId, action);
-        identity.grant(identity.token, assertPanelId(params?.panelId));
+        identity.grant(identity.token, readParams(action, params).panelId);
         reply({ success: true });
         return true;
     }
     if (action === "auth:panel-token") {
         requireHost(identity.panelId, action);
-        const panelId = assertPanelId(params?.panelId);
+        const { panelId, relayTo: servedBy } = readParams(action, params);
         // relayTo names the computer that serves the panel; a panel served
         // from elsewhere gets a relay-only credential
-        const relayTo = params?.relayTo === undefined || params?.relayTo === "local"
-            ? null
-            : assertStr(params.relayTo, "relayTo", 128);
+        const relayTo = servedBy === undefined || servedBy === "local" ? null : servedBy;
         reply({
             token: relayTo
                 ? auth.issueRelayToken(panelId, relayTo, identity.token ?? undefined)

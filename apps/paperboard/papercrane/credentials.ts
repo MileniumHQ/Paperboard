@@ -123,7 +123,7 @@ export class CredentialStore {
         return n;
     }
 
-    public get(name: string, panelId: string): { found: boolean; value: string | null } {
+    public get(name: unknown, panelId: string): { found: boolean; value: string | null } {
         const panel = this.validatePanelId(panelId);
         if (typeof name !== "string" || !NAME_RE.test(name)) {
             return { found: false, value: null };
@@ -132,7 +132,7 @@ export class CredentialStore {
         return entry ? { found: true, value: entry.value } : { found: false, value: null };
     }
 
-    public delete(name: string, panelId: string): boolean {
+    public delete(name: unknown, panelId: string): boolean {
         const panel = this.validatePanelId(panelId);
         if (typeof name !== "string" || !NAME_RE.test(name)) return false;
         const key = secretKey(panel, name);

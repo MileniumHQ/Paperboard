@@ -1,69 +1,23 @@
 import type { RpcContext } from "./context";
-import { assertStr, assertOptStr } from "./params";
+import { rpcModule } from "./dispatch";
 import { resourcePanelId } from "../principal";
-
-// single-frame write cap: 16 MiB of parsed content is far past any
-// legitimate panel state file; larger blobs ride file:download, which
-// streams with its own cap instead of living twice in one JSON frame
-const FILE_WRITE_MAX = 16 * 1024 * 1024;
 
 // file space is per-panel like the vault: a panel-scoped caller naming any
 // other panel's appId is refused outright. An omitted appId defaults to the
 // caller's own claim; master/host callers carry no claim and keep the
 // explicit-parameter behavior.
-function effectiveAppId(params: any, action: string, ctx: RpcContext): string | undefined {
-    const requested = assertOptStr(params?.appId, "appId", 128);
-    return resourcePanelId(ctx.callerPanelId(), requested, action);
-}
+const space = (appId: string | undefined, action: string, ctx: RpcContext) => resourcePanelId(ctx.callerPanelId(), appId, action);
 
-export async function handleFiles(action: string, id: unknown, params: any, ctx: RpcContext): Promise<boolean> {
-    const { engine, reply, sendEvent } = ctx;
-    switch (action) {
-        case "file:getPath": {
-            // empty targetPath is the panel root convention (getServerDir
-            // and friends pass ""): resolveSecureTargetPath maps it to the
-            // panel base, so the validator must allow it here. read/write/
-            // delete stay strict — an empty path is meaningless there.
-            reply(id, { path: engine.getFilePath(assertStr(params?.targetPath, "targetPath", 1024, true), effectiveAppId(params, action, ctx)) });
-            return true;
-        }
-        case "file:exists": {
-            reply(id, { exists: await engine.fileExists(assertStr(params?.targetPath, "targetPath", 1024, true), effectiveAppId(params, action, ctx)) });
-            return true;
-        }
-        case "file:write": {
-            reply(id, { path: await engine.writeFile(assertStr(params?.targetPath, "targetPath", 1024), assertStr(params?.content, "content", FILE_WRITE_MAX, true), effectiveAppId(params, action, ctx)) });
-            return true;
-        }
-        case "file:read": {
-            reply(id, { content: await engine.readFile(assertStr(params?.targetPath, "targetPath", 1024), effectiveAppId(params, action, ctx)) });
-            return true;
-        }
-        case "file:delete": {
-            reply(id, { success: await engine.deleteFile(assertStr(params?.targetPath, "targetPath", 1024), effectiveAppId(params, action, ctx)) });
-            return true;
-        }
-        case "file:clear": {
-            reply(id, { success: await engine.clearFiles(effectiveAppId(params, action, ctx)) });
-            return true;
-        }
-        case "file:download": {
-            const downloadId = assertStr(params?.downloadId, "downloadId", 128);
-            const dest = await engine.downloadFile(
-                assertStr(params?.url, "url", 8192),
-                assertStr(params?.targetPath, "targetPath", 1024),
-                effectiveAppId(params, action, ctx),
-                params?.options || {},
-                (progress) =>
-                    sendEvent("progress", {
-                        ...progress,
-                        downloadId,
-                    }),
-            );
-            reply(id, { path: dest });
-            return true;
-        }
-        default:
-            return false;
-    }
-}
+export const filesRpc = rpcModule({
+    "file:getPath": ({ targetPath, appId }, ctx, action) => ({ path: ctx.engine.getFilePath(targetPath, space(appId, action, ctx)) }),
+    "file:exists": async ({ targetPath, appId }, ctx, action) => ({ exists: await ctx.engine.fileExists(targetPath, space(appId, action, ctx)) }),
+    "file:write": async ({ targetPath, content, appId }, ctx, action) => ({ path: await ctx.engine.writeFile(targetPath, content, space(appId, action, ctx)) }),
+    "file:read": async ({ targetPath, appId }, ctx, action) => ({ content: await ctx.engine.readFile(targetPath, space(appId, action, ctx)) }),
+    "file:delete": async ({ targetPath, appId }, ctx, action) => ({ success: await ctx.engine.deleteFile(targetPath, space(appId, action, ctx)) }),
+    "file:clear": async ({ appId }, ctx, action) => ({ success: await ctx.engine.clearFiles(space(appId, action, ctx)) }),
+    "file:download": async ({ downloadId, url, targetPath, appId, options }, ctx, action) => ({
+        path: await ctx.engine.downloadFile(url, targetPath, space(appId, action, ctx), options ?? {}, (progress) =>
+            ctx.sendEvent("progress", { ...progress, downloadId }),
+        ),
+    }),
+});

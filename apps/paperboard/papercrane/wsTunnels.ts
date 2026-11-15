@@ -9,7 +9,7 @@ import { pinnedTlsOptions } from "./pinnedTls";
 import { pinnableWebSocket } from "./pinnableWebSocket";
 import { logger } from "./logger";
 import { ErrorCode } from "./protocol";
-import { assertStr } from "./rpc/params";
+import { readValue, text } from "./rpc/params";
 import { HANDSHAKE_TIMEOUT_MS, MAX_WS_PAYLOAD, sendBounded } from "./wsFrames";
 import type { SocketIdentity } from "./wsIdentity";
 
@@ -97,8 +97,8 @@ export function socketTunnels(ws: WebSocket, identity: SocketIdentity, options: 
             }
             return;
         }
-        const tunnelId = assertStr(maybe.tunnelId ?? maybe.id, "tunnel id", 128);
-        const computerId = assertStr(maybe.computerId, "computerId", 128);
+        const tunnelId = readValue(text(128), maybe.tunnelId ?? maybe.id, "tunnel id");
+        const computerId = readValue(text(128), maybe.computerId, "computerId");
         if (tunnels.has(tunnelId)) throw new Error("Tunnel id is already open");
         // a relay credential reaches exactly the computer that served its
         // panel, by id — never another, never by name

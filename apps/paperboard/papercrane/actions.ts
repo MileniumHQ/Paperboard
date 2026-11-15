@@ -4,6 +4,7 @@ import { logger } from "./logger";
 import { RpcError } from "./rpc/errors";
 import { ErrorCode } from "./protocol";
 import { LimitError } from "./storage";
+import { MAX_PROJECT_IMAGE } from "./rpc/contract";
 
 // outstanding action-call caps, mirroring the client surface
 // (PaperAPI CraneTransport.MAX_PENDING_CALLS): a caller runaway is refused
@@ -35,8 +36,7 @@ export interface ActionProject {
     image?: string;
 }
 
-/** The longest project picture: a data URL of a 256 KB server icon fits. */
-export const MAX_PROJECT_IMAGE = 512 * 1024;
+// a picture carried as a data: address
 const PROJECT_IMAGE_DATA = /^data:image\/(png|webp|jpeg|gif);base64,[A-Za-z0-9+/]+={0,2}$/;
 // a file in the panel's folder: no scheme, no climbing out of it
 const PROJECT_IMAGE_PATH = /^\/?[A-Za-z0-9._\/-]+\.(png|webp|jpe?g|gif|svg)$/i;

@@ -348,11 +348,11 @@ export class PaperCraneEngine {
         this.credentialsStore.set(name, value, panelId);
     }
 
-    public getSecret(name: string, panelId: string): { found: boolean; value: string | null } {
+    public getSecret(name: unknown, panelId: string): { found: boolean; value: string | null } {
         return this.credentialsStore.get(name, panelId);
     }
 
-    public deleteSecret(name: string, panelId: string): boolean {
+    public deleteSecret(name: unknown, panelId: string): boolean {
         return this.credentialsStore.delete(name, panelId);
     }
 

@@ -3,128 +3,83 @@
 // "kind.id" (or "project/kind.id"), and the Blocks panel lists and calls
 // them. It is the Actions registry's machinery as a separate registry, so
 // v1 actions and v2 blocks never see each other's names.
-import { MAX_PROJECT_IMAGE, blocksRegistry } from "../actions";
+import { blocksRegistry } from "../actions";
 import { ErrorCode } from "../protocol";
 import type { RpcContext } from "./context";
+import { rpcModule } from "./dispatch";
+import { Refusal } from "./errors";
+import { InvalidParamsError, rpcErrorCode } from "./params";
 import { resourcePanelId } from "../principal";
-import { assertPanelId, assertStr, assertOptStr, InvalidParamsError, rpcErrorCode } from "./params";
-import { assertCallTimeout } from "./actions";
+import { errorMessage } from "@mileniumhq/paperapi/errors";
 
-// what a registry entry is named: a kind, a dot and the definition's id,
-// optionally inside a project ("server1/command.kick-player")
-const ENTRY_PATTERN = /^(?:[A-Za-z0-9][A-Za-z0-9._-]{0,63}\/)?(type|command|value|event)\.[a-z0-9][a-z0-9-]{0,63}$/;
-
-function assertEntry(value: unknown, name: string): string {
-    const entry = assertStr(value, name, 256);
-    if (!ENTRY_PATTERN.test(entry)) {
-        throw new InvalidParamsError(`Parameter "${name}" must name a block entry ("kind.id" or "project/kind.id"), got "${entry}"`);
-    }
-    return entry;
+// The namespace a socket writes to is the token claim: a scoped caller
+// naming another panel is refused. Host callers keep the explicit parameter.
+export function ownNamespace(panelId: string, action: string, ctx: RpcContext): string {
+    return resourcePanelId(ctx.callerPanelId(), panelId, action)!;
 }
 
-function ownPanelId(params: any, action: string, ctx: RpcContext): string {
-    return resourcePanelId(ctx.callerPanelId(), assertPanelId(params?.panelId), action)!;
+/** A registry refusal: the namespace belongs to another socket. */
+export function ownedElsewhere(result: { ok: boolean }, what: string): void {
+    if (!result.ok) throw new Refusal(what, ErrorCode.CONFLICT);
+}
+
+// a registry call's own failure is answered as it is, typed by its code
+export async function answeredAs<T>(call: () => Promise<T>): Promise<{ result: T }> {
+    try {
+        return { result: await call() };
+    } catch (err) {
+        throw new Refusal(errorMessage(err) || String(err), rpcErrorCode(err));
+    }
 }
 
 const conflict = (what: string, panelId: string) =>
     `Registry namespace is owned by another socket: ${what} for panel "${panelId}" conflicts`;
 
-export async function handleBlocks(action: string, id: unknown, params: any, ctx: RpcContext): Promise<boolean> {
-    const { ws, reply, broadcastEvent } = ctx;
-    switch (action) {
-        case "blocks:register": {
-            const panelId = ownPanelId(params, action, ctx);
-            const entry = assertEntry(params?.entry, "entry");
-            if (!params?.schema || typeof params.schema !== "object") {
-                throw new InvalidParamsError('blocks:register requires a "schema" object');
-            }
-            const result = blocksRegistry.register(panelId, entry, ws, params.schema);
-            if (!result.ok) {
-                reply(id, null, conflict(`block "${entry}"`, panelId), ErrorCode.CONFLICT);
-                return true;
-            }
-            broadcastEvent("blocks:registry-updated", { type: "block:registered", panelId, entry });
-            reply(id, { success: true });
-            return true;
+export const blocksRpc = rpcModule({
+    "blocks:register": ({ panelId, entry, schema }, ctx, action) => {
+        const owner = ownNamespace(panelId, action, ctx);
+        ownedElsewhere(blocksRegistry.register(owner, entry, ctx.ws, schema), conflict(`block "${entry}"`, owner));
+        ctx.broadcastEvent("blocks:registry-updated", { type: "block:registered", panelId: owner, entry });
+        return { success: true };
+    },
+    "blocks:unregister": ({ panelId, entry }, ctx, action) => {
+        const owner = ownNamespace(panelId, action, ctx);
+        ownedElsewhere(blocksRegistry.unregister(owner, entry, ctx.ws), conflict(`block "${entry}"`, owner));
+        ctx.broadcastEvent("blocks:registry-updated", { type: "block:unregistered", panelId: owner, entry });
+        return { success: true };
+    },
+    "blocks:project-define": ({ panelId, project, name, icon, image }, ctx, action) => {
+        const owner = ownNamespace(panelId, action, ctx);
+        ownedElsewhere(blocksRegistry.defineProject(owner, { id: project, name, icon, image }, ctx.ws), conflict(`project "${project}"`, owner));
+        ctx.broadcastEvent("blocks:registry-updated", { type: "project:defined", panelId: owner, project });
+        return { success: true };
+    },
+    "blocks:project-remove": ({ panelId, project }, ctx, action) => {
+        const owner = ownNamespace(panelId, action, ctx);
+        ownedElsewhere(blocksRegistry.removeProject(owner, project, ctx.ws), conflict(`project "${project}"`, owner));
+        ctx.broadcastEvent("blocks:registry-updated", { type: "project:removed", panelId: owner, project });
+        return { success: true };
+    },
+    "blocks:projects": ({ panelId }) => ({ projects: blocksRegistry.listProjects(panelId) }),
+    // an internal block is its panel's own, called by name: never listed,
+    // so no toolbox, flow or agent is offered it
+    "blocks:list": ({ panelId }) => ({
+        entries: blocksRegistry
+            .list(panelId)
+            .filter((e) => e.schema?.internal !== true)
+            .map((e) => ({ panelId: e.panelId, entry: e.action, ...(e.project !== undefined ? { project: e.project } : {}), schema: e.schema })),
+    }),
+    "blocks:call": ({ panelId, entry, request, timeoutMs }, ctx) =>
+        answeredAs(() => blocksRegistry.call(panelId, entry, [request ?? null], ctx.ws, timeoutMs === undefined ? 30_000 : timeoutMs, ctx.callerPanelId())),
+    // an event firing, or a value saying it changed: delivered to whoever
+    // subscribed to "blocks:<panel>:<entry>"
+    "blocks:emit": ({ panelId, entry, payload }, ctx, action) => {
+        const owner = ownNamespace(panelId, action, ctx);
+        const kind = entry.slice(entry.indexOf("/") + 1).split(".")[0];
+        if (kind !== "event" && kind !== "value") {
+            throw new InvalidParamsError(`Only events fire and only values change; "${entry}" is neither`);
         }
-        case "blocks:unregister": {
-            const panelId = ownPanelId(params, action, ctx);
-            const entry = assertEntry(params?.entry, "entry");
-            const result = blocksRegistry.unregister(panelId, entry, ws);
-            if (!result.ok) {
-                reply(id, null, conflict(`block "${entry}"`, panelId), ErrorCode.CONFLICT);
-                return true;
-            }
-            broadcastEvent("blocks:registry-updated", { type: "block:unregistered", panelId, entry });
-            reply(id, { success: true });
-            return true;
-        }
-        case "blocks:project-define": {
-            const panelId = ownPanelId(params, action, ctx);
-            const projectId = assertStr(params?.project, "project", 64);
-            const name = assertStr(params?.name, "name", 128);
-            const icon = assertOptStr(params?.icon, "icon", 128);
-            const image = assertOptStr(params?.image, "image", MAX_PROJECT_IMAGE);
-            const result = blocksRegistry.defineProject(panelId, { id: projectId, name, icon, image }, ws);
-            if (!result.ok) {
-                reply(id, null, conflict(`project "${projectId}"`, panelId), ErrorCode.CONFLICT);
-                return true;
-            }
-            broadcastEvent("blocks:registry-updated", { type: "project:defined", panelId, project: projectId });
-            reply(id, { success: true });
-            return true;
-        }
-        case "blocks:project-remove": {
-            const panelId = ownPanelId(params, action, ctx);
-            const projectId = assertStr(params?.project, "project", 64);
-            const result = blocksRegistry.removeProject(panelId, projectId, ws);
-            if (!result.ok) {
-                reply(id, null, conflict(`project "${projectId}"`, panelId), ErrorCode.CONFLICT);
-                return true;
-            }
-            broadcastEvent("blocks:registry-updated", { type: "project:removed", panelId, project: projectId });
-            reply(id, { success: true });
-            return true;
-        }
-        case "blocks:projects": {
-            reply(id, { projects: blocksRegistry.listProjects(assertOptStr(params?.panelId, "panelId", 128)) });
-            return true;
-        }
-        case "blocks:list": {
-            // an internal block is its panel's own, called by name: never listed,
-            // so no toolbox, flow or agent is offered it
-            const entries = blocksRegistry.list(assertOptStr(params?.panelId, "panelId", 128)).filter((e) => e.schema?.internal !== true);
-            reply(id, {
-                entries: entries.map((e) => ({ panelId: e.panelId, entry: e.action, ...(e.project !== undefined ? { project: e.project } : {}), schema: e.schema })),
-            });
-            return true;
-        }
-        case "blocks:call": {
-            const panelId = assertPanelId(params?.panelId);
-            const entry = assertEntry(params?.entry, "entry");
-            const timeoutMs = assertCallTimeout(params?.timeoutMs, "timeoutMs", 30_000);
-            try {
-                const result = await blocksRegistry.call(panelId, entry, [params?.request ?? null], ws, timeoutMs, ctx.callerPanelId());
-                reply(id, { result });
-            } catch (err: any) {
-                reply(id, null, err?.message || String(err), rpcErrorCode(err));
-            }
-            return true;
-        }
-        case "blocks:emit": {
-            // an event firing, or a value saying it changed: delivered to
-            // whoever subscribed to "blocks:<panel>:<entry>"
-            const panelId = ownPanelId(params, action, ctx);
-            const entry = assertEntry(params?.entry, "entry");
-            const kind = entry.slice(entry.indexOf("/") + 1).split(".")[0];
-            if (kind !== "event" && kind !== "value") {
-                throw new InvalidParamsError(`Only events fire and only values change; "${entry}" is neither`);
-            }
-            broadcastEvent(`blocks:${panelId}:${entry}`, params?.payload ?? null);
-            reply(id, { success: true });
-            return true;
-        }
-        default:
-            return false;
-    }
-}
+        ctx.broadcastEvent(`blocks:${owner}:${entry}`, payload ?? null);
+        return { success: true };
+    },
+});

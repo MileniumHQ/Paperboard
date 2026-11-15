@@ -1,71 +1,43 @@
 import { requireHost } from "../principal";
 import type { RpcContext } from "./context";
-import { assertStr, assertOptStr } from "./params";
+import { rpcModule } from "./dispatch";
 import { resolvePackageSha256 } from "../packageChecksum";
 
-export async function handlePackages(action: string, id: unknown, params: any, ctx: RpcContext): Promise<boolean> {
-    const { engine, reply, sendEvent } = ctx;
-    // a panel that asks for a package uses it: the package stays while the panel is installed
-    const used = (packageName: string) => {
-        const caller = ctx.callerPanelId();
-        if (caller !== null) engine.recordPackageUse(packageName, caller);
-        return packageName;
-    };
-    switch (action) {
-        case "package:isInstalled": {
-            reply(id, { installed: engine.isPackageInstalled(used(assertStr(params?.packageName, "packageName", 128)), assertOptStr(params?.version, "version", 64)) });
-            return true;
-        }
-        case "package:getIndex": {
-            reply(id, { index: engine.getPackageIndex() });
-            return true;
-        }
-        case "package:getPath": {
-            reply(id, { path: engine.getPackagePath(used(assertStr(params?.packageName, "packageName", 128))) });
-            return true;
-        }
-        case "package:download": {
-            if (params?.allowDowngrade === true) requireHost(ctx.callerPanelId(), action);
-            const downloadId = assertStr(params?.downloadId, "downloadId", 128);
-            const packageName = used(assertStr(params?.packageName, "packageName", 128));
-            // plan-carrying callers (updater) supply their checksum fact and
-            // the engine cross-checks it; ad-hoc callers (Setup wizards)
-            // carry none, so the daemon resolves it from registry metadata
-            // itself. A failed lookup throws — the engine never sees
-            // sha256: undefined from this path.
-            const sha256 = assertOptStr(params?.sha256, "sha256", 128) ?? (await resolvePackageSha256(packageName));
-            const outcome = await engine.downloadPackage(
-                packageName,
-                (progress) =>
-                    sendEvent("progress", {
-                        ...progress,
-                        downloadId,
-                    }),
-                sha256,
-                { allowDowngrade: params?.allowDowngrade === true },
-            );
-            // waiting: verified and staged, installed once the workloads
-            // running from the current release stop. Accepted, not completed.
-            reply(id, outcome.waiting ? { path: outcome.path, waiting: outcome.waiting } : { path: outcome.path });
-            return true;
-        }
-        case "package:pending": {
-            // the host sees every waiting update; a panel sees only the
-            // updates its own workloads hold back, and only those workloads
-            const caller = ctx.callerPanelId();
-            const updates = engine.pendingPackageUpdates();
-            if (caller === null) {
-                reply(id, { updates });
-                return true;
-            }
-            reply(id, {
-                updates: updates
-                    .map((update) => ({ ...update, blockedBy: update.blockedBy.filter((user) => user.owner === caller) }))
-                    .filter((update) => update.blockedBy.length > 0),
-            });
-            return true;
-        }
-        default:
-            return false;
-    }
+// a panel that asks for a package uses it: the package stays while the panel is installed
+function used(packageName: string, ctx: RpcContext): string {
+    const caller = ctx.callerPanelId();
+    if (caller !== null) ctx.engine.recordPackageUse(packageName, caller);
+    return packageName;
 }
+
+export const packagesRpc = rpcModule({
+    "package:isInstalled": ({ packageName, version }, ctx) => ({ installed: ctx.engine.isPackageInstalled(used(packageName, ctx), version) }),
+    "package:getIndex": (_, ctx) => ({ index: ctx.engine.getPackageIndex() }),
+    "package:getPath": ({ packageName }, ctx) => ({ path: ctx.engine.getPackagePath(used(packageName, ctx)) }),
+    "package:download": async ({ packageName, downloadId, sha256, allowDowngrade }, ctx, action) => {
+        if (allowDowngrade) requireHost(ctx.callerPanelId(), action);
+        used(packageName, ctx);
+        // ad-hoc callers (Setup wizards) carry no checksum, so the daemon
+        // resolves it from registry metadata itself. A failed lookup throws:
+        // the engine never sees sha256: undefined from this path.
+        const outcome = await ctx.engine.downloadPackage(
+            packageName,
+            (progress) => ctx.sendEvent("progress", { ...progress, downloadId }),
+            sha256 ?? (await resolvePackageSha256(packageName)),
+            { allowDowngrade },
+        );
+        return outcome.waiting ? { path: outcome.path, waiting: outcome.waiting } : { path: outcome.path };
+    },
+    "package:pending": (_, ctx) => {
+        // the host sees every waiting update; a panel sees only the
+        // updates its own workloads hold back, and only those workloads
+        const caller = ctx.callerPanelId();
+        const updates = ctx.engine.pendingPackageUpdates();
+        if (caller === null) return { updates };
+        return {
+            updates: updates
+                .map((update) => ({ ...update, blockedBy: update.blockedBy.filter((user) => user.owner === caller) }))
+                .filter((update) => update.blockedBy.length > 0),
+        };
+    },
+});

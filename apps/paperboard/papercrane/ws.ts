@@ -4,20 +4,21 @@ import { PaperCraneAuth } from "./auth";
 import { logger } from "./logger";
 import { actionsRegistry, blocksRegistry } from "./actions";
 import type { RpcContext } from "./rpc/context";
-import { handleTerminal } from "./rpc/terminal";
-import { handleProcess } from "./rpc/process";
-import { handleFiles } from "./rpc/files";
-import { handlePackages } from "./rpc/packages";
-import { handlePanels } from "./rpc/panels";
-import { handleActions } from "./rpc/actions";
-import { handleBlocks } from "./rpc/blocks";
-import { handleSystem } from "./rpc/system";
-import { handleSecrets } from "./rpc/secrets";
-import { backupServiceFor, handleBackups } from "./rpc/backups";
-import { handlePorts } from "./rpc/ports";
-import { handleProblems, problemsFor } from "./rpc/problems";
+import { rpcDispatcher } from "./rpc/dispatch";
+import { terminalRpc } from "./rpc/terminal";
+import { processRpc } from "./rpc/process";
+import { filesRpc } from "./rpc/files";
+import { packagesRpc } from "./rpc/packages";
+import { panelsRpc } from "./rpc/panels";
+import { actionsRpc } from "./rpc/actions";
+import { blocksRpc } from "./rpc/blocks";
+import { systemRpc } from "./rpc/system";
+import { secretsRpc } from "./rpc/secrets";
+import { backupServiceFor, backupsRpc } from "./rpc/backups";
+import { portsRpc } from "./rpc/ports";
+import { problemsFor, problemsRpc } from "./rpc/problems";
 import { PROTOCOL_VERSION, ErrorCode } from "./protocol";
-import { rpcErrorCode, assertPanelId } from "./rpc/params";
+import { panelId as panelIdShape, readValue, rpcErrorCode } from "./rpc/params";
 import { TrafficMonitor } from "./monitor";
 import { secretsMatch } from "./secretCompare";
 import { MONITOR_PROTOCOL, MONITOR_SUBSCRIBE, MONITOR_UNSUBSCRIBE } from "@mileniumhq/paperapi/monitorProtocol";
@@ -75,6 +76,12 @@ interface ServerOptions extends TunnelOptions {
 }
 
 const MAX_CONNECTIONS = 4096;
+
+// every action rpc/contract.ts declares, past the auth gate
+const dispatch = rpcDispatcher([
+    terminalRpc, processRpc, filesRpc, packagesRpc, panelsRpc, actionsRpc, blocksRpc,
+    systemRpc, secretsRpc, backupsRpc, portsRpc, problemsRpc,
+]);
 const MAX_IN_FLIGHT_PER_SOCKET = 1024;
 
 export function setupWebSocketServer(
@@ -271,7 +278,7 @@ export function setupWebSocketServer(
                         reply(null, `${MONITOR_SUBSCRIBE} needs this computer's own host credential (local/crane.json)`, ErrorCode.FORBIDDEN);
                         return;
                     }
-                    const panelId = params?.panelId === undefined ? null : assertPanelId(params.panelId);
+                    const panelId = params?.panelId === undefined ? null : readValue(panelIdShape(), params.panelId, "panelId");
                     reply({ success: true, protocol: MONITOR_PROTOCOL });
                     monitor.subscribe(ws, panelId);
                     return;
@@ -282,26 +289,11 @@ export function setupWebSocketServer(
                     return;
                 }
 
-                if (
-                    (await handleTerminal(action, id, params, rpcCtx)) ||
-                    (await handleProcess(action, id, params, rpcCtx)) ||
-                    (await handleFiles(action, id, params, rpcCtx)) ||
-                    (await handlePackages(action, id, params, rpcCtx)) ||
-                    (await handlePanels(action, id, params, rpcCtx)) ||
-                    (await handleActions(action, id, params, rpcCtx)) ||
-                    (await handleBlocks(action, id, params, rpcCtx)) ||
-                    (await handleSystem(action, id, params, rpcCtx)) ||
-                    (await handleSecrets(action, id, params, rpcCtx)) ||
-                    (await handleBackups(action, id, params, rpcCtx)) ||
-                    (await handlePorts(action, id, params, rpcCtx)) ||
-                    (await handleProblems(action, id, params, rpcCtx))
-                ) {
-                    return;
-                }
+                if (await dispatch(action, id, params, rpcCtx)) return;
                 reply(null, `Unknown action: ${action}`, ErrorCode.NOT_FOUND);
             } catch (err: any) {
                 // always answer with a sanitized message, never a stack.
-                // malformed calls (rpc/params.ts asserts) get a typed
+                // malformed calls (rpc/contract.ts shapes) get a typed
                 // INVALID_PARAMS; everything else is INTERNAL.
                 try {
                     const error = `Request failed: ${err?.message || "internal error"}`;

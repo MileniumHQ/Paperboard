@@ -20,3 +20,16 @@ export function forbidden(what: string): RpcError {
 export function invalidParams(what: string): RpcError {
     return new RpcError(ErrorCode.INVALID_PARAMS, what);
 }
+
+/**
+ * An answer given as it is: its message without the "Request failed:"
+ * prefix, and only the code it names (none for a plain refusal).
+ */
+export class Refusal extends Error {
+    readonly code: string | undefined;
+    constructor(message: string, code?: string) {
+        super(message);
+        this.name = "Refusal";
+        this.code = code;
+    }
+}
