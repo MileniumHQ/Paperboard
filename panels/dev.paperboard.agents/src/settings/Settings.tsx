@@ -22,7 +22,7 @@ import BrainLogo from "../lib/BrainLogo";
 import { COMPACTIONS, DEFAULT_MODEL, HARNESSES, LIMITS, type Compaction, type Harness, type Settings as Saved } from "../contract";
 import type { Agent } from "../lib/agent";
 import { SEARCH_MODELS_FROM, createModels, harnessName, loadedModels } from "../lib/brains";
-import { createAction } from "../lib/action";
+import { createAction, createAsked } from "../lib/action";
 import { errorText, failure, type Failure } from "../lib/failure";
 import { BrainButtons, BrainStatus, SignInModal, brainLine, createBrainActions } from "./Brain";
 import Providers from "./Providers";
@@ -60,6 +60,9 @@ function AgentSettings(props: { agent: Agent }) {
     // a change made elsewhere (in another window) shows here
     createEffect(on(() => current().name, (n) => setName(n)));
     createEffect(on(() => current().model, (m) => setModel(m ?? "")));
+    // a pick shows at once, while it saves
+    const harness = createAsked(() => current().harness);
+    const picked = createAsked(() => current().model ?? DEFAULT_MODEL);
 
     // saved through the agent's one queue, each built from the settings as they stand when its turn comes
     const save = (title: string, patch: Partial<Saved>) => {
@@ -106,9 +109,9 @@ function AgentSettings(props: { agent: Agent }) {
                     <PaperSelectMenu
                         name="harness"
                         aria-label="Brain"
-                        value={current().harness}
+                        value={harness.value()}
                         // a model belongs to its harness: the new brain starts on its own default
-                        onValueChange={(v) => v !== current().harness && save("Brain not changed", { harness: v as Harness, model: null })}
+                        onValueChange={(v) => v !== current().harness && harness.ask(v as Harness, save("Brain not changed", { harness: v as Harness, model: null }))}
                     >
                         <For each={HARNESSES}>
                             {(h) => (
@@ -139,10 +142,10 @@ function AgentSettings(props: { agent: Agent }) {
                         <PaperSelectMenu
                             name="model"
                             aria-label="Model"
-                            value={current().model ?? DEFAULT_MODEL}
+                            value={picked.value()}
                             disabled={!loadedModels(models)}
                             searchable={listed().length >= SEARCH_MODELS_FROM}
-                            onValueChange={(v) => save("Model not changed", { model: v === DEFAULT_MODEL ? null : String(v) })}
+                            onValueChange={(v) => picked.ask(String(v), save("Model not changed", { model: v === DEFAULT_MODEL ? null : String(v) }))}
                         >
                             <PaperSelectMenuItem value={DEFAULT_MODEL} icon="tune" description={`Whatever ${harnessName(current().harness)} is set to use`}>
                                 Default
@@ -346,16 +349,17 @@ function ConversationSettings(props: { agent: Agent }) {
     const [open, setOpen] = createSignal(false);
     const [error, setError] = createSignal<string | null>(null);
     const current = () => props.agent.state.settings!;
-    const setCompaction = (compaction: Compaction) => {
+    const compaction = createAsked(() => current().compaction);
+    const setCompaction = (next: Compaction) => {
         setError(null);
-        props.agent.saveSettings((cur) => (cur.compaction === compaction ? null : { ...cur, compaction })).catch((e) => setError(errorText(e)));
+        compaction.ask(next, props.agent.saveSettings((cur) => (cur.compaction === next ? null : { ...cur, compaction: next })).catch((e) => setError(errorText(e))));
     };
     return (
         <PaperFlex gap="full" role="region" aria-label="Conversation">
             <PaperSectionHeader icon="forum" title="Conversation" role="heading" aria-level={2} />
             <PaperSettingList autoHeight>
                 <PaperSettingItem title="Compaction" description="A long conversation costs more tokens with every reply. Past a point, it's compacted: this is what happens to its older part.">
-                    <PaperSelectMenu name="compaction" aria-label="Compaction" value={current().compaction} onValueChange={(v) => setCompaction(v as Compaction)}>
+                    <PaperSelectMenu name="compaction" aria-label="Compaction" value={compaction.value()} onValueChange={(v) => setCompaction(v as Compaction)}>
                         <For each={COMPACTIONS}>
                             {(c) => (
                                 <PaperSelectMenuItem value={c} icon={COMPACTION_TEXT[c].icon} description={COMPACTION_TEXT[c].description}>

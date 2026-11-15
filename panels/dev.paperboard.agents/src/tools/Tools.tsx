@@ -28,7 +28,7 @@ import {
 import { createStore, reconcile } from "solid-js/store";
 import type { Agent } from "../lib/agent";
 import { holdPage } from "../lib/pageHold";
-import { createAction } from "../lib/action";
+import { createAction, createAsked } from "../lib/action";
 import { errorText, failure, type Failure } from "../lib/failure";
 import { TOOL_LIMITS, type ServerSpec } from "../toolsContract";
 import { createTools, type Tools as ToolsClient } from "./api";
@@ -61,20 +61,6 @@ export default function Tools(props: { agent: Agent }) {
             </Match>
         </Switch>
     );
-}
-
-/** A switch's state: what it was last pressed to, until that press's save is done, then what the service says. */
-function asked(saved: () => boolean) {
-    const [pressed, setPressed] = createSignal<boolean | null>(null);
-    let presses = 0;
-    return {
-        checked: () => pressed() ?? saved(),
-        ask(on: boolean, save: Promise<unknown>) {
-            const press = ++presses;
-            setPressed(on);
-            return save.finally(() => press === presses && setPressed(null));
-        },
-    };
 }
 
 // a control inside a list item answers for itself, and doesn't choose the item
@@ -119,7 +105,7 @@ function List(props: { tools: ToolsClient; name: string }) {
         saves = run;
         return run;
     };
-    const actionsAsked = asked(() => view().config.actions);
+    const actionsAsked = createAsked(() => view().config.actions);
     const setActions = (on: boolean) => actionsAsked.ask(on, saveSwitch("Panel access not changed", () => props.tools.setActions(on)));
     const remove = (s: ServerSpec) =>
         act(
@@ -133,7 +119,7 @@ function List(props: { tools: ToolsClient; name: string }) {
 
     const choose = (value: string) => {
         if (value === NEW) return setForm(blankForm());
-        if (value === ACTIONS) return void setActions(!actionsAsked.checked());
+        if (value === ACTIONS) return void setActions(!actionsAsked.value());
         const s = view().config.servers.find((x) => rowOf(x.name) === value);
         if (s) setForm(formFromSpec(s));
     };
@@ -200,7 +186,7 @@ function List(props: { tools: ToolsClient; name: string }) {
                         description={`${props.name} can look up what your other panels can do, like start a game server, and run it`}
                         actions={
                             <PaperFlex onPointerDown={own} onClick={own}>
-                                <PaperToggle aria-label="Let it use your other panels" checked={actionsAsked.checked()} disabled={locked()} onChange={setActions} />
+                                <PaperToggle aria-label="Let it use your other panels" checked={actionsAsked.value()} disabled={locked()} onChange={setActions} />
                             </PaperFlex>
                         }
                     >
@@ -271,7 +257,7 @@ function ServerRow(props: {
 }) {
     const s = () => props.server;
     const restart = () => RESTART[props.state.kind];
-    const enabled = asked(() => s().enabled);
+    const enabled = createAsked(() => s().enabled);
     return (
         <PaperListItem
             value={rowOf(s().name)}
@@ -317,7 +303,7 @@ function ServerRow(props: {
                     </PaperButton>
                     {/* last: every row's switch is on the list's right edge, under the one for the other panels */}
                     <PaperFlex onPointerDown={own} onClick={own}>
-                        <PaperToggle aria-label={`${s().name} on`} checked={enabled.checked()} disabled={props.locked} onChange={(on) => enabled.ask(on, props.onSwitch(on))} />
+                        <PaperToggle aria-label={`${s().name} on`} checked={enabled.value()} disabled={props.locked} onChange={(on) => enabled.ask(on, props.onSwitch(on))} />
                     </PaperFlex>
                 </PaperFlex>
             }

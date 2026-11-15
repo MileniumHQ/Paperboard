@@ -1,6 +1,7 @@
-// Two small patterns every view here shares: an action that is busy while it
-// runs and says why it didn't happen, and a read whose answer counts only if
-// nothing newer started (and the view is still there).
+// Small patterns every view here shares: an action that is busy while it runs
+// and says why it didn't happen, a control that shows what it was last set to
+// while that saves, and a read whose answer counts only if nothing newer
+// started (and the view is still there).
 
 import { createSignal, getOwner, onCleanup } from "solid-js";
 import { failure, type Failure } from "./failure";
@@ -27,6 +28,27 @@ export function createAction() {
         }
     };
     return { busy, error, setError, run };
+}
+
+/**
+ * A control's value: what it was last set to, until that choice's save is
+ * done, then what is saved. `ask(value, save)` shows value at once; a refused
+ * save (which save reports itself) lands back on what's saved.
+ */
+export function createAsked<T>(saved: () => T) {
+    const [pressed, setPressed] = createSignal<{ value: T } | null>(null);
+    let presses = 0;
+    return {
+        value: () => {
+            const p = pressed();
+            return p ? p.value : saved();
+        },
+        ask(value: T, save: Promise<unknown>) {
+            const press = ++presses;
+            setPressed({ value });
+            return save.finally(() => press === presses && setPressed(null));
+        },
+    };
 }
 
 /**

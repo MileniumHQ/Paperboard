@@ -58,6 +58,25 @@ describe("a save the service refuses", () => {
     });
 });
 
+describe("a pick", () => {
+    test("shows at once, and goes back to what's saved when the save is refused", async () => {
+        // refused like every save here, because Codex isn't set up
+        const page = await settingsPage({ codexOnPath: { signedIn: true } });
+        const COMPACTION = `document.querySelector('[role=region][aria-label="Conversation"] input[name="compaction"]')`;
+        // read in the same task as the press, before the save can be back
+        const shown = await page.evaluate(`(() => {
+            document.querySelector('[role=region][aria-label="Conversation"] input[name="compaction"] ~ button[aria-haspopup=listbox]').click();
+            document.querySelector('[role=option][data-select-value="forget"]').click();
+            return ${COMPACTION}.value;
+        })()`);
+        expect(shown).toBe("forget");
+        await page.waitFor(alertIn("Conversation", "Compaction not changed"), "the compaction's refusal");
+        await page.waitFor(`${COMPACTION}.value === "summarize"`, "the saved compaction back");
+        expect(panel!.savedSettings()).toEqual(SETTINGS);
+        expect(page.exceptions).toEqual([]);
+    });
+});
+
 describe("the models", () => {
     test("are listed again once the brain is set up, and the error that it wasn't goes", async () => {
         const page = await settingsPage({ codexOnPath: { signedIn: true, plan: MODELS } });
