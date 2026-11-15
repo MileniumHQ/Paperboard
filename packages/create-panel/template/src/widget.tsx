@@ -4,11 +4,10 @@
 import { render } from "solid-js/web";
 import { createSignal, onCleanup, Show } from "solid-js";
 import { PaperButton, PaperProvider, PaperWidget, PaperWidgetMessage, PaperWidgetStat } from "@mileniumhq/paperui";
-import { createPanelBridge, defineWidgets, type WidgetContext } from "@mileniumhq/paperapi";
+import { createPanelBridge, defineWidgets, type WidgetContext, errorMessage } from "@mileniumhq/paperapi";
 import "@mileniumhq/paperui/style.css";
 import "./widget.css";
 import { DEFAULT_STATE, PANEL_ID, type PanelState } from "./panel";
-import { errorMessage } from "./lib/failure";
 
 function Greetings(props: { widget: WidgetContext }) {
     const bridge = createPanelBridge<PanelState>({ panelId: PANEL_ID, defaultState: DEFAULT_STATE });

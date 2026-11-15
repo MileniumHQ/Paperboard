@@ -3,9 +3,8 @@
 // another panel's Greet block) shows up in every window at once.
 import { createSignal, onCleanup, Show } from "solid-js";
 import { PaperButton, PaperCard, PaperEmptyState, PaperFlex, PaperIcon, PaperInput, PaperPageHeader, PaperQuote, PaperText } from "@mileniumhq/paperui";
-import { createPanelBridge } from "@mileniumhq/paperapi";
+import { createPanelBridge, errorMessage } from "@mileniumhq/paperapi";
 import { DEFAULT_STATE, PANEL_ID, type PanelState } from "../panel";
-import { errorMessage } from "../lib/failure";
 
 export default function ServicePage() {
     const bridge = createPanelBridge<PanelState>({ panelId: PANEL_ID, defaultState: DEFAULT_STATE });

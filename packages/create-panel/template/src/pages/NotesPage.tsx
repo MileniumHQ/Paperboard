@@ -2,9 +2,8 @@
 // A read or write that fails is said, with the reason, never dropped.
 import { createSignal, onMount, Show } from "solid-js";
 import { PaperButton, PaperCard, PaperFlex, PaperInput, PaperPageHeader, PaperQuote, PaperText } from "@mileniumhq/paperui";
-import { config } from "@mileniumhq/paperapi";
+import { config, errorMessage } from "@mileniumhq/paperapi";
 import { PANEL_ID } from "../panel";
-import { errorMessage } from "../lib/failure";
 
 interface PanelConfig {
     note?: string;
