@@ -2,14 +2,14 @@
 // waiting for them to sign in, or in trouble. The service owns all of it
 // (state.brains); this only shows it and sends the person's answers back.
 
-import { Match, Show, Switch, createEffect, createSignal, on, onCleanup, type JSX } from "solid-js";
-import { catchLoopbackRedirect, LoopbackRedirectError } from "@mileniumhq/paperapi";
+import { Match, Show, Switch, createEffect, createSignal, on, type JSX } from "solid-js";
 import { PaperButton, PaperCopyButton, PaperFlex, PaperIcon, PaperInput, PaperLoader, PaperModal, PaperProgress, PaperQuote, PaperText } from "@mileniumhq/paperui";
 import { SIGN_IN_REQUIRED, type BrainState, type Harness } from "../contract";
 import type { Agent } from "../lib/agent";
 import { harnessName } from "../lib/brains";
 import { submitOnPaste } from "../lib/paste";
-import { errorText, failure, type Failure } from "../lib/failure";
+import { createAction } from "../lib/action";
+import { createLoopbackCatch } from "../lib/loopback";
 
 /** Who a brain is signed in as. An email is who; anything else (ChatGPT, a provider's name) is how. */
 export function signedInLine(b: BrainState): string {
@@ -45,15 +45,7 @@ export function brainLine(harness: Harness, b: BrainState): string {
 
 /** The actions a person can ask of a brain; a refused one is kept to show. */
 export function createBrainActions(agent: Agent) {
-    const [error, setError] = createSignal<Failure | null>(null);
-    const act = async (title: string, run: () => Promise<unknown>) => {
-        setError(null);
-        try {
-            await run();
-        } catch (e) {
-            setError(failure(title, e));
-        }
-    };
+    const { error, run: act } = createAction();
     return {
         error,
         install: (h: Harness) => act(`${harnessName(h)} not installed`, () => agent.installBrain(h)),
@@ -129,37 +121,12 @@ export function SignInSteps(props: { agent: Agent; harness: Harness; actions: Br
     const [opened, setOpened] = createSignal(false);
     createEffect(on(() => b().login?.url, () => setOpened(false)));
 
-    // "paste" when the address the browser ends on has to be pasted here
-    const [forward, setForward] = createSignal<"none" | "listening" | "paste">("none");
-    const [forwardError, setForwardError] = createSignal<string | null>(null);
-    createEffect(
-        on(
-            () => b().login?.callback ?? null,
-            (callback) => {
-                setForward("none");
-                setForwardError(null);
-                if (!callback) return;
-                const stop = new AbortController();
-                onCleanup(() => stop.abort());
-                setForward("listening");
-                catchLoopbackRedirect(callback, { signal: stop.signal }).then(
-                    async (result) => {
-                        if (stop.signal.aborted) return;
-                        // on this device the brain's own listener hears the browser
-                        if (result.status === "local") return setForward("none");
-                        await props.actions.finishAt(props.harness, result.url);
-                        // an address the brain refused can still be pasted again
-                        if (props.actions.error()) setForward("paste");
-                    },
-                    (e) => {
-                        if (stop.signal.aborted) return;
-                        setForward("paste");
-                        // no listener here (a web browser) is why there's a field, not a failure
-                        if (!(e instanceof LoopbackRedirectError && e.code === "unavailable")) setForwardError(errorText(e));
-                    },
-                );
-            },
-        ),
+    const forward = createLoopbackCatch(
+        () => b().login?.callback ?? null,
+        async (url) => {
+            await props.actions.finishAt(props.harness, url);
+            return !props.actions.error();
+        },
     );
 
     // what was pasted is on its way to the brain; the brain says how it went by leaving the sign-in
@@ -227,10 +194,10 @@ export function SignInSteps(props: { agent: Agent; harness: Harness; actions: Br
                                 when={login().expectsCode}
                                 fallback={
                                     <Show
-                                        when={forward() === "paste"}
+                                        when={forward.paste()}
                                         fallback={<PaperLoader loaderStatus="indeterminate" label="Waiting for you to finish signing in" />}
                                     >
-                                        <Show when={forwardError()}>
+                                        <Show when={forward.error()}>
                                             {(shown) => (
                                                 <PaperQuote variant="warning" icon="warning" title="Your browser can't come back here by itself">
                                                     {shown()}

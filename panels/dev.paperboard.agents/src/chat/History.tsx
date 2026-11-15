@@ -6,6 +6,7 @@ import { For, Match, Show, Switch, createEffect, createSignal, on } from "solid-
 import { PaperButton, PaperEmptyState, PaperFlex, PaperIcon, PaperList, PaperListItem, PaperLoader, PaperModal, PaperQuote, PaperText } from "@mileniumhq/paperui";
 import { CURRENT_CONVERSATION as CURRENT, type PastConversation } from "../contract";
 import type { Agent } from "../lib/agent";
+import { createLatest } from "../lib/action";
 import { errorText, failure, type Failure } from "../lib/failure";
 const when = (at: number) => new Date(at).toLocaleString([], { dateStyle: "medium", timeStyle: "short" });
 
@@ -21,18 +22,18 @@ export default function History(props: { agent: Agent; open: boolean; onClose: (
     const all = () => (list() ? [...(list()!.current ? [list()!.current!] : []), ...list()!.past] : []);
 
     // latest read wins: an older answer (the modal opened, closed and opened again) never replaces a newer one
-    let reads = 0;
+    const latest = createLatest();
     const load = async () => {
-        const mine = ++reads;
+        const current = latest();
         setReadError(null);
         setOpenError(null);
         setList(null);
         setChosen(CURRENT);
         try {
             const next = await props.agent.conversations();
-            if (mine === reads) setList(next);
+            if (current()) setList(next);
         } catch (e) {
-            if (mine === reads) setReadError(errorText(e));
+            if (current()) setReadError(errorText(e));
         }
     };
 

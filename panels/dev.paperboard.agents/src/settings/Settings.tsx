@@ -22,6 +22,7 @@ import BrainLogo from "../lib/BrainLogo";
 import { COMPACTIONS, DEFAULT_MODEL, HARNESSES, LIMITS, type Compaction, type Harness, type Settings as Saved } from "../contract";
 import type { Agent } from "../lib/agent";
 import { SEARCH_MODELS_FROM, createModels, harnessName, loadedModels } from "../lib/brains";
+import { createAction } from "../lib/action";
 import { errorText, failure, type Failure } from "../lib/failure";
 import { BrainButtons, BrainStatus, SignInModal, brainLine, createBrainActions } from "./Brain";
 import Providers from "./Providers";
@@ -56,7 +57,7 @@ function AgentSettings(props: { agent: Agent }) {
         const all = loadedModels(models);
         return id && all && !all.some((m) => m.id === id) ? id : null;
     };
-    // a change made elsewhere (the composer's brain menu) shows here
+    // a change made elsewhere (in another window) shows here
     createEffect(on(() => current().name, (n) => setName(n)));
     createEffect(on(() => current().model, (m) => setModel(m ?? "")));
 
@@ -220,35 +221,19 @@ function BrainsSettings(props: { agent: Agent }) {
 function ComputerSettings(props: { agent: Agent }) {
     const c = () => props.agent.state.computer;
     const name = () => props.agent.state.settings!.name;
-    const [busy, setBusy] = createSignal(false);
-    const [error, setError] = createSignal<Failure | null>(null);
+    const { busy, error, run: act } = createAction();
     const [confirming, setConfirming] = createSignal(false);
     // a refused erase is told in the confirmation, which stays open over the page
-    const [eraseError, setEraseError] = createSignal<string | null>(null);
-
-    const act = async (title: string, fn: () => Promise<unknown>) => {
-        setBusy(true);
-        setError(null);
-        try {
-            await fn();
-        } catch (e) {
-            setError(failure(title, e));
-        } finally {
-            setBusy(false);
-        }
-    };
-    const erase = async () => {
-        setBusy(true);
-        setEraseError(null);
-        try {
-            await props.agent.installComputer();
-            setConfirming(false);
-        } catch (e) {
-            setEraseError(errorText(e));
-        } finally {
-            setBusy(false);
-        }
-    };
+    const [eraseError, setEraseError] = createSignal<Failure | null>(null);
+    const erase = () =>
+        act(
+            "Computer not erased",
+            async () => {
+                await props.agent.installComputer();
+                setConfirming(false);
+            },
+            setEraseError,
+        );
     const status = () =>
         ({
             none: "Not set up",
@@ -340,9 +325,11 @@ function ComputerSettings(props: { agent: Agent }) {
             >
                 <PaperText preset="text">Everything on it is deleted: its files, downloads and sign-ins. This can't be undone.</PaperText>
                 <Show when={eraseError()}>
-                    <PaperQuote variant="danger" icon="error" title="Computer not erased" role="alert">
-                        {eraseError()}
-                    </PaperQuote>
+                    {(why) => (
+                        <PaperQuote variant="danger" icon="error" title={why().title} role="alert">
+                            {why().message}
+                        </PaperQuote>
+                    )}
                 </Show>
             </PaperModal>
         </PaperFlex>
@@ -441,10 +428,9 @@ function AutomationSettings(props: { agent: Agent }) {
     );
 }
 
-/** The confirmation for starting over, from settings or the composer's menu. */
-export function StartOver(props: { agent: Agent; open: boolean; onClose: () => void }) {
-    const [busy, setBusy] = createSignal(false);
-    const [error, setError] = createSignal<string | null>(null);
+/** The confirmation for starting over. */
+function StartOver(props: { agent: Agent; open: boolean; onClose: () => void }) {
+    const { busy, error, setError, run } = createAction();
     const name = () => props.agent.state.settings?.name ?? "Your agent";
     // each time it opens, it asks afresh
     createEffect(on(() => props.open, (open) => open && setError(null)));
@@ -462,18 +448,12 @@ export function StartOver(props: { agent: Agent; open: boolean; onClose: () => v
                     <PaperButton
                         variant="danger"
                         disabled={busy()}
-                        onClick={async () => {
-                            setBusy(true);
-                            setError(null);
-                            try {
+                        onClick={() =>
+                            void run("Conversation not cleared", async () => {
                                 await props.agent.startOver();
                                 props.onClose();
-                            } catch (e) {
-                                setError(errorText(e));
-                            } finally {
-                                setBusy(false);
-                            }
-                        }}
+                            })
+                        }
                     >
                         Start over
                     </PaperButton>
@@ -484,9 +464,11 @@ export function StartOver(props: { agent: Agent; open: boolean; onClose: () => v
                 {name()} stops what it's doing and forgets your whole conversation. Its computer and what's on it stay. This can't be undone.
             </PaperText>
             <Show when={error()}>
-                <PaperQuote variant="danger" icon="error" title="Conversation not cleared" role="alert">
-                    {error()}
-                </PaperQuote>
+                {(why) => (
+                    <PaperQuote variant="danger" icon="error" title={why().title} role="alert">
+                        {why().message}
+                    </PaperQuote>
+                )}
             </Show>
         </PaperModal>
     );

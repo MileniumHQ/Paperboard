@@ -4,59 +4,22 @@
 // it (Paperboard in a web browser, with the agent elsewhere), the address is
 // pasted. Shown on the Tools page and on the sign-in card in the chat.
 
-import { Show, createEffect, createSignal, on, onCleanup } from "solid-js";
-import { catchLoopbackRedirect, LoopbackRedirectError } from "@mileniumhq/paperapi";
+import { Show, createSignal } from "solid-js";
 import { PaperButton, PaperCopyButton, PaperFlex, PaperIcon, PaperInput, PaperLoader, PaperQuote, PaperText } from "@mileniumhq/paperui";
-import { errorText } from "../lib/failure";
+import { createAction } from "../lib/action";
+import { createLoopbackCatch } from "../lib/loopback";
 import { submitOnPaste } from "../lib/paste";
 import type { Tools } from "./api";
 
 export default function SignInSteps(props: { tools: Tools; name: string }) {
     const pending = () => props.tools.view()?.signIns[props.name] ?? null;
-    const [paste, setPaste] = createSignal(false);
     const [address, setAddress] = createSignal("");
-    const [error, setError] = createSignal<string | null>(null);
-    const [busy, setBusy] = createSignal(false);
-
-    createEffect(
-        on(
-            () => pending()?.callback ?? null,
-            (callback) => {
-                setPaste(false);
-                setError(null);
-                if (!callback) return;
-                const stop = new AbortController();
-                onCleanup(() => stop.abort());
-                catchLoopbackRedirect(callback, { signal: stop.signal }).then(
-                    async (result) => {
-                        if (stop.signal.aborted || result.status === "local") return;
-                        try {
-                            await props.tools.finishSignIn(props.name, result.url);
-                        } catch (e) {
-                            setError(errorText(e));
-                        }
-                    },
-                    (e) => {
-                        if (stop.signal.aborted) return;
-                        setPaste(true);
-                        if (!(e instanceof LoopbackRedirectError && e.code === "unavailable")) setError(errorText(e));
-                    },
-                );
-            },
-        ),
+    const { busy, error, run: act } = createAction();
+    const run = (fn: () => Promise<unknown>) => act("Not signed in", fn);
+    const forward = createLoopbackCatch(
+        () => pending()?.callback ?? null,
+        (url) => run(() => props.tools.finishSignIn(props.name, url)),
     );
-
-    const run = async (fn: () => Promise<unknown>) => {
-        setBusy(true);
-        setError(null);
-        try {
-            await fn();
-        } catch (e) {
-            setError(errorText(e));
-        } finally {
-            setBusy(false);
-        }
-    };
 
     // the address is used once: pasting it sends it, and a refused one can be pasted again
     const send = (value: string) => {
@@ -100,7 +63,7 @@ export default function SignInSteps(props: { tools: Tools; name: string }) {
                             </PaperButton>
                         </PaperFlex>
                         <Show
-                            when={paste()}
+                            when={forward.paste()}
                             fallback={<PaperLoader loaderStatus="indeterminate" label="Waiting for you to sign in" />}
                         >
                             <Show when={!busy()} fallback={<PaperLoader loaderStatus="indeterminate" label="Finishing the sign-in" />}>
@@ -118,10 +81,12 @@ export default function SignInSteps(props: { tools: Tools; name: string }) {
                             </Show>
                         </Show>
                     </Show>
-                    <Show when={error()}>
-                        <PaperQuote variant="danger" icon="error" title="Not signed in" role="alert">
-                            {error()}
-                        </PaperQuote>
+                    <Show when={error()?.message ?? forward.error()}>
+                        {(why) => (
+                            <PaperQuote variant="danger" icon="error" title="Not signed in" role="alert">
+                                {why()}
+                            </PaperQuote>
+                        )}
                     </Show>
                 </PaperFlex>
             )}

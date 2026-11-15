@@ -2,6 +2,7 @@
 // skin paints the face's sphere, which is otherwise invisible, and its
 // features.
 
+import { getVarCss } from "@mileniumhq/paperui";
 import { characterOf, type Character } from "../contract";
 
 export interface FaceSkin {
@@ -13,7 +14,7 @@ export interface FaceSkin {
 
 const SKINS: Record<Character, FaceSkin> = {
     // Verity, the yellow smiley helper from ThatMob's Minecraft ARG
-    verity: { sphere: "var(--paper-face-verity)", ink: "var(--paper-face-verity-ink)" },
+    verity: { sphere: getVarCss("face-verity"), ink: getVarCss("face-verity-ink") },
 };
 
 /** The skin an agent's name brings, if any. */

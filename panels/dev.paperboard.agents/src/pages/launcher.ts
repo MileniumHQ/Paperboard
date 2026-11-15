@@ -6,6 +6,7 @@ import { createEffect, createSignal, on } from "solid-js";
 import { createStore, reconcile } from "solid-js/store";
 import type { PageInfo, PageKind } from "../contract";
 import type { Agent } from "../lib/agent";
+import { createLatest } from "../lib/action";
 import { errorText } from "../lib/failure";
 
 export interface OpenPage {
@@ -31,13 +32,13 @@ export function createLauncher(agent: Agent) {
     };
 
     // a slow older read never replaces a newer one
-    let generation = 0;
+    const latest = createLatest();
     const load = () => {
-        const mine = ++generation;
+        const current = latest();
         setListError(null);
         agent.pages().then(
             (pages) => {
-                if (mine !== generation) return;
+                if (!current()) return;
                 setState("pages", reconcile(pages, { key: "name" }));
                 prune(pages);
                 // deleted, by the user or the agent: it goes from beside the chat too
@@ -45,7 +46,7 @@ export function createLauncher(agent: Agent) {
                 if (s && !pages.some((a) => a.name === s.name)) setShown(null);
             },
             (e) => {
-                if (mine === generation) setListError(errorText(e));
+                if (current()) setListError(errorText(e));
             },
         );
     };

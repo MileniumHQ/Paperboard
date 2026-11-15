@@ -28,6 +28,7 @@ import {
 import { createStore, reconcile } from "solid-js/store";
 import type { Agent } from "../lib/agent";
 import { holdPage } from "../lib/pageHold";
+import { createAction } from "../lib/action";
 import { errorText, failure, type Failure } from "../lib/failure";
 import { TOOL_LIMITS, type ServerSpec } from "../toolsContract";
 import { createTools, type Tools as ToolsClient } from "./api";
@@ -91,9 +92,8 @@ function List(props: { tools: ToolsClient; name: string }) {
     const lastForm = createMemo<Form>((prev) => form() ?? prev, blankForm());
     const [removing, setRemoving] = createSignal<ServerSpec | null>(null);
     // a refused removal is told in the confirmation, which stays open over the page
-    const [removeError, setRemoveError] = createSignal<string | null>(null);
-    const [busy, setBusy] = createSignal(false);
-    const [error, setError] = createSignal<Failure | null>(null);
+    const [removeError, setRemoveError] = createSignal<Failure | null>(null);
+    const { busy, error, setError, run: act } = createAction();
     // the server whose sign-in is shown, while it's under way
     const [signingIn, setSigningIn] = createSignal<string | null>(null);
     const full = () => view().config.servers.length >= TOOL_LIMITS.servers;
@@ -105,17 +105,6 @@ function List(props: { tools: ToolsClient; name: string }) {
         }),
     );
 
-    const act = async (title: string, fn: () => Promise<unknown>) => {
-        setBusy(true);
-        setError(null);
-        try {
-            await fn();
-        } catch (e) {
-            setError(failure(title, e));
-        } finally {
-            setBusy(false);
-        }
-    };
     const signIn = (s: ServerSpec) =>
         act("Sign-in not started", async () => {
             await props.tools.signIn(s.name);
@@ -132,18 +121,15 @@ function List(props: { tools: ToolsClient; name: string }) {
     };
     const actionsAsked = asked(() => view().config.actions);
     const setActions = (on: boolean) => actionsAsked.ask(on, saveSwitch("Panel access not changed", () => props.tools.setActions(on)));
-    const remove = async (s: ServerSpec) => {
-        setBusy(true);
-        setRemoveError(null);
-        try {
-            await props.tools.remove(s.name);
-            setRemoving(null);
-        } catch (e) {
-            setRemoveError(errorText(e));
-        } finally {
-            setBusy(false);
-        }
-    };
+    const remove = (s: ServerSpec) =>
+        act(
+            "Server not removed",
+            async () => {
+                await props.tools.remove(s.name);
+                setRemoving(null);
+            },
+            setRemoveError,
+        );
 
     const choose = (value: string) => {
         if (value === NEW) return setForm(blankForm());
@@ -257,9 +243,11 @@ function List(props: { tools: ToolsClient; name: string }) {
                 <PaperFlex gap="full">
                     <PaperText preset="text">It stops, and the secrets saved for it are deleted. {props.name} can't use its tools anymore.</PaperText>
                     <Show when={removeError()}>
-                        <PaperQuote variant="danger" icon="error" title="Server not removed" role="alert">
-                            {removeError()}
-                        </PaperQuote>
+                        {(why) => (
+                            <PaperQuote variant="danger" icon="error" title={why().title} role="alert">
+                                {why().message}
+                            </PaperQuote>
+                        )}
                     </Show>
                 </PaperFlex>
             </PaperModal>

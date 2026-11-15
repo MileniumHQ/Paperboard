@@ -8,6 +8,7 @@ import { PaperButton, PaperEmptyState, PaperFlex, PaperIcon, PaperList, PaperLis
 import type { AccessGrant, AccessView } from "../contract";
 import type { Agent } from "../lib/agent";
 import { holdPage } from "../lib/pageHold";
+import { createLatest } from "../lib/action";
 import { errorText } from "../lib/failure";
 import { localStamp } from "../routineText";
 import { itemText } from "../chat/AccessRequest";
@@ -26,24 +27,21 @@ export default function Access(props: { agent: Agent }) {
     const [error, setError] = createSignal<string | null>(null);
     const [failed, setFailed] = createSignal<string | null>(null);
 
-    let gone = false;
-    onCleanup(() => (gone = true));
     // a change pushed while the first read is out is newer than it: the read doesn't replace it
-    let pushed = false;
+    const latest = createLatest();
     onCleanup(
         props.agent.onAccess((next) => {
-            pushed = true;
-            if (!gone) setView(next);
+            if (latest()()) setView(next);
         }),
     );
     const load = async () => {
-        pushed = false;
+        const current = latest();
         try {
             const next = await props.agent.access();
-            if (!gone && !pushed) setView(next);
+            if (current()) setView(next);
             setError(null);
         } catch (e) {
-            if (!gone) setError(errorText(e));
+            if (current()) setError(errorText(e));
         }
     };
     holdPage(load());

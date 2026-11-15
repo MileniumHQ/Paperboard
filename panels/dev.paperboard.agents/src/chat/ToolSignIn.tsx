@@ -1,7 +1,7 @@
-import { Match, Show, Switch, createSignal } from "solid-js";
+import { Match, Show, Switch } from "solid-js";
 import { PaperButton, PaperCard, PaperFlex, PaperIcon, PaperLoader, PaperQuote, PaperText } from "@mileniumhq/paperui";
 import type { ToolSignInEntry } from "../contract";
-import { failure, type Failure } from "../lib/failure";
+import { createAction } from "../lib/action";
 import { createTools } from "../tools/api";
 import SignInSteps from "../tools/SignInSteps";
 import { stateOf, stateText } from "../tools/status";
@@ -28,19 +28,7 @@ export default function ToolSignIn(props: { entry: ToolSignInEntry; name: string
             return e().url;
         }
     };
-    const [busy, setBusy] = createSignal(false);
-    const [error, setError] = createSignal<Failure | null>(null);
-    const act = async (title: string, fn: () => Promise<unknown>) => {
-        setBusy(true);
-        setError(null);
-        try {
-            await fn();
-        } catch (err) {
-            setError(failure(title, err));
-        } finally {
-            setBusy(false);
-        }
-    };
+    const { busy, error, run: act } = createAction();
 
     return (
         <PaperFlex direction="row">
