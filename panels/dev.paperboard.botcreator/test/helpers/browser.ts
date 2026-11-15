@@ -34,7 +34,7 @@ function panelUi(): string {
 export async function servePanel(): Promise<{ url: string; stop: () => void }> {
     const daemon = await testDaemon();
     const dist = panelUi();
-    const creds = JSON.stringify({ port: daemon.port, token: daemon.panelToken(PANEL_ID), scoped: true, computerId: "local", panelId: PANEL_ID }).replace(/</g, "\\u003c");
+    const creds = JSON.stringify({ port: daemon.port, token: await daemon.panelToken(PANEL_ID), scoped: true, computerId: "local", panelId: PANEL_ID }).replace(/</g, "\\u003c");
     const server = Bun.serve({
         port: 0,
         hostname: "127.0.0.1",

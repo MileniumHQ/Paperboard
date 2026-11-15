@@ -1,36 +1,31 @@
-// The real Paperboard daemon in this test process, as the desktop app embeds
-// it (startPaperCraneServer: loopback, a port the OS picks, headless), on the
-// throwaway PAPERBOARD_DIR test/hermetic.ts made. paperapi in the test
-// process finds it through that directory's crane.json and talks to it over
-// the real wire as the host. Bot Creator's service runs no workloads, so an
-// in-process daemon is all it needs.
+// The real Paperboard daemon for the suite (scripts/testing/crane.ts): the
+// crane compiled from this checkout, in its own process, on a free loopback
+// port, over the throwaway PAPERBOARD_DIR test/hermetic.ts made. paperapi in
+// the test process finds it through that directory's crane.json and talks to
+// it over the real wire as the host.
+//
+// Its own process, not the test's: Bun's WebSocket client and the daemon's
+// server in one process now and then garble a frame (the client closes with
+// 1002, WS_ERR_UNEXPECTED_RSV_2_3), which a person's daemon never shares a
+// process with.
 //
 // One daemon per test process: bun runs every file of the suite in one
 // process, and paperapi's transport is bound to the first daemon it finds.
 // It stops when the suite ends (test/hermetic.ts).
-//
-// The daemon is loaded by a path the typechecker does not follow: it is
-// another target's source, typechecked by its own gate step.
+import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { within } from "./wait";
+import { getTransport } from "@mileniumhq/paperapi";
+import { buildCrane, startCrane } from "../../../../scripts/testing/crane";
 
-const DAEMON_ENTRY = path.resolve(import.meta.dir, "../../../../apps/paperboard/papercrane/index.ts");
 const ALLOWED = Symbol.for("paperboard.botcreator.test.ports");
 const TEARDOWN = Symbol.for("paperboard.botcreator.test.teardown");
-
-interface ServerInstance {
-    localPort: number;
-    server: { once(event: "close", cb: () => void): void };
-    auth: { issuePanelToken(panelId: string): string };
-    stop(): void;
-}
 
 export interface TestDaemon {
     port: number;
     dataDir: string;
     /** a scoped credential for one panel, as the daemon hands a panel service or window */
-    panelToken(panelId: string): string;
+    panelToken(panelId: string): Promise<string>;
 }
 
 let started: Promise<TestDaemon> | null = null;
@@ -46,18 +41,23 @@ async function start(): Promise<TestDaemon> {
     if (!dataDir || !dataDir.startsWith(os.tmpdir())) {
         throw new Error(`PAPERBOARD_DIR must be the throwaway dir test/hermetic.ts made, not ${dataDir}`);
     }
-    const entry: string = DAEMON_ENTRY;
-    const mod = (await import(entry)) as { startPaperCraneServer(options: Record<string, unknown>): Promise<ServerInstance> };
-    const instance = await mod.startPaperCraneServer({ host: "127.0.0.1", port: 0, headless: true, advertise: false });
     const allowed: Set<number> = (globalThis as any)[ALLOWED];
     const teardown: (() => Promise<void>)[] = (globalThis as any)[TEARDOWN];
     if (!allowed || !teardown) throw new Error("test/hermetic.ts is not preloaded");
-    allowed.add(instance.localPort);
+    const binDir = fs.mkdtempSync(path.join(os.tmpdir(), "botcreator-crane-"));
+    const crane = await startCrane(buildCrane(binDir), dataDir);
+    allowed.add(crane.port);
     teardown.push(async () => {
-        const closed = new Promise<void>((resolve) => instance.server.once("close", () => resolve()));
-        instance.stop();
-        await within("the test daemon to close", closed);
-        allowed.delete(instance.localPort);
+        await crane.stop();
+        allowed.delete(crane.port);
+        fs.rmSync(binDir, { recursive: true, force: true });
     });
-    return { port: instance.localPort, dataDir, panelToken: (panelId) => instance.auth.issuePanelToken(panelId) };
+    return {
+        port: crane.port,
+        dataDir,
+        async panelToken(panelId) {
+            const granted = await getTransport().call<{ token: string }>("auth:panel-token", { panelId });
+            return granted.token;
+        },
+    };
 }

@@ -59,7 +59,7 @@ export async function startService(options: { discordApi: string; entry?: string
         ...process.env,
         PAPERBOARD_DIR: daemon.dataDir,
         PAPERBOARD_PANEL_ID: PANEL_ID,
-        PAPERCRANE_PANEL_TOKEN: daemon.panelToken(PANEL_ID),
+        PAPERCRANE_PANEL_TOKEN: await daemon.panelToken(PANEL_ID),
         PAPERCRANE_PORT: String(daemon.port),
         BOTCREATOR_DISCORD_API: options.discordApi,
     };
