@@ -75,14 +75,23 @@ export function powershellErrorLine(stderr: string): string {
 }
 
 // AppleScript mount body: written to a 0600 temp file by the caller and
-// unlinked after osascript exits — never an argv element
+// unlinked after osascript exits — never an argv element. `mount volume`
+// takes no mount point: macOS names the folder under /Volumes itself ("dav",
+// "dav-1", ...), so the script prints where it went.
 export function buildMacMountScript(
     user: string,
     pass: string,
     host: string,
     port: number,
 ): string {
-    return `mount volume "http://${host}:${port}/dav" as user name "${appleQuoted(user)}" with password "${appleQuoted(pass)}"`;
+    return `return POSIX path of (mount volume "http://${host}:${port}/dav" as user name "${appleQuoted(user)}" with password "${appleQuoted(pass)}")`;
+}
+
+// the mount point the script printed ("/Volumes/dav/"), without its slash
+export function macMountedVolume(stdout: string): string {
+    const mount = stdout.trim().replace(/\/+$/, "");
+    if (!/^\/Volumes\/[^/]+$/.test(mount)) throw new Error(`macOS didn't say where it mounted the folder (it said "${stdout.trim()}")`);
+    return mount;
 }
 
 // temp script path for the mount body (caller sets 0600 + unlinks)

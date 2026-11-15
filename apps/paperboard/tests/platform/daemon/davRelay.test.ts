@@ -1,13 +1,14 @@
 import { afterAll, beforeAll, describe, expect, setDefaultTimeout, test } from "bun:test";
-import { spawnSync } from "node:child_process";
+import { execFile, spawnSync } from "node:child_process";
 import * as fs from "node:fs";
 import * as http from "node:http";
 import * as https from "node:https";
 import * as net from "node:net";
 import * as path from "node:path";
+import { promisify } from "node:util";
 import { createTlsIdentity } from "../../../papercrane/tlsIdentity";
 import { type DavRelay, type DavRelayOptions, startDavRelay } from "../../../src/main/davRelay";
-import { buildMacMountScript, buildWindowsMountCommand, macMountScriptPath, windowsDavRoot } from "../../../src/main/remoteFolderMount";
+import { buildMacMountScript, buildWindowsMountCommand, macMountedVolume, macMountScriptPath, windowsDavRoot } from "../../../src/main/remoteFolderMount";
 import { tempDir } from "../../daemon/support/fs";
 import { type InProcessDaemon, startDaemon } from "../../daemon/support/inproc";
 import { TEST_TIMEOUT_MS } from "../../daemon/support/wait";
@@ -240,14 +241,37 @@ describe("remote folder mounts", () => {
 
 	test("the macOS mount script escapes the credential and its path names neither user nor password", () => {
 		const script = buildMacMountScript('us"er\\', 'pa"ss\\word', "127.0.0.1", 4321);
-		expect(script).toBe('mount volume "http://127.0.0.1:4321/dav" as user name "us\\"er\\\\" with password "pa\\"ss\\\\word"');
+		expect(script).toBe('return POSIX path of (mount volume "http://127.0.0.1:4321/dav" as user name "us\\"er\\\\" with password "pa\\"ss\\\\word")');
 		expect(() => buildMacMountScript("user", "pass\nword", "127.0.0.1", 4321)).toThrow();
 		const scriptPath = macMountScriptPath();
 		expect(scriptPath).not.toContain("user");
 		expect(scriptPath).not.toContain("pass");
 	});
 
+	test("the macOS folder is wherever the mount script says macOS put it", () => {
+		// macOS names the folder itself, and a second mount of the same share name lands beside it
+		expect(macMountedVolume("/Volumes/dav-1/\n")).toBe("/Volumes/dav-1");
+		expect(() => macMountedVolume("")).toThrow();
+		expect(() => macMountedVolume("/Users/someone/dav/")).toThrow();
+	});
+
 	if (process.platform === "darwin") {
+		test("the mount script mounts the relay and prints the folder that holds its files", async () => {
+			// the relay answers macOS from this process, so nothing here may block the loop
+			const run = promisify(execFile);
+			const served = await relay({});
+			const scriptPath = macMountScriptPath();
+			fs.writeFileSync(scriptPath, buildMacMountScript(session.user, session.pass, "127.0.0.1", served.port), { mode: 0o600, flag: "wx" });
+			let mount = "";
+			try {
+				mount = macMountedVolume((await run("osascript", [scriptPath], { timeout: 60_000 })).stdout);
+				expect(await fs.promises.readFile(path.join(mount, "files", "test.relay", "hello.txt"), "utf8")).toBe("hello over the relay");
+			} finally {
+				fs.rmSync(scriptPath, { force: true });
+				if (mount) await run("umount", [mount], { timeout: 20_000 });
+			}
+		});
+
 		test("osascript compiles the escaped script as one mount command with the credential intact", () => {
 			const dir = tempDir();
 			const source = path.join(dir, "mount.applescript");

@@ -6,6 +6,7 @@ import { panelFilesDirName } from "../../papercrane/storage";
 import {
     buildWindowsMountCommand,
     buildMacMountScript,
+    macMountedVolume,
     macMountScriptPath,
     powershellErrorLine,
     windowsDavRoot,
@@ -31,7 +32,7 @@ interface ActiveSession {
     davUser: string;
     // kept in memory to make a panel's folder in an open session
     davPass: string;
-    mount: string; // drive "Z:", /Volumes/Name, or "" (linux)
+    mount: string; // drive "Z:", the /Volumes folder macOS picked, or "" (linux)
     relay: DavRelay | null; // loopback relay to the remote daemon
     timer: NodeJS.Timeout | null;
     seen: boolean;
@@ -160,7 +161,8 @@ const FINDER_WINDOWS = [
 
 async function macHasWindow(mountPoint: string): Promise<boolean> {
     const { stdout } = await execAsync("osascript", FINDER_WINDOWS.flatMap((line) => ["-e", line]), 15_000);
-    return stdout.split(/\r?\n/).some((line) => line.startsWith(mountPoint));
+    // Finder's paths end in "/": /Volumes/dav/ is in /Volumes/dav, not in /Volumes/dav-1
+    return stdout.split(/\r?\n/).some((line) => line.startsWith(`${mountPoint}/`));
 }
 
 // The folder closes once its window does: after a grace period for the
@@ -368,9 +370,6 @@ async function openNow(computerId: string, panelId?: string): Promise<{ ok: bool
             }
             rec.mount = drive;
         } else if (process.platform === "darwin") {
-            const safeId = computerId.replace(/[^A-Za-z0-9-]/g, "-").slice(0, 32) || "remote";
-            const mountPoint = `/Volumes/Paperboard-${safeId}`;
-            fs.mkdirSync(mountPoint, { recursive: true });
             // credential in a 0600 temp file, never argv/URL (both leak
             // into ps output)
             const scriptPath = macMountScriptPath();
@@ -380,7 +379,7 @@ async function openNow(computerId: string, panelId?: string): Promise<{ ok: bool
                 flag: "wx",
             });
             try {
-                await execAsync("osascript", [scriptPath], 60_000);
+                rec.mount = macMountedVolume((await execAsync("osascript", [scriptPath], 60_000)).stdout);
             } finally {
                 try {
                     fs.unlinkSync(scriptPath);
@@ -388,7 +387,6 @@ async function openNow(computerId: string, panelId?: string): Promise<{ ok: bool
                     logger.warn(`[RemoteFolder] couldn't remove the mount script ${scriptPath}, which holds this session's password:`, err);
                 }
             }
-            rec.mount = mountPoint;
         }
 
         const shown = await showFolder(rec, subDir);
