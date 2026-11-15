@@ -16,7 +16,7 @@ import {
 import { sourceCalls, type SourceMetrics } from "../source";
 import { cvarValue, mapName, optionValue } from "../source/config";
 import { consoleLine, logBody, parseLogLine, steamId, isSteamId, type SourceLogEvent } from "../source/log";
-import { noStats, SourceRoster, type SourceStats } from "../source/roster";
+import { mergeStats, noStats, SourceRoster, type SourceStats } from "../source/roster";
 import type { SourceOnline } from "../source/service";
 import { installMapPicture } from "../source/installPictures";
 import { cs2, CS2, MODES, type Cs2Mode } from "./index";
@@ -151,7 +151,8 @@ async function saveStats() {
     for (const player of local().online.values()) countPlaytime(player, now);
     const stats = local().unsaved;
     local().unsaved = new Map();
-    await roster().addStats(stats);
+    try { await roster().addStats(stats); }
+    catch (err) { mergeStats(local().unsaved, stats); throw err; }
 }
 function bump(ctx: Context, userId: number, key: "kills" | "deaths" | "assists") {
     const player = local().online.get(userId);

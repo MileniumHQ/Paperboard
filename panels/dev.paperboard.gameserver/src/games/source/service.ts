@@ -25,7 +25,7 @@ import { playModes } from "./modes";
 import { canonicalMap, findWorkshopMaps, readWorkshopMaps, workshopId, workshopMapToAdd, workshopName, type SourceWorkshopMap } from "./workshop";
 import { consoleLine, isErrorLine, isShaderNoise, isSteamId, linePlayer, parseLogLine, parseStatus, steamId as checkedSteamId, type SourceLogEvent } from "./log";
 import { passwordReadAsTls, SourceRcon, RconError, RconNoAnswer } from "./rcon";
-import { bannedUserCfg, noStats, SourceRoster, type SourceStats } from "./roster";
+import { bannedUserCfg, mergeStats, noStats, SourceRoster, type SourceStats } from "./roster";
 
 /** A player on the running server, by the server's user id for their connection. */
 export interface SourceOnline {
@@ -387,7 +387,8 @@ export function sourceService(spec: SourceGameSpec, game: GameDefinition): GameS
         for (const player of local().online.values()) countPlaytime(player, now);
         const stats = local().unsaved;
         local().unsaved = new Map();
-        await roster().addStats(stats);
+        try { await roster().addStats(stats); }
+        catch (err) { mergeStats(local().unsaved, stats); throw err; }
     }
 
     /** Learns who is on, which map and the player cap from `status`: on start and when reattaching. */

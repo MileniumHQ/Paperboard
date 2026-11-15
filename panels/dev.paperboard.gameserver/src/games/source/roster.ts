@@ -13,6 +13,14 @@ export interface SourceStats {
 }
 export const STAT_KEYS = ["kills", "deaths", "assists", "dominations", "playtime"] as const satisfies readonly (keyof SourceStats)[];
 export const noStats = (): SourceStats => ({ kills: 0, deaths: 0, assists: 0, dominations: 0, playtime: 0 });
+/** Adds `from`'s counts into `into`: what a failed write gathered waits for the next one. */
+export function mergeStats(into: Map<string, Partial<SourceStats>>, from: ReadonlyMap<string, Partial<SourceStats>>): void {
+    for (const [steamId, stats] of from) {
+        const kept = into.get(steamId) ?? {};
+        for (const key of STAT_KEYS) if (stats[key]) kept[key] = (kept[key] ?? 0) + stats[key]!;
+        into.set(steamId, kept);
+    }
+}
 
 /** A player Paperboard has seen on the server, keyed by Steam id, with their totals across visits. */
 export interface SourceSeen extends Partial<SourceStats> {
