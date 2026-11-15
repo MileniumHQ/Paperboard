@@ -1,3 +1,4 @@
+import type { Server } from "./server";
 // Player heads. Java players' skins come from Mojang; Bedrock players'
 // (Floodgate uuids) from GeyserMC, which keeps the skin Floodgate uploaded
 // for each Xbox account as a Minecraft texture. Neither profile endpoint
@@ -9,7 +10,6 @@
 // one. Lookups for the same player share one request, and lookups are
 // concurrency capped: a roster of a hundred players issues a bounded number
 // of requests at a time.
-import { apiFetch } from "../lib/userAgent";
 import { composeHeadFromSkin, clampHeadSize } from "../core/skin";
 import { gamertagOf, floodgateUuid, xuidOfFloodgateUuid, type BedrockNaming } from "../core/bedrock";
 import { uuidForPlayerName } from "./playerStats";
@@ -44,8 +44,8 @@ const limited = new LimitedQueue(MAX_CONCURRENT).run;
 
 // the server's own records first: a Bedrock player who has joined is in
 // them under the name Floodgate gave them
-async function uuidFromName(name: string, naming: () => Promise<BedrockNaming | null>): Promise<string | null> {
-    const local = await uuidForPlayerName(name);
+async function uuidFromName(ctx: Server, name: string, naming: () => Promise<BedrockNaming | null>): Promise<string | null> {
+    const local = await uuidForPlayerName(ctx, name);
     if (local) return local;
     const gamertag = gamertagOf(name, await naming());
     if (gamertag) {
@@ -94,6 +94,7 @@ async function fetchSkinBytes(url: string): Promise<Uint8Array> {
 }
 
 async function resolveHead(
+    ctx: Server,
     name: string,
     uuid: string,
     size: number,
@@ -105,7 +106,7 @@ async function resolveHead(
         if (UUID_DASHED_RE.test(trimmed)) resolved = trimmed;
         else if (UUID_BARE_RE.test(trimmed)) resolved = formatUuid(trimmed);
     }
-    if (!resolved && name) resolved = (await uuidFromName(name, naming)) ?? "";
+    if (!resolved && name) resolved = (await uuidFromName(ctx, name, naming)) ?? "";
     if (!resolved) return null;
 
     let skin = skins.get(resolved);
@@ -131,7 +132,7 @@ async function resolveHead(
  * picture. A lookup that fails throws why, for the page to show.
  * `naming` is Floodgate's, read only when a name has to be looked up.
  */
-export async function getHeadDataUrl(inputs: {
+export async function getHeadDataUrl(ctx: Server, inputs: {
     name?: string;
     uuid?: string;
     size?: number;
@@ -142,10 +143,10 @@ export async function getHeadDataUrl(inputs: {
     if (!name && !uuid) throw new Error("A player's head needs their name or uuid");
 
     const size = clampHeadSize(inputs?.size);
-    const key = `${size}:${uuid.toLowerCase() || name.toLowerCase()}`;
+    const key = `${ctx.id}:${size}:${uuid.toLowerCase() || name.toLowerCase()}`;
     const running = inflight.get(key);
     if (running) return running;
-    const lookup = limited(() => resolveHead(name, uuid, size, inputs.naming)).finally(() => inflight.delete(key));
+    const lookup = limited(() => resolveHead(ctx, name, uuid, size, inputs.naming)).finally(() => inflight.delete(key));
     inflight.set(key, lookup);
     return lookup;
 }

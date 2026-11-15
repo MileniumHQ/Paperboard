@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { SerialQueue } from "@mileniumhq/paperapi";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { zipSync, strToU8 } from "fflate";
@@ -23,6 +24,7 @@ function staged(files: Record<string, string | Uint8Array>, existing: Record<str
         writeConfig: async (patch) => {
             config = { ...config, ...patch };
         },
+        records: new SerialQueue().run,
     };
     return { root, deps, config: () => config, stageGone: () => !fs.existsSync(path.join(root, STAGE_DIR)) };
 }

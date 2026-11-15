@@ -4,11 +4,7 @@ import * as nodePath from "node:path";
 import { minecraftSoftware } from "../games/minecraft/index";
 import { MOD_DESCRIPTORS, PLUGIN_DESCRIPTORS, modVersionFrom, pluginDescription } from "./addonConfig";
 import { readJarEntries } from "./jarEntries";
-import {
-    files as fileApi,
-    config,
-    updateSettings,
-} from "./api";
+
 import { sanitizeFileName, tryListDirectory, listDirectory } from "./filesystem";
 import {
     INSTALL_RECORDS_KEY,
@@ -41,12 +37,12 @@ import { PANEL_ID } from "./types";
 export type { InstalledPlugin, InstalledRecord };
 export { INSTALL_RECORDS_KEY, pluginDirName };
 
-async function getInstallRecords(): Promise<Record<string, InstalledRecord>> {
-    return parseInstallRecords((await config.get<Record<string, unknown> | null>(PANEL_ID))?.[INSTALL_RECORDS_KEY]);
+async function getInstallRecords(ctx: Server): Promise<Record<string, InstalledRecord>> {
+    return parseInstallRecords(ctx.settings[INSTALL_RECORDS_KEY]);
 }
 
-async function writeInstallRecords(records: Record<string, InstalledRecord>): Promise<void> {
-    await updateSettings({ [INSTALL_RECORDS_KEY]: records });
+async function writeInstallRecords(ctx: Server, records: Record<string, InstalledRecord>): Promise<void> {
+    await ctx.updateSettings({ [INSTALL_RECORDS_KEY]: records });
 }
 
 /**
@@ -54,18 +50,18 @@ async function writeInstallRecords(records: Record<string, InstalledRecord>): Pr
  * replaced (`remove`), merged here so the service holds the one copy of the
  * records and nothing else's record is written over.
  */
-export async function recordPluginInstalls(input: { set?: unknown; remove?: unknown }): Promise<void> {
+export async function recordPluginInstalls(ctx: Server, input: { set?: unknown; remove?: unknown }): Promise<void> {
     const set = input?.set ?? {};
     const remove = input?.remove ?? [];
     if (typeof set !== "object" || set === null || Array.isArray(set)) throw new Error("Install records must be an object of file names");
     if (!Array.isArray(remove)) throw new Error("Files to forget must be a list");
-    const records = await getInstallRecords();
+    const records = await getInstallRecords(ctx);
     for (const name of remove) delete records[validatePluginFilename(String(name))];
     for (const [name, record] of Object.entries(set)) {
         if (!isInstallRecord(record)) throw new Error(`The install record for ${name} is not one Paperboard writes`);
         records[validatePluginFilename(name)] = record;
     }
-    await writeInstallRecords(records);
+    await writeInstallRecords(ctx, records);
 }
 
 export async function listInstalledPlugins(
@@ -75,21 +71,21 @@ export async function listInstalledPlugins(
     // a missing directory means "nothing installed yet", not an error: the
     // folder is only created on first install, and a warning here taught
     // users to ignore the warning bar
-    if (!(await fileApi.exists(dirName, PANEL_ID))) return { plugins: [] };
-    const records = await getInstallRecords();
-    const listing = await tryListDirectory(dirName);
-    const uploads = parseUploadRecords((await config.get<Record<string, unknown>>(PANEL_ID))?.[UPLOAD_RECORDS_KEY]);
+    if (!(await ctx.files.exists(dirName, PANEL_ID))) return { plugins: [] };
+    const records = await getInstallRecords(ctx);
+    const listing = await tryListDirectory(ctx, dirName);
+    const uploads = parseUploadRecords(ctx.settings[UPLOAD_RECORDS_KEY]);
     const collected = await collectInstalledPlugins({
         records,
         listingEntries: listing.entries,
-        exists: (path) => fileApi.exists(path, PANEL_ID),
+        exists: (path) => ctx.files.exists(path, PANEL_ID),
         sanitize: sanitizeFileName,
         dirName,
     });
 
     // an uploaded jar has no record Modrinth describes; saying so beats a bare "Unknown version"
     // (a Modrinth install over it has a record and is no longer the upload)
-    const root = await fileApi.getPath("", PANEL_ID);
+    const root = await ctx.root();
     const mods = SOFTWARE[minecraftSoftware(ctx.state.serverSoftware)].addons?.kind === "mod";
     const plugins = await Promise.all(collected.map(async (plugin): Promise<InstalledPlugin> => {
         if (plugin.record) return plugin;
@@ -119,16 +115,16 @@ export async function deletePlugin(
     filename: string,
 ): Promise<void> {
     const safe = validatePluginFilename(sanitizeFileName(filename) ?? filename);
-    // moved to trash (see service/trash.ts) — a bare fileApi.delete
+    // moved to trash (see service/trash.ts) — a bare ctx.files.delete
     // here is irreversible destruction on a single RPC
     await trashRemovePathsWith(
-        makeTrashRemoveDeps(),
+        makeTrashRemoveDeps(ctx),
         [`${pluginDirName(minecraftSoftware(ctx.state.serverSoftware))}/${safe}`],
     );
-    const records = await getInstallRecords();
+    const records = await getInstallRecords(ctx);
     if (records[safe]) {
         delete records[safe];
-        await writeInstallRecords(records);
+        await writeInstallRecords(ctx, records);
     }
     await forgetUploads(liveUploadDeps(ctx), [`${pluginDirName(minecraftSoftware(ctx.state.serverSoftware))}/${safe}`]);
 }
@@ -144,8 +140,8 @@ export async function uninstallAllPlugins(
     for (const dir of ALL_PLUGIN_DIRS) {
         // an unanswerable exists is a failure, not an empty folder: "uninstall
         // everything" must not report success over jars it never saw
-        if (!(await fileApi.exists(dir, PANEL_ID))) continue;
-        for (const entry of await listDirectory(dir)) {
+        if (!(await ctx.files.exists(dir, PANEL_ID))) continue;
+        for (const entry of await listDirectory(ctx, dir)) {
             const safe = sanitizeFileName(entry);
             if (!safe || !safe.toLowerCase().endsWith(".jar")) continue;
             try {
@@ -158,11 +154,11 @@ export async function uninstallAllPlugins(
     }
     if (paths.length > 0) {
         await trashRemovePathsWith(
-            makeTrashRemoveDeps(),
+            makeTrashRemoveDeps(ctx),
             paths,
         );
     }
-    await writeInstallRecords({});
+    await writeInstallRecords(ctx, {});
     await forgetUploads(liveUploadDeps(ctx), paths);
     return paths.length;
 }
@@ -489,10 +485,10 @@ export async function installLatestPlugin(
 }
 
 /** The daemon's Modrinth reads and checked downloads, for a plugin install. */
-export const livePluginInstallDeps: PluginInstallDeps = {
+export const livePluginInstallDeps = (ctx: Server): PluginInstallDeps => ({
     fetchJson,
     download: ({ url, targetPath, sha1, sha512 }) =>
-        fileApi.download({ url, targetPath, ...(sha1 ? { sha1 } : {}), ...(sha512 ? { checksum: { algorithm: "sha512", value: sha512 } } : {}), appId: PANEL_ID }).then(() => undefined),
-    readRecords: getInstallRecords,
-    writeRecords: writeInstallRecords,
-};
+        ctx.files.download({ url, targetPath, ...(sha1 ? { sha1 } : {}), ...(sha512 ? { checksum: { algorithm: "sha512", value: sha512 } } : {}), appId: PANEL_ID }).then(() => undefined),
+    readRecords: () => getInstallRecords(ctx),
+    writeRecords: (records) => writeInstallRecords(ctx, records),
+});

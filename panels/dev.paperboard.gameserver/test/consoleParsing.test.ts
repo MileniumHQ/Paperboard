@@ -2,7 +2,6 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { startTestDaemon, type TestDaemon } from "./helpers/crane";
 import { minecraftServer, type McServer } from "./helpers/minecraft";
 import { testServer } from "./helpers/scope";
-import { inServer } from "../src/service/scope";
 import { observeLine } from "../src/games/minecraft/observe";
 import { parseChatMessage } from "../src/lib/logs";
 import { parseGameruleValue } from "../src/core/gamerules";
@@ -25,9 +24,7 @@ function feed(version: string, lines: string[], software = "paper") {
         { directory: "servers/parse", settings: { software, version } },
         { serverSoftware: software as never, serverVersion: version },
     );
-    inServer(scope, () => {
-        for (const line of lines) observeLine(scope, line);
-    });
+    for (const line of lines) observeLine(scope, line);
     return scope;
 }
 
@@ -77,7 +74,7 @@ describe("console parsing", () => {
         const scope = feed("1.21.1", [PAPER("There are 2 of a max of 20 players online: Steve, Alex")]);
         expect(scope.state.onlinePlayers).toEqual(["steve", "alex"]);
         expect(scope.state.maxPlayers).toBe(20);
-        inServer(scope, () => observeLine(scope, PAPER("<Mallory> There are 9 of a max of 99 players online: alice, bob")));
+        observeLine(scope, PAPER("<Mallory> There are 9 of a max of 99 players online: alice, bob"));
         expect(scope.state.maxPlayers).toBe(20);
         expect(scope.state.onlinePlayers).toEqual(["steve", "alex"]);
         const v26 = feed("26.3", [V26("There are 0 of a max of 8 players online:")]);
@@ -86,13 +83,13 @@ describe("console parsing", () => {
 
     test("live stat and position replies land on the player and field they name; the panel's polls stay out of the console while typed ones show", async () => {
         const mc: McServer = minecraftServer({ files: { "fake-server.json": JSON.stringify({ players: ["Steve"] }) } });
-        await mc.run(() => startServerInstance(mc.server));
+        await startServerInstance(mc.server);
         // the panel's own `list` on Done sets the roster
         await mc.server.waitFor((s) => s.onlinePlayers.includes("steve"), "the roster from the panel's list poll");
-        mc.run(() => queryPlayerStats(mc.server, "Steve"));
+        queryPlayerStats(mc.server, "Steve");
         await mc.server.waitFor((s) => s.playerStats.steve?.xpProgress !== undefined, "Steve's stats");
         expect(mc.server.state.playerStats.steve).toEqual({ health: 15.5, food: 18, xpLevel: 7, xpProgress: 0.25 });
-        mc.run(() => queryPlayerPositions(mc.server));
+        queryPlayerPositions(mc.server);
         await mc.server.waitFor((s) => s.playerPositions.steve?.dimension === "minecraft:the_nether", "Steve's position");
         expect(mc.server.state.playerPositions.steve).toEqual({ x: 1.5, y: 64, z: -3.25, dimension: "minecraft:the_nether" });
 
@@ -101,12 +98,12 @@ describe("console parsing", () => {
         expect(console().some((c) => /players online|entity data|after scale factor/.test(c))).toBe(false);
 
         // the same list typed in the console is answered in the console
-        await mc.run(() => sendServerCommand(mc.server, "list"));
+        await sendServerCommand(mc.server, "list");
         await mc.server.waitFor((s) => s.serverEntries.some((e) => e.content.includes("players online")), "the typed list's reply");
         expect(console().filter((c) => c.includes("players online"))).toHaveLength(1);
 
         const exit = mc.nextExit();
-        await mc.run(() => stopServerInstance(mc.server));
+        await stopServerInstance(mc.server);
         await exit;
     });
 });

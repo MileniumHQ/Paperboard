@@ -1,7 +1,6 @@
 import type { Server } from "../../service/server";
 import { minecraftSoftware } from "./index";
-import { config, files as fileApi, packages as packageApi, system } from "../../service/api";
-import type { GameServerState } from "../../service/types";
+import { packages as packageApi, system } from "../../service/api";
 import { PANEL_ID, appendCapped } from "../../service/types";
 import { heapFit } from "../../service/memory";
 import { SOFTWARE_NAMES } from "../../lib/software";
@@ -17,7 +16,7 @@ import type { PreparedLaunch } from "../serviceTypes";
 import { unlessMissing } from "../../service/failures";
 
 export async function prepareLaunch(ctx: Server): Promise<PreparedLaunch> {
-    const saved = await config.get<Record<string, unknown>>(PANEL_ID);
+    const saved = ctx.settings;
     let version = ctx.state.serverVersion;
     if (!version && typeof saved?.version === "string" && saved.version) {
         version = saved.version;
@@ -43,7 +42,7 @@ export async function prepareLaunch(ctx: Server): Promise<PreparedLaunch> {
     }
 
     const javaPath = await packageApi.getPath(javaPkg);
-    const serverDir = await fileApi.getPath("", PANEL_ID);
+    const serverDir = await ctx.root();
     const targetOs = (await system.getInfo()).os;
     const isWin = isWindowsTarget(serverDir, targetOs);
     // launch what the last install recorded; a pre-record install is a
@@ -52,7 +51,7 @@ export async function prepareLaunch(ctx: Server): Promise<PreparedLaunch> {
     const entry = launchEntryFile(launch, isWin);
     const softwareName = SOFTWARE_NAMES[minecraftSoftware(ctx.state.serverSoftware)];
     // fail here instead of a confusing "unable to access jarfile" exit
-    if (!(await fileApi.exists(entry, PANEL_ID))) {
+    if (!(await ctx.files.exists(entry, PANEL_ID))) {
         throw new Error(
             `${entry} is missing in the server folder — reinstall ${softwareName} ${version || ""} from Versions (or run Setup) before starting.`,
         );

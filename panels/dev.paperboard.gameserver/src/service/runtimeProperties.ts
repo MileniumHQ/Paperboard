@@ -1,6 +1,6 @@
 import type { Server } from "./server";
-import { processApi, updateSettings } from "./api";
-import { PANEL_ID, SERVER_PROC_ID, type GameServerState } from "./types";
+
+import { SERVER_PROC_ID } from "./types";
 import { applyPendingEdits } from "./pendingEdits";
 
 // Runtime-applicable server.properties values. Most keys (port, motd,
@@ -64,17 +64,17 @@ export async function applyRuntimeProperties(
     if (commands.length === 0) return;
     if (ctx.state.serverStatus === "online") {
         for (const command of commands) {
-            await processApi.write(SERVER_PROC_ID, `${command}\n`);
+            await ctx.process.write(SERVER_PROC_ID, `${command}\n`);
         }
     } else {
-        await persistPendingProperties(values);
+        await persistPendingProperties(ctx, values);
     }
 }
 
 // a missing config reads as null; a read that throws is unreadable state,
 // so the error propagates instead of overwriting the config with {}
-async function persistPendingProperties(values: Record<string, string>): Promise<void> {
-    await updateSettings((saved) => {
+async function persistPendingProperties(ctx: Server, values: Record<string, string>): Promise<void> {
+    await ctx.updateSettings((saved) => {
     const pending: Record<string, string> = {
         ...((saved.pendingProperties as Record<string, string> | undefined) ?? {}),
     };
@@ -96,8 +96,8 @@ async function persistPendingProperties(values: Record<string, string>): Promise
 }
 
 /** Sends the property edits made while the server was offline; throws why they were not. */
-export function applyPendingRuntimeProperties(): Promise<void> {
-    return applyPendingEdits("pendingProperties", (pending) => {
+export function applyPendingRuntimeProperties(ctx: Server): Promise<void> {
+    return applyPendingEdits(ctx, "pendingProperties", (pending) => {
         const values: Record<string, string> = {};
         if (typeof pending.difficulty === "string") values.difficulty = pending.difficulty;
         if (typeof pending.gamemode === "string") values.gamemode = pending.gamemode;

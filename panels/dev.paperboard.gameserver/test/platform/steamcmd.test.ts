@@ -5,6 +5,7 @@ import { fakeSteamcmd, steamcmdDir } from "../helpers/steamcmd";
 import { tempDir } from "../helpers/tmp";
 import { installApp, takeSelfUpdate } from "../../src/games/steam/steamcmd";
 import { runInstallerProcess } from "../../src/service/installerProcess";
+import { processApi } from "@mileniumhq/paperapi";
 
 let daemon: TestDaemon;
 beforeAll(async () => {
@@ -30,7 +31,7 @@ describe("SteamCMD's self-update", () => {
     });
 
     test("a SteamCMD that keeps updating itself, or fails to start, is reported instead of run", async () => {
-        const run = (r: Parameters<typeof runInstallerProcess>[0]) => runInstallerProcess(r);
+        const run = (r: Parameters<typeof runInstallerProcess>[0]) => runInstallerProcess(r, processApi);
         const home = tempDir();
         fakeSteamcmd({ selfUpdateOnce: true });
         await takeSelfUpdate(run, bootstrap(), home, "win32");

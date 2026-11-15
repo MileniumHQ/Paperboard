@@ -1,7 +1,8 @@
+import { minecraftOf } from "./state";
 import type { Server } from "../../service/server";
 import { minecraftSoftware } from "./index";
 import stripAnsi from "strip-ansi";
-import { processApi } from "../../service/api";
+
 import { chatId, parseChatMessage, parseLogLine } from "../../lib/logs";
 import { parseGameruleValue } from "../../core/gamerules";
 import { resolveVersionProfile } from "../../lib/versionProfile";
@@ -12,10 +13,9 @@ import { applyPendingGamerules } from "../../service/gamerules";
 import { applyPendingRuntimeProperties } from "../../service/runtimeProperties";
 import { report } from "../serviceKit";
 import { observeSavingLine } from "./saving";
-import { type GameServerState, SERVER_PROC_ID, appendCapped } from "../../service/types";
+import { SERVER_PROC_ID, appendCapped } from "../../service/types";
 import { TRIGGER_IDS } from "../../service/contract";
 import { noteCrashReport } from "../../service/automation";
-import { serverLocal } from "../../service/scope";
 /** What Minecraft prints when it crashes: its crash report, and its watchdog giving up on a frozen server. */
 const CRASH_LINES = ["This crash report has been saved to", "Considering it crashed, server will forcibly shutdown"];
 
@@ -23,13 +23,11 @@ const CRASH_LINES = ["This crash report has been saved to", "Considering it cras
 // console, but the same reply to one sent from the console (or an action)
 // is the answer that was asked for: each such command lets one reply of its
 // kind through, if it comes within a few seconds.
-type QueryKind = "list" | "gamerule" | "data";
+export type QueryKind = "list" | "gamerule" | "data";
 const QUERY_KINDS: readonly string[] = ["list", "gamerule", "data"];
 const ASKED_REPLY_MS = 10_000;
-const local = serverLocal(() => ({ asked: [] as { kind: QueryKind; at: number }[] }));
-
-function takeAsked(kind: QueryKind): boolean {
-    const asked = local().asked;
+function takeAsked(ctx: Server, kind: QueryKind): boolean {
+    const asked = minecraftOf(ctx).asked;
     const now = Date.now();
     while (asked.length && now - asked[0]!.at > ASKED_REPLY_MS) asked.shift();
     const index = asked.findIndex((entry) => entry.kind === kind);
@@ -49,7 +47,7 @@ export async function sendChatMessage(
         ctx.state.serverStatus === "online" ||
         ctx.state.serverStatus === "starting"
     ) {
-        await processApi.write(SERVER_PROC_ID, `say ${trimmed}\n`);
+        await ctx.process.write(SERVER_PROC_ID, `say ${trimmed}\n`);
     } else {
         const now = new Date();
         const timeStr = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}:${String(now.getSeconds()).padStart(2, "0")}`;
@@ -91,7 +89,7 @@ export function onReady(ctx: Server): void {
     // panel config, so running both at once puts back the other's edits.
     void (async () => {
         await applyPendingGamerules(ctx).catch((err) => report(ctx, "Gamerule edits made while the server was offline were not applied", err));
-        await applyPendingRuntimeProperties().catch((err) => report(ctx, "Difficulty and game mode edits made while the server was offline were not applied", err));
+        await applyPendingRuntimeProperties(ctx).catch((err) => report(ctx, "Difficulty and game mode edits made while the server was offline were not applied", err));
     })();
 }
 
@@ -110,7 +108,7 @@ export function observeLine(ctx: Server, line: string, final = false): void {
         ctx.setState({ serverPort: portMatch[1] });
     }
 
-    observeSavingLine(clean);
+    observeSavingLine(ctx, clean);
     trackPlayerActivity(ctx, clean);
     const statConsumed = handleStatResponse(ctx, clean);
     const positionConsumed = handlePositionResponse(ctx, clean);
@@ -128,7 +126,7 @@ export function observeLine(ctx: Server, line: string, final = false): void {
 
     const chat = parseChatMessage(line);
     // the server's own crash lines; a player saying them is chat, not a crash
-    if (!chat && CRASH_LINES.some((text) => clean.includes(text))) noteCrashReport();
+    if (!chat && CRASH_LINES.some((text) => clean.includes(text))) noteCrashReport(ctx);
     if (chat) {
         ctx.setState({
             chatMessages: appendCapped(ctx.state.chatMessages, chat),
@@ -156,18 +154,18 @@ export function observeLine(ctx: Server, line: string, final = false): void {
             extractDimension(clean) !== undefined ? "data"
         : undefined;
 
-    if (!pollKind || takeAsked(pollKind)) {
+    if (!pollKind || takeAsked(ctx, pollKind)) {
         ctx.setState({
             serverEntries: appendCapped(ctx.state.serverEntries, parseLogLine(line)),
         });
     }
 }
 
-export function commandLine(command: string): string {
+export function commandLine(ctx: Server, command: string): string {
     assertSingleLine(String(command), "console command", 500);
     const trimmed = command.trim();
     const line = trimmed.startsWith("/") ? trimmed.slice(1) : trimmed;
     const kind = line.split(/\s/, 1)[0]!.toLowerCase();
-    if (QUERY_KINDS.includes(kind)) local().asked.push({ kind: kind as QueryKind, at: Date.now() });
+    if (QUERY_KINDS.includes(kind)) minecraftOf(ctx).asked.push({ kind: kind as QueryKind, at: Date.now() });
     return `${line}\n`;
 }

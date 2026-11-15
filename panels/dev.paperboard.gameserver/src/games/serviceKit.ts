@@ -8,25 +8,13 @@ import { exists, unlessMissing } from "../service/failures";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { randomBytes } from "node:crypto";
-import { files, processApi, readSettings, updateSettings } from "../service/api";
 import { fileApi as rawFiles, problemsApi, secretsApi, errorMessage } from "@mileniumhq/paperapi";
-import { currentServer, serverLocal } from "../service/scope";
 import { TRIGGER_IDS } from "../service/contract";
-import { appendCapped, PANEL_ID, type ChatMessage, type ConsoleLine, type GameServerState } from "../service/types";
+import { appendCapped, PANEL_ID, type ChatMessage, type ConsoleLine } from "../service/types";
 import { chatId } from "../lib/logs";
 import type { GameDefinition, GameOptions } from "./types";
 import type { GameService, PortSpec } from "./serviceTypes";
-
-
-/** The current server's folder. */
-export const serverRoot = () => files.getPath("", PANEL_ID);
-export { exists, readSettings, unlessMissing, updateSettings };
-
-function serverId(game: string): string {
-    const id = currentServer()?.id;
-    if (!id) throw new Error(`${game} requires a server scope`);
-    return id;
-}
+export { exists, unlessMissing };
 
 /** A secret one server keeps in the vault, such as a join password. */
 export interface ServerSecret {
@@ -39,8 +27,8 @@ export interface ServerSecret {
     ensure(): Promise<string>;
 }
 /** `<server id>-<game id>-<name>` in the vault. */
-export function serverSecret(gameId: string, name: string): ServerSecret {
-    const key = () => `${serverId(gameId)}-${gameId}-${name}`;
+export function serverSecret(server: Server, gameId: string, name: string): ServerSecret {
+    const key = () => `${server.id}-${gameId}-${name}`;
     const secret: ServerSecret = {
         key,
         value: async () => (await secretsApi.get(key(), PANEL_ID)).value ?? "",
@@ -101,17 +89,16 @@ const PLAYER_POLL_MS = 5_000;
  * request is still out, and an answer a newer request or a stop replaced is
  * dropped, so a slow answer never rewinds the list or repeats a join.
  */
-export function playerPoller<P extends { name: string }>(spec: {
+export function playerPoller<P extends { name: string }>(ctx: Server, spec: {
     game: string;
     id(player: P): string;
     list(): Promise<P[]>;
     remember(players: P[]): Promise<void>;
 }) {
-    const local = serverLocal(() => ({ timer: null as ReturnType<typeof setInterval> | null, online: [] as P[], baseline: false, error: "", latest: 0, asking: false }));
+    const state = { timer: null as ReturnType<typeof setInterval> | null, online: [] as P[], baseline: false, error: "", latest: 0, asking: false };
     /** Asks now; resolves once the answer is in the state (or dropped). */
-    async function poll(ctx: Server): Promise<void> {
+    async function poll(): Promise<void> {
         if (ctx.state.serverStatus !== "online") return;
-        const state = local();
         const asked = ++state.latest;
         state.asking = true;
         let players: P[];
@@ -151,24 +138,22 @@ export function playerPoller<P extends { name: string }>(spec: {
         spec.remember(players).catch((err) => report(ctx, `Could not record ${spec.game}'s players`, err));
     }
     function stop() {
-        const state = local();
         if (state.timer) clearInterval(state.timer);
         Object.assign(state, { timer: null, online: [], baseline: false, error: "", latest: state.latest + 1, asking: false });
     }
     return {
         /** who answered online last */
-        online: (): readonly P[] => local().online,
+        online: (): readonly P[] => state.online,
         poll,
         /** `baseline`: the first answer is who was already there (a reattach), not who joined */
-        start(ctx: Server, baseline = false) {
-            const state = local();
+        start(baseline = false) {
             if (state.timer) return;
             state.baseline = baseline;
             state.timer = setInterval(() => {
                 if (ctx.state.serverStatus === "offline") stop();
-                else if (!local().asking) void poll(ctx);
+                else if (!state.asking) void poll();
             }, PLAYER_POLL_MS);
-            void poll(ctx);
+            void poll();
         },
         stop,
     };
@@ -283,12 +268,12 @@ export class ConsoleBuffer {
 }
 
 /** Ports a game keeps in its settings, as the Port API claims them. */
-export function settingPort(spec: { name: string; label: string; protocol: PortSpec["protocol"]; key: string; fallback: number; onWrite?(port: number): Promise<void> | void }, saved: Record<string, unknown>): PortSpec {
+export function settingPort(ctx: Server, spec: { name: string; label: string; protocol: PortSpec["protocol"]; key: string; fallback: number; onWrite?(port: number): Promise<void> | void }, saved: Record<string, unknown>): PortSpec {
     return {
         name: spec.name, label: spec.label, protocol: spec.protocol,
         preferred: Number(saved[spec.key] ?? spec.fallback),
         async write(port) {
-            await updateSettings({ [spec.key]: port });
+            await ctx.updateSettings({ [spec.key]: port });
             await spec.onWrite?.(port);
         },
     };
@@ -298,11 +283,11 @@ export function settingPort(spec: { name: string; label: string; protocol: PortS
  * The resume marker of an offline backup or restore. It lives outside the
  * server folder: a restored snapshot must never decide whether to restart.
  */
-const resumeMarker = (gameId: string) => rawFiles.getPath(`.${gameId}-resume/${serverId(gameId)}`, PANEL_ID);
+const resumeMarker = (ctx: Server, gameId: string) => rawFiles.getPath(`.${gameId}-resume/${ctx.id}`, PANEL_ID);
 
 /** Starts a server an offline backup stopped, once Paperboard is back. */
 export async function resumeAfterBackup(ctx: Server, gameId: string, running: boolean) {
-    const marker = await resumeMarker(gameId);
+    const marker = await resumeMarker(ctx, gameId);
     if (!(await exists(marker))) return;
     // lifecycle reaches every game's service, which import this module
     if (!running) await (await import("../service/lifecycle")).startServerInstance(ctx);
@@ -315,9 +300,9 @@ export interface OfflineBackupSpec {
     processId: string;
     flag: () => BusyFlag;
     /** Tells players the server is going down. */
-    announce(ctx: Server): Promise<void>;
+    announce(): Promise<void>;
     /** Saves the world and resolves once it is on disk. */
-    save(ctx: Server): Promise<void>;
+    save(): Promise<void>;
     /** Takes passwords out of files before they are copied; runs while stopped. */
     clean(): Promise<void>;
     /** When the game saves on exit, the stamp that must change for the exit to count. */
@@ -328,10 +313,10 @@ export interface OfflineBackupSpec {
  * then start again. A crash between them leaves the marker, which restarts
  * the server when Paperboard comes back.
  */
-export function offlineBackup(spec: OfflineBackupSpec): GameService["backup"] {
+export function offlineBackup(ctx: Server, spec: OfflineBackupSpec): GameService["backup"] {
     /** Starts the server again when this backup stopped it, and drops the marker. */
-    const recover = async (ctx: Server) => resumeAfterBackup(ctx, spec.gameId, await processApi.exists(spec.processId));
-    async function before(ctx: Server) {
+    const recover = async () => resumeAfterBackup(ctx, spec.gameId, await ctx.process.exists(spec.processId));
+    async function before() {
         const flag = spec.flag();
         if (flag.busy) throw new Error(`Wait for the ${spec.name} operation to finish`);
         if (ctx.state.serverStatus === "offline") { await spec.clean(); return; }
@@ -339,23 +324,23 @@ export function offlineBackup(spec: OfflineBackupSpec): GameService["backup"] {
         flag.busy = true;
         let marked = false;
         try {
-            await spec.announce(ctx);
-            await spec.save(ctx);
-            await writePrivate(await resumeMarker(spec.gameId), "resume after offline operation\n");
+            await spec.announce();
+            await spec.save();
+            await writePrivate(await resumeMarker(ctx, spec.gameId), "resume after offline operation\n");
             marked = true;
             const saved = await spec.exitStamp?.();
             await (await import("../service/lifecycle")).stopServerInstance(ctx);
-            await waitUntil(async () => !(await processApi.exists(spec.processId)), 125_000, `${spec.name} to exit`);
+            await waitUntil(async () => !(await ctx.process.exists(spec.processId)), 125_000, `${spec.name} to exit`);
             await spec.clean();
             if (saved !== undefined && (await spec.exitStamp!()) === saved) throw new Error(`${spec.name} exited without confirming its shutdown save; no backup was copied`);
         } catch (err) {
             // refused after it stopped: the server starts again, as the copy would have ended
             flag.busy = false;
-            if (marked) await recover(ctx).catch((startErr) => report(ctx, `${spec.name} could not start again after the refused backup`, startErr));
+            if (marked) await recover().catch((startErr) => report(ctx, `${spec.name} could not start again after the refused backup`, startErr));
             throw err;
         } finally { flag.busy = false; }
     }
-    return { mode: "offline", before, recover, async withConsistentData(ctx, work) { await before(ctx); return work(); } };
+    return { mode: "offline", before, recover, async withConsistentData(work) { await before(); return work(); } };
 }
 
 /**

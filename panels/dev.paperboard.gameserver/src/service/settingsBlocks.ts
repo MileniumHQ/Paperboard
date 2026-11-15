@@ -4,21 +4,18 @@
 // keeps to itself.
 import type { Server } from "./server";
 import type { BlockSet } from "@mileniumhq/paperapi";
-import type { GameServerState } from "./types";
-import { currentGame } from "../games/service";
 import { runGameCall } from "./blocks";
 import type { GameOption } from "../games/types";
 
-
 /** The options a block can read and set: every one the Options tab edits, its secrets left out. */
 function editableOptions(ctx: Server): GameOption[] {
-    const features = currentGame().describe({ software: ctx.state.serverSoftware, version: ctx.state.serverVersion, settings: ctx.state.gameSettings });
+    const features = ctx.definition.describe({ software: ctx.state.serverSoftware, version: ctx.state.serverVersion, settings: ctx.state.gameSettings });
     return features.options.filter((option) => option.kind !== "secret");
 }
 
 function optionNamed(ctx: Server, id: string): GameOption {
     const option = editableOptions(ctx).find((o) => o.id === id);
-    if (!option) throw new Error(`${currentGame().name} has no option "${id}" that blocks can change`);
+    if (!option) throw new Error(`${ctx.definition.name} has no option "${id}" that blocks can change`);
     return option;
 }
 

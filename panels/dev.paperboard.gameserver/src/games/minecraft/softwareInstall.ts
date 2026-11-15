@@ -1,7 +1,7 @@
 import type { Server } from "../../service/server";
 import { errorMessage } from "@mileniumhq/paperapi";
 import { exists } from "../../service/failures";
-import { serverLocal } from "../../service/scope";
+import { minecraftOf } from "./state";
 import * as nodeFs from "node:fs/promises";
 import * as nodePath from "node:path";
 import type { FileDownloadProgress } from "../../service/api";
@@ -21,9 +21,6 @@ import {
 import { InstallerStillRunningError, type InstallerResult, type InstallerRun } from "../../service/installerProcess";
 import { shouldRelayInstallProgress, toInstallProgress, type InstallProgress } from "../../service/installProgress";
 import { assertRecoverySettled } from "../../service/recoveryState";
-import type { GameServerState } from "../../service/types";
-
-const local = serverLocal(() => ({ running: false }));
 
 // Installs a server software for a Minecraft version: resolve the build,
 // download it (and run its installer when it has one) into a staging
@@ -59,8 +56,8 @@ export interface InstallOutcome {
 }
 
 /** True while an install owns the server folder; starting the server is refused. */
-export function isInstallRunning(): boolean {
-    return local().running;
+export function isInstallRunning(ctx: Server): boolean {
+    return minecraftOf(ctx).installing;
 }
 
 function fsOf(deps: InstallDeps): ActivationFs {
@@ -73,14 +70,15 @@ function fsOf(deps: InstallDeps): ActivationFs {
  * The claim is synchronous, so a caller that checks "offline" just before
  * cannot race a start.
  */
-export async function withInstallLock<T>(work: () => Promise<T>): Promise<T> {
-    assertRecoverySettled("installing");
-    if (local().running) throw new Error("A server install is already running");
-    local().running = true;
+export async function withInstallLock<T>(ctx: Server, work: () => Promise<T>): Promise<T> {
+    assertRecoverySettled(ctx, "installing");
+    const state = minecraftOf(ctx);
+    if (state.installing) throw new Error("A server install is already running");
+    state.installing = true;
     try {
         return await work();
     } finally {
-        local().running = false;
+        state.installing = false;
     }
 }
 
@@ -91,7 +89,7 @@ export function installServerSoftware(
     deps: InstallDeps,
     opts: { build?: string } = {},
 ): Promise<InstallOutcome> {
-    return withInstallLock(() => install(ctx, software, version, deps, opts.build));
+    return withInstallLock(ctx, () => install(ctx, software, version, deps, opts.build));
 }
 
 /** installServerSoftware for a caller already inside withInstallLock (a modpack install). */
@@ -102,7 +100,7 @@ export async function installServerSoftwareLocked(
     deps: InstallDeps,
     opts: { build?: string; configPatch?: Record<string, unknown> } = {},
 ): Promise<InstallOutcome> {
-    if (!local().running) throw new Error("installServerSoftwareLocked called without the install lock");
+    if (!isInstallRunning(ctx)) throw new Error("installServerSoftwareLocked called without the install lock");
     return install(ctx, software, version, deps, opts.build, opts.configPatch);
 }
 

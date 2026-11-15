@@ -1,5 +1,5 @@
 import type { Server } from "./server";
-import { config, files as fileApi, updateSettings, errorMessage } from "./api";
+import { errorMessage } from "./api";
 import { sanitizeFileName, listDirectory } from "./filesystem";
 import {
     buildWorldInfos,
@@ -11,7 +11,7 @@ import {
     type WorldInfo,
 } from "../core/worlds";
 import { parseProperties, extractLevelName, stringifyServerProperties } from "../core/properties";
-import { type GameServerState, PANEL_ID } from "./types";
+import { PANEL_ID } from "./types";
 import { makeTrashRemoveDeps } from "./trashDeps";
 import { trashRemovePathsWith } from "./trash";
 
@@ -29,9 +29,8 @@ const MAX_PENDING_WORLDS = 100;
 // one throws: listing it as "no created worlds" would hide them, and
 // writing over it would replace the whole panel config (software,
 // version, …) with just this list.
-async function readPendingWorlds(): Promise<string[]> {
-    const saved = await config.get<Record<string, unknown> | null>(PANEL_ID);
-    const list = saved?.pendingWorlds;
+async function readPendingWorlds(ctx: Server): Promise<string[]> {
+    const list = ctx.settings.pendingWorlds;
     if (!Array.isArray(list)) return [];
     return list.filter(
         (name): name is string =>
@@ -39,16 +38,16 @@ async function readPendingWorlds(): Promise<string[]> {
     );
 }
 
-async function writePendingWorlds(names: string[]): Promise<void> {
-    await updateSettings({ pendingWorlds: names.slice(0, MAX_PENDING_WORLDS) });
+async function writePendingWorlds(ctx: Server, names: string[]): Promise<void> {
+    await ctx.updateSettings({ pendingWorlds: names.slice(0, MAX_PENDING_WORLDS) });
 }
 
-export async function listWorldDirs(): Promise<string[]> {
-    const entries = await listDirectory("");
+export async function listWorldDirs(ctx: Server): Promise<string[]> {
+    const entries = await listDirectory(ctx, "");
     return collectWorldDirs({
         entries,
         sanitize: sanitizeFileName,
-        exists: (path) => fileApi.exists(path, PANEL_ID),
+        exists: (path) => ctx.files.exists(path, PANEL_ID),
     });
 }
 
@@ -59,10 +58,10 @@ export async function deleteActiveWorldDirs(
     // enforce offline here, at the owner, not only in the action that calls it
     assertServerOffline(ctx);
     // <level>, <level>_nether and <level>_the_end, trashed, never deleted
-    await trashRemovePathsWith(makeTrashRemoveDeps(), getWorldDirsToDelete(levelName));
-    const pending = await readPendingWorlds();
+    await trashRemovePathsWith(makeTrashRemoveDeps(ctx), getWorldDirsToDelete(levelName));
+    const pending = await readPendingWorlds(ctx);
     const next = pending.filter((n) => n.toLowerCase() !== levelName.toLowerCase());
-    if (next.length !== pending.length) await writePendingWorlds(next);
+    if (next.length !== pending.length) await writePendingWorlds(ctx, next);
 }
 
 // world mutations are offline-only: the server holds open handles on the
@@ -80,11 +79,11 @@ export function assertServerOffline(ctx: Server): void {
 // and which dimensions have generated data. Dimension presence is a
 // level.dat check per dimension — a world whose nether was never entered
 // honestly reports "not generated" instead of pretending.
-export async function listWorlds(): Promise<WorldInfo[]> {
+export async function listWorlds(ctx: Server): Promise<WorldInfo[]> {
     const [generated, active, pending] = await Promise.all([
-        listWorldDirs(),
-        resolveLevelName(),
-        readPendingWorlds(),
+        listWorldDirs(ctx),
+        resolveLevelName(ctx),
+        readPendingWorlds(ctx),
     ]);
     // prune names that have since generated, keeping the pending list bounded
     const generatedKeys = new Set(generated.map((name) => name.toLowerCase()));
@@ -93,7 +92,7 @@ export async function listWorlds(): Promise<WorldInfo[]> {
     // listing must say so instead of looking fine until the next read
     if (pendingOnly.length !== pending.length) {
         try {
-            await writePendingWorlds(pendingOnly);
+            await writePendingWorlds(ctx, pendingOnly);
         } catch (err) {
             const reason = errorMessage(err);
             throw new Error(`Couldn't save the list of created worlds: ${reason}`);
@@ -113,8 +112,8 @@ export async function listWorlds(): Promise<WorldInfo[]> {
             .filter((info) => info.generated)
             .map(async (info) => {
                 const [nether, end] = await Promise.all([
-                    fileApi.exists(`${info.name}_nether/level.dat`, PANEL_ID),
-                    fileApi.exists(`${info.name}_the_end/level.dat`, PANEL_ID),
+                    ctx.files.exists(`${info.name}_nether/level.dat`, PANEL_ID),
+                    ctx.files.exists(`${info.name}_the_end/level.dat`, PANEL_ID),
                 ]);
                 info.hasNether = nether;
                 info.hasEnd = end;
@@ -141,7 +140,7 @@ export async function setActiveWorld(
     createOnly = false,
 ): Promise<SetActiveWorldResult> {
     assertServerOffline(ctx);
-    const [existing, active] = await Promise.all([listWorldDirs(), resolveLevelName()]);
+    const [existing, active] = await Promise.all([listWorldDirs(ctx), resolveLevelName(ctx)]);
     const plan = planWorldActivation(levelName, existing, active);
     if (plan.kind === "noop-active") {
         if (createOnly) {
@@ -164,17 +163,17 @@ export async function setActiveWorld(
 
     // an unreadable file fails the switch: writing "fresh" over it would
     // drop every other setting the server had
-    const content = await fileApi.read("server.properties", PANEL_ID);
+    const content = await ctx.files.read("server.properties", PANEL_ID);
     const props = content ? parseProperties(content) : {};
     props["level-name"] = plan.name;
     if (plan.kind === "create") {
         props["level-seed"] = cleanSeed;
     }
-    await fileApi.write("server.properties", stringifyServerProperties(props), PANEL_ID);
+    await ctx.files.write("server.properties", stringifyServerProperties(props), PANEL_ID);
     if (plan.kind === "create") {
-        const pending = await readPendingWorlds();
+        const pending = await readPendingWorlds(ctx);
         if (!pending.some((n) => n.toLowerCase() === plan.name.toLowerCase())) {
-            await writePendingWorlds([...pending, plan.name]);
+            await writePendingWorlds(ctx, [...pending, plan.name]);
         }
     }
     return { activated: plan.name, created: plan.kind === "create" };
@@ -186,10 +185,10 @@ export async function setActiveWorld(
 // unreadable file throws: guessing "world" would point a reset, a player
 // delete or an export at a world the server isn't using. A present but
 // shell-unsafe name refuses loudly instead of deleting the wrong directory.
-export async function resolveLevelName(): Promise<string> {
+export async function resolveLevelName(ctx: Server): Promise<string> {
     let content: string | null;
     try {
-        content = await fileApi.read("server.properties", PANEL_ID);
+        content = await ctx.files.read("server.properties", PANEL_ID);
     } catch (err) {
         const reason = errorMessage(err);
         throw new Error(`Couldn't read server.properties to find the active world: ${reason}`);

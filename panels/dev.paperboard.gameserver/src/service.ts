@@ -20,13 +20,11 @@ import {
     type StoredServer,
 } from "./servers";
 import * as nodeFs from "node:fs/promises";
-import { inServer } from "./service/scope";
 import { Server } from "./service/server";
-import type { ServerCalls } from "./service/calls";
 import { announceChanges, bindBlocks, fireBackupEnded, fireTrigger, mergeBlocks, serverOperation, sharedBlocks, sharedTypes } from "./service/blocks";
 import { SERVER_EVENTS, serverType, serversBlocks, type ServersBlocksHost } from "./service/serversBlocks";
 import { errorMessage } from "@mileniumhq/paperapi";
-import { type GameServerState, appendCapped } from "./service/types";
+import { appendCapped } from "./service/types";
 import { SERVERS_CALLS, gameServerContract, type CallName, type ServerSummary } from "./service/contract";
 import type { GameContractCalls } from "./games/serviceTypes";
 import { pictureCall } from "./service/pictures";
@@ -163,9 +161,9 @@ async function onServer<T>(id: unknown, name: CallName, work: (server: Server) =
     }, name);
     server.activeOperations++;
     try {
-        const result = await inServer(server, () => work(server));
+        const result = await work(server);
         if (ICON_CALLS.includes(name)) {
-            server.icon = await inServer(server, () => server.game.readIcon?.() ?? null);
+            server.icon = (await server.game.readIcon?.()) ?? null;
             publish();
             await server.blocks?.update(blocksProject(server));
         }
@@ -235,7 +233,7 @@ async function initialize(server: Server): Promise<Server> {
         await nodeFs.mkdir(await fileApi.getPath(server.stored.directory, PANEL_ID), { recursive: true });
         server.blocks = await blocksApi.defineProject({ id: server.id, ...blocksProject(server) }, PANEL_ID);
         const blocks = server.blocks;
-        await inServer(server, async () => blocks.register(bindBlocks(server, mergeBlocks(sharedBlocks(server), settingsBlocks(server), await game.blocks?.(server)))));
+        await blocks.register(bindBlocks(server, mergeBlocks(sharedBlocks(server), settingsBlocks(server), await game.blocks?.())));
         let wasRunning = false;
         let onlineSince: number | null = null;
         try {
@@ -248,37 +246,35 @@ async function initialize(server: Server): Promise<Server> {
             console.error(`[gameserver] the console history of ${server.name} could not be read:`, err);
             server.setState({ serverEntries: [{ type: "error", content: `[Server] The saved console history could not be read: ${errorMessage(err)}` }] });
         }
-        await inServer(server, async () => {
-            // A server left running keeps its identity and directory on migration.
-            // Recovery must never modify that running process's files.
-            const running = await server.process.exists(game.primaryProcessId);
-            // a server left running has been online since its history says; one whose history
-            // predates that record counts from now
-            if (running) server.setState({ serverStatus: "online", ...(onlineSince === null ? {} : { onlineSince }) });
-            server.unsubscribe.push(
-                server.process.onData(game.primaryProcessId, (chunk) => inServer(server, () => handleProcessData(server, chunk))),
-                server.process.onExit(game.primaryProcessId, (code) => inServer(server, () => handleProcessExit(server, code))),
-            );
-            await loadServerOptions(server);
-            const automation = await readAutomation();
-            scheduleDailyRestart(server, restartServerInstance);
-            scheduleUpdateChecks(server, restartServerInstance);
-            await game.initialize(server, running);
-            server.icon = (await game.readIcon?.()) ?? null;
-            // the server runs either way; only the Blocks Library keeps the game's art
-            if (server.icon) {
-                await blocks.update(blocksProject(server)).catch((err) => report(server, "The Blocks Library can't show this server's icon", err));
-            }
-            // the server was running when this service last saw it and nobody
-            // stopped it: it went down while Paperboard was not watching (the
-            // computer restarted, or the system ended it), which is a crash
-            if (wasRunning && !running) {
-                const restart = automation.restartAfterCrash;
-                server.setState((prev) => ({ serverEntries: appendCapped(prev.serverEntries, { type: "warn", content: `[Server] The server stopped while Paperboard was not running.${restart ? " Starting it again." : ""}` }) }));
-                // quiet: startServerInstance puts its own failure in the console
-                if (restart) void startServerInstance(server).catch((err) => console.error(`[gameserver] ${server.name} could not start again:`, err));
-            }
-        });
+        // A server left running keeps its identity and directory on migration.
+        // Recovery must never modify that running process's files.
+        const running = await server.process.exists(game.primaryProcessId);
+        // a server left running has been online since its history says; one whose history
+        // predates that record counts from now
+        if (running) server.setState({ serverStatus: "online", ...(onlineSince === null ? {} : { onlineSince }) });
+        server.unsubscribe.push(
+            server.process.onData(game.primaryProcessId, (chunk) => handleProcessData(server, chunk)),
+            server.process.onExit(game.primaryProcessId, (code) => handleProcessExit(server, code)),
+        );
+        await loadServerOptions(server);
+        const automation = readAutomation(server);
+        scheduleDailyRestart(server, restartServerInstance);
+        scheduleUpdateChecks(server, restartServerInstance);
+        await game.initialize(running);
+        server.icon = (await game.readIcon?.()) ?? null;
+        // the server runs either way; only the Blocks Library keeps the game's art
+        if (server.icon) {
+            await blocks.update(blocksProject(server)).catch((err) => report(server, "The Blocks Library can't show this server's icon", err));
+        }
+        // the server was running when this service last saw it and nobody
+        // stopped it: it went down while Paperboard was not watching (the
+        // computer restarted, or the system ended it), which is a crash
+        if (wasRunning && !running) {
+            const restart = automation.restartAfterCrash;
+            server.setState((prev) => ({ serverEntries: appendCapped(prev.serverEntries, { type: "warn", content: `[Server] The server stopped while Paperboard was not running.${restart ? " Starting it again." : ""}` }) }));
+            // quiet: startServerInstance puts its own failure in the console
+            if (restart) void startServerInstance(server).catch((err) => console.error(`[gameserver] ${server.name} could not start again:`, err));
+        }
         return server;
     } catch (err) {
         server.setState((prev) => ({
@@ -291,7 +287,9 @@ async function initialize(server: Server): Promise<Server> {
 /** Ends what a server's setup started: its subscriptions, timers and its game's own work. */
 async function dispose(server: Server): Promise<void> {
     for (const off of server.unsubscribe.splice(0)) off();
-    await inServer(server, async () => { cancelReadiness(); cancelAutomation(); await server.game.dispose(); });
+    cancelReadiness(server);
+    cancelAutomation(server);
+    await server.game.dispose();
 }
 /** Sets up a server whose setup failed again, from nothing: what the failed setup started is undone first. */
 function retryInitialize(id: unknown): Promise<void> {
@@ -359,13 +357,11 @@ function removeServer(id: unknown): Promise<void> {
             );
         server.removing = true;
         try {
-            await inServer(server, async () => {
-                await server.game.beforeRemove();
-                await stopServerInstance(server);
-                await waitUntil(async () => !(await server.process.exists(server.game.primaryProcessId)), 40_000, "the server to stop; its files and entry were kept");
-                // Keep its directory and backups; removal never deletes user data.
-                for (const name of server.game.portNames) await server.ports.release(name);
-            });
+            await server.game.beforeRemove();
+            await stopServerInstance(server);
+            await waitUntil(async () => !(await server.process.exists(server.game.primaryProcessId)), 40_000, "the server to stop; its files and entry were kept");
+            // Keep its directory and backups; removal never deletes user data.
+            for (const name of server.game.portNames) await server.ports.release(name);
             // a setup that failed may have made neither
             if (server.backupSource) await server.backups.setSchedule(null);
             await server.blocks?.remove();
@@ -510,7 +506,7 @@ export const gameServerService = definePanelService({
             if (server.state.serverStatus === "restarting")
                 throw new Error(`${server.name} is restarting; update once it's back online`);
             server.setState((prev) => ({ serverEntries: appendCapped(prev.serverEntries, { type: "info", content: "[Server] Stopping for an update..." }) }));
-            await inServer(server, () => stopServerInstance(server));
+            await stopServerInstance(server);
             await waitUntil(async () => !(await server.process.exists(server.game.primaryProcessId)), 90_000, `${server.name} to stop`);
         }
     },
@@ -520,7 +516,7 @@ export const gameServerService = definePanelService({
                 ? { type: "info" as const, content: "[Server] Updated. Starting again." }
                 : { type: "warn" as const, content: `[Server] The update failed, so nothing changed: ${error ?? "no reason given"}. Starting again.` };
             // quiet: startServerInstance puts its own failure in the console
-            await inServer(server, () => startServerInstance(server, [why])).catch((err) =>
+            await startServerInstance(server, [why]).catch((err) =>
                 console.error(`[gameserver] ${server.name} could not start again after the update:`, err),
             );
         }
@@ -528,7 +524,7 @@ export const gameServerService = definePanelService({
     async beforeRestore(_ctx, { sourceId }) {
         const selected = sourceId === undefined ? [...entries.values()] : [requireServer(sourceId)];
         for (const server of selected)
-            if (server.game.backup.mode === "offline") await inServer(server, () => server.game.backup.before(server));
+            if (server.game.backup.mode === "offline") await server.game.backup.before();
     },
     // a server's backup fires its Blocks events; a backup of the whole panel is no one server's
     afterBackup(_ctx, ended) {
@@ -540,12 +536,12 @@ export const gameServerService = definePanelService({
         try {
             const selected = sourceId === undefined ? [...entries.values()] : [requireServer(sourceId)];
             for (const server of selected) {
-                await inServer(server, () => server.game.backup.before(server));
+                await server.game.backup.before();
                 paused.push(server);
             }
         } catch (err) {
             for (const server of paused) {
-                await inServer(server, () => server.game.backup.recover(server)).catch((recoverErr) =>
+                await server.game.backup.recover().catch((recoverErr) =>
                     report(server, "Could not undo the preparation for the refused backup", recoverErr));
             }
             throw err;

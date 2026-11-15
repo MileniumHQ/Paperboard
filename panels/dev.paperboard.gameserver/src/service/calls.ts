@@ -1,15 +1,13 @@
 import type { Server } from "./server";
 import { assertSingleLine } from "../core/players";
-import { files as fileApi } from "./api";
-import type { GameServerState } from "./types";
-import { PANEL_ID, type CallName } from "./contract";
+
+import { type CallName } from "./contract";
 import { startServerInstance, stopServerInstance, restartServerInstance, sendServerCommand, sendChatMessage } from "./lifecycle";
 import { listServerFiles, readServerFile, writeServerFile } from "./serverFiles";
 import { listLogFiles, readLogFile } from "./logs";
-import { currentGameService } from "../games/service";
 import { loadServerOptions } from "./options";
 import { automationView, readAutomation, writeAutomation } from "./automation";
-const loaderDeps = { serverDir: () => fileApi.getPath("", PANEL_ID) };
+const loaderDeps = (ctx: Server) => ({ serverDir: () => ctx.root() });
 /** Says a message in the game's chat; one line, so it can't carry a second console command. */
 export async function sayInChat(ctx: Server, message: unknown): Promise<string> {
     const msg = assertSingleLine(String(message ?? "").trim(), "chat message", 500);
@@ -26,10 +24,10 @@ export type ServerCall = (ctx: Server, input: any) => unknown;
 export type ServerCalls = Partial<Record<CallName, ServerCall>>;
 
 export const sharedCalls: ServerCalls = {
-    readAutomation: async () => automationView(await readAutomation()),
+    readAutomation: async (ctx) => automationView(ctx, readAutomation(ctx)),
     writeAutomation: async (ctx: Server, input: { patch: Record<string, unknown> }) => {
         if (!input?.patch || typeof input.patch !== "object" || Array.isArray(input.patch)) throw new Error("Give the automation settings to change");
-        return automationView(await writeAutomation(ctx, input.patch, restartServerInstance));
+        return automationView(ctx, await writeAutomation(ctx, input.patch, restartServerInstance));
     },
     runCommand: async (
         ctx: Server,
@@ -40,7 +38,7 @@ export const sharedCalls: ServerCalls = {
         return `Executed: ${cmd}`;
     },
     saveWorld: async (ctx: Server) => {
-        await currentGameService().saveWorld(ctx);
+        await ctx.game.saveWorld();
         return true;
     },
     startServer: async (ctx: Server) => {
@@ -65,20 +63,20 @@ export const sharedCalls: ServerCalls = {
     ) => {
         return sayInChat(ctx, inputs?.message);
     },
-    listServerFiles: async (_ctx: Server, inputs: { path?: string }) =>
-        listServerFiles(inputs?.path ?? "", loaderDeps),
-    readServerFile: async (_ctx: Server, inputs: { path?: string }) =>
-        (await currentGameService().assertFileAccess?.(_ctx, inputs?.path, false), readServerFile(inputs?.path, loaderDeps)),
+    listServerFiles: async (ctx: Server, inputs: { path?: string }) =>
+        listServerFiles(inputs?.path ?? "", loaderDeps(ctx)),
+    readServerFile: async (ctx: Server, inputs: { path?: string }) =>
+        (await ctx.game.assertFileAccess?.(inputs?.path, false), readServerFile(inputs?.path, loaderDeps(ctx))),
     writeServerFile: async (
         ctx: Server,
         inputs: { path?: string; text?: string; version?: string },
     ) => {
-        if (currentGameService().isMutating()) {
+        if (ctx.game.isMutating()) {
             throw new Error("A server install is running; save files once it finishes.");
         }
-        await currentGameService().assertFileAccess?.(ctx, inputs?.path, true);
+        await ctx.game.assertFileAccess?.(inputs?.path, true);
         const running = ctx.state.serverStatus !== "offline";
-        return writeServerFile(inputs?.path, inputs?.text, inputs?.version, running, loaderDeps);
+        return writeServerFile(inputs?.path, inputs?.text, inputs?.version, running, loaderDeps(ctx));
     },
     listLogFiles: async (ctx: Server) => {
         return listLogFiles(ctx);

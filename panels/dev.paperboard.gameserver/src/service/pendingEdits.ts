@@ -1,5 +1,6 @@
-import { config, processApi, updateSettings } from "./api";
-import { PANEL_ID, SERVER_PROC_ID } from "./types";
+import type { Server } from "./server";
+
+import { SERVER_PROC_ID } from "./types";
 
 /**
  * Sends the console edits saved under `key` while the server was offline,
@@ -8,10 +9,9 @@ import { PANEL_ID, SERVER_PROC_ID } from "./types";
  * user-editable and these strings become console commands) and throws to
  * refuse them. Any failure throws and the edits stay saved for the next boot.
  */
-export async function applyPendingEdits(key: string, commands: (pending: Record<string, unknown>) => string[]): Promise<void> {
-    const saved = await config.get<Record<string, unknown> | null>(PANEL_ID);
-    const pending = saved?.[key];
+export async function applyPendingEdits(ctx: Server, key: string, commands: (pending: Record<string, unknown>) => string[]): Promise<void> {
+    const pending = ctx.settings[key];
     if (!pending || typeof pending !== "object" || Object.keys(pending).length === 0) return;
-    for (const line of commands(pending as Record<string, unknown>)) await processApi.write(SERVER_PROC_ID, `${line}\n`);
-    await updateSettings({ [key]: {} });
+    for (const line of commands(pending as Record<string, unknown>)) await ctx.process.write(SERVER_PROC_ID, `${line}\n`);
+    await ctx.updateSettings({ [key]: {} });
 }

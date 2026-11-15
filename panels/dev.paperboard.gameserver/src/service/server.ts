@@ -144,6 +144,10 @@ export class Server {
     get backups() {
         return backupApi.forSource(PANEL_ID, this.id);
     }
+    /** its folder, as a path on this computer */
+    root(): Promise<string> {
+        return this.files.getPath("", PANEL_ID);
+    }
     /** a process of the server's game as the daemon knows it */
     processId(id: string): string {
         return this.legacy || !this.game.processIds.includes(id) ? id : `${this.id}-${id}`;

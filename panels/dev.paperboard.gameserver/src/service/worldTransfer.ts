@@ -1,12 +1,12 @@
+import { minecraftOf } from "../games/minecraft/state";
 import type { Server } from "./server";
 import { unlessMissing } from "./failures";
-import { serverLocal } from "./scope";
 import * as nodeFs from "node:fs/promises";
 import * as nodePath from "node:path";
 import { randomUUID } from "node:crypto";
 import type { UnzipFile } from "fflate";
 import { loadZip } from "../core/lazy";
-import { files as fileApi, errorMessage } from "./api";
+import { errorMessage } from "./api";
 import {
     DIMENSION_SUFFIXES,
     MAX_WORLD_EXPORT_BYTES,
@@ -21,9 +21,6 @@ import {
 import { assertShellSafeLevelName } from "../core/worlds";
 import { withSavingPaused } from "../games/minecraft/saving";
 import { resolveLevelName } from "./worlds";
-import { PANEL_ID, type GameServerState } from "./types";
-
-const local = serverLocal(() => ({ running: false }));
 
 // Worlds as zip files: a download zips a world's folders into the transfer
 // folder for the page to export; an upload is a zip the page imported
@@ -32,17 +29,17 @@ const local = serverLocal(() => ({ running: false }));
 
 const READ_CHUNK = 64 * 1024;
 
-async function exclusive<T>(work: () => Promise<T>): Promise<T> {
-    if (local().running) throw new Error("Another world upload or download is running");
-    local().running = true;
+async function exclusive<T>(ctx: Server, work: () => Promise<T>): Promise<T> {
+    if (minecraftOf(ctx).transferring) throw new Error("Another world upload or download is running");
+    minecraftOf(ctx).transferring = true;
     try {
         return await work();
     } finally {
-        local().running = false;
+        minecraftOf(ctx).transferring = false;
     }
 }
 
-const serverDir = () => fileApi.getPath("", PANEL_ID);
+const serverDir = (ctx: Server) => ctx.root();
 
 /** a file the page gave or will take, by bare name, inside the transfer folder */
 function transferFile(root: string, name: unknown): string {
@@ -77,9 +74,9 @@ async function listFiles(root: string, folder: string): Promise<string[]> {
  * the copy when it is the world being played.
  */
 export function exportWorld(ctx: Server, levelName: unknown): Promise<{ file: string; bytes: number }> {
-    return exclusive(async () => {
+    return exclusive(ctx, async () => {
         const name = assertShellSafeLevelName(levelName);
-        const root = await serverDir();
+        const root = await serverDir(ctx);
         const folders: string[] = [];
         for (const suffix of DIMENSION_SUFFIXES) {
             const stat = await unlessMissing(nodeFs.lstat(nodePath.join(root, `${name}${suffix}`)), null);
@@ -90,7 +87,7 @@ export function exportWorld(ctx: Server, levelName: unknown): Promise<{ file: st
         await nodeFs.mkdir(nodePath.join(root, WORLD_TRANSFER_DIR), { recursive: true });
         const file = `${name.replace(/[^A-Za-z0-9_-]/g, "_")}.zip`;
         const target = transferFile(root, file);
-        const active = (await resolveLevelName()).toLowerCase() === name.toLowerCase();
+        const active = (await resolveLevelName(ctx)).toLowerCase() === name.toLowerCase();
         const copy = () => writeZip(root, folders, target);
         try {
             const bytes = await (active ? withSavingPaused(ctx, copy) : copy());
@@ -157,8 +154,8 @@ export async function writeZip(root: string, folders: string[], target: string):
 }
 
 /** removes a transfer file the page is done with */
-export async function discardWorldTransfer(file: unknown): Promise<void> {
-    await nodeFs.rm(transferFile(await serverDir(), file), { force: true });
+export async function discardWorldTransfer(ctx: Server, file: unknown): Promise<void> {
+    await nodeFs.rm(transferFile(await serverDir(ctx), file), { force: true });
 }
 
 /**
@@ -166,9 +163,9 @@ export async function discardWorldTransfer(file: unknown): Promise<void> {
  * named `name`. Nothing of an existing world is touched: a name already
  * used is refused, and the folders appear only once fully written.
  */
-export function importWorld(file: unknown, requestedName: unknown): Promise<{ name: string; folders: string[] }> {
-    return exclusive(async () => {
-        const root = await serverDir();
+export function importWorld(ctx: Server, file: unknown, requestedName: unknown): Promise<{ name: string; folders: string[] }> {
+    return exclusive(ctx, async () => {
+        const root = await serverDir(ctx);
         const archive = transferFile(root, file);
         const name = String(requestedName ?? "").trim();
         try {

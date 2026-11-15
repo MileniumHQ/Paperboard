@@ -1,6 +1,6 @@
 import type { Server } from "./server";
 import { minecraftSoftware } from "../games/minecraft/index";
-import { processApi, updateSettings } from "./api";
+
 import {
     assertGameruleName,
     assertGameruleValue,
@@ -13,7 +13,7 @@ import {
     serverGameruleValue,
     type VersionProfile,
 } from "../lib/versionProfile";
-import { PANEL_ID, SERVER_PROC_ID, type GameServerState } from "./types";
+import { SERVER_PROC_ID } from "./types";
 import { applyPendingEdits } from "./pendingEdits";
 
 // gamerule truth comes from the running server, not from registry
@@ -43,12 +43,12 @@ export async function setGamerule(
 
     if (ctx.state.serverStatus === "online") {
         // a write the console refused fails the call: no readout would ever correct it
-        await processApi.write(SERVER_PROC_ID, `gamerule ${serverName} ${serverValue}\n`);
+        await ctx.process.write(SERVER_PROC_ID, `gamerule ${serverName} ${serverValue}\n`);
     } else {
         // offline edits must never look applied-and-dropped: they persist
         // in panel config and re-apply the next time the server boots, and
         // an edit that could not be saved fails the call that made it
-        await persistPendingGamerule(name, value);
+        await persistPendingGamerule(ctx, name, value);
     }
 
     // optimistic truth until the server's readout corrects it
@@ -58,8 +58,8 @@ export async function setGamerule(
     return true;
 }
 
-async function persistPendingGamerule(name: string, value: string): Promise<void> {
-    await updateSettings((saved) => ({
+async function persistPendingGamerule(ctx: Server, name: string, value: string): Promise<void> {
+    await ctx.updateSettings((saved) => ({
         ...saved,
         pendingGamerules: { ...((saved.pendingGamerules as Record<string, string> | undefined) ?? {}), [name]: value },
     }));
@@ -78,7 +78,7 @@ export async function queryGamerules(
     const known = names.filter(isKnownGameruleName).slice(0, MAX_GAMERULE_WRITES);
     // the tab waits on these readouts: a write the console refused fails the call
     for (const name of known) {
-        await processApi.write(SERVER_PROC_ID, `gamerule ${serverGameruleName(profile, name)}\n`);
+        await ctx.process.write(SERVER_PROC_ID, `gamerule ${serverGameruleName(profile, name)}\n`);
     }
     return true;
 }
@@ -86,7 +86,7 @@ export async function queryGamerules(
 /** Sends the gamerule edits made while the server was offline; throws why they were not. */
 export function applyPendingGamerules(ctx: Server): Promise<void> {
     const profile = profileFor(ctx);
-    return applyPendingEdits("pendingGamerules", (pending) => {
+    return applyPendingEdits(ctx, "pendingGamerules", (pending) => {
         const entries = Object.entries(pending);
         if (entries.length > MAX_GAMERULE_WRITES) throw new Error(`${entries.length} saved gamerule edits is more than the ${MAX_GAMERULE_WRITES} a boot sends`);
         return entries.map(([name, value]) => {

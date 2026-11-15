@@ -22,7 +22,7 @@ afterAll(async () => {
 const linux = process.platform === "linux";
 const ids = SOURCE_CALLS;
 const BANNED = "[U:1:24691]";
-const command = (server: GameServer, line: string) => server.run(() => sendServerCommand(server.server, line));
+const command = (server: GameServer, line: string) => sendServerCommand(server.server, line);
 const consoleOf = (server: GameServer) => server.server.state.serverEntries.map((e) => String(e.content));
 const commands = (server: GameServer) => fs.readFileSync(path.join(server.dir, "install", "commands.txt"), "utf8").split("\n").filter(Boolean);
 const said = (server: GameServer, text: string, what: string) => server.server.waitFor((s) => s.serverEntries.some((e) => String(e.content).includes(text)), what);
@@ -32,7 +32,7 @@ describe("Counter-Strike 2", () => {
     test.skipIf(!linux)("the server is driven through its console: passwords stay out of sight, a banned player is put out as they join, chat, kicks and map changes are read back, and time on survives a failed save", async () => {
         const server = await cs2Server();
         await call(server, "writeGameOptions", { patch: { password: "join-Secret-1", token: "token-Secret-1", gamemode: "casual", bot_quota: 2 } });
-        await server.run(() => startServerInstance(server.server));
+        await startServerInstance(server.server);
         await server.server.waitFor((s) => s.serverStatus === "online", "Counter-Strike 2 to say its map is running");
         expect(server.server.state.serverLevel).toBe("de_dust2");
         expect(server.server.state.maxPlayers).toBe(10);
@@ -53,7 +53,7 @@ describe("Counter-Strike 2", () => {
         await expect(command(server, "sv_setsteamaccount stolen")).rejects.toThrow("Paperboard keeps the server's passwords");
         await expect(command(server, "status\nquit")).rejects.toThrow();
 
-        await server.run(() => sendChatMessage(server.server, "hello everyone"));
+        await sendChatMessage(server.server, "hello everyone");
         await server.server.waitFor((s) => s.chatMessages.some((m) => m.event === "server" && m.content === "hello everyone"), "the console's chat line");
 
         // a player joins, is counted, and is kicked by the server's id for them
@@ -96,7 +96,7 @@ describe("Counter-Strike 2", () => {
         await server.server.waitFor(() => commands(server).includes("mp_autoteambalance 0"), "the live option");
 
         const exit = server.nextExit();
-        await server.run(() => stopServerInstance(server.server));
+        await stopServerInstance(server.server);
         expect(await exit).toBe(0);
         expect(commands(server).at(-1)).toBe("quit");
         const seen = JSON.parse(fs.readFileSync(path.join(server.dir, "players.json"), "utf8")) as { steamId: string; playtime?: number }[];

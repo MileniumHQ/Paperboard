@@ -1,6 +1,6 @@
 import fs from "node:fs/promises";
 import path from "node:path";
-import { fileApi as rawFiles, SerialQueue } from "@mileniumhq/paperapi";
+import { fileApi as rawFiles, processApi, SerialQueue } from "@mileniumhq/paperapi";
 import { packages as packageApi } from "../../service/api";
 import { PANEL_ID } from "../../service/types";
 import { runInstallerProcess, stopLeftoverInstaller, type InstallerRun } from "../../service/installerProcess";
@@ -114,9 +114,9 @@ export function downloadWorkshopItems(appId: number, ids: readonly string[], opt
         await fs.mkdir(target, { recursive: true });
         // a service restart can leave a run behind; it holds the workspace. A
         // runner handed in owns its own processes
-        if (!options.runner) await stopLeftoverInstaller(undefined, undefined, undefined, STEAMCMD_PROC_ID);
+        if (!options.runner) await stopLeftoverInstaller(processApi, undefined, undefined, STEAMCMD_PROC_ID);
         const lines: string[] = [];
-        const run = options.runner ?? ((r: InstallerRun) => runInstallerProcess(r));
+        const run = options.runner ?? ((r: InstallerRun) => runInstallerProcess(r, processApi));
         await takeSelfUpdate(run, command, home);
         const result = await run({
             id: STEAMCMD_PROC_ID,
@@ -258,8 +258,8 @@ export function latestBuild(appId: number, options: { runner?: Runner; workspace
     const branch = branchName(options.branch);
     return serialized(async () => {
         const { command, home } = await prepare(options.workspace);
-        if (!options.runner) await stopLeftoverInstaller(undefined, undefined, undefined, STEAMCMD_PROC_ID);
-        const run = options.runner ?? ((r: InstallerRun) => runInstallerProcess(r));
+        if (!options.runner) await stopLeftoverInstaller(processApi, undefined, undefined, STEAMCMD_PROC_ID);
+        const run = options.runner ?? ((r: InstallerRun) => runInstallerProcess(r, processApi));
         await takeSelfUpdate(run, command, home);
         const lines: string[] = [];
         const result = await run({
@@ -294,8 +294,8 @@ export function installApp(appId: number, dir: string, options: { onProgress?: (
     return serialized(async () => {
         const { command, home } = await prepare(options.workspace);
         await fs.mkdir(dir, { recursive: true });
-        if (!options.runner) await stopLeftoverInstaller(undefined, undefined, undefined, STEAMCMD_PROC_ID);
-        const run = options.runner ?? ((r: InstallerRun) => runInstallerProcess(r));
+        if (!options.runner) await stopLeftoverInstaller(processApi, undefined, undefined, STEAMCMD_PROC_ID);
+        const run = options.runner ?? ((r: InstallerRun) => runInstallerProcess(r, processApi));
         await takeSelfUpdate(run, command, home);
         const attempt = async () => {
             const lines: string[] = [];

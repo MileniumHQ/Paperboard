@@ -1,7 +1,5 @@
-import { serverLocal } from "./scope";
+import type { SerialQueue } from "@mileniumhq/paperapi";
 import { UPLOAD_RECORDS_KEY, parseUploadRecords } from "../core/addonUpload";
-
-const local = serverLocal(() => ({ recordsQueue: Promise.resolve() as Promise<unknown> }));
 
 // Which paths below the server folder the user uploaded, kept in the panel's
 // config. Uploaded files have no Modrinth record; this is how the lists tell.
@@ -9,26 +7,20 @@ const local = serverLocal(() => ({ recordsQueue: Promise.resolve() as Promise<un
 export interface UploadRecordDeps {
     readConfig(): Promise<Record<string, unknown>>;
     writeConfig(patch: Record<string, unknown>): Promise<void>;
+    /** runs a records write after the ones before it: two quick uploads must not both read the old records */
+    records: SerialQueue["run"];
 }
-
-// one records write at a time: two quick uploads must not both read the
-// old records and the second drop the first's entries
 
 /** Changes which paths are recorded as uploaded. */
 export function updateUploadRecords(
     deps: UploadRecordDeps,
     change: (records: Record<string, { at: number }>) => void,
 ): Promise<void> {
-    const run = local().recordsQueue.then(async () => {
+    return deps.records(async () => {
         const records = parseUploadRecords((await deps.readConfig())[UPLOAD_RECORDS_KEY]);
         change(records);
         await deps.writeConfig({ [UPLOAD_RECORDS_KEY]: records });
     });
-    local().recordsQueue = run.then(
-        () => undefined,
-        () => undefined,
-    );
-    return run;
 }
 
 /** Forgets that these paths (below the server folder) were uploaded; they are gone. */

@@ -1,5 +1,4 @@
 import type { BlockTypeDefinition } from "@mileniumhq/paperapi";
-import { currentServer } from "../service/scope";
 import type { Server } from "../service/server";
 import { gameFor } from "./index";
 import { minecraft } from "./minecraft";
@@ -26,13 +25,13 @@ export interface GameModule {
     blockTypes?(): Promise<BlockTypeDefinition[]>;
 }
 const modules: Readonly<Record<string, GameModule>> = {
-    [minecraft.id]: { create: () => minecraftService, blockTypes: async () => (await import("./minecraft/blocks")).minecraftBlockTypes },
-    [terraria.id]: { create: () => terrariaService },
-    [palworld.id]: { create: () => palworldService },
-    [tf2.id]: { create: () => tf2Service },
-    [gmod.id]: { create: () => gmodService },
-    [rust.id]: { create: () => rustService },
-    [cs2.id]: { create: () => cs2Service },
+    [minecraft.id]: { create: minecraftService, blockTypes: async () => (await import("./minecraft/blocks")).minecraftBlockTypes },
+    [terraria.id]: { create: terrariaService },
+    [palworld.id]: { create: palworldService },
+    [tf2.id]: { create: tf2Service },
+    [gmod.id]: { create: gmodService },
+    [rust.id]: { create: rustService },
+    [cs2.id]: { create: cs2Service },
 };
 /** A stored server's game; an id no game has throws. */
 export function gameModuleFor(id: string): GameModule {
@@ -41,6 +40,3 @@ export function gameModuleFor(id: string): GameModule {
     if (!found) throw new Error(`Game service missing: ${game.id}`);
     return found;
 }
-// Unscoped adapters (legacy callers and unit tests) use the original module.
-export const currentGame = () => currentServer()!.definition;
-export const currentGameService = () => currentServer()!.game;

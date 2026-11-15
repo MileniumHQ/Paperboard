@@ -31,12 +31,12 @@ const quoteText = (page: Page, title: string) => page.evaluate<string>(`${quote(
 describe("failures are shown", () => {
     test("a console command or chat line sent while offline rejects and says so in the console and chat", async () => {
         const mc = minecraftServer();
-        await expect(mc.run(() => sendServerCommand(mc.server, "list"))).rejects.toThrow("Cannot execute command: server is offline.");
+        await expect(sendServerCommand(mc.server, "list")).rejects.toThrow("Cannot execute command: server is offline.");
         expect(mc.server.state.serverEntries.map((e) => [e.type, e.content])).toEqual([
             ["command", "list"],
             ["error", "Cannot execute command: server is offline."],
         ]);
-        await expect(mc.run(() => minecraftService.sendChat!(mc.server, "hello"))).rejects.toThrow("Cannot send message: server is offline.");
+        await expect(mc.server.game.sendChat!("hello")).rejects.toThrow("Cannot send message: server is offline.");
         expect(mc.server.state.chatMessages.map((m) => m.text)).toEqual(["Cannot send message: server is offline."]);
     });
 
@@ -44,19 +44,19 @@ describe("failures are shown", () => {
         const mc = minecraftServer({ files: { "elsewhere/server.jar": "jar" } });
         fs.rmSync(path.join(mc.dir, "server.jar"));
         fs.symlinkSync(path.join(mc.dir, "elsewhere", "server.jar"), path.join(mc.dir, "server.jar"));
-        const failure = await mc.run(() => startServerInstance(mc.server)).catch((err: Error) => err);
+        const failure = await startServerInstance(mc.server).catch((err: Error) => err);
         expect(String(failure)).toContain("symbolic link");
         expect(String(failure)).not.toContain("reinstall");
     });
 
     test("a server that failed to start and then could not be ended says so in the console, and as the panel's problem", async () => {
-        const server = gameServer("palworld", { settings: { port: await freePort(), restPort: await freePort() }, state: palworldService.initialState() });
+        const server = gameServer("palworld", { settings: { port: await freePort(), restPort: await freePort() } });
         installPalworld(server.dir, { refuse: { info: "broken world" } });
-        await server.run(() => palworldService.initialize(server.server, false));
+        await server.server.game.initialize(false);
         const kill = rawProcess.kill;
         rawProcess.kill = (async () => { throw new Error("the supervisor did not answer"); }) as typeof kill;
         try {
-            await server.run(() => startServerInstance(server.server));
+            await startServerInstance(server.server);
             await server.server.waitFor((s) => s.serverEntries.some((e) => String(e.content).includes("could not be ended")), "the failed kill to be reported");
         } finally {
             rawProcess.kill = kill;
@@ -72,21 +72,21 @@ describe("failures are shown", () => {
         }).finally(() => off());
         expect(problem).toMatchObject({ title: `${server.server.name}: The server that failed to start could not be ended`, message: "the supervisor did not answer" });
         const exit = server.nextExit();
-        await server.run(() => processApi.kill(palworldService.primaryProcessId, "SIGKILL"));
+        await server.server.process.kill(server.server.game.primaryProcessId, "SIGKILL");
         await exit;
     });
 
     test("a Palworld settings file that can't be read when the server stops is reported in the console", async () => {
-        const server = gameServer("palworld", { settings: { port: await freePort(), restPort: await freePort() }, state: palworldService.initialState() });
+        const server = gameServer("palworld", { settings: { port: await freePort(), restPort: await freePort() } });
         installPalworld(server.dir);
-        await server.run(() => palworldService.initialize(server.server, false));
-        await server.run(() => startServerInstance(server.server));
+        await server.server.game.initialize(false);
+        await startServerInstance(server.server);
         await server.server.waitFor((s) => s.serverStatus === "online", "Palworld to answer its REST API");
         const ini = path.join(server.dir, ...INI.split("/"));
         fs.chmodSync(ini, 0o000);
         try {
             const exit = server.nextExit();
-            await server.run(() => stopServerInstance(server.server));
+            await stopServerInstance(server.server);
             expect(await exit).toBe(0);
             await server.server.waitFor((s) => s.serverEntries.some((e) => e.content.startsWith("[Server] Could not clean up after the server stopped:")), "the failed cleanup to be reported");
         } finally {

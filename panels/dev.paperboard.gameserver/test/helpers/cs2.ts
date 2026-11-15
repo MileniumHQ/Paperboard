@@ -11,7 +11,7 @@ import { CS2 } from "../../src/games/cs2";
 import { cs2Service } from "../../src/games/cs2/service";
 
 export async function cs2Server(): Promise<GameServer> {
-    const server = gameServer("counter-strike-2", { settings: { port: await freePort() }, state: cs2Service.initialState() });
+    const server = gameServer("counter-strike-2", { settings: { port: await freePort() } });
     fakeSteamcmd({});
     // the Steam client library SteamCMD unpacks, which the server loads from its profile
     writeTree(steamcmdDir(), { "linux64/steamclient.so": "steamclient" });
@@ -21,8 +21,8 @@ export async function cs2Server(): Promise<GameServer> {
         "install/game/csgo/maps/lobby_mapveto.vpk": "", "install/game/csgo/maps/graphics_settings.vpk": "", "install/game/csgo/cfg/server.cfg": "// the game's own\n",
     });
     placeStandIn("fakeCs2", path.join(server.dir, "install", "game", "bin", "linuxsteamrt64", "cs2"));
-    await server.run(() => cs2Service.initialize(server.server, false));
+    await server.server.game.initialize(false);
     return server;
 }
 /** one of the game's calls, made for `server` */
-export const cs2Call = async (server: GameServer, id: string, input: unknown = {}) => server.run(async () => (await cs2Service.calls())[id]!(server.server, input));
+export const cs2Call = async (server: GameServer, id: string, input: unknown = {}) => (await server.server.game.calls())[id]!(server.server, input);

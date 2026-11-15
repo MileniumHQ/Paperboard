@@ -105,9 +105,9 @@ describe("Steam and Terraria installs", () => {
 
     test("a second install while one downloads joins it instead of starting another", async () => {
         const steam = fakeSteamcmd({ install: { [PALWORLD_APP_ID]: { mode: "ok", build: "25247047", files: { "DefaultPalWorldSettings.ini": DEFAULT_INI, "PalServer.sh": "#!/bin/sh\n" } } } });
-        const server = gameServer("palworld", { state: palworldService.initialState() });
-        await server.run(() => palworldService.initialize(server.server, false));
-        const [first, second] = server.run(() => [palworldService.installUpdate!(server.server), palworldService.installUpdate!(server.server)]);
+        const server = gameServer("palworld", { });
+        await server.server.game.initialize(false);
+        const [first, second] = [server.server.game.installUpdate!(), server.server.game.installUpdate!()];
         expect(second).toBe(first);
         await Promise.all([first, second]);
         expect(appUpdates(steam.runs())).toHaveLength(1);

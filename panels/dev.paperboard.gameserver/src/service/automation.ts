@@ -1,8 +1,6 @@
 import type { Server } from "./server";
-import { config, updateSettings, errorMessage } from "./api";
-import { serverLocal } from "./scope";
-import { currentGameService } from "../games/service";
-import { appendCapped, type GameServerState, PANEL_ID } from "./types";
+import { errorMessage } from "@mileniumhq/paperapi";
+import { appendCapped, type GameServerState } from "./types";
 
 /** What the server does on its own: restart after a crash, once a day at a set hour, and update itself. */
 export interface AutomationSettings {
@@ -32,16 +30,6 @@ export const UPDATE_CHECK_MS = 60 * 60_000;
 export const UPDATE_WARNING_MS = 5 * 60_000;
 const HOUR = /^([01]\d|2[0-3]):00$/;
 
-const local = serverLocal(() => ({
-    settings: null as AutomationSettings | null,
-    crashes: [] as number[],
-    stopRequested: false,
-    crashReported: false,
-    crashTimer: null as ReturnType<typeof setTimeout> | null,
-    dailyTimers: [] as ReturnType<typeof setTimeout>[],
-    updateTimer: null as ReturnType<typeof setTimeout> | null,
-}));
-
 export function parseAutomation(raw: unknown): AutomationSettings {
     if (raw === undefined || raw === null) return { ...AUTOMATION_DEFAULTS };
     if (typeof raw !== "object") throw new Error("The saved automation settings are not an object");
@@ -56,46 +44,47 @@ export function validateAutomation(input: Record<string, unknown>): AutomationSe
     return { restartAfterCrash, dailyRestart, autoUpdate };
 }
 
-export async function readAutomation(): Promise<AutomationSettings> {
-    const saved = await config.get<Record<string, unknown>>(PANEL_ID);
-    const settings = parseAutomation(saved?.[KEY]);
-    local().settings = settings;
+/** The server's automation as saved, kept for the timers that read it. */
+export function readAutomation(ctx: Server): AutomationSettings {
+    const settings = parseAutomation(ctx.settings[KEY]);
+    ctx.automation.settings = settings;
     return settings;
 }
 
-export function automationView(settings: AutomationSettings): AutomationView {
-    const game = currentGameService();
+export function automationView(ctx: Server, settings: AutomationSettings): AutomationView {
+    const game = ctx.game;
     return { ...settings, timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone, canUpdate: Boolean(game.updateStatus && game.installUpdate) };
 }
 
 export async function writeAutomation(ctx: Server, patch: Record<string, unknown>, restart: (ctx: Server) => Promise<void>): Promise<AutomationSettings> {
-    const next = validateAutomation({ ...(await readAutomation()), ...patch });
-    await updateSettings({ [KEY]: next });
-    local().settings = next;
+    const next = validateAutomation({ ...readAutomation(ctx), ...patch });
+    await ctx.updateSettings({ [KEY]: next });
+    ctx.automation.settings = next;
     // a changed setting starts a fresh count: the user is looking at the server
-    local().crashes = [];
+    ctx.automation.crashes = [];
     scheduleDailyRestart(ctx, restart);
     scheduleUpdateChecks(ctx, restart);
     return next;
 }
 
 /** Paperboard asked the server to stop, so its exit is not a crash. */
-export function markStopRequested(): void { local().stopRequested = true; }
+export function markStopRequested(ctx: Server): void { ctx.automation.stopRequested = true; }
 /** The stop request never reached the server, which keeps running. */
-export function cancelStopRequest(): void { local().stopRequested = false; }
+export function cancelStopRequest(ctx: Server): void { ctx.automation.stopRequested = false; }
 /** A start clears what the last run left behind. */
-export function markStarting(): void { local().stopRequested = false; local().crashReported = false; }
+export function markStarting(ctx: Server): void { ctx.automation.stopRequested = false; ctx.automation.crashReported = false; }
 /** The game's output said it crashed, as Minecraft's crash report; its exit code may still be 0. */
-export function noteCrashReport(): void { local().crashReported = true; }
+export function noteCrashReport(ctx: Server): void { ctx.automation.crashReported = true; }
 
 export type ExitKind = { kind: "stopped" } | { kind: "crashed"; whileStarting: boolean };
 
 /** Whether an exit was a stop or a crash: a crash is an exit nobody asked for, with an error code or a crash report. */
-export function classifyExit(status: GameServerState["serverStatus"], exitCode: number | undefined): ExitKind {
-    const { stopRequested: requested, crashReported } = local();
+export function classifyExit(ctx: Server, exitCode: number | undefined): ExitKind {
+    const status = ctx.state.serverStatus;
+    const { stopRequested: requested, crashReported } = ctx.automation;
     // an exit settles both: the next run starts clean
-    local().stopRequested = false;
-    local().crashReported = false;
+    ctx.automation.stopRequested = false;
+    ctx.automation.crashReported = false;
     if (requested || status === "offline") return { kind: "stopped" };
     const failed = (exitCode !== undefined && exitCode !== 0) || crashReported;
     if (!failed) return { kind: "stopped" };
@@ -118,26 +107,26 @@ export function afterCrash(ctx: Server, exit: { whileStarting: boolean; exitCode
     if (exit.outOfMemory) say("error", `[Server] The computer ran out of memory, so the system ended the server${exit.whileStarting ? " while it was starting" : ""}${code}. Give the server less memory or close other programs.`);
     else say("error", `[Server] The server crashed${exit.whileStarting ? " while starting" : ""}${code}. Logs has what it printed.`);
     if (exit.whileStarting) return;
-    const settings = local().settings ?? AUTOMATION_DEFAULTS;
+    const settings = ctx.automation.settings ?? AUTOMATION_DEFAULTS;
     if (!settings.restartAfterCrash) return;
-    const crashes = [...local().crashes.filter((at) => now - at < CRASH_WINDOW_MS), now];
-    local().crashes = crashes;
+    const crashes = [...ctx.automation.crashes.filter((at) => now - at < CRASH_WINDOW_MS), now];
+    ctx.automation.crashes = crashes;
     if (crashes.length >= CRASH_LIMIT) {
         say("error", `[Server] It crashed ${crashes.length} times in ${CRASH_WINDOW_MS / 60_000} minutes, so it was not restarted. Start it once the cause is fixed.`);
-        local().crashes = [];
+        ctx.automation.crashes = [];
         return;
     }
     say("info", `[Server] Restarting in ${CRASH_RESTART_DELAY_MS / 1000} seconds.`);
-    if (local().crashTimer) clearTimeout(local().crashTimer!);
+    if (ctx.automation.crashTimer) clearTimeout(ctx.automation.crashTimer);
     const timer = setTimeout(() => {
-        local().crashTimer = null;
+        ctx.automation.crashTimer = null;
         if (ctx.state.serverStatus !== "offline") return;
         // the fresh console still says why the server started again
         const when = new Date(now).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
         start(ctx, [{ type: "warn", content: `[Server] Restarted after a crash at ${when}${code}.` }]).catch((err) => say("error", `[Server] Restart after the crash failed: ${errorMessage(err)}`));
     }, CRASH_RESTART_DELAY_MS);
     timer.unref?.();
-    local().crashTimer = timer;
+    ctx.automation.crashTimer = timer;
 }
 
 /** Milliseconds from `now` to the next "HH:00" on this computer's clock. */
@@ -148,18 +137,18 @@ export function msUntilHour(hour: string, now: Date): number {
     return next.getTime() - now.getTime();
 }
 
-function cancelDailyRestart(): void {
-    for (const timer of local().dailyTimers) clearTimeout(timer);
-    local().dailyTimers = [];
+function cancelDailyRestart(ctx: Server): void {
+    for (const timer of ctx.automation.dailyTimers) clearTimeout(timer);
+    ctx.automation.dailyTimers = [];
 }
 
 /** Drops every pending automatic restart, as when the server is removed. */
-export function cancelAutomation(): void {
-    cancelDailyRestart();
-    if (local().updateTimer) clearTimeout(local().updateTimer!);
-    local().updateTimer = null;
-    if (local().crashTimer) clearTimeout(local().crashTimer!);
-    local().crashTimer = null;
+export function cancelAutomation(ctx: Server): void {
+    cancelDailyRestart(ctx);
+    if (ctx.automation.updateTimer) clearTimeout(ctx.automation.updateTimer);
+    ctx.automation.updateTimer = null;
+    if (ctx.automation.crashTimer) clearTimeout(ctx.automation.crashTimer);
+    ctx.automation.crashTimer = null;
 }
 
 /**
@@ -167,25 +156,25 @@ export function cancelAutomation(): void {
  * then a running server restarts. A server that is not running is left alone.
  */
 export function scheduleDailyRestart(ctx: Server, restart: (ctx: Server) => Promise<void>, now = new Date()): void {
-    cancelDailyRestart();
-    const hour = local().settings?.dailyRestart;
+    cancelDailyRestart(ctx);
+    const hour = ctx.automation.settings?.dailyRestart;
     if (!hour) return;
     const due = msUntilHour(hour, now);
     const say = (type: "error" | "info", content: string) => ctx.setState((prev) => ({ serverEntries: appendCapped(prev.serverEntries, { type, content }) }));
     const at = (ms: number, work: () => Promise<void>) => {
         if (ms < 0) return;
         const timer = setTimeout(() => {
-            local().dailyTimers = local().dailyTimers.filter((t) => t !== timer);
+            ctx.automation.dailyTimers = ctx.automation.dailyTimers.filter((t) => t !== timer);
             void work();
         }, ms);
         timer.unref?.();
-        local().dailyTimers.push(timer);
+        ctx.automation.dailyTimers.push(timer);
     };
     for (const minutes of RESTART_WARNINGS) {
         at(due - minutes * 60_000, async () => {
-            const sendChat = currentGameService().sendChat;
+            const sendChat = ctx.game.sendChat;
             if (ctx.state.serverStatus !== "online" || !sendChat || ctx.state.onlinePlayers.length === 0) return;
-            await sendChat(ctx, `The server restarts in ${minutes} minute${minutes === 1 ? "" : "s"}.`)
+            await sendChat(`The server restarts in ${minutes} minute${minutes === 1 ? "" : "s"}.`)
                 .catch((err) => say("error", `[Server] Could not warn players about the daily restart: ${errorMessage(err)}`));
         });
     }
@@ -207,21 +196,21 @@ const consoleSay = (ctx: Server): Say => (type, content) => ctx.setState((prev) 
  * as it is; a failed install fails the start.
  */
 export async function updateBeforeStart(ctx: Server): Promise<void> {
-    const game = currentGameService();
+    const game = ctx.game;
     if (!game.updateStatus || !game.installUpdate) return;
-    const settings = local().settings ?? await readAutomation();
+    const settings = ctx.automation.settings ?? readAutomation(ctx);
     if (!settings.autoUpdate) return;
     const say = consoleSay(ctx);
     let status;
     try {
-        status = await game.updateStatus(ctx);
+        status = await game.updateStatus();
     } catch (err) {
         say("error", `[Server] Could not check for an update, so the server starts as it is: ${errorMessage(err)}`);
         return;
     }
     if (!status.updateAvailable) return;
     say("info", `[Server] Updating to build ${status.latest} before starting.`);
-    await game.installUpdate(ctx);
+    await game.installUpdate();
     say("info", `[Server] Updated to build ${status.latest}.`);
 }
 
@@ -231,15 +220,15 @@ export async function updateBeforeStart(ctx: Server): Promise<void> {
  * UPDATE_WARNING_MS of warning first. The restart's start installs it.
  */
 export function scheduleUpdateChecks(ctx: Server, restart: (ctx: Server) => Promise<void>, every = UPDATE_CHECK_MS): void {
-    if (local().updateTimer) clearTimeout(local().updateTimer!);
-    local().updateTimer = null;
-    const game = currentGameService();
-    if (!game.updateStatus || !game.installUpdate || !(local().settings ?? AUTOMATION_DEFAULTS).autoUpdate) return;
+    if (ctx.automation.updateTimer) clearTimeout(ctx.automation.updateTimer);
+    ctx.automation.updateTimer = null;
+    const game = ctx.game;
+    if (!game.updateStatus || !game.installUpdate || !(ctx.automation.settings ?? AUTOMATION_DEFAULTS).autoUpdate) return;
     const say = consoleSay(ctx);
     const arm = (ms: number, work: () => Promise<void>) => {
-        const timer = setTimeout(() => { local().updateTimer = null; void work(); }, ms);
+        const timer = setTimeout(() => { ctx.automation.updateTimer = null; void work(); }, ms);
         timer.unref?.();
-        local().updateTimer = timer;
+        ctx.automation.updateTimer = timer;
     };
     const restartForUpdate = async () => {
         if (ctx.state.serverStatus !== "online") return scheduleUpdateChecks(ctx, restart, every);
@@ -251,7 +240,7 @@ export function scheduleUpdateChecks(ctx: Server, restart: (ctx: Server) => Prom
         if (ctx.state.serverStatus !== "online") return scheduleUpdateChecks(ctx, restart, every);
         let status;
         try {
-            status = await game.updateStatus!(ctx);
+            status = await game.updateStatus!();
         } catch (err) {
             say("error", `[Server] Could not check for an update: ${errorMessage(err)}`);
             return scheduleUpdateChecks(ctx, restart, every);
@@ -260,7 +249,7 @@ export function scheduleUpdateChecks(ctx: Server, restart: (ctx: Server) => Prom
         say("info", `[Server] Build ${status.latest} is out.`);
         if (ctx.state.onlinePlayers.length === 0) return restartForUpdate();
         const minutes = UPDATE_WARNING_MS / 60_000;
-        await game.sendChat?.(ctx, `An update is out. The server restarts to install it in ${minutes} minute${minutes === 1 ? "" : "s"}.`)
+        await game.sendChat?.(`An update is out. The server restarts to install it in ${minutes} minute${minutes === 1 ? "" : "s"}.`)
             .catch((err) => say("error", `[Server] Could not warn players about the update: ${errorMessage(err)}`));
         arm(UPDATE_WARNING_MS, restartForUpdate);
     });

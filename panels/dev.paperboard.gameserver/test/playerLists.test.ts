@@ -36,15 +36,15 @@ const FLOODGATE_UUID = (() => {
 const read = (mc: McServer, file: string) => fs.readFileSync(path.join(mc.dir, file), "utf8");
 const exists = (mc: McServer, file: string) => fs.existsSync(path.join(mc.dir, file));
 const flag = (mc: McServer, which: "op" | "whitelist", name: string, on = true, naming: typeof NAMING | null = null) =>
-    mc.run(() => setPlayerFlag(mc.server, (cmd) => sendServerCommand(mc.server, cmd), naming, which, name, on));
+    setPlayerFlag(mc.server, (cmd) => sendServerCommand(mc.server, cmd), naming, which, name, on);
 
 async function running(mc: McServer): Promise<void> {
-    await mc.run(() => startServerInstance(mc.server));
+    await startServerInstance(mc.server);
     await mc.server.waitFor((s) => s.serverStatus === "online", "the server to come online");
 }
 async function stop(mc: McServer): Promise<void> {
     const exit = mc.nextExit();
-    await mc.run(() => stopServerInstance(mc.server));
+    await stopServerInstance(mc.server);
     await exit;
 }
 
@@ -127,7 +127,7 @@ describe("op and whitelist edits", () => {
 
     test("a name lookup Mojang fails keeps the name on file and says why in the console", async () => {
         const mc = minecraftServer();
-        expect(await mc.run(() => currentPlayerNames(mc.server, ["8667ba71-b85a-4004-af54-457a9734eed7"], null))).toEqual({});
+        expect(await currentPlayerNames(mc.server, ["8667ba71-b85a-4004-af54-457a9734eed7"], null)).toEqual({});
         expect(mc.server.state.serverEntries.map((e) => String(e.content))).toEqual([expect.stringMatching(/^\[Paperboard\] 1 player name lookup\(s\) failed: .*500/)]);
     });
 });

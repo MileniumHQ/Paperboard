@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { SerialQueue } from "@mileniumhq/paperapi";
 import { createHash } from "node:crypto";
 import { loopbackServer, routeHost } from "./helpers/http";
 import { tempDir } from "./helpers/tmp";
@@ -72,6 +73,7 @@ function datapackDeps(versions: unknown[]) {
         writeConfig: async (patch) => {
             config = { ...config, ...patch };
         },
+        records: new SerialQueue().run,
         trash: async () => undefined,
     };
     return { deps, downloads };

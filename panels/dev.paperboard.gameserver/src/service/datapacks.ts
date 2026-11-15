@@ -1,5 +1,5 @@
+import type { SerialQueue } from "@mileniumhq/paperapi";
 import { exists, unlessMissing } from "./failures";
-import { serverLocal } from "./scope";
 import * as nodeFs from "node:fs/promises";
 import * as nodePath from "node:path";
 import {
@@ -24,7 +24,6 @@ import { UPLOAD_RECORDS_KEY, parseUploadRecords } from "../core/addonUpload";
 import { forgetUploads } from "./uploadRecords";
 import { modrinthVersions } from "./modrinth";
 
-const local = serverLocal(() => ({ recordsQueue: Promise.resolve() as Promise<unknown> }));
 
 // The Datapacks tab's owner: lists the active world's datapacks/ folder,
 // installs Modrinth datapack builds into it, and moves removed packs to
@@ -48,6 +47,8 @@ export interface DatapackDeps {
     download(opts: { url: string; targetPath: string; sha1: string; sha512: string }): Promise<unknown>;
     readConfig(): Promise<Record<string, unknown>>;
     writeConfig(patch: Record<string, unknown>): Promise<void>;
+    /** runs a records write after the ones before it: two quick installs must not both read the old records */
+    records: SerialQueue["run"];
     /** recoverable removal of server-folder-relative paths */
     trash(paths: string[]): Promise<void>;
     fs?: DatapackFs;
@@ -119,20 +120,12 @@ export async function listDatapacks(deps: DatapackDeps): Promise<DatapackListing
     };
 }
 
-// one records write at a time: two quick installs must not both read the
-// old records and the second drop the first's entry
-
 function updateRecords(deps: DatapackDeps, change: (records: Record<string, DatapackRecord>) => void): Promise<void> {
-    const run = local().recordsQueue.then(async () => {
+    return deps.records(async () => {
         const records = parseDatapackRecords((await deps.readConfig())[DATAPACK_RECORDS_KEY]);
         change(records);
         await deps.writeConfig({ [DATAPACK_RECORDS_KEY]: records });
     });
-    local().recordsQueue = run.then(
-        () => undefined,
-        () => undefined,
-    );
-    return run;
 }
 
 export async function listDatapackVersions(

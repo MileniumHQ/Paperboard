@@ -37,7 +37,7 @@ async function holdPort(): Promise<{ port: number; release: () => Promise<void> 
 }
 
 const claims = async (mc: McServer) =>
-    Object.fromEntries((await mc.run(() => portApi.list(PANEL_ID))).filter((c) => c.name.startsWith(`${mc.server.id}-`)).map((c) => [c.name.slice(mc.server.id.length + 1), c.port]));
+    Object.fromEntries((await portApi.list(PANEL_ID)).filter((c) => c.name.startsWith(`${mc.server.id}-`)).map((c) => [c.name.slice(mc.server.id.length + 1), c.port]));
 const property = (mc: McServer, key: string) => fs.readFileSync(path.join(mc.dir, "server.properties"), "utf8").match(new RegExp(`^${key}=(.*)$`, "m"))?.[1];
 
 // Port conflicts are moved or refused and written where the server reads them.
@@ -46,7 +46,7 @@ describe("ports", () => {
         const held = await holdPort();
         try {
             const mc = minecraftServer({ files: { "server.properties": `#Minecraft server properties\nmotd=\\u00A7aHi\nserver-port=${held.port}\nmax-players=7\n` } });
-            await mc.run(() => startServerInstance(mc.server));
+            await startServerInstance(mc.server);
             await mc.server.waitFor((s) => s.serverStatus === "online", "the server to come online");
             const moved = Number(property(mc, "server-port"));
             expect(moved).toBeGreaterThan(held.port);
@@ -55,7 +55,7 @@ describe("ports", () => {
             expect(mc.server.state.serverEntries.map((e) => e.content)).toContain(`[Server] Port ${held.port} is taken, so Game Server (Java) uses ${moved}.`);
             expect([property(mc, "motd"), property(mc, "max-players")]).toEqual(["\\u00A7aHi", "7"]);
             const exit = mc.nextExit();
-            await mc.run(() => stopServerInstance(mc.server));
+            await stopServerInstance(mc.server);
             await exit;
         } finally {
             await held.release();
@@ -68,7 +68,7 @@ describe("ports", () => {
         const mc = minecraftServer({ files: { "server.properties": original } });
         await portSettingsApi.setPolicy("refuse");
         try {
-            await expect(mc.run(() => startServerInstance(mc.server))).rejects.toThrow(`can't use port ${held.port}`);
+            await expect(startServerInstance(mc.server)).rejects.toThrow(`can't use port ${held.port}`);
         } finally {
             await portSettingsApi.setPolicy("next-free");
             await held.release();
@@ -91,7 +91,7 @@ describe("ports", () => {
         fs.writeFileSync(path.join(mc.dir, "plugins", "Geyser.jar"), zipSync({ "plugin.yml": strToU8("name: Geyser-Spigot\nversion: 1\nmain: x.M\n") }));
         const geyser = () => fs.readFileSync(path.join(mc.dir, "plugins", "Geyser-Spigot", "config.yml"), "utf8");
         try {
-            const moves = await mc.run(() => prepareServerPorts("paper", livePortDeps()));
+            const moves = await prepareServerPorts("paper", livePortDeps(mc.server));
             const claimed = await claims(mc);
             expect(Object.keys(claimed).sort()).toEqual([BEDROCK_PORT_NAME, JAVA_PORT_NAME, NETHERNET_PORT_NAME].sort());
             expect(claimed[BEDROCK_PORT_NAME]).toBeGreaterThan(held.port);
@@ -103,7 +103,7 @@ describe("ports", () => {
             expect(moves.map((m) => [m.label, m.from])).toContainEqual(["Game Server (Bedrock)", held.port]);
 
             fs.rmSync(path.join(mc.dir, "plugins", "Geyser.jar"));
-            await mc.run(() => prepareServerPorts("paper", livePortDeps()));
+            await prepareServerPorts("paper", livePortDeps(mc.server));
             expect(Object.keys(await claims(mc))).toEqual([JAVA_PORT_NAME]);
         } finally {
             await held.release();

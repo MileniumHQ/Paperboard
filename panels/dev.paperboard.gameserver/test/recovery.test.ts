@@ -112,18 +112,18 @@ describe("start-up recovery", () => {
         const mc = minecraftServer({
             files: { ".install-8-1/journal.json": "not json", ".install-8-1/previous/server.jar": "old" },
         });
-        expect(await mc.run(() => settleInterruptedWork(mc.server))).toBe(false);
+        expect(await settleInterruptedWork(mc.server)).toBe(false);
         expect(mc.server.state.recoveryBlock).toContain("An interrupted install could not be cleaned up");
-        await expect(mc.run(() => startServerInstance(mc.server))).rejects.toThrow("Retry the recovery");
-        await expect(mc.run(() => withInstallLock(async () => "installed"))).rejects.toThrow("Retry the recovery");
+        await expect(startServerInstance(mc.server)).rejects.toThrow("Retry the recovery");
+        await expect(withInstallLock(mc.server, async () => "installed")).rejects.toThrow("Retry the recovery");
         expect(mc.server.state.serverStatus).toBe("offline");
 
         // the journal is readable again: the retry settles it and both work again
         fs.writeFileSync(path.join(mc.dir, ".install-8-1", "journal.json"), journal(["server.jar"], ["server.jar"], ["server.jar"]));
         fs.rmSync(path.join(mc.dir, "server.jar"));
-        expect(await mc.run(() => settleInterruptedWork(mc.server))).toBe(true);
+        expect(await settleInterruptedWork(mc.server)).toBe(true);
         expect(mc.server.state.recoveryBlock).toBeNull();
         expect(fs.readFileSync(path.join(mc.dir, "server.jar"), "utf8")).toBe("old");
-        expect(await mc.run(() => withInstallLock(async () => "installed"))).toBe("installed");
+        expect(await withInstallLock(mc.server, async () => "installed")).toBe("installed");
     });
 });

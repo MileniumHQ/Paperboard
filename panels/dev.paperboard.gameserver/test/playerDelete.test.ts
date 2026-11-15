@@ -48,7 +48,7 @@ describe("deleting a player", () => {
             files: { "server.properties": "level-name=survival\n", "usercache.json": usercache, ...playerFiles("survival") },
             state: { seenPlayers: ["steve", "alex"], playerPlaytime: { steve: 60, alex: 30 }, playerStats: { steve: { health: 20 } } },
         });
-        await mc.run(() => deletePlayerData(mc.server, "Steve"));
+        await deletePlayerData(mc.server, "Steve");
         const live = liveFiles(mc);
         expect(live.filter((f) => f.includes(STEVE))).toEqual([]);
         expect(live.filter((f) => f.includes(ALEX))).toHaveLength(7);
@@ -67,9 +67,9 @@ describe("deleting a player", () => {
         const mc = minecraftServer({
             files: { "usercache.json": usercache, "fake-server.json": JSON.stringify({ players: ["Steve"] }), ...playerFiles("world") },
         });
-        await mc.run(() => startServerInstance(mc.server));
+        await startServerInstance(mc.server);
         await mc.server.waitFor((s) => s.onlinePlayers.includes("steve"), "Steve to be online");
-        await mc.run(() => deletePlayerData(mc.server, "Steve", STEVE));
+        await deletePlayerData(mc.server, "Steve", STEVE);
         const commands = mc.commands();
         expect(commands.slice(commands.indexOf("kick Steve Your player data was deleted"))).toEqual([
             "kick Steve Your player data was deleted",
@@ -78,21 +78,21 @@ describe("deleting a player", () => {
         expect(liveFiles(mc).filter((f) => f.includes(STEVE))).toEqual([]);
         expect(mc.server.state.onlinePlayers).toEqual([]);
         const exit = mc.nextExit();
-        await mc.run(() => stopServerInstance(mc.server));
+        await stopServerInstance(mc.server);
         await exit;
     });
 
     test("is refused while the server is starting or stopping", async () => {
         for (const serverStatus of ["starting", "stopping"] as const) {
             const mc = minecraftServer({ files: { "usercache.json": usercache, ...playerFiles("world") }, state: { serverStatus } });
-            await expect(mc.run(() => deletePlayerData(mc.server, "Steve", STEVE))).rejects.toThrow("Wait until the server has finished starting or stopping");
+            await expect(deletePlayerData(mc.server, "Steve", STEVE)).rejects.toThrow("Wait until the server has finished starting or stopping");
             expect(liveFiles(mc).filter((f) => f.includes(STEVE))).toHaveLength(7);
         }
     });
 
     test("a damaged usercache.json fails the delete and is left as it was", async () => {
         const mc = minecraftServer({ files: { "usercache.json": "[{\"name\":", ...playerFiles("world") } });
-        await expect(mc.run(() => deletePlayerData(mc.server, "Steve", STEVE))).rejects.toThrow("usercache.json is not valid JSON");
+        await expect(deletePlayerData(mc.server, "Steve", STEVE)).rejects.toThrow("usercache.json is not valid JSON");
         expect(fs.readFileSync(path.join(mc.dir, "usercache.json"), "utf8")).toBe("[{\"name\":");
     });
 });

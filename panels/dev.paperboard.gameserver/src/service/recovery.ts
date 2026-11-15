@@ -1,14 +1,11 @@
 import type { Server } from "./server";
 import { errorMessage } from "@mileniumhq/paperapi";
-import { serverLocal } from "./scope";
+import { minecraftOf } from "../games/minecraft/state";
 import { recoverInterruptedInstall } from "../games/minecraft/softwareInstall";
 import { liveRecoveryDeps } from "./softwareInstallDeps";
 import { recoverInterruptedModpack } from "./modpacks";
 import { liveModpackRecoveryDeps } from "./modpackDeps";
-import { setRecoveryBlock } from "./recoveryState";
-import { appendCapped, type GameServerState } from "./types";
-
-const local = serverLocal(() => ({ settling: null as Promise<boolean> | null }));
+import { appendCapped } from "./types";
 
 type Recovered = { committed: unknown[]; rolledBack: unknown[]; discarded: unknown[] };
 
@@ -17,27 +14,27 @@ export interface RecoverySteps {
     modpack(): Promise<Recovered>;
 }
 
-const liveSteps: RecoverySteps = {
-    install: () => recoverInterruptedInstall(liveRecoveryDeps()),
-    modpack: () => recoverInterruptedModpack(liveModpackRecoveryDeps()),
-};
+const liveSteps = (ctx: Server): RecoverySteps => ({
+    install: () => recoverInterruptedInstall(liveRecoveryDeps(ctx)),
+    modpack: () => recoverInterruptedModpack(liveModpackRecoveryDeps(ctx)),
+});
 
 /**
  * Settles what an interrupted install and then an interrupted modpack
  * change left in the server folder. A step that fails blocks starting the
- * server and every install (recoveryState) and shows the reason in state
+ * server and every install (assertRecoverySettled) and shows the reason in state
  * until a retry succeeds; the modpack step waits for the install step, as
  * a pack change may depend on it. Resolves true when everything is settled.
  */
 export function settleInterruptedWork(
     ctx: Server,
-    steps: RecoverySteps = liveSteps,
+    steps: RecoverySteps = liveSteps(ctx),
 ): Promise<boolean> {
-    if (local().settling) return local().settling!;
-    local().settling = run(ctx, steps).finally(() => {
-        local().settling = null;
+    const state = minecraftOf(ctx);
+    state.settling ??= run(ctx, steps).finally(() => {
+        state.settling = null;
     });
-    return local().settling!;
+    return state.settling;
 }
 
 async function run(ctx: Server, steps: RecoverySteps): Promise<boolean> {
@@ -53,7 +50,6 @@ async function run(ctx: Server, steps: RecoverySteps): Promise<boolean> {
         } catch (err) {
             const reason = errorMessage(err);
             console.error(`[gameserver] interrupted ${what} could not be settled:`, reason);
-            setRecoveryBlock(`${what}: ${reason}`);
             ctx.setState({
                 recoveryBlock: `An interrupted ${what} could not be cleaned up: ${reason}`,
                 serverEntries: appendCapped(ctx.state.serverEntries, {
@@ -64,7 +60,6 @@ async function run(ctx: Server, steps: RecoverySteps): Promise<boolean> {
             return false;
         }
     }
-    setRecoveryBlock(null);
     if (ctx.state.recoveryBlock !== null) ctx.setState({ recoveryBlock: null });
     return true;
 }

@@ -1,4 +1,4 @@
-import { processApi } from "./api";
+import type { processApi } from "@mileniumhq/paperapi";
 
 // Runs a software installer (Forge, NeoForge, SteamCMD) as a daemon-supervised
 // child under a fixed id the panel owns, so its exit is observed rather than
@@ -45,7 +45,7 @@ function delay<T>(ms: number, value: T): { promise: Promise<T>; cancel: () => vo
 
 export async function runInstallerProcess(
     run: InstallerRun,
-    proc: InstallerProcessApi = processApi,
+    proc: InstallerProcessApi,
 ): Promise<InstallerResult> {
     const id = run.id ?? INSTALLER_PROC_ID;
     if (await proc.exists(id)) {
@@ -120,7 +120,7 @@ export async function runInstallerProcess(
  * cannot be confirmed stopped.
  */
 export async function stopLeftoverInstaller(
-    proc: InstallerProcessApi = processApi,
+    proc: InstallerProcessApi,
     pollMs = 250,
     limitMs = 15_000,
     id = INSTALLER_PROC_ID,

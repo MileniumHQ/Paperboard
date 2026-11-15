@@ -77,7 +77,7 @@ describe("world deletion", () => {
             software: "paper",
             files: { "world/level.dat": "w", "world/region/r.0.0.mca": "r", "world_nether/level.dat": "n", "world_the_end/level.dat": "e", "other/level.dat": "o" },
         });
-        const listed = await mc.run(() => listWorlds());
+        const listed = await listWorlds(mc.server);
         // Paper's dimension folders list under their world, not as worlds
         expect(listed.map((w) => [w.name, w.hasNether, w.hasEnd])).toEqual([
             ["world", true, true],
@@ -85,55 +85,45 @@ describe("world deletion", () => {
         ]);
         const running = testServer({ directory: mc.server.stored.directory }, { serverStatus: "online" });
         await expect(deleteActiveWorldDirs(running, "world")).rejects.toThrow("Stop the server before managing worlds");
-        await mc.run(() => deleteActiveWorldDirs(mc.server, "world"));
+        await deleteActiveWorldDirs(mc.server, "world");
         expect(trashed(mc.dir)).toEqual(["world/level.dat", "world/region/r.0.0.mca", "world_nether/level.dat", "world_the_end/level.dat"]);
         expect(fs.readFileSync(path.join(mc.dir, "other", "level.dat"), "utf8")).toBe("o");
     });
 
     test("a created world that never started is forgotten when deleted", async () => {
         const mc = minecraftServer({ files: { "server.properties": "level-name=world\n", "world/level.dat": "w" } });
-        expect(await mc.run(() => setActiveWorld(mc.server, "fresh", "12345"))).toEqual({ activated: "fresh", created: true });
-        expect((await mc.run(() => listWorlds())).map((w) => [w.name, w.generated])).toEqual([
+        expect(await setActiveWorld(mc.server, "fresh", "12345")).toEqual({ activated: "fresh", created: true });
+        expect((await listWorlds(mc.server)).map((w) => [w.name, w.generated])).toEqual([
             ["fresh", false],
             ["world", true],
         ]);
-        await mc.run(() => deleteActiveWorldDirs(mc.server, "fresh"));
-        expect((await mc.run(() => listWorlds())).map((w) => w.name)).toEqual(["world"]);
+        await deleteActiveWorldDirs(mc.server, "fresh");
+        expect((await listWorlds(mc.server)).map((w) => w.name)).toEqual(["world"]);
     });
 
     test("a name matching an existing folder in another case switches to it instead of forking a new world", async () => {
         const mc = minecraftServer({ files: { "server.properties": "level-name=other\n", "Survival/level.dat": "s", "other/level.dat": "o" } });
-        expect(await mc.run(() => setActiveWorld(mc.server, "survival"))).toEqual({ activated: "Survival", created: false });
+        expect(await setActiveWorld(mc.server, "survival")).toEqual({ activated: "Survival", created: false });
         expect(fs.readFileSync(path.join(mc.dir, "server.properties"), "utf8")).toContain("level-name=Survival");
-        await expect(mc.run(() => setActiveWorld(mc.server, "OTHER", "42"))).rejects.toThrow("\"other\" already exists — a seed only applies to a new world");
-        await expect(mc.run(() => setActiveWorld(mc.server, "OTHER", undefined, true))).rejects.toThrow('A world named "other" already exists');
+        await expect(setActiveWorld(mc.server, "OTHER", "42")).rejects.toThrow("\"other\" already exists — a seed only applies to a new world");
+        await expect(setActiveWorld(mc.server, "OTHER", undefined, true)).rejects.toThrow('A world named "other" already exists');
     });
 
     test("an unreadable server.properties refuses a reset instead of trashing the \"world\" folders", async () => {
         // a folder where the file should be: present, but no read succeeds
         const mc = minecraftServer({ files: { "server.properties/.keep": "", "world/level.dat": "w", "survival/level.dat": "s" } });
-        await expect(mc.run(() => resetWorldFiles(mc.server))).rejects.toThrow("Couldn't read server.properties to find the active world");
-        await expect(mc.run(() => listWorlds())).rejects.toThrow("Couldn't read server.properties to find the active world");
+        await expect(resetWorldFiles(mc.server)).rejects.toThrow("Couldn't read server.properties to find the active world");
+        await expect(listWorlds(mc.server)).rejects.toThrow("Couldn't read server.properties to find the active world");
         expect(trashed(mc.dir)).toEqual([]);
         expect(fs.readFileSync(path.join(mc.dir, "world", "level.dat"), "utf8")).toBe("w");
-    });
-
-    test("an unreadable panel config is never overwritten when a created world is recorded", async () => {
-        const file = path.join(daemon.dataDir, "configs", `${PANEL_ID}.json`);
-        fs.mkdirSync(path.dirname(file), { recursive: true });
-        fs.writeFileSync(file, "{\"software\": \"paper\",");
-        const ctx = testServer({ directory: "" });
-        await expect(setActiveWorld(ctx, "brandnew")).rejects.toThrow("JSON Parse error");
-        expect(fs.readFileSync(file, "utf8")).toBe("{\"software\": \"paper\",");
-        fs.rmSync(file);
     });
 
     test("a world, player or log file that can't be read fails its listing instead of reading as missing", async () => {
         const mc = minecraftServer({ files: { "server.properties": "level-name=world\n", "world/level.dat": "w", "elsewhere/level.dat": "n", "ops.json/.keep": "", "logs/old.log": "log" } });
         fs.symlinkSync(path.join(mc.dir, "elsewhere"), path.join(mc.dir, "world_nether"));
         fs.symlinkSync(path.join(mc.dir, "logs", "old.log"), path.join(mc.dir, "logs", "latest.log"));
-        await expect(mc.run(() => listWorlds())).rejects.toThrow("symbolic link");
-        await expect(mc.run(() => listPlayerStats(mc.server))).rejects.toThrow();
-        await expect(mc.run(() => listLogFiles(mc.server))).rejects.toThrow("symbolic link");
+        await expect(listWorlds(mc.server)).rejects.toThrow("symbolic link");
+        await expect(listPlayerStats(mc.server)).rejects.toThrow();
+        await expect(listLogFiles(mc.server)).rejects.toThrow("symbolic link");
     });
 });

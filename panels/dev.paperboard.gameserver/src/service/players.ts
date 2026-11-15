@@ -1,15 +1,8 @@
+import { minecraftOf } from "../games/minecraft/state";
 import type { Server } from "./server";
-import { serverLocal } from "./scope";
-import { files as fileApi } from "./api";
+
 import { writeServerLineBestEffort } from "./serverConsole";
-import {
-    type GameServerState,
-    type PlayerStatData,
-    PLAYER_NAME_PATTERN,
-    SERVER_PROC_ID,
-    appendCapped,
-    MAX_BUFFERED_ENTRIES,
-} from "./types";
+import { type PlayerStatData, PLAYER_NAME_PATTERN, SERVER_PROC_ID, appendCapped, MAX_BUFFERED_ENTRIES } from "./types";
 import {
     STAT_QUERIES,
     assertPlayerName,
@@ -34,8 +27,6 @@ import { PANEL_ID } from "./types";
 import { TRIGGER_IDS } from "./contract";
 import { send } from "../games/minecraft/saving";
 
-const local = serverLocal(() => ({ lastJoinAt: new Map<string, number>(), pendingStats: [] as PendingStatQuery[], recentNames: [] as string[], pendingPositionQueries: [] as PendingPositionQuery[] }));
-
 export { usernameFromUuid } from "./playerStats";
 
 export type { PlayerStatData };
@@ -45,41 +36,31 @@ export { PLAYER_NAME_PATTERN, SERVER_PROC_ID, STAT_QUERIES };
 // normalized), newest last. The list must stay bounded like every other
 // buffer in the panel.
 
-function rememberPlayerName(name: string): void {
+function rememberPlayerName(ctx: Server, name: string): void {
     const key = normalizePlayerKey(name);
-    const existing = local().recentNames.findIndex((n) => normalizePlayerKey(n) === key);
-    if (existing >= 0) local().recentNames.splice(existing, 1);
-    local().recentNames.push(name);
-    while (local().recentNames.length > MAX_BUFFERED_ENTRIES) local().recentNames.shift();
+    const existing = minecraftOf(ctx).players.recentNames.findIndex((n) => normalizePlayerKey(n) === key);
+    if (existing >= 0) minecraftOf(ctx).players.recentNames.splice(existing, 1);
+    minecraftOf(ctx).players.recentNames.push(name);
+    while (minecraftOf(ctx).players.recentNames.length > MAX_BUFFERED_ENTRIES) minecraftOf(ctx).players.recentNames.shift();
 }
 
-function nameKnown(name: string): boolean {
+function nameKnown(ctx: Server, name: string): boolean {
     const key = normalizePlayerKey(name);
-    return local().recentNames.some((n) => normalizePlayerKey(n) === key);
+    return minecraftOf(ctx).players.recentNames.some((n) => normalizePlayerKey(n) === key);
 }
 
 // join timestamps are keyed per username and only deleted on leave —
 // without a cap, spoofed joins grow the map forever. Map preserves
 // insertion order, so evict oldest first.
-function rememberJoin(key: string, ts: number): void {
-    local().lastJoinAt.delete(key);
-    local().lastJoinAt.set(key, ts);
-    while (local().lastJoinAt.size > MAX_BUFFERED_ENTRIES) {
-        const oldest = local().lastJoinAt.keys().next();
+function rememberJoin(ctx: Server, key: string, ts: number): void {
+    minecraftOf(ctx).players.lastJoinAt.delete(key);
+    minecraftOf(ctx).players.lastJoinAt.set(key, ts);
+    while (minecraftOf(ctx).players.lastJoinAt.size > MAX_BUFFERED_ENTRIES) {
+        const oldest = minecraftOf(ctx).players.lastJoinAt.keys().next();
         if (oldest.done) break;
-        local().lastJoinAt.delete(oldest.value);
+        minecraftOf(ctx).players.lastJoinAt.delete(oldest.value);
     }
 }
-
-// test seam: lets tests assert the bound without 1000 log lines of setup
-export const __playersTest = {
-    lastJoinSize: () => local().lastJoinAt.size,
-    clearJoins: () => local().lastJoinAt.clear(),
-    clearNames: () => {
-        local().recentNames.length = 0;
-    },
-    remember: (name: string) => rememberPlayerName(name),
-};
 
 // per-player records grow with unique players; keep them bounded the same
 // way every other buffer in the panel is (evict oldest insertion first)
@@ -103,8 +84,8 @@ export function trackPlayerActivity(
     const joined = extractJoinedName(clean);
     if (joined) {
         const key = normalizePlayerKey(joined);
-        if (ts !== undefined) rememberJoin(key, ts);
-        rememberPlayerName(joined);
+        if (ts !== undefined) rememberJoin(ctx, key, ts);
+        rememberPlayerName(ctx, joined);
         ctx.setState((prev) => {
             // seenPlayers is history, not presence: cap it like every other
             // buffer instead of growing one entry per unique join forever
@@ -123,13 +104,13 @@ export function trackPlayerActivity(
     const left = extractLeftName(clean);
     if (left) {
         const key = normalizePlayerKey(left);
-        const joinAt = local().lastJoinAt.get(key);
+        const joinAt = minecraftOf(ctx).players.lastJoinAt.get(key);
         let sessionSeconds = 0;
         if (ts !== undefined && joinAt !== undefined) {
             sessionSeconds = ts - joinAt;
             if (sessionSeconds < 0) sessionSeconds += 86400;
         }
-        local().lastJoinAt.delete(key);
+        minecraftOf(ctx).players.lastJoinAt.delete(key);
 
         ctx.setState((prev) => {
             const online = prev.onlinePlayers.filter((p) => p !== key);
@@ -151,10 +132,10 @@ export function trackPlayerActivity(
     const names = extractListedNames(clean);
     if (names) {
         for (const name of names) {
-            if (ts !== undefined && !local().lastJoinAt.has(name)) rememberJoin(name, ts);
+            if (ts !== undefined && !minecraftOf(ctx).players.lastJoinAt.has(name)) rememberJoin(ctx, name, ts);
             // the list lowercases names; keep the join's original casing when
             // one is already known so the options match the event payload
-            if (!nameKnown(name)) rememberPlayerName(name);
+            if (!nameKnown(ctx, name)) rememberPlayerName(ctx, name);
         }
         ctx.setState((prev) => {
             const seen = new Set([...prev.seenPlayers, ...names]);
@@ -173,7 +154,7 @@ export function handleStatResponse(
 ): boolean {
     const reply = extractStatReply(clean);
     if (!reply) return false;
-    const pending = local().pendingStats;
+    const pending = minecraftOf(ctx).players.pendingStats;
     // the reply names its player inside any team prefix or suffix
     const query = pending.find((p) => p.path === reply.path && displayNameNames(reply.entity, p.player));
     // not one of ours (someone typed it), so the console shows it
@@ -191,7 +172,7 @@ export function handleStatResponse(
 
 export function queryOnlinePlayers(ctx: Server): void {
     if (ctx.state.serverStatus === "online") {
-        writeServerLineBestEffort("list\n");
+        writeServerLineBestEffort(ctx, "list\n");
     }
 }
 
@@ -203,23 +184,23 @@ export function queryPlayerStats(
     // boundary: the name reaches `data get entity` raw — UI checks don't count
     const safe = assertPlayerName(name);
     const key = normalizePlayerKey(safe);
-    const pending = local().pendingStats.filter((p) => p.player !== key);
+    const pending = minecraftOf(ctx).players.pendingStats.filter((p) => p.player !== key);
     for (const { field, path, scale } of STAT_QUERIES) {
         pending.push({ player: key, field, path });
-        writeServerLineBestEffort(`data get entity ${safe} ${path} ${scale}\n`);
+        writeServerLineBestEffort(ctx, `data get entity ${safe} ${path} ${scale}\n`);
     }
     // bounded: queries the server never answers (a player who just left)
     // would otherwise pile up; the oldest go first
-    local().pendingStats = pending.slice(-MAX_BUFFERED_ENTRIES);
+    minecraftOf(ctx).players.pendingStats = pending.slice(-MAX_BUFFERED_ENTRIES);
 }
 
-type PendingStatQuery = { player: string; field: keyof PlayerStatData; path: string };
+export type PendingStatQuery = { player: string; field: keyof PlayerStatData; path: string };
 
 // ─── Map positions ───────────────────────────────────────────────────
 // `data get entity <name> Pos` / `Dimension`, matched to the replies by the
 // player each one names. Results land in state so the map updates through
 // the normal bridge sync.
-type PendingPositionQuery = { player: string; kind: "pos" | "dim" };
+export type PendingPositionQuery = { player: string; kind: "pos" | "dim" };
 
 export function queryPlayerPositions(ctx: Server): void {
     if (ctx.state.serverStatus !== "online") return;
@@ -230,7 +211,7 @@ export function queryPlayerPositions(ctx: Server): void {
         return;
     }
     const queried = new Set(players.map(normalizePlayerKey));
-    local().pendingPositionQueries = local().pendingPositionQueries.filter(
+    minecraftOf(ctx).players.pendingPositionQueries = minecraftOf(ctx).players.pendingPositionQueries.filter(
         (p) => !queried.has(p.player),
     );
     for (const name of players) {
@@ -242,13 +223,13 @@ export function queryPlayerPositions(ctx: Server): void {
             continue;
         }
         const key = normalizePlayerKey(safe);
-        local().pendingPositionQueries.push({ player: key, kind: "pos" });
-        local().pendingPositionQueries.push({ player: key, kind: "dim" });
-        writeServerLineBestEffort(`data get entity ${safe} Pos\n`);
-        writeServerLineBestEffort(`data get entity ${safe} Dimension\n`);
+        minecraftOf(ctx).players.pendingPositionQueries.push({ player: key, kind: "pos" });
+        minecraftOf(ctx).players.pendingPositionQueries.push({ player: key, kind: "dim" });
+        writeServerLineBestEffort(ctx, `data get entity ${safe} Pos\n`);
+        writeServerLineBestEffort(ctx, `data get entity ${safe} Dimension\n`);
     }
-    while (local().pendingPositionQueries.length > MAX_BUFFERED_ENTRIES) {
-        local().pendingPositionQueries.shift();
+    while (minecraftOf(ctx).players.pendingPositionQueries.length > MAX_BUFFERED_ENTRIES) {
+        minecraftOf(ctx).players.pendingPositionQueries.shift();
     }
     // drop markers for players who left since the last poll
     ctx.setState((prev) => {
@@ -272,7 +253,7 @@ export function handlePositionResponse(
     const subject = extractEntityDataSubject(clean);
     if (!subject) return false;
     const kind = pos ? "pos" : "dim";
-    const queue = local().pendingPositionQueries;
+    const queue = minecraftOf(ctx).players.pendingPositionQueries;
     const pending = queue.find((p) => p.kind === kind && displayNameNames(subject, p.player));
     if (!pending) return false;
     queue.splice(queue.indexOf(pending), 1);
@@ -291,7 +272,7 @@ export function forgetPlayerData(
     name: string,
 ): void {
     const key = normalizePlayerKey(assertPlayerName(name));
-    local().lastJoinAt.delete(key);
+    minecraftOf(ctx).players.lastJoinAt.delete(key);
     ctx.setState((prev) => {
         const seen = prev.seenPlayers.filter((p) => p !== key);
         const online = prev.onlinePlayers.filter((p) => p !== key);
@@ -326,7 +307,7 @@ export async function deletePlayerData(
     if (!UUID_RE.test(safeUuid)) {
         // flows name a player, not a UUID: resolve it from the server's
         // own player files instead of asking the author to look it up
-        const resolved = await uuidForPlayerName(safeName);
+        const resolved = await uuidForPlayerName(ctx, safeName);
         if (!resolved) {
             throw new Error(
                 `No UUID on file for "${safeName}" — the player must have joined this server once.`,
@@ -336,12 +317,12 @@ export async function deletePlayerData(
     }
     // the level first: an unreadable server.properties refuses before the
     // player is kicked for a delete that can't happen
-    const level = await resolveLevelName();
+    const level = await resolveLevelName(ctx);
     await disconnectBeforeDelete(ctx, safeName);
     // both layouts: 26.x worlds nest player files under players/, older
     // ones keep them at the world root, and an upgraded server can hold both
     await trashRemovePathsWith(
-        makeTrashRemoveDeps(),
+        makeTrashRemoveDeps(ctx),
         [
             `${level}/players/data/${safeUuid}.dat`,
             `${level}/players/data/${safeUuid}.dat_old`,
@@ -353,7 +334,7 @@ export async function deletePlayerData(
             `${level}/stats/${safeUuid}.json`,
         ],
     );
-    await forgetCachedProfile(safeUuid);
+    await forgetCachedProfile(ctx, safeUuid);
     forgetPlayerData(ctx, safeName);
 }
 
@@ -373,16 +354,16 @@ async function disconnectBeforeDelete(ctx: Server, name: string): Promise<void> 
     const key = normalizePlayerKey(name);
     if (!ctx.state.onlinePlayers.includes(key)) return;
     const leftLine = new RegExp(`\\b${name}\\s+left the game`, "i");
-    await send(`kick ${name} Your player data was deleted`, (line) => leftLine.test(line), DISCONNECT_TIMEOUT_MS, `that ${name} left`);
-    await send("save-all", (line) => /Saved the (game|world)/i.test(line), DISCONNECT_TIMEOUT_MS, "that the world is saved");
+    await send(ctx, `kick ${name} Your player data was deleted`, (line) => leftLine.test(line), DISCONNECT_TIMEOUT_MS, `that ${name} left`);
+    await send(ctx, "save-all", (line) => /Saved the (game|world)/i.test(line), DISCONNECT_TIMEOUT_MS, "that the world is saved");
 }
 
 // usercache.json remembers the player's name; it goes with their data. A
 // running server keeps its own copy and may write the entry back, which is
 // why the roster lists players by their data and the server's lists, never
 // by usercache. ops, whitelist and bans are the owner's settings and stay.
-async function forgetCachedProfile(uuid: string): Promise<void> {
-    const content = await fileApi.read("usercache.json", PANEL_ID);
+async function forgetCachedProfile(ctx: Server, uuid: string): Promise<void> {
+    const content = await ctx.files.read("usercache.json", PANEL_ID);
     if (!content) return;
     let parsed: unknown;
     try {
@@ -399,5 +380,5 @@ async function forgetCachedProfile(uuid: string): Promise<void> {
             !(entry && typeof entry.uuid === "string" && entry.uuid.toLowerCase() === wanted),
     );
     if (kept.length === parsed.length) return;
-    await fileApi.write("usercache.json", JSON.stringify(kept), PANEL_ID);
+    await ctx.files.write("usercache.json", JSON.stringify(kept), PANEL_ID);
 }

@@ -2,7 +2,6 @@
 // Each runs what the matching call runs, from calls.ts.
 import type { Server } from "../../service/server";
 import type { BlockCommandDefinition, BlockSet, BlockTypeDefinition, BlockValueDefinition } from "../../service/api";
-import type { GameServerState } from "../../service/types";
 import { needsCall, playerEvents, runGameCall } from "../../service/blocks";
 import { listRoster } from "../../service/playerLists";
 import { listPlayerStats } from "../../service/playerStats";
@@ -183,7 +182,7 @@ export function minecraftBlocks(ctx: Server): BlockSet {
     const world = { type: "text", name: "World" } as const;
     const roster = (id: string, name: string, icon: string, flag: "whitelisted" | "op" | "banned"): BlockValueDefinition => ({
         id, name, category: "Players", icon, type: "list<player>",
-        read: async () => (await listRoster()).filter((entry) => entry[flag]).map((entry) => entry.name),
+        read: async () => (await listRoster(ctx)).filter((entry) => entry[flag]).map((entry) => entry.name),
     });
     const rules = gameruleBlocks(ctx);
     return {
@@ -199,7 +198,7 @@ export function minecraftBlocks(ctx: Server): BlockSet {
                 text: "Switch to world {world}",
                 inputs: { world },
                 run: async ({ world }: { world: string }) => {
-                    if (!(await listWorlds()).some((w) => w.name.toLowerCase() === world.toLowerCase())) {
+                    if (!(await listWorlds(ctx)).some((w) => w.name.toLowerCase() === world.toLowerCase())) {
                         throw new Error(`This server has no world named "${world}"; Create World makes one`);
                     }
                     await activateWorld(ctx, world);
@@ -260,7 +259,7 @@ export function minecraftBlocks(ctx: Server): BlockSet {
                 inputs: { plugin: { type: "text", name: "Modrinth Project", description: "Its id or the name in its Modrinth address, such as essentialsx" } },
                 output: "plugin",
                 run: async ({ plugin }: { plugin: string }) => {
-                    return installLatestPlugin(plugin, pluginTarget(ctx.state), livePluginInstallDeps);
+                    return installLatestPlugin(plugin, pluginTarget(ctx.state), livePluginInstallDeps(ctx));
                 },
             }),
             needsCall(ctx, "deletePlugin", {
@@ -383,7 +382,7 @@ export function minecraftBlocks(ctx: Server): BlockSet {
                 text: "Player with UUID {uuid}",
                 inputs: { uuid: { type: "text", name: "UUID" } },
                 type: "player",
-                read: ({ uuid }: { uuid: string }) => playerForUuid(uuid),
+                read: ({ uuid }: { uuid: string }) => playerForUuid(ctx, uuid),
             },
             needsCall(ctx, "listPlayerStats", {
                 id: "player-statistics",
@@ -415,7 +414,7 @@ export function minecraftBlocks(ctx: Server): BlockSet {
                 category: "Worlds",
                 icon: "public",
                 type: "list<world>",
-                read: async () => (await listWorlds()).map((w) => ({ name: w.name, active: w.active, generated: w.generated, nether: w.hasNether, end: w.hasEnd })),
+                read: async () => (await listWorlds(ctx)).map((w) => ({ name: w.name, active: w.active, generated: w.generated, nether: w.hasNether, end: w.hasEnd })),
             },
             {
                 id: "active-world",
@@ -424,7 +423,7 @@ export function minecraftBlocks(ctx: Server): BlockSet {
                 icon: "public",
                 description: "The name of the world the server starts with",
                 type: "text",
-                read: () => resolveLevelName(),
+                read: () => resolveLevelName(ctx),
             },
             {
                 id: "plugins",

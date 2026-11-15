@@ -60,10 +60,10 @@ describe("call and game contracts", () => {
 
     test("an empty value is a valid edit for a file write, and a setting still needs its name", async () => {
         const mc = minecraftServer({ files: { "a.txt": "text" } });
-        const read: { version: string } = await mc.run(() => minecraftCalls.readServerFile!(mc.server, { path: "a.txt" }) as Promise<{ version: string }>);
-        await mc.run(() => minecraftCalls.writeServerFile!(mc.server, { path: "a.txt", text: "", version: read.version }));
+        const read = (await minecraftCalls.readServerFile!(mc.server, { path: "a.txt" })) as { version: string };
+        await minecraftCalls.writeServerFile!(mc.server, { path: "a.txt", text: "", version: read.version });
         expect(fs.readFileSync(path.join(mc.dir, "a.txt"), "utf8")).toBe("");
-        await expect(mc.run(() => minecraftCalls.writeLoaderSetting!(mc.server, { id: "", value: "x" }))).rejects.toThrow();
+        await expect(minecraftCalls.writeLoaderSetting!(mc.server, { id: "", value: "x" })).rejects.toThrow();
     });
 
     test("unknown games throw instead of falling back to Minecraft", () => {

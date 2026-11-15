@@ -5,7 +5,6 @@ import { startTestDaemon, type TestDaemon } from "./helpers/crane";
 import { gameServer } from "./helpers/game";
 import { readTree, tempDir, writeTree } from "./helpers/tmp";
 import { keptFile, linkFolder } from "../src/games/serviceKit";
-import { tf2Service } from "../src/games/tf2/service";
 import { PlayerStore, formatBanlist, parseBanlist } from "../src/games/terraria/roster";
 import { importUpload, inspectUpload, trashWorld, UPLOAD_DIR } from "../src/games/terraria/worldStore";
 
@@ -119,11 +118,10 @@ describe("other games' files", () => {
                 "install/tf/maps/cp_dustbowl.bsp": "bsp",
                 "install/tf/cfg/mapcycle.txt": userCycle,
             },
-            state: tf2Service.initialState(),
         });
-        await server.run(() => tf2Service.initialize(server.server, false));
-        const calls = await tf2Service.calls();
-        const call = (id: string, input: unknown) => server.run(() => calls[id]!(server.server, input));
+        await server.server.game.initialize(false);
+        const calls = await server.server.game.calls();
+        const call = (id: string, input: unknown) => calls[id]!(server.server, input);
         const cfg = (name: string) => path.join(server.dir, "install", "tf", "cfg", name);
 
         expect(await call("sourceMapCycle", {})).toMatchObject({ maps: ["ctf_2fort", "cp_dustbowl"], custom: false, file: "cfg/mapcycle.txt" });

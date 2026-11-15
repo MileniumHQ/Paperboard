@@ -6,7 +6,6 @@
 import { createHash } from "node:crypto";
 import * as nodeFs from "node:fs";
 import { zipSync, strToU8 } from "fflate";
-import { files } from "../../src/service/api";
 import { PANEL_ID } from "../../src/servers";
 import type { ModpackDeps } from "../../src/service/modpacks";
 import { loopbackServer, type LoopbackServer } from "./http";
@@ -58,20 +57,18 @@ export function packDeps(mc: McServer, cdn: LoopbackServer, overrides: Partial<M
     const published: unknown[] = [];
     const deps: ModpackDeps & { published: unknown[] } = {
         published,
-        serverDir: () => mc.run(() => files.getPath("", PANEL_ID)),
+        serverDir: () => mc.server.root(),
         levelName: async () => "world",
         fetchJson: async () => {
             throw new Error("this test reads no Modrinth records");
         },
         download: (opts) =>
-            mc.run(() =>
-                files.download({
+            mc.server.files.download({
                     url: opts.url.replace("https://cdn.modrinth.com", cdn.url),
                     targetPath: opts.targetPath,
                     sha1: opts.sha1,
                     appId: PANEL_ID,
                 }),
-            ),
         sha512: async (absolute) => sha512(nodeFs.readFileSync(absolute)),
         readConfig: async () => mc.server.settings,
         writeConfig: async (patch) => {

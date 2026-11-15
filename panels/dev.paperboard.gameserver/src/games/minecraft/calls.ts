@@ -2,7 +2,7 @@ import type { Server } from "../../service/server";
 import { minecraftSoftware } from "./index";
 import { sharedCalls, type ServerCalls } from "../../service/calls";
 import type { GameContractCalls } from "../serviceTypes";
-import { files as fileApi, errorMessage } from "../../service/api";
+import { errorMessage } from "../../service/api";
 import { sendServerCommand } from "../../service/lifecycle";
 import { waitForLine } from "./saving";
 import {
@@ -59,19 +59,17 @@ import { discardUpload, uploadDatapacks, uploadModpack, uploadPlugins } from "..
 import { liveUploadDeps } from "../../service/addonUploadDeps";
 import { liveModpackDeps } from "../../service/modpackDeps";
 import { assertPlayerName, assertSingleLine } from "../../core/players";
-import type { GameServerState } from "../../service/types";
-import { PANEL_ID } from "../../service/contract";
 import { isServerSoftware } from "../../software/catalog";
 import { INSTALL_OWNED_CONFIG_KEYS } from "../../software/installRecord";
 import { providerFor } from "./providers";
 import { isSupportedMcVersion, MIN_SUPPORTED_MC_VERSION, versionSupports } from "../../lib/versionProfile";
 import { gamerulesFor } from "../../core/gamerules";
 
-const loaderDeps = { serverDir: () => fileApi.getPath("", PANEL_ID) };
+const loaderDeps = (ctx: Server) => ({ serverDir: () => ctx.root() });
 
 // how Floodgate names Bedrock players here; null when it is not installed
 const bedrockNaming = (ctx: Server) =>
-    readBedrockNaming(minecraftSoftware(ctx.state.serverSoftware), loaderDeps);
+    readBedrockNaming(minecraftSoftware(ctx.state.serverSoftware), loaderDeps(ctx));
 
 // What the calls and the blocks of a Minecraft server both run.
 
@@ -86,10 +84,10 @@ const BAN_REFUSED = /Nothing changed|That player does not exist|Unknown player|N
 
 async function banCommand(ctx: Server, verb: "ban" | "pardon", name: string, command: string): Promise<void> {
     const done = new RegExp(`\\b${verb === "ban" ? "Banned" : "Unbanned"} (player )?${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i");
-    const recorded = async () => (await isBanned(name)) === (verb === "ban");
+    const recorded = async () => (await isBanned(ctx, name)) === (verb === "ban");
     // a list that already shows it can only be refused, and the refusal says why
     const watchList = !(await recorded());
-    const answer = waitForLine((line) => done.test(line) || BAN_REFUSED.test(line), BAN_ANSWER_MS, verb === "ban" ? `the ban of ${name}` : `the pardon of ${name}`);
+    const answer = waitForLine(ctx, (line) => done.test(line) || BAN_REFUSED.test(line), BAN_ANSWER_MS, verb === "ban" ? `the ban of ${name}` : `the pardon of ${name}`);
     try {
         await sendServerCommand(ctx, command);
     } catch (err) {
@@ -176,9 +174,9 @@ export async function installVersion(ctx: Server, rawSoftware: unknown, rawVersi
 }
 
 /** The name the server's player files give a UUID. */
-export async function playerForUuid(uuid: unknown): Promise<string> {
+export async function playerForUuid(ctx: Server, uuid: unknown): Promise<string> {
     if (!uuid || typeof uuid !== "string") throw new Error("UUID is required");
-    const name = await usernameFromUuid(uuid);
+    const name = await usernameFromUuid(ctx, uuid);
     if (!name) throw new Error(`No username on file for UUID ${uuid}`);
     return name;
 }
@@ -198,13 +196,13 @@ export const modpackCalls: Pick<GameContractCalls, "readModpack" | "listModpackV
         if (ctx.state.serverStatus !== "offline") {
             throw new Error("Stop the server before installing a modpack");
         }
-        return withInstallLock(() => installModpack({ projectId, versionId }, minecraftSoftware(ctx.state.serverSoftware), liveModpackDeps(ctx)));
+        return withInstallLock(ctx, () => installModpack({ projectId, versionId }, minecraftSoftware(ctx.state.serverSoftware), liveModpackDeps(ctx)));
     },
     removeModpack: async (_input, ctx) => {
         if (ctx.state.serverStatus !== "offline") {
             throw new Error("Stop the server before removing the modpack");
         }
-        return withInstallLock(() => removeModpack(liveModpackDeps(ctx)));
+        return withInstallLock(ctx, () => removeModpack(liveModpackDeps(ctx)));
     },
 };
 
@@ -286,7 +284,7 @@ export const minecraftCalls: ServerCalls = {
         return true;
     },
     retryRecovery: async (ctx: Server) => {
-        if (isInstallRunning()) throw new Error("An install is running; retry when it finishes.");
+        if (isInstallRunning(ctx)) throw new Error("An install is running; retry when it finishes.");
         const settled = await settleInterruptedWork(ctx);
         if (!settled) throw new Error(ctx.state.recoveryBlock ?? "The interrupted work could not be cleaned up.");
         return true;
@@ -307,17 +305,17 @@ export const minecraftCalls: ServerCalls = {
         await updatePanelConfig(ctx, patch);
         return true;
     },
-    listWorldDirs: async () => {
-        return listWorldDirs();
+    listWorldDirs: async (ctx) => {
+        return listWorldDirs(ctx);
     },
     exportWorld: async (ctx, inputs) => exportWorld(ctx, inputs?.levelName),
-    importWorld: async (_ctx, inputs) => importWorld(inputs?.file, inputs?.levelName),
-    discardWorldTransfer: async (_ctx, inputs) => {
-        await discardWorldTransfer(inputs?.file);
+    importWorld: async (ctx, inputs) => importWorld(ctx, inputs?.file, inputs?.levelName),
+    discardWorldTransfer: async (ctx, inputs) => {
+        await discardWorldTransfer(ctx, inputs?.file);
         return true;
     },
-    listWorlds: async () => {
-        return listWorlds();
+    listWorlds: async (ctx) => {
+        return listWorlds(ctx);
     },
     installServerVersion: async (
         ctx: Server,
@@ -328,7 +326,7 @@ export const minecraftCalls: ServerCalls = {
     // fetched here, not in the panel page: upstream indexes such as
     // files.minecraftforge.net send no CORS headers, and the service
     // already owns every other call to these hosts
-    listSoftwareVersions: async (_ctx: Server, inputs: { software?: string }) => {
+    listSoftwareVersions: async (ctx: Server, inputs: { software?: string }) => {
         const software = inputs?.software;
         if (!isServerSoftware(software)) {
             throw new Error(`Unknown server software: ${JSON.stringify(software)}`);
@@ -336,44 +334,44 @@ export const minecraftCalls: ServerCalls = {
         return providerFor(software).listVersions();
     },
     readLoaderSettings: async (ctx: Server) =>
-        readLoaderSettings(minecraftSoftware(ctx.state.serverSoftware), loaderDeps),
+        readLoaderSettings(minecraftSoftware(ctx.state.serverSoftware), loaderDeps(ctx)),
     writeLoaderSetting: async (ctx: Server, inputs: { id?: string; value?: string }) => {
-        if (isInstallRunning()) {
+        if (isInstallRunning(ctx)) {
             throw new Error("A server install is running; change loader settings once it finishes.");
         }
-        return writeLoaderSetting(minecraftSoftware(ctx.state.serverSoftware), inputs?.id, inputs?.value, loaderDeps);
+        return writeLoaderSetting(minecraftSoftware(ctx.state.serverSoftware), inputs?.id, inputs?.value, loaderDeps(ctx));
     },
     readCrossplay: async (ctx: Server) => {
         const software = minecraftSoftware(ctx.state.serverSoftware);
         // a Geyser set up before Paperboard let RakNet clients in shows,
         // and gets on its next start, the setup it would get today
-        if (!isInstallRunning() && (await findCrossplayJars(software, loaderDeps)).geyser) {
-            await settleBedrockTransport(software, loaderDeps);
+        if (!isInstallRunning(ctx) && (await findCrossplayJars(software, loaderDeps(ctx))).geyser) {
+            await settleBedrockTransport(software, loaderDeps(ctx));
         }
-        return readCrossplay(software, loaderDeps);
+        return readCrossplay(software, loaderDeps(ctx));
     },
     writeCrossplaySetting: async (ctx: Server, inputs: { id?: string; value?: string }) => {
-        if (isInstallRunning()) {
+        if (isInstallRunning(ctx)) {
             throw new Error("A server install is running; change crossplay settings once it finishes.");
         }
-        return writeCrossplaySetting(minecraftSoftware(ctx.state.serverSoftware), inputs?.id, inputs?.value, loaderDeps);
+        return writeCrossplaySetting(minecraftSoftware(ctx.state.serverSoftware), inputs?.id, inputs?.value, loaderDeps(ctx));
     },
     prepareCrossplay: async (ctx: Server) => {
-        if (isInstallRunning()) {
+        if (isInstallRunning(ctx)) {
             throw new Error("A server install is running; turn crossplay on once it finishes.");
         }
-        await prepareCrossplay(minecraftSoftware(ctx.state.serverSoftware), loaderDeps);
-        await claimBedrockPorts(minecraftSoftware(ctx.state.serverSoftware), false, livePortDeps());
-        return readCrossplay(minecraftSoftware(ctx.state.serverSoftware), loaderDeps);
+        await prepareCrossplay(minecraftSoftware(ctx.state.serverSoftware), loaderDeps(ctx));
+        await claimBedrockPorts(minecraftSoftware(ctx.state.serverSoftware), false, livePortDeps(ctx));
+        return readCrossplay(minecraftSoftware(ctx.state.serverSoftware), loaderDeps(ctx));
     },
-    readServerIcon: async () => readServerIcon(loaderDeps),
-    setServerIcon: async (_ctx, inputs) => setServerIcon(inputs?.png, loaderDeps),
-    removeServerIcon: async () => {
-        await removeServerIcon(loaderDeps);
+    readServerIcon: async (ctx) => readServerIcon(loaderDeps(ctx)),
+    setServerIcon: async (ctx, inputs) => setServerIcon(inputs?.png, loaderDeps(ctx)),
+    removeServerIcon: async (ctx) => {
+        await removeServerIcon(loaderDeps(ctx));
         return true;
     },
     locateAddonConfig: async (ctx: Server, inputs: { filename?: string }) =>
-        locateAddonConfig(inputs?.filename, minecraftSoftware(ctx.state.serverSoftware), loaderDeps),
+        locateAddonConfig(inputs?.filename, minecraftSoftware(ctx.state.serverSoftware), loaderDeps(ctx)),
     listMapRegions: async (ctx: Server) => {
         return listMapRegions(ctx);
     },
@@ -392,14 +390,14 @@ export const minecraftCalls: ServerCalls = {
     listInstalledPlugins: async (ctx: Server) => {
         return listInstalledPlugins(ctx);
     },
-    recordPluginInstalls: async (_ctx: Server, inputs: { set?: unknown; remove?: unknown }) => {
-        await recordPluginInstalls(inputs);
+    recordPluginInstalls: async (ctx: Server, inputs: { set?: unknown; remove?: unknown }) => {
+        await recordPluginInstalls(ctx, inputs);
         return true;
     },
     previewPluginInstall: (ctx: Server, inputs: Parameters<typeof previewPluginInstall>[0]) =>
-        previewPluginInstall(inputs ?? {}, pluginTarget(ctx.state), livePluginInstallDeps),
+        previewPluginInstall(inputs ?? {}, pluginTarget(ctx.state), livePluginInstallDeps(ctx)),
     installPluginVersion: (ctx: Server, inputs: Parameters<typeof installPluginVersion>[0]) =>
-        installPluginVersion(inputs ?? {}, pluginTarget(ctx.state), livePluginInstallDeps),
+        installPluginVersion(inputs ?? {}, pluginTarget(ctx.state), livePluginInstallDeps(ctx)),
     uninstallAllPlugins: async (ctx: Server) => {
         return uninstallAllPlugins(ctx);
     },
@@ -446,18 +444,18 @@ export const minecraftCalls: ServerCalls = {
     installModpack: (ctx: Server, inputs: { projectId: string; versionId: string }) => modpackCalls.installModpack(inputs, ctx),
     removeModpack: (ctx: Server) => modpackCalls.removeModpack(undefined, ctx),
     uploadPlugins: async (ctx: Server, inputs: { stage?: string }) =>
-        withInstallLock(() => uploadPlugins(inputs?.stage, minecraftSoftware(ctx.state.serverSoftware), liveUploadDeps(ctx))),
+        withInstallLock(ctx, () => uploadPlugins(inputs?.stage, minecraftSoftware(ctx.state.serverSoftware), liveUploadDeps(ctx))),
     uploadDatapacks: async (ctx: Server, inputs: { stage?: string }) => {
         if (!versionSupports(ctx.state.serverVersion, "datapacks")) {
             throw new Error("Datapacks need Minecraft 1.13 or newer.");
         }
-        return withInstallLock(() => uploadDatapacks(inputs?.stage, liveUploadDeps(ctx)));
+        return withInstallLock(ctx, () => uploadDatapacks(inputs?.stage, liveUploadDeps(ctx)));
     },
     uploadModpack: async (ctx: Server, inputs: { stage?: string }) => {
         if (ctx.state.serverStatus !== "offline") {
             throw new Error("Stop the server before installing a modpack");
         }
-        const outcome = await withInstallLock(() => uploadModpack(inputs?.stage, minecraftSoftware(ctx.state.serverSoftware), liveModpackDeps(ctx)));
+        const outcome = await withInstallLock(ctx, () => uploadModpack(inputs?.stage, minecraftSoftware(ctx.state.serverSoftware), liveModpackDeps(ctx)));
         return outcome;
     },
     discardAddonUpload: async (ctx: Server, inputs: { stage?: string }) => {
@@ -477,7 +475,7 @@ export const minecraftCalls: ServerCalls = {
         ctx: Server,
         inputs: { player?: string; uuid?: string; size?: number },
     ) => {
-        return getHeadDataUrl({
+        return getHeadDataUrl(ctx, {
             name: inputs?.player,
             uuid: inputs?.uuid,
             size: inputs?.size,
@@ -506,7 +504,7 @@ export const minecraftCalls: ServerCalls = {
         queryPlayerPositions(ctx);
         return true;
     },
-    listRoster: async () => listRoster(),
+    listRoster: async (ctx) => listRoster(ctx),
     currentPlayerNames: async (ctx: Server, inputs: { uuids?: unknown }) =>
         currentPlayerNames(ctx, inputs?.uuids, await bedrockNaming(ctx)),
     readBedrockNaming: async (ctx: Server) => bedrockNaming(ctx),

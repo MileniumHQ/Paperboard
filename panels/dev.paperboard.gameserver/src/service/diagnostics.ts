@@ -1,10 +1,5 @@
 import type { Server } from "./server";
-import {
-    files as fileApi,
-    processApi,
-    system,
-} from "./api";
-import { type GameServerState, PANEL_ID } from "./types";
+import { system } from "./api";
 import {
     checkLogForIssues as coreCheckLogForIssues,
     detectServerIssue,
@@ -27,15 +22,15 @@ export interface KillPortDeps {
     ownPid: number;
 }
 
-const killPortDeps: KillPortDeps = {
+const killPortDeps = (ctx: Server): KillPortDeps => ({
     isWindows: async () =>
-        isWindowsTarget(await fileApi.getPath("", PANEL_ID), (await system.getInfo()).os),
+        isWindowsTarget(await ctx.root(), (await system.getInfo()).os),
     run: async (command, args, onStdout) =>
-        (await processApi.run({ command, args, onStdout })).exitCode,
+        (await ctx.process.run({ command, args, onStdout })).exitCode,
     // this service runs on the server's computer, so the pid is local
     kill: (pid) => process.kill(pid, "SIGKILL"),
     ownPid: process.pid,
-};
+});
 
 // Kills whatever listens on the port and returns how many processes it
 // killed. Finding none is a valid answer (0); being unable to look is a
@@ -86,7 +81,7 @@ export async function killConflictingProcess(
     // boundary: the port arrives from UI action input — validated here, and
     // again inside killConflictingProcessWith as the last line of defense
     const targetPort = assertPort(port || ctx.state.serverPort, "port");
-    const killed = await killConflictingProcessWith(killPortDeps, targetPort);
+    const killed = await killConflictingProcessWith(killPortDeps(ctx), targetPort);
     console.log(`[Service:Diagnostics] killed ${killed} process(es) listening on port ${targetPort}`);
 }
 
@@ -98,6 +93,6 @@ export async function resetWorldFiles(
     assertServerOffline(ctx);
     // the reset follows the server's actual level-name, read fresh — a
     // renamed world must reset the renamed dirs, not hardcoded "world*"
-    const levelName = await resolveLevelName();
-    await trashRemovePathsWith(makeTrashRemoveDeps(), getWorldDirsToDelete(levelName));
+    const levelName = await resolveLevelName(ctx);
+    await trashRemovePathsWith(makeTrashRemoveDeps(ctx), getWorldDirsToDelete(levelName));
 }

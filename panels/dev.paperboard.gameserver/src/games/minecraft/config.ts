@@ -1,9 +1,4 @@
 import type { Server } from "../../service/server";
-import {
-    config,
-    updateSettings,
-    files as fileApi,
-} from "../../service/api";
 import { parseProperties, extractServerPort } from "../../core/properties";
 import { DEFAULT_MOTD } from "../../core/motd";
 import type { GameServerState } from "../../service/types";
@@ -15,7 +10,7 @@ export { parseProperties };
 export async function loadConfigAndProperties(
     ctx: Server,
 ): Promise<void> {
-    const saved = await config.get<any>(PANEL_ID);
+    const saved: Record<string, any> = ctx.settings;
     const patch: Partial<GameServerState> = {};
     // a software Paperboard doesn't run is a damaged setting, never shown as the default one
     if (isServerSoftware(saved?.software)) patch.serverSoftware = saved.software;
@@ -23,7 +18,7 @@ export async function loadConfigAndProperties(
     if (saved?.version) patch.serverVersion = saved.version;
     if (typeof saved?.ramGB === "number") patch.ramAllocation = saved.ramGB;
 
-    const propertiesContent = await fileApi.read("server.properties", PANEL_ID);
+    const propertiesContent = await ctx.files.read("server.properties", PANEL_ID);
     if (propertiesContent) {
         const props = parseProperties(propertiesContent);
         const port = extractServerPort(props);
@@ -45,6 +40,6 @@ export async function updatePanelConfig(
     ctx: Server,
     patch: Record<string, unknown>,
 ): Promise<void> {
-    await updateSettings(patch);
+    await ctx.updateSettings(patch);
     await loadConfigAndProperties(ctx);
 }

@@ -23,7 +23,7 @@ afterAll(async () => {
 const call = async (server: GameServer, id: string, input: unknown) => {
     const def = (await server.server.game.calls())[id];
     if (!def) throw new Error(`${server.server.stored.game} has no call ${id}`);
-    return server.run(() => def(server.server, input));
+    return def(server.server, input);
 };
 const vault = async (server: GameServer, name: string) => (await secretsApi.get(`${server.server.id}-${server.server.stored.game}-${name}`, PANEL_ID)).value ?? "";
 /** every file in the server folder that holds `text` */
@@ -47,7 +47,7 @@ async function terrariaServer(): Promise<GameServer> {
         files: { [`install/${release.directory}/manifest.json`]: JSON.stringify({ software: "vanilla", version: release.version, sha256: release.sha256, os: process.platform, arch: process.arch }) }
     });
     placeStandIn("fakeTerraria", path.join(server.dir, "install", release.directory, entrypoint(process.platform)));
-    await server.run(() => server.server.game.initialize(server.server, false));
+    await server.server.game.initialize(false);
     return server;
 }
 
@@ -61,12 +61,12 @@ describe("game server secrets and inputs", () => {
         expect(JSON.stringify(server.server.settings)).not.toContain(secret);
         expect(filesHolding(server.dir, secret)).toEqual([]);
 
-        await server.run(() => startServerInstance(server.server));
+        await startServerInstance(server.server);
         await server.server.waitFor((s) => s.serverStatus === "online", "Terraria to listen");
         expect(JSON.parse(fs.readFileSync(path.join(server.dir, "install", "1458", "Linux", "started-with.json"), "utf8")).password).toBe(secret);
         await server.server.waitFor((s) => s.serverEntries.some((e) => e.content.includes("Loaded config")), "Terraria's config line");
         // a player says it in chat
-        await server.run(() => processApi.write("terraria-server", `relay <Bob> join with ${secret} everyone\n`));
+        await server.server.process.write("terraria-server", `relay <Bob> join with ${secret} everyone\n`);
         await server.server.waitFor((s) => s.chatMessages.some((m) => (m.content ?? m.text ?? "").includes("join with")), "Bob's chat line");
         const shown = JSON.stringify([server.server.state.serverEntries, server.server.state.chatMessages]);
         expect(shown).toContain("password=[redacted]");
@@ -74,11 +74,11 @@ describe("game server secrets and inputs", () => {
         expect(shown).not.toContain(secret);
         // the running config can't be opened, and the console can't set or reveal it
         const service = server.server.game;
-        await expect(server.run(() => service.assertFileAccess!(server.server, "serverconfig.txt", false))).rejects.toThrow("contains vault credentials while running");
-        await expect(server.run(() => sendServerCommand(server.server, "password hunter2"))).rejects.toThrow("Use Options for the password");
+        await expect(service.assertFileAccess!("serverconfig.txt", false)).rejects.toThrow("contains vault credentials while running");
+        await expect(sendServerCommand(server.server, "password hunter2")).rejects.toThrow("Use Options for the password");
 
         const exit = server.nextExit();
-        await server.run(() => stopServerInstance(server.server));
+        await stopServerInstance(server.server);
         expect(await exit).toBe(0);
         // stopped, the folder (which backups copy) holds no password; the stand-in's own record of its start aside
         expect(filesHolding(server.dir, secret).filter((f) => !f.endsWith("started-with.json"))).toEqual([]);
@@ -89,7 +89,7 @@ describe("game server secrets and inputs", () => {
             files: { "install/tf/maps/ctf_2fort.bsp": "bsp", "install/tf/cfg/server.cfg": "// the game's own\n" }
         });
         const service = server.server.game;
-        await server.run(() => service.initialize(server.server, false));
+        await service.initialize(false);
         await call(server, "writeGameOptions", { patch: { rconPassword: "rcon-Secret-1", password: "join-Secret-1", hostname: "My Server" } });
         expect([await vault(server, "rcon-password"), await vault(server, "join-password")]).toEqual(["rcon-Secret-1", "join-Secret-1"]);
         // writing the rotation writes the game's config files from the settings
@@ -105,8 +105,8 @@ describe("game server secrets and inputs", () => {
         await expect(call(server, "sourceMapCycleSet", { maps: ["../../cfg/server"] })).rejects.toThrow("Choose a map by its name");
         await expect(call(server, "sourcePluginRemove", { file: "../../../server.cfg" })).rejects.toThrow();
         await expect(call(server, "sourceBan", { steamId: "[U:1:1]; quit" })).rejects.toThrow("Steam id");
-        await expect(server.run(() => sendServerCommand(server.server, "rcon_password stolen"))).rejects.toThrow("Paperboard manages the RCON password");
-        await expect(server.run(() => service.assertFileAccess!(server.server, "install/tf/cfg/paperboard_secrets.cfg", false))).rejects.toThrow("holds Team Fortress 2's passwords");
+        await expect(sendServerCommand(server.server, "rcon_password stolen")).rejects.toThrow("Paperboard manages the RCON password");
+        await expect(service.assertFileAccess!("install/tf/cfg/paperboard_secrets.cfg", false)).rejects.toThrow("holds Team Fortress 2's passwords");
         expect(JSON.stringify(server.server.settings)).toBe(settingsBefore);
         expect(fs.readFileSync(path.join(server.dir, "install", "tf", "cfg", "server.cfg"), "utf8")).not.toContain("rcon_password y");
     });
@@ -116,7 +116,7 @@ describe("game server secrets and inputs", () => {
             files: { "install/garrysmod/maps/gm_construct.bsp": "bsp", "install/garrysmod/gamemodes/sandbox/sandbox.txt": "", "install/garrysmod/cfg/server.cfg": "// the game's own\n" }
         });
         const service = server.server.game;
-        await server.run(() => service.initialize(server.server, false));
+        await service.initialize(false);
         // 12 bytes: its packet begins like a TLS hello, which the server takes for a web request
         await expect(call(server, "writeGameOptions", { patch: { rconPassword: "abcdefghijkl" } })).rejects.toThrow("exactly 12 characters");
         expect(await vault(server, "rcon-password")).toBe("");
@@ -142,13 +142,13 @@ describe("game server secrets and inputs", () => {
         const server = gameServer("palworld", { settings: { port: await freePort(), restPort: await freePort() } });
         installPalworld(server.dir);
         const service = server.server.game;
-        await server.run(() => service.initialize(server.server, false));
+        await service.initialize(false);
         for (const userId of ["steam_1;rm -rf", "../players", "", "x".repeat(65)]) {
             await expect(call(server, "palworldKick", { userId })).rejects.toThrow("Choose a player by their Palworld user id");
             await expect(call(server, "palworldBan", { userId })).rejects.toThrow("Choose a player by their Palworld user id");
         }
         const binary = fs.readFileSync(path.join(server.dir, "install", "PalServer.sh"));
-        await expect(server.run(() => service.assertFileAccess!(server.server, "install/PalServer.sh", true))).rejects.toThrow("Installed Palworld files are managed by Updates");
+        await expect(service.assertFileAccess!("install/PalServer.sh", true)).rejects.toThrow("Installed Palworld files are managed by Updates");
         expect(fs.readFileSync(path.join(server.dir, "install", "PalServer.sh"))).toEqual(binary);
     });
 });

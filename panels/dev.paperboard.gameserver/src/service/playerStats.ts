@@ -1,11 +1,11 @@
 import type { Server } from "./server";
-import { files as fileApi, errorMessage } from "./api";
+import { errorMessage } from "./api";
 import { listDirectory } from "./filesystem";
 import {
     parsePlayerStats,
     type PlayerStatSummary,
 } from "../core/playerStats";
-import { type GameServerState, PANEL_ID } from "./types";
+import { PANEL_ID } from "./types";
 import { resolveLevelName } from "./worlds";
 
 const UUID_FILE_RE =
@@ -16,8 +16,8 @@ const UUID_FILE_RE =
 const MAX_PLAYER_STATS = 2000;
 
 /** a file the server writes, or null when it has not written it; one it can't read throws why */
-async function readJson(relative: string): Promise<unknown> {
-    const content = await fileApi.read(relative, PANEL_ID);
+async function readJson(ctx: Server, relative: string): Promise<unknown> {
+    const content = await ctx.files.read(relative, PANEL_ID);
     if (!content) return null;
     try {
         return JSON.parse(content);
@@ -47,29 +47,29 @@ export type { PlayerStatSummary };
 // applied last: the server rewrites it on every join, while the lists keep
 // the name a player had when they were added, so a renamed player resolves
 // to their new name.
-export async function resolvePlayerIdentities(): Promise<Map<string, string>> {
+export async function resolvePlayerIdentities(ctx: Server): Promise<Map<string, string>> {
     const [usercache, ops, whitelist, banned] = await Promise.all([
-        readJson("usercache.json"),
-        readJson("ops.json"),
-        readJson("whitelist.json"),
-        readJson("banned-players.json"),
+        readJson(ctx, "usercache.json"),
+        readJson(ctx, "ops.json"),
+        readJson(ctx, "whitelist.json"),
+        readJson(ctx, "banned-players.json"),
     ]);
     const names = new Map<string, string>();
     for (const raw of [banned, whitelist, ops, usercache]) collectNames(raw, names);
     return names;
 }
 
-export async function usernameFromUuid(rawUuid: string): Promise<string | null> {
+export async function usernameFromUuid(ctx: Server, rawUuid: string): Promise<string | null> {
     const uuid = String(rawUuid ?? "").trim().toLowerCase();
     if (!uuid) return null;
-    const names = await resolvePlayerIdentities();
+    const names = await resolvePlayerIdentities(ctx);
     return names.get(uuid) ?? null;
 }
 
-export async function uuidForPlayerName(rawName: string): Promise<string | null> {
+export async function uuidForPlayerName(ctx: Server, rawName: string): Promise<string | null> {
     const wanted = String(rawName ?? "").trim().toLowerCase();
     if (!wanted) return null;
-    const names = await resolvePlayerIdentities();
+    const names = await resolvePlayerIdentities(ctx);
     for (const [uuid, name] of names) {
         if (name.toLowerCase() === wanted) return uuid;
     }
@@ -78,23 +78,23 @@ export async function uuidForPlayerName(rawName: string): Promise<string | null>
 
 // new worlds nest per-player data under players/ (26.x); older ones keep
 // stats/ at the world root. Check the modern path first.
-async function resolveStatsDir(level: string): Promise<string | null> {
+async function resolveStatsDir(ctx: Server, level: string): Promise<string | null> {
     const candidates = [`${level}/players/stats`, `${level}/stats`];
     for (const candidate of candidates) {
-        if (await fileApi.exists(candidate, PANEL_ID)) return candidate;
+        if (await ctx.files.exists(candidate, PANEL_ID)) return candidate;
     }
     return null;
 }
 
 export async function listPlayerStats(
-    _ctx: Server,
+    ctx: Server,
 ): Promise<PlayerStatSummary[]> {
-    const level = await resolveLevelName();
-    const names = await resolvePlayerIdentities();
+    const level = await resolveLevelName(ctx);
+    const names = await resolvePlayerIdentities(ctx);
 
-    const statsDir = await resolveStatsDir(level);
+    const statsDir = await resolveStatsDir(ctx, level);
     if (!statsDir) return [];
-    const entries = await listDirectory(statsDir);
+    const entries = await listDirectory(ctx, statsDir);
     const out: PlayerStatSummary[] = [];
     for (const entry of entries) {
         if (out.length >= MAX_PLAYER_STATS) {
@@ -106,7 +106,7 @@ export async function listPlayerStats(
         const match = UUID_FILE_RE.exec(entry);
         if (!match) continue;
         const uuid = match[1].toLowerCase();
-        const parsed = parsePlayerStats(await readJson(`${statsDir}/${entry}`));
+        const parsed = parsePlayerStats(await readJson(ctx, `${statsDir}/${entry}`));
         if (!parsed) continue;
         out.push({ uuid, name: names.get(uuid) ?? uuid, ...parsed });
     }

@@ -26,10 +26,9 @@ async function palworldServer(files: Record<string, string> = {}): Promise<GameS
     const server = gameServer("palworld", {
         settings: { port: await freePort(), restPort: await freePort() },
         files,
-        state: palworldService.initialState(),
     });
     installPalworld(server.dir, files["install/fake-palworld.json"] ? JSON.parse(files["install/fake-palworld.json"]) : undefined);
-    await server.run(() => palworldService.initialize(server.server, false));
+    await server.server.game.initialize(false);
     return server;
 }
 
@@ -37,17 +36,17 @@ const ini = (server: GameServer) => fs.readFileSync(path.join(server.dir, ...INI
 const entry = (text: string, key: string) => parseOptionSettings(text).find((e) => e.key === key)?.raw;
 const vault = async (server: GameServer, name: string) => (await secretsApi.get(`${server.server.id}-palworld-${name}`, PANEL_ID)).value ?? "";
 /** the Files tab opening the settings file; it runs after any cleanup already queued */
-const settled = (server: GameServer) => server.run(() => palworldService.assertFileAccess!(server.server, INI, false));
-const action = async (id: string) => (await palworldService.calls())[id]!;
+const settled = (server: GameServer) => server.server.game.assertFileAccess!(INI, false);
+const action = async (server: GameServer, id: string) => (await server.server.game.calls())[id]!;
 
 // Secrets stay out of files and the console.
 describe("secrets", () => {
     test("Palworld's passwords live in the vault, are in its settings file only while it runs, and never reach the console", async () => {
         const server = await palworldServer();
-        await server.run(async () => (await action("writeGameOptions"))(server.server, { patch: { password: "join-secret-1" } }));
+        await (await action(server, "writeGameOptions"))(server.server, { patch: { password: "join-secret-1" } });
         expect(await vault(server, "join-password")).toBe("join-secret-1");
 
-        await server.run(() => startServerInstance(server.server));
+        await startServerInstance(server.server);
         await server.server.waitFor((s) => s.serverStatus === "online", "Palworld to answer its REST API");
         // its output reaches the console apart from its REST answers
         await server.server.waitFor((s) => s.serverEntries.some((e) => e.content.includes("Loaded settings")), "Palworld's settings line in the console");
@@ -63,7 +62,7 @@ describe("secrets", () => {
         await expect(settled(server)).rejects.toThrow("Stop Palworld to open PalWorldSettings.ini");
 
         const exit = server.nextExit();
-        await server.run(() => stopServerInstance(server.server));
+        await stopServerInstance(server.server);
         expect(await exit).toBe(0);
         await settled(server);
         const after = ini(server);
@@ -78,7 +77,7 @@ describe("secrets", () => {
     test("a server that dies while starting leaves no password in its settings file", async () => {
         const server = await palworldServer({ "install/fake-palworld.json": JSON.stringify({ exitAfterStart: 3 }) });
         const exit = server.nextExit();
-        await server.run(() => startServerInstance(server.server));
+        await startServerInstance(server.server);
         expect(await exit).toBe(3);
         await settled(server);
         const admin = await vault(server, "admin-password");
@@ -91,11 +90,11 @@ describe("secrets", () => {
 
     test("a service starting next to a stopped server blanks passwords an earlier one left in the file", async () => {
         const server = await palworldServer();
-        await server.run(() => palworldService.loadOptions!(server.server));
+        await server.server.game.loadOptions!();
         const left = DEFAULT_INI.replace('AdminPassword=""', 'AdminPassword="leftover-admin"').replace('ServerPassword=""', 'ServerPassword="leftover-join"').replace(/^;.*\n/gm, "");
         fs.mkdirSync(path.dirname(path.join(server.dir, ...INI.split("/"))), { recursive: true });
         fs.writeFileSync(path.join(server.dir, ...INI.split("/")), left);
-        await server.run(() => palworldService.initialize(server.server, false));
+        await server.server.game.initialize(false);
         expect([entry(ini(server), "AdminPassword"), entry(ini(server), "ServerPassword"), entry(ini(server), "Difficulty")]).toEqual(['""', '""', "None"]);
     });
 

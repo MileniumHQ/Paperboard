@@ -5,8 +5,6 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { handleProcessData, handleProcessExit } from "../../src/service/lifecycle";
-import { inServer } from "../../src/service/scope";
-import { processApi } from "../../src/service/api";
 import { javaPackageFor } from "../../src/lib/versionProfile";
 import { PANEL_ID } from "../../src/servers";
 import type { GameServerState } from "../../src/service/types";
@@ -21,9 +19,9 @@ const created: McServer[] = [];
 onDaemonStop(async () => {
     for (const mc of created.splice(0)) {
         for (const id of mc.server.game.processIds) {
-            if (!(await mc.run(() => processApi.exists(id)))) continue;
+            if (!(await mc.server.process.exists(id))) continue;
             const exit = id === "mc-server" ? mc.nextExit() : null;
-            await mc.run(() => processApi.kill(id, "SIGKILL"));
+            await mc.server.process.kill(id, "SIGKILL");
             if (exit) await exit;
         }
     }
@@ -35,7 +33,6 @@ export interface McServer {
     server: TestServer;
     /** the server folder on disk */
     dir: string;
-    run<T>(work: () => T): T;
     /** resolves with the exit code of the next exit of the server process */
     nextExit(): Promise<number | undefined>;
     /** the console commands the server process received, in order */
@@ -65,17 +62,14 @@ export function minecraftServer(opts: {
         { id, directory, settings: { configured: true, software, version, ...opts.settings } },
         { serverSoftware: software as GameServerState["serverSoftware"], serverVersion: version, ramAllocation: 1, ...opts.state },
     );
-    const run = <T>(work: () => T): T => inServer(server, work);
     const exits: ((code: number | undefined) => void)[] = [];
-    run(() => {
-        server.unsubscribe.push(processApi.onData("mc-server", (chunk) => handleProcessData(server, chunk)));
-        server.unsubscribe.push(
-            processApi.onExit("mc-server", (code) => {
-                handleProcessExit(server, code);
-                for (const waiter of exits.splice(0)) waiter(code);
-            }),
-        );
-    });
+    server.unsubscribe.push(
+        server.process.onData("mc-server", (chunk) => handleProcessData(server, chunk)),
+        server.process.onExit("mc-server", (code) => {
+            handleProcessExit(server, code);
+            for (const waiter of exits.splice(0)) waiter(code);
+        }),
+    );
     const commands = () => {
         const file = path.join(dir, "commands.log");
         return fs.existsSync(file) ? fs.readFileSync(file, "utf8").split("\n").filter(Boolean) : [];
@@ -83,7 +77,6 @@ export function minecraftServer(opts: {
     const made: McServer = {
         server,
         dir,
-        run,
         nextExit: () => new Promise((resolve) => exits.push(resolve)),
         commands,
         received: async (command, after = 0) => {

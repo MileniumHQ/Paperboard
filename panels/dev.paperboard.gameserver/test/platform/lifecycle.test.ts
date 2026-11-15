@@ -26,13 +26,13 @@ const runs = (mc: McServer) => fs.readFileSync(path.join(mc.dir, "runs.log"), "u
 const triggers = (mc: McServer, id: string) => mc.server.triggers.filter((t) => t.id === id);
 
 async function startOnline(mc: McServer): Promise<void> {
-    await mc.run(() => startServerInstance(mc.server));
+    await startServerInstance(mc.server);
     await mc.server.waitFor((s) => s.serverStatus === "online", "the server to come online");
 }
 
 async function stopOffline(mc: McServer): Promise<void> {
     const exit = mc.nextExit();
-    await mc.run(() => stopServerInstance(mc.server));
+    await stopServerInstance(mc.server);
     expect(await exit).toBe(0);
     expect(mc.server.state.serverStatus).toBe("offline");
 }
@@ -54,14 +54,14 @@ describe("start, stop and restart", () => {
         expect(mc.commands().at(-1)).toBe("stop");
         expect(triggers(mc, TRIGGER_IDS.serverStopped)).toHaveLength(1);
         expect(triggers(mc, TRIGGER_IDS.serverCrashed)).toHaveLength(0);
-        expect(await mc.run(() => processApi.exists("mc-server"))).toBe(false);
+        expect(await mc.server.process.exists("mc-server")).toBe(false);
     });
 
     test("restart stops the server and starts a fresh instance", async () => {
         const mc = minecraftServer();
         await startOnline(mc);
         const exit = mc.nextExit();
-        await mc.run(() => restartServerInstance(mc.server));
+        await restartServerInstance(mc.server);
         expect(mc.server.state.serverStatus).toBe("restarting");
         expect(await exit).toBe(0);
         await mc.server.waitFor((s) => s.serverStatus === "online", "the restarted server to come online");
@@ -75,50 +75,50 @@ describe("start, stop and restart", () => {
     test("a server that ignores stop is force-killed by one pending SIGKILL, and a clean exit cancels it", async () => {
         const mc = minecraftServer({ files: { "fake-server.json": JSON.stringify({ ignoreStop: true }) } });
         await startOnline(mc);
-        await mc.run(() => stopServerInstance(mc.server));
+        await stopServerInstance(mc.server);
         expect(mc.server.state.serverStatus).toBe("stopping");
-        expect(mc.run(() => __lifecycleTest.isStopForceKillPending())).toBe(true);
+        expect(__lifecycleTest.isStopForceKillPending(mc.server)).toBe(true);
         // a second stop reschedules the one force-kill rather than adding one
-        mc.run(() => __lifecycleTest.scheduleStopForceKill(mc.server, 600_000));
-        expect(mc.run(() => __lifecycleTest.isStopForceKillPending())).toBe(true);
+        __lifecycleTest.scheduleStopForceKill(mc.server, 600_000);
+        expect(__lifecycleTest.isStopForceKillPending(mc.server)).toBe(true);
         // the server exits on its own: the pending kill goes
         const exit = mc.nextExit();
-        await mc.run(() => processApi.write("mc-server", "crash 0\n"));
+        await mc.server.process.write("mc-server", "crash 0\n");
         expect(await exit).toBe(0);
-        expect(mc.run(() => __lifecycleTest.isStopForceKillPending())).toBe(false);
+        expect(__lifecycleTest.isStopForceKillPending(mc.server)).toBe(false);
         expect(mc.server.state.serverStatus).toBe("offline");
 
         // the same server again, and this time the force-kill fires
         await startOnline(mc);
-        await mc.run(() => stopServerInstance(mc.server));
+        await stopServerInstance(mc.server);
         const killed = mc.nextExit();
-        mc.run(() => __lifecycleTest.scheduleStopForceKill(mc.server, 0));
+        __lifecycleTest.scheduleStopForceKill(mc.server, 0);
         const code = await killed;
         expect(code).not.toBe(0);
         await mc.server.waitFor((s) => s.serverStatus === "offline", "the killed server to read offline");
-        expect(await mc.run(() => processApi.exists("mc-server"))).toBe(false);
+        expect(await mc.server.process.exists("mc-server")).toBe(false);
     });
 
     test("a force-killed restart comes back and stays online, and a server still running after a force-kill is never called offline", async () => {
         const mc = minecraftServer({ files: { "fake-server.json": JSON.stringify({ ignoreStop: true }) } });
         await startOnline(mc);
-        await mc.run(() => restartServerInstance(mc.server));
+        await restartServerInstance(mc.server);
         const killed = mc.nextExit();
-        mc.run(() => __lifecycleTest.scheduleStopForceKill(mc.server, 0));
+        __lifecycleTest.scheduleStopForceKill(mc.server, 0);
         expect(await killed).not.toBe(0);
         await mc.server.waitFor((s) => s.serverStatus === "online", "the force-killed restart to come online");
         // the exit ended the force-kill: nothing is left to write over the new instance
-        expect(mc.run(() => __lifecycleTest.isStopForceKillPending())).toBe(false);
+        expect(__lifecycleTest.isStopForceKillPending(mc.server)).toBe(false);
         expect(runs(mc)).toHaveLength(2);
         // a force-kill that finds the server process still there says so, and leaves it online to stop again
-        await mc.run(() => __lifecycleTest.confirmForceKill(mc.server));
+        await __lifecycleTest.confirmForceKill(mc.server);
         expect(mc.server.state.serverStatus).toBe("online");
         expect(mc.server.state.serverEntries.at(-1)?.content).toBe("[Server] Could not confirm the force-kill: the process is still running.");
         expect(mc.server.state.serverEntries.filter((e) => e.content === "[Server] Process stopped.")).toHaveLength(0);
 
-        await mc.run(() => stopServerInstance(mc.server));
+        await stopServerInstance(mc.server);
         const stopped = mc.nextExit();
-        mc.run(() => __lifecycleTest.scheduleStopForceKill(mc.server, 0));
+        __lifecycleTest.scheduleStopForceKill(mc.server, 0);
         await stopped;
         await mc.server.waitFor((s) => s.serverStatus === "offline", "the killed server to read offline");
         expect(mc.server.state.serverEntries.filter((e) => e.content === "[Server] Process stopped.")).toHaveLength(1);
@@ -127,15 +127,15 @@ describe("start, stop and restart", () => {
     test("a stop the daemon refuses fails and keeps the status", async () => {
         // the console says online, but no process exists: the daemon refuses the write
         const mc = minecraftServer({ state: { serverStatus: "online" } });
-        await expect(mc.run(() => stopServerInstance(mc.server))).rejects.toThrow();
+        await expect(stopServerInstance(mc.server)).rejects.toThrow();
         expect(mc.server.state.serverStatus).toBe("online");
-        expect(mc.run(() => __lifecycleTest.isStopForceKillPending())).toBe(false);
+        expect(__lifecycleTest.isStopForceKillPending(mc.server)).toBe(false);
     });
 
     test("a last line with no newline is flushed when the process exits, and the exit marks offline", async () => {
         const mc = minecraftServer({ files: { "fake-server.json": JSON.stringify({ exitBeforeDone: 3 }) } });
         const exit = mc.nextExit();
-        await mc.run(() => startServerInstance(mc.server));
+        await startServerInstance(mc.server);
         expect(await exit).toBe(3);
         const last = mc.server.state.serverEntries.find((e) => e.content.includes("Failed to start the minecraft server"));
         expect(last).toBeDefined();

@@ -23,42 +23,41 @@ export interface PortSpec {
     preferred: number | null;
     write(port: number): Promise<void>;
 }
-/** The calls of the panel's contract a game answers, each given the call's checked input and its server's context. */
+/** The calls of the panel's contract a game answers, each given the call's checked input and its server. */
 export type GameContractCalls = {
     [K in keyof (typeof gameServerContract)["calls"]]: (
         input: CallInput<(typeof gameServerContract)["calls"][K]>,
         ctx: Server,
     ) => Promise<CallOutput<(typeof gameServerContract)["calls"][K]>>;
 };
+/** One server's part of its game, made for that server alone (GameModule.create): it knows its server. */
 export interface GameService {
     initialState(): GameServerState;
-    /** The contract's calls the game answers, and its blocks run; each is handed the server's context and the call's own input. */
+    /** The contract's calls the game answers, and its blocks run; each is handed the server and the call's own input. */
     calls(): Promise<ServerCalls>;
     /** The contract's calls the game answers; a call it leaves out is refused for its servers. */
     contractCalls?(): Promise<Partial<GameContractCalls>>;
     /** The game's own blocks for the Blocks panel, beside the ones every game shares; its joins, leaves and chat among them. */
-    blocks?(ctx: Server): Promise<import("@mileniumhq/paperapi").BlockSet>;
-    /** The Blocks types the game's own blocks use; the panel registers them. */
-    blockTypes?(): Promise<import("@mileniumhq/paperapi").BlockTypeDefinition[]>;
-    initialize(ctx: Server, running: boolean): Promise<void>;
+    blocks?(): Promise<import("@mileniumhq/paperapi").BlockSet>;
+    initialize(running: boolean): Promise<void>;
     dispose(): Promise<void>;
     beforeRemove(): Promise<void>;
     /** Asks the game's download source whether a newer build than the installed one is out; Steam games have it. Throws when the source cannot be asked. */
-    updateStatus?(ctx: Server): Promise<import("./steam/installAction").SteamUpdateStatus>;
+    updateStatus?(): Promise<import("./steam/installAction").SteamUpdateStatus>;
     /** Installs the newest build over a stopped server; with updateStatus, the server can update itself. */
-    installUpdate?(ctx: Server): Promise<void>;
+    installUpdate?(): Promise<void>;
     /** The server's own icon, for games that have one. */
     readIcon?(): Promise<string | null>;
     primaryProcessId: string;
-    readiness?: { timeoutMs: number; probe(ctx: Server): Promise<boolean> };
+    readiness?: { timeoutMs: number; probe(): Promise<boolean> };
     stopTimeoutMs?: number;
     processIds: readonly string[];
     /** Top-level folders of the server left out of its backups and kept on restore, such as a downloaded game install. */
     backupExclude?: readonly string[];
     /** File names left out of its backups wherever they are, such as a lock the running server holds. */
     backupSkip?: readonly string[];
-    loadOptions(ctx: Server): Promise<void>;
-    prepareLaunch(ctx: Server): Promise<PreparedLaunch>;
+    loadOptions(): Promise<void>;
+    prepareLaunch(): Promise<PreparedLaunch>;
     /**
      * Runs once the server's process is gone, however it went: stopped,
      * crashed, killed, or never started because the launch failed. A game
@@ -66,27 +65,27 @@ export interface GameService {
      * written into its settings files. It can run again for a server it
      * already cleaned up, and a restart waits for it before starting again.
      */
-    afterStop?(ctx: Server): Promise<void>;
+    afterStop?(): Promise<void>;
     isMutating(): boolean;
-    assertFileAccess?(ctx: Server, path: unknown, write: boolean): Promise<void>;
+    assertFileAccess?(path: unknown, write: boolean): Promise<void>;
     /** Writes the running world to disk and resolves once the game confirms it; refuses when offline. */
-    saveWorld(ctx: Server): Promise<void>;
+    saveWorld(): Promise<void>;
     stopEntry: string;
-    stop(ctx: Server): Promise<void>;
+    stop(): Promise<void>;
     /** Checks a console command and gives what is sent: the stdin write, or for "rcon" the line itself. */
     commandLine(command: string): string;
     /** Runs a console command when the game's control is "rcon", as commandLine gave it. */
-    sendCommand?(ctx: Server, command: string): Promise<void>;
-    sendChat?(ctx: Server, message: string): Promise<void>;
-    observePartialLine?(ctx: Server, line: string): void;
-    observeLine(ctx: Server, line: string, final?: boolean): void;
+    sendCommand?(command: string): Promise<void>;
+    sendChat?(message: string): Promise<void>;
+    observePartialLine?(line: string): void;
+    observeLine(line: string, final?: boolean): void;
     portNames: readonly string[];
-    ports(ctx: Server, deps: PortDeps): AsyncIterable<PortSpec>;
+    ports(deps: PortDeps): AsyncIterable<PortSpec>;
     backup: {
         mode: "quiesce" | "offline";
-        before(ctx: Server): Promise<void>;
+        before(): Promise<void>;
         /** Undoes `before` when the backup it readied is refused. */
-        recover(ctx: Server): Promise<unknown>;
-        withConsistentData<T>(ctx: Server, work: () => Promise<T>): Promise<T>;
+        recover(): Promise<unknown>;
+        withConsistentData<T>(work: () => Promise<T>): Promise<T>;
     };
 }

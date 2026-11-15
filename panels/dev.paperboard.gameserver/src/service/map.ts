@@ -1,11 +1,11 @@
+import { minecraftOf } from "../games/minecraft/state";
 import type { Server } from "./server";
 import { minecraftSoftware } from "../games/minecraft/index";
-import { serverLocal } from "./scope";
 import * as fs from "node:fs";
 import { gunzipSync, inflateSync } from "node:zlib";
 import type { PNG as Png } from "pngjs";
 import { loadNbt, loadPng } from "../core/lazy";
-import { files as fileApi, errorMessage, SerialQueue } from "./api";
+import { errorMessage, SerialQueue } from "./api";
 import { tryListDirectory } from "./filesystem";
 import { resolveVersionProfile, worldPathsFor, type VersionProfile } from "../lib/versionProfile";
 import {
@@ -26,10 +26,8 @@ import {
     type MapDimension,
     type RegionCoord,
 } from "../core/map";
-import { type GameServerState, PANEL_ID } from "./types";
+import { PANEL_ID } from "./types";
 import { resolveLevelName } from "./worlds";
-
-const local = serverLocal(() => ({ tileCache: new Map<string, CachedTile>() }));
 
 // Minimum build height per dimension: heightmap values are stored relative
 // to it (overworld surface y=72 with a -64 floor is stored as 137; nether
@@ -121,12 +119,13 @@ function regionDirCandidates(
 }
 
 async function resolveRegionDir(
+    ctx: Server,
     profile: VersionProfile,
     levelName: string,
     dimension: MapDimension,
 ): Promise<string | null> {
     for (const candidate of regionDirCandidates(profile, levelName, dimension)) {
-        if (await fileApi.exists(candidate, PANEL_ID)) return candidate;
+        if (await ctx.files.exists(candidate, PANEL_ID)) return candidate;
     }
     return null;
 }
@@ -140,15 +139,15 @@ function profileOf(ctx: Server): VersionProfile {
 export async function listMapRegions(
     ctx: Server,
 ): Promise<MapRegionsResult> {
-    const levelName = await resolveLevelName();
+    const levelName = await resolveLevelName(ctx);
     const profile = profileOf(ctx);
     const dimensions: MapDimensionRegions[] = [];
     for (const dimension of DIMENSION_ORDER) {
-        const dir = await resolveRegionDir(profile, levelName, dimension);
+        const dir = await resolveRegionDir(ctx, profile, levelName, dimension);
         if (!dir) continue;
         // a listing failure is not an empty directory: an error here would
         // otherwise render as "No generated terrain to map yet"
-        const listing = await tryListDirectory(dir);
+        const listing = await tryListDirectory(ctx, dir);
         if (listing.error) {
             throw new Error(listing.error);
         }
@@ -164,7 +163,7 @@ export async function listMapRegions(
         }
         if (regions.length === 0) continue;
         regions.sort((a, b) => a.x - b.x || a.z - b.z);
-        dimensions.push({ dimension, regions, terrain: await terrainBounds(dir, regions) });
+        dimensions.push({ dimension, regions, terrain: await terrainBounds(ctx, dir, regions) });
     }
     return { levelName, dimensions };
 }
@@ -175,7 +174,7 @@ export async function listMapRegions(
  * regions on the edge of the listing can hold the outermost chunks, so only
  * their headers are read. A region file with no chunks counts as a whole region.
  */
-async function terrainBounds(dir: string, regions: RegionCoord[]): Promise<TerrainBounds> {
+async function terrainBounds(ctx: Server, dir: string, regions: RegionCoord[]): Promise<TerrainBounds> {
     const minRX = Math.min(...regions.map((r) => r.x));
     const maxRX = Math.max(...regions.map((r) => r.x));
     const minRZ = Math.min(...regions.map((r) => r.z));
@@ -189,7 +188,7 @@ async function terrainBounds(dir: string, regions: RegionCoord[]): Promise<Terra
     };
     for (const region of regions) {
         if (region.x !== minRX && region.x !== maxRX && region.z !== minRZ && region.z !== maxRZ) continue;
-        const absolute = await fileApi.getPath(`${dir}/${regionFileName(region)}`, PANEL_ID);
+        const absolute = await ctx.files.getPath(`${dir}/${regionFileName(region)}`, PANEL_ID);
         const header = Buffer.alloc(4096);
         const file = await fs.promises.open(absolute, "r");
         let read: number;
@@ -257,7 +256,7 @@ async function parseChunk(buffer: Buffer): Promise<ChunkNbt> {
     return nbt.simplify((await nbt.parse(buffer)).parsed) as ChunkNbt;
 }
 
-interface CachedTile {
+export interface CachedTile {
     mtimeMs: number;
     dataUrl: string;
 }
@@ -319,14 +318,14 @@ export async function renderMapTile(
     if (!Number.isInteger(rx) || !Number.isInteger(rz)) {
         throw new Error("Invalid region coordinates");
     }
-    const levelName = await resolveLevelName();
+    const levelName = await resolveLevelName(ctx);
     const profile = profileOf(ctx);
-    const dir = await resolveRegionDir(profile, levelName, dimension);
+    const dir = await resolveRegionDir(ctx, profile, levelName, dimension);
     if (!dir) throw new Error(`No region directory for dimension ${dimension}`);
 
     const relative = `${dir}/${regionFileName({ x: rx, z: rz })}`;
-    if (!(await fileApi.exists(relative, PANEL_ID))) return null;
-    const absolute = await fileApi.getPath(relative, PANEL_ID);
+    if (!(await ctx.files.exists(relative, PANEL_ID))) return null;
+    const absolute = await ctx.files.getPath(relative, PANEL_ID);
     const mtimeMs = fs.statSync(absolute).mtimeMs;
     const size = fs.statSync(absolute).size;
     if (size > MAX_REGION_BYTES) {
@@ -338,7 +337,7 @@ export async function renderMapTile(
     // the caller already draws this region as it is on disk: nothing to send
     if (since === mtimeMs) return { dataUrl: null, version: mtimeMs, dimension, rx, rz };
 
-    const tiles = local().tileCache;
+    const tiles = minecraftOf(ctx).tileCache;
     const cached = tiles.get(absolute);
     if (cached && cached.mtimeMs === mtimeMs) {
         return { dataUrl: cached.dataUrl, version: mtimeMs, dimension, rx, rz };

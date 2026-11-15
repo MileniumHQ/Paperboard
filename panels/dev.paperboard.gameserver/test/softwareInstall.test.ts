@@ -7,7 +7,6 @@ import { minecraftServer, type McServer } from "./helpers/minecraft";
 import { fakeJavaBinary } from "./helpers/fakeJava";
 import { loopbackServer, type LoopbackServer } from "./helpers/http";
 import { readTree, tempDir } from "./helpers/tmp";
-import { files, processApi } from "../src/service/api";
 import { PANEL_ID } from "../src/servers";
 import { installServerSoftware, withInstallLock, type InstallDeps } from "../src/games/minecraft/softwareInstall";
 import { neoforgeProvider } from "../src/games/minecraft/providers/neoforge";
@@ -37,12 +36,12 @@ function paperServer(installerPlan: Record<string, unknown>, overrides: Partial<
     fs.writeFileSync(path.join(javaHome, "installer.json"), JSON.stringify(installerPlan));
     const runs: InstallerRun[] = [];
     const deps: InstallDeps = {
-        serverDir: () => files.getPath("", PANEL_ID),
-        download: (opts) => files.download({ ...opts, appId: PANEL_ID }),
+        serverDir: () => mc.server.root(),
+        download: (opts) => mc.server.files.download({ ...opts, appId: PANEL_ID }),
         javaBinary: async () => ({ bin: fakeJavaBinary(), home: javaHome }),
         runInstaller: (run) => {
             runs.push(run);
-            return runInstallerProcess(run);
+            return runInstallerProcess(run, mc.server.process);
         },
         readConfig: async () => mc.server.settings,
         writeConfig: async (patch) => {
@@ -57,7 +56,7 @@ function paperServer(installerPlan: Record<string, unknown>, overrides: Partial<
         }),
         ...overrides,
     };
-    const install = () => mc.run(() => installServerSoftware(mc.server, "neoforge", "1.21.1", deps));
+    const install = () => installServerSoftware(mc.server, "neoforge", "1.21.1", deps);
     return { mc, deps, runs, install };
 }
 
@@ -122,16 +121,16 @@ describe("software installs", () => {
     test("one install at a time, and the server cannot start while an install holds the folder", async () => {
         const { mc, install } = paperServer({ mode: "ok" });
         let release!: () => void;
-        const holding = mc.run(() => withInstallLock(() => new Promise<void>((resolve) => (release = resolve))));
+        const holding = withInstallLock(mc.server, () => new Promise<void>((resolve) => (release = resolve)));
         await expect(install()).rejects.toThrow("A server install is already running");
         // a refused Minecraft start fails its call, as every game's does, and says why in the console
-        await expect(mc.run(() => startServerInstance(mc.server))).rejects.toThrow("A server install is running");
+        await expect(startServerInstance(mc.server)).rejects.toThrow("A server install is running");
         expect(mc.server.state.serverStatus).toBe("offline");
         expect(mc.server.state.serverEntries.at(-1)).toEqual({
             type: "error",
             content: "[Server] Failed to launch: A server install is running; start the server once it finishes.",
         });
-        expect(await mc.run(() => processApi.exists("mc-server"))).toBe(false);
+        expect(await mc.server.process.exists("mc-server")).toBe(false);
         release();
         await holding;
         expect((await install()).build).toBe("21.1.256");
@@ -144,8 +143,7 @@ describe("software installs", () => {
         const lines: string[] = [];
         const mc = minecraftServer();
         await expect(
-            mc.run(() =>
-                runInstallerProcess({
+            runInstallerProcess({
                     command: fakeJavaBinary(),
                     args: ["-jar", "installer.jar", "--installServer", out],
                     cwd: out,
@@ -153,11 +151,10 @@ describe("software installs", () => {
                     timeoutMs: 1_000,
                     exitGraceMs: 1_000,
                     onLine: (line) => lines.push(line),
-                }),
-            ),
+                }, mc.server.process),
         ).rejects.toThrow("did not finish within");
         expect(lines).toContain("ignoring SIGTERM");
-        expect(await mc.run(() => processApi.exists("mc-installer"))).toBe(false);
+        expect(await mc.server.process.exists("mc-installer")).toBe(false);
     });
 
     test("an installer that cannot be confirmed stopped fails distinctly and keeps its staging", async () => {

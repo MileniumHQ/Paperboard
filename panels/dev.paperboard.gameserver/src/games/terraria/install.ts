@@ -5,8 +5,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { createHash } from "node:crypto";
 import { loadZip } from "../../core/lazy";
-import { files } from "../../service/api";
-import type { GameServerState } from "../../service/types";
+
 import { archiveFor, entrypoint, releaseFor, tmodloaderReleaseFor, TMODLOADER_ENTRYPOINT, type TerrariaSoftware } from "./catalog";
 
 export async function unpackArchive(archive: Uint8Array, target: string, version: string, os: string): Promise<void> {
@@ -71,7 +70,7 @@ export async function activateRelease(staging: string, target: string): Promise<
 }
 export async function install(ctx: Server, software: TerrariaSoftware, version: string): Promise<void> {
     const release = archiveFor(software, version);
-    const root = await files.getPath("", PANEL_ID);
+    const root = await ctx.root();
     const archive = ".terraria-download.zip";
     const staging = path.join(root, ".terraria-install");
     const target = path.join(root, "install", release.directory);
@@ -79,7 +78,7 @@ export async function install(ctx: Server, software: TerrariaSoftware, version: 
     let lastProgress = -1;
     let lastStage = "";
     try {
-        await files.download({ appId: PANEL_ID, targetPath: archive, url: release.url, sha256: release.sha256, onProgress: p => { const percent = Math.floor(p.percent); if (percent === lastProgress && p.stage === lastStage) return; lastProgress = percent; lastStage = p.stage; const bytes = p.bytesLoaded !== undefined && p.bytesTotal ? { bytes: { done: p.bytesLoaded, total: p.bytesTotal } } : {}; ctx.setState({ installProgress: { stage: p.stage === "starting" ? "downloading" : p.stage, percent, ...bytes } }); } });
+        await ctx.files.download({ appId: PANEL_ID, targetPath: archive, url: release.url, sha256: release.sha256, onProgress: p => { const percent = Math.floor(p.percent); if (percent === lastProgress && p.stage === lastStage) return; lastProgress = percent; lastStage = p.stage; const bytes = p.bytesLoaded !== undefined && p.bytesTotal ? { bytes: { done: p.bytesLoaded, total: p.bytesTotal } } : {}; ctx.setState({ installProgress: { stage: p.stage === "starting" ? "downloading" : p.stage, percent, ...bytes } }); } });
         await fs.rm(staging, { recursive: true, force: true });
         const bytes = await fs.readFile(path.join(root, archive));
         if (software === "tmodloader") await unpackTmodloader(bytes, staging, version);

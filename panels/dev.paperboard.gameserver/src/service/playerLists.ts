@@ -1,3 +1,4 @@
+import { minecraftOf } from "../games/minecraft/state";
 // The server's player lists: whitelist.json, ops.json and banned-players.json.
 // A running server owns them, so flags change through its console (it
 // rewrites the files itself); a stopped server reads them when it starts, so
@@ -11,8 +12,7 @@
 // a stopped one gets the uuid Floodgate derives from their XUID written in.
 import type { Server } from "./server";
 import { createHash } from "node:crypto";
-import { files as fileApi, errorMessage, SerialQueue } from "./api";
-import { serverLocal } from "./scope";
+import { errorMessage } from "./api";
 import { report } from "../games/serviceKit";
 import { resolvePlayerIdentities } from "./playerStats";
 import { profileForName, profileForUuid } from "./mojang";
@@ -27,7 +27,7 @@ import {
     xuidOfFloodgateUuid,
     type BedrockNaming,
 } from "../core/bedrock";
-import { type GameServerState, PANEL_ID } from "./types";
+import { PANEL_ID } from "./types";
 
 export type PlayerFlag = "op" | "whitelist";
 
@@ -55,15 +55,8 @@ const MAX_NAME_CACHE = 2048;
 const MAX_NAME_LOOKUPS = 4;
 const MAX_NAMES_PER_CALL = 200;
 
-const local = serverLocal(() => ({
-    names: new Map<string, { name: string; at: number }>(),
-    // one list edit at a time: two quick toggles must not read the same file
-    // and each write back a copy missing the other's change
-    editing: new SerialQueue().run,
-}));
-
-async function readList(path: string): Promise<ListEntry[]> {
-    const content = await fileApi.read(path, PANEL_ID);
+async function readList(ctx: Server, path: string): Promise<ListEntry[]> {
+    const content = await ctx.files.read(path, PANEL_ID);
     // the server writes these files on first start; none yet is an empty list
     if (content === null || content.trim() === "") return [];
     let parsed: unknown;
@@ -77,9 +70,9 @@ async function readList(path: string): Promise<ListEntry[]> {
 }
 
 /** Whether banned-players.json, as the server last wrote it, has a player of this name. */
-export async function isBanned(name: string): Promise<boolean> {
+export async function isBanned(ctx: Server, name: string): Promise<boolean> {
     const wanted = name.toLowerCase();
-    return (await readList(LIST_FILES.banned)).some((entry) => typeof entry.name === "string" && entry.name.toLowerCase() === wanted);
+    return (await readList(ctx, LIST_FILES.banned)).some((entry) => typeof entry.name === "string" && entry.name.toLowerCase() === wanted);
 }
 
 function entryUuid(entry: ListEntry): string | null {
@@ -88,8 +81,8 @@ function entryUuid(entry: ListEntry): string | null {
         : null;
 }
 
-async function readServerProperties(): Promise<Record<string, string>> {
-    const content = await fileApi.read("server.properties", PANEL_ID);
+async function readServerProperties(ctx: Server): Promise<Record<string, string>> {
+    const content = await ctx.files.read("server.properties", PANEL_ID);
     return content ? parseProperties(content) : {};
 }
 
@@ -113,12 +106,12 @@ export function offlinePlayerUuid(name: string): string {
  * the lists keep the name a player had when they were added) and the name
  * Mojang last reported, when one was looked up this hour.
  */
-export async function listRoster(): Promise<RosterEntry[]> {
+export async function listRoster(ctx: Server): Promise<RosterEntry[]> {
     const [whitelist, ops, banned, identities] = await Promise.all([
-        readList(LIST_FILES.whitelist),
-        readList(LIST_FILES.op),
-        readList(LIST_FILES.banned),
-        resolvePlayerIdentities(),
+        readList(ctx, LIST_FILES.whitelist),
+        readList(ctx, LIST_FILES.op),
+        readList(ctx, LIST_FILES.banned),
+        resolvePlayerIdentities(ctx),
     ]);
     const roster = new Map<string, RosterEntry>();
     const add = (entries: ListEntry[], flag: "whitelisted" | "op" | "banned") => {
@@ -145,7 +138,7 @@ export async function listRoster(): Promise<RosterEntry[]> {
     add(banned, "banned");
     const now = Date.now();
     for (const entry of roster.values()) {
-        const known = local().names.get(entry.uuid);
+        const known = minecraftOf(ctx).lists.names.get(entry.uuid);
         if (known && now - known.at < NAME_TTL_MS) entry.name = known.name;
     }
     return [...roster.values()];
@@ -164,14 +157,14 @@ export async function currentPlayerNames(ctx: Server, rawUuids: unknown, naming:
         .slice(0, MAX_NAMES_PER_CALL);
     const result: Record<string, string> = {};
     if (valid.length === 0) return result;
-    const onlineMode = isOnlineMode(await readServerProperties());
+    const onlineMode = isOnlineMode(await readServerProperties(ctx));
     // a Floodgate uuid is no Mojang account; without Floodgate it has no name to look up
     const uuids = valid.filter((u) => (isFloodgateUuid(u) ? naming !== null : onlineMode));
 
     const now = Date.now();
     const stale: string[] = [];
     for (const uuid of uuids) {
-        const known = local().names.get(uuid);
+        const known = minecraftOf(ctx).lists.names.get(uuid);
         if (known && now - known.at < NAME_TTL_MS) result[uuid] = known.name;
         else stale.push(uuid);
     }
@@ -181,7 +174,7 @@ export async function currentPlayerNames(ctx: Server, rawUuids: unknown, naming:
             try {
                 const name = await currentName(uuid, naming);
                 if (!name) continue;
-                rememberName(uuid, name);
+                rememberName(ctx, uuid, name);
                 result[uuid] = name;
             } catch (err) {
                 failures.push(errorMessage(err));
@@ -204,19 +197,19 @@ async function currentName(uuid: string, naming: BedrockNaming | null): Promise<
     return (await profileForUuid(uuid))?.name ?? null;
 }
 
-function rememberName(uuid: string, name: string): void {
-    local().names.delete(uuid);
-    local().names.set(uuid, { name, at: Date.now() });
-    while (local().names.size > MAX_NAME_CACHE) {
-        const oldest = local().names.keys().next();
+function rememberName(ctx: Server, uuid: string, name: string): void {
+    minecraftOf(ctx).lists.names.delete(uuid);
+    minecraftOf(ctx).lists.names.set(uuid, { name, at: Date.now() });
+    while (minecraftOf(ctx).lists.names.size > MAX_NAME_CACHE) {
+        const oldest = minecraftOf(ctx).lists.names.keys().next();
         if (oldest.done) break;
-        local().names.delete(oldest.value);
+        minecraftOf(ctx).lists.names.delete(oldest.value);
     }
 }
 
-async function knownAccount(name: string): Promise<{ uuid: string; name: string } | null> {
+async function knownAccount(ctx: Server, name: string): Promise<{ uuid: string; name: string } | null> {
     const wanted = name.toLowerCase();
-    for (const [uuid, known] of await resolvePlayerIdentities()) {
+    for (const [uuid, known] of await resolvePlayerIdentities(ctx)) {
         if (known.toLowerCase() === wanted) return { uuid, name: known };
     }
     return null;
@@ -239,12 +232,13 @@ async function bedrockAccount(gamertag: string, naming: BedrockNaming): Promise<
 // GeyserMC for a Bedrock name, Mojang for a Java name on an online-mode
 // server, else the uuid offline mode derives
 async function accountForName(
+    ctx: Server,
     name: string,
     gamertag: string | null,
     naming: BedrockNaming | null,
     props: Record<string, string>,
 ): Promise<{ uuid: string; name: string }> {
-    const known = await knownAccount(name);
+    const known = await knownAccount(ctx, name);
     if (known) return known;
     if (gamertag && naming) return bedrockAccount(gamertag, naming);
     if (!isOnlineMode(props)) return { uuid: offlinePlayerUuid(name), name };
@@ -254,6 +248,7 @@ async function accountForName(
 }
 
 async function editListFile(
+    ctx: Server,
     flag: PlayerFlag,
     name: string,
     on: boolean,
@@ -262,8 +257,8 @@ async function editListFile(
     naming: BedrockNaming | null,
 ): Promise<void> {
     const path = LIST_FILES[flag];
-    const list = await readList(path);
-    const props = await readServerProperties();
+    const list = await readList(ctx, path);
+    const props = await readServerProperties(ctx);
     const wanted = name.toLowerCase();
     const matches = (entry: ListEntry) =>
         typeof entry.name === "string" && entry.name.toLowerCase() === wanted;
@@ -271,7 +266,7 @@ async function editListFile(
     if (!on) {
         // a renamed player is still listed under their old name: match by
         // the uuid given, or the one the server knows the current name by
-        const identities = await resolvePlayerIdentities();
+        const identities = await resolvePlayerIdentities(ctx);
         const kept = list.filter((entry) => {
             if (matches(entry)) return false;
             const listed = entryUuid(entry);
@@ -281,12 +276,12 @@ async function editListFile(
         if (kept.length === list.length) {
             throw new Error(flag === "op" ? `${name} is not an operator` : `${name} is not on the whitelist`);
         }
-        await fileApi.write(path, `${JSON.stringify(kept, null, 2)}\n`, PANEL_ID);
+        await ctx.files.write(path, `${JSON.stringify(kept, null, 2)}\n`, PANEL_ID);
         return;
     }
 
     if (list.some(matches)) return;
-    const account = uuid ? { uuid, name } : await accountForName(name, gamertag, naming, props);
+    const account = uuid ? { uuid, name } : await accountForName(ctx, name, gamertag, naming, props);
     if (list.some((entry) => entryUuid(entry) === account.uuid)) return;
     const entry: Record<string, unknown> = { uuid: account.uuid, name: account.name };
     if (flag === "op") {
@@ -295,7 +290,7 @@ async function editListFile(
         entry.level = Number.isInteger(level) && level >= 1 && level <= 4 ? level : 4;
         entry.bypassesPlayerLimit = false;
     }
-    await fileApi.write(path, `${JSON.stringify([...list, entry], null, 2)}\n`, PANEL_ID);
+    await ctx.files.write(path, `${JSON.stringify([...list, entry], null, 2)}\n`, PANEL_ID);
 }
 
 /** the console command a running server takes the change as */
@@ -310,8 +305,8 @@ function floodgateArgument(gamertag: string): string {
     return gamertag.includes(" ") ? `"${gamertag}"` : gamertag;
 }
 
-async function inUsercache(name: string): Promise<boolean> {
-    const list = await readList("usercache.json");
+async function inUsercache(ctx: Server, name: string): Promise<boolean> {
+    const list = await readList(ctx, "usercache.json");
     const wanted = name.toLowerCase();
     return list.some((entry) => typeof entry.name === "string" && entry.name.toLowerCase() === wanted);
 }
@@ -325,6 +320,7 @@ async function inUsercache(name: string): Promise<boolean> {
  * can op them; a stopped server's file takes them any time.
  */
 async function bedrockFlagCommand(
+    ctx: Server,
     flag: PlayerFlag,
     name: string,
     gamertag: string,
@@ -334,13 +330,13 @@ async function bedrockFlagCommand(
 ): Promise<string> {
     if (flag === "whitelist") {
         if (!on) {
-            const known = uuid ?? (await knownAccount(name))?.uuid ?? null;
+            const known = uuid ?? (await knownAccount(ctx, name))?.uuid ?? null;
             return `fwhitelist remove ${known && isFloodgateUuid(known) ? known : floodgateArgument(gamertag)}`;
         }
         await bedrockAccount(gamertag, naming);
         return `fwhitelist add ${floodgateArgument(gamertag)}`;
     }
-    if (!(await inUsercache(name))) {
+    if (!(await inUsercache(ctx, name))) {
         throw new Error(
             on
                 ? `${name} has not joined this server yet, and a running server can only make Bedrock players it has seen operators. Stop the server to make them an operator now.`
@@ -380,11 +376,11 @@ export async function setPlayerFlag(
     }
     const status = ctx.state.serverStatus;
     if (status === "online" || status === "starting") {
-        await send(gamertag && naming ? await bedrockFlagCommand(flag, name, gamertag, naming, on, uuid) : playerFlagCommand(flag, name, on));
+        await send(gamertag && naming ? await bedrockFlagCommand(ctx, flag, name, gamertag, naming, on, uuid) : playerFlagCommand(flag, name, on));
         return;
     }
     if (status !== "offline") {
         throw new Error("Wait until the server has finished stopping");
     }
-    await local().editing(() => editListFile(flag, name, on, uuid, gamertag, naming));
+    await minecraftOf(ctx).lists.editing(() => editListFile(ctx, flag, name, on, uuid, gamertag, naming));
 }

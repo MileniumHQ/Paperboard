@@ -1,6 +1,6 @@
 import type { Server } from "../../service/server";
 import { installApp, installedBuild, latestBuild } from "./steamcmd";
-import { assertHost, exclusive, hostSupportHere, readSettings, updateSettings, type BusyFlag } from "../serviceKit";
+import { assertHost, exclusive, hostSupportHere, type BusyFlag } from "../serviceKit";
 import type { ServerCalls } from "../../service/calls";
 import type { GameDefinition } from "../types";
 
@@ -13,7 +13,7 @@ export interface SteamInstallSpec {
     flag(): BusyFlag;
     /** The game's own setup after each download, such as links and generated settings. */
     afterInstall(): Promise<void>;
-    loadOptions(ctx: Server): Promise<void>;
+    loadOptions(): Promise<void>;
     /**
      * Whether setup asks something after the download (a Source game's
      * mode and map). The server is set up once that is answered, not when
@@ -66,33 +66,27 @@ export async function steamUpdateStatus(spec: Pick<SteamInstallSpec, "appId" | "
     return { installed, latest, updateAvailable: installed !== null && installed !== latest };
 }
 
-/** Each server's install while it runs, so setup opened again follows it instead of being refused. */
-const running = new WeakMap<BusyFlag, Promise<void>>();
-
-/** Installs the newest build, or the first one; the Updates tab's install and an automatic update both run it. */
-export function steamInstall(spec: SteamInstallSpec): (ctx: Server) => Promise<void> {
+/**
+ * Installs the newest build, or the first one; the Updates tab's install and
+ * an automatic update both run it. An install already running is followed
+ * instead of refused, so setup opened again shows it.
+ */
+export function steamInstall(ctx: Server, spec: SteamInstallSpec): () => Promise<void> {
     const name = spec.game.name;
-    return (ctx) => {
-        const flag = spec.flag();
-        const current = running.get(flag);
-        if (current) return current;
-        const install = exclusive(ctx, flag, name, async () => {
-            assertHost(spec.game);
-            const build = await installWithProgress(ctx, spec.appId, await spec.installDir(), spec.afterInstall, spec.branch);
-            await updateSettings(spec.setupAfterInstall ? { build } : { configured: true, build });
-            await spec.loadOptions(ctx);
-        }).finally(() => running.delete(flag));
-        running.set(flag, install);
-        return install;
-    };
+    let running: Promise<void> | null = null;
+    return () => running ??= exclusive(ctx, spec.flag(), name, async () => {
+        assertHost(spec.game);
+        const build = await installWithProgress(ctx, spec.appId, await spec.installDir(), spec.afterInstall, spec.branch);
+        await ctx.updateSettings(spec.setupAfterInstall ? { build } : { configured: true, build });
+        await spec.loadOptions();
+    }).finally(() => { running = null; });
 }
 
 /** The Updates tab's three calls for a game downloaded from Steam. */
-export function steamInstallCalls(spec: SteamInstallSpec): ServerCalls {
-    const install = steamInstall(spec);
+export function steamInstallCalls(spec: SteamInstallSpec, install: () => Promise<void>): ServerCalls {
     return {
-        steamInfo: async () => {
-            const saved = await readSettings();
+        steamInfo: async (ctx) => {
+            const saved = ctx.settings;
             return {
                 host: hostSupportHere(spec.game),
                 build: await installedBuild(spec.appId, await spec.installDir()),
@@ -102,6 +96,6 @@ export function steamInstallCalls(spec: SteamInstallSpec): ServerCalls {
             };
         },
         steamLatest: () => steamUpdateStatus(spec),
-        steamInstall: async (ctx) => { await install(ctx); return true; },
+        steamInstall: async () => { await install(); return true; },
     };
 }

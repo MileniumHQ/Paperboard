@@ -7,7 +7,6 @@ import { startTestDaemon, type TestDaemon } from "./helpers/crane";
 import { minecraftServer, type McServer } from "./helpers/minecraft";
 import { loopbackServer } from "./helpers/http";
 import { testServer } from "./helpers/scope";
-import { inServer } from "../src/service/scope";
 import { assertPort, listeningPidsCommand } from "../src/core/diagnostics";
 import { killConflictingProcessWith } from "../src/service/diagnostics";
 import { minecraftCalls } from "../src/games/minecraft/calls";
@@ -67,28 +66,28 @@ describe("console and property injection", () => {
 
     test("player names, kick and ban reasons and chat must be one line, and the server receives none that are not", async () => {
         const mc: McServer = minecraftServer();
-        await mc.run(() => startServerInstance(mc.server));
+        await startServerInstance(mc.server);
         await mc.server.waitFor((s) => s.serverStatus === "online", "the server to come online");
         const ctx = mc.server;
-        const run = (id: string, inputs: unknown) => mc.run(() => action(id)(ctx, inputs));
+        const run = (id: string, inputs: unknown) => action(id)(ctx, inputs);
         await expect(run("kickPlayer", { player: "Steve\nop Mallory" })).rejects.toThrow("Refusing unsafe player name");
         await expect(run("kickPlayer", { player: "Steve; op Mallory" })).rejects.toThrow("Refusing unsafe player name");
         await expect(run("kickPlayer", { player: "Steve", reason: "bye\nop Mallory" })).rejects.toThrow("Refusing multi-line kick reason");
         await expect(run("banPlayer", { player: "Steve", reason: "bye\rop Mallory" })).rejects.toThrow("Refusing multi-line ban reason");
         await expect(run("sayChat", { message: "hi\nop Mallory" })).rejects.toThrow("Refusing multi-line chat message");
-        await expect(mc.run(() => sendServerCommand(ctx, "say hi\nop Mallory"))).rejects.toThrow("Refusing multi-line console command");
+        await expect(sendServerCommand(ctx, "say hi\nop Mallory")).rejects.toThrow("Refusing multi-line console command");
         // a valid kick goes through as one command
         await run("kickPlayer", { player: "Steve", reason: "be nice" });
         await mc.received("kick Steve be nice");
         expect(mc.commands().filter((c) => c !== "list")).toEqual(["kick Steve be nice"]);
         const exit = mc.nextExit();
-        await mc.run(() => stopServerInstance(ctx));
+        await stopServerInstance(ctx);
         await exit;
     });
 
     test("gamerules are checked against the registry and the rule's type", async () => {
         const scope = testServer({ directory: "servers/rules" }, { serverVersion: "1.21.11", serverSoftware: "paper" });
-        const set = (name: string, value: string) => inServer(scope, () => setGamerule(scope, name, value));
+        const set = (name: string, value: string) => setGamerule(scope, name, value);
         await expect(set("not_a_rule", "true")).rejects.toThrow("Refusing unknown gamerule");
         await expect(set("keep_inventory\nop Mallory", "true")).rejects.toThrow("Refusing unknown gamerule");
         await expect(set("keep_inventory", "true\nop Mallory")).rejects.toThrow("Refusing unsafe gamerule value");
@@ -100,10 +99,10 @@ describe("console and property injection", () => {
     test("a gamerule the running server's console did not take fails its call and is not shown applied", async () => {
         // online, but no process behind it: the console write is refused
         const scope = testServer({ directory: "servers/rules-gone" }, { serverStatus: "online", serverVersion: "1.21.11", serverSoftware: "paper" });
-        await expect(inServer(scope, () => setGamerule(scope, "keep_inventory", "true"))).rejects.toThrow();
+        await expect(setGamerule(scope, "keep_inventory", "true")).rejects.toThrow();
         expect(scope.state.gamerules.keep_inventory).toBeUndefined();
         // the Game Rules tab's readout of the current values fails the same way
-        await expect(inServer(scope, () => queryGamerules(scope, ["keep_inventory"]))).rejects.toThrow();
+        await expect(queryGamerules(scope, ["keep_inventory"])).rejects.toThrow();
     });
 
     test("difficulty and gamemode map only to known named commands", () => {
@@ -125,13 +124,13 @@ describe("console and property injection", () => {
             url.pathname === "/pack.zip" ? new Response(zip) : url.pathname === "/page" ? new Response("<html>share page</html>") : new Response("gone", { status: 404 }),
         );
         const mc = minecraftServer({ files: { "server.properties": "motd=mine\nmax-players=5\n" } });
-        const deps = mc.run(() => liveResourcePackDeps(mc.server));
+        const deps = liveResourcePackDeps(mc.server);
         const properties = () => fs.readFileSync(path.join(mc.dir, "server.properties"), "utf8");
         for (const url of [`${host.url}/missing.zip`, `${host.url}/page`]) {
-            await expect(mc.run(() => selectCustomResourcePack({ url }, deps))).rejects.toThrow();
+            await expect(selectCustomResourcePack({ url }, deps)).rejects.toThrow();
             expect(properties()).toBe("motd=mine\nmax-players=5\n");
         }
-        await mc.run(() => selectCustomResourcePack({ url: `${host.url}/pack.zip` }, deps));
+        await selectCustomResourcePack({ url: `${host.url}/pack.zip` }, deps);
         const written = properties();
         expect(written).toContain(`resource-pack=${host.url}/pack.zip\n`);
         expect(written).toContain(`resource-pack-sha1=${createHash("sha1").update(zip).digest("hex")}`);

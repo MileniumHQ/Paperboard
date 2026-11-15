@@ -1,7 +1,5 @@
 import type { Server } from "./server";
-import { serverLocal } from "./scope";
-import { processApi, errorMessage } from "./api";
-import { currentGame, currentGameService } from "../games/service";
+import { errorMessage } from "@mileniumhq/paperapi";
 import { assertRecoverySettled } from "./recoveryState";
 import { prepareGamePorts } from "./ports";
 import { livePortDeps } from "./portDeps";
@@ -12,54 +10,53 @@ import { TRIGGER_IDS } from "./contract";
 import { report } from "../games/serviceKit";
 import { afterCrash, cancelStopRequest, classifyExit, markStarting, markStopRequested, updateBeforeStart } from "./automation";
 
-const primaryProcessId = () => currentGameService().primaryProcessId;
-const local = serverLocal(() => ({ oomBaseline: null as number | null, lineBuffer: "", readinessTimer: null as ReturnType<typeof setTimeout> | null, readinessDeadline: null as ReturnType<typeof setTimeout> | null, generation: 0, isRestarting: false, stopTimeout: null as ReturnType<typeof setTimeout> | null, killDeadline: null as ReturnType<typeof setTimeout> | null }));
-
-export function cancelReadiness(): void {
-    local().generation++;
-    if (local().readinessTimer) clearTimeout(local().readinessTimer!);
-    local().readinessTimer = null;
-    if (local().readinessDeadline) clearTimeout(local().readinessDeadline!);
-    local().readinessDeadline = null;
+export function cancelReadiness(ctx: Server): void {
+    const local = ctx.lifecycle;
+    local.generation++;
+    if (local.readinessTimer) clearTimeout(local.readinessTimer);
+    local.readinessTimer = null;
+    if (local.readinessDeadline) clearTimeout(local.readinessDeadline);
+    local.readinessDeadline = null;
 }
 function monitorReadiness(ctx: Server): void {
-    cancelReadiness();
-    const readiness = currentGameService().readiness;
+    cancelReadiness(ctx);
+    const readiness = ctx.game.readiness;
     if (!readiness) return;
-    const generation = local().generation;
+    const generation = ctx.lifecycle.generation;
     const deadline = Date.now() + readiness.timeoutMs;
     // A separate deadline enforces the bound even if a probe hangs.
-    const expired = setTimeout(() => void fail(new Error(`Startup timed out after ${readiness.timeoutMs / 1000}s; inspect the preceding ${currentGame().name} logs`)), readiness.timeoutMs);
-    local().readinessDeadline = expired;
+    const expired = setTimeout(() => void fail(new Error(`Startup timed out after ${readiness.timeoutMs / 1000}s; inspect the preceding ${ctx.definition.name} logs`)), readiness.timeoutMs);
+    ctx.lifecycle.readinessDeadline = expired;
     expired.unref?.();
-    const active = () => generation === local().generation && ctx.state.serverStatus === "starting";
+    const active = () => generation === ctx.lifecycle.generation && ctx.state.serverStatus === "starting";
     const fail = async (err: unknown) => {
         if (!active()) return;
-        clearTimeout(expired); cancelReadiness();
+        clearTimeout(expired); cancelReadiness(ctx);
         ctx.setState({ serverEntries: appendCapped(ctx.state.serverEntries, { type: "error", content: `Startup failed: ${errorMessage(err)}` }) });
-        markStopRequested();
+        markStopRequested(ctx);
         // nobody awaits this: a kill that fails is said, or the server would sit "starting" in silence
-        await processApi.kill(primaryProcessId(), "SIGKILL").catch((killErr) => report(ctx, "The server that failed to start could not be ended", killErr));
+        await ctx.process.kill(ctx.game.primaryProcessId, "SIGKILL").catch((killErr) => report(ctx, "The server that failed to start could not be ended", killErr));
     };
     const poll = async () => {
         if (!active()) { clearTimeout(expired); return; }
         try {
             if (Date.now() >= deadline) throw new Error("Startup deadline exceeded");
-            const ready = await readiness.probe(ctx);
+            const ready = await readiness.probe();
             if (!active()) { clearTimeout(expired); return; }
-            if (ready) { clearTimeout(expired); cancelReadiness(); ctx.setState({ serverStatus: "online" }); ctx.trigger(TRIGGER_IDS.serverStarted, true); return; }
-            local().readinessTimer = setTimeout(() => void poll(), 100);
-            local().readinessTimer?.unref?.();
+            if (ready) { clearTimeout(expired); cancelReadiness(ctx); ctx.setState({ serverStatus: "online" }); ctx.trigger(TRIGGER_IDS.serverStarted, true); return; }
+            ctx.lifecycle.readinessTimer = setTimeout(() => void poll(), 100);
+            ctx.lifecycle.readinessTimer?.unref?.();
         } catch (err) { await fail(err); }
     };
     void poll();
 }
 
-function cancelStopForceKill(): void {
-    if (local().stopTimeout) clearTimeout(local().stopTimeout!);
-    local().stopTimeout = null;
-    if (local().killDeadline) clearTimeout(local().killDeadline!);
-    local().killDeadline = null;
+function cancelStopForceKill(ctx: Server): void {
+    const local = ctx.lifecycle;
+    if (local.stopTimeout) clearTimeout(local.stopTimeout);
+    local.stopTimeout = null;
+    if (local.killDeadline) clearTimeout(local.killDeadline);
+    local.killDeadline = null;
 }
 
 // exactly one pending force-kill at a time: a stop/restart issued while a
@@ -71,17 +68,17 @@ function scheduleStopForceKill(
     delayMs: number = 15000,
     confirmMs: number = 10000,
 ): void {
-    cancelStopForceKill();
+    cancelStopForceKill(ctx);
     const timer = setTimeout(() => {
-        local().stopTimeout = null;
-        if (currentGameService().stopTimeoutMs) ctx.setState({ serverEntries: appendCapped(ctx.state.serverEntries, { type: "error", content: "[Server] Graceful stop timed out; force-killing. World save not confirmed." }) });
-        void Promise.resolve(processApi.kill(primaryProcessId(), "SIGKILL")).catch((err) => ctx.setState((prev) => ({ serverEntries: appendCapped(prev.serverEntries, { type: "error", content: `[Server] Force-kill failed: ${errorMessage(err)}` }) })));
+        ctx.lifecycle.stopTimeout = null;
+        if (ctx.game.stopTimeoutMs) ctx.setState({ serverEntries: appendCapped(ctx.state.serverEntries, { type: "error", content: "[Server] Graceful stop timed out; force-killing. World save not confirmed." }) });
+        void Promise.resolve(ctx.process.kill(ctx.game.primaryProcessId, "SIGKILL")).catch((err) => ctx.setState((prev) => ({ serverEntries: appendCapped(prev.serverEntries, { type: "error", content: `[Server] Force-kill failed: ${errorMessage(err)}` }) })));
         const deadline = setTimeout(() => void confirmForceKill(ctx), confirmMs);
         deadline.unref?.();
-        local().killDeadline = deadline;
+        ctx.lifecycle.killDeadline = deadline;
     }, delayMs);
     timer.unref?.();
-    local().stopTimeout = timer;
+    ctx.lifecycle.stopTimeout = timer;
 }
 
 /**
@@ -92,16 +89,16 @@ function scheduleStopForceKill(
  * process.
  */
 async function confirmForceKill(ctx: Server): Promise<void> {
-    local().killDeadline = null;
+    ctx.lifecycle.killDeadline = null;
     let reason: string;
     try {
-        if (!(await processApi.exists(primaryProcessId()))) return handleProcessExit(ctx);
+        if (!(await ctx.process.exists(ctx.game.primaryProcessId))) return handleProcessExit(ctx);
         reason = "the process is still running";
     } catch (err) {
         reason = errorMessage(err);
     }
-    local().isRestarting = false;
-    cancelStopRequest();
+    ctx.lifecycle.isRestarting = false;
+    cancelStopRequest(ctx);
     ctx.setState((prev) => ({ serverStatus: "online", serverEntries: appendCapped(prev.serverEntries, { type: "error", content: `[Server] Could not confirm the force-kill: ${reason}.` }) }));
 }
 
@@ -110,7 +107,7 @@ async function confirmForceKill(ctx: Server): Promise<void> {
 export const __lifecycleTest = {
     scheduleStopForceKill,
     confirmForceKill,
-    isStopForceKillPending: () => local().stopTimeout !== null || local().killDeadline !== null,
+    isStopForceKillPending: (ctx: Server) => ctx.lifecycle.stopTimeout !== null || ctx.lifecycle.killDeadline !== null,
 };
 
 /**
@@ -118,9 +115,9 @@ export const __lifecycleTest = {
  * console, never dropped; undefined when the game has nothing to take back.
  */
 function releaseServer(ctx: Server): Promise<void> | undefined {
-    const afterStop = currentGameService().afterStop;
+    const afterStop = ctx.game.afterStop;
     if (!afterStop) return undefined;
-    return afterStop(ctx).catch((err) => {
+    return afterStop().catch((err) => {
         console.error("[gameserver] cleaning up after the server stopped failed:", err);
         ctx.setState((prev) => ({
             serverEntries: appendCapped(prev.serverEntries, {
@@ -149,34 +146,34 @@ export async function startServerInstance(
     if (ctx.state.serverStatus !== "offline") return;
     // refused to the caller, and said in the console for the restarts that
     // have none: a half-settled server folder is not a launch failure
-    try { assertRecoverySettled("starting the server"); }
+    try { assertRecoverySettled(ctx, "starting the server"); }
     catch (err) { report(ctx, "The server was not started", err); throw err; }
     try {
         ctx.setState({ activeIssue: null });
         await loadServerOptions(ctx);
 
-        const game = currentGameService();
-        const support = currentGame().hostSupport({ os: process.platform, arch: process.arch }, { software: ctx.state.serverSoftware, version: ctx.state.serverVersion, settings: ctx.state.gameSettings });
+        const game = ctx.game;
+        const support = ctx.definition.hostSupport({ os: process.platform, arch: process.arch }, { software: ctx.state.serverSoftware, version: ctx.state.serverVersion, settings: ctx.state.gameSettings });
         if (!support.supported) throw new Error(support.reason ?? "Unsupported host");
 
         // the port files are the install's while one runs
-        if (currentGameService().isMutating()) {
+        if (ctx.game.isMutating()) {
             throw new Error("A server install is running; start the server once it finishes.");
         }
         // throws, with who has it, when a port is taken and the user's
         // setting refuses to move it
-        const moves = await prepareGamePorts(game.ports(ctx, livePortDeps()), livePortDeps());
+        const moves = await prepareGamePorts(game.ports(livePortDeps(ctx)), livePortDeps(ctx));
 
         // the update installs before the launch reads the server's files; it
         // holds the game's install flag, so a second start refuses meanwhile
         await updateBeforeStart(ctx);
-        const launch = await game.prepareLaunch(ctx);
+        const launch = await game.prepareLaunch();
 
         // an install owns the server folder until it activates or rolls
         // back. Checked with no await before the status flips: the install
         // action likewise checks "offline" and claims the folder in one
         // synchronous step, so the two can never both proceed.
-        if (currentGameService().isMutating()) {
+        if (ctx.game.isMutating()) {
             throw new Error("A server install is running; start the server once it finishes.");
         }
         // the last run's console and chat stay above the new one: they are
@@ -198,10 +195,10 @@ export async function startServerInstance(
             ].slice(-MAX_BUFFERED_ENTRIES),
         });
 
-        markStarting();
-        local().oomBaseline = readOomKills(ctx);
-        await processApi.start({
-            id: primaryProcessId(),
+        markStarting(ctx);
+        ctx.lifecycle.oomBaseline = readOomKills(ctx);
+        await ctx.process.start({
+            id: ctx.game.primaryProcessId,
             command: launch.command.executable,
             args: launch.command.args,
             cwd: launch.command.cwd,
@@ -230,11 +227,11 @@ export async function startServerInstance(
 export async function stopServerInstance(
     ctx: Server,
 ): Promise<void> {
-    cancelReadiness();
+    cancelReadiness(ctx);
     const curr = ctx.state.serverStatus;
     if (curr === "starting") {
-        markStopRequested();
-        await processApi.kill(primaryProcessId(), "SIGKILL");
+        markStopRequested(ctx);
+        await ctx.process.kill(ctx.game.primaryProcessId, "SIGKILL");
         ctx.setState({
             serverStatus: "offline",
             serverEntries: appendCapped(ctx.state.serverEntries, {
@@ -243,18 +240,18 @@ export async function stopServerInstance(
             }),
         });
     } else if (curr === "online") {
-        markStopRequested();
+        markStopRequested(ctx);
         ctx.setState({
             serverStatus: "stopping",
             serverEntries: appendCapped(ctx.state.serverEntries, {
                 type: "command",
-                content: currentGameService().stopEntry,
+                content: ctx.game.stopEntry,
             }),
         });
-        try { await currentGameService().stop(ctx); }
-        catch (err) { cancelStopRequest(); ctx.setState({ serverStatus: "online" }); throw err; }
+        try { await ctx.game.stop(); }
+        catch (err) { cancelStopRequest(ctx); ctx.setState({ serverStatus: "online" }); throw err; }
 
-        scheduleStopForceKill(ctx, currentGameService().stopTimeoutMs);
+        scheduleStopForceKill(ctx, ctx.game.stopTimeoutMs);
     }
 }
 
@@ -262,15 +259,15 @@ export async function restartServerInstance(
     ctx: Server,
 ): Promise<void> {
     if (ctx.state.serverStatus !== "online") return;
-    cancelReadiness();
-    local().isRestarting = true;
-    markStopRequested();
+    cancelReadiness(ctx);
+    ctx.lifecycle.isRestarting = true;
+    markStopRequested(ctx);
     ctx.setState({
         serverStatus: "restarting",
         serverEntries: appendCapped(
             appendCapped(ctx.state.serverEntries, {
                 type: "command",
-                content: currentGameService().stopEntry,
+                content: ctx.game.stopEntry,
             }),
             {
                 type: "info",
@@ -278,10 +275,10 @@ export async function restartServerInstance(
             },
         ),
     });
-    try { await currentGameService().stop(ctx); }
-    catch (err) { local().isRestarting = false; cancelStopRequest(); ctx.setState({ serverStatus: "online" }); throw err; }
+    try { await ctx.game.stop(); }
+    catch (err) { ctx.lifecycle.isRestarting = false; cancelStopRequest(ctx); ctx.setState({ serverStatus: "online" }); throw err; }
 
-    scheduleStopForceKill(ctx, currentGameService().stopTimeoutMs);
+    scheduleStopForceKill(ctx, ctx.game.stopTimeoutMs);
 }
 
 export async function sendServerCommand(
@@ -293,11 +290,11 @@ export async function sendServerCommand(
     // validation (kick/ban reasons) does not replace this check — it is
     // the last line of defense for raw-command callers too, matching
     // sendChatMessage's discipline one action over.
-    const game = currentGameService();
-    const control = currentGame().describe({ software: ctx.state.serverSoftware, version: ctx.state.serverVersion, settings: ctx.state.gameSettings }).control.kind;
+    const game = ctx.game;
+    const control = ctx.definition.describe({ software: ctx.state.serverSoftware, version: ctx.state.serverVersion, settings: ctx.state.gameSettings }).control.kind;
     if (control !== "stdin" && control !== "rcon")
         throw new Error("This game does not support console commands");
-    if (control === "rcon" && !game.sendCommand) throw new Error(`${currentGame().name} declares a remote console but has no way to send to it`);
+    if (control === "rcon" && !game.sendCommand) throw new Error(`${ctx.definition.name} declares a remote console but has no way to send to it`);
     const line = game.commandLine(cmd);
     const trimmed = cmd.trim();
     if (!trimmed) return;
@@ -318,8 +315,8 @@ export async function sendServerCommand(
         ctx.state.serverStatus === "online" ||
         ctx.state.serverStatus === "starting"
     ) {
-        if (control === "rcon") await game.sendCommand!(ctx, line);
-        else await processApi.write(primaryProcessId(), line);
+        if (control === "rcon") await game.sendCommand!(line);
+        else await ctx.process.write(ctx.game.primaryProcessId, line);
     } else {
         ctx.setState({
             serverEntries: appendCapped(ctx.state.serverEntries, {
@@ -335,29 +332,29 @@ export async function sendServerCommand(
 
 /** Log viewing is available even when a game has no command control. */
 export function handleProcessData(ctx: Server, chunk: string): void {
-    local().lineBuffer += chunk;
-    const lines = local().lineBuffer.split("\n");
-    local().lineBuffer = lines.pop() ?? "";
-    for (const line of lines) currentGameService().observeLine(ctx, line);
-    if (local().lineBuffer) currentGameService().observePartialLine?.(ctx, local().lineBuffer);
+    ctx.lifecycle.lineBuffer += chunk;
+    const lines = ctx.lifecycle.lineBuffer.split("\n");
+    ctx.lifecycle.lineBuffer = lines.pop() ?? "";
+    for (const line of lines) ctx.game.observeLine(line);
+    if (ctx.lifecycle.lineBuffer) ctx.game.observePartialLine?.(ctx.lifecycle.lineBuffer);
 }
 export function sendChatMessage(ctx: Server, msg: string): Promise<void> {
-    const game = currentGameService();
+    const game = ctx.game;
     if (!game.sendChat) throw new Error("This game does not support chat");
-    return game.sendChat(ctx, msg);
+    return game.sendChat(msg);
 }
 
 export function handleProcessExit(ctx: Server, exitCode?: number): void {
-    cancelStopForceKill();
-    cancelReadiness();
+    cancelStopForceKill(ctx);
+    cancelReadiness(ctx);
 
-    if (local().lineBuffer.trim()) {
-        currentGameService().observeLine(ctx, local().lineBuffer, true);
-        local().lineBuffer = "";
+    if (ctx.lifecycle.lineBuffer.trim()) {
+        ctx.game.observeLine(ctx.lifecycle.lineBuffer, true);
+        ctx.lifecycle.lineBuffer = "";
     }
 
-    if (local().isRestarting) {
-        local().isRestarting = false;
+    if (ctx.lifecycle.isRestarting) {
+        ctx.lifecycle.isRestarting = false;
         // startServerInstance only proceeds from "offline" and owns the
         // transition to "starting"
         ctx.setState({
@@ -377,7 +374,7 @@ export function handleProcessExit(ctx: Server, exitCode?: number): void {
         if (released) void released.then(restart);
         else restart();
     } else {
-        const exit = classifyExit(ctx.state.serverStatus, exitCode);
+        const exit = classifyExit(ctx, exitCode);
         const released = releaseServer(ctx);
         ctx.setState({
             serverStatus: "offline",
@@ -394,7 +391,7 @@ export function handleProcessExit(ctx: Server, exitCode?: number): void {
             ctx.trigger(TRIGGER_IDS.serverCrashed, exitCode ?? null);
             // SIGKILL, while the system's count of programs it ended for
             // memory went up: the system ran out and chose the server
-            const baseline = local().oomBaseline;
+            const baseline = ctx.lifecycle.oomBaseline;
             const outOfMemory = exitCode === 137 && baseline !== null && (readOomKills(ctx) ?? baseline) > baseline;
             // the game takes back what the crashed start set aside before the next one
             afterCrash(ctx, { whileStarting: exit.whileStarting, exitCode, outOfMemory }, (ctx, carry) => (released ?? Promise.resolve()).then(() => startServerInstance(ctx, carry)));

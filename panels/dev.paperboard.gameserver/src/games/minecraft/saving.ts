@@ -1,9 +1,7 @@
+import { minecraftOf } from "./state";
 import type { Server } from "../../service/server";
-import { serverLocal } from "../../service/scope";
-import { files as fileApi, processApi, errorMessage } from "../../service/api";
-import { PANEL_ID, SERVER_PROC_ID, type GameServerState } from "../../service/types";
-
-const local = serverLocal(() => ({ waiters: new Set<Waiter>(), pausing: false }));
+import { errorMessage } from "../../service/api";
+import { PANEL_ID, SERVER_PROC_ID } from "../../service/types";
 
 // Copying a running world: the server writes region files whenever it
 // autosaves, so a copy taken meanwhile can catch half a write. Saving is
@@ -21,32 +19,32 @@ const PAUSED_MARKER = ".paperboard-saving-paused";
 const FLUSH_TIMEOUT_MS = 120_000;
 const COMMAND_TIMEOUT_MS = 15_000;
 
-type Waiter = { match: (line: string) => boolean; resolve: (line: string) => void };
+export type Waiter = { match: (line: string) => boolean; resolve: (line: string) => void };
 // at most one pause at a time, so at most two waiters (off, flushed)
 
 /** every console line passes here (lifecycle.handleProcessData) */
-export function observeSavingLine(line: string): void {
-    for (const waiter of local().waiters) {
+export function observeSavingLine(ctx: Server, line: string): void {
+    for (const waiter of minecraftOf(ctx).saving.waiters) {
         if (waiter.match(line)) {
-            local().waiters.delete(waiter);
+            minecraftOf(ctx).saving.waiters.delete(waiter);
             waiter.resolve(line);
         }
     }
 }
 
 /** the next console line `match` accepts, or a failure naming `what` once `timeoutMs` passes without one */
-export function waitForLine(match: (line: string) => boolean, timeoutMs: number, what: string): { done: Promise<string>; cancel: () => void } {
+export function waitForLine(ctx: Server, match: (line: string) => boolean, timeoutMs: number, what: string): { done: Promise<string>; cancel: () => void } {
     let waiter!: Waiter;
     let timer: ReturnType<typeof setTimeout> | undefined;
     const done = new Promise<string>((resolve, reject) => {
         waiter = { match, resolve: (line) => { clearTimeout(timer); resolve(line); } };
         timer = setTimeout(() => {
-            local().waiters.delete(waiter);
+            minecraftOf(ctx).saving.waiters.delete(waiter);
             reject(new Error(`The server did not confirm ${what} within ${Math.round(timeoutMs / 1000)} seconds`));
         }, timeoutMs);
-        local().waiters.add(waiter);
+        minecraftOf(ctx).saving.waiters.add(waiter);
     });
-    return { done, cancel: () => { clearTimeout(timer); local().waiters.delete(waiter); } };
+    return { done, cancel: () => { clearTimeout(timer); minecraftOf(ctx).saving.waiters.delete(waiter); } };
 }
 
 // "Automatic saving is now disabled", "Saving is already turned off"
@@ -57,10 +55,10 @@ const savingOn = (line: string) => /saving is (now enabled|already turned on)/i.
 const flushed = (line: string) => /Saved the (game|world)/i.test(line);
 
 /** writes a console command and resolves once the server prints a line `confirm` accepts */
-export async function send(command: string, confirm: (line: string) => boolean, timeoutMs: number, what: string): Promise<void> {
-    const wait = waitForLine(confirm, timeoutMs, what);
+export async function send(ctx: Server, command: string, confirm: (line: string) => boolean, timeoutMs: number, what: string): Promise<void> {
+    const wait = waitForLine(ctx, confirm, timeoutMs, what);
     try {
-        await processApi.write(SERVER_PROC_ID, `${command}\n`);
+        await ctx.process.write(SERVER_PROC_ID, `${command}\n`);
     } catch (err) {
         wait.cancel();
         throw err;
@@ -76,21 +74,21 @@ export async function send(command: string, confirm: (line: string) => boolean, 
 export async function withSavingPaused<T>(ctx: Server, work: () => Promise<T>): Promise<T> {
     if (ctx.state.serverStatus === "offline") return work();
     if (ctx.state.serverStatus !== "online") throw new Error("Wait until the server has finished starting or stopping");
-    if (local().pausing) throw new Error("Saving is already paused for another copy");
-    local().pausing = true;
+    if (minecraftOf(ctx).saving.pausing) throw new Error("Saving is already paused for another copy");
+    minecraftOf(ctx).saving.pausing = true;
     try {
         let result!: T;
         let workError: unknown;
         let workFailed = false;
         try {
-            await pauseSaving();
+            await pauseSaving(ctx);
             result = await work();
         } catch (err) {
             workFailed = true;
             workError = err;
         }
         try {
-            await resumeSaving();
+            await resumeSaving(ctx);
         } catch (err) {
             // saving is still off and the marker stays: say so, and keep
             // the failure that came first
@@ -101,21 +99,21 @@ export async function withSavingPaused<T>(ctx: Server, work: () => Promise<T>): 
         if (workFailed) throw workError;
         return result;
     } finally {
-        local().pausing = false;
+        minecraftOf(ctx).saving.pausing = false;
     }
 }
 
 /** Save world: everything in memory is written out, confirmed by the server's "Saved the game". */
 export async function saveWorld(ctx: Server): Promise<void> {
     if (ctx.state.serverStatus !== "online") throw new Error("Start the server before saving");
-    await send("save-all flush", flushed, FLUSH_TIMEOUT_MS, "that the world is saved");
+    await send(ctx, "save-all flush", flushed, FLUSH_TIMEOUT_MS, "that the world is saved");
 }
 
 /** the marker first, so a pause is never left without one */
-async function pauseSaving(): Promise<void> {
-    await fileApi.write(PAUSED_MARKER, new Date().toISOString(), PANEL_ID);
-    await send("save-off", savingOff, COMMAND_TIMEOUT_MS, "that saving is paused");
-    await send("save-all flush", flushed, FLUSH_TIMEOUT_MS, "that the world is saved");
+async function pauseSaving(ctx: Server): Promise<void> {
+    await ctx.files.write(PAUSED_MARKER, new Date().toISOString(), PANEL_ID);
+    await send(ctx, "save-off", savingOff, COMMAND_TIMEOUT_MS, "that saving is paused");
+    await send(ctx, "save-all flush", flushed, FLUSH_TIMEOUT_MS, "that the world is saved");
 }
 
 /**
@@ -128,34 +126,34 @@ async function pauseSaving(): Promise<void> {
 export async function pauseSavingForBackup(ctx: Server): Promise<void> {
     if (ctx.state.serverStatus === "offline") return;
     if (ctx.state.serverStatus !== "online") throw new Error("The server is starting or stopping; back it up when it has finished");
-    if (local().pausing) throw new Error("A world download is copying the world; back up when it has finished");
-    local().pausing = true;
+    if (minecraftOf(ctx).saving.pausing) throw new Error("A world download is copying the world; back up when it has finished");
+    minecraftOf(ctx).saving.pausing = true;
     try {
-        await pauseSaving();
+        await pauseSaving(ctx);
     } catch (err) {
         try {
-            await resumeSaving();
+            await resumeSaving(ctx);
         } catch (resumeErr) {
             const reason = errorMessage(resumeErr);
             throw new Error(`${errorMessage(err)} (saving could not be turned back on: ${reason})`, { cause: err });
         }
         throw err;
     } finally {
-        local().pausing = false;
+        minecraftOf(ctx).saving.pausing = false;
     }
 }
 
 /** the marker goes only after the server confirmed save-on */
-async function resumeSaving(): Promise<void> {
-    if (await processApi.exists(SERVER_PROC_ID)) {
-        await send("save-on", savingOn, COMMAND_TIMEOUT_MS, "that saving is back on");
+async function resumeSaving(ctx: Server): Promise<void> {
+    if (await ctx.process.exists(SERVER_PROC_ID)) {
+        await send(ctx, "save-on", savingOn, COMMAND_TIMEOUT_MS, "that saving is back on");
     }
-    await fileApi.delete(PAUSED_MARKER, PANEL_ID);
+    await ctx.files.delete(PAUSED_MARKER, PANEL_ID);
 }
 
 /** at service start: a pause the last service left behind is ended */
-export async function recoverPausedSaving(): Promise<boolean> {
-    if (!(await fileApi.exists(PAUSED_MARKER, PANEL_ID))) return false;
-    await resumeSaving();
+export async function recoverPausedSaving(ctx: Server): Promise<boolean> {
+    if (!(await ctx.files.exists(PAUSED_MARKER, PANEL_ID))) return false;
+    await resumeSaving(ctx);
     return true;
 }

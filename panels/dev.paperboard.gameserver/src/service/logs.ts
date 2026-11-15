@@ -1,10 +1,10 @@
 import type { Server } from "./server";
 import * as fs from "node:fs";
 import { gunzipSync } from "node:zlib";
-import { files as fileApi, errorCode } from "./api";
+import { errorCode } from "./api";
 import { listDirectory } from "./filesystem";
 import { isLogFileName, tailChars } from "../core/logs";
-import { type GameServerState, PANEL_ID } from "./types";
+import { PANEL_ID } from "./types";
 
 // the log viewer is bounded twice: a compressed archive we will not expand,
 // and a character cap on what is returned over the bridge
@@ -26,15 +26,15 @@ export interface LogFileContent {
 }
 
 export async function listLogFiles(
-    _ctx: Server,
+    ctx: Server,
 ): Promise<LogFileInfo[]> {
-    const entries = await listDirectory("logs");
+    const entries = await listDirectory(ctx, "logs");
     const files: LogFileInfo[] = [];
     for (const entry of entries) {
         if (!isLogFileName(entry)) continue;
         let stat: fs.Stats;
         try {
-            stat = fs.statSync(await fileApi.getPath(`logs/${entry}`, PANEL_ID));
+            stat = fs.statSync(await ctx.files.getPath(`logs/${entry}`, PANEL_ID));
         } catch (err) {
             // rotated away since the listing
             if (errorCode(err) === "ENOENT") continue;
@@ -61,7 +61,7 @@ function readTail(path: string, maxBytes: number): Buffer {
 }
 
 export async function readLogFile(
-    _ctx: Server,
+    ctx: Server,
     name: string,
 ): Promise<LogFileContent> {
     // boundary: the name reaches the filesystem — validated here, not in UI
@@ -69,10 +69,10 @@ export async function readLogFile(
         throw new Error(`Refusing to read unsafe log file name: ${JSON.stringify(name)}`);
     }
     const relative = `logs/${name}`;
-    if (!(await fileApi.exists(relative, PANEL_ID))) {
+    if (!(await ctx.files.exists(relative, PANEL_ID))) {
         throw new Error(`Log file not found: ${name}`);
     }
-    const absolute = await fileApi.getPath(relative, PANEL_ID);
+    const absolute = await ctx.files.getPath(relative, PANEL_ID);
     const size = fs.statSync(absolute).size;
 
     let raw: string;

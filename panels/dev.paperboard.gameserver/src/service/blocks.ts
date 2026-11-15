@@ -2,27 +2,16 @@
 // a Blocks project of its own; what every game shares is here, and a game
 // adds its own through its service's blocks().
 import type { Server } from "./server";
-import type {
-    BlockCommandDefinition,
-    BlockEventDefinition,
-    BlockSet,
-    BlockTypeDefinition,
-    BlockValueDefinition,
-    BlocksProjectHandle,
-    ServiceContext,
-} from "@mileniumhq/paperapi";
+import type { BlockCommandDefinition, BlockEventDefinition, BlockSet, BlockTypeDefinition, BlockValueDefinition, BlocksProjectHandle } from "@mileniumhq/paperapi";
 import type { BackupEnded, BackupRecord } from "@mileniumhq/paperapi";
 import { MAX_BUFFERED_ENTRIES, type ChatMessage, type GameServerState } from "./types";
-import { inServer } from "./scope";
 import { TRIGGER_IDS, type CallName, type TriggerId } from "./contract";
 import { restartServerInstance, sendServerCommand, startServerInstance, stopServerInstance } from "./lifecycle";
 import { waitUntil } from "../games/serviceKit";
 import { listLogFiles, readLogFile } from "./logs";
 import { sayInChat } from "./calls";
 import { automationView, readAutomation, writeAutomation } from "./automation";
-import { currentGameService } from "../games/service";
 import { assertGameCall } from "../games";
-
 
 /**
  * A player, by the name the server knows them by. The panel's own type.
@@ -98,8 +87,8 @@ export function sharedTypes(onlinePlayers: (server: string) => readonly string[]
 }
 
 /** The server's automation as its value reads. */
-async function automationValue() {
-    const view = automationView(await readAutomation());
+function automationValue(ctx: Server) {
+    const view = automationView(ctx, readAutomation(ctx));
     return {
         "restart-after-crash": view.restartAfterCrash,
         "daily-restart": view.dailyRestart,
@@ -121,7 +110,7 @@ export async function stopFromBlocks(ctx: Server): Promise<void> {
     if (ctx.state.serverStatus === "restarting") throw new Error("The server is restarting; stop it once it is online");
     await stopServerInstance(ctx);
     // the game's own stop wait, then the force-kill and its confirmation
-    await waitUntil(() => ctx.state.serverStatus === "offline", (currentGameService().stopTimeoutMs ?? 15_000) + 15_000, "the server to stop");
+    await waitUntil(() => ctx.state.serverStatus === "offline", (ctx.game.stopTimeoutMs ?? 15_000) + 15_000, "the server to stop");
 }
 
 /** Restarts a server that is online, as Restart the Server does. */
@@ -220,7 +209,7 @@ export function sharedBlocks(ctx: Server): BlockSet {
                 icon: "autorenew",
                 description: "Whether the server restarts after a crash, the hour it restarts each day, and whether it updates itself",
                 type: "automation",
-                read: () => automationValue(),
+                read: () => automationValue(ctx),
             }),
         ],
         commands: [
@@ -254,7 +243,7 @@ export function sharedBlocks(ctx: Server): BlockSet {
                 category: "Server",
                 icon: "save",
                 description: "Writes the running world to disk, once the server confirms it",
-                run: () => currentGameService().saveWorld(ctx),
+                run: () => ctx.game.saveWorld(),
             },
             {
                 id: "run-command",
@@ -357,7 +346,7 @@ export function sharedBlocks(ctx: Server): BlockSet {
                     },
                 },
                 run: async ({ update }: { update: boolean }) => {
-                    if (!automationView(await readAutomation()).canUpdate) throw new Error("This game can't update itself, so it has no automatic updates");
+                    if (!automationView(ctx, readAutomation(ctx)).canUpdate) throw new Error("This game can't update itself, so it has no automatic updates");
                     await writeAutomation(ctx, { autoUpdate: update }, restartServerInstance);
                 },
             }),
@@ -433,7 +422,7 @@ export function playerEvents(): BlockEventDefinition[] {
 
 /** Runs one of the game's calls the way its tab does, so a block is checked as the tab's edit is. */
 export async function runGameCall<T>(ctx: Server, id: CallName, inputs: Record<string, unknown>): Promise<T> {
-    const call = (await currentGameService().calls())[id];
+    const call = (await ctx.game.calls())[id];
     if (!call) throw new Error(`${ctx.definition.name} has no "${id}" call`);
     return (await call(ctx, inputs)) as T;
 }
@@ -513,14 +502,14 @@ const live = (server: Server) => {
 };
 
 /**
- * Runs work as one of the server's operations: in its scope, refused once
+ * Runs work as one of the server's operations: refused once
  * it is being removed, and counted while it runs (removal waits for it).
  */
 export async function serverOperation<T>(server: Server, work: () => T | Promise<T>): Promise<T> {
     live(server);
     server.activeOperations++;
     try {
-        return await inServer(server, work);
+        return await work();
     } finally {
         server.activeOperations--;
     }
@@ -528,17 +517,17 @@ export async function serverOperation<T>(server: Server, work: () => T | Promise
 
 /**
  * The set as it runs for one server: a command is one of its operations,
- * and a value is read in its scope, refused once it is being removed.
+ * and a value is refused once it is being removed too.
  */
-export function bindBlocks(scope: Server, set: BlockSet): BlockSet {
-    // choices worked out on demand are asked in the server too
+export function bindBlocks(server: Server, set: BlockSet): BlockSet {
+    // choices worked out on demand are refused once the server is being removed too
     const inputs = <T extends { inputs?: BlockCommandDefinition["inputs"] }>(def: T): T => {
         if (!def.inputs) return def;
         const bound = Object.fromEntries(
             Object.entries(def.inputs).map(([key, input]) => {
                 const choices = input.choices;
                 if (typeof choices !== "function") return [key, input];
-                return [key, { ...input, choices: (ctx: Parameters<typeof choices>[0]) => (live(scope), inServer(scope, () => choices(ctx))) }];
+                return [key, { ...input, choices: (ctx: Parameters<typeof choices>[0]) => (live(server), choices(ctx)) }];
             }),
         );
         return { ...def, inputs: bound };
@@ -548,13 +537,13 @@ export function bindBlocks(scope: Server, set: BlockSet): BlockSet {
         events: set.events?.map(inputs),
         commands: set.commands?.map(inputs).map((command) => ({
             ...command,
-            run: (inputs, ctx) => serverOperation(scope, () => command.run(inputs, ctx)),
+            run: (inputs, ctx) => serverOperation(server, () => command.run(inputs, ctx)),
         })),
         values: set.values?.map(inputs).map((value) => ({
             ...value,
             read: (inputs, ctx) => {
-                live(scope);
-                return inServer(scope, () => value.read(inputs, ctx));
+                live(server);
+                return value.read(inputs, ctx);
             },
         })),
     };
