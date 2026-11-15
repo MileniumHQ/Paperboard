@@ -1,14 +1,14 @@
 // A page backed by the panel's service. The service owns the state; the page
-// mirrors it through the bridge, so a greeting given in one window (or by
+// mirrors it through its client, so a greeting given in one window (or by
 // another panel's Greet block) shows up in every window at once.
 import { createSignal, onCleanup, Show } from "solid-js";
 import { PaperButton, PaperCard, PaperEmptyState, PaperFlex, PaperIcon, PaperInput, PaperPageHeader, PaperQuote, PaperText } from "@mileniumhq/paperui";
-import { createPanelBridge, errorMessage } from "@mileniumhq/paperapi";
-import { DEFAULT_STATE, PANEL_ID, type PanelState } from "../panel";
+import { errorMessage, serviceClient } from "@mileniumhq/paperapi";
+import { panelContract } from "../panel";
 
 export default function ServicePage() {
-    const bridge = createPanelBridge<PanelState>({ panelId: PANEL_ID, defaultState: DEFAULT_STATE });
-    const [state, setState] = createSignal<PanelState>(bridge.getState());
+    const service = serviceClient(panelContract);
+    const [state, setState] = createSignal(service.state.current());
     // unavailable is not empty: a service that has not answered is said, with a way to try again
     const [hydration, setHydration] = createSignal<"loading" | "ready" | "failed">("loading");
     const [hydrationError, setHydrationError] = createSignal("");
@@ -17,16 +17,16 @@ export default function ServicePage() {
     const [failure, setFailure] = createSignal("");
     const [busy, setBusy] = createSignal(false);
 
-    const off = bridge.onStateChange((_patch, full) => setState({ ...full }));
+    const off = service.state.subscribe((full) => setState({ ...full }));
     onCleanup(() => {
         off();
-        bridge.dispose();
+        service.state.dispose();
     });
 
     const hydrate = async () => {
         setHydration("loading");
         try {
-            setState({ ...(await bridge.refreshState()) });
+            setState({ ...(await service.state.refresh()) });
             setHydration("ready");
         } catch (err) {
             setHydrationError(errorMessage(err));
@@ -43,7 +43,7 @@ export default function ServicePage() {
         try {
             // the service refuses a bad name with a reason; the new count
             // arrives through its state, not through this answer
-            setGreeting((await bridge.call<string>("greet", name())) ?? "");
+            setGreeting(await service.calls.greet({ name: name() }));
         } catch (err) {
             console.error("[Service] greet failed:", err);
             setFailure(errorMessage(err));

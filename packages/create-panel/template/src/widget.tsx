@@ -1,29 +1,29 @@
 // Home widget: how many greetings the service has given. A widget is its own
-// small page: it mirrors the service's state through the bridge and says so
+// small page: it mirrors the service's state through its client and says so
 // when the service does not answer, in the tile where the number would be.
 import { render } from "solid-js/web";
 import { createSignal, onCleanup, Show } from "solid-js";
 import { PaperButton, PaperProvider, PaperWidget, PaperWidgetMessage, PaperWidgetStat } from "@mileniumhq/paperui";
-import { createPanelBridge, defineWidgets, type WidgetContext, errorMessage } from "@mileniumhq/paperapi";
+import { defineWidgets, serviceClient, type WidgetContext, errorMessage } from "@mileniumhq/paperapi";
 import "@mileniumhq/paperui/style.css";
 import "./widget.css";
-import { DEFAULT_STATE, PANEL_ID, type PanelState } from "./panel";
+import { panelContract } from "./panel";
 
 function Greetings(props: { widget: WidgetContext }) {
-    const bridge = createPanelBridge<PanelState>({ panelId: PANEL_ID, defaultState: DEFAULT_STATE });
+    const service = serviceClient(panelContract);
     const [count, setCount] = createSignal<number | null>(null);
     const [failure, setFailure] = createSignal("");
 
-    const off = bridge.onStateChange((_patch, full) => setCount(full.greetingCount));
+    const off = service.state.subscribe((full) => setCount(full.greetingCount));
     onCleanup(() => {
         off();
-        bridge.dispose();
+        service.state.dispose();
     });
 
     const load = async () => {
         setFailure("");
         try {
-            setCount((await bridge.refreshState()).greetingCount);
+            setCount((await service.state.refresh()).greetingCount);
         } catch (err) {
             setFailure(errorMessage(err));
         }
