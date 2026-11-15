@@ -1,7 +1,7 @@
 // The agent's browser reaches the web only through this proxy, which the
-// service runs on loopback. It resolves every name itself and dials only an
-// address netPolicy allows, the one it checked (there is no second lookup a
-// name's owner could answer differently). The browser is told to send
+// service runs on loopback. It resolves every name itself and dials only a
+// public address (PaperAPI's publicAddressRefusal), the one it checked: there
+// is no second lookup a name's owner could answer differently. The browser is told to send
 // loopback through it too (`--proxy-bypass-list=<-loopback>`), so this
 // machine, its local network and their services are refused here, by name
 // or by number. The one exception is the agent's own pages (pages.ts): plain
@@ -16,7 +16,7 @@ import dns from "node:dns/promises";
 import http from "node:http";
 import net from "node:net";
 import type { AddressInfo } from "node:net";
-import { refusal } from "./netPolicy";
+import { publicAddressRefusal } from "@mileniumhq/paperapi/net";
 
 const MAX_CONNECTIONS = 256;
 const HEADERS_MS = 10_000;
@@ -33,7 +33,7 @@ export interface Proxy {
 export async function resolvePublic(host: string, lookup: (h: string) => Promise<{ address: string }[]> = defaultLookup): Promise<string> {
     const bare = host.startsWith("[") && host.endsWith("]") ? host.slice(1, -1) : host;
     if (net.isIP(bare)) {
-        const why = refusal(bare);
+        const why = publicAddressRefusal(bare);
         if (why) throw new Refused(`${host} is ${why}`);
         return bare;
     }
@@ -43,7 +43,7 @@ export async function resolvePublic(host: string, lookup: (h: string) => Promise
     } catch {
         throw new Unreachable(`couldn't find ${host}`);
     }
-    const allowed = found.map((a) => a.address).filter((a) => refusal(a) === null);
+    const allowed = found.map((a) => a.address).filter((a) => publicAddressRefusal(a) === null);
     if (allowed.length) return allowed[0]!;
     throw new Refused(found.length ? `${host} is on this computer or its local network` : `couldn't find ${host}`);
 }

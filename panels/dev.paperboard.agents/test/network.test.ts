@@ -6,7 +6,7 @@ import os from "node:os";
 import path from "node:path";
 import { BROWSER_PROC_ID, BrowserComputer } from "../src/service/browser";
 import { HomeFolder } from "../src/service/homeFolder";
-import { refusal } from "../src/service/netPolicy";
+import { publicAddressRefusal } from "@mileniumhq/paperapi/net";
 import { startProxy } from "../src/service/proxy";
 import { shellToolset } from "../src/service/shell";
 import type { ComputerState } from "../src/contract";
@@ -127,7 +127,7 @@ describe("the browser's proxy", () => {
         }
         expect(hits).toEqual([]);
         // and the public internet is allowed, by the same rule
-        for (const ip of ["93.184.216.34", "2606:2800:220:1:248:1893:25c8:1946", "1.1.1.1"]) expect(refusal(ip)).toBeNull();
+        for (const ip of ["93.184.216.34", "2606:2800:220:1:248:1893:25c8:1946", "1.1.1.1"]) expect(publicAddressRefusal(ip)).toBeNull();
     });
 
     test("the agent's apps over plain HTTP at <name>.localhost are the only way in", async () => {

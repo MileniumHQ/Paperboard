@@ -1,7 +1,7 @@
 // A web image an agent's message shows, fetched here rather than by the
 // panel's page: what a message names comes from the model, or from a page it
 // read, so the page never asks a host it names for anything. This fetch keeps
-// the browser's rule (netPolicy.ts): it resolves the name itself and dials the
+// the browser's rule (proxy.ts): it resolves the name itself and dials the
 // address it checked, never this computer or its local network; each redirect
 // is checked the same way. Only HTTPS, no cookies or credentials, a size cap,
 // and only the picture types the chat shows, judged by their bytes.
