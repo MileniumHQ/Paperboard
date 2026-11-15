@@ -23,7 +23,7 @@ function get(port: number, target: string, headers: Record<string, string>): Pro
     });
 }
 
-async function setup() {
+async function setup(problems: { title: string; message: string }[] = []) {
     const root = tempDir("pages");
     const home = new HomeFolder(path.join(root, "home"));
     home.ensure();
@@ -37,6 +37,7 @@ async function setup() {
         pdf: async () => Buffer.from("%PDF-1.7"),
         post: () => {},
         onChange: () => {},
+        problem: (title, message) => problems.push({ title, message }),
     });
     cleanups.push(async () => {
         await pages.close();
@@ -150,8 +151,9 @@ describe("pages", () => {
         expect(await planner.ended).toEqual([]);
     });
 
-    test("~/Apps from before becomes ~/Pages, and a page already there by the same name is never written over", async () => {
-        const { pages, home } = await setup();
+    test("~/Apps from before becomes ~/Pages, and a page already there by the same name is never written over, which is the panel's problem", async () => {
+        const problems: { title: string; message: string }[] = [];
+        const { pages, home } = await setup(problems);
         const old = path.join(home.root, "Apps");
         fs.mkdirSync(path.join(old, "planner"), { recursive: true });
         fs.writeFileSync(path.join(old, "planner", "index.html"), "the old planner");
@@ -163,6 +165,8 @@ describe("pages", () => {
         expect(fs.readFileSync(path.join(home.root, "Pages", "planner", "index.html"), "utf8")).toBe("<h1>planner</h1>");
         expect(fs.readFileSync(path.join(old, "planner", "index.html"), "utf8")).toBe("the old planner");
         expect(pages.list().map((p) => p.name).sort()).toEqual(["card", "other", "planner"]);
+        // the old planner is out of sight in ~/Apps: the person is told where, and why
+        expect(problems).toEqual([{ title: "Some pages stayed in ~/Apps", message: "planner stays in ~/Apps: ~/Pages has pages by the same name already. Move or rename them to see them." }]);
     });
 
     test("a document's PDF is saved for the view, and only such a file can be discarded", async () => {

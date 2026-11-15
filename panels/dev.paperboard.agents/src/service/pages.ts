@@ -199,6 +199,8 @@ export interface PagesOptions {
     post(entry: PageEntry): void;
     /** a page was made, shown, changed or deleted: open lists read again */
     onChange(): void;
+    /** what went wrong in the background, where nobody waits to be told: the panel's problem */
+    problem(title: string, message: string): void;
 }
 
 interface Info {
@@ -468,7 +470,7 @@ export class Pages {
             else fs.renameSync(path.join(old, e), to);
         }
         if (!left.length) fs.rmdirSync(old);
-        else console.error(`[agents] ${left.join(", ")} stay in ${OLD_PAGES}: ${PAGES} has ones by the same name already`);
+        else this.o.problem(`Some pages stayed in ${OLD_PAGES}`, `${left.join(", ")} ${left.length === 1 ? "stays" : "stay"} in ${OLD_PAGES}: ${PAGES} has pages by the same name already. Move or rename them to see them.`);
     }
 
     /** The server, started once; on the port it had before when that's free. */
@@ -478,6 +480,7 @@ export class Pages {
             try {
                 saved = Number(JSON.parse(fs.readFileSync(this.o.portFile, "utf8")).port) || 0;
             } catch (e) {
+                // quiet: a developer's note: the pages open on a new port, as when there was none
                 if ((e as NodeJS.ErrnoException).code !== "ENOENT") console.error("[agents] the pages' saved port couldn't be read:", String(e));
             }
             const server = http.createServer((req, res) => {
@@ -625,7 +628,8 @@ export class Pages {
         this.seen = this.names();
         const home = this.o.home.resolve("~");
         this.watchers.home = fs.watch(home, () => this.look());
-        this.watchers.home.on("error", (e) => console.error("[agents] the home folder can't be followed for pages:", String(e)));
+        // a new ~/Pages isn't seen until the service starts again
+        this.watchers.home.on("error", (e) => this.o.problem("New pages aren't seen", `The home folder can't be followed for pages: ${errorMessage(e)}`));
         this.followPages();
     }
 
@@ -736,7 +740,7 @@ function watchFolder(root: string, changed: () => void, gone: () => void): Folde
             entries = fs.readdirSync(dir, { withFileTypes: true });
         } catch (e) {
             if (dir === root) throw e;
-            // a folder gone between being listed and followed is expected; anything else leaves part of the page unfollowed
+            // quiet: a folder gone between being listed and followed is expected; anything else leaves part of the page unfollowed, which a developer reads here
             if ((e as NodeJS.ErrnoException).code !== "ENOENT") console.error(`[agents] ${dir} can't be followed for page changes:`, String(e));
             return;
         }

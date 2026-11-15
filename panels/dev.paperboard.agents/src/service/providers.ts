@@ -145,6 +145,7 @@ export class Providers {
             this.idle = null;
             void this.quiet().then(
                 (down) => down || this.arm(),
+                // quiet: nothing is lost: the server stays up idle, and is stopped with the service
                 (e) => console.error(`[agents] couldn't stop OpenCode's provider server: ${errorMessage(e)}`),
             );
         }, this.deps.idleMs ?? IDLE_MS);

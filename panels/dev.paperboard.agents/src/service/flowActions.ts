@@ -189,14 +189,17 @@ export class FlowActionsPublisher {
                 try {
                     await this.deps.register(def);
                 } catch (e) {
+                    // the flows' dropdown keeps its last list until the next change publishes again
                     this.published = "";
-                    console.error(`[agents] couldn't update the "${def.id}" action:`, errorMessage(e));
+                    const title = `The "${def.id}" action couldn't be updated for flows`;
+                    problemsApi.report(PANEL_ID, { key: title, title, message: errorMessage(e) });
                 }
             }
         }).catch((e) => {
             // the queue goes on: the next change publishes again
             this.published = "";
-            console.error("[agents] the flow actions couldn't be published:", errorMessage(e));
+            const title = "The flow actions couldn't be published";
+            problemsApi.report(PANEL_ID, { key: title, title, message: errorMessage(e) });
         });
     }
 }

@@ -34,6 +34,7 @@ export class BlocksSync {
         }
         await this.deps.memory().then(
             (list) => this.seeMemory(list, false),
+            // quiet: an unreadable memory shows in state.memory.error; its next change is announced
             (e) => console.error("[agents] memory can't be read for Blocks:", String(e)),
         );
         this.registered = true;
@@ -59,6 +60,7 @@ export class BlocksSync {
         this.memoryRevision = revision;
         this.deps.memory().then(
             (list) => this.seeMemory(list, true),
+            // quiet: an unreadable memory shows in state.memory.error; its next change is announced
             (e) => console.error("[agents] memory can't be read for Blocks:", String(e)),
         );
     }

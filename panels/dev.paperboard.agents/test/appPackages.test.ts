@@ -78,7 +78,7 @@ async function app(registryUrl: string) {
     cleanups.push(() => fs.rmSync(root, { recursive: true, force: true }));
     const home = new HomeFolder(path.join(root, "home"));
     home.ensure();
-    const pages = new Pages({ home, portFile: path.join(root, "apps.json"), infoFile: path.join(root, "info.json"), picturesDir: path.join(root, "pics"), exportsDir: path.join(root, "exports"), registry: registryUrl, picture: async () => "", pdf: async () => Buffer.alloc(0), post: () => {}, onChange: () => {} });
+    const pages = new Pages({ home, portFile: path.join(root, "apps.json"), infoFile: path.join(root, "info.json"), picturesDir: path.join(root, "pics"), exportsDir: path.join(root, "exports"), registry: registryUrl, picture: async () => "", pdf: async () => Buffer.alloc(0), post: () => {}, onChange: () => {}, problem: (title, message) => { throw new Error(`${title}: ${message}`); } });
     cleanups.push(() => pages.close());
     const tools = pages.toolset();
     await tools.call("start_page", { name: "planner", kind: "app", title: "Planner", description: "plans" }, { fromFlow: false });

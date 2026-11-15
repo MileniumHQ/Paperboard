@@ -5,7 +5,7 @@
 // conversation as entry events plus a history call.
 
 import path from "node:path";
-import { DEFAULT_MODEL, HARNESSES, LIMITS, NO_ONBOARDING, ONBOARDING_STEP, TRIGGER_IDS, parseSettings, type AiState, type OnboardingDraft, type Harness, type Settings, type agentsContract } from "../contract";
+import { DEFAULT_MODEL, HARNESSES, LIMITS, NO_ONBOARDING, ONBOARDING_STEP, PANEL_ID, TRIGGER_IDS, parseSettings, type AiState, type OnboardingDraft, type Harness, type Settings, type agentsContract } from "../contract";
 import { HomeFolder, moveHomeFolder } from "./homeFolder";
 import { Checkpoints } from "./checkpoints";
 import { shellToolset } from "./shell";
@@ -40,7 +40,7 @@ import { Asker } from "./ask";
 import { FlowActionsPublisher, flowActions, type ConversationChoice, type FlowHost, type MessageReceived } from "./flowActions";
 import { BlocksSync } from "./blocksSync";
 import { flowBlocks, replyPayload, type ConversationFacts } from "./flowBlocks";
-import { type ActionDefinition, type BlocksHandle, type ContractContext, errorMessage } from "@mileniumhq/paperapi";
+import { type ActionDefinition, type BlocksHandle, type ContractContext, errorMessage, problemsApi } from "@mileniumhq/paperapi";
 export { findProgram } from "./which";
 import type { Launch } from "./which";
 import { openTurnLog, type TurnLog } from "./turnLog";
@@ -235,6 +235,7 @@ export class AiApp {
                 // the Blocks list keeps its id from when pages were apps
                 this.blocks.announce("apps");
             },
+            problem: (title, message) => problemsApi.report(PANEL_ID, { key: title, title, message }),
         });
         this.pages = pages;
         pages.watch();
@@ -343,7 +344,7 @@ export class AiApp {
         });
         // after the conversation exists: a one-off missed while the service was down runs as soon as it's read
         await this.routines.load();
-        // a broken index shows in state.memory.error from the start; the failure itself is reported there
+        // quiet: a broken index shows in state.memory.error from the start; the failure itself is reported there
         await this.memory.list().then(
             () => undefined,
             (e) => console.error("[agents] memory is unreadable:", String(e)),
@@ -455,6 +456,7 @@ export class AiApp {
                 () => ({ accepted: true }),
                 (e) => {
                     if (this.brains.snapshot()[harness].error !== errorMessage(e)) throw e;
+                    // quiet: the brain's state says why, as it does for one found by a look
                     console.error(`[agents] ${HARNESS_NAMES[harness]} on this computer wasn't used:`, String(e));
                     return { accepted: true };
                 },

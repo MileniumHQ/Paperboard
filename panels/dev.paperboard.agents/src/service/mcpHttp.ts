@@ -137,6 +137,7 @@ export class HttpWire implements McpWire {
             headers: { ...this.o.headers, ...(this.authorization ? { Authorization: this.authorization } : {}), "Mcp-Session-Id": this.session },
             signal: AbortSignal.timeout(3000),
         }).catch((e: Error) => {
+            // quiet: cleanup on close: this side forgets the session either way
             console.error(`[agents] couldn't end the session with ${new URL(this.o.url).host}: ${e.message}`);
             return null;
         });
@@ -428,6 +429,7 @@ function eventJson(raw: string): any {
     try {
         return JSON.parse(raw);
     } catch (e) {
+        // quiet: one bad event is skipped rather than ending the stream; the tool server's developer reads why here
         console.warn("[agents] a tool server sent an event that isn't JSON:", errorMessage(e));
         return undefined;
     }
