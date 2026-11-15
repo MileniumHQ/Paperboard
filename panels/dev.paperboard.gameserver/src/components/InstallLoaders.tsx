@@ -8,7 +8,10 @@ import {
 import type { DownloadedBytes } from "../lib/ensureJava";
 
 export interface InstallLoaderItem {
+    /** the step under way, without an ellipsis: "Downloading Java" */
     label: string;
+    /** the step once it is done: "Downloaded Java" */
+    done: string;
     /** how much the step has downloaded, while it downloads: shown under the label ("5.6 / 6 GB") */
     bytes?: Accessor<DownloadedBytes | undefined>;
     percent: Accessor<number>;
@@ -31,7 +34,7 @@ export default function InstallLoaders(props: { items: InstallLoaderItem[] }) {
                     <PaperLoader
                         percent={item.percent()}
                         loaderStatus={item.status()}
-                        label={item.label}
+                        label={item.status() === "success" ? item.done : `${item.label}...`}
                         subtitle={amount(item)}
                     />
                 )}

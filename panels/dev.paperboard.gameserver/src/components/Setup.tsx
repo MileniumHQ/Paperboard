@@ -190,7 +190,8 @@ function InstallStep(props: InstallStepProps) {
             rows={[
                 ...install.rows(props.software),
                 {
-                    label: "Setting up server...",
+                    label: "Setting up the server",
+                    done: "Set up the server",
                     percent: setupPercent,
                     status: setupStatus,
                 },

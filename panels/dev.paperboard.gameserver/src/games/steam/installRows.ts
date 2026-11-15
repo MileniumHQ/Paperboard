@@ -63,9 +63,9 @@ export function createSteamInstall() {
     const bytes = (step: number) => () => (live(step)?.stage === "preparing" ? undefined : live(step)?.bytes);
 
     const rows = (name: string): InstallLoaderItem[] => [
-        { label: `Downloading ${name} from Steam...`, bytes: bytes(0), percent: percent(0), status: status(0) },
-        { label: "Checking the downloaded files...", bytes: bytes(1), percent: percent(1), status: status(1) },
-        { label: "Setting up server...", percent: percent(2), status: status(2) },
+        { label: `Downloading ${name} from Steam`, done: `Downloaded ${name} from Steam`, bytes: bytes(0), percent: percent(0), status: status(0) },
+        { label: "Checking the downloaded files", done: "Checked the downloaded files", bytes: bytes(1), percent: percent(1), status: status(1) },
+        { label: "Setting up the server", done: "Set up the server", percent: percent(2), status: status(2) },
     ];
 
     return { error, installed, running, run, rows, reset: flow.reset, finished: flow.finished };

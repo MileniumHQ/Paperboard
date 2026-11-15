@@ -60,15 +60,16 @@ export function createTerrariaInstall() {
 
     const rows = (software: TerrariaSoftware, version: string): InstallLoaderItem[] => [
         ...(software === "tmodloader"
-            ? [{ label: `Installing the .NET ${tmodloaderReleaseFor(version).runtime.replace(/^dotnet-/, "")} runtime...`, percent: () => (runtimeReady() ? 100 : runtimePercent()), bytes: () => (runtimeStatus() === "loading" ? runtimeBytes() : undefined), status: runtimeStatus }]
+            ? [{ label: `Installing the .NET ${tmodloaderReleaseFor(version).runtime.replace(/^dotnet-/, "")} runtime`, done: `Installed the .NET ${tmodloaderReleaseFor(version).runtime.replace(/^dotnet-/, "")} runtime`, percent: () => (runtimeReady() ? 100 : runtimePercent()), bytes: () => (runtimeStatus() === "loading" ? runtimeBytes() : undefined), status: runtimeStatus }]
             : []),
         {
-            label: `Downloading ${software === "tmodloader" ? softwareName(software) : "Terraria"} ${version}...`,
+            label: `Downloading ${software === "tmodloader" ? softwareName(software) : "Terraria"} ${version}`,
+            done: `Downloaded ${software === "tmodloader" ? softwareName(software) : "Terraria"} ${version}`,
             percent: () => (downloaded() ? 100 : installProgress()?.percent ?? 0),
             bytes: () => (downloadStatus(software)() === "loading" ? downloadBytes() : undefined),
             status: downloadStatus(software),
         },
-        { label: "Setting up server...", percent: () => (installed() ? 100 : 0), status: setupStatus },
+        { label: "Setting up the server", done: "Set up the server", percent: () => (installed() ? 100 : 0), status: setupStatus },
     ];
 
     return { error, installed, running, run, rows, reset: flow.reset };

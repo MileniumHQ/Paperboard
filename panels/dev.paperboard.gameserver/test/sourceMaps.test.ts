@@ -190,7 +190,12 @@ describe("a Source game's setup", () => {
         const served = await setUp();
         const page = await openPage(`${served.url}/?server=s-new`);
         try {
-            await page.waitFor(`document.body.innerText.includes("Downloading Team Fortress 2 from Steam") && ${button("Next")} && !${button("Next")}.disabled`, "the download done");
+            await page.waitFor(`document.body.innerText.includes("Downloaded Team Fortress 2 from Steam") && ${button("Next")} && !${button("Next")}.disabled`, "the download done");
+            // finished steps read as done, not as still under way
+            const steps = await page.evaluate<string>(`document.body.innerText`);
+            expect(steps).toContain("Checked the downloaded files");
+            expect(steps).toContain("Set up the server");
+            expect(steps).not.toContain("...");
             await page.evaluate(`${button("Next")}.click()`);
             const payload = card("Payload");
             await page.waitFor(payload, "the game modes");

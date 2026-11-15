@@ -68,12 +68,12 @@ export function createInstallRun() {
     const rows = (software: ServerSoftwareType): InstallLoaderItem[] => {
         const name = SOFTWARE_NAMES[software];
         const items: InstallLoaderItem[] = [
-            { label: "Downloading Java...", bytes: () => (javaDownload.status() === "loading" ? javaBytes() : undefined), percent: javaDownload.percent, status: javaDownload.status },
-            { label: "Installing Java...", percent: javaExtract.percent, status: javaExtract.status },
-            { label: `Downloading ${name}...`, bytes: () => (download.status() === "loading" ? jarBytes() : undefined), percent: download.percent, status: download.status },
+            { label: "Downloading Java", done: "Downloaded Java", bytes: () => (javaDownload.status() === "loading" ? javaBytes() : undefined), percent: javaDownload.percent, status: javaDownload.status },
+            { label: "Installing Java", done: "Installed Java", percent: javaExtract.percent, status: javaExtract.status },
+            { label: `Downloading ${name}`, done: `Downloaded ${name}`, bytes: () => (download.status() === "loading" ? jarBytes() : undefined), percent: download.percent, status: download.status },
         ];
         if (providerFor(software).install.type === "installer") {
-            items.push({ label: `Installing ${name}...`, percent: installer.percent, status: installer.status });
+            items.push({ label: `Installing ${name}`, done: `Installed ${name}`, percent: installer.percent, status: installer.status });
         }
         return items;
     };
