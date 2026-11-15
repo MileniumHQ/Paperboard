@@ -42,7 +42,7 @@ const VOICES: Record<Character, string> = {
  * Which model the agent thinks with. Claude Code notes the model in the conversation itself, once when it
  * starts and again after a switch, and keeps the old note: without this the agent reads two models.
  */
-export function modelNote(harness: Harness, model: string | null): string {
+function modelNote(harness: Harness, model: string | null): string {
     const which = model ?? `the model ${HARNESS_NAMES[harness]} is set to use by default`;
     return `You think with ${which}. The user can switch models mid-conversation: of the notes naming your model, the latest is current.`;
 }
@@ -250,7 +250,7 @@ function openCodeFileRef(file: string): string {
  * OpenCode's config for a turn: the panel's MCP endpoint as plain tools, and nothing else but web search.
  * `system`: what its instructions are read from (openCodeFileRef).
  */
-export function openCodeConfig(spec: Pick<TurnSpec, "mcpUrl">, system: string): Record<string, unknown> {
+function openCodeConfig(spec: Pick<TurnSpec, "mcpUrl">, system: string): Record<string, unknown> {
     return {
         share: "disabled",
         autoupdate: false,

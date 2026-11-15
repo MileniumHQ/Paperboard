@@ -47,7 +47,7 @@ export const LOGOUT_COMMAND: Record<Exclude<Harness, "opencode">, string[]> = {
 
 // eslint-disable-next-line no-control-regex
 const ANSI = /\u001b\[[0-9;?]*[ -/]*[@-~]|\u001b\][^\u0007\u001b]*(?:\u0007|\u001b\\)/g;
-export const stripAnsi = (text: string) => text.replace(ANSI, "");
+const stripAnsi = (text: string) => text.replace(ANSI, "");
 
 /** The last few lines of a harness's output, for an error message. */
 export function outputTail(text: string, lines = 4): string {
@@ -92,7 +92,7 @@ function loopback(text: string): URL | null {
 }
 
 /** Where a sign-in page sends the browser back to, when that's a loopback address the harness listens on. */
-export function loopbackCallback(page: string): string | null {
+function loopbackCallback(page: string): string | null {
     const redirect = URL.parse(page)?.searchParams.get("redirect_uri");
     const url = redirect ? loopback(redirect) : null;
     return url ? `${url.origin}${url.pathname}` : null;

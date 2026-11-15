@@ -43,7 +43,7 @@ export async function listModels(harness: Harness, homes: HarnessHomes, run: Run
     return claudeCatalog(homes.claude) ?? claudePickerModels(await askClaude());
 }
 
-export function openCodeModels(out: { stdout: string; stderr: string; exitCode: number }): BrainModel[] {
+function openCodeModels(out: { stdout: string; stderr: string; exitCode: number }): BrainModel[] {
     if (out.exitCode !== 0) throw new Error(`OpenCode couldn't list its models: ${out.stderr.trim().slice(-300) || `exit ${out.exitCode}`}`);
     const models: BrainModel[] = [];
     for (const line of out.stdout.split("\n")) {
@@ -96,7 +96,7 @@ function claudeCatalog(home: string): BrainModel[] | null {
  * runs (`resolvedModel`), as its catalog names it, so a model picked here is the same one once the catalog
  * exists. "default" is left out: the panel offers the default itself.
  */
-export function claudePickerModels(listed: unknown): BrainModel[] {
+function claudePickerModels(listed: unknown): BrainModel[] {
     if (!Array.isArray(listed)) throw new Error("Claude's model list isn't a list of models");
     const models: BrainModel[] = [];
     for (const m of listed as { value?: unknown; resolvedModel?: unknown; displayName?: unknown; description?: unknown }[]) {
@@ -190,7 +190,7 @@ export async function askClaudeModels(host: TurnHost, launch: ClaudeLaunch): Pro
     }
 }
 
-export function codexModels(out: { stdout: string; stderr: string; exitCode: number }): BrainModel[] {
+function codexModels(out: { stdout: string; stderr: string; exitCode: number }): BrainModel[] {
     if (out.exitCode !== 0) throw new Error(`Codex couldn't list its models: ${out.stderr.trim().slice(-300) || `exit ${out.exitCode}`}`);
     if (out.stdout.length > MAX_CATALOG_BYTES) throw new Error(`Codex's model list is too big (${out.stdout.length} bytes)`);
     let d: { models?: unknown };

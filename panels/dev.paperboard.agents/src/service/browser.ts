@@ -13,7 +13,7 @@
 // pages in an isolated world the page's scripts can't see or change. Its home
 // folder (homeFolder.ts) holds what the browser downloads and what it's given.
 
-import { createHash, randomBytes } from "node:crypto";
+import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { LIMITS, PANEL_ID, SETUP_STEPS, type PageDialog, type ComputerPhase, type ComputerState, type SetupStep, type SetupStepId } from "../contract";
@@ -61,8 +61,8 @@ const VIEW_MAX_TEXT = 2000;
 const KEYS_MAX = 16;
 const UPLOAD_MAX = 10;
 /** control lasts this long past the last renewal, so a closed shell can't hold the agent off */
-export const CONTROL_LEASE_MS = 20_000;
-export const VIEW_TOOLS = ["view_windows", "view_frame", "view_input", "view_go", "view_close", "view_sign_in"] as const;
+const CONTROL_LEASE_MS = 20_000;
+const VIEW_TOOLS = ["view_windows", "view_frame", "view_input", "view_go", "view_close", "view_sign_in"] as const;
 export type ViewTool = (typeof VIEW_TOOLS)[number];
 
 /** A daemon-supervised child (processApi.start). */
@@ -1523,7 +1523,7 @@ function dialogNote(tab: Tab): string {
 }
 
 /** What the user is told they're signing in to: the host, with the scheme only when it isn't https. */
-export function siteOf(url: string): string {
+function siteOf(url: string): string {
     let u: URL;
     try {
         u = new URL(url);
@@ -1557,4 +1557,3 @@ function navigationError(url: string, error: string): string {
     return `Couldn't open ${url} (${error}).`;
 }
 
-export const newSignInId = () => randomBytes(8).toString("hex");

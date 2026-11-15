@@ -99,7 +99,7 @@ async function getMetadata(f: typeof fetch, url: string): Promise<Record<string,
 }
 
 /** the parameters of a `WWW-Authenticate: Bearer ...` challenge */
-export function bearerChallenge(header: string | null): Record<string, string> | null {
+function bearerChallenge(header: string | null): Record<string, string> | null {
     if (!header || !/^\s*bearer\b/i.test(header)) return null;
     const out: Record<string, string> = {};
     for (const m of header.matchAll(/([a-zA-Z_][a-zA-Z0-9_-]*)\s*=\s*(?:"((?:[^"\\]|\\.)*)"|([^\s,]+))/g)) out[m[1]!.toLowerCase()] = (m[2] ?? m[3] ?? "").replace(/\\(.)/g, "$1");

@@ -70,7 +70,7 @@ interface Pending extends SignIn {
     finishing: boolean;
 }
 
-export const processId = (name: string) => `${PANEL_ID}.mcp.${name}`;
+const processId = (name: string) => `${PANEL_ID}.mcp.${name}`;
 
 export class McpServers {
     config: ToolsConfig = structuredClone(DEFAULT_TOOLS);
