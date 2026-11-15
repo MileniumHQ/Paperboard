@@ -1,23 +1,23 @@
-import { claimPort, prepareGamePorts, type PortDeps, type PortMove } from "../../service/ports";
+import { claimPort, prepareGamePorts, type PortDeps, type RunPorts } from "../../service/ports";
 import type { PortSpec } from "../serviceTypes";
 import * as nodeFs from "node:fs/promises";
 import * as nodePath from "node:path";
 import { BEDROCK_PORT_NAME, JAVA_PORT_NAME, NETHERNET_PORT_NAME } from "../../core/portNames";
-import { parseProperties, stringifyServerProperties } from "../../core/properties";
+import { parseProperties } from "../../core/properties";
 import type { ServerSoftwareType } from "../../software/catalog";
 import { BEDROCK_PORT_SETTING_ID, CROSSPLAY, crossplaySetting, NETHERNET_PORT_SETTING_ID } from "../../software/crossplay";
 import { findCrossplayJars, readBedrockTransport, settleBedrockTransport } from "../../service/crossplay";
-import { serializedFileTask } from "../../service/fileWrites";
-import { writeFileAtomic } from "@mileniumhq/paperapi/fs";
 import { writeSchemaSetting, type LoaderDeps, type LoaderFs } from "../../service/loaderSettings";
 import { unlessMissing } from "../../service/failures";
 
 // The server's ports go through Paperboard's port registry, so no other
 // panel and no other program ends up on the same one. The config files say
 // which port the server wants; right before it starts, each is claimed and
-// checked, and a port the registry moved is written back into its file so
-// the server opens the one it was given. Turning crossplay on claims the
-// Bedrock ports at once, so they are listed before the first start.
+// checked. A Java port the registry moved is this run's alone: the launch
+// passes it as --port and server.properties keeps the user's. Geyser reads
+// its ports only from its config, so those are pinned. Turning crossplay on
+// claims the Bedrock ports at once, so they are listed before the first
+// start, and the ports it was given are written into Geyser's config then.
 
 export const DEFAULT_JAVA_PORT = 25565;
 const JAVA_LABEL = "Game Server (Java)";
@@ -41,68 +41,55 @@ export async function readJavaPort(deps: LoaderDeps): Promise<number> {
     return Number.isInteger(port) && port >= 1 && port <= 65535 ? port : DEFAULT_JAVA_PORT;
 }
 
-async function writeJavaPort(port: number, deps: LoaderDeps): Promise<void> {
-    const fs = fsOf(deps);
-    const file = await propertiesPath(deps);
-    await serializedFileTask(file, async () => {
-        const text = await unlessMissing(fs.readFile(file, "utf8"), "");
-        await writeFileAtomic(file, stringifyServerProperties({ ...parseProperties(text), "server-port": String(port) }));
-    });
-}
+const PINNED = "Choose another port in Crossplay, or close the program using it.";
 
 /**
  * Geyser's two ports, or releases when it is not installed. Lazy, in order:
- * a moved Bedrock port is in the file before NetherNet's is read.
+ * a Bedrock port moved as crossplay is turned on is in the file before
+ * NetherNet's is read.
  */
-async function* geyserSpecs(software: ServerSoftwareType, deps: LoaderDeps): AsyncGenerator<PortSpec> {
+async function* geyserSpecs(software: ServerSoftwareType, deps: LoaderDeps): AsyncGenerator<PortSpec & { setting: string }> {
     const installed = Boolean(CROSSPLAY[software]) && Boolean((await findCrossplayJars(software, deps)).geyser);
     // settled first, so NetherNet has a port of its own to claim
     if (installed) await settleBedrockTransport(software, deps);
     const read = async () => (installed ? readBedrockTransport(software, deps) : null);
-    const writer = (id: string) => async (port: number) => {
-        await writeSchemaSetting(CROSSPLAY[software]!.schema, crossplaySetting(id)!, String(port), deps);
-    };
     yield {
-        name: BEDROCK_PORT_NAME, label: BEDROCK_LABEL, protocol: "tcp+udp",
+        name: BEDROCK_PORT_NAME, label: BEDROCK_LABEL, protocol: "tcp+udp", pinned: PINNED, setting: BEDROCK_PORT_SETTING_ID,
         preferred: (await read())?.bedrockPort ?? null,
-        write: writer(BEDROCK_PORT_SETTING_ID),
     };
     const after = await read();
     yield {
-        name: NETHERNET_PORT_NAME, label: NETHERNET_LABEL, protocol: "udp",
+        name: NETHERNET_PORT_NAME, label: NETHERNET_LABEL, protocol: "udp", pinned: PINNED, setting: NETHERNET_PORT_SETTING_ID,
         // none for RakNet alone, or for NetherNet someone left sharing the Bedrock port
         preferred: after && after.transport !== "raknet" && after.nethernetPort !== 0 ? after.nethernetPort : null,
-        write: writer(NETHERNET_PORT_SETTING_ID),
     };
 }
 
 /** Port identities are unchanged, including the optional claims released on removal. */
 export const portNames = [JAVA_PORT_NAME, BEDROCK_PORT_NAME, NETHERNET_PORT_NAME];
 export async function* portSpecs(software: ServerSoftwareType, deps: PortDeps): AsyncGenerator<PortSpec> {
-    yield { name: JAVA_PORT_NAME, label: JAVA_LABEL, protocol: "tcp", preferred: await readJavaPort(deps), write: (port) => writeJavaPort(port, deps) };
+    yield { name: JAVA_PORT_NAME, label: JAVA_LABEL, protocol: "tcp", preferred: await readJavaPort(deps) };
     yield* geyserSpecs(software, deps);
 }
 
 /** Compatibility for callers that already know their Minecraft loader. */
-export async function prepareServerPorts(software: ServerSoftwareType, deps: PortDeps): Promise<PortMove[]> {
-    // Resolve in order: a Java move is persisted before reading Geyser's config.
+export async function prepareServerPorts(software: ServerSoftwareType, deps: PortDeps): Promise<RunPorts> {
     return prepareGamePorts(portSpecs(software, deps), deps);
 }
 
 /**
  * Bedrock players connect over UDP, RakNet on the Bedrock port and NetherNet
- * on its own; Geyser's signaling listens on TCP at the Bedrock port. Both are
- * claimed while Geyser is installed and given back once it is not.
+ * on its own; Geyser's signaling listens on TCP at the Bedrock port. Turning
+ * crossplay on claims both while Geyser is installed, and writes the ports
+ * it was given into Geyser's config; they are given back once it is not.
  */
-export async function claimBedrockPorts(software: ServerSoftwareType, starting: boolean, deps: PortDeps): Promise<PortMove[]> {
-    const moves: PortMove[] = [];
-    for await (const { name, label, protocol, preferred, write } of geyserSpecs(software, deps)) {
+export async function claimBedrockPorts(software: ServerSoftwareType, deps: PortDeps): Promise<void> {
+    for await (const { name, label, protocol, preferred, setting } of geyserSpecs(software, deps)) {
         if (preferred === null) {
             await deps.ports.release(name);
             continue;
         }
-        const moved = await claimPort({ name, label, protocol, preferred }, write, starting, deps);
-        if (moved) moves.push(moved);
+        const port = await claimPort({ name, label, protocol, preferred }, false, deps);
+        if (port !== preferred) await writeSchemaSetting(CROSSPLAY[software]!.schema, crossplaySetting(setting)!, String(port), deps);
     }
-    return moves;
 }

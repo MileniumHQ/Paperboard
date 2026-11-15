@@ -27,6 +27,7 @@ import { TRIGGER_IDS } from "../../service/contract";
 
 const GAME = "terraria";
 const PROC = "terraria-server";
+const DEFAULT_PORT = 7777;
 /** One server's part of the game: its process, console, settings files and players are its own. */
 export function terrariaService(ctx: Server): GameService {
     const local = {
@@ -55,11 +56,13 @@ export function terrariaService(ctx: Server): GameService {
         await fs.mkdir(path.join(directory, "worlds"), { recursive: true });
         const file = path.join(directory, "serverconfig.txt");
         const existing = await unlessMissing(fs.readFile(file, "utf8"), "");
-        await writePrivate(file, configText(directory, ctx.settings, password, existing));
+        // a run on a port that moved because the saved one was taken opens the moved one
+        const port = ctx.runPort("terraria", Number(ctx.settings.port ?? DEFAULT_PORT));
+        await writePrivate(file, configText(directory, { ...ctx.settings, port }, password, existing));
     }
     async function loadOptions() {
         const saved = ctx.settings;
-        ctx.setState({ serverSoftware: softwareOf(saved), serverVersion: String(saved.version ?? ""), serverPort: String(saved.port ?? 7777), serverMotd: String(saved.motd ?? ""), gameSettings: { ...saved, password: await joinPassword.found() } });
+        ctx.setState({ serverSoftware: softwareOf(saved), serverVersion: String(saved.version ?? ""), serverPort: String(saved.port ?? DEFAULT_PORT), serverMotd: String(saved.motd ?? ""), gameSettings: { ...saved, password: await joinPassword.found() } });
     }
     const worldStamp = async () => fileStamp(path.join(await ctx.root(), "worlds", `${worldName(ctx.settings.world ?? "World")}.wld`), "Terraria's world file");
     async function save() {
@@ -184,7 +187,7 @@ export function terrariaService(ctx: Server): GameService {
     const SORTS: readonly ModscanSort[] = ["relevance", "subscriptions", "updated"];
     return {
         primaryProcessId: PROC, processIds: [PROC],
-        initialState: () => ({ ...initialServerState(), serverSoftware: "vanilla", serverPort: "7777", serverMotd: "" }),
+        initialState: () => ({ ...initialServerState(), serverSoftware: "vanilla", serverPort: String(DEFAULT_PORT), serverMotd: "" }),
         blocks: async () => {
             const { mergeBlocks, playerEvents, rosterBlocks, runGameCall } = await import("../../service/blocks");
             // each runs what the Players tab runs, by the name Terraria knows the player by
@@ -330,7 +333,7 @@ export function terrariaService(ctx: Server): GameService {
         readiness: { timeoutMs: 300_000, async probe() {
             if (!local.ready) return false;
             return new Promise((resolve, reject) => {
-                const socket = net.connect({ host: "127.0.0.1", port: Number(ctx.state.serverPort) });
+                const socket = net.connect({ host: "127.0.0.1", port: ctx.runPort("terraria", Number(ctx.state.serverPort)) });
                 socket.setTimeout(1000); socket.once("connect", () => {
                     // Terraria prints the check as "127.0.0.1:<port> is connecting..."; that line is ours, not a player's
                     local.probes = [...local.probes, `127.0.0.1:${socket.localPort}`].slice(-16);
@@ -376,7 +379,7 @@ export function terrariaService(ctx: Server): GameService {
         portNames: ["terraria"],
         async *ports() {
             const saved = ctx.settings;
-            yield settingPort(ctx, { name: "terraria", label: "Terraria", protocol: "tcp", key: "port", fallback: 7777, async onWrite(port) { ctx.setState({ serverPort: String(port) }); await generate(""); } }, saved);
+            yield settingPort({ name: "terraria", label: "Terraria", protocol: "tcp", key: "port", fallback: DEFAULT_PORT }, saved);
         },
         backup: offlineBackup(ctx, {
             gameId: GAME, name: "Terraria", processId: PROC, flag: () => local,

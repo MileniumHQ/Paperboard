@@ -18,7 +18,12 @@ export interface PortSpec {
     label: string;
     protocol: "tcp" | "udp" | "tcp+udp";
     preferred: number | null;
-    write(port: number): Promise<void>;
+    /**
+     * Set when the game reads this port only from a file the user keeps, so
+     * it can't move for one run: a taken one refuses the start, and this says
+     * what to do instead.
+     */
+    pinned?: string;
 }
 /** One server's part of its game, made for that server alone (GameModule.create): it knows its server. */
 export interface GameService {
@@ -45,6 +50,7 @@ export interface GameService {
     /** File names left out of its backups wherever they are, such as a lock the running server holds. */
     backupSkip?: readonly string[];
     loadOptions(): Promise<void>;
+    /** Readies a start. The run's ports are claimed: `ctx.runPort` gives each, which a taken one may have moved. */
     prepareLaunch(): Promise<PreparedLaunch>;
     /**
      * Runs once the server's process is gone, however it went: stopped,

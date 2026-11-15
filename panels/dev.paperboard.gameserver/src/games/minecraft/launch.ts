@@ -14,6 +14,9 @@ import { javaBinaryPath } from "./java";
 import { minecraft } from "./index";
 import type { PreparedLaunch } from "../serviceTypes";
 import { unlessMissing } from "../../service/failures";
+import { livePortDeps } from "../../service/portDeps";
+import { JAVA_PORT_NAME } from "../../core/portNames";
+import { readJavaPort } from "./ports";
 
 export async function prepareLaunch(ctx: Server): Promise<PreparedLaunch> {
     const saved = ctx.settings;
@@ -65,10 +68,13 @@ export async function prepareLaunch(ctx: Server): Promise<PreparedLaunch> {
     if (fit && "refuse" in fit) throw new Error(fit.refuse);
     if (fit) ctx.setState((prev) => ({ serverEntries: appendCapped(prev.serverEntries, { type: "warn", content: fit.warn }) }));
 
+    // a Java port that was taken moves for this run only: server.properties keeps the chosen one
+    const port = ctx.runPorts.get(JAVA_PORT_NAME);
+    const moved = port !== undefined && port !== (await readJavaPort(livePortDeps(ctx))) ? ["--port", String(port)] : [];
     return {
         command: {
             executable: javaBin,
-            args: javaLaunchArgs(launch, { ramGb: ctx.state.ramAllocation, javaMajor: javaMajorOf(javaPkg), hugePages: targetOs.toLowerCase() === "linux" && (await transparentHugePages()) }, isWin),
+            args: [...javaLaunchArgs(launch, { ramGb: ctx.state.ramAllocation, javaMajor: javaMajorOf(javaPkg), hugePages: targetOs.toLowerCase() === "linux" && (await transparentHugePages()) }, isWin), ...moved],
             cwd: serverDir,
             env: { JAVA_HOME: javaPath },
         },

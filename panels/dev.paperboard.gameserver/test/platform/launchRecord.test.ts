@@ -32,13 +32,15 @@ const record = (launch: unknown, files: string[] = ["libraries"]) => ({
 });
 const argv = (mc: McServer): string[] => JSON.parse(fs.readFileSync(path.join(mc.dir, "argv.json"), "utf8"));
 
+/** what the server was launched with, up to its own arguments: a port taken by another test's claim adds --port after them */
 async function launchOnce(mc: McServer): Promise<string[]> {
     await startServerInstance(mc.server);
     await mc.server.waitFor((s) => s.serverStatus === "online", "the server to come online");
     const exit = mc.nextExit();
     await stopServerInstance(mc.server);
     await exit;
-    return argv(mc);
+    const args = argv(mc);
+    return args.slice(0, args.indexOf("nogui") + 1);
 }
 
 // The launch record is validated, then launched as written.

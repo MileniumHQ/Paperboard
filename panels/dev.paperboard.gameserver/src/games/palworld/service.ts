@@ -247,7 +247,7 @@ export function palworldService(ctx: Server): GameService {
                 const saved = ctx.settings;
                 const password = await adminPassword.value();
                 if (!password) throw new Error("Palworld is running without the admin password Paperboard set; stop it from the computer and start it again here");
-                local.rest = new PalworldRest(Number(saved.restPort ?? DEFAULT_REST_PORT), password);
+                local.rest = new PalworldRest(ctx.runPort("palworld-rest", Number(saved.restPort ?? DEFAULT_REST_PORT)), password);
                 local.secrets = [password, await joinPassword.value()].filter(Boolean);
                 players.start(true);
                 void rest().metrics()
@@ -273,7 +273,7 @@ export function palworldService(ctx: Server): GameService {
             await linkSaved();
             const admin = await adminPassword.ensure();
             const join = await joinPassword.value();
-            const restPort = Number(saved.restPort ?? DEFAULT_REST_PORT);
+            const restPort = ctx.runPort("palworld-rest", Number(saved.restPort ?? DEFAULT_REST_PORT));
             await updateIni({
                 AdminPassword: encode(admin, "string", "Admin password"),
                 ServerPassword: encode(join, "string", "Join password"),
@@ -294,7 +294,7 @@ export function palworldService(ctx: Server): GameService {
                 await fs.mkdir(home, { recursive: true });
                 Object.assign(env, { HOME: home, XDG_DATA_HOME: home });
             }
-            const port = Number(saved.port ?? DEFAULT_PORT);
+            const port = ctx.runPort("palworld", Number(saved.port ?? DEFAULT_PORT));
             return {
                 message: `Starting Palworld${saved.version ? ` ${saved.version}` : ""}…`,
                 command: {
@@ -358,8 +358,8 @@ export function palworldService(ctx: Server): GameService {
         portNames: ["palworld", "palworld-rest"],
         async *ports() {
             const saved = ctx.settings;
-            yield settingPort(ctx, { name: "palworld", label: "Palworld", protocol: "udp", key: "port", fallback: DEFAULT_PORT, onWrite: (port) => ctx.setState({ serverPort: String(port) }) }, saved);
-            yield settingPort(ctx, { name: "palworld-rest", label: "Palworld REST API", protocol: "tcp", key: "restPort", fallback: DEFAULT_REST_PORT }, saved);
+            yield settingPort({ name: "palworld", label: "Palworld", protocol: "udp", key: "port", fallback: DEFAULT_PORT }, saved);
+            yield settingPort({ name: "palworld-rest", label: "Palworld REST API", protocol: "tcp", key: "restPort", fallback: DEFAULT_REST_PORT }, saved);
         },
         backup: offlineBackup(ctx, {
             gameId: GAME, name: "Palworld", processId: PROC, flag: () => local,

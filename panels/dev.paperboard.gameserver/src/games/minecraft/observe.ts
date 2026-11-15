@@ -103,11 +103,6 @@ export function observeLine(ctx: Server, line: string, final = false): void {
     }
     const clean = stripAnsi(line);
     if (!clean.trim()) return;
-    const portMatch = clean.match(/Starting (?:Minecraft )?server on .*:(\d+)/i);
-    if (portMatch?.[1] && portMatch[1] !== "0") {
-        ctx.setState({ serverPort: portMatch[1] });
-    }
-
     observeSavingLine(ctx, clean);
     trackPlayerActivity(ctx, clean);
     const statConsumed = handleStatResponse(ctx, clean);

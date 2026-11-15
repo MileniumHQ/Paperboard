@@ -267,16 +267,9 @@ export class ConsoleBuffer {
     }
 }
 
-/** Ports a game keeps in its settings, as the Port API claims them. */
-export function settingPort(ctx: Server, spec: { name: string; label: string; protocol: PortSpec["protocol"]; key: string; fallback: number; onWrite?(port: number): Promise<void> | void }, saved: Record<string, unknown>): PortSpec {
-    return {
-        name: spec.name, label: spec.label, protocol: spec.protocol,
-        preferred: Number(saved[spec.key] ?? spec.fallback),
-        async write(port) {
-            await ctx.updateSettings({ [spec.key]: port });
-            await spec.onWrite?.(port);
-        },
-    };
+/** Ports a game keeps in its settings, as the Port API claims them; the launch opens `ctx.runPort(name, saved)`. */
+export function settingPort(spec: { name: string; label: string; protocol: PortSpec["protocol"]; key: string; fallback: number }, saved: Record<string, unknown>): PortSpec {
+    return { name: spec.name, label: spec.label, protocol: spec.protocol, preferred: Number(saved[spec.key] ?? spec.fallback) };
 }
 
 /**

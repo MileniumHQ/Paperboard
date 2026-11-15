@@ -386,7 +386,7 @@ export function cs2Service(ctx: Server): GameService {
             local.status = null;
             const internet = optionValue(options.find((o) => o.id === "internet")!, saved) !== false;
             const args = [
-                "-dedicated", "-console", "-ip", "0.0.0.0", "-port", String(Number(saved.port ?? CS2.defaultPort)),
+                "-dedicated", "-console", "-ip", "0.0.0.0", "-port", String(ctx.runPort("game", Number(saved.port ?? CS2.defaultPort))),
                 "-maxplayers", String(Number(optionValue(options.find((o) => o.id === "maxplayers")!, saved))),
                 "+game_type", String(mode.type), "+game_mode", String(mode.mode), "+sv_lan", internet ? "0" : "1",
                 "+exec", "paperboard_secrets.cfg", "+map", map,
@@ -446,7 +446,7 @@ export function cs2Service(ctx: Server): GameService {
         },
         portNames: ["game"],
         async *ports() {
-            yield settingPort(ctx, { name: "game", label: CS2.name, protocol: "tcp+udp", key: "port", fallback: CS2.defaultPort, onWrite: (port) => ctx.setState({ serverPort: String(port) }) }, ctx.settings);
+            yield settingPort({ name: "game", label: CS2.name, protocol: "tcp+udp", key: "port", fallback: CS2.defaultPort }, ctx.settings);
         },
         // the server keeps no world; its files copy as it runs
         backup: { mode: "quiesce", before: async () => {}, recover: async () => {}, withConsistentData: (work) => work() },

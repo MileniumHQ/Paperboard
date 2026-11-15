@@ -345,7 +345,7 @@ export function rustService(ctx: Server): GameService {
                 const saved = ctx.settings;
                 const password = await rconPassword.value();
                 if (!password) throw new Error("Rust is running without the RCON password Paperboard set; stop it from the computer and start it again here");
-                connect(Number(saved.rconPort ?? DEFAULT_RCON_PORT), password);
+                connect(ctx.runPort("rust-rcon", Number(saved.rconPort ?? DEFAULT_RCON_PORT)), password);
                 local.started = true;
                 players.start(true);
                 void info()
@@ -371,17 +371,17 @@ export function rustService(ctx: Server): GameService {
             await fs.access(executable, windows ? fs.constants.F_OK : fs.constants.X_OK);
             await linkData();
             const password = await rconPassword.ensure();
-            const rconPort = Number(saved.rconPort ?? DEFAULT_RCON_PORT);
+            const rconPort = ctx.runPort("rust-rcon", Number(saved.rconPort ?? DEFAULT_RCON_PORT));
             connect(rconPort, password);
             local.started = false;
             players.stop();
 
             const args = [
                 "-batchmode", "-nographics", "-logfile", "-",
-                "+server.ip", "0.0.0.0", "+server.port", String(Number(saved.port ?? DEFAULT_PORT)), "+server.queryport", String(Number(saved.queryPort ?? DEFAULT_QUERY_PORT)),
+                "+server.ip", "0.0.0.0", "+server.port", String(ctx.runPort("rust", Number(saved.port ?? DEFAULT_PORT))), "+server.queryport", String(ctx.runPort("rust-query", Number(saved.queryPort ?? DEFAULT_QUERY_PORT))),
                 // the remote console answers this computer only
                 "+rcon.ip", "127.0.0.1", "+rcon.port", String(rconPort), "+rcon.web", "1", "+rcon.password", password,
-                "+app.port", String(Number(saved.appPort ?? DEFAULT_APP_PORT)),
+                "+app.port", String(ctx.runPort("rust-app", Number(saved.appPort ?? DEFAULT_APP_PORT))),
                 "+server.identity", IDENTITY, "+server.level", "Procedural Map",
             ];
             for (const option of options) {
@@ -457,10 +457,10 @@ export function rustService(ctx: Server): GameService {
         portNames: ["rust", "rust-query", "rust-rcon", "rust-app"],
         async *ports() {
             const saved = ctx.settings;
-            yield settingPort(ctx, { name: "rust", label: "Rust", protocol: "udp", key: "port", fallback: DEFAULT_PORT, onWrite: (port) => ctx.setState({ serverPort: String(port) }) }, saved);
-            yield settingPort(ctx, { name: "rust-query", label: "Rust server browser", protocol: "udp", key: "queryPort", fallback: DEFAULT_QUERY_PORT }, saved);
-            yield settingPort(ctx, { name: "rust-rcon", label: "Rust remote console", protocol: "tcp", key: "rconPort", fallback: DEFAULT_RCON_PORT }, saved);
-            yield settingPort(ctx, { name: "rust-app", label: "Rust+ app", protocol: "tcp", key: "appPort", fallback: DEFAULT_APP_PORT }, saved);
+            yield settingPort({ name: "rust", label: "Rust", protocol: "udp", key: "port", fallback: DEFAULT_PORT }, saved);
+            yield settingPort({ name: "rust-query", label: "Rust server browser", protocol: "udp", key: "queryPort", fallback: DEFAULT_QUERY_PORT }, saved);
+            yield settingPort({ name: "rust-rcon", label: "Rust remote console", protocol: "tcp", key: "rconPort", fallback: DEFAULT_RCON_PORT }, saved);
+            yield settingPort({ name: "rust-app", label: "Rust+ app", protocol: "tcp", key: "appPort", fallback: DEFAULT_APP_PORT }, saved);
         },
         backup: offlineBackup(ctx, {
             gameId: GAME, name: "Rust", processId: PROC, flag: () => local,

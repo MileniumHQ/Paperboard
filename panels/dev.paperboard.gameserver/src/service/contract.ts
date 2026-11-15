@@ -754,6 +754,8 @@ export const serverStateShape = shape.object({
     ),
     localIp: shape.text(),
     serverPort: shape.text(),
+    /** ports that were taken, so the running server uses others until it stops; its settings keep the chosen ones */
+    portMoves: shape.list(shape.object({ label: shape.text(), from: shape.number(), to: shape.number(), primary: shape.boolean() })),
     serverMotd: shape.text(),
     serverSoftware: shape.text(),
     gameSettings: shape.record(shape.json()),

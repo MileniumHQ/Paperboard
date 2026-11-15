@@ -341,7 +341,7 @@ export const minecraftCalls: ServerCalls = {
             throw new Error("A server install is running; turn crossplay on once it finishes.");
         }
         await prepareCrossplay(minecraftSoftware(ctx.state.serverSoftware), loaderDeps(ctx));
-        await claimBedrockPorts(minecraftSoftware(ctx.state.serverSoftware), false, livePortDeps(ctx));
+        await claimBedrockPorts(minecraftSoftware(ctx.state.serverSoftware), livePortDeps(ctx));
         return readCrossplay(minecraftSoftware(ctx.state.serverSoftware), loaderDeps(ctx));
     },
     readServerIcon: async (ctx) => readServerIcon(loaderDeps(ctx)),

@@ -22,10 +22,10 @@ export async function loadConfigAndProperties(
     if (propertiesContent) {
         const props = parseProperties(propertiesContent);
         const port = extractServerPort(props);
-        // While the server is up, serverPort is the ACTUAL bound port
-        // captured from its startup log. Projecting the newly configured
-        // (not-yet-applied) value here made Overview advertise a port the
-        // running server was not listening on until the next restart.
+        // While the server is up, serverPort is the one it started with.
+        // Projecting the newly configured (not-yet-applied) value here made
+        // Overview advertise a port the running server was not listening on
+        // until the next restart.
         const status = ctx.state.serverStatus;
         const serverLive = status !== undefined && status !== "offline";
         if (port && !serverLive) patch.serverPort = port;

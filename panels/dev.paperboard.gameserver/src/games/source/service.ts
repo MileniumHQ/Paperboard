@@ -634,7 +634,7 @@ export function sourceService(spec: SourceGameSpec, game: GameDefinition): (ctx:
                     const saved = ctx.settings;
                     const password = await rconPassword.value();
                     if (!password) throw new Error(`${spec.name} is running without the RCON password Paperboard set; stop it from the computer and start it again here`);
-                    local.rcon = new SourceRcon(Number(saved.port ?? spec.defaultPort), password, spec.name);
+                    local.rcon = new SourceRcon(ctx.runPort("game", Number(saved.port ?? spec.defaultPort)), password, spec.name);
                     local.secrets = [password, await joinPassword.value(), await loginToken.value()].filter(Boolean);
                     // the links are what the server started with: placeMods makes them only at a start
                     local.modsActive = (await modsOn()) && (await isLinked(path.join(await gameDir(), "addons")));
@@ -689,7 +689,7 @@ export function sourceService(spec: SourceGameSpec, game: GameDefinition): (ctx:
                 await writeConfigs();
                 await writePrivate(await secretsFile(), secretsCfg({ rcon: rconSecret, join, token }));
 
-                const port = Number(saved.port ?? spec.defaultPort);
+                const port = ctx.runPort("game", Number(saved.port ?? spec.defaultPort));
                 local.rcon?.close();
                 local.rcon = new SourceRcon(port, rconSecret, spec.name);
                 local.secrets = [rconSecret, join, token].filter(Boolean);
@@ -697,7 +697,7 @@ export function sourceService(spec: SourceGameSpec, game: GameDefinition): (ctx:
                 local.modsActive = modsActive;
                 const internet = optionValue(options.find((o) => o.id === "internet")!, saved) !== false;
                 const own = (await spec.launchArgs?.(saved, await gameDir())) ?? [];
-                const args = ["-game", spec.gameDir, "-console", "-ip", "0.0.0.0", "-port", String(port), "+clientport", String(Number(saved.clientPort ?? DEFAULT_CLIENT_PORT)), "-nohltv", "+maxplayers", String(Number(optionValue(options.find((o) => o.id === "maxplayers")!, saved))), "+sv_lan", internet ? "0" : "1", "+exec", "paperboard_secrets.cfg", ...own, "+map", map];
+                const args = ["-game", spec.gameDir, "-console", "-ip", "0.0.0.0", "-port", String(port), "+clientport", String(ctx.runPort("client", Number(saved.clientPort ?? DEFAULT_CLIENT_PORT))), "-nohltv", "+maxplayers", String(Number(optionValue(options.find((o) => o.id === "maxplayers")!, saved))), "+sv_lan", internet ? "0" : "1", "+exec", "paperboard_secrets.cfg", ...own, "+map", map];
                 return {
                     message: `Starting ${spec.name}${saved.build ? ` build ${saved.build}` : ""}…`,
                     command: linux
@@ -763,8 +763,8 @@ export function sourceService(spec: SourceGameSpec, game: GameDefinition): (ctx:
             portNames: ["game", "client"],
             async *ports() {
                 const saved = ctx.settings;
-                yield settingPort(ctx, { name: "game", label: spec.name, protocol: "tcp+udp", key: "port", fallback: spec.defaultPort, onWrite: (port) => ctx.setState({ serverPort: String(port) }) }, saved);
-                yield settingPort(ctx, { name: "client", label: `${spec.name} client`, protocol: "udp", key: "clientPort", fallback: DEFAULT_CLIENT_PORT }, saved);
+                yield settingPort({ name: "game", label: spec.name, protocol: "tcp+udp", key: "port", fallback: spec.defaultPort }, saved);
+                yield settingPort({ name: "client", label: `${spec.name} client`, protocol: "udp", key: "clientPort", fallback: DEFAULT_CLIENT_PORT }, saved);
             },
             backup: spec.offlineBackups
                 ? offlineBackup(ctx, {

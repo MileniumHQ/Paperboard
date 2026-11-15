@@ -162,7 +162,8 @@ export async function startServerInstance(
         }
         // throws, with who has it, when a port is taken and the user's
         // setting refuses to move it
-        const moves = await prepareGamePorts(game.ports(livePortDeps(ctx)), livePortDeps(ctx));
+        const { ports, moves } = await prepareGamePorts(game.ports(livePortDeps(ctx)), livePortDeps(ctx));
+        ctx.runPorts = ports;
 
         // the update installs before the launch reads the server's files; it
         // holds the game's install flag, so a second start refuses meanwhile
@@ -181,6 +182,7 @@ export async function startServerInstance(
         // start has already said its lines into it.
         ctx.setState({
             serverStatus: "starting",
+            portMoves: moves,
             serverEntries: [
                 ...ctx.state.serverEntries,
                 ...carry,
@@ -190,7 +192,7 @@ export async function startServerInstance(
                 },
                 ...moves.map((move) => ({
                     type: "warn" as const,
-                    content: `[Server] Port ${move.from} is taken, so ${move.label} uses ${move.to}.`,
+                    content: `[Server] Port ${move.from} was taken, so this run of ${move.label} uses ${move.to}.`,
                 })),
             ].slice(-MAX_BUFFERED_ENTRIES),
         });

@@ -1,3 +1,5 @@
+import type { GameServerState } from "../service/types";
+
 // The server's names for its ports in Paperboard's port registry.
 export const JAVA_PORT_NAME = "java";
 export const BEDROCK_PORT_NAME = "bedrock";
@@ -9,4 +11,10 @@ export function serverPortLabel(name: string, label: string): string {
 }
 export function serverPortName(id: string, legacy: boolean, name: string): string {
     return legacy ? name : `${id}-${name}`;
+}
+
+/** The port players join on: where this run moved it when the server's own was taken, else the server's. */
+export function joinPort(state: Pick<GameServerState, "serverPort" | "portMoves">): string {
+    const moved = state.portMoves.find((move) => move.primary);
+    return moved ? String(moved.to) : state.serverPort;
 }

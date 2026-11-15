@@ -7,6 +7,7 @@ import { createStateSignal, createLatest } from "@mileniumhq/paperui/headless";
 import { createSignal, onCleanup, type Accessor } from "solid-js";
 import { serviceClient, type ServiceCalls, type ServiceClient, type WidgetContext } from "@mileniumhq/paperapi";
 import { gameFor } from "../games";
+import { joinPort } from "../core/portNames";
 import { gameServerContract } from "../service/contract";
 import type { ServersState, ServerSummary } from "../service";
 import type { GameServerState } from "../service/types";
@@ -66,7 +67,7 @@ function serverView(server: ServerSummary, snapshot: GameServerState, widgetId: 
         serverMotd: snapshot.serverMotd,
         serverEntries: snapshot.serverEntries.slice(-TAIL_ENTRIES),
         localIp: snapshot.localIp,
-        serverPort: snapshot.serverPort,
+        serverPort: joinPort(snapshot),
         activeIssue: snapshot.activeIssue,
         supportsPlayers: features.widgets.includes("players"),
         softwareLabel: game.softwareLabel(options),

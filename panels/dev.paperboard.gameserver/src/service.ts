@@ -37,6 +37,7 @@ import { gameModuleFor } from "./games/service";
 import { settingsBlocks } from "./service/settingsBlocks";
 import { assertGameCall, gameFor, games } from "./games";
 import { loadServerOptions } from "./service/options";
+import { joinPort } from "./core/portNames";
 import { report, waitUntil } from "./games/serviceKit";
 export * from "./service/types";
 
@@ -101,7 +102,7 @@ function publish(changed?: Server): void {
                 serverStatus: state.serverStatus,
                 serverSoftware: state.serverSoftware,
                 serverVersion: state.serverVersion,
-                serverPort: state.serverPort,
+                serverPort: joinPort(state),
                 recoveryBlock: state.recoveryBlock,
                 initFailure: state.initFailure,
                 maxPlayers: state.maxPlayers,
@@ -245,6 +246,8 @@ async function initialize(server: Server): Promise<Server> {
         // a server left running has been online since its history says; one whose history
         // predates that record counts from now
         if (running) server.setState({ serverStatus: "online", ...(onlineSince === null ? {} : { onlineSince }) });
+        // it opened the ports its start claimed, which the registry still holds
+        if (running) server.runPorts = await server.ports.held();
         server.unsubscribe.push(
             server.process.onData(game.primaryProcessId, (chunk) => handleProcessData(server, chunk)),
             server.process.onExit(game.primaryProcessId, (code) => handleProcessExit(server, code)),

@@ -7,38 +7,46 @@ export interface PortRegistryDeps {
     release(name: string): Promise<void>;
 }
 export interface PortDeps extends LoaderDeps { ports: PortRegistryDeps }
-export interface PortMove { label: string; from: number; to: number }
+/** A port that was taken, so one run uses another; `primary` is the one players join on. */
+export interface PortMove { label: string; from: number; to: number; primary: boolean }
+/** What a start's ports are: each claimed number by the game's name for it, and the ones that moved. */
+export interface RunPorts { ports: ReadonlyMap<string, number>; moves: PortMove[] }
 
 /**
- * Claims the port the file asks for and writes back a moved one. `starting`
- * also checks the computer right now; only then, since a running server
- * holds its own ports.
+ * Claims the port the server asks for. `starting` also checks the computer
+ * right now; only then, since a running server holds its own ports. Gives
+ * the number it got, which may be another when the asked one was taken.
  */
-export async function claimPort(
-    request: PortRequest,
-    write: (port: number) => Promise<void>,
-    starting: boolean,
-    deps: PortDeps,
-): Promise<PortMove | null> {
-    let { port } = await deps.ports.claim(request);
-    if (starting) port = (await deps.ports.prepare(request.name)).port;
-    if (port === request.preferred) return null;
-    await write(port);
-    return { label: request.label, from: request.preferred, to: port };
+export async function claimPort(request: PortRequest, starting: boolean, deps: PortDeps): Promise<number> {
+    const { port } = await deps.ports.claim(request);
+    return starting ? (await deps.ports.prepare(request.name)).port : port;
 }
 
-/** Modules own port files; shared infrastructure owns all claims. */
-export async function prepareGamePorts(specs: AsyncIterable<PortSpec> | Iterable<PortSpec>, deps: PortDeps): Promise<PortMove[]> {
+/**
+ * Claims every port of a start. A port the registry moves is this run's
+ * alone: the game opens it from its launch, and the server's settings keep
+ * the one the user chose, which the next start asks for again. A pinned
+ * port can't move, so a taken one refuses the start.
+ */
+export async function prepareGamePorts(specs: AsyncIterable<PortSpec> | Iterable<PortSpec>, deps: PortDeps): Promise<RunPorts> {
+    const ports = new Map<string, number>();
     const moves: PortMove[] = [];
+    let first = true;
     for await (const spec of specs) {
+        const primary = first;
+        first = false;
         if (spec.preferred === null) {
             await deps.ports.release(spec.name);
             continue;
         }
-        const moved = await claimPort({ name: spec.name, label: spec.label, protocol: spec.protocol, preferred: spec.preferred }, spec.write, true, deps);
-        if (moved) moves.push(moved);
+        const port = await claimPort({ name: spec.name, label: spec.label, protocol: spec.protocol, preferred: spec.preferred }, true, deps);
+        if (port !== spec.preferred) {
+            if (spec.pinned) throw new Error(`${spec.label} can't use port ${spec.preferred}: something else has it. ${spec.pinned}`);
+            moves.push({ label: spec.label, from: spec.preferred, to: port, primary });
+        }
+        ports.set(spec.name, port);
     }
-    return moves;
+    return { ports, moves };
 }
 // Existing Minecraft adapters and tests retain their import path.
 export { DEFAULT_JAVA_PORT, readJavaPort, prepareServerPorts, claimBedrockPorts } from "../games/minecraft/ports";

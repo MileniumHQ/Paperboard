@@ -42,24 +42,40 @@ const property = (mc: McServer, key: string) => fs.readFileSync(path.join(mc.dir
 
 // Port conflicts are moved or refused and written where the server reads them.
 describe("ports", () => {
-    test("a taken Java port moves to a free one under next-free, written into server.properties with every other key kept", async () => {
+    test("a taken Java port moves for that run only: the launch opens the free one, server.properties and the next start keep the chosen one", async () => {
         const held = await holdPort();
+        const original = `#Minecraft server properties\nmotd=\\u00A7aHi\nserver-port=${held.port}\nmax-players=7\n`;
+        const mc = minecraftServer({ files: { "server.properties": original } });
+        const argv = () => JSON.parse(fs.readFileSync(path.join(mc.dir, "argv.json"), "utf8")) as string[];
         try {
-            const mc = minecraftServer({ files: { "server.properties": `#Minecraft server properties\nmotd=\\u00A7aHi\nserver-port=${held.port}\nmax-players=7\n` } });
             await startServerInstance(mc.server);
             await mc.server.waitFor((s) => s.serverStatus === "online", "the server to come online");
-            const moved = Number(property(mc, "server-port"));
+            const moved = (await claims(mc))[JAVA_PORT_NAME]!;
             expect(moved).toBeGreaterThan(held.port);
             expect(moved).toBeLessThanOrEqual(held.port + 100);
-            expect(await claims(mc)).toEqual({ [JAVA_PORT_NAME]: moved });
-            expect(mc.server.state.serverEntries.map((e) => e.content)).toContain(`[Server] Port ${held.port} is taken, so Game Server (Java) uses ${moved}.`);
-            expect([property(mc, "motd"), property(mc, "max-players")]).toEqual(["\\u00A7aHi", "7"]);
+            // the server opens the free port, and the page says so while it runs
+            expect(argv().slice(-2)).toEqual(["--port", String(moved)]);
+            expect(mc.server.state.portMoves).toEqual([{ label: "Game Server (Java)", from: held.port, to: moved, primary: true }]);
+            // the user's choice is never overwritten
+            expect(fs.readFileSync(path.join(mc.dir, "server.properties"), "utf8")).toBe(original);
+            expect(mc.server.state.serverPort).toBe(String(held.port));
             const exit = mc.nextExit();
             await stopServerInstance(mc.server);
             await exit;
+            expect(mc.server.state.portMoves).toEqual([]);
         } finally {
             await held.release();
         }
+        // the port is free again: the next run opens the chosen one
+        await startServerInstance(mc.server);
+        await mc.server.waitFor((s) => s.serverStatus === "online", "the server to come online again");
+        expect(await claims(mc)).toEqual({ [JAVA_PORT_NAME]: held.port });
+        expect(argv()).not.toContain("--port");
+        expect(mc.server.state.portMoves).toEqual([]);
+        const exit = mc.nextExit();
+        await stopServerInstance(mc.server);
+        await exit;
+        expect(fs.readFileSync(path.join(mc.dir, "server.properties"), "utf8")).toBe(original);
     });
 
     test("under refuse, a taken Java port fails the start naming the port, and nothing is launched or written", async () => {
@@ -80,27 +96,24 @@ describe("ports", () => {
         expect(await claims(mc)).toEqual({});
     });
 
-    test("with Geyser installed its Bedrock and NetherNet ports are claimed and moves written to its config.yml; removing Geyser releases them", async () => {
+    test("with Geyser installed its Bedrock and NetherNet ports are claimed; a taken one refuses the start and its config.yml is kept; removing Geyser releases them", async () => {
         const held = await holdPort();
-        const config = fs.readFileSync(GEYSER_CONFIG, "utf8").replace("  port: 19132\n", `  port: ${held.port}\n`);
-        const mc = minecraftServer({
-            software: "paper",
-            // Java asks for the same taken port, so all three move
-            files: { "server.properties": `server-port=${held.port}\n`, "plugins/Geyser-Spigot/config.yml": config },
-        });
+        const config = fs.readFileSync(GEYSER_CONFIG, "utf8");
+        const mc = minecraftServer({ software: "paper", files: { "server.properties": "server-port=25590\n", "plugins/Geyser-Spigot/config.yml": config } });
         fs.writeFileSync(path.join(mc.dir, "plugins", "Geyser.jar"), zipSync({ "plugin.yml": strToU8("name: Geyser-Spigot\nversion: 1\nmain: x.M\n") }));
         const geyser = () => fs.readFileSync(path.join(mc.dir, "plugins", "Geyser-Spigot", "config.yml"), "utf8");
         try {
-            const moves = await prepareServerPorts("paper", livePortDeps(mc.server));
-            const claimed = await claims(mc);
-            expect(Object.keys(claimed).sort()).toEqual([BEDROCK_PORT_NAME, JAVA_PORT_NAME, NETHERNET_PORT_NAME].sort());
-            expect(claimed[BEDROCK_PORT_NAME]).toBeGreaterThan(held.port);
-            expect(new Set(Object.values(claimed)).size).toBe(3);
-            // the file says what was claimed, so Geyser opens the ports it was given
-            expect(geyser()).toContain(`\n  port: ${claimed[BEDROCK_PORT_NAME]}\n`);
-            expect(geyser()).toContain(`\n  webrtc-port: ${claimed[NETHERNET_PORT_NAME]}\n`);
-            expect(geyser()).toContain("\n  transport: both\n");
-            expect(moves.map((m) => [m.label, m.from])).toContainEqual(["Game Server (Bedrock)", held.port]);
+            const run = await prepareServerPorts("paper", livePortDeps(mc.server));
+            expect(run.moves).toEqual([]);
+            const settled = geyser();
+            expect(Object.keys(await claims(mc)).sort()).toEqual([BEDROCK_PORT_NAME, JAVA_PORT_NAME, NETHERNET_PORT_NAME].sort());
+            expect(new Set(Object.values(await claims(mc))).size).toBe(3);
+
+            // Geyser reads its port only from its config: it can't move for one run
+            fs.writeFileSync(path.join(mc.dir, "plugins", "Geyser-Spigot", "config.yml"), settled.replace("  port: 19132\n", `  port: ${held.port}\n`));
+            const before = geyser();
+            await expect(prepareServerPorts("paper", livePortDeps(mc.server))).rejects.toThrow(`Game Server (Bedrock) can't use port ${held.port}`);
+            expect(geyser()).toBe(before);
 
             fs.rmSync(path.join(mc.dir, "plugins", "Geyser.jar"));
             await prepareServerPorts("paper", livePortDeps(mc.server));

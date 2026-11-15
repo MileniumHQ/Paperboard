@@ -34,6 +34,8 @@ export interface ServerPorts {
     claim(request: PortRequest): Promise<PortClaim>;
     prepare(name: string): Promise<PortClaim>;
     release(name: string): Promise<void>;
+    /** the numbers the registry holds for the server's ports, by its own names for them */
+    held(): Promise<Map<string, number>>;
 }
 
 type Timer = ReturnType<typeof setTimeout>;
@@ -77,6 +79,8 @@ export class Server {
         stopTimeout: null as Timer | null,
         killDeadline: null as Timer | null,
     };
+    /** the ports the running server opened, by the game's names for them; empty while it is stopped */
+    runPorts: ReadonlyMap<string, number> = new Map();
     /** restarts after a crash, daily and for an update (automation) */
     readonly automation = {
         settings: null as import("./automation").AutomationSettings | null,
@@ -99,6 +103,15 @@ export class Server {
             claim: (request) => portApi.claim(PANEL_ID, { ...request, name: this.portName(request.name), label: serverPortLabel(this.name, request.label) }),
             prepare: (name) => portApi.prepare(PANEL_ID, this.portName(name)),
             release: (name) => portApi.release(PANEL_ID, this.portName(name)),
+            held: async () => {
+                const claims = await portApi.list(PANEL_ID);
+                const held = new Map<string, number>();
+                for (const name of this.game.portNames) {
+                    const claim = claims.find((c) => c.name === this.portName(name));
+                    if (claim) held.set(name, claim.port);
+                }
+                return held;
+            },
         };
         this.game = gameModuleFor(stored.game).create(this);
         this.#state = this.game.initialState();
@@ -121,6 +134,11 @@ export class Server {
         const before = this.#state;
         const next = { ...before, ...(typeof patch === "function" ? patch(before) : patch) };
         next.onlineSince = onlineSinceAfter(before, next);
+        // a run's ports end with it: the next start asks for the saved ones again
+        if (next.serverStatus === "offline" && before.serverStatus !== "offline") {
+            next.portMoves = [];
+            this.runPorts = new Map();
+        }
         this.#state = next;
         this.#host.changed(this, before);
     }
@@ -151,6 +169,14 @@ export class Server {
     /** a process of the server's game as the daemon knows it */
     processId(id: string): string {
         return this.legacy || !this.game.processIds.includes(id) ? id : `${this.id}-${id}`;
+    }
+    /**
+     * The port `name` is open on while the server runs: the one its start
+     * claimed, which a taken port moved for that run. `saved` is the
+     * server's own setting, which holds while it is stopped.
+     */
+    runPort(name: string, saved: number): number {
+        return this.runPorts.get(name) ?? saved;
     }
     /** one of the server's ports as the port registry knows it */
     portName(name: string): string {
