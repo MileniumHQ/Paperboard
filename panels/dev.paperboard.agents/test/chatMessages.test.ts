@@ -1,6 +1,6 @@
 // What goes into and out of a message, in the real chat (real browser):
-// pressing Send sends once, and a YouTube link's thumbnail comes through the
-// service. The chat runs over a stubbed service (fixtures/chatMessages.tsx).
+// pressing Send sends once, a YouTube link's thumbnail comes through the
+// service, and a slow history never puts another conversation in the chat. The chat runs over a stubbed service (fixtures/chatMessages.tsx).
 //
 // Without Chrome the suite is skipped with a visible reason; CI must have it.
 import { describe, expect, test } from "bun:test";
@@ -42,6 +42,17 @@ describe("a message", () => {
             expect(youTube.src).toBe("blob");
             expect(youTube.link).toBe("https://www.youtube.com/watch?v=dQw4w9WgXcQ");
             expect(youTube.askedYouTube).toEqual([]);
+            expect(uncaught).toEqual([]);
+        },
+        TIMEOUT,
+    );
+
+    browserTest(
+        named("switched twice, the chat shows the last conversation, even when the first one's history answers last"),
+        async () => {
+            const { switched, uncaught } = await fixture();
+            expect(switched.last, "the last conversation's history is gone").toBe(true);
+            expect(switched.first, "the first conversation's late history replaced it").toBe(false);
             expect(uncaught).toEqual([]);
         },
         TIMEOUT,

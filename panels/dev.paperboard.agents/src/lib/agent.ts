@@ -5,6 +5,7 @@
 import { actionsApi, createPanelBridge } from "@mileniumhq/paperapi";
 import { createSignal } from "solid-js";
 import { createStore, reconcile } from "solid-js/store";
+import { createLatest } from "./action";
 import { errorText } from "./failure";
 import { createFiles } from "./files";
 import { createSettingsQueue } from "./settingsQueue";
@@ -22,9 +23,7 @@ import {
     type ComputerWindow,
     type Harness,
     type InputEvent,
-    type MemoryFact,
     type MemoryList,
-    type MemoryNoteInfo,
     type PastConversation,
     type ProviderAttempt,
     type ProviderAttemptStatus,
@@ -62,35 +61,42 @@ export function createAgent() {
     const offSwitched = actionsApi.on(PANEL_ID, EVENTS.switched, () => {
         setEntries([]);
         files.clear();
-        loadHistory().catch((e) => {
-            // shown with a way to retry, rather than an empty conversation that isn't
-            setError(errorText(e));
-            setHydration("failed");
-        });
+        void load(false);
     });
 
     const call = <T>(id: string, inputs: Record<string, unknown> = {}) => actionsApi.call<T>(PANEL_ID, id, inputs);
     const files = createFiles(call);
 
-    /** The current conversation so far; entries that arrived as events while it was on its way are kept. */
-    const loadHistory = async () => {
-        const history = await call<ChatEntry[]>(UI_ACTION_IDS.history, { limit: LIMITS.history });
-        const known = new Set(history.map((e) => e.id));
-        setEntries(reconcile([...history, ...entries.filter((e) => !known.has(e.id))]));
-    };
-
-    /** Hydrate (again): state, then the conversation so far. Failure is shown, with a way to retry. */
-    const hydrate = async () => {
-        setHydration("loading");
-        setError(null);
+    // a switch or a retry starts a newer read: an older one's answer (another conversation's history, maybe) is dropped
+    const latest = createLatest();
+    /**
+     * The state (when asked) and then the current conversation so far; entries that arrived as events
+     * while it was on its way are kept. Failure is shown, with a way to retry.
+     */
+    const load = async (withState: boolean) => {
+        const current = latest();
         try {
-            setState(reconcile(await bridge.refreshState()));
-            await loadHistory();
+            if (withState) {
+                const full = await bridge.refreshState();
+                if (current()) setState(reconcile(full));
+            }
+            const history = await call<ChatEntry[]>(UI_ACTION_IDS.history, { limit: LIMITS.history });
+            if (!current()) return;
+            const known = new Set(history.map((e) => e.id));
+            setEntries(reconcile([...history, ...entries.filter((e) => !known.has(e.id))]));
             setHydration("ready");
         } catch (e) {
+            if (!current()) return;
             setError(errorText(e));
             setHydration("failed");
         }
+    };
+
+    /** Hydrate (again): state, then the conversation so far. */
+    const hydrate = () => {
+        setHydration("loading");
+        setError(null);
+        return load(true);
     };
     void hydrate();
 

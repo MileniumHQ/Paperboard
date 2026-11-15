@@ -2,10 +2,11 @@
 // a message leaves once however its Send is pressed, and keeps what was
 // typed while it was on its way; a YouTube link in the agent's message shows
 // its thumbnail as the service fetched it, and the page asks YouTube for
-// nothing. The service is the stub (paperapiStub.ts), answering the actions
+// nothing; switched to another conversation twice, the chat shows the last
+// one's history even when the first one's answers last. The service is the stub (paperapiStub.ts), answering the actions
 // this needs the way the real one does, and recording what it was asked.
-import { EVENTS, UI_ACTION_IDS } from "../../src/contract";
-import { errors, field, mountChat, report, type, until } from "./chatPage";
+import { EVENTS, UI_ACTION_IDS, type ChatEntry } from "../../src/contract";
+import { errors, field, frame, mountChat, report, type, until } from "./chatPage";
 import { answers, emit } from "./paperapiStub";
 
 // a 1x1 PNG, the thumbnail the service hands over
@@ -60,7 +61,24 @@ async function run(): Promise<Record<string, unknown>> {
         askedYouTube: asked().filter((url) => /ytimg\.com|youtube\.com/.test(url)),
     };
 
-    return { afterSend, youTube, uncaught: [...errors] };
+    // two switches in a row: the first one's history is on its way longest
+    const histories: ((entries: ChatEntry[]) => void)[] = [];
+    answers.set(UI_ACTION_IDS.history, () => new Promise((resolve) => histories.push(resolve)));
+    emit(EVENTS.switched, {});
+    emit(EVENTS.switched, {});
+    await until("both histories asked for", () => histories.length === 2);
+    histories[1]!([{ id: "last1", at: Date.now(), kind: "agent", text: "The conversation switched to last" }]);
+    await until("the last conversation's history", () => document.querySelector('[data-message="last1"]'));
+    histories[0]!([{ id: "first1", at: Date.now(), kind: "agent", text: "The conversation switched to first" }]);
+    // what an answer sets lands before the next frame is drawn
+    await frame();
+    await frame();
+    const switched = {
+        last: Boolean(document.querySelector('[data-message="last1"]')),
+        first: Boolean(document.querySelector('[data-message="first1"]')),
+    };
+
+    return { afterSend, youTube, switched, uncaught: [...errors] };
 }
 
 report(run);
