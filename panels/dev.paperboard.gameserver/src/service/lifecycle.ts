@@ -38,7 +38,8 @@ function monitorReadiness(ctx: ServiceContext<GameServerState>): void {
         clearTimeout(expired); cancelReadiness();
         ctx.setState({ serverEntries: appendCapped(ctx.state.serverEntries, { type: "error", content: `Startup failed: ${errorText(err)}` }) });
         markStopRequested();
-        await processApi.kill(primaryProcessId(), "SIGKILL");
+        // nobody awaits this: a kill that fails is said, or the server would sit "starting" in silence
+        await processApi.kill(primaryProcessId(), "SIGKILL").catch((killErr) => report(ctx, "The server that failed to start could not be ended", killErr));
     };
     const poll = async () => {
         if (!active()) { clearTimeout(expired); return; }
@@ -211,7 +212,7 @@ export async function startServerInstance(
             important: true,
         });
         monitorReadiness(ctx);
-    } catch (err: any) {
+    } catch (err) {
         console.error("[Service:Lifecycle] Failed to start server:", err);
         // the launch may have got as far as preparing the server's files
         void releaseServer(ctx);
@@ -219,7 +220,7 @@ export async function startServerInstance(
             serverStatus: "offline",
             serverEntries: appendCapped(ctx.state.serverEntries, {
                 type: "error",
-                content: `[Server] Failed to launch: ${err?.message || err}`,
+                content: `[Server] Failed to launch: ${errorText(err)}`,
             }),
         });
         throw err;

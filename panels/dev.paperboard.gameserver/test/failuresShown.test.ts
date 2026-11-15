@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { processApi as rawProcess } from "@mileniumhq/paperapi";
+import { processApi } from "../src/service/api";
 import { callServer } from "./helpers/serverCall";
 import { startTestDaemon, type TestDaemon } from "./helpers/crane";
 import { minecraftServer } from "./helpers/minecraft";
@@ -46,6 +47,24 @@ describe("failures are shown", () => {
         const failure = await mc.run(() => startServerInstance(mc.scope.ctx)).catch((err: Error) => err);
         expect(String(failure)).toContain("symbolic link");
         expect(String(failure)).not.toContain("reinstall");
+    });
+
+    test("a server that failed to start and then could not be ended says so in the console", async () => {
+        const server = gameServer("palworld", { settings: { port: await freePort(), restPort: await freePort() }, state: palworldService.initialState() });
+        installPalworld(server.dir, { refuse: { info: "broken world" } });
+        await server.run(() => palworldService.initialize(server.scope.ctx, false));
+        const kill = rawProcess.kill;
+        rawProcess.kill = (async () => { throw new Error("the supervisor did not answer"); }) as typeof kill;
+        try {
+            await server.run(() => startServerInstance(server.scope.ctx));
+            await server.scope.waitFor((s) => s.serverEntries.some((e) => String(e.content).includes("could not be ended")), "the failed kill to be reported");
+        } finally {
+            rawProcess.kill = kill;
+        }
+        expect(server.scope.ctx.state.serverEntries.map((e) => String(e.content))).toContain("[Paperboard] The server that failed to start could not be ended: the supervisor did not answer");
+        const exit = server.nextExit();
+        await server.run(() => processApi.kill(palworldService.primaryProcessId, "SIGKILL"));
+        await exit;
     });
 
     test("a Palworld settings file that can't be read when the server stops is reported in the console", async () => {
