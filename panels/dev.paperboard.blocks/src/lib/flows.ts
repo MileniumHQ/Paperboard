@@ -1,8 +1,7 @@
 // Reading saved flows: what the page sends and what config holds are both
 // checked here, so a broken file is refused with its reason, never half-run.
+import { isRecord } from "@mileniumhq/paperapi";
 import type { SavedFlows } from "../panel";
-
-export const isRecord = (v: unknown): v is Record<string, unknown> => Boolean(v) && typeof v === "object" && !Array.isArray(v);
 
 export function readFlows(raw: unknown): SavedFlows {
     if (!isRecord(raw)) throw new Error("The saved flows are not an object");

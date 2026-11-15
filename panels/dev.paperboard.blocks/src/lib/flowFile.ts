@@ -2,7 +2,8 @@
 // It is the saved canvas (Blockly's workspace, and the schema of each panel
 // block on it), marked so another file is refused with a reason.
 import type { SavedFlows } from "../panel";
-import { isRecord, readFlows } from "./flows";
+import { isRecord } from "@mileniumhq/paperapi";
+import { readFlows } from "./flows";
 
 export const FLOW_FILE_FORMAT = "paperboard-blocks";
 export const FLOW_FILE_VERSION = 1;

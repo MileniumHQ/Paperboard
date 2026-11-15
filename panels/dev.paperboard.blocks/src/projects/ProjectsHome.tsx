@@ -23,10 +23,10 @@ import {
 import CanvasPreview from "./CanvasPreview";
 import { DeleteProjectModal, RenameProjectModal } from "./ProjectDialogs";
 import { editedText, switchFailed, type ProjectsState } from "./state";
-import { errorMessage } from "../lib/failure";
 import { oneAtATime } from "../lib/oneAtATime";
 import type { ProjectSummary } from "../lib/projects";
 import { closedUnsaved, NOT_SAVED, setClosedUnsaved } from "../editorFlows";
+import { errorMessage } from "@mileniumhq/paperapi";
 
 
 export default function ProjectsHome(props: { projects: ProjectsState; onOpen: (project: ProjectSummary) => void }) {

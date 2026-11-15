@@ -2,12 +2,12 @@
 // it over: it keeps the projects and their flows, listens for the events the
 // switched-on projects start from, and runs them. service.ts hands it the
 // daemon's; the tests hand it a registry and storage in memory.
-import { blockEntry, type blocksApi, type BlocksHandle, type ServiceContext } from "@mileniumhq/paperapi";
+import { blockEntry, type blocksApi, type BlocksHandle, type ServiceContext, errorMessage, isRecord } from "@mileniumhq/paperapi";
 import { BlockError, hatInputs, isHat, runHat, type Host, type SavedBlock } from "./lib/interpreter";
 import { BUILTIN, parseEntry, parseRegistryBlockType, registryBlockType } from "./lib/names";
 import { BlocksAnnouncer, FLOW_FAILED_EVENT, blocksPanelBlocks } from "./blocks";
-import { RUN_STOPPED, errorMessage } from "./lib/failure";
-import { isRecord, readFlows } from "./lib/flows";
+import { RUN_STOPPED } from "./lib/failure";
+import { readFlows } from "./lib/flows";
 import { ProjectStore, readPreview, type ProjectStorage } from "./lib/projects";
 import { MAX_LOG, PANEL_ID, SERVICE_CALLS, type LogEntry, type PanelState, type SavedFlows } from "./panel";
 

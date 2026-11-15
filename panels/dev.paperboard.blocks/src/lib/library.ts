@@ -2,7 +2,8 @@
 // requests, time, positions in lists and text. Pure functions the
 // interpreter calls; each throws a plain Error the interpreter pins on the
 // block that asked.
-import { RUN_STOPPED, errorMessage } from "./failure";
+import { RUN_STOPPED } from "./failure";
+import { errorMessage } from "@mileniumhq/paperapi";
 
 /** The longest a web request may take, in milliseconds. */
 export const WEB_TIMEOUT_MS = 30_000;

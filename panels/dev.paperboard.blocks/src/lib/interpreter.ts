@@ -2,9 +2,10 @@
 // does what they say. Blocks from the registry run in the panel that owns
 // them, through `host`; built-in blocks run here. Nothing is generated or
 // evaluated as code. Every failure names the block it happened on.
-import { RUN_STOPPED, errorMessage } from "./failure";
+import { RUN_STOPPED } from "./failure";
 import { base64, formatTime, isPrime, median, modes, position, regex, standardDeviation, timePart, unitMs, web, type WebAnswer } from "./library";
 import { BUILTIN, parseChoiceBlockType, parseEntry, parsePropertyBlockType, parseRegistryBlockType } from "./names";
+import { errorMessage } from "@mileniumhq/paperapi";
 
 export interface SavedInput {
     block?: SavedBlock;

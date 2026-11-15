@@ -5,8 +5,8 @@ import { batch, createSignal, onCleanup } from "solid-js";
 import { createStore, reconcile } from "solid-js/store";
 import { bridge } from "../bridge";
 import { SERVICE_CALLS, type PanelState } from "../panel";
-import { errorMessage } from "../lib/failure";
 import type { ProjectSummary } from "../lib/projects";
+import { errorMessage } from "@mileniumhq/paperapi";
 
 export type ProjectsState = ReturnType<typeof createProjects>;
 

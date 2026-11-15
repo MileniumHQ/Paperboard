@@ -2,8 +2,8 @@
 // editor. Each says what failed, in place, instead of closing on an error.
 import { createEffect, createMemo, createSignal, on, Show } from "solid-js";
 import { PaperButton, PaperFlex, PaperInput, PaperModal, PaperQuote, PaperText } from "@mileniumhq/paperui";
-import { errorMessage } from "../lib/failure";
 import { MAX_PROJECT_NAME } from "../lib/projects";
+import { errorMessage } from "@mileniumhq/paperapi";
 
 
 /** The project's name in the editor's top bar, renamed in place: Enter or

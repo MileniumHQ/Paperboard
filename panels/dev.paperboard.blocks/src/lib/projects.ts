@@ -4,9 +4,9 @@
 // file. The store runs in the service and in the tests, over any storage
 // that reads and writes JSON by path.
 import { EMPTY_FLOWS as EMPTY, PANEL_ID, type SavedFlows } from "../panel";
-import { errorMessage } from "./failure";
-import { isRecord, readFlows } from "./flows";
+import { readFlows } from "./flows";
 import { isHat } from "./interpreter";
+import { errorMessage, isRecord, SerialQueue } from "@mileniumhq/paperapi";
 
 /** the project index, in the panel's files */
 export const PROJECTS_FILE = "projects.json";
@@ -162,7 +162,7 @@ interface Project {
 
 export class ProjectStore {
     private readonly projects = new Map<string, Project>();
-    private queue: Promise<unknown> = Promise.resolve();
+    private readonly queue = new SerialQueue();
     private opened = false;
 
     constructor(private readonly storage: ProjectStorage) {}
@@ -363,8 +363,6 @@ export class ProjectStore {
 
     /** Changes run one at a time, each written before the next. */
     private serial<T>(op: () => Promise<T>): Promise<T> {
-        const next = this.queue.then(op, op);
-        this.queue = next.catch(() => undefined);
-        return next;
+        return this.queue.run(op);
     }
 }

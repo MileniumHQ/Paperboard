@@ -9,10 +9,9 @@ import {
     PaperSelectorItem,
     PaperText,
 } from "@mileniumhq/paperui";
-import { backupApi, fileApi, type BackupRecord, type BackupStatus } from "@mileniumhq/paperapi";
+import { backupApi, fileApi, type BackupRecord, type BackupStatus, errorMessage } from "@mileniumhq/paperapi";
 import { PANEL_ID, type SavedFlows } from "./panel";
 import type { Notice } from "./bridge";
-import { errorMessage } from "./lib/failure";
 import { oneAtATime } from "./lib/oneAtATime";
 import { flowFileText, MAX_FLOW_FILE_BYTES, parseFlowFile } from "./lib/flowFile";
 

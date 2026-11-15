@@ -4,7 +4,7 @@
 // make them; the service runs the flows.
 import { createEffect, createMemo, createSignal, on, onCleanup, onMount, Show } from "solid-js";
 import * as Blockly from "blockly";
-import { blocksApi, setUnsavedChanges } from "@mileniumhq/paperapi";
+import { blocksApi, setUnsavedChanges, errorMessage } from "@mileniumhq/paperapi";
 import {
     PaperButton,
     PaperContextMenuItem,
@@ -31,7 +31,6 @@ import { createCanvas, type Canvas } from "./lib/canvas";
 import "./lib/undrawnFields";
 import { parseEntry, parseRegistryBlockType } from "./lib/names";
 import { Console } from "./Console";
-import { errorMessage } from "./lib/failure";
 import { oneAtATime } from "./lib/oneAtATime";
 import { SERVICE_CALLS, type PanelState } from "./panel";
 import { bridge, type Notice } from "./bridge";

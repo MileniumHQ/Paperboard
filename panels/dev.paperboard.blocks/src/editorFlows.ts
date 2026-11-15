@@ -5,13 +5,13 @@
 // older registry answer never lands over a newer one.
 import { createSignal } from "solid-js";
 import * as Blockly from "blockly";
-import { blocksApi, panelsApi, type BlockInfo, type BlockProjectInfo, type PanelItem } from "@mileniumhq/paperapi";
+import { createLatest } from "@mileniumhq/paperui";
+import { blocksApi, panelsApi, type BlockInfo, type BlockProjectInfo, type PanelItem, errorMessage } from "@mileniumhq/paperapi";
 import { BUILTIN_BLOCKS, choicesSources, registryDefinitions, type Definitions } from "./lib/blockDefs";
 import { refreshChoices } from "./lib/choicesField";
 import { assignPanelStyles } from "./lib/blockStyles";
 import { setResultBlocks, sourceOf } from "./lib/results";
 import { parseRegistryBlockType } from "./lib/names";
-import { errorMessage } from "./lib/failure";
 import { appendWorkspace } from "./lib/appendWorkspace";
 import { uiGap } from "./lib/libraryFlyout";
 import type { SavedWorkspace } from "./lib/interpreter";
@@ -244,7 +244,7 @@ export function createEditorFlows(options: {
     }
 
     // the newest load: an older one that answers late leaves the canvas to it
-    let loads = 0;
+    const loads = createLatest();
     /**
      * Shows the flows the service has now: on opening, after a backup is
      * loaded, or again after a load that failed. Until they're shown the
@@ -253,7 +253,7 @@ export function createEditorFlows(options: {
      */
     async function load(): Promise<void> {
         const workspace = canvas();
-        const mine = ++loads;
+        const current = loads();
         // the canvas shows what the service has, in place of any edit not sent
         discard();
         setLoaded(false);
@@ -261,7 +261,7 @@ export function createEditorFlows(options: {
         try {
             const flows = await bridge.call<SavedFlows>(SERVICE_CALLS.load, { project: options.project() });
             await refreshBlocks(() => flows.schemas);
-            if (mine !== loads || closed) return;
+            if (!current() || closed) return;
             Blockly.serialization.workspaces.load(flows.workspace, workspace);
             markAway();
             workspace.setIsReadOnly(false);
@@ -270,7 +270,7 @@ export function createEditorFlows(options: {
             stored = JSON.stringify(snapshot().workspace);
             options.onLoaded();
         } catch (err) {
-            if (mine === loads) setLoadError(errorMessage(err));
+            if (current()) setLoadError(errorMessage(err));
         }
     }
 

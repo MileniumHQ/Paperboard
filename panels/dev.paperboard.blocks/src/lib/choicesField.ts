@@ -7,7 +7,7 @@
 // choice is gone.
 import * as Blockly from "blockly";
 import type { BlockChoice } from "@mileniumhq/paperapi";
-import { errorMessage } from "./failure";
+import { errorMessage } from "@mileniumhq/paperapi";
 
 export const CHOICES_FIELD = "pb_field_choices";
 
