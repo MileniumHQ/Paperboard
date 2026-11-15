@@ -28,6 +28,8 @@ export interface LogFileContent {
 export async function listLogFiles(
     ctx: Server,
 ): Promise<LogFileInfo[]> {
+    // the folder is made by the server's first start
+    if (!(await ctx.files.exists("logs", PANEL_ID))) return [];
     const entries = await listDirectory(ctx, "logs");
     const files: LogFileInfo[] = [];
     for (const entry of entries) {

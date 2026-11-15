@@ -1,7 +1,8 @@
-import type {
-    fileApi as FileApi,
-    processApi as ProcessApi,
-    system as SystemApi,
+import {
+    errorMessage,
+    type fileApi as FileApi,
+    type processApi as ProcessApi,
+    type system as SystemApi,
 } from "@mileniumhq/paperapi";
 import { PANEL_ID } from "../service/types";
 import { isWindowsTarget } from "../lib/platform";
@@ -48,8 +49,12 @@ export function createDirectoryLister({
                 relative === "" ? base || serverDir : `${base}${separator}${relative}`;
 
             let output = "";
+            let errors = "";
             const collect = (chunk: string) => {
                 output += chunk;
+            };
+            const collectErrors = (chunk: string) => {
+                errors += chunk;
             };
 
             // run resolves on exit, do not also subscribe via onExit
@@ -60,6 +65,7 @@ export function createDirectoryLister({
                     args: windowsDirArgs(absoluteDir),
                     cwd: serverDir,
                     onStdout: collect,
+                    onStderr: collectErrors,
                 });
             } else {
                 result = await processApi.run({
@@ -67,20 +73,17 @@ export function createDirectoryLister({
                     args: ["-1", absoluteDir],
                     cwd: serverDir,
                     onStdout: collect,
+                    onStderr: collectErrors,
                 });
             }
 
             // only an explicit non-zero exit code counts as failure
             const exitCode = (result as any).exitCode;
+            // the lister's own words say why (no such folder, no permission)
             if (typeof exitCode === "number" && exitCode !== 0) {
-                console.error(
-                    `[FileSystem] Listing "${dir}" exited with code ${exitCode}. Raw output:\n${
-                        output.trim() || "(no output)"
-                    }`,
-                );
                 return {
                     entries: [],
-                    error: `Could not list "${dir}/" (exit code ${exitCode}).`,
+                    error: `Could not list "${dir}/": ${errors.trim() || `the lister exited with code ${exitCode} and said nothing`}`,
                 };
             }
 
@@ -96,16 +99,18 @@ export function createDirectoryLister({
 
             return { entries };
         } catch (err) {
-            console.error(`[FileSystem] Failed to list directory "${dir}":`, err);
             return {
                 entries: [],
-                error: `Could not list "${dir}/". Check the console for details.`,
+                error: `Could not list "${dir}/": ${errorMessage(err)}`,
             };
         }
     }
 
+    /** the folder's entries; a folder that can't be listed is a failure, never an empty one */
     async function listDirectory(dir: string): Promise<string[]> {
-        return (await tryListDirectory(dir)).entries;
+        const listing = await tryListDirectory(dir);
+        if (listing.error) throw new Error(listing.error);
+        return listing.entries;
     }
 
     return { tryListDirectory, listDirectory };

@@ -12,6 +12,8 @@ import { openPage, servePanel, type Page } from "./helpers/browser";
 import { PANEL_ID } from "../src/servers";
 import { sendServerCommand, startServerInstance, stopServerInstance } from "../src/service/lifecycle";
 import { minecraftService } from "../src/games/minecraft/service";
+import { tryListDirectory } from "../src/service/filesystem";
+import { listLogFiles } from "../src/service/logs";
 import { palworldService } from "../src/games/palworld/service";
 
 let daemon: TestDaemon;
@@ -47,6 +49,21 @@ describe("failures are shown", () => {
         const failure = await startServerInstance(mc.server).catch((err: Error) => err);
         expect(String(failure)).toContain("symbolic link");
         expect(String(failure)).not.toContain("reinstall");
+    });
+
+    test("a folder that can't be listed says why, and is never shown as an empty one", async () => {
+        const mc = minecraftServer({ files: { "logs/latest.log": "[12:00:00] Done\n" } });
+        const logs = path.join(mc.dir, "logs");
+        expect((await listLogFiles(mc.server)).map((file) => file.name)).toEqual(["latest.log"]);
+        fs.chmodSync(logs, 0o000);
+        try {
+            await expect(listLogFiles(mc.server)).rejects.toThrow(/Could not list "logs\/": .*Permission denied/);
+            expect((await tryListDirectory(mc.server, "logs")).error).toMatch(/Permission denied/);
+        } finally {
+            fs.chmodSync(logs, 0o700);
+        }
+        // a failure before the lister runs names its cause too
+        expect((await tryListDirectory(mc.server, "../elsewhere")).error).toBe('Could not list "../elsewhere/": Unsafe directory name: "../elsewhere"');
     });
 
     test("a server that failed to start and then could not be ended says so in the console, and as the panel's problem", async () => {
