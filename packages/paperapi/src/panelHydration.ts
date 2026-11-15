@@ -3,7 +3,7 @@
 const hydrators = new Set<{ panelId: string; hydrate: () => Promise<unknown> }>();
 
 export function registerPanelHydrator(panelId: string, hydrate: () => Promise<unknown>): () => void {
-    if (hydrators.size >= 128) throw new Error("Too many panel bridges; dispose unused bridges");
+    if (hydrators.size >= 128) throw new Error("Too many state mirrors on this page; dispose the ones no longer shown");
     const owner = { panelId, hydrate };
     hydrators.add(owner);
     return () => { hydrators.delete(owner); };

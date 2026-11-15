@@ -278,7 +278,7 @@ function pageEvents(panelId: string, blocks: Blocks, legacyActions: boolean, con
         // doesn't say, is the panel's mistake: thrown where it was made
         if (contract) {
             const shape = Object.hasOwn(contract.events, event) ? contract.events[event] : undefined;
-            if (!shape) throw new Error(`[Service:${panelId}] the contract has no event "${event}"`);
+            if (!shape) throw new Error(`[Service:${panelId}] The contract has no event "${event}"`);
             const problem = eventPayloadProblem(event, shape, payload);
             if (problem) throw new Error(`[Service:${panelId}] ${problem}`);
         }
