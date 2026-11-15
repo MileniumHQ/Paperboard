@@ -94,11 +94,17 @@ export function appUpdateDownloadUrl(): string {
  * restarts into the downloaded update. Resolves false when a page kept it
  * open; throws when there is no update to install.
  */
+// a package install is out (its password prompt is open): a second press
+// joins it instead of asking for the password twice
+let installing = false;
+
 export async function restartToUpdate(): Promise<boolean> {
     if (getAppUpdateState().status !== "ready") throw new Error("No app update has been downloaded");
+    if (installing) return true;
     if (!(await confirmQuit())) return false;
     if (packageUpdater) {
         const updater = packageUpdater;
+        installing = true;
         // a refused or failed install shows in the update dialog, and this
         // version keeps running
         void updater.install().then(
@@ -107,7 +113,10 @@ export async function restartToUpdate(): Promise<boolean> {
                 app.relaunch();
                 app.quit();
             },
-            (err) => updater.emit("error", err),
+            (err) => {
+                installing = false;
+                updater.emit("error", err);
+            },
         );
         return true;
     }

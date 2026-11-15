@@ -67,7 +67,7 @@ const DROP_RESPONSE_HEADERS = new Set([
  * local port is the connection's remote port and whose remote port is the
  * relay's port. null when no row matches.
  */
-export function socketOwnerUid(procNetTcp: string, clientPort: number, serverPort: number): number | null {
+function socketOwnerUid(procNetTcp: string, clientPort: number, serverPort: number): number | null {
     for (const line of procNetTcp.split("\n").slice(1)) {
         const cols = line.trim().split(/\s+/);
         if (cols.length < 8) continue;
@@ -313,6 +313,8 @@ export function startDavRelay(opts: DavRelayOptions): Promise<DavRelay> {
     return new Promise((resolve, reject) => {
         gate.once("error", reject);
         gate.listen(0, "127.0.0.1", () => {
+            gate.off("error", reject);
+            gate.on("error", (err) => logger.error("[DavRelay] the relay failed:", err));
             const address = gate.address();
             port = typeof address === "object" && address ? address.port : 0;
             armIdle();

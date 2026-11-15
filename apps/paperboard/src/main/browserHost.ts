@@ -464,11 +464,16 @@ export function startBrowserHost(opts: BrowserHostOptions): Promise<BrowserHost>
     heartbeat.unref?.();
 
     return new Promise((resolve, reject) => {
-        server.once("error", (err) => {
+        const failListen = (err: Error) => {
             clearInterval(heartbeat);
             reject(err);
-        });
+        };
+        server.once("error", failListen);
         server.listen(opts.port, "127.0.0.1", () => {
+            // once serving, a failure (an accept that runs out of files) is
+            // said, never an unhandled error event that ends Paperboard
+            server.off("error", failListen);
+            server.on("error", (err) => logger.error("[BrowserHost] the browser host failed:", err));
             const address = server.address();
             port = typeof address === "object" && address ? address.port : opts.port;
             shellHost = `${BROWSER_HOST_NAME}:${port}`;

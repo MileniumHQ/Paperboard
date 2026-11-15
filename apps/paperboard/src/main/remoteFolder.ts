@@ -112,7 +112,7 @@ async function unmount(s: ActiveSession): Promise<void> {
     }
 }
 
-export async function closeRemoteFolder(computerId: string): Promise<void> {
+async function closeRemoteFolder(computerId: string): Promise<void> {
     const s = active.get(computerId);
     if (s) await closeSession(s);
 }
@@ -374,8 +374,10 @@ async function openNow(computerId: string, panelId?: string): Promise<{ ok: bool
             // credential in a 0600 temp file, never argv/URL (both leak
             // into ps output)
             const scriptPath = macMountScriptPath();
+            // a file already there is never written through
             fs.writeFileSync(scriptPath, buildMacMountScript(session.user, session.pass, "127.0.0.1", rec.relay.port), {
                 mode: 0o600,
+                flag: "wx",
             });
             try {
                 await execAsync("osascript", [scriptPath], 60_000);

@@ -135,7 +135,7 @@ function byteCap(cap: number, counted: { bytes: number }): Transform {
 }
 
 /** GET the panel file as a stream, capped; the caller consumes or destroys it */
-export async function readPanelFile(
+async function readPanelFile(
     endpoint: DaemonEndpoint,
     req: PanelFileTransferRequest,
 ): Promise<{ size: number; body: Readable; received: () => number }> {
@@ -157,7 +157,7 @@ export async function readPanelFile(
 }
 
 /** PUT a stream of known size into the panel's storage */
-export async function writePanelFile(
+async function writePanelFile(
     endpoint: DaemonEndpoint,
     req: PanelFileTransferRequest,
     body: Readable,
