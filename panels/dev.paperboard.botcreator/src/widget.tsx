@@ -32,9 +32,10 @@ const ACTIVITY_POLL_MS = 60_000;
 type Load<T> = { kind: "loading" } | { kind: "ready"; value: T } | { kind: "failed"; message: string };
 
 // reads the service now and every `ms` while the widget is visible; nothing
-// runs while Home is hidden or the widget is scrolled away
+// runs while Home is hidden or the widget is scrolled away. A read that
+// says what the last one said changes nothing on screen.
 function createPolledRead<T>(widget: WidgetContext, ms: number, read: () => Promise<T>) {
-    const [state, setState] = createSignal<Load<T>>({ kind: "loading" });
+    const [state, setState] = createSignal<Load<T>>({ kind: "loading" }, { equals: (a, b) => JSON.stringify(a) === JSON.stringify(b) });
     let timer: ReturnType<typeof setInterval> | undefined;
     let generation = 0;
     const refresh = async () => {
@@ -129,9 +130,9 @@ function BotStatus(props: { widget: WidgetContext }) {
     };
 
     // a 2x1 puts its way out in the header; a 1x1 has no room beside the
-    // bot's name, so its way out sits in the message instead. Each poll hands
-    // over a new status, so the button is built from the one thing that
-    // decides it and stays the same button while that stays the same.
+    // bot's name, so its way out sits in the message instead. The button is
+    // built from the one thing that decides it, so a status that changes
+    // (a server joined) keeps the same button.
     const actionKind = createMemo<"retry" | "connect" | "open" | null>(() => {
         if (!wide()) return null;
         if (failed()) return "retry";

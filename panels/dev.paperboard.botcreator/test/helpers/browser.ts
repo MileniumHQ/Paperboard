@@ -30,7 +30,33 @@ function panelUi(): string {
     return out;
 }
 
-/** serves the built UI with a panel credential the test daemon issued */
+// Home's side of a widget frame, as the shell does it: the widget page in a
+// frame the size of the tile in ?w= and ?h=, asked to show the widget in
+// ?id= for the bot in ?bot=. window.showWidget(visible) is the shell
+// scrolling it away and back, which reads the service again.
+const WIDGET_HOST = `<!doctype html><html><head><meta charset="utf-8"></head><body style="margin:0">
+<iframe id="widget" src="/widget.html" style="border:0"></iframe>
+<script>
+const query = new URLSearchParams(location.search);
+const size = { w: Number(query.get("w")), h: Number(query.get("h")) };
+const frame = document.getElementById("widget");
+frame.style.width = size.w * 160 + "px";
+frame.style.height = size.h * 150 + "px";
+// a wait in this page wakes on this page's changes: each change in the frame is one here too
+let changes = 0;
+const changed = () => (document.body.dataset.changes = String(++changes));
+window.showWidget = (visible) => frame.contentWindow.postMessage({ type: "paperboard:widget-update", generation: "g1", visible }, "*");
+frame.addEventListener("load", () => {
+    new MutationObserver(changed).observe(frame.contentDocument, { subtree: true, childList: true, attributes: true, characterData: true });
+    frame.contentWindow.postMessage({
+        type: "paperboard:initialize",
+        generation: "g1",
+        widget: { id: query.get("id"), instanceId: "w1", size, visible: true, options: { bot: query.get("bot") } },
+    }, "*");
+});
+</script></body></html>`;
+
+/** serves the built UI with a panel credential the test daemon issued; /widget-host.html?id=…&w=…&h=…&bot=… shows a Home widget */
 export async function servePanel(): Promise<{ url: string; stop: () => void }> {
     const daemon = await testDaemon();
     const dist = panelUi();
@@ -40,6 +66,7 @@ export async function servePanel(): Promise<{ url: string; stop: () => void }> {
         hostname: "127.0.0.1",
         async fetch(req) {
             const pathname = new URL(req.url).pathname;
+            if (pathname === "/widget-host.html") return new Response(WIDGET_HOST, { headers: { "content-type": "text/html; charset=utf-8" } });
             const file = path.join(dist, pathname === "/" ? "index.html" : pathname);
             if (!file.startsWith(dist) || !fs.existsSync(file) || fs.statSync(file).isDirectory()) return new Response("Not found", { status: 404 });
             if (file.endsWith(".html")) {
