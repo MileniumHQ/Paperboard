@@ -11,7 +11,8 @@ import { PaperButton, PaperEmptyState, PaperFlex, PaperIcon, PaperList, PaperLis
 import type { ComputerWindow } from "../contract";
 import type { Agent } from "../lib/agent";
 import { SetupProgress } from "./Computer";
-import { errorText, failure, type Failure } from "../lib/failure";
+import { createAction } from "../lib/action";
+import { errorText, failure } from "../lib/failure";
 import { clip } from "../lib/text";
 import { WindowView } from "./WindowView";
 import styles from "./ComputerView.module.css";
@@ -32,21 +33,7 @@ export default function ComputerView(props: { agent: Agent }) {
     const name = () => props.agent.state.settings?.name ?? "Your agent";
     const ready = () => c().phase === "ready";
 
-    const [busy, setBusy] = createSignal(false);
-    const [error, setError] = createSignal<Failure | null>(null);
-    const act = async (title: string, fn: () => Promise<unknown>) => {
-        setBusy(true);
-        setError(null);
-        try {
-            await fn();
-            return true;
-        } catch (e) {
-            setError(failure(title, e));
-            return false;
-        } finally {
-            setBusy(false);
-        }
-    };
+    const { busy, error, setError, run: act } = createAction();
 
     // ------------------------------------------------------------- its windows
 
@@ -115,11 +102,17 @@ export default function ComputerView(props: { agent: Agent }) {
     const [holding, setHolding] = createSignal(false);
     let taking: Promise<void> | null = null;
     let idle: ReturnType<typeof setTimeout> | undefined;
+    const giveBack = () =>
+        props.agent.control(false).catch((e) => {
+            // closed meanwhile: nowhere on the page is left to say it, and the service's lease frees the agent anyway
+            if (disposed) console.error("[agents] computer not handed back:", e);
+            else setError(failure("Computer not handed back", e));
+        });
     const handBack = () => {
         clearTimeout(idle);
         if (!holding()) return;
         setHolding(false);
-        void props.agent.control(false).catch((e) => setError(failure("Computer not handed back", e)));
+        void giveBack();
     };
     const use = async () => {
         clearTimeout(idle);
@@ -128,7 +121,9 @@ export default function ComputerView(props: { agent: Agent }) {
         taking ??= props.agent
             .control(true)
             .then(() => {
-                if (!disposed) setHolding(true);
+                // taken just as the view closed: it goes straight back
+                if (disposed) void giveBack();
+                else setHolding(true);
             })
             .finally(() => (taking = null));
         await taking;

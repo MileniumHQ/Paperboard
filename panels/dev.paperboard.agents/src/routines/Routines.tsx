@@ -2,13 +2,14 @@
 // chat; here the user sees them, when each runs next, how the last run went,
 // and can stop any of them. The list follows the service's routines revision.
 
-import { For, Match, Show, Switch, createEffect, createSignal, on, onCleanup } from "solid-js";
+import { For, Match, Show, Switch, createEffect, createSignal, on } from "solid-js";
 import { createStore, reconcile } from "solid-js/store";
 import { PaperButton, PaperCard, PaperEmptyState, PaperFlex, PaperIcon, PaperLoader, PaperQuote, PaperText } from "@mileniumhq/paperui";
 import type { Routine } from "../contract";
 import { describeSchedule, localStamp } from "../routineText";
 import type { Agent } from "../lib/agent";
 import { holdPage } from "../lib/pageHold";
+import { createLatest } from "../lib/action";
 import { errorText } from "../lib/failure";
 
 export default function Routines(props: { agent: Agent }) {
@@ -19,32 +20,36 @@ export default function Routines(props: { agent: Agent }) {
     const [error, setError] = createSignal<string | null>(null);
     const [failed, setFailed] = createSignal<string | null>(null);
 
-    let gone = false;
-    onCleanup(() => (gone = true));
     // latest read wins: an older answer never replaces a newer one
-    let reads = 0;
+    const latest = createLatest();
     const load = async () => {
-        const mine = ++reads;
+        const current = latest();
         try {
             const next = await props.agent.routines();
-            if (!gone && mine === reads) {
+            if (current()) {
                 setState("routines", reconcile(next, { key: "id" }));
                 setError(null);
             }
         } catch (e) {
-            if (!gone && mine === reads) setError(errorText(e));
+            if (current()) setError(errorText(e));
         }
     };
     // the page before this one stays up until the first read is in
     holdPage(load());
     createEffect(on(() => props.agent.state.routines.revision, () => void load(), { defer: true }));
 
+    // a second press while the first is on its way is the same stop, not a refused one
+    const stopping = new Set<string>();
     const stop = async (r: Routine) => {
+        if (stopping.has(r.id)) return;
+        stopping.add(r.id);
         setFailed(null);
         try {
             await props.agent.deleteRoutine(r.id);
         } catch (e) {
             setFailed(errorText(e));
+        } finally {
+            stopping.delete(r.id);
         }
     };
 

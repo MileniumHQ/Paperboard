@@ -4,7 +4,7 @@
 // them and can make it forget any. The list follows the service's memory
 // revision, so what the agent remembers shows up live.
 
-import { For, Match, Show, Switch, createEffect, createSignal, on, onCleanup } from "solid-js";
+import { For, Match, Show, Switch, createEffect, createSignal, on } from "solid-js";
 import { createStore, reconcile } from "solid-js/store";
 import {
     PaperButton,
@@ -22,6 +22,7 @@ import {
 import type { MemoryList } from "../contract";
 import type { Agent } from "../lib/agent";
 import { holdPage } from "../lib/pageHold";
+import { createLatest } from "../lib/action";
 import { errorText } from "../lib/failure";
 
 export default function Memories(props: { agent: Agent }) {
@@ -34,22 +35,20 @@ export default function Memories(props: { agent: Agent }) {
     const [error, setError] = createSignal<string | null>(null);
     const [open, setOpen] = createSignal<string | null>(null);
 
-    let gone = false;
-    onCleanup(() => (gone = true));
     // latest read wins: an older answer never replaces a newer one
-    let reads = 0;
+    const latest = createLatest();
     const load = async () => {
-        const mine = ++reads;
+        const current = latest();
         try {
             const next = await props.agent.memory();
-            if (!gone && mine === reads) {
+            if (current()) {
                 setFacts(reconcile(next.facts, { key: "id" }));
                 setNotes(reconcile(next.notes, { key: "key" }));
                 setRead(true);
                 setError(null);
             }
         } catch (e) {
-            if (!gone && mine === reads) setError(errorText(e));
+            if (current()) setError(errorText(e));
         }
     };
     // the page before this one stays up until the first read is in
@@ -90,9 +89,16 @@ export default function Memories(props: { agent: Agent }) {
 function Facts(props: { agent: Agent; facts: MemoryList["facts"] }) {
     const [error, setError] = createSignal<string | null>(null);
     // a refused forget says why; the list stays as the service has it
+    // a second press while the first is on its way is the same forget, not a refused one
+    const forgetting = new Set<string>();
     const forget = (id: string) => {
+        if (forgetting.has(id)) return;
+        forgetting.add(id);
         setError(null);
-        props.agent.deleteFact(id).catch((e) => setError(errorText(e)));
+        props.agent
+            .deleteFact(id)
+            .catch((e) => setError(errorText(e)))
+            .finally(() => forgetting.delete(id));
     };
 
     return (
