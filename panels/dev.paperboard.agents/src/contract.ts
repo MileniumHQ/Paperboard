@@ -271,7 +271,7 @@ export interface Routine {
 
 export interface RoutinesState {
     revision: number;
-    /** the routines can't be read; none run until they can */
+    /** the routines can't be read, or couldn't be saved after a run; none run until they can */
     error: string | null;
 }
 

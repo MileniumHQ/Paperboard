@@ -17,12 +17,13 @@
 
 import { randomUUID } from "node:crypto";
 import fs from "node:fs/promises";
-import path from "node:path";
 import { LIMITS, type Routine, type RoutineSchedule, type RoutinesState } from "../contract";
 import { DAY_NAMES, describeSchedule, localStamp } from "../routineText";
 import type { ToolResult } from "./computerMcp";
 import type { ToolSpec } from "./computerTools";
 import type { Toolset } from "./toolsets";
+import { writeAtomic } from "./writeAtomic";
+import { errorText } from "../lib/failure";
 
 const L = LIMITS.routines;
 const VERSION = 1;
@@ -67,7 +68,7 @@ export class Routines {
             this.items = await this.read();
             this.broken = null;
         } catch (e) {
-            this.broken = e instanceof Error ? e.message : String(e);
+            this.broken = errorText(e);
             console.error("[agents] routines are unreadable:", this.broken);
         }
         const now = this.now();
@@ -129,7 +130,7 @@ export class Routines {
                 r.lastRun = now;
                 r.lastError = null;
             } catch (e) {
-                r.lastError = e instanceof Error ? e.message : String(e);
+                r.lastError = errorText(e);
                 console.error(`[agents] routine ${r.id} couldn't run:`, r.lastError);
             }
             if (r.schedule.kind === "once" && r.lastError === null) {
@@ -143,7 +144,10 @@ export class Routines {
         try {
             await this.save();
         } catch (e) {
-            console.error("[agents] couldn't save the routines after a run:", e instanceof Error ? e.message : String(e));
+            // what ran is on disk as not having run: none run again until the file is right, and the user sees why
+            this.broken = `the routines couldn't be saved after one ran, so none run until the agent is restarted (${this.deps.file}): ${errorText(e)}`;
+            console.error("[agents]", this.broken);
+            this.changed();
         }
         this.arm();
     }
@@ -183,14 +187,14 @@ export class Routines {
             raw = await fs.readFile(this.deps.file, "utf8");
         } catch (e) {
             if ((e as NodeJS.ErrnoException).code === "ENOENT") return [];
-            throw new RoutineError(`the routines can't be read (${this.deps.file}): ${(e as Error).message}`);
+            throw new RoutineError(`the routines can't be read (${this.deps.file}): ${errorText(e)}`);
         }
         const bad = (why: string) => new RoutineError(`the routines file is unreadable (${why}); it was left as it is: ${this.deps.file}`);
         let doc: any;
         try {
             doc = JSON.parse(raw);
         } catch (e) {
-            throw bad((e as Error).message);
+            throw bad(errorText(e));
         }
         if (!doc || doc.version !== VERSION || !Array.isArray(doc.routines)) throw bad("not a routines file of this version");
         const ids = new Set<string>();
@@ -213,17 +217,7 @@ export class Routines {
     /** Write the routines as they are now; writes run one at a time, in order. */
     private save(): Promise<void> {
         const data = JSON.stringify({ version: VERSION, routines: this.items }, null, 2);
-        const write = async () => {
-            await fs.mkdir(path.dirname(this.deps.file), { recursive: true });
-            const tmp = `${this.deps.file}.${randomUUID().slice(0, 8)}.tmp`;
-            try {
-                await fs.writeFile(tmp, data);
-                await fs.rename(tmp, this.deps.file);
-            } catch (e) {
-                await fs.rm(tmp, { force: true });
-                throw e;
-            }
-        };
+        const write = async () => writeAtomic(this.deps.file, data);
         const done = this.writes.then(write, write);
         this.writes = done.then(
             () => undefined,
@@ -299,7 +293,7 @@ function firstRun(r: Stored, now: number): number | null {
 }
 
 /** The first run strictly after `after`. */
-export function nextRun(r: Pick<Stored, "schedule" | "created" | "lastRun">, after: number): number | null {
+function nextRun(r: Pick<Stored, "schedule" | "created" | "lastRun">, after: number): number | null {
     const s = r.schedule;
     switch (s.kind) {
         case "once":

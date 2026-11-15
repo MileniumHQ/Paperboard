@@ -100,6 +100,30 @@ describe("routines", () => {
         expect(JSON.parse(fs.readFileSync(file, "utf8")).routines).toEqual([]);
     });
 
+    test("a run that can't be saved is shown, and nothing runs again until it can be", async () => {
+        const dir = temp();
+        const file = path.join(dir, "routines.json");
+        const clock = { now: Date.UTC(2026, 10, 9, 12, 0) };
+        const errors: (string | null)[] = [];
+        const runs: string[] = [];
+        const r = new Routines({ file, run: (routine) => runs.push(routine.id), onChange: (s) => errors.push(s.error), now: () => clock.now });
+        closers.push(() => r.shutdown());
+        await r.load();
+        await r.add("text the user happy birthday", { kind: "once", at: clock.now + 30 * MIN });
+        await r.add("check the forum", { kind: "every", minutes: 15 });
+        // the disk refuses the write after the run: the one-off is still on it
+        fs.chmodSync(dir, 0o500);
+        closers.push(() => fs.chmodSync(dir, 0o700));
+        clock.now += 30 * MIN;
+        await r.check();
+        expect(runs).toHaveLength(2);
+        expect(errors.at(-1)).toMatch(/couldn't be saved after one ran/);
+        expect(() => r.list()).toThrow(/couldn't be saved after one ran/);
+        clock.now += 15 * MIN;
+        await r.check();
+        expect(runs).toHaveLength(2);
+    });
+
     test("an unreadable routines.json is left alone and nothing runs", async () => {
         const file = path.join(temp(), "routines.json");
         const damaged = '{"version":1,"routines":[{"id":"abc123","what":"x","schedule":{"kind":"once","at":1},"created":0}';
