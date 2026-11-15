@@ -484,8 +484,7 @@ export class BlocksAnnouncer {
         const key = JSON.stringify(ids);
         if (this.last.get(value) === key) return;
         this.last.set(value, key);
-        // quiet: the change is already in the panel's state; Blocks reads it again on its next look
-        this.handle.changed(value).catch((err) => console.error(`[TerminalService] the change to ${value} did not reach Blocks:`, err));
+        this.handle.changed(value).catch((err) => this.problem(`Blocks didn't hear the change to ${value}`, errorMessage(err)));
     }
 
     fire(event: string, payload: Record<string, unknown>): void {

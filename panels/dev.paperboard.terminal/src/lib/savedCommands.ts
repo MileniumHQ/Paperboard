@@ -292,11 +292,12 @@ export class SavedCommands {
             // abandoned before the kill: the exit it causes arrives while the
             // kill is awaited and must not be recorded as the run's outcome
             this.abandon(live, previousRun);
-            // quiet: the run's failure is thrown to the user below; this only stops its process
-            await this.deps.kill(procId).catch((killErr) =>
-                console.error(`[TerminalService] could not stop unrecorded run of ${command.id}:`, killErr),
+            const unstopped = await this.deps.kill(procId).then(() => null, errorMessage);
+            throw new Error(
+                unstopped === null
+                    ? `"${command.label}" was stopped: its run could not be recorded (${errorMessage(err)})`
+                    : `"${command.label}" is running unrecorded: its run could not be recorded (${errorMessage(err)}), and it could not be stopped (${unstopped})`,
             );
-            throw new Error(`"${command.label}" was stopped: its run could not be recorded (${errorMessage(err)})`);
         }
         if (!live.settled) {
             live.timeout = setTimeout(() => this.expire(command.id, live), this.timeoutMs);
@@ -460,8 +461,7 @@ export class SavedCommands {
         try {
             await this.transaction(() => this.deps.save(this.docNow()));
         } catch (err) {
-            // quiet: restart housekeeping: the runs are live in state either way, only their record waits for the next save
-            console.error("[TerminalService] could not record the runs taken back after a restart:", err);
+            this.deps.problem("The runs taken back after a restart couldn't be recorded", errorMessage(err));
         }
     }
 
@@ -500,8 +500,7 @@ export class SavedCommands {
         }
         // a stop waiting on this run ends once the outcome is on record
         this.transaction(() => this.deps.save(this.docNow()))
-            // quiet: the outcome is already published to the page; only its copy on disk waits for the next save
-            .catch((err) => console.error(`[TerminalService] could not keep the last run of ${live.commandId}:`, err))
+            .catch((err) => this.deps.problem("A command's last run couldn't be saved", `${live.commandId}: ${errorMessage(err)}`))
             .finally(() => live.onSettled?.());
     }
 

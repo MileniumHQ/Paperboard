@@ -487,8 +487,8 @@ async function dropSession(id: string): Promise<void> {
 
 /** Ends a shell that was started for a tab or split that could not be saved. */
 async function endSession(id: string): Promise<void> {
-    // quiet: the caller reports the failed save; this only tidies the shell it started
-    await terminalApi.destroy(id).catch((err) => console.error(`[TerminalService] the unsaved session ${id} would not stop:`, err));
+    // the caller reports the failed save; a shell left running after it is a problem of its own
+    await terminalApi.destroy(id).catch((err) => problem("A shell that couldn't be saved is still running", `${id}: ${errorMessage(err)}`));
     await dropSession(id);
 }
 
