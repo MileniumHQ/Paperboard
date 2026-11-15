@@ -9,9 +9,15 @@ import { logToMain, shellIpc } from "./lib/shell";
 
 async function startShell() {
     const close = configureHostConnection(() => shellIpc().invoke<{ port: number; token: string }>("crane-credentials"));
-    window.addEventListener("pagehide", close, { once: true });
+    // the page goes away: its views stop following first, so none of them
+    // reports a read that failed only because the connections closed under it
+    let dispose: (() => void) | null = null;
+    window.addEventListener("pagehide", () => {
+        dispose?.();
+        close();
+    }, { once: true });
     await initPaperApi({ computerId: "local" });
-    render(() => <App />, document.getElementById("root") as HTMLElement);
+    dispose = render(() => <App />, document.getElementById("root") as HTMLElement);
 }
 // drawn with PaperUI, which needs no server, so it follows the system theme
 function NoServer(props: { message: string }) {
