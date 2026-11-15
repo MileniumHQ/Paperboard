@@ -134,12 +134,15 @@ describe("a new project", () => {
         expect(store.list().map((p) => p.id)).toEqual([kept.id]);
     });
 
-    test("takes the next free name", async () => {
+    test("takes the next name no kept project has; a draft left behind holds none", async () => {
         const store = new ProjectStore(memory().storage);
         await store.open();
-        const a = await store.create();
-        const b = await store.create();
-        expect([a.name, b.name]).toEqual(["Untitled project", "Untitled project 2"]);
+        const kept = await store.create();
+        await store.save(kept.id, flows(BUILTIN.onRun), null);
+        // its window closed before it had a block: the service never hears it was left
+        const left = await store.create();
+        const next = await store.create();
+        expect([kept.name, left.name, next.name]).toEqual(["Untitled project", "Untitled project 2", "Untitled project 2"]);
     });
 });
 
@@ -218,7 +221,7 @@ describe("changing a project", () => {
     test("a project with the longest name a person may type can be copied again and again", async () => {
         const store = new ProjectStore(memory().storage);
         await store.open();
-        const made = await store.create("x".repeat(MAX_PROJECT_NAME));
+        const made = await store.create("x".repeat(MAX_PROJECT_NAME), flows(BUILTIN.onRun));
         const first = await store.duplicate(made.id);
         const second = await store.duplicate(made.id);
         expect(first.name).toBe(`Copy of ${"x".repeat(MAX_PROJECT_NAME - 8)}`);

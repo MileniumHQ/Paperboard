@@ -31,6 +31,8 @@ const PAGES = {
     editor: "test/fixtures/editorFixture.html",
     /** the whole panel, over a service announcing its state (test/fixtures/panelFixture.tsx) */
     panel: "test/fixtures/panelFixture.html",
+    /** the whole panel over the real service, its projects in memory (test/fixtures/projectsFixture.tsx) */
+    projects: "test/fixtures/projectsFixture.html",
 };
 export type FixtureName = keyof typeof PAGES;
 

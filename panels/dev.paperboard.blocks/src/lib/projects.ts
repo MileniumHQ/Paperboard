@@ -203,17 +203,15 @@ export class ProjectStore {
         return this.serial(() => {
             const source = this.require(id);
             if (source.loadError) throw new Error(`"${source.meta.name}" couldn't be read, so it can't be copied: ${source.loadError}`);
-            const names = [...this.projects.values()].map((p) => p.meta.name);
-            return this.make(nextProjectName(names, `Copy of ${source.meta.name}`), structuredClone(source.flows), source.meta.preview);
+            return this.make(nextProjectName(this.keptNames(), `Copy of ${source.meta.name}`), structuredClone(source.flows), source.meta.preview);
         });
     }
 
     /** create's work, run in its turn of `serial`. */
     private async make(name: unknown, initial: SavedFlows, preview: CanvasPreview | null): Promise<ProjectSummary> {
         this.requireOpen();
-        if (this.projects.size >= MAX_PROJECTS) throw new Error(`Blocks holds at most ${MAX_PROJECTS} projects`);
-        const names = [...this.projects.values()].map((p) => p.meta.name);
-        const clean = name === undefined || name === "" ? nextProjectName(names) : cleanProjectName(name);
+        if (this.kept().length >= MAX_PROJECTS) throw new Error(`Blocks holds at most ${MAX_PROJECTS} projects`);
+        const clean = name === undefined || name === "" ? nextProjectName(this.keptNames()) : cleanProjectName(name);
         const now = Date.now();
         const meta: ProjectMeta = { id: createProjectId(), name: clean, enabled: true, createdAt: now, editedAt: now, preview };
         const project: Project = { meta, flows: initial, draft: !hasBlocks(initial), loadError: null };
@@ -320,9 +318,21 @@ export class ProjectStore {
         if (!this.opened) throw new Error("The projects haven't been read yet");
     }
 
+    /**
+     * The projects kept: a draft is only its editor's until it has a block. A
+     * draft whose window closed lives on here unseen, so it takes no name and
+     * no place, and nothing is written of it.
+     */
+    private kept(): Project[] {
+        return [...this.projects.values()].filter((p) => !p.draft);
+    }
+
+    private keptNames(): string[] {
+        return this.kept().map((p) => p.meta.name);
+    }
+
     private writeIndex(): Promise<void> {
-        const kept = [...this.projects.values()].filter((p) => !p.draft).map((p) => p.meta);
-        return this.storage.set({ version: PROJECTS_VERSION, projects: kept }, PROJECTS_FILE);
+        return this.storage.set({ version: PROJECTS_VERSION, projects: this.kept().map((p) => p.meta) }, PROJECTS_FILE);
     }
 
     /** Changes run one at a time, each written before the next. */

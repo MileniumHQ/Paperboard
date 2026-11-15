@@ -4,7 +4,8 @@
 // `service.announce` sends a patch of it the way the daemon delivers one
 // (parsed from JSON: every object in it is new), and the client hands its
 // listeners the merged state and that patch, exactly as serviceClient's
-// state does. Calls answer from that state, and a call can be told to fail. Every
+// state does. Calls answer from that state, or from the real service once it is
+// told to serve them, and a call can be told to fail. Every
 // answer comes a task later, as one over the wire does.
 // first: the contract the page imports is made with the real SDK
 export * from "../../../../packages/paperapi/dist/paperapi.es.js";
@@ -114,6 +115,7 @@ const failing = new Map<CallName, string>();
 const flows = new Map<string, SavedFlows>();
 const calls: { name: CallName; input: unknown }[] = [];
 let projectsMade = 0;
+let served: Record<string, (input: any) => unknown> | null = null;
 
 export const service = {
     /** what the service announces next, as the daemon delivers it */
@@ -125,6 +127,10 @@ export const service = {
     state: (): PanelState => shared,
     /** every call the page made, oldest first */
     calls: (): { name: CallName; input: any }[] => calls,
+    /** from now on the calls are answered by these, the real service's (src/runtime.ts) */
+    serve(handlers: Record<string, (input: any) => unknown>): void {
+        served = handlers;
+    },
     /** the service's call `name` fails with `reason` until told otherwise (null) */
     fail(name: CallName, reason: string | null): void {
         if (reason === null) failing.delete(name);
@@ -141,6 +147,7 @@ async function answer(name: CallName, input: Input): Promise<unknown> {
     await new Promise((resolve) => setTimeout(resolve, 0));
     const reason = failing.get(name);
     if (reason) throw new Error(reason);
+    if (served) return structuredClone(await served[name]!(structuredClone(input)));
     if (name === "loadFlows") return structuredClone(flows.get(input.project!) ?? { workspace: {}, schemas: {} });
     if (name === "saveFlows") {
         flows.set(input.project!, structuredClone(input.flows!));
