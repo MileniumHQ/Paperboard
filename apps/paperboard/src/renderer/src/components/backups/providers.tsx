@@ -77,6 +77,7 @@ export const BACKUP_PROVIDERS: readonly BackupProvider[] = [
     {
         kind: "s3",
         name: "S3 bucket",
+        description: "Save backups to Amazon S3, R2, B2 or your own MinIO",
         fields: [
             { key: "label", label: "Name", placeholder: "Offsite bucket" },
             { key: "endpoint", label: "Server address", placeholder: "https://s3.us-east-1.amazonaws.com" },

@@ -2,6 +2,8 @@
 // a switch that saves to the computer, and forgetting a computer, failed
 // and done, from wherever you are.
 import { afterAll, beforeAll, expect, test } from "bun:test";
+import * as fs from "node:fs";
+import * as path from "node:path";
 import { bootShell, clickText, type Shell } from "./support/shell";
 
 // Holds the shell's calls of one daemon action until the test sends them
@@ -31,7 +33,7 @@ const HOLD_CALLS = `(() => {
 let shell: Shell;
 const rail = (label: string) => `[role=radio][aria-label=${JSON.stringify(label)}]`;
 const LOCAL = rail("This Computer (127.0.0.1)");
-// the switch on the info page in view; every computer keeps its own page
+// the switch on the info page in view
 const PORTS_SWITCH = `[...document.querySelectorAll("[role=switch]")].find((s) => s.offsetParent !== null)`;
 
 beforeAll(async () => {
@@ -73,6 +75,69 @@ test("Refuse taken ports flips at once while it saves, and goes back with why wh
         `document.querySelector("[data-target]").getAttribute("aria-checked") === "true" && document.body.innerText.includes("The setting was not saved")`,
         "the switch back on what the computer kept, with why",
     );
+    expect(page.exceptions).toEqual([]);
+});
+
+// Inventory: Core contracts — what a backup location holds is read as the page opens, not when the app started.
+test("Computer Info counts the backups made since it was last open", async () => {
+    const { page } = shell;
+    const usage = (text: string) => `[...document.querySelectorAll("p, span")].some((e) => e.offsetParent !== null && e.textContent === ${JSON.stringify(text)})`;
+    await openInfo(LOCAL);
+    await page.waitFor(`document.body.innerText.includes("0 B of backups")`, "the empty This Computer location");
+
+    // a panel makes a backup into This Computer while the page is closed
+    await page.click("[role=radio][aria-label^='Home']");
+    await page.waitFor(`!document.body.innerText.includes("of backups")`, "Computer Info left");
+    const dir = path.join(shell.dataDir, "backups", "panels", "dev.paperboard.gameserver");
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, "b-0123456789abcdef.pbbackup"), Buffer.alloc(3 * 1024 * 1024));
+
+    await openInfo(LOCAL);
+    await page.waitFor(`document.body.innerText.includes("3 MB of backups")`, "the backup counted");
+    expect(await page.evaluate(usage("0 B of backups"))).toBe(false);
+    expect(page.exceptions).toEqual([]);
+});
+
+// Inventory: Core contracts — a location that can't be added says why in words, where it is seen.
+test("an S3 server that refuses the connection is named in words, in view of the person at the narrowest window", async () => {
+    const { page } = shell;
+    await page.resize(860, 560);
+    await openInfo(LOCAL);
+    await page.waitFor(`[...document.querySelectorAll("button")].some((b) => b.textContent.includes("Add Location") && b.offsetParent !== null)`, "the Backups section");
+    await clickText(page, "button", "Add Location");
+    await page.waitFor(`document.querySelector("[role=dialog] button[aria-haspopup=listbox]")`, "the provider menu");
+    await page.click("[role=dialog] button[aria-haspopup=listbox]");
+    await page.waitFor(`document.querySelector("[role=option][data-select-value=s3]")?.offsetParent`, "the S3 option");
+    // the menu has finished opening: an option pressed while it grows can miss
+    await page.evaluate(`Promise.all(document.getAnimations().filter((a) => a.effect?.getTiming().iterations !== Infinity).map((a) => a.finished))`);
+    await page.click("[role=option][data-select-value=s3]");
+    await page.waitFor(`[...document.querySelectorAll("[role=dialog] label")].some((l) => l.textContent.trim() === "Server address")`, "the S3 form");
+    const fields: Record<string, string> = {
+        Name: "Garage bucket",
+        "Server address": "http://127.0.0.1:1",
+        Region: "us-east-1",
+        "Bucket name": "backups",
+        "Access key ID": "AKID",
+        "Secret access key": "secret",
+    };
+    for (const [label, value] of Object.entries(fields)) {
+        await page.evaluate(`[...document.querySelectorAll("[role=dialog] label")].find((l) => l.textContent.trim() === ${JSON.stringify(label)}).control.dataset.field = ${JSON.stringify(label)}`);
+        await page.type(`[data-field=${JSON.stringify(label)}]`, value);
+    }
+    await clickText(page, "[role=dialog] label", "Self-hosted server");
+    await clickText(page, "[role=dialog] button", "Add Bucket");
+
+    const said = "Couldn't reach 127.0.0.1:1. Is the server running?";
+    await page.waitFor(`document.querySelector("[role=dialog] [role=alert]")?.textContent === ${JSON.stringify(said)}`, "the refusal, in words");
+    // seen as it is: what is drawn at its middle is the error itself, not the form scrolled over it
+    expect(await page.evaluate(`(() => {
+        const alert = document.querySelector("[role=dialog] [role=alert]");
+        const box = alert.getBoundingClientRect();
+        return alert.contains(document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2));
+    })()`)).toBe(true);
+    await clickText(page, "[role=dialog] button", "Cancel");
+    await page.waitFor(`!document.querySelector("[role=dialog]")`, "the window closed");
+    await page.send("Emulation.clearDeviceMetricsOverride");
     expect(page.exceptions).toEqual([]);
 });
 

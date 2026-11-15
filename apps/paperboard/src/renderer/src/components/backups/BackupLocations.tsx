@@ -1,4 +1,4 @@
-import { type Component, createSignal, For, Show } from "solid-js";
+import { type Component, createEffect, createSignal, For, on, Show } from "solid-js";
 import { PaperButton, PaperCard, PaperFlex, PaperModal, PaperSectionHeader, PaperText, createLatest, createRead } from "@mileniumhq/paperui";
 import { backupLocationLabel, backupLocationsApi, type BackupLocation, errorMessage } from "@mileniumhq/paperapi";
 import { isBrowserShell, shellIpc } from "../../lib/shell";
@@ -10,7 +10,7 @@ import styles from "./BackupLocations.module.css";
 // The Backups section of a computer's Computer Info: the locations its
 // panels can keep backups in, what each holds and has free, adding one, and
 // removing one. Removing a location keeps the backups already there.
-const BackupLocations: Component<{ computerId: string; computerName: string }> = (props) => {
+const BackupLocations: Component<{ computerId: string; computerName: string; shown: boolean }> = (props) => {
     // reconciled by id: a reload keeps each card, and its space line, as it is.
     // A damaged locations file is no list: it is shown with its own recovery action.
     const read = createRead(
@@ -37,6 +37,10 @@ const BackupLocations: Component<{ computerId: string; computerName: string }> =
         setRecoverError("");
         return read.reload();
     };
+    // the page stays mounted while hidden: what a panel backed up meanwhile is counted as it comes back into view
+    createEffect(on(() => props.shown, (shown) => {
+        if (shown) void load();
+    }, { defer: true }));
     const [recovering, setRecovering] = createSignal(false);
     const [adding, setAdding] = createSignal(false);
     const [removing, setRemoving] = createSignal<BackupLocation | null>(null);

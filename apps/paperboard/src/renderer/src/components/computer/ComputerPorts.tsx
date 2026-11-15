@@ -1,4 +1,4 @@
-import { type Component, createSignal, For, Show } from "solid-js";
+import { type Component, createEffect, createSignal, For, on, Show } from "solid-js";
 import { PaperButton, PaperCard, PaperFlex, PaperSectionHeader, PaperSettingItem, PaperSettingList, PaperText, PaperToggle, createRead, createSavedValue } from "@mileniumhq/paperui";
 import { portSettingsApi, type PortPolicy, type PortProtocol, errorMessage } from "@mileniumhq/paperapi";
 
@@ -6,7 +6,7 @@ const PROTOCOL_NAMES: Record<PortProtocol, string> = { tcp: "TCP", udp: "UDP", "
 
 // The Ports section of a computer's Computer Info: the network ports its
 // panels hold, and what happens when one a panel asks for is taken.
-const ComputerPorts: Component<{ computerId: string }> = (props) => {
+const ComputerPorts: Component<{ computerId: string; shown: boolean }> = (props) => {
     const ports = createRead(
         async () => {
             const state = await portSettingsApi.all(props.computerId);
@@ -18,6 +18,10 @@ const ComputerPorts: Component<{ computerId: string }> = (props) => {
         await portSettingsApi.setPolicy(next, props.computerId);
     });
     const [saveError, setSaveError] = createSignal("");
+    // the page stays mounted while hidden: the ports panels took meanwhile are read as it comes back into view
+    createEffect(on(() => props.shown, (shown) => {
+        if (shown) void ports.reload();
+    }, { defer: true }));
 
     const setRefuse = (refuse: boolean) => {
         setSaveError("");

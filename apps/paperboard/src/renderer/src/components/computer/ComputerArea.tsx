@@ -191,6 +191,12 @@ export default function ComputerArea(props: {
                             >
                                 <ComputerSettings
                                     computer={comp}
+                                    shown={
+                                        props.navigation.railMode() === "computer" &&
+                                        activeComputerId() === comp.id &&
+                                        getSelectedTab(comp.id) === "settings" &&
+                                        (!props.navigation.mobile() || props.navigation.mobilePageOpen())
+                                    }
                                     onForget={() => void props.computerDialogs.openForget(comp.id)}
                                     onChangeName={() => props.computerDialogs.openRename(comp.id)}
                                 />

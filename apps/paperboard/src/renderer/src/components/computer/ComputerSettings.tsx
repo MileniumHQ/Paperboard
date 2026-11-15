@@ -14,6 +14,8 @@ import { DAEMON_PORT } from "../../lib/daemonPort";
 
 export interface ComputerSettingsProps {
     computer?: ComputerInfo;
+    /** the page is in view: what it shows is read again each time it comes into view */
+    shown: boolean;
     /** opens the Forget Computer dialog, the same one the rail's menu opens */
     onForget: () => void;
     onChangeName: () => void;
@@ -41,10 +43,10 @@ const ComputerSettings: Component<ComputerSettingsProps> = (props) => {
 
             <PaperFlex direction="column" gap="double" fullWidth>
                 <Show when={props.computer}>
-                    {(computer) => <BackupLocations computerId={computer().id} computerName={computer().name || "This Computer"} />}
+                    {(computer) => <BackupLocations computerId={computer().id} computerName={computer().name || "This Computer"} shown={props.shown} />}
                 </Show>
                 <Show when={props.computer}>
-                    {(computer) => <ComputerPorts computerId={computer().id} />}
+                    {(computer) => <ComputerPorts computerId={computer().id} shown={props.shown} />}
                 </Show>
 
                 <Show when={!isLocal()}>

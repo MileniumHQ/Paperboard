@@ -3,6 +3,7 @@ import { createLatest, PaperButton, PaperCheckbox, PaperFlex, PaperInput, PaperM
 import { isBrowserShell } from "../../lib/shell";
 import { BACKUP_PROVIDERS, LocationLogo, type BackupProvider } from "./providers";
 import { uniqueLocationLabel } from "./locationLabel";
+import { systemErrorWords } from "../../lib/systemErrorWords";
 import { errorMessage } from "@mileniumhq/paperapi";
 
 // Adding a backup location: pick a provider from the dropdown, then fill in
@@ -65,7 +66,7 @@ const AddLocationModal: Component<{
             close();
             props.onAdded();
         } catch (err) {
-            if (current()) setError(errorMessage(err));
+            if (current()) setError(systemErrorWords(errorMessage(err)));
         } finally {
             if (current()) setBusy(false);
         }
@@ -79,6 +80,12 @@ const AddLocationModal: Component<{
             size="small"
             footer={
                 <>
+                    {/* in the footer, so a refusal is seen wherever the form is scrolled */}
+                    <Show when={error()}>
+                        <PaperFlex flex={1} minWidth={0}>
+                            <PaperText preset="error" role="alert" breakWord>{error()}</PaperText>
+                        </PaperFlex>
+                    </Show>
                     <PaperButton variant="text" disabled={busy() && !provider().cancel} onClick={close}>Cancel</PaperButton>
                     <PaperButton disabled={busy() || blocked()} onClick={() => void submit()}>
                         {busy() ? provider().busyLabel : provider().submitLabel}
@@ -126,9 +133,6 @@ const AddLocationModal: Component<{
                         />
                     )}
                 </For>
-                <Show when={error()}>
-                    <PaperText preset="error">{error()}</PaperText>
-                </Show>
             </PaperFlex>
         </PaperModal>
     );
