@@ -99,48 +99,55 @@ describe("the pages' server", () => {
     });
 });
 
-/** The next event on a page's change stream, or null when none comes within `ms`. */
-function nextChange(port: number, name: string, ms: number, opened: () => void): Promise<string | null> {
-    return new Promise((ok, fail) => {
-        const req = http.request({ host: "127.0.0.1", port, path: "/__paperboard/changes", headers: { host: `${name}.localhost:${port}` } }, (res) => {
-            let body = "";
-            let said = false;
-            res.setEncoding("utf8").on("data", (d) => {
-                body += d;
-                if (!said && body.includes("following")) {
-                    said = true;
-                    opened();
-                }
-                const event = body.match(/^data: (.+)$/m);
-                if (event) {
-                    clearTimeout(timer);
-                    req.destroy();
-                    ok(event[1]!);
-                }
+/** A page's change stream: open once it's following, each event as it comes, and all of them once it ends. */
+function changes(port: number, name: string) {
+    let opened!: () => void;
+    let next: ((event: string) => void) | null = null;
+    const events: string[] = [];
+    const stream = {
+        opened: new Promise<void>((ok) => (opened = ok)),
+        /** the next event */
+        next: () => new Promise<string>((ok) => (next = ok)),
+        ended: new Promise<string[]>((ok, fail) => {
+            const req = http.request({ host: "127.0.0.1", port, path: "/__paperboard/changes", headers: { host: `${name}.localhost:${port}` } }, (res) => {
+                let body = "";
+                res.setEncoding("utf8").on("data", (d) => {
+                    body += d;
+                    if (body.includes("following")) opened();
+                    for (let m = body.match(/^data: (.+)\n\n/m); m; m = body.match(/^data: (.+)\n\n/m)) {
+                        body = body.slice(m.index! + m[0].length);
+                        events.push(m[1]!);
+                        next?.(m[1]!);
+                        next = null;
+                    }
+                });
+                res.on("end", () => ok(events));
             });
-        });
-        const timer = setTimeout(() => {
-            req.destroy();
-            ok(null);
-        }, ms);
-        req.on("error", (e) => (e.message.includes("socket hang up") ? undefined : fail(e)));
-        req.end();
-    });
+            req.on("error", fail);
+            req.end();
+        }),
+    };
+    return stream;
 }
 
 describe("pages", () => {
     test("every HTML file is sent with the script that reloads it, and a change to its files says so", async () => {
-        const { port, home } = await setup();
+        const { pages, port, home } = await setup();
         const page = await get(port, "/", { host: `planner.localhost:${port}` });
         expect(page.body.startsWith("<script>")).toBe(true);
         expect(page.body).toContain('new EventSource("/__paperboard/changes")');
         const dir = path.join(home.root, "Pages", "planner");
-        // an install's files are no change of the page's
+        // an install's files are no change of the page's: another page changed after them is told, and the page's stream ends with nothing
         fs.mkdirSync(path.join(dir, "node_modules", "left-pad"), { recursive: true });
-        const quiet = nextChange(port, "planner", 600, () => setTimeout(() => fs.writeFileSync(path.join(dir, "node_modules", "left-pad", "index.js"), "x"), 50));
-        expect(await quiet).toBeNull();
-        const changed = nextChange(port, "planner", 3000, () => setTimeout(() => fs.writeFileSync(path.join(dir, "index.html"), "<h1>v2</h1>"), 50));
-        expect(await changed).toBe("changed");
+        const planner = changes(port, "planner");
+        const other = changes(port, "other");
+        await Promise.all([planner.opened, other.opened]);
+        const told = other.next();
+        fs.writeFileSync(path.join(dir, "node_modules", "left-pad", "index.js"), "x");
+        fs.writeFileSync(path.join(home.root, "Pages", "other", "index.html"), "<h1>v2</h1>");
+        expect(await told).toBe("changed");
+        await pages.remove("planner");
+        expect(await planner.ended).toEqual([]);
     });
 
     test("~/Apps from before becomes ~/Pages, and a page already there by the same name is never written over", async () => {

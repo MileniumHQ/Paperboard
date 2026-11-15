@@ -411,7 +411,8 @@ describe("brain failures", () => {
                 await new Promise((r) => setTimeout(r, 20));
             } };
             await expect(askClaudeModels(slowWrite, { command: quits, env: {}, cwd: path.join(root, "models") })).rejects.toThrow("Claude ended before it listed its models (exit 0): no config");
-            await new Promise((r) => setTimeout(r, 50));
+            // the rejection happened while the write was pending; a rejection left unhandled is reported once the task it was in has run
+            await new Promise((r) => setImmediate(r));
         } finally {
             process.off("unhandledRejection", note);
         }
