@@ -1,8 +1,9 @@
-import { For, Match, Show, Switch, createSignal } from "solid-js";
-import { PaperButton, PaperCard, PaperCollapsible, PaperFlex, PaperIcon, PaperQuote, PaperText } from "@mileniumhq/paperui";
+import { For, Match, Switch } from "solid-js";
+import { PaperButton, PaperCard, PaperCollapsible, PaperFlex, PaperIcon, PaperText } from "@mileniumhq/paperui";
 import type { AccessEntry, AccessItem } from "../contract";
 import type { Agent } from "../lib/agent";
-import { errorText } from "../lib/failure";
+import { createAction } from "../lib/action";
+import RequestEnd from "./RequestEnd";
 
 /** what a folder or command lets the agent do, in the user's words */
 export const itemText = (item: AccessItem) =>
@@ -22,20 +23,9 @@ function countText(items: AccessItem[]): string {
 /** The agent asking for folders and commands on the user's own computer: once, for good, or not at all. */
 export default function AccessRequest(props: { agent: Agent; entry: AccessEntry; name: string }) {
     const e = () => props.entry;
-    const [error, setError] = createSignal<string | null>(null);
-    const [busy, setBusy] = createSignal(false);
+    const { busy, error, run } = createAction();
 
-    const answer = (how: "once" | "always" | "decline") => {
-        setError(null);
-        setBusy(true);
-        props.agent
-            .answerAccess(e().id, how)
-            .then(
-                () => undefined,
-                (err) => setError(errorText(err)),
-            )
-            .finally(() => setBusy(false));
-    };
+    const answer = (how: "once" | "always" | "decline") => void run("Answer not sent", () => props.agent.answerAccess(e().id, how));
 
     return (
         <PaperFlex direction="row">
@@ -97,18 +87,8 @@ export default function AccessRequest(props: { agent: Agent; entry: AccessEntry;
                             <PaperText preset="hint">Always allowed. Take it back any time on the Access page.</PaperText>
                         </PaperFlex>
                     </Match>
-                    <Match when={e().status === "declined"}>
-                        <PaperText preset="hint">You said no.</PaperText>
-                    </Match>
-                    <Match when={e().status === "expired"}>
-                        <PaperText preset="hint">This request lapsed. {props.name} can ask again.</PaperText>
-                    </Match>
                 </Switch>
-                <Show when={error()}>
-                    <PaperQuote variant="danger" icon="error" title="Answer not sent" role="alert">
-                        {error()}
-                    </PaperQuote>
-                </Show>
+                <RequestEnd entry={e()} name={props.name} error={error()} />
             </PaperCard>
         </PaperFlex>
     );

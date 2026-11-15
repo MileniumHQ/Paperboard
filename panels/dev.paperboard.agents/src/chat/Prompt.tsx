@@ -1,8 +1,9 @@
 import { For, Match, Show, Switch, createEffect, createSignal, on } from "solid-js";
-import { PaperButton, PaperCard, PaperFlex, PaperIcon, PaperInput, PaperLoader, PaperQuote, PaperText } from "@mileniumhq/paperui";
+import { PaperButton, PaperCard, PaperFlex, PaperIcon, PaperInput, PaperLoader, PaperText } from "@mileniumhq/paperui";
 import { LIMITS, type PromptEntry } from "../contract";
 import type { Agent } from "../lib/agent";
-import { errorText } from "../lib/failure";
+import { createAction } from "../lib/action";
+import RequestEnd from "./RequestEnd";
 import type { SignInDraft } from "./SignIn";
 
 /** The servers a request's secret fields are saved for, as one phrase: "Linear and GitHub". */
@@ -19,8 +20,7 @@ function serversText(entry: PromptEntry): string {
 export default function Prompt(props: { agent: Agent; entry: PromptEntry; name: string; draft: SignInDraft; onDone: () => void }) {
     const e = () => props.entry;
     const [values, setValues] = createSignal<string[]>(props.draft.values.length ? props.draft.values : e().fields.map(() => ""));
-    const [error, setError] = createSignal<string | null>(null);
-    const [busy, setBusy] = createSignal(false);
+    const { busy, error, run } = createAction();
     const secrets = () => e().fields.some((f) => f.secret);
 
     const setValue = (i: number, v: string) => {
@@ -30,14 +30,7 @@ export default function Prompt(props: { agent: Agent; entry: PromptEntry; name: 
         props.draft.values = next;
     };
 
-    const answer = (run: () => Promise<unknown>) => {
-        setError(null);
-        setBusy(true);
-        run().then(
-            () => undefined,
-            (err) => setError(errorText(err)),
-        ).finally(() => setBusy(false));
-    };
+    const answer = (send: () => Promise<unknown>) => void run("Answer not sent", send);
     // however it ended (sent, declined, lapsed, failed), what was typed goes with it
     createEffect(
         on(
@@ -113,23 +106,8 @@ export default function Prompt(props: { agent: Agent; entry: PromptEntry; name: 
                             <PaperText preset="hint">{secrets() ? `Sent. Keys are saved for ${serversText(e())}.` : "Sent."}</PaperText>
                         </PaperFlex>
                     </Match>
-                    <Match when={e().status === "declined"}>
-                        <PaperText preset="hint">You said no.</PaperText>
-                    </Match>
-                    <Match when={e().status === "expired"}>
-                        <PaperText preset="hint">This request lapsed. {props.name} can ask again.</PaperText>
-                    </Match>
-                    <Match when={e().status === "failed"}>
-                        <PaperQuote variant="danger" icon="error" title="Not sent" role="alert">
-                            {e().error}. {props.name} was told and can ask again.
-                        </PaperQuote>
-                    </Match>
                 </Switch>
-                <Show when={error()}>
-                    <PaperQuote variant="danger" icon="error" title="Answer not sent" role="alert">
-                        {error()}
-                    </PaperQuote>
-                </Show>
+                <RequestEnd entry={e()} name={props.name} failed="Not sent" error={error()} />
             </PaperCard>
         </PaperFlex>
     );

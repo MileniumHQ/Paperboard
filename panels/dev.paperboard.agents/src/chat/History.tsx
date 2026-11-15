@@ -6,16 +6,15 @@ import { For, Match, Show, Switch, createEffect, createSignal, on } from "solid-
 import { PaperButton, PaperEmptyState, PaperFlex, PaperIcon, PaperList, PaperListItem, PaperLoader, PaperModal, PaperQuote, PaperText } from "@mileniumhq/paperui";
 import { CURRENT_CONVERSATION as CURRENT, type PastConversation } from "../contract";
 import type { Agent } from "../lib/agent";
-import { createLatest } from "../lib/action";
-import { errorText, failure, type Failure } from "../lib/failure";
+import { createAction, createLatest } from "../lib/action";
+import { errorText, type Failure } from "../lib/failure";
 const when = (at: number) => new Date(at).toLocaleString([], { dateStyle: "medium", timeStyle: "short" });
 
 export default function History(props: { agent: Agent; open: boolean; onClose: () => void }) {
     const [list, setList] = createSignal<{ current: PastConversation | null; past: PastConversation[] } | null>(null);
     const [readError, setReadError] = createSignal<string | null>(null);
-    const [openError, setOpenError] = createSignal<Failure | null>(null);
-    const [deleteError, setDeleteError] = createSignal<string | null>(null);
-    const [busy, setBusy] = createSignal(false);
+    const { busy, error: openError, setError: setOpenError, run } = createAction();
+    const [deleteError, setDeleteError] = createSignal<Failure | null>(null);
     const [deleting, setDeleting] = createSignal<PastConversation | null>(null);
     // the current one is marked; one being opened is, until it's open or wasn't
     const [chosen, setChosen] = createSignal(CURRENT);
@@ -42,17 +41,8 @@ export default function History(props: { agent: Agent; open: boolean; onClose: (
 
     const reopen = async (c: PastConversation) => {
         setChosen(c.id);
-        setBusy(true);
-        setOpenError(null);
-        try {
-            await props.agent.openConversation(c.id);
-            props.onClose();
-        } catch (e) {
-            setOpenError(failure("Conversation not opened", e));
-        } finally {
-            setChosen(CURRENT);
-            setBusy(false);
-        }
+        if (await run("Conversation not opened", () => props.agent.openConversation(c.id))) props.onClose();
+        setChosen(CURRENT);
     };
 
     const askDelete = (c: PastConversation) => {
@@ -60,19 +50,17 @@ export default function History(props: { agent: Agent; open: boolean; onClose: (
         setDeleting(c);
     };
 
-    const remove = async () => {
+    const remove = () => {
         const c = deleting()!;
-        setBusy(true);
-        setDeleteError(null);
-        try {
-            await props.agent.deleteConversation(c.id);
-            setDeleting(null);
-            setList((l) => l && { ...l, past: l.past.filter((x) => x.id !== c.id) });
-        } catch (e) {
-            setDeleteError(errorText(e));
-        } finally {
-            setBusy(false);
-        }
+        return run(
+            "Conversation not deleted",
+            async () => {
+                await props.agent.deleteConversation(c.id);
+                setDeleting(null);
+                setList((l) => l && { ...l, past: l.past.filter((x) => x.id !== c.id) });
+            },
+            setDeleteError,
+        );
     };
 
     return (
@@ -172,9 +160,11 @@ export default function History(props: { agent: Agent; open: boolean; onClose: (
                 <PaperFlex gap="full">
                     <PaperText preset="text">“{deleting()?.title}” is deleted for good. What the agent remembers from it stays in its memory.</PaperText>
                     <Show when={deleteError()}>
-                        <PaperQuote variant="danger" icon="error" title="Conversation not deleted" role="alert">
-                            {deleteError()}
-                        </PaperQuote>
+                        {(shown) => (
+                            <PaperQuote variant="danger" icon="error" title={shown().title} role="alert">
+                                {shown().message}
+                            </PaperQuote>
+                        )}
                     </Show>
                 </PaperFlex>
             </PaperModal>

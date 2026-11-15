@@ -3,6 +3,8 @@ import { PaperButton, PaperCard, PaperFlex, PaperIcon, PaperInput, PaperLoader, 
 import { LIMITS, type SignInEntry } from "../contract";
 import type { Agent } from "../lib/agent";
 import { errorText } from "../lib/failure";
+import { createAction } from "../lib/action";
+import RequestEnd from "./RequestEnd";
 import styles from "./SignIn.module.css";
 
 /**
@@ -20,8 +22,7 @@ export default function SignIn(props: { agent: Agent; entry: SignInEntry; name: 
     const [values, setValues] = createSignal<string[]>(props.draft.values.length ? props.draft.values : e().fields.map(() => ""));
     const [image, setImage] = createSignal<string | null>(props.draft.image);
     const [shotError, setShotError] = createSignal<string | null>(null);
-    const [error, setError] = createSignal<string | null>(null);
-    const [busy, setBusy] = createSignal(false);
+    const { busy, error, run } = createAction();
 
     const loadShot = () => {
         setShotError(null);
@@ -41,18 +42,11 @@ export default function SignIn(props: { agent: Agent; entry: SignInEntry; name: 
         props.draft.values = next;
     };
 
-    const answer = (run: () => Promise<unknown>) => {
-        setError(null);
-        setBusy(true);
-        run().then(
-            () => undefined,
-            (err) => setError(errorText(err)),
-        ).finally(() => {
-            setBusy(false);
-            // whatever happened, the values go: the request is used once
-            setValues(e().fields.map(() => ""));
-            props.onDone();
-        });
+    const answer = async (send: () => Promise<unknown>) => {
+        await run("Answer not sent", send);
+        // whatever happened, the values go: the request is used once
+        setValues(e().fields.map(() => ""));
+        props.onDone();
     };
 
     return (
@@ -98,7 +92,7 @@ export default function SignIn(props: { agent: Agent; entry: SignInEntry; name: 
                         <form
                             onSubmit={(ev) => {
                                 ev.preventDefault();
-                                answer(() => props.agent.signIn(e().id, values()));
+                                void answer(() => props.agent.signIn(e().id, values()));
                             }}
                         >
                             <PaperFlex gap="half">
@@ -118,7 +112,7 @@ export default function SignIn(props: { agent: Agent; entry: SignInEntry; name: 
                                     )}
                                 </For>
                                 <PaperFlex direction="row" justify="flex-end" gap="half">
-                                    <PaperButton variant="text" type="button" disabled={busy()} onClick={() => answer(() => props.agent.declineSignIn(e().id))}>
+                                    <PaperButton variant="text" type="button" disabled={busy()} onClick={() => void answer(() => props.agent.declineSignIn(e().id))}>
                                         Not now
                                     </PaperButton>
                                     <PaperButton type="submit" disabled={busy()}>
@@ -139,23 +133,8 @@ export default function SignIn(props: { agent: Agent; entry: SignInEntry; name: 
                             </PaperText>
                         </PaperFlex>
                     </Match>
-                    <Match when={e().status === "declined"}>
-                        <PaperText preset="hint">You said no.</PaperText>
-                    </Match>
-                    <Match when={e().status === "expired"}>
-                        <PaperText preset="hint">This request lapsed. {props.name} can ask again.</PaperText>
-                    </Match>
-                    <Match when={e().status === "failed"}>
-                        <PaperQuote variant="danger" icon="error" title="Not signed in" role="alert">
-                            {e().error}. {props.name} was told and can ask again.
-                        </PaperQuote>
-                    </Match>
                 </Switch>
-                <Show when={error()}>
-                    <PaperQuote variant="danger" icon="error" title="Answer not sent" role="alert">
-                        {error()}
-                    </PaperQuote>
-                </Show>
+                <RequestEnd entry={e()} name={props.name} failed="Not signed in" error={error()} />
             </PaperCard>
         </PaperFlex>
     );

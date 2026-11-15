@@ -22,7 +22,7 @@ import {
 import type { MemoryList } from "../contract";
 import type { Agent } from "../lib/agent";
 import { holdPage } from "../lib/pageHold";
-import { createLatest } from "../lib/action";
+import { createAction, createLatest } from "../lib/action";
 import { errorText } from "../lib/failure";
 
 export default function Memories(props: { agent: Agent }) {
@@ -87,18 +87,14 @@ export default function Memories(props: { agent: Agent }) {
 }
 
 function Facts(props: { agent: Agent; facts: MemoryList["facts"] }) {
-    const [error, setError] = createSignal<string | null>(null);
+    const { error, run } = createAction();
     // a refused forget says why; the list stays as the service has it
     // a second press while the first is on its way is the same forget, not a refused one
     const forgetting = new Set<string>();
     const forget = (id: string) => {
         if (forgetting.has(id)) return;
         forgetting.add(id);
-        setError(null);
-        props.agent
-            .deleteFact(id)
-            .catch((e) => setError(errorText(e)))
-            .finally(() => forgetting.delete(id));
+        void run("Fact not forgotten", () => props.agent.deleteFact(id)).then(() => forgetting.delete(id));
     };
 
     return (
@@ -121,9 +117,11 @@ function Facts(props: { agent: Agent; facts: MemoryList["facts"] }) {
                 )}
             </For>
             <Show when={error()}>
-                <PaperQuote variant="danger" icon="error" title="Fact not forgotten" role="alert">
-                    {error()}
-                </PaperQuote>
+                {(shown) => (
+                    <PaperQuote variant="danger" icon="error" title={shown().title} role="alert">
+                        {shown().message}
+                    </PaperQuote>
+                )}
             </Show>
         </PaperFlex>
     );
@@ -132,8 +130,7 @@ function Facts(props: { agent: Agent; facts: MemoryList["facts"] }) {
 function Note(props: { agent: Agent; noteKey: string; onDone: () => void }) {
     const [note, setNote] = createSignal<{ when: string; body: string } | null>(null);
     const [readError, setReadError] = createSignal<string | null>(null);
-    const [error, setError] = createSignal<string | null>(null);
-    const [forgetting, setForgetting] = createSignal(false);
+    const { busy: forgetting, error, run } = createAction();
 
     const load = async () => {
         setReadError(null);
@@ -146,16 +143,7 @@ function Note(props: { agent: Agent; noteKey: string; onDone: () => void }) {
     void load();
 
     const forget = async () => {
-        setForgetting(true);
-        setError(null);
-        try {
-            await props.agent.deleteNote(props.noteKey);
-            props.onDone();
-        } catch (e) {
-            setError(errorText(e));
-        } finally {
-            setForgetting(false);
-        }
+        if (await run("Note not forgotten", () => props.agent.deleteNote(props.noteKey))) props.onDone();
     };
 
     return (
@@ -184,9 +172,11 @@ function Note(props: { agent: Agent; noteKey: string; onDone: () => void }) {
                         </PaperText>
                         <PaperMarkdown text={n().body} />
                         <Show when={error()}>
-                            <PaperQuote variant="danger" icon="error" title="Note not forgotten" role="alert">
-                                {error()}
-                            </PaperQuote>
+                            {(shown) => (
+                                <PaperQuote variant="danger" icon="error" title={shown().title} role="alert">
+                                    {shown().message}
+                                </PaperQuote>
+                            )}
                         </Show>
                         <PaperFlex direction="row">
                             <PaperButton variant="danger" disabled={forgetting()} onClick={() => void forget()}>

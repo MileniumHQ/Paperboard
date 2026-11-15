@@ -1,10 +1,10 @@
 // A page the agent showed the user: its picture, its name and what it's for,
 // and Open, which puts it beside the chat. It is never a link.
 
-import { Show, createSignal } from "solid-js";
+import { Show } from "solid-js";
 import { PaperButton, PaperCard, PaperFlex, PaperIcon, PaperQuote, PaperText } from "@mileniumhq/paperui";
 import type { PageEntry } from "../contract";
-import { failure, type Failure } from "../lib/failure";
+import { createAction } from "../lib/action";
 import type { Launcher } from "./launcher";
 import Picture from "./Picture";
 import styles from "./PageCard.module.css";
@@ -12,17 +12,8 @@ import styles from "./PageCard.module.css";
 export default function PageCard(props: { entry: PageEntry; pages: Launcher }) {
     const e = () => props.entry;
     const there = () => props.pages.exists(e().app);
-    const [error, setError] = createSignal<Failure | null>(null);
-    const [busy, setBusy] = createSignal(false);
-
-    const open = () => {
-        setError(null);
-        setBusy(true);
-        props.pages
-            .open(e().app)
-            .catch((err) => setError(failure("Page not opened", err)))
-            .finally(() => setBusy(false));
-    };
+    const { busy, error, setError, run } = createAction();
+    const open = () => void run("Page not opened", () => props.pages.open(e().app));
 
     return (
         <PaperFlex direction="row">

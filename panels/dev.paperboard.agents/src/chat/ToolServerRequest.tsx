@@ -1,27 +1,17 @@
-import { For, Match, Show, Switch, createSignal } from "solid-js";
-import { PaperButton, PaperCard, PaperFlex, PaperIcon, PaperQuote, PaperText } from "@mileniumhq/paperui";
+import { For, Match, Switch } from "solid-js";
+import { PaperButton, PaperCard, PaperFlex, PaperIcon, PaperText } from "@mileniumhq/paperui";
 import type { ToolServerEntry } from "../contract";
 import type { Agent } from "../lib/agent";
-import { errorText } from "../lib/failure";
+import { createAction } from "../lib/action";
+import RequestEnd from "./RequestEnd";
 
 /** The agent asking to run a program on the user's computer as one of its tool servers. Nothing runs until it's allowed. */
 export default function ToolServerRequest(props: { agent: Agent; entry: ToolServerEntry; name: string }) {
     const e = () => props.entry;
-    const [error, setError] = createSignal<string | null>(null);
-    const [busy, setBusy] = createSignal(false);
+    const { busy, error, run } = createAction();
     const title = () => (e().change ? `${props.name} wants to change what ${e().server} runs` : `${props.name} wants to run ${e().server} on your computer`);
 
-    const answer = (allow: boolean) => {
-        setError(null);
-        setBusy(true);
-        props.agent
-            .answerToolServer(e().id, allow)
-            .then(
-                () => undefined,
-                (err) => setError(errorText(err)),
-            )
-            .finally(() => setBusy(false));
-    };
+    const answer = (allow: boolean) => void run("Answer not sent", () => props.agent.answerToolServer(e().id, allow));
 
     return (
         <PaperFlex direction="row">
@@ -67,23 +57,8 @@ export default function ToolServerRequest(props: { agent: Agent; entry: ToolServ
                             <PaperText preset="hint">Allowed. Switch it off or remove it any time on the Tools page.</PaperText>
                         </PaperFlex>
                     </Match>
-                    <Match when={e().status === "declined"}>
-                        <PaperText preset="hint">You said no.</PaperText>
-                    </Match>
-                    <Match when={e().status === "expired"}>
-                        <PaperText preset="hint">This request lapsed. {props.name} can ask again.</PaperText>
-                    </Match>
-                    <Match when={e().status === "failed"}>
-                        <PaperQuote variant="danger" icon="error" title="Not added" role="alert">
-                            {e().error}. {props.name} was told and can ask again.
-                        </PaperQuote>
-                    </Match>
                 </Switch>
-                <Show when={error()}>
-                    <PaperQuote variant="danger" icon="error" title="Answer not sent" role="alert">
-                        {error()}
-                    </PaperQuote>
-                </Show>
+                <RequestEnd entry={e()} name={props.name} failed="Not added" error={error()} />
             </PaperCard>
         </PaperFlex>
     );

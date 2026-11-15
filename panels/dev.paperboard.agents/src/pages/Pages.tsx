@@ -5,7 +5,8 @@
 import { For, Match, Show, Switch, createSignal } from "solid-js";
 import { PaperButton, PaperEmptyState, PaperFlex, PaperIcon, PaperList, PaperListItem, PaperLoader, PaperModal, PaperQuote, PaperText } from "@mileniumhq/paperui";
 import type { PageInfo } from "../contract";
-import { errorText, failure, type Failure } from "../lib/failure";
+import { createAction } from "../lib/action";
+import type { Failure } from "../lib/failure";
 import type { Launcher } from "./launcher";
 import Picture from "./Picture";
 
@@ -13,26 +14,16 @@ import Picture from "./Picture";
 const own = (e: PointerEvent) => e.stopPropagation();
 
 export default function Pages(props: { pages: Launcher; name: string; onOpened: () => void }) {
-    const [openError, setOpenError] = createSignal<Failure | null>(null);
-    const [deleteError, setDeleteError] = createSignal<string | null>(null);
-    const [busy, setBusy] = createSignal(false);
+    const { busy, error: openError, run } = createAction();
+    const [deleteError, setDeleteError] = createSignal<Failure | null>(null);
     const [deleting, setDeleting] = createSignal<PageInfo | null>(null);
     // one being opened is marked until it's open (then it's the one shown) or wasn't
     const [chosen, setChosen] = createSignal<string | null>(null);
 
     const open = async (name: string) => {
         setChosen(name);
-        setBusy(true);
-        setOpenError(null);
-        try {
-            await props.pages.open(name);
-            props.onOpened();
-        } catch (e) {
-            setOpenError(failure("Page not opened", e));
-        } finally {
-            setChosen(null);
-            setBusy(false);
-        }
+        if (await run("Page not opened", () => props.pages.open(name))) props.onOpened();
+        setChosen(null);
     };
 
     const askDelete = (a: PageInfo) => {
@@ -40,18 +31,15 @@ export default function Pages(props: { pages: Launcher; name: string; onOpened: 
         setDeleting(a);
     };
 
-    const remove = async () => {
-        setBusy(true);
-        setDeleteError(null);
-        try {
-            await props.pages.remove(deleting()!.name);
-            setDeleting(null);
-        } catch (e) {
-            setDeleteError(errorText(e));
-        } finally {
-            setBusy(false);
-        }
-    };
+    const remove = () =>
+        run(
+            "Page not deleted",
+            async () => {
+                await props.pages.remove(deleting()!.name);
+                setDeleting(null);
+            },
+            setDeleteError,
+        );
 
     return (
         <>
@@ -142,9 +130,11 @@ export default function Pages(props: { pages: Launcher; name: string; onOpened: 
                         “{deleting()?.title}” and its folder, ~/Pages/{deleting()?.name}, are deleted. A checkpoint from before now still has it.
                     </PaperText>
                     <Show when={deleteError()}>
-                        <PaperQuote variant="danger" icon="error" title="Page not deleted" role="alert">
-                            {deleteError()}
-                        </PaperQuote>
+                        {(shown) => (
+                            <PaperQuote variant="danger" icon="error" title={shown().title} role="alert">
+                                {shown().message}
+                            </PaperQuote>
+                        )}
                     </Show>
                 </PaperFlex>
             </PaperModal>
