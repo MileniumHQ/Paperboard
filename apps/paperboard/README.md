@@ -30,7 +30,7 @@ bun run dev:browser                        # from source
 Paperboard --browser                       # an installed build
 Paperboard --browser --web-port=4700       # pin the port (default for --browser and dev builds: any free port)
 ```
-Paperboard serves the app at `http://localhost:<port>` and prints a sign-in link. It works once, for five minutes; run `--browser` again (the running app prints a new one) when you need another.
+Paperboard serves the app at `http://localhost:<port>` and prints a sign-in link. A throwaway data directory has no panels: link this checkout's first (`PAPERBOARD_DIR=<dir> bun run link:panels` from the repo root, after `bun run build:panels`). Vite's reload socket goes through the same port, so edits to the shell reload the tab. It works once, for five minutes; run `--browser` again (the running app prints a new one) when you need another.
 
 - The installed app serves on port 45470 for `--web` and Open in Browser, so bookmarks keep working.
 - Panels are served from `/_panel/<computer>/<panel>/` on the same origin, as on Paperboard web.

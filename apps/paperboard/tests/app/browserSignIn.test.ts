@@ -7,6 +7,7 @@ import * as http from "node:http";
 import * as path from "node:path";
 import { sessionCookieName, startBrowserHost, type BrowserHost } from "../../src/main/browserHost";
 import { BrowserSessions, SESSION_TTL_MS, SIGN_IN_LINK_TTL_MS } from "../../src/main/browserSessions";
+import { WebSocket, WebSocketServer } from "ws";
 import { tempDir } from "../platform/app/support/temp";
 
 const SECRET = "daemon-master-token";
@@ -145,5 +146,71 @@ describe("a signed-in browser", () => {
         expect(clocked.isSignedIn(signed.token)).toBe(true);
         now += SESSION_TTL_MS;
         expect(clocked.isSignedIn(signed.token)).toBe(false);
+    });
+});
+
+// `--browser` from source: the shell comes from Vite's dev server, and Vite's
+// client in the page opens its reload socket on the page's own origin. A
+// socket the host never answers leaves the page deaf to "reload", so a
+// shell loaded while Vite re-bundles its dependencies stays blank.
+describe("browser mode from source", () => {
+    let dev: http.Server;
+    let devHost: BrowserHost;
+
+    beforeAll(async () => {
+        const sockets = new WebSocketServer({ noServer: true });
+        dev = http.createServer((_req, res) => res.end("<p>dev shell</p>"));
+        dev.on("upgrade", (req, socket, head) => {
+            sockets.handleUpgrade(req, socket, head, (ws) => {
+                ws.send(`host ${req.headers.host}, cookie "${req.headers.cookie ?? ""}"`);
+                ws.on("message", (data) => ws.send(`echo ${data}`));
+            });
+        });
+        await new Promise<void>((resolve) => dev.listen(0, "127.0.0.1", resolve));
+        const devPort = (dev.address() as { port: number }).port;
+        devHost = await startBrowserHost({
+            port: 0,
+            sessions,
+            rendererDevUrl: `http://127.0.0.1:${devPort}`,
+            invoke: {},
+            servePanel: async () => new Response("", { status: 404 }),
+        });
+    });
+
+    afterAll(async () => {
+        await devHost?.close();
+        await new Promise((resolve) => dev?.close(resolve));
+    });
+
+    // what a socket to the host hears: its messages, or "closed" when the host shuts it
+    function talk(cookie?: string): Promise<string[]> {
+        return new Promise((resolve, reject) => {
+            const heard: string[] = [];
+            const ws = new WebSocket(`ws://127.0.0.1:${devHost.port}/?token=t`, "vite-hmr", {
+                headers: { host: `localhost:${devHost.port}`, origin: devHost.origin, ...(cookie ? { cookie } : {}) },
+            });
+            ws.on("open", () => ws.send("ping"));
+            ws.on("message", (data) => {
+                heard.push(String(data));
+                if (heard.length === 2) ws.close();
+            });
+            ws.on("close", () => resolve(heard));
+            ws.on("error", (err) => (heard.length ? reject(err) : resolve(["closed"])));
+        });
+    }
+
+    test("passes Vite's reload socket through to the dev server, without the session cookie", async () => {
+        const link = new URL(devHost.signInUrl());
+        const answer = await new Promise<http.IncomingMessage>((resolve, reject) => {
+            http.get({ host: "127.0.0.1", port: devHost.port, path: link.pathname + link.search, headers: { host: `localhost:${devHost.port}` } }, resolve).on("error", reject);
+        });
+        answer.resume();
+        const cookie = String(answer.headers["set-cookie"]).split(";")[0]!;
+        const devPort = (dev.address() as { port: number }).port;
+        expect(await talk(cookie)).toEqual([`host 127.0.0.1:${devPort}, cookie ""`, "echo ping"]);
+    });
+
+    test("refuses the socket to a browser it didn't sign in", async () => {
+        expect(await talk()).toEqual(["closed"]);
     });
 });

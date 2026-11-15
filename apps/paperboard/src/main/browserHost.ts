@@ -18,7 +18,7 @@
 // defense), and the shell bridge must carry the exact shell Origin, so
 // another site's page cannot drive it even with the cookie attached.
 import * as http from "http";
-import type { Readable } from "stream";
+import type { Duplex, Readable } from "stream";
 import { pipeline } from "stream/promises";
 import { PANEL_PATH_ROOT, parsePanelPath } from "@mileniumhq/paperapi/panelPath";
 import { logger } from "../../papercrane/logger";
@@ -331,24 +331,23 @@ export function startBrowserHost(opts: BrowserHostOptions): Promise<BrowserHost>
         res.end(file.data);
     };
 
+    // the request path is appended to the dev origin as text: URL
+    // resolution would let "//other-host/x" or an absolute-form request
+    // line pick the upstream host
+    const devTarget = (req: http.IncomingMessage, devUrl: string): URL => {
+        const rawPath = req.url || "/";
+        if (!rawPath.startsWith("/")) throw new HttpError(400, "Malformed request path");
+        return new URL(new URL(devUrl).origin + rawPath);
+    };
+    // the dev server checks Host; the session cookie stays here
+    const devHeaders = (req: http.IncomingMessage, target: URL) => ({ ...req.headers, host: target.host, cookie: "" });
+
     const proxyRenderer = (req: http.IncomingMessage, res: http.ServerResponse, devUrl: string) =>
         new Promise<void>((resolve, reject) => {
-            // the request path is appended to the dev origin as text: URL
-            // resolution would let "//other-host/x" or an absolute-form
-            // request line pick the upstream host
-            const rawPath = req.url || "/";
-            if (!rawPath.startsWith("/")) {
-                reject(new HttpError(400, "Malformed request path"));
-                return;
-            }
-            const target = new URL(new URL(devUrl).origin + rawPath);
+            const target = devTarget(req, devUrl);
             const upstream = http.request(
                 target,
-                {
-                    method: "GET",
-                    // the dev server checks Host; the session cookie stays here
-                    headers: { ...req.headers, host: target.host, cookie: "" },
-                },
+                { method: "GET", headers: devHeaders(req, target) },
                 (up) => {
                     res.writeHead(up.statusCode || 502, {
                         ...up.headers,
@@ -360,7 +359,11 @@ export function startBrowserHost(opts: BrowserHostOptions): Promise<BrowserHost>
                 },
             );
             upstream.on("error", reject);
-            res.on("close", () => upstream.destroy());
+            // the page went away (a reload): nothing failed, the answer has no reader
+            res.on("close", () => {
+                resolve();
+                upstream.destroy();
+            });
             upstream.end();
         });
 
@@ -456,6 +459,42 @@ export function startBrowserHost(opts: BrowserHostOptions): Promise<BrowserHost>
             }
             sendText(res, status, err?.message || "Internal error");
         });
+    });
+
+    // dev: Vite's HMR socket. The page's client opens it on this origin
+    // first and waits there; unanswered, it never hears "reload", so a shell
+    // loaded while Vite re-bundles its dependencies stays blank.
+    server.on("upgrade", (req: http.IncomingMessage, socket: Duplex, head: Buffer) => {
+        socket.on("error", () => socket.destroy());
+        const host = String(req.headers.host || "").toLowerCase();
+        if (!opts.rendererDevUrl || host !== shellHost || !signedIn(req) || !req.url?.startsWith("/")) {
+            socket.destroy();
+            return;
+        }
+        const target = devTarget(req, opts.rendererDevUrl);
+        const upstream = http.request(target, { method: "GET", headers: devHeaders(req, target) });
+        upstream.on("upgrade", (answer, upSocket, upHead) => {
+            const lines = [`HTTP/1.1 ${answer.statusCode} ${answer.statusMessage}`];
+            for (let i = 0; i < answer.rawHeaders.length; i += 2) lines.push(`${answer.rawHeaders[i]}: ${answer.rawHeaders[i + 1]}`);
+            socket.write(`${lines.join("\r\n")}\r\n\r\n`);
+            if (upHead.length) socket.write(upHead);
+            if (head.length) upSocket.write(head);
+            upSocket.on("error", () => socket.destroy());
+            upSocket.on("close", () => socket.destroy());
+            socket.on("close", () => upSocket.destroy());
+            upSocket.pipe(socket).pipe(upSocket);
+        });
+        // the dev server refused the upgrade, or is gone
+        upstream.on("response", (answer) => {
+            logger.warn(`[BrowserHost] the renderer dev server refused a socket for ${target.pathname}: ${answer.statusCode}`);
+            answer.resume();
+            socket.destroy();
+        });
+        upstream.on("error", (err) => {
+            logger.warn("[BrowserHost] the renderer dev server's socket failed:", err.message);
+            socket.destroy();
+        });
+        upstream.end();
     });
 
     const heartbeat = setInterval(() => {
