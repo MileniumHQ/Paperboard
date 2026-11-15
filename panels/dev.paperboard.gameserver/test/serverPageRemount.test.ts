@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { processApi } from "@mileniumhq/paperapi";
-import { callServer } from "./helpers/serverCall";
+import { serverCalls } from "./helpers/serverCall";
 import { startTestDaemon, type TestDaemon } from "./helpers/crane";
 import { openPage, servePanel } from "./helpers/browser";
 import { installFakeJava } from "./helpers/fakeJava";
@@ -55,9 +55,9 @@ describe("the server page", () => {
             expect(calls(page.sentFrames)).toContain("s-mc/read-game-options");
 
             // a start pushes status and every console line; a config edit pushes settings
-            await callServer("s-mc", "start-server");
+            await serverCalls("s-mc").startServer();
             await page.received((f) => f.includes('"server:s-mc":{"serverStatus":"online"'), "the server's online state");
-            await callServer("s-mc", "update-panel-config", { patch: { ramGB: 3 } });
+            await serverCalls("s-mc").updatePanelConfig({ patch: { ramGB: 3 } });
             await page.received((f) => f.includes('"ramAllocation":3'), "the edited settings");
 
             expect(await page.evaluate(`${ACTIVE}.firstElementChild.dataset.mounted`)).toBe("first");
@@ -78,7 +78,7 @@ describe("the server page", () => {
             expect(page.consoleErrors).toEqual([]);
         } finally {
             await page.close();
-            await callServer("s-mc", "stop-server");
+            await serverCalls("s-mc").stopServer();
             await exited;
             served.stop();
         }

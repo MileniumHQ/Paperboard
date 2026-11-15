@@ -7,21 +7,17 @@ import RustMap from "./Map";
 import Chat from "../../components/Chat";
 import PlayerAvatar from "../../components/PlayerAvatar";
 
-const INFO = "rust-info";
-const LATEST = "rust-latest";
-const INSTALL = "rust-install";
-
 export const rustUI: GameUI = {
     create(ctx) {
         return {
-            setup: (props) => <SteamSetup name="Rust" infoAction={INFO} installAction={INSTALL} onComplete={props.onComplete} />,
+            setup: (props) => <SteamSetup name="Rust" onComplete={props.onComplete} />,
             tab(id) {
                 switch (id) {
                     case "overview": return <RustOverview />;
                     case "chat": return <Chat avatar={(name) => <PlayerAvatar name={name} size="small" />} />;
                     case "players": return <RustPlayers />;
                     case "map": return <RustMap active={ctx.active() === id} />;
-                    case "versions": return <SteamVersions name="Rust" infoAction={INFO} latestAction={LATEST} installAction={INSTALL} />;
+                    case "versions": return <SteamVersions name="Rust" />;
                     default: throw new Error(`Rust tab has no renderer: ${id}`);
                 }
             },

@@ -8,8 +8,6 @@ export interface SteamInstallSpec {
     appId: number;
     /** The Steam branch the server is installed from, when it is not the public one. */
     branch?: string;
-    /** Call names: the install's facts, its newest build on Steam, and install or update. */
-    ids: { info: string; latest: string; install: string };
     installDir(): Promise<string>;
     flag(): BusyFlag;
     /** The game's own setup after each download, such as links and generated settings. */
@@ -92,7 +90,7 @@ export function steamInstall(spec: SteamInstallSpec): (ctx: Context) => Promise<
 export function steamInstallCalls(spec: SteamInstallSpec): ServerCalls {
     const install = steamInstall(spec);
     return {
-        [spec.ids.info]: async () => {
+        steamInfo: async () => {
             const saved = await readSettings();
             return {
                 host: hostSupportHere(spec.game),
@@ -102,7 +100,7 @@ export function steamInstallCalls(spec: SteamInstallSpec): ServerCalls {
                 downloaded: typeof saved.build === "string",
             };
         },
-        [spec.ids.latest]: () => steamUpdateStatus(spec),
-        [spec.ids.install]: async (ctx) => { await install(ctx); return true; },
+        steamLatest: () => steamUpdateStatus(spec),
+        steamInstall: async (ctx) => { await install(ctx); return true; },
     };
 }

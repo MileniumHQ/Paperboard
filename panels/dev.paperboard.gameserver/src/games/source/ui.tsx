@@ -4,7 +4,7 @@ import type { GameDefinition } from "../types";
 import type { GameUI } from "../uiTypes";
 import SteamSetup from "../steam/SteamSetup";
 import SteamVersions from "../steam/SteamVersions";
-import { rotatesMaps, sourceCalls, type SourceGameSpec } from "./index";
+import { rotatesMaps, type SourceGameSpec } from "./index";
 import SourceOverview from "./Overview";
 import SourcePlayers from "./Players";
 import SourceSetup from "./Setup";
@@ -12,21 +12,20 @@ import SourceMaps from "./Maps";
 import SourceMods from "./Mods";
 
 export function sourceUI(spec: SourceGameSpec, game: GameDefinition): GameUI {
-    const ids = sourceCalls(spec.id);
     return {
         create(ctx) {
             return {
                 // a game with a map rotation asks how it plays; another is set up once it is downloaded
                 setup: (props) => (rotatesMaps(spec)
                     ? <SourceSetup spec={spec} onComplete={props.onComplete} />
-                    : <SteamSetup name={spec.name} infoAction={ids.info} installAction={ids.install} onComplete={props.onComplete} />),
+                    : <SteamSetup name={spec.name} onComplete={props.onComplete} />),
                 tab(id) {
                     switch (id) {
                         case "overview": return <SourceOverview spec={spec} game={game} />;
                         case "chat": return <Chat avatar={(name) => <PlayerAvatar name={name} size="small" />} />;
                         case "players": return <SourcePlayers spec={spec} />;
                         case "maps": return <SourceMaps spec={spec} active={ctx.active() === id} />;
-                        case "versions": return <SteamVersions name={spec.name} infoAction={ids.info} latestAction={ids.latest} installAction={ids.install} />;
+                        case "versions": return <SteamVersions name={spec.name} />;
                         case "mods": return <SourceMods spec={spec} active={ctx.active() === id} />;
                         default: throw new Error(`${spec.name} tab has no renderer: ${id}`);
                     }

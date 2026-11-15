@@ -1,11 +1,11 @@
 import { createSignal, Show } from "solid-js";
 import { PaperButton, PaperEffect, PaperIcon, PaperQuote, PaperText } from "@mileniumhq/paperui";
-import { serverBridge, serverStatus } from "../lib/server";
-import { CALLS } from "../service/contract";
+import { serverStatus } from "../lib/server";
 import { errorMessage } from "../lib/failure";
 import { datapacksKind } from "../lib/addons/datapacks";
 import AddonBrowser from "./addons/AddonBrowser";
 import { createAddonBrowser } from "./addons/state";
+import { serverCalls } from "../lib/api";
 
 // Datapacks: the shared add-on browser over the active world's datapacks/
 // folder, plus the world note and the reload command only this tab has.
@@ -19,7 +19,7 @@ export default function Datapacks(props: { active: boolean }) {
         setReloading(true);
         setReloadMessage(null);
         try {
-            await serverBridge.call(CALLS.runCommand, { command: "reload" });
+            await serverCalls.runCommand({ command: "reload" });
             setReloadMessage({ ok: true, text: "Reload sent. The console shows whether every datapack loaded." });
         } catch (err) {
             setReloadMessage({ ok: false, text: errorMessage(err) });

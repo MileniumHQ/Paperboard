@@ -13,11 +13,11 @@ import {
 } from "@mileniumhq/paperui";
 import InstallStepView, { createWizardInstall } from "../../components/InstallStepView";
 import { UnsupportedHost, type HostSupport } from "../../components/InstallNotices";
-import { serverBridge } from "../../lib/server";
 import { errorMessage } from "../../lib/failure";
 import { createTerrariaInstall } from "./installRows";
 import ReleaseSelector, { releasesOf } from "./ReleaseSelector";
 import { releases, SOFTWARE, SOFTWARE_ICON, softwareName, type TerrariaSoftware } from "./catalog";
+import { serverCalls } from "../../lib/api";
 
 /** what each software is, as the setup and Versions selectors describe it */
 export const SOFTWARE_DESCRIPTION: Record<TerrariaSoftware, string> = {
@@ -61,7 +61,7 @@ export default function TerrariaSetup(props: { onComplete(): void }) {
     const support = () => hosts()?.[software()] ?? null;
     onMount(async () => {
         try {
-            const info = await serverBridge.call<{ hosts: Record<TerrariaSoftware, HostSupport> }>("terraria-versions");
+            const info = await serverCalls.terrariaVersions();
             setHosts(info.hosts);
         } catch (err) {
             console.error("[Setup] Failed to read the Terraria releases:", err);

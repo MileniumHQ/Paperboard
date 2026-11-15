@@ -16,10 +16,10 @@ import ConfigSettings from "./ConfigSettings";
 import { errorMessage } from "../lib/failure";
 import { createSaves } from "../lib/saves";
 import { crossplayPlatform, disableCrossplay, enableCrossplay, readCrossplay } from "../lib/crossplay";
-import { localIp, serverBridge, serverSoftware, serverStatus } from "../lib/server";
-import { CALLS } from "../service/contract";
+import { localIp, serverSoftware, serverStatus } from "../lib/server";
 import type { CrossplayView } from "../service/crossplay";
 import { BEDROCK_PORT_SETTING_ID } from "../software/crossplay";
+import { serverCalls } from "../lib/api";
 
 // Crossplay: one switch for Geyser and Floodgate, then their settings.
 // Turning it off removes the jars and keeps their settings folders, so
@@ -139,7 +139,7 @@ export default function Crossplay(props: { active: boolean }) {
                     </Show>
                     <ConfigSettings
                         groups={view()!.groups}
-                        write={(id, value) => serverBridge.call(CALLS.writeCrossplaySetting, { id, value })}
+                        write={(id, value) => serverCalls.writeCrossplaySetting({ id, value })}
                         reload={load}
                         plain
                     />

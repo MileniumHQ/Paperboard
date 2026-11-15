@@ -2,9 +2,9 @@
 // page must not load, but the picture the service fetched (service/pictures.ts)
 // as a data: address.
 import { createResource } from "solid-js";
-import { serversBridge } from "./api";
+import { serverCalls } from "./api";
 import { errorMessage } from "./failure";
-import { PICTURE_CALL, type PictureSource } from "../service/contract";
+import type { PictureSource } from "../service/contract";
 
 const MAX_KEPT = 256;
 // by source and address, so a list drawn again paints its pictures at once;
@@ -16,7 +16,7 @@ export async function servedPicture(from: PictureSource, url: string): Promise<s
     const key = `${from} ${url}`;
     const have = kept.get(key);
     if (have !== undefined) return have;
-    const picture = await serversBridge.call<string>(PICTURE_CALL, { from, url });
+    const picture = await serverCalls.servedPicture({ from, url });
     kept.set(key, picture);
     if (kept.size > MAX_KEPT) kept.delete(kept.keys().next().value!);
     return picture;

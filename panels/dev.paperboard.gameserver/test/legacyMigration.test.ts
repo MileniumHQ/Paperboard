@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { backupApi, backupLocationsApi, processApi } from "@mileniumhq/paperapi";
-import { callServer } from "./helpers/serverCall";
+import { serverCalls } from "./helpers/serverCall";
 import { startTestDaemon, type TestDaemon } from "./helpers/crane";
 import { installFakeJava } from "./helpers/fakeJava";
 import { installPanel, restartService, servicesState, waitForFile } from "./helpers/installedPanel";
@@ -67,11 +67,11 @@ describe("v1 migration", () => {
         expect((await backupApi.forSource(PANEL_ID, id).status()).schedule).toMatchObject({ everyHours: 12, keep: 5 });
 
         // a call for the migrated server reaches the process it already ran
-        await callServer(id, "run-command", { command: "say from its page" });
+        await serverCalls(id).runCommand({ command: "say from its page" });
         await waitForFile(path.join(legacyDir, "commands.log"), (text) => text.includes("say from its page"), "the call to reach the server");
         expect(fs.readFileSync(path.join(legacyDir, "world", "level.dat"), "utf8")).toBe("the v1 world");
 
-        await callServer(id, "stop-server");
+        await serverCalls(id).stopServer();
         await servicesState().waitFor(id, (s) => s.serverStatus === "offline", "the legacy server to stop");
     });
 });

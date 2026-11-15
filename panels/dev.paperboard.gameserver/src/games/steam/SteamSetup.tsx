@@ -7,13 +7,13 @@ import {
 } from "@mileniumhq/paperui";
 import InstallStepView, { createWizardInstall } from "../../components/InstallStepView";
 import { UnsupportedHost } from "../../components/InstallNotices";
-import { serverBridge } from "../../lib/server";
+import { serverCalls } from "../../lib/api";
 import { errorMessage, type Outcome } from "../../lib/failure";
 import { createSteamInstall, type SteamInstallInfo } from "./installRows";
 import FailureText from "../../components/FailureText";
 
-function InstallStep(props: { name: string; infoAction: string; installAction: string }) {
-    const install = createSteamInstall(props.installAction);
+function InstallStep(props: { name: string }) {
+    const install = createSteamInstall();
     const { run, wizard, disposed } = createWizardInstall(install.run);
     const [blocked, setBlocked] = createSignal<{ failure?: Outcome; host?: SteamInstallInfo["host"] } | null>(null);
 
@@ -22,7 +22,7 @@ function InstallStep(props: { name: string; infoAction: string; installAction: s
         wizard?.setOptionsShown(false);
         let info: SteamInstallInfo;
         try {
-            info = await serverBridge.call<SteamInstallInfo>(props.infoAction);
+            info = await serverCalls.steamInfo();
         } catch (err) {
             console.error(`[Setup] Failed to check ${props.name}:`, err);
             if (!disposed()) setBlocked({ failure: { title: `${props.name} could not be checked`, message: errorMessage(err) } });
@@ -66,8 +66,6 @@ function InstallStep(props: { name: string; infoAction: string; installAction: s
  */
 export default function SteamSetup(props: {
     name: string;
-    infoAction: string;
-    installAction: string;
     steps?: JSX.Element;
     save?: () => Promise<boolean>;
     onComplete(): void;
@@ -78,7 +76,7 @@ export default function SteamSetup(props: {
     return (
         <PaperWizard showProgress={false} finishLabel="Finish Setup" finishVariant="success" onComplete={() => void finish()}>
             <PaperWizardStep index={0}>
-                <InstallStep name={props.name} infoAction={props.infoAction} installAction={props.installAction} />
+                <InstallStep name={props.name} />
             </PaperWizardStep>
             {props.steps}
         </PaperWizard>

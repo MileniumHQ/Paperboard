@@ -26,12 +26,12 @@ export async function searchModpacks(query: string, signal?: AbortSignal): Promi
     });
 }
 
-export const readModpack = async () => serverCalls().readModpack();
+export const readModpack = async () => serverCalls.readModpack();
 
-export const listModpackVersions = async (projectId: string) => serverCalls().listModpackVersions({ projectId });
+export const listModpackVersions = async (projectId: string) => serverCalls.listModpackVersions({ projectId });
 
 // downloading and placing a pack runs for minutes: the contract waits it out
 // (progress arrives through state)
-export const installModpack = async (projectId: string, versionId: string) => serverCalls().installModpack({ projectId, versionId });
+export const installModpack = async (projectId: string, versionId: string) => serverCalls.installModpack({ projectId, versionId });
 
-export const removeModpack = async () => serverCalls().removeModpack();
+export const removeModpack = async () => serverCalls.removeModpack();

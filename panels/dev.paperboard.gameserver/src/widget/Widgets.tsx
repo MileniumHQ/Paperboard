@@ -3,7 +3,8 @@
 // service through useWidgetServer, so what they show is what the service
 // holds: a service that doesn't answer is "unavailable", never an empty server.
 import { batch, createEffect, createMemo, createSignal, mapArray, Match, on, onCleanup, Show, Switch, type JSX } from "solid-js";
-import { type WidgetContext } from "@mileniumhq/paperapi";
+import { type ServiceCalls, type WidgetContext } from "@mileniumhq/paperapi";
+import type { gameServerContract } from "../service/contract";
 import {
     createAction,
     PaperButton,
@@ -15,7 +16,6 @@ import {
     type PaperRole,
     type PaperWidgetRow,
 } from "@mileniumhq/paperui";
-import { CALLS } from "../service/contract";
 import { getStatusBadge } from "../core/statusBadge";
 import type { HeadFetch } from "../lib/skins";
 import HeadAvatar from "../components/HeadAvatar";
@@ -109,7 +109,7 @@ function askForCap(server: WidgetServer) {
         if (c.server.serverStatus !== "online" || c.server.maxPlayers !== null) return;
         asked = true;
         // quiet: the widget shows the players as unknown, and asks again the next time it is shown
-        server.call(CALLS.queryOnlinePlayers).catch((err) =>
+        server.call((calls) => calls.queryOnlinePlayers()).catch((err) =>
             console.warn("[gameserver widget] player list query failed:", errorMessage(err)),
         );
     }));
@@ -125,7 +125,7 @@ export function StatusWidget(props: Props) {
     const size = useSize(props.widget);
     const tall = () => size().h > 1;
     const power = createAction({ message: errorMessage });
-    const run = (verb: string, action: string) => void power.run(`Couldn't ${verb} the server`, () => server.call(action));
+    const run = (verb: string, action: (calls: ServiceCalls<typeof gameServerContract>) => Promise<unknown>) => void power.run(`Couldn't ${verb} the server`, () => server.call(action));
 
     return (
         <Connected server={server} widget={props.widget} title={SERVER_TITLE} icon="dns" short={!tall()}>
@@ -140,8 +140,8 @@ export function StatusWidget(props: Props) {
                 // can't start, so it opens the panel to set up
                 const control = () =>
                     status() === "offline"
-                        ? { label: "Start server", short: "Start", icon: "play_arrow", variant: "success" as const, act: () => run("start", CALLS.startServer) }
-                        : { label: "Stop server", short: "Stop", icon: "stop", variant: "danger" as const, act: () => run("stop", CALLS.stopServer) };
+                        ? { label: "Start server", short: "Start", icon: "play_arrow", variant: "success" as const, act: () => run("start", (calls) => calls.startServer()) }
+                        : { label: "Stop server", short: "Stop", icon: "stop", variant: "danger" as const, act: () => run("stop", (calls) => calls.stopServer()) };
                 const canControl = () => installed() || status() !== "offline";
                 const button = (small: boolean) => (
                     <PaperButton
@@ -248,9 +248,9 @@ function useNameCasing(server: WidgetServer) {
     createEffect(
         on([server.visible, book], ([shown, path]) => {
             if (!shown || !path) return;
-            server.call<{ kind: string; text?: string; reason?: string }>(CALLS.readServerFile, { path })
+            server.call((calls) => calls.readServerFile({ path }))
                 .then((file) => {
-                    if (file.kind !== "text") throw new Error(file.reason ?? `${path} is not text`);
+                    if (file.kind !== "text") throw new Error(file.kind === "unavailable" ? file.reason : `${path} is not text`);
                     const parsed: unknown = file.text ? JSON.parse(file.text) : [];
                     if (!Array.isArray(parsed)) throw new Error(`${path} is not a list of players`);
                     const next = new Map<string, string>();
@@ -276,7 +276,7 @@ export function PlayersWidget(props: Props) {
     const casing = useNameCasing(server);
     const nameOf = casing.nameOf;
     const loadHead: HeadFetch = (request) =>
-        server.call<string | null>(CALLS.getPlayerSkin, { player: request.name, size: request.size });
+        server.call((calls) => calls.getPlayerSkin({ player: request.name, size: request.size }));
 
     return (
         <Connected server={server} widget={props.widget} title="Players" icon="group" short={false}>

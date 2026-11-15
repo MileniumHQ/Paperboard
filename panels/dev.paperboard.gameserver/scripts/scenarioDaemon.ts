@@ -15,7 +15,9 @@ import { spawn, spawnSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import type { ServiceCalls } from "@mileniumhq/paperapi";
 import type { GameServerState } from "../src/service/types";
+import type { gameServerContract } from "../src/service/contract";
 
 export const PANEL = "dev.paperboard.gameserver";
 const REPO = path.resolve(import.meta.dir, "../../..");
@@ -30,7 +32,8 @@ export interface ScenarioServer {
     id: string;
     /** the server's folder on disk */
     directory: string;
-    call<T = any>(name: string, input?: Record<string, unknown>): Promise<T>;
+    /** its calls, as its page makes them */
+    calls: ServiceCalls<typeof gameServerContract>;
     state(): Promise<GameServerState>;
     /** the console's lines, as text */
     console(): Promise<string[]>;
@@ -62,6 +65,7 @@ export async function withScenarioDaemon(prefix: string, work: (scenario: Scenar
     daemon.stderr.on("data", (chunk: Buffer) => { log += chunk.toString("utf8"); });
     // paperapi finds the daemon through PAPERBOARD_DIR, so it loads once that is set
     const api = await import("@mileniumhq/paperapi");
+    const { gameServerContract } = await import("../src/service/contract");
     const processes: string[] = [];
     const servers: ScenarioServer[] = [];
     try {
@@ -72,7 +76,7 @@ export async function withScenarioDaemon(prefix: string, work: (scenario: Scenar
         await work({
             root,
             async addServer(name, game, processId) {
-                const { id } = await api.serviceApi.call<{ id: string }>(PANEL, "add-server", { name, game });
+                const { id } = await api.serviceClient(gameServerContract, {}).calls.addServer({ name, game });
                 const stored = (await api.config.get<any>(PANEL)).servers.find((s: any) => s.id === id);
                 processes.push(`${id}-${processId}`);
                 const state = async () => {
@@ -82,7 +86,7 @@ export async function withScenarioDaemon(prefix: string, work: (scenario: Scenar
                 };
                 const server: ScenarioServer = {
                     id, directory: await api.fileApi.getPath(stored.directory, PANEL), state,
-                    call: (call, input) => api.serviceApi.call(PANEL, call, { ...input, server: id }, { timeoutMs: null }),
+                    calls: api.serviceClient(gameServerContract, { server: id }).calls,
                     console: async () => (await state()).serverEntries.map((e) => String(e.content)),
                 };
                 servers.push(server);

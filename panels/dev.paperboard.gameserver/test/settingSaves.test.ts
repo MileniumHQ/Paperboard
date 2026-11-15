@@ -11,7 +11,7 @@ import { openPage, servePanel, type Page } from "./helpers/browser";
 import { installFakeJava } from "./helpers/fakeJava";
 import { loopbackServer, routeHost } from "./helpers/http";
 import { writeTree } from "./helpers/tmp";
-import { callServer } from "./helpers/serverCall";
+import { serverCalls } from "./helpers/serverCall";
 import { PANEL_ID } from "../src/servers";
 import { javaPackageFor } from "../src/lib/versionProfile";
 
@@ -111,9 +111,9 @@ describe("settings saved at once", () => {
         await setUp();
         // the server is stopped, so each gamerule edit is kept for its next start
         await Promise.all([
-            callServer("s-mc", "write-automation", { patch: { dailyRestart: "04:00" } }),
-            callServer("s-mc", "set-gamerule", { name: "keep_inventory", value: "true" }),
-            callServer("s-mc", "write-game-options", { patch: { ramGB: 3 } }),
+            serverCalls("s-mc").writeAutomation({ patch: { dailyRestart: "04:00" } }),
+            serverCalls("s-mc").setGamerule({ name: "keep_inventory", value: "true" }),
+            serverCalls("s-mc").writeGameOptions({ patch: { ramGB: 3 } }),
         ]);
         expect(settings().automation.dailyRestart).toBe("04:00");
         expect(settings().pendingGamerules).toEqual({ keep_inventory: "true" });

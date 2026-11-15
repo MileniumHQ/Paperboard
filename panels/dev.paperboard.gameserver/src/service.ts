@@ -7,7 +7,6 @@ import {
     type ServiceContext,
     type CallHandlers,
     type ContractContext,
-    callBlockId,
     type BlocksHandle,
     SerialQueue,
 } from "@mileniumhq/paperapi";
@@ -28,7 +27,7 @@ import { announceChanges, bindBlocks, fireBackupEnded, fireTrigger, mergeBlocks,
 import { SERVER_EVENTS, serverType, serversBlocks, type ServersBlocksHost } from "./service/serversBlocks";
 import { processApi as scopedProcess, errorMessage } from "./service/api";
 import { type GameServerState, appendCapped } from "./service/types";
-import { CALLS, PICTURE_CALL, SETUP_CALLS, gameServerContract } from "./service/contract";
+import { SERVERS_CALLS, gameServerContract, type CallName } from "./service/contract";
 import type { GameContractCalls } from "./games/serviceTypes";
 import { pictureCall } from "./service/pictures";
 import { handleProcessData, handleProcessExit, stopServerInstance, cancelReadiness, restartServerInstance, startServerInstance } from "./service/lifecycle";
@@ -149,29 +148,26 @@ function requireInitialized(scope: ServerScope): ServerScope {
 /** Every game's calls, by game; a server answers the ones its game does. */
 const gameCalls = new Map<string, ServerCalls>(await Promise.all(games.map(async (game): Promise<[string, ServerCalls]> => [game.id, await gameServiceFor(game.id).calls()])));
 // what a server's icon call changes in the lists that show it
-const ICON_CALLS: readonly string[] = [CALLS.setServerIcon, CALLS.removeServerIcon];
-/** Runs one of a server's calls: the input names the server, and the rest is the call's own. */
-async function serverCall(name: string, input: unknown): Promise<unknown> {
-    if (!input || typeof input !== "object" || Array.isArray(input)) throw new Error(`${name} needs the server it is for`);
-    const { server, ...rest } = input as Record<string, unknown>;
-    const call = (scope: ServerScope) => {
+const ICON_CALLS: readonly CallName[] = ["setServerIcon", "removeServerIcon"];
+/** Runs one of a server's calls, as the server's game answers it, with the call's own input. */
+function serverCall(name: CallName, input: unknown, server: string | undefined): Promise<unknown> {
+    return onServer(server, name, (scope) => {
         const found = gameCalls.get(scope.server.game)?.[name];
         if (!found) throw new Error(`${gameFor(scope.server.game).name} has no call "${name}"`);
-        return found(scope.ctx, rest);
-    };
-    return onServer(server, name, call);
+        return found(scope.ctx, input ?? {});
+    });
 }
 /** One of the contract's calls, answered by the game of the server the page is open on. */
-function contractCall<K extends keyof GameContractCalls>(name: K, id: string) {
-    return (input: Parameters<GameContractCalls[K]>[0], _ctx: unknown, { server }: { server: string }) =>
-        onServer(server, id, async (scope) => {
+function contractCall<K extends keyof GameContractCalls>(name: K) {
+    return (input: Parameters<GameContractCalls[K]>[0], _ctx: unknown, { server }: { server?: string }) =>
+        onServer(server, name, async (scope) => {
             const answer = (await gameServiceFor(scope.server.game).contractCalls?.())?.[name];
-            if (!answer) throw new Error(`${gameFor(scope.server.game).name} has no call "${id}"`);
+            if (!answer) throw new Error(`${gameFor(scope.server.game).name} has no call "${name}"`);
             return answer(input, scope.ctx);
         });
 }
 /** Runs work for one server's call: the server must be set up and its game must answer the call. */
-async function onServer<T>(server: unknown, name: string, work: (scope: ServerScope) => T | Promise<T>): Promise<Awaited<T>> {
+async function onServer<T>(server: unknown, name: CallName, work: (scope: ServerScope) => T | Promise<T>): Promise<Awaited<T>> {
     const scope = requireInitialized(requireServer(server));
     if (scope.removing) throw new Error("This server was removed or is being removed");
     assertGameCall(gameFor(scope.server.game), {
@@ -476,36 +472,41 @@ const BLOCK_CATEGORIES = [
     { name: "Automation", icon: "autorenew" },
     { name: "Logs", icon: "receipt_long" },
 ];
-type RootCalls = Record<string, (ctx: ServiceContext<ServersState>, input: any) => unknown>;
-/** The calls that manage the saved servers, and the pages' pictures; every other call is a server's own and names its server. */
-const managementCalls: RootCalls = {
-    "read-server-config": (_ctx, { server }) => requireServer(server).server.settings,
-    "add-server": async (_ctx, { name, game }) => ({ id: await addServer(name, game) }),
-    "rename-server": async (_ctx, { server, name }) => (await renameServer(server, name), true),
-    "remove-server": async (_ctx, { server }) => (await removeServer(server), { removed: server }),
-    [SETUP_CALLS.retryInitialize]: async (_ctx, { server }) => (await retryInitialize(server), true),
-    [PICTURE_CALL]: (_ctx, input) => pictureCall(input),
+type Handlers = CallHandlers<typeof gameServerContract>;
+/** The calls about the saved servers, and the pictures every page shows: the panel's own, not any game's. */
+const serversCalls: Pick<Handlers, (typeof SERVERS_CALLS)[number]> = {
+    addServer: async ({ name, game }) => ({ id: await addServer(name, game) }),
+    renameServer: async ({ name }, _ctx, { server }) => (await renameServer(server, name), true),
+    removeServer: async (_input, _ctx, { server }) => {
+        const id = requireServer(server).server.id;
+        await removeServer(id);
+        return { removed: id };
+    },
+    readServerConfig: (_input, _ctx, { server }) => requireServer(server).server.settings,
+    retryInitialize: async (_input, _ctx, { server }) => (await retryInitialize(server), true),
+    servedPicture: (input) => pictureCall(input),
 };
-/** The calls on the panel's contract: typed, and checked before they run. */
-const contractCalls: CallHandlers<typeof gameServerContract> = {
-    readModpack: contractCall("readModpack", CALLS.readModpack),
-    listModpackVersions: contractCall("listModpackVersions", CALLS.listModpackVersions),
-    installModpack: contractCall("installModpack", CALLS.installModpack),
-    removeModpack: contractCall("removeModpack", CALLS.removeModpack),
-};
-const onContract = new Set<string>(Object.keys(gameServerContract.calls).map(callBlockId));
-/** TRANSITIONAL (contract): one untyped root call for each name any game answers that is not on the contract yet. */
-const callNames = [...new Set([...gameCalls.values()].flatMap((calls) => Object.keys(calls)))].filter((name) => !onContract.has(callBlockId(name)));
-for (const name of callNames) {
-    if (Object.hasOwn(managementCalls, name)) throw new Error(`The call "${name}" is both a server's and a management call`);
-}
+/**
+ * Every other call is about one server, and its game answers it. The
+ * games' calls take their input untyped until they answer the contract
+ * themselves, as the modpack calls do; each answer is checked against the
+ * contract before it leaves.
+ */
+const serverCalls = Object.fromEntries(
+    (Object.keys(gameServerContract.calls) as CallName[])
+        .filter((name) => !(SERVERS_CALLS as readonly CallName[]).includes(name))
+        .map((name) => [name, (input: unknown, _ctx: unknown, { server }: { server?: string }) => serverCall(name, input, server)]),
+) as Omit<Handlers, (typeof SERVERS_CALLS)[number]>;
 export const gameServerService = definePanelService({
     contract: gameServerContract,
     state: { servers: [], serversError: null } as ServersState,
-    calls: contractCalls,
-    untypedCalls: {
-        ...managementCalls,
-        ...Object.fromEntries(callNames.map((name): [string, RootCalls[string]] => [name, (_ctx, input) => serverCall(name, input)])),
+    calls: {
+        ...serverCalls,
+        ...serversCalls,
+        readModpack: contractCall("readModpack"),
+        listModpackVersions: contractCall("listModpackVersions"),
+        installModpack: contractCall("installModpack"),
+        removeModpack: contractCall("removeModpack"),
     },
     // Home's gallery: each widget's "Server" dropdown offers the servers whose game shows that widget
     widgetChoices: Object.fromEntries(["status", "players", "console", "motd"].map((widgetId) => [widgetId, {

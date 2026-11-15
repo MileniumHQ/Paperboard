@@ -1,9 +1,9 @@
 import { minecraftSoftware } from "../games/minecraft/index";
-import { serverBridge, serverSoftware, serverVersion } from "./server";
-import { CALLS } from "../service/contract";
+import { serverSoftware, serverVersion } from "./server";
 import { levelTypeOptionsFor } from "./versionProfile";
 import type { PropertyField } from "./properties";
 import type { WorldInfo } from "../core/worlds";
+import { serverCalls } from "./api";
 
 // The New World creator's fields, in display order. These are the
 // generation-time choices; runtime settings (allow-nether,
@@ -75,11 +75,11 @@ export function normalizeLevelType(value: string): string {
 // fileApi/terminalApi twins that lived here are gone: the UI triggers,
 // the service executes, state syncs back.
 export async function listWorldDirs(): Promise<string[]> {
-    return serverBridge.call<string[]>(CALLS.listWorldDirs);
+    return serverCalls.listWorldDirs();
 }
 
 export async function listWorlds(): Promise<WorldInfo[]> {
-    return serverBridge.call<WorldInfo[]>(CALLS.listWorlds);
+    return serverCalls.listWorlds();
 }
 
 export async function setActiveWorld(
@@ -87,27 +87,24 @@ export async function setActiveWorld(
     seed?: string,
     createOnly = false,
 ): Promise<{ activated: string; created: boolean }> {
-    return serverBridge.call<{ activated: string; created: boolean }>(
-        CALLS.setActiveWorld,
-        { levelName, seed, createOnly },
-    );
+    return serverCalls.setActiveWorld({ levelName, seed, createOnly });
 }
 
 export async function deleteActiveWorldDirs(levelName: string): Promise<void> {
-    await serverBridge.call(CALLS.deleteWorld, { levelName });
+    await serverCalls.deleteWorld({ levelName });
 }
 
 // world zips go through the transfer folder: the service builds or unpacks
 // them, the page exports or imports them. Zipping a big world takes a
 // while, so these calls are waited out rather than cut off at 30 s.
 export async function exportWorld(levelName: string): Promise<{ file: string; bytes: number }> {
-    return serverBridge.call(CALLS.exportWorld, { levelName }, { timeoutMs: null });
+    return serverCalls.exportWorld({ levelName });
 }
 
 export async function importWorld(file: string, levelName: string): Promise<{ name: string; folders: string[] }> {
-    return serverBridge.call(CALLS.importWorld, { file, levelName }, { timeoutMs: null });
+    return serverCalls.importWorld({ file, levelName });
 }
 
 export async function discardWorldTransfer(file: string): Promise<void> {
-    await serverBridge.call(CALLS.discardWorldTransfer, { file });
+    await serverCalls.discardWorldTransfer({ file });
 }

@@ -3,7 +3,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { problemsApi, processApi as rawProcess, type PanelProblem } from "@mileniumhq/paperapi";
 import { processApi } from "../src/service/api";
-import { callServer } from "./helpers/serverCall";
+import { serverCalls } from "./helpers/serverCall";
 import { startTestDaemon, type TestDaemon } from "./helpers/crane";
 import { minecraftServer } from "./helpers/minecraft";
 import { gameServer } from "./helpers/game";
@@ -134,7 +134,7 @@ describe("failures are shown", () => {
         await mc.close();
 
         const exited = new Promise<void>((resolve) => rawProcess.onExit("s-pal-palworld-server", () => resolve()));
-        await callServer("s-pal", "start-server");
+        await serverCalls("s-pal").startServer();
         const pal = await openPage(`${served.url}/?server=s-pal`);
         try {
             await pal.waitFor(`document.body.innerText.includes("ONLINE")`, "Palworld to show online");
@@ -179,7 +179,7 @@ describe("failures are shown", () => {
             expect([pal.exceptions, mc.exceptions]).toEqual([[], []]);
         } finally {
             await pal.close();
-            await callServer("s-pal", "stop-server");
+            await serverCalls("s-pal").stopServer();
             await exited;
             served.stop();
         }

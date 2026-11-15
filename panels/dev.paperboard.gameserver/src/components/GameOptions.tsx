@@ -17,12 +17,12 @@ import {
     sameData,
 } from "@mileniumhq/paperui";
 import type { GameFeatures, GameOption, GameTab } from "../games";
-import { serverBridge, serverStatus } from "../lib/server";
+import { serverStatus } from "../lib/server";
 import { errorMessage } from "../lib/failure";
 import { createSaves } from "../lib/saves";
-import { CALLS } from "../service/contract";
 import { fitsNumber, numberRule } from "../games/options";
 import { describeWithProblem } from "./PropertyFieldControl";
+import { serverCalls } from "../lib/api";
 
 /**
  * One option's control. Toggles and menus report a change at once; text,
@@ -244,7 +244,7 @@ export default function GameOptions(props: {
     const load = async () => {
         setLoadError("");
         try {
-            setValues(await serverBridge.call<Record<string, unknown>>(CALLS.readGameOptions));
+            setValues(await serverCalls.readGameOptions());
         } catch (err) {
             setLoadError(errorMessage(err));
         }
@@ -263,7 +263,7 @@ export default function GameOptions(props: {
                 return values()?.[row.id] ?? (option.kind === "secret" ? "" : option.default);
             },
             async (next) => {
-                setValues(await serverBridge.call<Record<string, unknown>>(CALLS.writeGameOptions, { patch: { [row.id]: next } }));
+                setValues(await serverCalls.writeGameOptions({ patch: { [row.id]: next } }));
             },
         );
         return (

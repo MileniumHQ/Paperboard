@@ -2,8 +2,9 @@ import { createMemo, Show } from "solid-js";
 import GameRoster, { CopyRow, createRosterState, type RosterPlayer } from "../../components/GameRoster";
 import { byName } from "../rosterNames";
 import PlayerAvatar from "../../components/PlayerAvatar";
-import { onlinePlayerNames, serverBridge } from "../../lib/server";
+import { onlinePlayerNames } from "../../lib/server";
 import type { BanEntry, SeenPlayer } from "./roster";
+import { serverCalls } from "../../lib/api";
 
 interface Player extends RosterPlayer {
     address?: string;
@@ -12,10 +13,9 @@ interface Player extends RosterPlayer {
 const key = (name: string) => name.toLowerCase();
 
 export default function TerrariaPlayers() {
-    const state = createRosterState(() => serverBridge.call<{ seen: SeenPlayer[]; bans: BanEntry[] }>("terraria-players"));
+    const state = createRosterState(() => serverCalls.terrariaPlayers());
     const seen = () => state.roster()?.seen ?? [];
     const bans = () => state.roster()?.bans ?? [];
-    const act = (action: string) => (player: Player) => serverBridge.call(action, { name: player.name });
 
     // everyone who has joined, who is online now, or who is banned by name
     const players = createMemo(() => {
@@ -36,9 +36,9 @@ export default function TerrariaPlayers() {
             playing={() => "Playing"}
             pickHint="Players appear here once they join. Pick one to see when they played and to kick or ban them."
             moderation={{
-                kick: act("terraria-kick"),
-                ban: act("terraria-ban"),
-                unban: act("terraria-unban"),
+                kick: (player) => serverCalls.terrariaKick({ name: player.name }),
+                ban: (player) => serverCalls.terrariaBan({ name: player.name }),
+                unban: (player) => serverCalls.terrariaUnban({ name: player.name }),
                 banNote: "Terraria bans the address a player joins from, so anyone else joining from it is turned away too.",
             }}
             details={(player) => (

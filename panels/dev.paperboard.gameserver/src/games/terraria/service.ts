@@ -23,7 +23,7 @@ import { provideWindowsRuntime } from "../windowsRuntimeInstall";
 import { discardUpload, importUpload, inspectUpload, listWorlds, trashWorld } from "./worldStore";
 import { WORLD_GENERATION } from "./index";
 import { parseConsoleLine, playerName, PlayerStore, stripPrompt, type ConsoleEvent } from "./roster";
-import { CALLS, TRIGGER_IDS } from "../../service/contract";
+import { TRIGGER_IDS } from "../../service/contract";
 
 const GAME = "terraria";
 const PROC = "terraria-server";
@@ -189,23 +189,23 @@ export const terrariaService: GameService = {
         const { mergeBlocks, playerEvents, rosterBlocks, runGameCall } = await import("../../service/blocks");
         // each runs what the Players tab runs, by the name Terraria knows the player by
         return mergeBlocks({ events: playerEvents() }, rosterBlocks({
-            kick: (name) => runGameCall(ctx, "terraria-kick", { name }),
-            ban: (name) => runGameCall(ctx, "terraria-ban", { name }),
-            unban: (name) => runGameCall(ctx, "terraria-unban", { name }),
+            kick: (name) => runGameCall(ctx, "terrariaKick", { name }),
+            ban: (name) => runGameCall(ctx, "terrariaBan", { name }),
+            unban: (name) => runGameCall(ctx, "terrariaUnban", { name }),
             banned: async () => (await store().bans()).map((ban) => ban.name),
         }));
     },
     calls: async () => { const { sharedCalls } = await import("../../service/calls"); return { ...sharedCalls,
-        [CALLS.readGameOptions]: async ctx => { await loadOptions(ctx); return ctx.state.gameSettings; },
-        [CALLS.writeGameOptions]: (ctx, { patch }) => exclusive(ctx, local(), "Terraria", async () => {
+        readGameOptions: async ctx => { await loadOptions(ctx); return ctx.state.gameSettings; },
+        writeGameOptions: (ctx, { patch }) => exclusive(ctx, local(), "Terraria", async () => {
             if (!patch || typeof patch !== "object" || Array.isArray(patch)) throw new Error("Options patch is required");
             // refused before the password changes
             validateOptions(patch, await settings());
             if (Object.hasOwn(patch, "password")) await joinPassword.set(singleLine(patch.password, "Join password"));
             await updateSettings((current) => validateOptions(patch, current)); await generate(""); await loadOptions(ctx); return ctx.state.gameSettings;
         }),
-        ["terraria-versions"]: () => ({ releases, tmodloaderReleases, host: hostFor("vanilla"), hosts: { vanilla: hostFor("vanilla"), tmodloader: hostFor("tmodloader") } }),
-        ["terraria-install"]: (ctx, { software: rawSoftware, version }) => exclusive(ctx, local(), "Terraria", async () => {
+        terrariaVersions: () => ({ releases, tmodloaderReleases, host: hostFor("vanilla"), hosts: { vanilla: hostFor("vanilla"), tmodloader: hostFor("tmodloader") } }),
+        terrariaInstall: (ctx, { software: rawSoftware, version }) => exclusive(ctx, local(), "Terraria", async () => {
             const software = terrariaSoftware(rawSoftware ?? "vanilla");
             host(software); const release = archiveFor(software, version);
             const previous = await settings();
@@ -220,8 +220,8 @@ export const terrariaService: GameService = {
             await updateSettings({ software, version, configured: true });
             await generate(""); await loadOptions(ctx); return true;
         }),
-        ["terraria-worlds"]: async () => listWorlds(path.join(await root(), "worlds"), worldName((await settings()).world ?? "World")),
-        ["terraria-world"]: (ctx, { name, create, generation }) => exclusive(ctx, local(), "Terraria", async () => {
+        terrariaWorlds: async () => listWorlds(path.join(await root(), "worlds"), worldName((await settings()).world ?? "World")),
+        terrariaWorld: (ctx, { name, create, generation }) => exclusive(ctx, local(), "Terraria", async () => {
             const nameChecked = worldName(name);
             const file = path.join(await root(), "worlds", `${nameChecked}.wld`);
             const found = await exists(file);
@@ -232,37 +232,37 @@ export const terrariaService: GameService = {
             await updateSettings((current) => ({ ...(generated ? validateOptions(generation, current) : current), world: nameChecked }));
             await generate(""); await loadOptions(ctx); return true;
         }),
-        ["terraria-world-delete"]: (ctx, { name }) => exclusive(ctx, local(), "Terraria", async () => { await trashWorld(await root(), name); return true; }),
-        ["terraria-world-inspect"]: async (_ctx, { file }) => inspectUpload(await root(), file),
-        ["terraria-world-import"]: async (_ctx, { file, name }) => { await importUpload(await root(), file, name); return true; },
-        ["terraria-world-discard"]: async (_ctx, { file }) => { await discardUpload(await root(), file); return true; },
-        ["terraria-mods"]: async ctx => ({ mods: await (await modStore(ctx)).list(), tmodloader: String((await settings()).version) }),
-        ["terraria-mod-search"]: async (_ctx, { query, page, sort }) => {
+        terrariaWorldDelete: (ctx, { name }) => exclusive(ctx, local(), "Terraria", async () => { await trashWorld(await root(), name); return true; }),
+        terrariaWorldInspect: async (_ctx, { file }) => inspectUpload(await root(), file),
+        terrariaWorldImport: async (_ctx, { file, name }) => { await importUpload(await root(), file, name); return true; },
+        terrariaWorldDiscard: async (_ctx, { file }) => { await discardUpload(await root(), file); return true; },
+        terrariaMods: async ctx => ({ mods: await (await modStore(ctx)).list(), tmodloader: String((await settings()).version) }),
+        terrariaModSearch: async (_ctx, { query, page, sort }) => {
             if (typeof query !== "string") throw new Error("Search text is required");
             if (sort !== undefined && !SORTS.includes(sort)) throw new Error(`Sort is one of ${SORTS.join(", ")}`);
             return searchWorkshop("tmodloader", query, { page: page ?? 1, sort });
         },
-        ["terraria-mod-items"]: async (_ctx, { ids }) => {
+        terrariaModItems: async (_ctx, { ids }) => {
             if (!Array.isArray(ids)) throw new Error("Workshop ids are required");
             return workshopItems("tmodloader", ids);
         },
-        ["terraria-mod-install"]: (ctx, { id, dependencies }) => modChange(ctx, store => {
+        terrariaModInstall: (ctx, { id, dependencies }) => modChange(ctx, store => {
             if (typeof id !== "string") throw new Error("A Workshop id is required");
             if (dependencies !== undefined && (!Array.isArray(dependencies) || dependencies.some(d => typeof d !== "string"))) throw new Error("Dependencies are Workshop ids");
             return store.install(id, dependencies ?? []);
         }),
-        ["terraria-mod-updates"]: ctx => modChange(ctx, store => store.update()),
-        ["terraria-mod-remove"]: (ctx, { file }) => modChange(ctx, store => store.remove(file)),
-        ["terraria-mod-upload"]: (ctx, { stage }) => modChange(ctx, async store => ({ added: await store.upload(path.join(await root(), addonStageDir(stage))) })),
-        [CALLS.discardAddonUpload]: async (_ctx, { stage }) => { await fs.rm(path.join(await root(), addonStageDir(stage)), { recursive: true, force: true }); return true; },
-        ["terraria-players"]: async () => ({ seen: await store().seen(), bans: await store().bans() }),
-        ["terraria-kick"]: async (ctx, { name }) => {
+        terrariaModUpdates: ctx => modChange(ctx, store => store.update()),
+        terrariaModRemove: (ctx, { file }) => modChange(ctx, store => store.remove(file)),
+        terrariaModUpload: (ctx, { stage }) => modChange(ctx, async store => ({ added: await store.upload(path.join(await root(), addonStageDir(stage))) })),
+        discardAddonUpload: async (_ctx, { stage }) => { await fs.rm(path.join(await root(), addonStageDir(stage)), { recursive: true, force: true }); return true; },
+        terrariaPlayers: async () => ({ seen: await store().seen(), bans: await store().bans() }),
+        terrariaKick: async (ctx, { name }) => {
             const online = onlineName(ctx, playerName(name));
             if (!online) throw new Error(`${name} is not online`);
             await processApi.write(PROC, `kick ${online}\n`);
             return true;
         },
-        ["terraria-ban"]: async (ctx, { name }) => {
+        terrariaBan: async (ctx, { name }) => {
             const checked = playerName(name);
             const online = onlineName(ctx, checked);
             // an online ban kicks them and records their address itself
@@ -271,8 +271,8 @@ export const terrariaService: GameService = {
             return true;
         },
         // Terraria re-reads banlist.txt on every connection, so an unban applies at once
-        ["terraria-unban"]: async (_ctx, { name }) => { await store().unban(playerName(name)); return true; },
-        ["terraria-motd"]: async (ctx, { motd }) => {
+        terrariaUnban: async (_ctx, { name }) => { await store().unban(playerName(name)); return true; },
+        terrariaMotd: async (ctx, { motd }) => {
             if (local().busy) throw new Error("Wait for the Terraria operation to finish");
             const status = ctx.state.serverStatus;
             if (status !== "online" && status !== "offline") throw new Error("Wait for Terraria to finish starting or stopping");

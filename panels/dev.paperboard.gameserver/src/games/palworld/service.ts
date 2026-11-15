@@ -3,7 +3,7 @@ import path from "node:path";
 import { emitTrigger, serverLocal } from "../../service/scope";
 import { initialServerState } from "../../service/initialState";
 import { appendCapped } from "../../service/types";
-import { CALLS, TRIGGER_IDS } from "../../service/contract";
+import { TRIGGER_IDS } from "../../service/contract";
 import { validateOptions } from "../options";
 import { installedBuild } from "../steam/steamcmd";
 import { VISUAL_CPP_X64 } from "../windowsRuntime";
@@ -160,7 +160,7 @@ export async function save(ctx: Context) {
 }
 
 const steam: SteamInstallSpec = {
-    game: palworld, appId: PALWORLD_APP_ID, ids: { info: "palworld-info", latest: "palworld-latest", install: "palworld-install" },
+    game: palworld, appId: PALWORLD_APP_ID,
     installDir, flag: local, loadOptions,
     async afterInstall() { await linkSaved(); await ensureIni(); await stripSecrets(); },
 };
@@ -179,14 +179,14 @@ export const palworldService: GameService = {
         const nameOf = (p: { name: string }) => p.name;
         const idOf = (p: { userId: string }) => p.userId;
         return mergeBlocks({ events: playerEvents() }, rosterBlocks({
-            kick: (name) => runGameCall(ctx, "palworld-kick", { userId: onlyIdNamed(name, players.online(), nameOf, idOf, "online") }),
-            ban: async (name) => runGameCall(ctx, "palworld-ban", { userId: onlyIdNamed(name, await known(), nameOf, idOf, "on this server") }),
+            kick: (name) => runGameCall(ctx, "palworldKick", { userId: onlyIdNamed(name, players.online(), nameOf, idOf, "online") }),
+            ban: async (name) => runGameCall(ctx, "palworldBan", { userId: onlyIdNamed(name, await known(), nameOf, idOf, "on this server") }),
             unban: async (name) => {
                 const bans = new Set(await roster().bans());
                 // listed by their user id when Paperboard never saw them
-                if (bans.has(name)) return runGameCall(ctx, "palworld-unban", { userId: name });
+                if (bans.has(name)) return runGameCall(ctx, "palworldUnban", { userId: name });
                 const banned = (await roster().seen()).filter((p) => bans.has(p.userId));
-                return runGameCall(ctx, "palworld-unban", { userId: onlyIdNamed(name, banned, nameOf, idOf, "banned") });
+                return runGameCall(ctx, "palworldUnban", { userId: onlyIdNamed(name, banned, nameOf, idOf, "banned") });
             },
             // a ban of a player Paperboard never saw shows as their user id, as the Players tab shows it
             banned: async () => {
@@ -196,8 +196,8 @@ export const palworldService: GameService = {
         }));
     },
     calls: async () => { const { sharedCalls } = await import("../../service/calls"); return { ...sharedCalls,
-        [CALLS.readGameOptions]: async (ctx) => { await loadOptions(ctx); return ctx.state.gameSettings; },
-        [CALLS.writeGameOptions]: async (ctx, { patch }) => {
+        readGameOptions: async (ctx) => { await loadOptions(ctx); return ctx.state.gameSettings; },
+        writeGameOptions: async (ctx, { patch }) => {
             if (local().busy) throw new Error("Wait for the Palworld operation to finish");
             if (!patch || typeof patch !== "object" || Array.isArray(patch)) throw new Error("Options patch is required");
             validateOptions(options, "Palworld", patch);
@@ -213,23 +213,23 @@ export const palworldService: GameService = {
             return ctx.state.gameSettings;
         },
         ...steamInstallCalls(steam),
-        ["palworld-metrics"]: () => rest().metrics(),
-        ["palworld-players"]: async () => ({ seen: await roster().seen(), bans: await roster().bans(), online: players.online() }),
-        ["palworld-kick"]: async (ctx, { userId: id }) => {
+        palworldMetrics: () => rest().metrics(),
+        palworldPlayers: async () => ({ seen: await roster().seen(), bans: await roster().bans(), online: players.online() }),
+        palworldKick: async (ctx, { userId: id }) => {
             const checked = userId(id);
             if (!settled(ctx, "Palworld") || !players.online().some((p) => p.userId === checked)) throw new Error("That player is not online");
             await rest().kick(checked);
             await players.poll(ctx);
             return true;
         },
-        ["palworld-ban"]: async (ctx, { userId: id }) => {
+        palworldBan: async (ctx, { userId: id }) => {
             const checked = userId(id);
             if (!settled(ctx, "Palworld")) throw new Error(BANS_ONLINE);
             await rest().ban(checked);
             await players.poll(ctx);
             return true;
         },
-        ["palworld-unban"]: async (ctx, { userId: id }) => {
+        palworldUnban: async (ctx, { userId: id }) => {
             const checked = userId(id);
             if (!settled(ctx, "Palworld")) throw new Error(BANS_ONLINE);
             await rest().unban(checked);

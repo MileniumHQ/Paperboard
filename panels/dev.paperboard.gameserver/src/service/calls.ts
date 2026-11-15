@@ -1,7 +1,7 @@
 import { assertSingleLine } from "../core/players";
 import { files as fileApi, backupApi, type ServiceContext } from "./api";
 import type { GameServerState } from "./types";
-import { CALLS, PANEL_ID } from "./contract";
+import { PANEL_ID, type CallName } from "./contract";
 import { startServerInstance, stopServerInstance, restartServerInstance, sendServerCommand, sendChatMessage } from "./lifecycle";
 import { listServerFiles, readServerFile, writeServerFile } from "./serverFiles";
 import { listLogFiles, readLogFile } from "./logs";
@@ -23,17 +23,21 @@ export async function sayInChat(ctx: ServiceContext<GameServerState>, message: u
     await sendChatMessage(ctx, msg);
     return msg;
 }
-/** What a server's calls are: the page asks by name, and each is handed the server's context and the rest of the input. */
+/**
+ * What a server's game answers of the panel's contract, and what its blocks
+ * run: each is handed the server's context and the call's own input, which
+ * the contract checked when a page made the call.
+ */
 export type ServerCall = (ctx: ServiceContext<GameServerState>, input: any) => unknown;
-export type ServerCalls = Record<string, ServerCall>;
+export type ServerCalls = Partial<Record<CallName, ServerCall>>;
 
 export const sharedCalls: ServerCalls = {
-    [CALLS.readAutomation]: async () => automationView(await readAutomation()),
-    [CALLS.writeAutomation]: async (ctx: ServiceContext<GameServerState>, input: { patch: Record<string, unknown> }) => {
+    readAutomation: async () => automationView(await readAutomation()),
+    writeAutomation: async (ctx: ServiceContext<GameServerState>, input: { patch: Record<string, unknown> }) => {
         if (!input?.patch || typeof input.patch !== "object" || Array.isArray(input.patch)) throw new Error("Give the automation settings to change");
         return automationView(await writeAutomation(ctx, input.patch, restartServerInstance));
     },
-    [CALLS.runCommand]: async (
+    runCommand: async (
         ctx: ServiceContext<GameServerState>,
         inputs: { command: string },
     ) => {
@@ -41,37 +45,37 @@ export const sharedCalls: ServerCalls = {
         await sendServerCommand(ctx, cmd);
         return `Executed: ${cmd}`;
     },
-    [CALLS.saveWorld]: async (ctx: ServiceContext<GameServerState>) => {
+    saveWorld: async (ctx: ServiceContext<GameServerState>) => {
         await currentGameService().saveWorld(ctx);
         return true;
     },
-    [CALLS.startServer]: async (ctx: ServiceContext<GameServerState>) => {
+    startServer: async (ctx: ServiceContext<GameServerState>) => {
         await startServerInstance(ctx);
         return true;
     },
-    [CALLS.stopServer]: async (ctx: ServiceContext<GameServerState>) => {
+    stopServer: async (ctx: ServiceContext<GameServerState>) => {
         await stopServerInstance(ctx);
         return true;
     },
-    [CALLS.restartServer]: async (ctx: ServiceContext<GameServerState>) => {
+    restartServer: async (ctx: ServiceContext<GameServerState>) => {
         await restartServerInstance(ctx);
         return true;
     },
-    [CALLS.loadConfig]: async (ctx) => {
+    loadConfig: async (ctx) => {
         await loadServerOptions(ctx);
         return true;
     },
-    [CALLS.sayChat]: async (
+    sayChat: async (
         ctx: ServiceContext<GameServerState>,
         inputs: { message: string },
     ) => {
         return sayInChat(ctx, inputs?.message);
     },
-    [CALLS.listServerFiles]: async (_ctx: ServiceContext<GameServerState>, inputs: { path?: string }) =>
+    listServerFiles: async (_ctx: ServiceContext<GameServerState>, inputs: { path?: string }) =>
         listServerFiles(inputs?.path ?? "", loaderDeps),
-    [CALLS.readServerFile]: async (_ctx: ServiceContext<GameServerState>, inputs: { path?: string }) =>
+    readServerFile: async (_ctx: ServiceContext<GameServerState>, inputs: { path?: string }) =>
         (await currentGameService().assertFileAccess?.(_ctx, inputs?.path, false), readServerFile(inputs?.path, loaderDeps)),
-    [CALLS.writeServerFile]: async (
+    writeServerFile: async (
         ctx: ServiceContext<GameServerState>,
         inputs: { path?: string; text?: string; version?: string },
     ) => {
@@ -82,10 +86,10 @@ export const sharedCalls: ServerCalls = {
         const running = ctx.state.serverStatus !== "offline";
         return writeServerFile(inputs?.path, inputs?.text, inputs?.version, running, loaderDeps);
     },
-    [CALLS.listLogFiles]: async (ctx: ServiceContext<GameServerState>) => {
+    listLogFiles: async (ctx: ServiceContext<GameServerState>) => {
         return listLogFiles(ctx);
     },
-    [CALLS.readLogFile]: async (
+    readLogFile: async (
         ctx: ServiceContext<GameServerState>,
         inputs: { name: string },
     ) => {

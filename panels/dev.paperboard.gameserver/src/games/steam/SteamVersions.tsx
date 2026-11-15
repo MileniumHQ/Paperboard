@@ -13,7 +13,8 @@ import {
 } from "@mileniumhq/paperui";
 import InstallNotices from "../../components/InstallNotices";
 import InstallProgressModal from "../../components/InstallProgressModal";
-import { serverBridge, serverStatus } from "../../lib/server";
+import { serverStatus } from "../../lib/server";
+import { serverCalls } from "../../lib/api";
 import { errorMessage, type Outcome } from "../../lib/failure";
 import { createSteamInstall, type SteamInstallInfo, type SteamUpdateStatus } from "./installRows";
 import FailureText from "../../components/FailureText";
@@ -23,18 +24,18 @@ import FailureText from "../../components/FailureText";
  * the tab shows what is installed, asks Steam whether it is the newest, and
  * updates it in place.
  */
-export default function SteamVersions(props: { name: string; infoAction: string; latestAction: string; installAction: string }) {
+export default function SteamVersions(props: { name: string }) {
     const [info, setInfo] = createSignal<SteamInstallInfo | null>(null);
     const [loadFailure, setLoadFailure] = createSignal<Outcome>();
     const [installOpen, setInstallOpen] = createSignal(false);
     const [status, setStatus] = createSignal<SteamUpdateStatus>();
     const [checking, setChecking] = createSignal(false);
     const [checkFailure, setCheckFailure] = createSignal<Outcome>();
-    const install = createSteamInstall(props.installAction);
+    const install = createSteamInstall();
 
     const load = async () => {
         try {
-            setInfo(await serverBridge.call<SteamInstallInfo>(props.infoAction));
+            setInfo(await serverCalls.steamInfo());
             setLoadFailure(undefined);
         } catch (err) {
             console.error(`[Updates] Failed to read the ${props.name} install:`, err);
@@ -46,7 +47,7 @@ export default function SteamVersions(props: { name: string; infoAction: string;
     const check = async () => {
         setChecking(true);
         try {
-            setStatus(await serverBridge.call<SteamUpdateStatus>(props.latestAction, undefined, { timeoutMs: null }));
+            setStatus(await serverCalls.steamLatest());
             setCheckFailure(undefined);
         } catch (err) {
             console.error(`[Updates] Failed to check for ${props.name} updates:`, err);

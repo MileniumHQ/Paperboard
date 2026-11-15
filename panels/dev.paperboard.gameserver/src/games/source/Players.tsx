@@ -12,10 +12,10 @@ import {
 import GameRoster, { CopyRow, createRosterState, type RosterPlayer } from "../../components/GameRoster";
 import { byName, withUniqueNames } from "../rosterNames";
 import PlayerAvatar from "../../components/PlayerAvatar";
-import { serverBridge } from "../../lib/server";
-import { sourceCalls, type SourceGameSpec } from "./index";
+import { type SourceGameSpec } from "./index";
 import { noStats, type SourceBan, type SourceSeen, type SourceStats } from "./roster";
 import type { SourceOnline } from "./service";
+import { serverCalls } from "../../lib/api";
 
 interface Player extends RosterPlayer {
     /** what tells two players apart, even when they share a name */
@@ -33,8 +33,7 @@ interface Player extends RosterPlayer {
 }
 
 export default function SourcePlayers(props: { spec: SourceGameSpec }) {
-    const ids = sourceCalls(props.spec.id);
-    const state = createRosterState(() => serverBridge.call<{ seen: SourceSeen[]; bans: SourceBan[]; online: SourceOnline[]; admins: string[] | null }>(ids.players));
+    const state = createRosterState(() => serverCalls.sourcePlayers());
     const seen = () => state.roster()?.seen ?? [];
     const bans = () => state.roster()?.bans ?? [];
     const online = () => state.roster()?.online ?? [];
@@ -79,9 +78,13 @@ export default function SourcePlayers(props: { spec: SourceGameSpec }) {
                 </>
             )}
             moderation={{
-                kick: (player) => serverBridge.call(ids.kick, { userId: player.userId }),
-                ban: (player) => serverBridge.call(ids.ban, { steamId: player.steamId }),
-                unban: (player) => serverBridge.call(ids.unban, { steamId: player.steamId }),
+                kick: (player) => {
+                    // only a player on the server has a user id to kick by
+                    if (player.userId === undefined) throw new Error("That player is not online");
+                    return serverCalls.sourceKick({ userId: player.userId });
+                },
+                ban: (player) => serverCalls.sourceBan({ steamId: player.steamId }),
+                unban: (player) => serverCalls.sourceUnban({ steamId: player.steamId }),
                 banNote: "The ban is on their Steam account, wherever they join from.",
                 canBan: (player) => !player.bot,
             }}
@@ -107,7 +110,7 @@ export default function SourcePlayers(props: { spec: SourceGameSpec }) {
                                 `admin:${player().steamId}`,
                                 (value) => `${player().name} was not ${value ? "made" : "removed as"} an admin`,
                                 () => list().includes(player().steamId),
-                                (value) => serverBridge.call(ids.admin, { steamId: player().steamId, admin: value }),
+                                (value) => serverCalls.sourceAdmin({ steamId: player().steamId, admin: value }),
                             );
                             return (
                                 <>

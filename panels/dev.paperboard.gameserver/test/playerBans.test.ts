@@ -9,7 +9,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { processApi } from "@mileniumhq/paperapi";
 import { startTestDaemon, type TestDaemon } from "./helpers/crane";
-import { callServer } from "./helpers/serverCall";
+import { serverCalls } from "./helpers/serverCall";
 import { openPage, servePanel } from "./helpers/browser";
 import { installFakeJava } from "./helpers/fakeJava";
 import { writeTree } from "./helpers/tmp";
@@ -71,7 +71,7 @@ describe("the Players tab's bans", () => {
         const served = await servePanel(daemon);
         const exited = new Promise<void>((resolve) => processApi.onExit("s-mc-mc-server", () => resolve()));
         const banned = () => (JSON.parse(fs.readFileSync(path.join(dir, "banned-players.json"), "utf8")) as { name: string }[]).map((entry) => entry.name);
-        await callServer("s-mc", "start-server");
+        await serverCalls("s-mc").startServer();
         const page = await openPage(`${served.url}/?server=s-mc`);
         try {
             await page.waitFor(`document.body.innerText.includes("ONLINE")`, "the server online");
@@ -121,7 +121,7 @@ describe("the Players tab's bans", () => {
             expect(page.exceptions).toEqual([]);
         } finally {
             await page.close();
-            await callServer("s-mc", "stop-server");
+            await serverCalls("s-mc").stopServer();
             await exited;
             served.stop();
         }

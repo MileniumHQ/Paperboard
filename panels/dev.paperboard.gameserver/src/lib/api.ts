@@ -4,12 +4,9 @@ export * from "@mileniumhq/paperapi";
 import { sameData } from "@mileniumhq/paperui/headless";
 import {
     createPanelBridge as rawBridge,
-    serviceApi,
     serviceClient,
     type ServiceCalls,
-    type BlockCallOptions,
     fileApi as rawFiles,
-    config as rawConfig,
     portApi as rawPorts,
 } from "@mileniumhq/paperapi";
 import {
@@ -69,52 +66,45 @@ export const portApi: typeof rawPorts = {
         return (await rawPorts.list(panel, scope)).filter((claim) => names.includes(claim.name));
     },
 };
-const selectedService = selectedServerId ? serviceClient(gameServerContract, { server: selectedServerId }) : null;
-/** The selected server's calls on the panel's contract: each tells the service which server it is for. */
-export function serverCalls(): ServiceCalls<typeof gameServerContract> {
-    if (!selectedService) throw new Error("Choose a server first");
-    return selectedService.calls;
-}
-/** One of the selected server's calls: the service is told which server it is for. */
-function callServer<T>(name: string, input?: Record<string, unknown>, options?: BlockCallOptions): Promise<T> {
-    if (!selectedServerId) return Promise.reject(new Error("Choose a server first"));
-    return serviceApi.call<T>(PANEL_ID, name, { ...input, server: selectedServerId }, options);
-}
-export const config: typeof rawConfig = {
-    get: <T>() => serversBridge.call<T>("read-server-config", { server: selectedServerId }),
-    set: (patch) => callServer("update-panel-config", { patch }),
+/**
+ * The service's calls, each about the server this page is open on; on the
+ * servers list, which is open on none, only those about the saved servers
+ * answer.
+ */
+export const serverCalls: ServiceCalls<typeof gameServerContract> = serviceClient(gameServerContract, selectedServerId ? { server: selectedServerId } : {}).calls;
+/** The calls about another server than the page's, for the servers list. */
+export const callsFor = (server: string): ServiceCalls<typeof gameServerContract> => serviceClient(gameServerContract, { server }).calls;
+/**
+ * The selected server's state, projected out of the panel's: the contract
+ * can't carry it yet, as each server's state sits under its own id.
+ */
+export const serverState = {
+    refresh: async (): Promise<Record<string, unknown>> => {
+        const state = await serversBridge.refreshState();
+        return { ...serverStateOf(state, selectedServer(state).id) };
+    },
+    // The handler hears what changed on this server: another server's
+    // activity, or the list of servers, is not a change here, and a push
+    // carries this server's whole state, so it is narrowed to the keys
+    // whose values differ from the last push.
+    onChange: (handler: (patch: Record<string, unknown>) => void): (() => void) => {
+        let last: Record<string, unknown> | null = null;
+        return serversBridge.onStateChange((patch, full) => {
+            // App owns the missing/deleted-server error; let its listener run.
+            if (
+                !selectedServerId ||
+                full.serversError ||
+                !full.servers.some((s) => s.id === selectedServerId) ||
+                !(serverStateKey(selectedServerId) in patch)
+            )
+                return;
+            const state: Record<string, unknown> = { ...serverStateOf(full, selectedServer(full).id) };
+            const changed: Record<string, unknown> = {};
+            for (const [key, value] of Object.entries(state)) {
+                if (!last || !sameData(last[key], value)) changed[key] = value;
+            }
+            last = state;
+            if (Object.keys(changed).length > 0) handler(changed);
+        });
+    },
 };
-// Existing tabs use the same bridge contract, projected onto this server.
-export function createPanelBridge(_options: any) {
-    return {
-        call: callServer,
-        refreshState: async () => {
-            const state = await serversBridge.refreshState();
-            return serverStateOf(state, selectedServer(state).id);
-        },
-        // The handler hears what changed on this server: another server's
-        // activity, or the list of servers, is not a change here, and a push
-        // carries this server's whole state, so it is narrowed to the keys
-        // whose values differ from the last push.
-        onStateChange: (handler: (patch: any, full?: any) => void) => {
-            let last: Record<string, unknown> | null = null;
-            return serversBridge.onStateChange((patch, full) => {
-                // App owns the missing/deleted-server error; let its listener run.
-                if (
-                    !selectedServerId ||
-                    full.serversError ||
-                    !full.servers.some((s) => s.id === selectedServerId) ||
-                    !(serverStateKey(selectedServerId) in patch)
-                )
-                    return;
-                const state = serverStateOf(full, selectedServer(full).id) as unknown as Record<string, unknown>;
-                const changed: Record<string, unknown> = {};
-                for (const [key, value] of Object.entries(state)) {
-                    if (!last || !sameData(last[key], value)) changed[key] = value;
-                }
-                last = state;
-                if (Object.keys(changed).length > 0) handler(changed, state);
-            });
-        },
-    };
-}

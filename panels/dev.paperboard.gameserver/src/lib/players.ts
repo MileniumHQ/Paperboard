@@ -1,8 +1,7 @@
 import { createStateSignal } from "@mileniumhq/paperui/headless";
-import { serverBridge } from "./server";
-import { CALLS } from "../service/contract";
 import type { PlayerStatData, PlayerPosition } from "../core/players";
 import type { PlayerStatSummary } from "../core/playerStats";
+import { serverCalls } from "./api";
 
 export type { PlayerStatData, PlayerPosition, PlayerStatSummary };
 export { PLAYER_NAME_PATTERN, SERVER_PROC_ID } from "../core/players";
@@ -27,7 +26,7 @@ export const [playerStatSummaries, setPlayerStatSummaries] = createStateSignal<M
 // rejects when the stats can't be read; the caller shows why. A poll that
 // reads the same numbers keeps the map and every entry it had
 export async function loadPlayerStats(): Promise<void> {
-    const list = await serverBridge.call<PlayerStatSummary[]>(CALLS.listPlayerStats);
+    const list = await serverCalls.listPlayerStats();
     const next = new Map<string, PlayerStatSummary>();
     for (const entry of list ?? []) {
         if (entry && typeof entry.uuid === "string") {
@@ -84,8 +83,8 @@ export function forgetPlayerData(name: string, uuid?: string) {
 // The live polls: each asks the running game to report, and the answer
 // arrives as state. Each rejects when the game could not be asked; the
 // page that polls shows why.
-export const queryPlayerStats = (name: string): Promise<unknown> => serverBridge.call(CALLS.queryPlayerStats, { player: name });
+export const queryPlayerStats = (name: string): Promise<unknown> => serverCalls.queryPlayerStats({ player: name });
 
-export const queryOnlinePlayers = (): Promise<unknown> => serverBridge.call(CALLS.queryOnlinePlayers);
+export const queryOnlinePlayers = (): Promise<unknown> => serverCalls.queryOnlinePlayers();
 
-export const queryPlayerPositions = (): Promise<unknown> => serverBridge.call(CALLS.queryPlayerPositions);
+export const queryPlayerPositions = (): Promise<unknown> => serverCalls.queryPlayerPositions();

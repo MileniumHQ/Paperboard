@@ -2,11 +2,11 @@ import { minecraftSoftware } from "../games/minecraft/index";
 import { createEffect, createSignal, on, Show } from "solid-js";
 import { PaperButton, PaperFlex, PaperPageHeader, PaperQuote, keepUnchanged, createLatest } from "@mileniumhq/paperui";
 import ConfigSettings from "./ConfigSettings";
-import { serverBridge, serverSoftware, serverStatus } from "../lib/server";
-import { CALLS } from "../service/contract";
+import { serverSoftware, serverStatus } from "../lib/server";
 import { SOFTWARE_NAMES } from "../lib/software";
 import type { LoaderSettingsView } from "../service/loaderSettings";
 import { errorMessage } from "../lib/failure";
+import { serverCalls } from "../lib/api";
 
 // Loader: the installed software's own settings files (Paper's YAML,
 // NeoForge/Forge TOML). The service owns reading and writing; this tab
@@ -20,7 +20,7 @@ export default function Loader(props: { active: boolean }) {
         setLoadError("");
         const current = latest();
         try {
-            const answer = await serverBridge.call<LoaderSettingsView>(CALLS.readLoaderSettings);
+            const answer = await serverCalls.readLoaderSettings();
             // a setting read again unchanged keeps its row
             if (current()) setSettings((prev) => keepUnchanged(prev, answer));
         } catch (err) {
@@ -70,7 +70,7 @@ export default function Loader(props: { active: boolean }) {
                         </Show>
                         <ConfigSettings
                             groups={view().groups}
-                            write={(id, value) => serverBridge.call(CALLS.writeLoaderSetting, { id, value })}
+                            write={(id, value) => serverCalls.writeLoaderSetting({ id, value })}
                             reload={load}
                         />
                     </Show>

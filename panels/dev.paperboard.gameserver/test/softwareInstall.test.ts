@@ -14,7 +14,6 @@ import { neoforgeProvider } from "../src/games/minecraft/providers/neoforge";
 import { InstallerStillRunningError, runInstallerProcess, type InstallerRun } from "../src/service/installerProcess";
 import { startServerInstance } from "../src/service/lifecycle";
 import { INSTALL_RECORD_KEY } from "../src/software/installRecord";
-import { CALLS } from "../src/service/contract";
 import { installFakeJava } from "./helpers/fakeJava";
 import { createRoot } from "solid-js";
 
@@ -172,24 +171,25 @@ describe("software installs", () => {
         expect(fs.readFileSync(path.join(mc.dir, "server.jar"), "utf8")).toBe("paper");
     });
 
-    test("the UI waits out install and modpack calls instead of cutting them off at the bridge's default timeout", async () => {
+    test("the UI waits out install and modpack calls instead of cutting them off at the default timeout", async () => {
         // the panel's Java check finds the runtime installed on the test daemon
         installFakeJava("java-21");
-        const { serverBridge } = await import("../src/lib/server");
+        const { serverCalls } = await import("../src/lib/api");
         const { createInstallRun } = await import("../src/lib/installRun");
         const { gameServerContract } = await import("../src/service/contract");
-        const calls: { action: string; options: unknown }[] = [];
-        // the bridge's one entry point, recorded: what each call asks of the transport
-        serverBridge.call = (async (action: string, _params?: unknown, options?: unknown) => {
-            calls.push({ action, options });
+        const asked: unknown[] = [];
+        // the page's one way to the install, recorded
+        serverCalls.installServerVersion = async (input) => {
+            asked.push(input);
             return { software: "neoforge", version: "1.21.1", build: "21.1.256" };
-        }) as typeof serverBridge.call;
+        };
         await createRoot(async (dispose) => {
             await createInstallRun().run("neoforge", "1.21.1");
             dispose();
         });
-        expect(calls).toEqual([{ action: CALLS.installServerVersion, options: { timeoutMs: null } }]);
-        // the modpack calls are on the contract, which the page's client waits out
+        expect(asked).toEqual([{ software: "neoforge", version: "1.21.1" }]);
+        // the contract the page's client calls with waits these out
+        expect(gameServerContract.calls.installServerVersion.timeoutMs).toBeNull();
         expect(gameServerContract.calls.installModpack.timeoutMs).toBeNull();
         expect(gameServerContract.calls.removeModpack.timeoutMs).toBeNull();
     });

@@ -1,11 +1,11 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { callBlockId, serviceApi } from "@mileniumhq/paperapi";
+import { callBlockId } from "@mileniumhq/paperapi";
 import { startTestDaemon, type TestDaemon } from "./helpers/crane";
-import { callServer } from "./helpers/serverCall";
+import { panelCalls, serverCalls } from "./helpers/serverCall";
 import { minecraftServer } from "./helpers/minecraft";
-import { CALLS, TRIGGER_IDS } from "../src/service/contract";
+import { MINECRAFT_CALLS, SERVERS_CALLS, TRIGGER_IDS, gameServerContract } from "../src/service/contract";
 import { minecraftCalls } from "../src/games/minecraft/calls";
 import { playerEvents, sharedBlocks } from "../src/service/blocks";
 import { assertGameCall, gameFor, games } from "../src/games";
@@ -25,7 +25,7 @@ const NODE_BUILTINS = /^(node:|(fs|path|os|child_process|net|tls|dgram|crypto|st
 // Call and game contracts are complete and fail closed.
 describe("call and game contracts", () => {
     test("every Minecraft call is in the service contract, with none orphaned", () => {
-        expect(Object.keys(minecraftCalls).sort()).toEqual(Object.values(CALLS).sort());
+        expect(Object.keys(minecraftCalls).sort()).toEqual([...MINECRAFT_CALLS].sort());
     });
 
     test("every game's calls can be made over blocks without clashing, and what a game describes it also answers", async () => {
@@ -46,6 +46,12 @@ describe("call and game contracts", () => {
         }
     });
 
+    test("every call on the panel's contract is answered: by the panel, or by a game", async () => {
+        const answered = new Set<string>(SERVERS_CALLS);
+        for (const game of games) for (const name of Object.keys(await gameServiceFor(game.id).calls())) answered.add(name);
+        expect(Object.keys(gameServerContract.calls).filter((name) => !answered.has(name))).toEqual([]);
+    });
+
     test("every event a game emits is a Blocks event of that name", () => {
         const events = [...sharedBlocks({} as never).events!, ...playerEvents()].map((event) => event.id);
         for (const id of Object.values(TRIGGER_IDS)) expect(events).toContain(id);
@@ -53,10 +59,10 @@ describe("call and game contracts", () => {
 
     test("an empty value is a valid edit for a file write, and a setting still needs its name", async () => {
         const mc = minecraftServer({ files: { "a.txt": "text" } });
-        const read: { version: string } = await mc.run(() => minecraftCalls[CALLS.readServerFile]!(mc.scope.ctx, { path: "a.txt" }) as Promise<{ version: string }>);
-        await mc.run(() => minecraftCalls[CALLS.writeServerFile]!(mc.scope.ctx, { path: "a.txt", text: "", version: read.version }));
+        const read: { version: string } = await mc.run(() => minecraftCalls.readServerFile!(mc.scope.ctx, { path: "a.txt" }) as Promise<{ version: string }>);
+        await mc.run(() => minecraftCalls.writeServerFile!(mc.scope.ctx, { path: "a.txt", text: "", version: read.version }));
         expect(fs.readFileSync(path.join(mc.dir, "a.txt"), "utf8")).toBe("");
-        await expect(mc.run(() => minecraftCalls[CALLS.writeLoaderSetting]!(mc.scope.ctx, { id: "", value: "x" }))).rejects.toThrow();
+        await expect(mc.run(() => minecraftCalls.writeLoaderSetting!(mc.scope.ctx, { id: "", value: "x" }))).rejects.toThrow();
     });
 
     test("unknown games throw instead of falling back to Minecraft", () => {
@@ -110,18 +116,16 @@ describe("call and game contracts", () => {
         const { gameServerService } = await import("../src/service");
         await gameServerService.ready;
         expect(gameServerService.getState().serversError).toBeNull();
-        const call = (server: string, name: string, input: Record<string, unknown> = {}) => callServer(server, name, input);
-
-        await expect(call("s-vanilla", CALLS.readCrossplay)).rejects.toThrow('Minecraft does not support "read-crossplay" with this server\'s software and version');
-        await expect(call("s-old", CALLS.listDatapacks)).rejects.toThrow('does not support "list-datapacks"');
+        await expect(serverCalls("s-vanilla").readCrossplay()).rejects.toThrow('Minecraft does not support "readCrossplay" with this server\'s software and version');
+        await expect(serverCalls("s-old").listDatapacks()).rejects.toThrow('does not support "listDatapacks"');
         // nothing ran: the refused crossplay read would have seeded no files, and the server folder holds none
         expect(fs.readdirSync(path.join(daemon.dataDir, "files", PANEL_ID, "servers-0123456789ab", "s-vanilla"))).toEqual([]);
-        expect(await call("s-paper", CALLS.readCrossplay)).toMatchObject({ software: "paper", geyser: null, floodgate: null });
+        expect(await serverCalls("s-paper").readCrossplay()).toMatchObject({ software: "paper", geyser: null, floodgate: null });
 
         // the same check, as the service makes it
-        expect(() => assertGameCall(gameFor("minecraft"), { software: "forge", version: "1.20.1", settings: {} }, CALLS.prepareCrossplay)).toThrow("does not support");
-        await expect(serviceApi.call(PANEL_ID, "add-server", { name: "Factory", game: "factorio" })).rejects.toThrow("Unsupported game: factorio");
-        await expect(serviceApi.call(PANEL_ID, "add-server", { name: "Proto", game: "__proto__" })).rejects.toThrow("Unsupported game: __proto__");
+        expect(() => assertGameCall(gameFor("minecraft"), { software: "forge", version: "1.20.1", settings: {} }, "prepareCrossplay")).toThrow("does not support");
+        await expect(panelCalls().addServer({ name: "Factory", game: "factorio" })).rejects.toThrow("Unsupported game: factorio");
+        await expect(panelCalls().addServer({ name: "Proto", game: "__proto__" })).rejects.toThrow("Unsupported game: __proto__");
         expect(gameServerService.getState().servers.map((s: { id: string }) => s.id)).toEqual(["s-vanilla", "s-old", "s-paper"]);
     });
 });

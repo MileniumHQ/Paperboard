@@ -1,5 +1,4 @@
 import type { GameDefinition, GameOption, OptionSection } from "../types";
-import { CALLS as A } from "../../service/contract";
 import { gameArt } from "../art";
 import { AUTOMATION_CALLS, AUTOMATION_TAB } from "../automation";
 import { hostRoutes } from "../host";
@@ -54,7 +53,7 @@ export const rust: GameDefinition = {
             // Rust reads no console input; commands go over its WebSocket remote console
             control: { kind: "rcon" }, widgets: ["status", "console"],
             packages: [{ id: "steamcmd", purpose: "Downloads and updates the Rust dedicated server from Steam" }],
-            calls: [A.startServer, A.stopServer, A.restartServer, A.runCommand, A.loadConfig, A.sayChat, A.saveWorld, A.listServerFiles, A.readServerFile, A.writeServerFile, A.listLogFiles, A.readLogFile, A.readGameOptions, A.writeGameOptions, "rust-install", "rust-info", "rust-latest", "rust-metrics", "rust-players", "rust-kick", "rust-ban", "rust-unban", "rust-map", "rust-map-picture", "rust-map-draw", "rust-wipe", ...AUTOMATION_CALLS],
+            calls: ["startServer", "stopServer", "restartServer", "runCommand", "loadConfig", "sayChat", "saveWorld", "listServerFiles", "readServerFile", "writeServerFile", "listLogFiles", "readLogFile", "readGameOptions", "writeGameOptions", "steamInstall", "steamInfo", "steamLatest", "rustMetrics", "rustPlayers", "rustKick", "rustBan", "rustUnban", "rustMap", "rustMapPicture", "rustMapDraw", "rustWipe", ...AUTOMATION_CALLS],
             tabs: [
                 { id: "overview", label: "Overview", icon: "dashboard", owner: "game", variant: "fill", compactVariant: "page" },
                 { id: "chat", label: "Chat", icon: "chat", group: "Play", owner: "game", variant: "fill" },

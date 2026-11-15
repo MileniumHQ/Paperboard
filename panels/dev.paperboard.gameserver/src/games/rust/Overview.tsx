@@ -5,11 +5,11 @@ import { gameSettings } from "../../lib/server";
 import { createMetrics, createUptime, overviewStats } from "../../components/overviewStats";
 import { rust } from "./index";
 import { fpsTone } from "./health";
-import type { RustInfo } from "./webrcon";
+import { serverCalls } from "../../lib/api";
 
 export default function RustOverview() {
     const description = () => String(gameSettings().description ?? "");
-    const metrics = createMetrics<RustInfo>("rust-metrics");
+    const metrics = createMetrics(serverCalls.rustMetrics);
     const uptime = createUptime();
 
     return (

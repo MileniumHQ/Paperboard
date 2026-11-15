@@ -1,7 +1,7 @@
 import { createEffect, createSignal, on, onCleanup } from "solid-js";
 import type { JSX } from "solid-js";
 import type { PaperRole } from "@mileniumhq/paperui";
-import { maxPlayers, onlineSince, serverBridge, serverStatus } from "../lib/server";
+import { maxPlayers, onlineSince, serverStatus } from "../lib/server";
 import { errorMessage } from "../lib/failure";
 import { onlinePlayerNames } from "../lib/players";
 import { durationLabel } from "../core/format";
@@ -48,7 +48,7 @@ const METRICS_MS = 5_000;
  * while it is online; they are gone when it stops. `error` says why the last
  * ask failed, for the Overview to show.
  */
-export function createMetrics<T>(call: string): { value: () => T | undefined; error: () => string } {
+export function createMetrics<T>(read: () => Promise<T>): { value: () => T | undefined; error: () => string } {
     const [value, setValue] = createSignal<T>();
     const [error, setError] = createSignal("");
     createEffect(on(serverStatus, (status) => {
@@ -58,7 +58,7 @@ export function createMetrics<T>(call: string): { value: () => T | undefined; er
         // an answer that lands after the server stopped, or after the
         // Overview closed, is about a server that is no longer running
         let current = true;
-        const load = () => serverBridge.call<T>(call).then(
+        const load = () => read().then(
             (answer) => { if (current) { setValue(() => answer); setError(""); } },
             (err) => { if (current) setError(errorMessage(err)); },
         );

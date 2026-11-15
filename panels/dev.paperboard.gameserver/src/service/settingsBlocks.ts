@@ -4,7 +4,6 @@
 // keeps to itself.
 import type { BlockSet, ServiceContext } from "@mileniumhq/paperapi";
 import type { GameServerState } from "./types";
-import { CALLS } from "./contract";
 import { currentGame } from "../games/service";
 import { runGameCall } from "./blocks";
 import type { GameOption } from "../games/types";
@@ -63,7 +62,7 @@ export function settingsBlocks(ctx: Context): BlockSet {
                 type: "any",
                 read: async ({ option: id }: { option: string }) => {
                     const checked = optionNamed(ctx, id);
-                    const values = await runGameCall<Record<string, unknown>>(ctx, CALLS.readGameOptions, {});
+                    const values = await runGameCall<Record<string, unknown>>(ctx, "readGameOptions", {});
                     if (!Object.hasOwn(values, checked.id)) throw new Error(`${checked.label} has no value yet`);
                     return values[checked.id];
                 },
@@ -78,7 +77,7 @@ export function settingsBlocks(ctx: Context): BlockSet {
                 inputs: { folder: { type: "text", name: "Folder", optional: true } },
                 type: "list<text>",
                 read: async ({ folder }: { folder?: string }) => {
-                    const listing = await runGameCall<{ entries: { path: string; kind: "file" | "folder" }[]; note?: string }>(ctx, CALLS.listServerFiles, {
+                    const listing = await runGameCall<{ entries: { path: string; kind: "file" | "folder" }[]; note?: string }>(ctx, "listServerFiles", {
                         path: folder ?? "",
                     });
                     return listing.entries.map((entry) => (entry.kind === "folder" ? `${entry.path}/` : entry.path));
@@ -94,7 +93,7 @@ export function settingsBlocks(ctx: Context): BlockSet {
                 inputs: { file },
                 type: "text",
                 read: async ({ file: path }: { file: string }) => {
-                    const content = await runGameCall<{ kind: string; text?: string; reason?: string }>(ctx, CALLS.readServerFile, { path });
+                    const content = await runGameCall<{ kind: string; text?: string; reason?: string }>(ctx, "readServerFile", { path });
                     if (content.kind === "unavailable") throw new Error(content.reason ?? `${path} can't be read as text`);
                     if (content.kind !== "text" || content.text === undefined) throw new Error(`${path} is not a text file`);
                     return content.text;
@@ -112,7 +111,7 @@ export function settingsBlocks(ctx: Context): BlockSet {
                 inputs: { option, value: { type: "any", name: "Value" } },
                 run: async ({ option: id, value }: { option: string; value: unknown }) => {
                     const checked = optionNamed(ctx, id);
-                    await runGameCall(ctx, CALLS.writeGameOptions, { patch: { [checked.id]: optionValue(checked, value) } });
+                    await runGameCall(ctx, "writeGameOptions", { patch: { [checked.id]: optionValue(checked, value) } });
                 },
             },
             {
@@ -124,10 +123,10 @@ export function settingsBlocks(ctx: Context): BlockSet {
                 text: "Write {text} to {file}",
                 inputs: { text: { type: "text", name: "Text" }, file },
                 run: async ({ text, file: path }: { text: string; file: string }) => {
-                    const content = await runGameCall<{ kind: string; version?: string; reason?: string }>(ctx, CALLS.readServerFile, { path });
+                    const content = await runGameCall<{ kind: string; version?: string; reason?: string }>(ctx, "readServerFile", { path });
                     if (content.kind === "unavailable") throw new Error(content.reason ?? `${path} can't be written as text`);
                     if (content.kind !== "text" || !content.version) throw new Error(`${path} is not a text file`);
-                    await runGameCall(ctx, CALLS.writeServerFile, { path, text, version: content.version });
+                    await runGameCall(ctx, "writeServerFile", { path, text, version: content.version });
                 },
             },
         ],

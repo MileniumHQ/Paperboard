@@ -5,7 +5,7 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { processApi } from "@mileniumhq/paperapi";
-import { callServer } from "./helpers/serverCall";
+import { serverCalls } from "./helpers/serverCall";
 import { startTestDaemon, type TestDaemon } from "./helpers/crane";
 import { openPage, servePanel, type Page } from "./helpers/browser";
 import { loopbackServer, routeHost } from "./helpers/http";
@@ -122,7 +122,7 @@ describe("Terraria's Overview", () => {
         const exited = new Promise<void>((resolve) => processApi.onExit("s-ter-terraria-server", () => resolve()));
         let started = false;
         try {
-            await callServer("s-ter", "write-game-options", { patch: { password: "hunter2" } });
+            await serverCalls("s-ter").writeGameOptions({ patch: { password: "hunter2" } });
             await page.waitFor(`${text("No message of the day")} && ${button("Start")}`, "the stopped server's Overview");
             await page.evaluate(`${button("Start")}.click()`);
             started = true;
@@ -142,7 +142,7 @@ describe("Terraria's Overview", () => {
             expect(settingsOf("s-ter").motd).toBe("Welcome to the island");
             expect(JSON.stringify(settingsOf("s-ter"))).not.toContain("hunter2");
 
-            await callServer("s-ter", "stop-server");
+            await serverCalls("s-ter").stopServer();
             started = false;
             await exited;
             // stopped, the config the next start reads has the message and not the password
@@ -152,7 +152,7 @@ describe("Terraria's Overview", () => {
             expect(page.exceptions).toEqual([]);
         } finally {
             if (started) {
-                await callServer("s-ter", "stop-server");
+                await serverCalls("s-ter").stopServer();
                 await exited;
             }
             await page.close();

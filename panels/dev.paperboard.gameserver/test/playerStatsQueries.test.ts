@@ -8,14 +8,13 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { processApi } from "@mileniumhq/paperapi";
 import { startTestDaemon, type TestDaemon } from "./helpers/crane";
-import { callServer } from "./helpers/serverCall";
+import { serverCalls } from "./helpers/serverCall";
 import { openPage, servePanel, type Page } from "./helpers/browser";
 import { installFakeJava } from "./helpers/fakeJava";
 import { writeTree } from "./helpers/tmp";
 import { PANEL_ID } from "../src/servers";
 import { javaPackageFor } from "../src/lib/versionProfile";
 import { minecraftCalls } from "../src/games/minecraft/calls";
-import { CALLS } from "../src/service/contract";
 
 let daemon: TestDaemon;
 beforeAll(async () => {
@@ -49,7 +48,7 @@ async function setUp() {
 async function onSteve(body: (page: Page) => Promise<void>) {
     const served = await setUp();
     const exited = new Promise<void>((resolve) => processApi.onExit("s-mc-mc-server", () => resolve()));
-    await callServer("s-mc", "start-server");
+    await serverCalls("s-mc").startServer();
     const page = await openPage(`${served.url}/?server=s-mc`);
     try {
         await page.waitFor(`document.body.innerText.includes("ONLINE")`, "the server online");
@@ -61,7 +60,7 @@ async function onSteve(body: (page: Page) => Promise<void>) {
         expect(page.exceptions).toEqual([]);
     } finally {
         await page.close();
-        await callServer("s-mc", "stop-server");
+        await serverCalls("s-mc").stopServer();
         await exited;
         served.stop();
     }
@@ -80,8 +79,8 @@ describe("an online player's page", () => {
             expect(statQueries().length - before).toBe(4);
 
             // other state arrives: console lines, a settings edit
-            for (const word of ["one", "two", "three"]) await callServer("s-mc", "run-command", { command: `say ${word}` });
-            await callServer("s-mc", "update-panel-config", { patch: { ramGB: 3 } });
+            for (const word of ["one", "two", "three"]) await serverCalls("s-mc").runCommand({ command: `say ${word}` });
+            await serverCalls("s-mc").updatePanelConfig({ patch: { ramGB: 3 } });
             await page.received((f) => f.includes('"ramAllocation":3'), "the edited settings");
             await page.received((f) => f.includes("[Server] three"), "the last console line");
             await page.settled();
@@ -91,8 +90,8 @@ describe("an online player's page", () => {
 
     test("an ask for their live stats that fails says why", async () => {
         await setUp();
-        const ask = minecraftCalls[CALLS.queryPlayerStats]!;
-        minecraftCalls[CALLS.queryPlayerStats] = async () => {
+        const ask = minecraftCalls.queryPlayerStats!;
+        minecraftCalls.queryPlayerStats = async () => {
             throw new Error("the server's console is not taking commands");
         };
         try {
@@ -101,7 +100,7 @@ describe("an online player's page", () => {
                 expect(await page.evaluate<string>("document.body.innerText")).toContain("the server's console is not taking commands");
             });
         } finally {
-            minecraftCalls[CALLS.queryPlayerStats] = ask;
+            minecraftCalls.queryPlayerStats = ask;
         }
     }, 60_000);
 });

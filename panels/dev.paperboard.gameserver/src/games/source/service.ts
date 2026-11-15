@@ -4,7 +4,7 @@ import { packages as packageApi, processApi } from "../../service/api";
 import { emitTrigger, serverLocal } from "../../service/scope";
 import { initialServerState } from "../../service/initialState";
 import { appendCapped } from "../../service/types";
-import { CALLS, TRIGGER_IDS } from "../../service/contract";
+import { TRIGGER_IDS } from "../../service/contract";
 import { validateOptions } from "../options";
 import { installedBuild, steamClientLibrary } from "../steam/steamcmd";
 import { steamInstall, steamInstallCalls, steamUpdateStatus, type SteamInstallSpec } from "../steam/installAction";
@@ -15,7 +15,7 @@ import {
 import type { GameDefinition } from "../types";
 import type { GameService } from "../serviceTypes";
 import { addonStageDir } from "../../core/addonUpload";
-import { rotatesMaps, SOURCEMOD_PACKAGES, sourceCalls, type SourceGameSpec, type SourceMapCycle, type SourceModView } from "./index";
+import { rotatesMaps, SOURCEMOD_PACKAGES, SOURCE_CALLS, type SourceGameSpec, type SourceMapCycle, type SourceModView } from "./index";
 import { pluginFile, SourceMod, SOURCEMOD_MISSING } from "./sourcemod";
 import { cvarValue, mapName, optionValue, secretsCfg, serverCfg } from "./config";
 import { cfgMapCycleFile, checkRotation, DEFAULT_MAPCYCLE, findMap, installedMaps, mapCycleFile, PAPERBOARD_MAPCYCLE, readServerCycle } from "./mapcycle";
@@ -56,7 +56,7 @@ export function connectedMs(text: string): number {
 }
 
 export function sourceService(spec: SourceGameSpec, game: GameDefinition): GameService {
-    const ids = sourceCalls(spec.id);
+    const ids = SOURCE_CALLS;
     const PROC = `${spec.id}-server`;
     const options = spec.options;
     const steamId = (value: unknown) => checkedSteamId(value, spec.steamIds);
@@ -413,7 +413,7 @@ export function sourceService(spec: SourceGameSpec, game: GameDefinition): GameS
 
     const online = (ctx: Context) => settled(ctx, spec.name);
     const steam: SteamInstallSpec = {
-        game, appId: spec.appId, branch: spec.branch, ids: { info: ids.info, latest: ids.latest, install: ids.install },
+        game, appId: spec.appId, branch: spec.branch,
         installDir, flag: local, loadOptions,
         async afterInstall() { await linkLogs(); await writeConfigs(); },
         // a game with a map rotation ends setup with how the server plays (ids.play)
@@ -446,8 +446,8 @@ export function sourceService(spec: SourceGameSpec, game: GameDefinition): GameS
             }));
         },
         calls: async () => { const { sharedCalls } = await import("../../service/calls"); return { ...sharedCalls,
-            [CALLS.readGameOptions]: async (ctx) => { await loadOptions(ctx); return ctx.state.gameSettings; },
-            [CALLS.writeGameOptions]: async (ctx, { patch }) => {
+            readGameOptions: async (ctx) => { await loadOptions(ctx); return ctx.state.gameSettings; },
+            writeGameOptions: async (ctx, { patch }) => {
                 if (local().busy) throw new Error(`Wait for the ${spec.name} operation to finish`);
                 if (!patch || typeof patch !== "object" || Array.isArray(patch)) throw new Error("Options patch is required");
                 const next = validateOptions(options, spec.name, patch, await settings());
@@ -544,7 +544,7 @@ export function sourceService(spec: SourceGameSpec, game: GameDefinition): GameS
                     return { added, view };
                 } finally { await fs.rm(dir, { recursive: true, force: true }); }
             },
-            [CALLS.discardAddonUpload]: async (_ctx, { stage }) => { await fs.rm(path.join(await root(), addonStageDir(stage)), { recursive: true, force: true }); return true; },
+            discardAddonUpload: async (_ctx, { stage }) => { await fs.rm(path.join(await root(), addonStageDir(stage)), { recursive: true, force: true }); return true; },
             [ids.admin]: (ctx, { steamId: raw, admin }) => modChange(ctx, async (sm) => {
                 if (typeof admin !== "boolean") throw new Error("Choose admin or not");
                 if (!(await modsOn())) throw new Error("Turn SourceMod on in Mods first");

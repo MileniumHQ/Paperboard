@@ -1,8 +1,8 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { serviceApi, backupApi, backupLocationsApi } from "@mileniumhq/paperapi";
-import { callServer } from "./helpers/serverCall";
+import { backupApi, backupLocationsApi } from "@mileniumhq/paperapi";
+import { serverCalls } from "./helpers/serverCall";
 import { startTestDaemon, type TestDaemon } from "./helpers/crane";
 import { installFakeJava } from "./helpers/fakeJava";
 import { installPanel, restartService, servicesState, waitForFile } from "./helpers/installedPanel";
@@ -27,7 +27,6 @@ const alive = (pid: number) => {
         throw err;
     }
 };
-const call = <T = unknown>(name: string, input: unknown = {}) => serviceApi.call<T>(PANEL_ID, name, input, { timeoutMs: null });
 
 let daemon: TestDaemon;
 beforeAll(async () => {
@@ -58,22 +57,22 @@ describe("servers through restarts", () => {
         expect(failed.initFailure).toContain("EEXIST");
         // not an interrupted install: there is nothing to clean up
         expect(failed.recoveryBlock).toBeNull();
-        await expect(callServer("s-c", "start-server")).rejects.toThrow("could not be set up");
+        await expect(serverCalls("s-c").startServer()).rejects.toThrow("could not be set up");
         fs.rmSync(serverDir("s-c"));
-        expect(await callServer("s-c", "retry-initialize")).toBe(true);
+        expect(await serverCalls("s-c").retryInitialize()).toBe(true);
         expect((await state.server("s-c"))!.initFailure).toBeNull();
         expect(fs.statSync(serverDir("s-c")).isDirectory()).toBe(true);
-        expect(await callServer("s-c", "read-automation")).toBeTruthy();
-        expect(await call("remove-server", { server: "s-c" })).toEqual({ removed: "s-c" });
+        expect(await serverCalls("s-c").readAutomation()).toBeTruthy();
+        expect(await serverCalls("s-c").removeServer()).toEqual({ removed: "s-c" });
     });
 
     test("a server that could not be set up is renamed and removed as it is, and what stands at its folder is kept", async () => {
         const state = servicesState();
         await state.waitFor("s-d", (s) => typeof s.initFailure === "string", "s-d's setup failure");
-        expect(await call("rename-server", { server: "s-d", name: "Broken" })).toBe(true);
+        expect(await serverCalls("s-d").renameServer({ name: "Broken" })).toBe(true);
         const named = JSON.parse(fs.readFileSync(path.join(dataDir, "configs", `${PANEL_ID}.json`), "utf8"));
         expect(named.servers.find((s: { id: string }) => s.id === "s-d").name).toBe("Broken");
-        expect(await call("remove-server", { server: "s-d" })).toEqual({ removed: "s-d" });
+        expect(await serverCalls("s-d").removeServer()).toEqual({ removed: "s-d" });
         const saved = JSON.parse(fs.readFileSync(path.join(dataDir, "configs", `${PANEL_ID}.json`), "utf8"));
         expect(saved.servers.map((s: { id: string }) => s.id)).not.toContain("s-d");
         expect(fs.readFileSync(serverDir("s-d"), "utf8")).toBe("not a folder");
@@ -81,10 +80,10 @@ describe("servers through restarts", () => {
 
     test("a server running when the service starts again is shown online with its players and its console history", async () => {
         const state = servicesState();
-        await callServer("s-a", "start-server");
+        await serverCalls("s-a").startServer();
         const before = await state.waitFor("s-a", (s) => s.serverStatus === "online" && s.onlinePlayers.length === 2, "s-a online with its players");
         expect(Date.now() - before.onlineSince!).toBeLessThan(60_000);
-        await callServer("s-a", "run-command", { command: "say before the restart" });
+        await serverCalls("s-a").runCommand({ command: "say before the restart" });
         await state.waitFor("s-a", (s) => s.serverEntries.some((e) => e.content.includes("[Server] before the restart")), "the command's echo");
         // the console is kept on disk for the next service, with when the server came online
         await waitForFile(historyFile("s-a"), (text) => text.includes("[Server] before the restart") && text.includes(`"onlineSince":${before.onlineSince}`), "the console history to be saved");
@@ -113,7 +112,7 @@ describe("servers through restarts", () => {
         const back = await state.waitFor("s-a", (s) => s.serverStatus === "online" && runs("s-a").length === 2, "s-a started again");
         expect(back.serverEntries.map((e) => e.content)).toContain("[Server] The server stopped while Paperboard was not running. Starting it again.");
         expect(runs("s-a")[1]).not.toBe(pid);
-        await callServer("s-a", "stop-server");
+        await serverCalls("s-a").stopServer();
         await state.waitFor("s-a", (s) => s.serverStatus === "offline", "s-a to stop");
     });
 
@@ -133,7 +132,7 @@ describe("servers through restarts", () => {
         expect(fs.readFileSync(path.join(serverDir("s-b"), "world", "level.dat"), "utf8")).toBe("s-b changed");
 
         const before = readTree(serverDir("s-b"));
-        expect(await call("remove-server", { server: "s-b" })).toEqual({ removed: "s-b" });
+        expect(await serverCalls("s-b").removeServer()).toEqual({ removed: "s-b" });
         expect(readTree(serverDir("s-b"))).toEqual(before);
         const saved = JSON.parse(fs.readFileSync(path.join(dataDir, "configs", `${PANEL_ID}.json`), "utf8"));
         expect(saved.servers.map((s: { id: string }) => s.id)).toEqual(["s-a"]);

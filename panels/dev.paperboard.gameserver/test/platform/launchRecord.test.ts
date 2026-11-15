@@ -11,7 +11,6 @@ import { heapFit, oomKillCount } from "../../src/service/memory";
 import { afterCrash } from "../../src/service/automation";
 import { startServerInstance, stopServerInstance } from "../../src/service/lifecycle";
 import { minecraftCalls } from "../../src/games/minecraft/calls";
-import { CALLS } from "../../src/service/contract";
 import { testScope } from "../helpers/scope";
 import { inServer } from "../../src/service/scope";
 
@@ -64,7 +63,7 @@ describe("the launch record", () => {
     });
 
     test("the generic config patch cannot set what an install records", async () => {
-        const call = minecraftCalls[CALLS.updatePanelConfig]!;
+        const call = minecraftCalls.updatePanelConfig!;
         const scope = testScope({ directory: "servers/patch" });
         for (const key of ["software", "version", "install"]) {
             await expect(inServer(scope, () => call(scope.ctx, { patch: { [key]: "forge" } }))).rejects.toThrow(

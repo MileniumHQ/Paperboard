@@ -11,10 +11,9 @@ import {
     createLatest,
 } from "@mileniumhq/paperui";
 import type { ServerSoftwareType, VersionItem } from "../lib/software";
-import { serverBridge } from "../lib/server";
-import { CALLS } from "../service/contract";
 import FailureText from "./FailureText";
 import { errorMessage } from "../lib/failure";
+import { serverCalls } from "../lib/api";
 
 // Shared Minecraft version picker: search, release-channel filters and the
 // version list. Used by onboarding (Setup) and the Versions tab so there is
@@ -46,7 +45,7 @@ export default function VersionPicker(props: {
         const current = latest();
         try {
             // the service fetches upstream: some indexes refuse cross-origin reads
-            const answer = await serverBridge.call<VersionItem[]>(CALLS.listSoftwareVersions, { software });
+            const answer = await serverCalls.listSoftwareVersions({ software });
             if (!current()) return;
             const versions = answer.filter((v) => v.installable && (v.type === "release" || v.type === "snapshot"));
             setAllVersions(versions);

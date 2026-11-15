@@ -2,12 +2,12 @@ import { minecraftSoftware } from "../games/minecraft/index";
 import { portApi } from "./api";
 import { SOFTWARE } from "../software/catalog";
 import { CROSSPLAY, GEYSER_MODRINTH_ID, type CrossplayPlatform } from "../software/crossplay";
-import { CALLS } from "../service/contract";
 import type { CrossplayView } from "../service/crossplay";
 import { BEDROCK_PORT_NAME, NETHERNET_PORT_NAME } from "../core/portNames";
 import { PANEL_ID } from "../service/types";
-import { serverBridge, serverSoftware, serverVersion } from "./server";
+import { serverSoftware, serverVersion } from "./server";
 import { getProject, installGeyserMCProject, installProjectVersion, modrinthFetch, uninstallPlugin } from "./plugins";
+import { serverCalls } from "./api";
 
 // Turning crossplay on installs Geyser and Floodgate the same way the
 // Plugins tab installs anything (Modrinth, checksummed, recorded, so updates
@@ -48,7 +48,7 @@ async function installFromModrinth(projectId: string): Promise<void> {
 }
 
 export async function readCrossplay(): Promise<CrossplayView> {
-    return serverBridge.call<CrossplayView>(CALLS.readCrossplay);
+    return serverCalls.readCrossplay();
 }
 
 /** installs whichever of the two is missing, then sets Geyser to log Bedrock players in through Floodgate */
@@ -62,7 +62,7 @@ export async function enableCrossplay(current: CrossplayView): Promise<Crossplay
             await installGeyserMCProject({ kind, project, platform: target }, filename, "Floodgate");
         }
     }
-    return serverBridge.call<CrossplayView>(CALLS.prepareCrossplay);
+    return serverCalls.prepareCrossplay();
 }
 
 /** removes both jars and gives the Bedrock ports back; their settings folders

@@ -1,12 +1,11 @@
 // The server list icon, over the panel's bridge. The page decodes and scales
 // the picked image, since the browser reads every format people have
 // (PNG, JPEG, WebP, GIF); the service checks the result and writes it.
-import { serverBridge } from "./server";
-import { CALLS } from "../service/contract";
 import { SERVER_ICON_SIZE } from "../core/serverIcon";
+import { serverCalls } from "./api";
 
-export const readServerIcon = () => serverBridge.call<string | null>(CALLS.readServerIcon, {});
-export const removeServerIcon = () => serverBridge.call<boolean>(CALLS.removeServerIcon, {});
+export const readServerIcon = () => serverCalls.readServerIcon();
+export const removeServerIcon = () => serverCalls.removeServerIcon();
 
 /**
  * The picked image as the game wants it: the centre square, at 64×64. A
@@ -48,5 +47,5 @@ async function scaleToServerIcon(file: File): Promise<string> {
 /** replaces the icon with `file`; resolves with the new icon's data URL */
 export async function setServerIconFromFile(file: File): Promise<string> {
     const png = await scaleToServerIcon(file);
-    return serverBridge.call<string>(CALLS.setServerIcon, { png });
+    return serverCalls.setServerIcon({ png });
 }

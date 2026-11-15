@@ -6,10 +6,9 @@ import { startTestDaemon, type TestDaemon } from "../helpers/crane";
 import type { GameServer } from "../helpers/game";
 import { cs2Call as call, cs2Server } from "../helpers/cs2";
 import { PANEL_ID } from "../../src/servers";
-import { CALLS } from "../../src/service/contract";
 import { sendServerCommand, sendChatMessage, startServerInstance, stopServerInstance } from "../../src/service/lifecycle";
 import { CS2 } from "../../src/games/cs2";
-import { sourceCalls } from "../../src/games/source";
+import { SOURCE_CALLS } from "../../src/games/source";
 
 let daemon: TestDaemon;
 beforeAll(async () => {
@@ -21,7 +20,7 @@ afterAll(async () => {
 
 // the dedicated server Paperboard runs is the Linux build
 const linux = process.platform === "linux";
-const ids = sourceCalls(CS2.id);
+const ids = SOURCE_CALLS;
 const BANNED = "[U:1:24691]";
 const command = (server: GameServer, line: string) => server.run(() => sendServerCommand(server.scope.ctx, line));
 const consoleOf = (server: GameServer) => server.scope.ctx.state.serverEntries.map((e) => String(e.content));
@@ -32,7 +31,7 @@ const said = (server: GameServer, text: string, what: string) => server.scope.wa
 describe("Counter-Strike 2", () => {
     test.skipIf(!linux)("the server is driven through its console: passwords stay out of sight, a banned player is put out as they join, chat, kicks and map changes are read back, and time on survives a failed save", async () => {
         const server = await cs2Server();
-        await call(server, CALLS.writeGameOptions, { patch: { password: "join-Secret-1", token: "token-Secret-1", gamemode: "casual", bot_quota: 2 } });
+        await call(server, "writeGameOptions", { patch: { password: "join-Secret-1", token: "token-Secret-1", gamemode: "casual", bot_quota: 2 } });
         await server.run(() => startServerInstance(server.scope.ctx));
         await server.scope.waitFor((s) => s.serverStatus === "online", "Counter-Strike 2 to say its map is running");
         expect(server.scope.ctx.state.serverLevel).toBe("de_dust2");
@@ -93,7 +92,7 @@ describe("Counter-Strike 2", () => {
         await server.scope.waitFor((s) => s.serverLevel === "de_inferno", "the map change");
         expect(server.scope.server.settings.map).toBe("de_inferno");
         // an option the server takes at once is typed into its console
-        await call(server, CALLS.writeGameOptions, { patch: { mp_autoteambalance: false } });
+        await call(server, "writeGameOptions", { patch: { mp_autoteambalance: false } });
         await server.scope.waitFor(() => commands(server).includes("mp_autoteambalance 0"), "the live option");
 
         const exit = server.nextExit();

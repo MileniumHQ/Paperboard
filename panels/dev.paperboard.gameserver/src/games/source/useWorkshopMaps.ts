@@ -1,9 +1,9 @@
 import { createSignal, onMount } from "solid-js";
-import { serverBridge } from "../../lib/server";
 import { errorMessage } from "../../lib/failure";
-import { sourceCalls, type SourceGameSpec } from "./index";
+import { type SourceGameSpec } from "./index";
 import type { MapChoice } from "./MapCards";
 import { canonicalMap, workshopName, type SourceWorkshopMap } from "./workshop";
+import { serverCalls } from "../../lib/api";
 
 /** What a screen shows of a Steam Workshop map: Valve's name for the mode it is listed under. */
 export const WORKSHOP_GROUP = "Steam Workshop";
@@ -18,7 +18,7 @@ export function createWorkshopMaps(spec: SourceGameSpec) {
     const load = async () => {
         setError("");
         try {
-            setMaps(await serverBridge.call<SourceWorkshopMap[]>(sourceCalls(spec.id).workshopMaps));
+            setMaps(await serverCalls.sourceWorkshopMaps());
         } catch (err) {
             setError(errorMessage(err));
         }

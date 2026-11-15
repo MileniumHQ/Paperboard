@@ -4,7 +4,7 @@ import { processApi, errorCode } from "../../service/api";
 import { emitTrigger, serverLocal } from "../../service/scope";
 import { initialServerState } from "../../service/initialState";
 import { appendCapped } from "../../service/types";
-import { CALLS, TRIGGER_IDS } from "../../service/contract";
+import { TRIGGER_IDS } from "../../service/contract";
 import { validateOptions } from "../options";
 import { installedBuild, steamClientLibrary } from "../steam/steamcmd";
 import { steamInstall, steamInstallCalls, steamUpdateStatus, type SteamInstallSpec } from "../steam/installAction";
@@ -13,7 +13,7 @@ import {
     ConsoleBuffer, assertHost, exists, linkFolder, pushChat, readSettings, redact, report,
     serverRoot, serverSecret, settingPort, settled, singleLine, updateSettings, writePrivate, type Context,
 } from "../serviceKit";
-import { sourceCalls, type SourceMetrics } from "../source";
+import { SOURCE_CALLS, type SourceMetrics } from "../source";
 import { cvarValue, mapName, optionValue } from "../source/config";
 import { consoleLine, logBody, parseLogLine, steamId, isSteamId, type SourceLogEvent } from "../source/log";
 import { mergeStats, noStats, SourceRoster, type SourceStats } from "../source/roster";
@@ -23,7 +23,7 @@ import { cs2, CS2, MODES, type Cs2Mode } from "./index";
 import { activatedMap, consoleSaid, isErrorLine, parseStatusPlayers, STATUS_END, STATUS_PLAYERS, withoutPositions } from "./console";
 
 const PROC = `${CS2.id}-server`;
-const ids = sourceCalls(CS2.id);
+const ids = SOURCE_CALLS;
 const options = CS2.options;
 const STDBUF = ["/usr/bin/stdbuf", "/bin/stdbuf"];
 /** maps the server ships that are no place to play: menu backdrops and tools */
@@ -242,7 +242,7 @@ function applyStatus(ctx: Context, rows: readonly string[]) {
 }
 
 const steam: SteamInstallSpec = {
-    game: cs2, appId: CS2.appId, ids: { info: ids.info, latest: ids.latest, install: ids.install },
+    game: cs2, appId: CS2.appId,
     installDir, flag: local, loadOptions,
     async afterInstall() { await linkLogs(); await writeConfigs(); },
 };
@@ -270,8 +270,8 @@ export const cs2Service: GameService = {
         }));
     },
     calls: async () => { const { sharedCalls } = await import("../../service/calls"); return { ...sharedCalls,
-        [CALLS.readGameOptions]: async (ctx) => { await loadOptions(ctx); return ctx.state.gameSettings; },
-        [CALLS.writeGameOptions]: async (ctx, { patch }) => {
+        readGameOptions: async (ctx) => { await loadOptions(ctx); return ctx.state.gameSettings; },
+        writeGameOptions: async (ctx, { patch }) => {
             if (local().busy) throw new Error("Wait for the Counter-Strike 2 operation to finish");
             if (!patch || typeof patch !== "object" || Array.isArray(patch)) throw new Error("Options patch is required");
             const next = validateOptions(options, CS2.name, patch, await readSettings());

@@ -1,14 +1,14 @@
 import { batch, createMemo, createSignal, For, onMount, Show } from "solid-js";
 import { PaperButton, PaperFlex, PaperInput, PaperLink, PaperQuote, PaperText, createLatest } from "@mileniumhq/paperui";
-import { serverBridge } from "../../lib/server";
 import { errorMessage } from "../../lib/failure";
 import { formatCount } from "../../lib/addons/presentation";
-import { sourceCalls, type SourceGameSpec } from "./index";
+import { type SourceGameSpec } from "./index";
 import MapCards from "./MapCards";
 import { workshopChoice } from "./useWorkshopMaps";
 import type { MapPicturesState } from "./useMapPictures";
 import type { SourceWorkshopHit, SourceWorkshopResults } from "./workshop";
 import { workshopName } from "./workshop";
+import { serverCalls } from "../../lib/api";
 
 /**
  * The Steam Workshop's maps for a game, searched by name or found by a pasted
@@ -26,7 +26,6 @@ export default function WorkshopPane(props: {
     inRotation: readonly string[];
     onPick(map: SourceWorkshopHit): void;
 }) {
-    const ids = sourceCalls(props.spec.id);
     const [query, setQuery] = createSignal("");
     const [results, setResults] = createSignal<SourceWorkshopResults | null>(null);
     const [searching, setSearching] = createSignal(false);
@@ -39,7 +38,7 @@ export default function WorkshopPane(props: {
         setError("");
         const current = latest();
         try {
-            const answer = await serverBridge.call<SourceWorkshopResults>(ids.workshopFind, { query: query() }, { timeoutMs: 30_000 });
+            const answer = await serverCalls.sourceWorkshopFind({ query: query() });
             if (!current()) return;
             batch(() => {
                 setResults(answer);

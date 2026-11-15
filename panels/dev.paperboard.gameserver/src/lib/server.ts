@@ -1,7 +1,6 @@
 import { createStateSignal } from "@mileniumhq/paperui/headless";
-import { PANEL_ID, CALLS } from "../service/contract";
 import { createSignal } from "solid-js";
-import { createPanelBridge, errorMessage } from "./api";
+import { errorMessage, serverCalls, serverState } from "./api";
 import type { PaperConsoleEntry } from "@mileniumhq/paperui";
 import stripAnsi from "strip-ansi";
 import { SOFTWARE_NAMES, type ServerSoftwareType } from "./software";
@@ -74,10 +73,6 @@ export const [initFailure, setInitFailure] = createSignal<string | null>(null);
 export const [serverActionError, setServerActionError] = createSignal("");
 
 
-export const serverBridge = createPanelBridge({
-    panelId: PANEL_ID,
-});
-
 function currentSetters() {
     return {
         setServerStatus,
@@ -107,8 +102,8 @@ function currentSetters() {
     };
 }
 
-serverBridge.onStateChange((patch) => {
-    applyStatePatch(patch as Record<string, unknown>, currentSetters());
+serverState.onChange((patch) => {
+    applyStatePatch(patch, currentSetters());
 });
 
 /* Initial projection is requested after App resolves the selected server. */
@@ -117,16 +112,16 @@ serverBridge.onStateChange((patch) => {
 // UI only triggers a reload and pulls the resulting state.
 export async function loadServerConfig() {
     try {
-        await serverBridge.call(CALLS.loadConfig);
-        applyStatePatch(await serverBridge.refreshState() as any, currentSetters());
+        await serverCalls.loadConfig();
+        applyStatePatch(await serverState.refresh(), currentSetters());
     } catch (err) {
         reportActionError("load-server-config", err);
     }
 }
 
 export async function updatePanelConfig(patch: Record<string, unknown>) {
-    await serverBridge.call(CALLS.updatePanelConfig, { patch });
-    applyStatePatch(await serverBridge.refreshState() as any, currentSetters());
+    await serverCalls.updatePanelConfig({ patch });
+    applyStatePatch(await serverState.refresh(), currentSetters());
 }
 
 /** loads the server's config once, which also reads its state */
@@ -142,38 +137,38 @@ function reportActionError(action: string, err: unknown): void {
 
 export function startServer() {
     setServerActionError("");
-    serverBridge
-        .call(CALLS.startServer)
+    serverCalls
+        .startServer()
         .catch((err) => reportActionError("start-server", err));
 }
 
 export function stopServer() {
     setServerActionError("");
-    serverBridge
-        .call(CALLS.stopServer)
+    serverCalls
+        .stopServer()
         .catch((err) => reportActionError("stop-server", err));
 }
 
 export function restartServer() {
     setServerActionError("");
-    serverBridge
-        .call(CALLS.restartServer)
+    serverCalls
+        .restartServer()
         .catch((err) => reportActionError("restart-server", err));
 }
 
 /** Rejects when the command did not run; the console that sent it shows why. */
 export function sendServerCommand(cmd: string): Promise<unknown> {
-    return serverBridge.call(CALLS.runCommand, { command: cmd });
+    return serverCalls.runCommand({ command: cmd });
 }
 
 /** Rejects when the message was not sent; the chat that sent it shows why. */
 export function sendChatMessage(msg: string): Promise<unknown> {
-    return serverBridge.call(CALLS.sayChat, { message: msg });
+    return serverCalls.sayChat({ message: msg });
 }
 
 /** Asks the game to write its world to disk; resolves once the game confirms it. */
 export function saveWorld(): Promise<unknown> {
-    return serverBridge.call(CALLS.saveWorld, undefined, { timeoutMs: null });
+    return serverCalls.saveWorld();
 }
 
 export { getStatusBadge } from "../core/statusBadge";

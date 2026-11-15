@@ -3,7 +3,7 @@ import path from "node:path";
 import { randomInt } from "node:crypto";
 import { emitTrigger, serverLocal } from "../../service/scope";
 import { initialServerState } from "../../service/initialState";
-import { CALLS, TRIGGER_IDS } from "../../service/contract";
+import { TRIGGER_IDS } from "../../service/contract";
 import { validateOptions } from "../options";
 import { installedBuild } from "../steam/steamcmd";
 import { steamInstall, steamInstallCalls, steamUpdateStatus, type SteamInstallSpec } from "../steam/installAction";
@@ -243,7 +243,7 @@ async function bans(ctx: Context): Promise<RustBan[]> {
 }
 
 const steam: SteamInstallSpec = {
-    game: rust, appId: RUST_APP_ID, ids: { info: "rust-info", latest: "rust-latest", install: "rust-install" },
+    game: rust, appId: RUST_APP_ID,
     installDir, flag: local, loadOptions,
     afterInstall: linkData,
 };
@@ -262,20 +262,20 @@ export const rustService: GameService = {
         const nameOf = (p: { name: string }) => p.name;
         const idOf = (p: { steamId: string }) => p.steamId;
         return mergeBlocks({ events: playerEvents() }, rosterBlocks({
-            kick: (name) => runGameCall(ctx, "rust-kick", { steamId: onlyIdNamed(name, players.online(), nameOf, idOf, "online") }),
-            ban: async (name) => runGameCall(ctx, "rust-ban", { steamId: onlyIdNamed(name, await known(), nameOf, idOf, "on this server") }),
+            kick: (name) => runGameCall(ctx, "rustKick", { steamId: onlyIdNamed(name, players.online(), nameOf, idOf, "online") }),
+            ban: async (name) => runGameCall(ctx, "rustBan", { steamId: onlyIdNamed(name, await known(), nameOf, idOf, "on this server") }),
             unban: async (name) => {
                 const banned = await bans(ctx);
                 // listed by their Steam id when the ban holds no name
                 const byId = banned.find((ban) => ban.steamId === name);
-                return runGameCall(ctx, "rust-unban", { steamId: byId ? byId.steamId : onlyIdNamed(name, banned, nameOf, idOf, "banned") });
+                return runGameCall(ctx, "rustUnban", { steamId: byId ? byId.steamId : onlyIdNamed(name, banned, nameOf, idOf, "banned") });
             },
             banned: async () => (await bans(ctx)).map((ban) => ban.name || ban.steamId),
         }));
     },
     calls: async () => { const { sharedCalls } = await import("../../service/calls"); return { ...sharedCalls,
-        [CALLS.readGameOptions]: async (ctx) => { await loadOptions(ctx); return ctx.state.gameSettings; },
-        [CALLS.writeGameOptions]: async (ctx, { patch }) => {
+        readGameOptions: async (ctx) => { await loadOptions(ctx); return ctx.state.gameSettings; },
+        writeGameOptions: async (ctx, { patch }) => {
             if (local().busy) throw new Error("Wait for the Rust operation to finish");
             if (!patch || typeof patch !== "object" || Array.isArray(patch)) throw new Error("Options patch is required");
             const next = validateOptions(options, "Rust", patch, await settings());
@@ -293,18 +293,18 @@ export const rustService: GameService = {
             return ctx.state.gameSettings;
         },
         ...steamInstallCalls(steam),
-        ["rust-metrics"]: () => info(),
-        ["rust-map"]: () => mapView(),
-        ["rust-map-picture"]: () => mapPicture(),
-        ["rust-map-draw"]: (ctx) => drawMap(ctx),
-        ["rust-wipe"]: (ctx, { blueprints }) => exclusive(ctx, local(), "Rust", async () => {
+        rustMetrics: () => info(),
+        rustMap: () => mapView(),
+        rustMapPicture: () => mapPicture(),
+        rustMapDraw: (ctx) => drawMap(ctx),
+        rustWipe: (ctx, { blueprints }) => exclusive(ctx, local(), "Rust", async () => {
             if (typeof blueprints !== "boolean") throw new Error("Choose whether blueprints are wiped too");
             const view = await wipe(blueprints);
             await loadOptions(ctx);
             return view;
         }),
-        ["rust-players"]: async (ctx) => ({ seen: await roster().seen(), bans: await bans(ctx), online: players.online() }),
-        ["rust-kick"]: async (ctx, { steamId: raw }) => {
+        rustPlayers: async (ctx) => ({ seen: await roster().seen(), bans: await bans(ctx), online: players.online() }),
+        rustKick: async (ctx, { steamId: raw }) => {
             const id = steamId(raw);
             if (!settled(ctx, "Rust") || !players.online().some((p) => p.steamId === id)) throw new Error("That player is not online");
             const reply = await rcon().exec(`kick ${id} "Kicked by the server admin"`);
@@ -312,7 +312,7 @@ export const rustService: GameService = {
             await players.poll(ctx);
             return true;
         },
-        ["rust-ban"]: async (ctx, { steamId: raw }) => {
+        rustBan: async (ctx, { steamId: raw }) => {
             const id = steamId(raw);
             if (!settled(ctx, "Rust")) throw new Error(BANS_NEED_SERVER);
             const name = [...players.online(), ...await roster().seen()].find((p) => p.steamId === id)?.name ?? id;
@@ -324,7 +324,7 @@ export const rustService: GameService = {
             await players.poll(ctx);
             return true;
         },
-        ["rust-unban"]: async (ctx, { steamId: raw }) => {
+        rustUnban: async (ctx, { steamId: raw }) => {
             const id = steamId(raw);
             if (!settled(ctx, "Rust")) throw new Error(BANS_NEED_SERVER);
             const reply = await rcon().exec(`unban ${id}`);

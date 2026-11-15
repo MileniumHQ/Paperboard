@@ -14,7 +14,7 @@ import type { BackupEnded, BackupRecord } from "@mileniumhq/paperapi";
 import { MAX_BUFFERED_ENTRIES, type ChatMessage, type GameServerState } from "./types";
 import type { ServerScope } from "./scope";
 import { currentServer, inServer } from "./scope";
-import { CALLS, TRIGGER_IDS, type TriggerId } from "./contract";
+import { TRIGGER_IDS, type CallName, type TriggerId } from "./contract";
 import { restartServerInstance, sendServerCommand, startServerInstance, stopServerInstance } from "./lifecycle";
 import { waitUntil } from "../games/serviceKit";
 import { listLogFiles, readLogFile } from "./logs";
@@ -214,7 +214,7 @@ export function sharedBlocks(ctx: Context): BlockSet {
                         .map((entry) => (typeof entry.content === "string" ? entry.content : ""))
                         .join("\n"),
             },
-            needsCall(ctx, CALLS.readAutomation, {
+            needsCall(ctx, "readAutomation", {
                 id: "automation",
                 name: "Automation",
                 category: "Automation",
@@ -313,7 +313,7 @@ export function sharedBlocks(ctx: Context): BlockSet {
                     await serverBackups().delete(backupId(backup));
                 },
             },
-            needsCall(ctx, CALLS.writeAutomation, {
+            needsCall(ctx, "writeAutomation", {
                 id: "set-restart-after-crash",
                 name: "Set Restart After a Crash",
                 category: "Automation",
@@ -331,7 +331,7 @@ export function sharedBlocks(ctx: Context): BlockSet {
                     await writeAutomation(ctx, { restartAfterCrash: restart }, restartServerInstance);
                 },
             }),
-            needsCall(ctx, CALLS.writeAutomation, {
+            needsCall(ctx, "writeAutomation", {
                 id: "set-daily-restart",
                 name: "Set Daily Restart",
                 category: "Automation",
@@ -343,7 +343,7 @@ export function sharedBlocks(ctx: Context): BlockSet {
                     await writeAutomation(ctx, { dailyRestart: hour === "never" ? null : hour }, restartServerInstance);
                 },
             }),
-            needsCall(ctx, CALLS.writeAutomation, {
+            needsCall(ctx, "writeAutomation", {
                 id: "set-automatic-updates",
                 name: "Set Automatic Updates",
                 category: "Automation",
@@ -433,7 +433,7 @@ export function playerEvents(): BlockEventDefinition[] {
 }
 
 /** Runs one of the game's calls the way its tab does, so a block is checked as the tab's edit is. */
-export async function runGameCall<T>(ctx: Context, id: string, inputs: Record<string, unknown>): Promise<T> {
+export async function runGameCall<T>(ctx: Context, id: CallName, inputs: Record<string, unknown>): Promise<T> {
     const call = (await currentGameService().calls())[id];
     if (!call) throw new Error(`${gameFor(currentServer()!.server.game).name} has no "${id}" call`);
     return (await call(ctx, inputs)) as T;
@@ -497,7 +497,7 @@ export function mergeBlocks(...sets: (BlockSet | undefined)[]): BlockSet {
  * A block that only works where the game offers the call it shares its
  * work with, such as plugins on a server software that has them.
  */
-export function needsCall<T extends BlockCommandDefinition | BlockValueDefinition>(ctx: Context, call: string, def: T): T {
+export function needsCall<T extends BlockCommandDefinition | BlockValueDefinition>(ctx: Context, call: CallName, def: T): T {
     const check = () => {
         const scope = currentServer();
         if (!scope) throw new Error(`${def.name} needs a server`);

@@ -13,12 +13,13 @@ import {
     sameData,
     createLatest,
 } from "@mileniumhq/paperui";
-import { serverBridge, serverStatus } from "../../lib/server";
+import { serverStatus } from "../../lib/server";
 import { errorMessage } from "../../lib/failure";
 import { createSaves } from "../../lib/saves";
 import { discardUpload, listAdded, newStage, pickFiles, stageFolder } from "../../lib/addons/upload";
-import { sourceCalls, type SourceGameSpec, type SourceModView } from "./index";
+import { type SourceGameSpec, type SourceModView } from "./index";
 import type { SourcePlugin } from "./sourcemod";
+import { serverCalls } from "../../lib/api";
 
 const upload = pickFiles("Upload plugins", ["smx"]);
 const SOURCEMOD = "sourcemod";
@@ -27,7 +28,6 @@ const SOURCEMOD = "sourcemod";
 // turned on or off where SourceMod keeps them. There is no catalog that
 // checks what it lists, so plugins come as .smx files the user uploads.
 export default function SourceMods(props: { spec: SourceGameSpec; active: boolean }) {
-    const ids = sourceCalls(props.spec.id);
     const [view, setView] = createSignal<SourceModView | null>(null);
     const [loadError, setLoadError] = createSignal("");
     const [working, setWorking] = createSignal<string | null>(null);
@@ -43,7 +43,7 @@ export default function SourceMods(props: { spec: SourceGameSpec; active: boolea
         setLoadError("");
         const current = latest();
         try {
-            const answer = await serverBridge.call<SourceModView>(ids.sourcemod);
+            const answer = await serverCalls.sourceSourcemod();
             if (current()) setView(answer);
         } catch (err) {
             if (current()) setLoadError(errorMessage(err));
@@ -77,17 +77,17 @@ export default function SourceMods(props: { spec: SourceGameSpec; active: boolea
     };
     // turning SourceMod on the first time downloads it, which can take a while
     const sourcemod = saves.setting(SOURCEMOD, () => view()?.on ?? false, (on) =>
-        answer(() => serverBridge.call<SourceModView>(ids.sourcemodSet, { on }, { timeoutMs: null })),
+        answer(() => serverCalls.sourceSourcemodSet({ on })),
     );
     const pluginSetting = (file: string, enabled: () => boolean) =>
-        saves.setting(file, enabled, (on) => answer(() => serverBridge.call<SourceModView>(ids.plugin, { file, on })));
+        saves.setting(file, enabled, (on) => answer(() => serverCalls.sourcePlugin({ file, on })));
 
     const remove = async (plugin: SourcePlugin) => {
         setWorking(plugin.file);
         setError(null);
         setNotice("");
         try {
-            await saves.run(() => answer(() => serverBridge.call<SourceModView>(ids.pluginRemove, { file: plugin.file })));
+            await saves.run(() => answer(() => serverCalls.sourcePluginRemove({ file: plugin.file })));
             setRemoving(null);
         } catch (err) {
             setError({ title: `${plugin.title} was not removed`, message: errorMessage(err) });
@@ -107,7 +107,7 @@ export default function SourceMods(props: { spec: SourceGameSpec; active: boolea
                 return;
             }
             const { added, view: next } = await saves.run(() =>
-                serverBridge.call<{ added: string[]; view: SourceModView }>(ids.pluginUpload, { stage }, { timeoutMs: null }),
+                serverCalls.sourcePluginUpload({ stage }),
             );
             setView(next);
             setNotice(`${listAdded(added)} ${added.length === 1 ? "is" : "are"} on.`);

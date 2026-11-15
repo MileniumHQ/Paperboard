@@ -1,7 +1,8 @@
-// One of a server's calls, the way its page makes it: by name, with the
-// server it is for in the input.
-import { serviceApi, type BlockCallOptions } from "@mileniumhq/paperapi";
-import { PANEL_ID } from "../../src/service/contract";
+// One server's calls, the way its page makes them: through the panel's
+// contract, with the server they are about in the client's scope.
+import { serviceClient } from "@mileniumhq/paperapi";
+import { gameServerContract } from "../../src/service/contract";
 
-export const callServer = <T = unknown>(server: string, name: string, input: Record<string, unknown> = {}, options?: BlockCallOptions): Promise<T> =>
-    serviceApi.call<T>(PANEL_ID, name, { ...input, server }, { timeoutMs: null, ...options });
+export const serverCalls = (server: string) => serviceClient(gameServerContract, { server }).calls;
+/** The calls about the saved servers, which the servers list makes with no server open. */
+export const panelCalls = () => serviceClient(gameServerContract, {}).calls;

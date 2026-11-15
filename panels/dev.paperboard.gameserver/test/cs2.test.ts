@@ -2,12 +2,11 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import * as path from "node:path";
 import { startTestDaemon, type TestDaemon } from "./helpers/crane";
 import { cs2Call as call, cs2Server } from "./helpers/cs2";
-import { CALLS } from "../src/service/contract";
 import { CS2 } from "../src/games/cs2";
 import { configFiles, installedMaps } from "../src/games/cs2/service";
 import { activatedMap, consoleSaid, parseStatusPlayers, withoutPositions } from "../src/games/cs2/console";
 import { parseLogLine } from "../src/games/source/log";
-import { describedCalls, sourceCalls } from "../src/games/source";
+import { describedCalls, SOURCE_CALLS } from "../src/games/source";
 import { TF2 } from "../src/games/tf2";
 
 let daemon: TestDaemon;
@@ -18,7 +17,7 @@ afterAll(async () => {
     await daemon?.stop();
 });
 
-const ids = sourceCalls(CS2.id);
+const ids = SOURCE_CALLS;
 
 // Counter-Strike 2, against a stand-in that prints what the real server was measured to (build 26598758).
 describe("Counter-Strike 2", () => {
@@ -46,12 +45,12 @@ describe("Counter-Strike 2", () => {
 
         const server = await cs2Server();
         expect(await installedMaps(path.join(server.dir, "install", "game", "csgo"))).toEqual(["de_dust2", "de_inferno"]);
-        await expect(call(server, CALLS.writeGameOptions, { patch: { map: "lobby_mapveto" } })).rejects.toThrow("is not installed");
+        await expect(call(server, "writeGameOptions", { patch: { map: "lobby_mapveto" } })).rejects.toThrow("is not installed");
         await expect(call(server, ids.changeMap, { map: "../cfg/server" })).rejects.toThrow("Choose a map by its name");
         // a game answers what it describes: one with no rotation, Workshop or SourceMod describes none of their calls
         expect(describedCalls(CS2)).not.toContain(ids.mapCycleSet);
         expect(describedCalls(CS2)).not.toContain(ids.sourcemodSet);
-        expect(describedCalls(TF2)).toEqual(expect.arrayContaining([sourceCalls(TF2.id).mapCycleSet, sourceCalls(TF2.id).workshopAdd, sourceCalls(TF2.id).sourcemodSet]));
+        expect(describedCalls(TF2)).toEqual(expect.arrayContaining([SOURCE_CALLS.mapCycleSet, SOURCE_CALLS.workshopAdd, SOURCE_CALLS.sourcemodSet]));
     });
 
 });

@@ -5,7 +5,7 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { processApi } from "@mileniumhq/paperapi";
-import { callServer } from "./helpers/serverCall";
+import { serverCalls } from "./helpers/serverCall";
 import { startTestDaemon, type TestDaemon } from "./helpers/crane";
 import { openPage, servePanel, waitForWidget, widgetUrl, WIDGET_DOC, WIDGET_TEXT, type Page } from "./helpers/browser";
 import { installFakeJava } from "./helpers/fakeJava";
@@ -70,7 +70,7 @@ async function running(id: Id, start: () => Promise<unknown>) {
     await state().waitFor(id, (s) => s.serverStatus === "online", `${id} online`);
     return {
         async stop() {
-            await callServer(id, "stop-server");
+            await serverCalls(id).stopServer();
             await exited;
         },
     };
@@ -130,7 +130,7 @@ describe("two servers of different games", () => {
 
             // a change to one server's settings is that server's alone
             const before = stored("s-mc").settings;
-            await callServer("s-ter", "terraria-motd", { motd: "Island only" });
+            await serverCalls("s-ter").terrariaMotd({ motd: "Island only" });
             await page.waitFor(`${ACTIVE}.innerText.includes("Island only")`, "Terraria's new message of the day");
             expect(stored("s-ter").settings.motd).toBe("Island only");
             expect(stored("s-mc").settings).toEqual(before);
@@ -189,7 +189,7 @@ describe("Home's widgets", () => {
             await waitForWidget(ter, `${WIDGET_TEXT}.includes("Game Server isn't answering")`, "Island's players widget refused");
             expect(await ter.evaluate<string>(`${WIDGET_DOC}.body.textContent`)).toContain("Terraria does not support the players widget");
 
-            minecraft = await running("s-mc", () => callServer("s-mc", "start-server"));
+            minecraft = await running("s-mc", () => serverCalls("s-mc").startServer());
             // the widget asks the running server who is on: its list answer names them
             await waitForWidget(mc, `${WIDGET_TEXT}.includes("Alice") && ${WIDGET_TEXT}.includes("Bob") && ${WIDGET_TEXT}.includes("2/10")`, "Alice and Bob online, of 10");
             expect(await mc.evaluate<string>(WIDGET_TEXT)).not.toContain("Names as typed not read");

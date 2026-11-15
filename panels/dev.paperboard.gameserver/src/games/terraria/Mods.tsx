@@ -1,12 +1,12 @@
 import { createEffect, createSignal, For, on, Show } from "solid-js";
 import { PaperButton, PaperEffect, PaperIcon, PaperQuote, PaperText } from "@mileniumhq/paperui";
-import { serverBridge } from "../../lib/server";
 import { errorMessage } from "../../lib/failure";
 import { listAdded } from "../../lib/addons/upload";
 import { changeMessage, requiredChain, workshopModsKind, type ModChange } from "../../lib/addons/workshop";
 import AddonBrowser from "../../components/addons/AddonBrowser";
 import type { InstallExtrasProps } from "../../components/addons/AddonModals";
 import { createAddonBrowser } from "../../components/addons/state";
+import { serverCalls } from "../../lib/api";
 
 // What installing a mod also installs: the Workshop items it requires, and
 // what those require. The service skips the ones already installed, and
@@ -87,11 +87,7 @@ export default function TerrariaMods(props: { active: boolean }) {
         setUpdateError("");
         setNotice(null);
         try {
-            const { result, restart } = await serverBridge.call<ModChange<{ updated: string[]; current: number }>>(
-                "terraria-mod-updates",
-                {},
-                { timeoutMs: null },
-            );
+            const { result, restart } = await serverCalls.terrariaModUpdates();
             setNotice(
                 result.updated.length > 0
                     ? { title: "Updated", message: changeMessage(`${listAdded(result.updated)} updated.`, restart) }

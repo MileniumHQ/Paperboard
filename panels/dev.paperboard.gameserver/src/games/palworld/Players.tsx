@@ -2,9 +2,9 @@ import { createMemo, Show } from "solid-js";
 import GameRoster, { CopyRow, createRosterState, type RosterPlayer } from "../../components/GameRoster";
 import { byName, withUniqueNames } from "../rosterNames";
 import PlayerAvatar from "../../components/PlayerAvatar";
-import { serverBridge } from "../../lib/server";
 import type { PalworldSeen } from "./roster";
 import type { PalworldPlayer } from "./rest";
+import { serverCalls } from "../../lib/api";
 
 interface Player extends RosterPlayer {
     userId: string;
@@ -13,11 +13,10 @@ interface Player extends RosterPlayer {
 }
 
 export default function PalworldPlayers() {
-    const state = createRosterState(() => serverBridge.call<{ seen: PalworldSeen[]; bans: string[]; online: PalworldPlayer[] }>("palworld-players"));
+    const state = createRosterState(() => serverCalls.palworldPlayers());
     const seen = () => state.roster()?.seen ?? [];
     const bans = () => state.roster()?.bans ?? [];
     const online = () => state.roster()?.online ?? [];
-    const act = (action: string) => (player: Player) => serverBridge.call(action, { userId: player.userId });
 
     // Palworld names need not be unique, so a clash gets the user id
     const players = createMemo(() => {
@@ -39,9 +38,9 @@ export default function PalworldPlayers() {
             playing={(player) => `Playing · level ${player.level ?? 0}`}
             pickHint="Players appear here once they join. Pick one to see their level and to kick or ban them."
             moderation={{
-                kick: act("palworld-kick"),
-                ban: act("palworld-ban"),
-                unban: act("palworld-unban"),
+                kick: (player) => serverCalls.palworldKick({ userId: player.userId }),
+                ban: (player) => serverCalls.palworldBan({ userId: player.userId }),
+                unban: (player) => serverCalls.palworldUnban({ userId: player.userId }),
                 banNote: "Palworld bans the player's account, wherever they join from.",
                 needsServer: "Start the server to ban or unban. Palworld keeps its own ban list.",
             }}

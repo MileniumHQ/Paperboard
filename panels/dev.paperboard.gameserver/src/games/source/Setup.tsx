@@ -1,12 +1,12 @@
 import { createMemo, createResource, createSignal, For, Show } from "solid-js";
 import { createAction, PaperButton, PaperCenteredInterface, PaperFlex, PaperIcon, PaperMediaCard, PaperMediaCardGroup, PaperQuote, PaperText, PaperWizardStep } from "@mileniumhq/paperui";
-import { serverBridge } from "../../lib/server";
 import { errorMessage } from "../../lib/failure";
 import SteamSetup from "../steam/SteamSetup";
-import { sourceCalls, type SourceGameSpec } from "./index";
+import { type SourceGameSpec } from "./index";
 import MapCards, { MapPicturesCredit, MapPicturesFailure, mapChoices } from "./MapCards";
 import { playModes } from "./modes";
 import { createMapPictures } from "./useMapPictures";
+import { serverCalls } from "../../lib/api";
 
 /** A banner of one big symbol, for a card whose pictures are not there. */
 const iconBanner = (icon: string) => (
@@ -25,11 +25,10 @@ type Choice = { mode: string | null; map: string };
  * maps, once the download has said which maps there are.
  */
 export default function SourceSetup(props: { spec: SourceGameSpec; onComplete(): void }) {
-    const ids = sourceCalls(props.spec.id);
     const pictures = createMapPictures(props.spec);
     // the maps are only there once the download is, so they are read when its step is left
     const [downloaded, setDownloaded] = createSignal(false);
-    const [resource, { refetch }] = createResource(downloaded, () => serverBridge.call<string[]>(ids.maps));
+    const [resource, { refetch }] = createResource(downloaded, () => serverCalls.sourceMaps());
     // reading a failed resource throws; the failure is shown where the modes would be
     const installed = () => (resource.state === "ready" ? resource() : undefined);
     // the mode picked ("" before one is), and null for the game's own map cycle
@@ -63,14 +62,12 @@ export default function SourceSetup(props: { spec: SourceGameSpec; onComplete():
 
     const save = () => saving.run("Setup is not finished", () => {
         const choice: Choice = { mode: mode() as string | null, map: map() };
-        return serverBridge.call(ids.play, choice);
+        return serverCalls.sourcePlay(choice);
     });
 
     return (
         <SteamSetup
             name={props.spec.name}
-            infoAction={ids.info}
-            installAction={ids.install}
             save={save}
             onComplete={props.onComplete}
             steps={

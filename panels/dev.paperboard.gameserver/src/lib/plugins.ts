@@ -2,9 +2,8 @@ import { minecraftSoftware } from "../games/minecraft/index";
 import semver from "semver";
 import { fileApi, errorMessage } from "./api";
 import { PANEL_ID } from "../service/types";
-import { serverSoftware, serverVersion, serverBridge } from "./server";
+import { serverSoftware, serverVersion } from "./server";
 import { behaviorVersionOf } from "./versionProfile";
-import { CALLS } from "../service/contract";
 import { SOFTWARE, type ServerSoftwareType } from "./software";
 import { sanitizeFileName } from "./filesystem";
 import {
@@ -18,6 +17,7 @@ import { resolveGeyserMCLatest } from "./geysermc";
 import type { InstallPreview, InstallVersionSelection, InstalledFileSummary, RawVersionDependency } from "../service/plugins";
 import type { GeyserMCSource } from "../core/plugins";
 import { SEARCH_LIMIT, getProject, modrinthFetch, parseSearchHits, type ModrinthHit, type ModrinthProject, type RawHit } from "./modrinth";
+import { serverCalls } from "./api";
 
 export type { InstalledPlugin, InstalledRecord, ModrinthHit, ModrinthProject };
 export type { InstallPreview, InstallVersionSelection, InstalledFileSummary, ResolvedDependency } from "../service/plugins";
@@ -32,7 +32,7 @@ const SERVER_ENVIRONMENTS = [
 
 /** Records installed files and forgets replaced ones; the service merges them into its records. */
 function recordInstalls(set: Record<string, InstalledRecord>, remove: string[] = []): Promise<unknown> {
-    return serverBridge.call(CALLS.recordPluginInstalls, { set, remove });
+    return serverCalls.recordPluginInstalls({ set, remove });
 }
 
 export async function listInstalledPlugins(): Promise<{
@@ -40,13 +40,13 @@ export async function listInstalledPlugins(): Promise<{
     warning?: string;
 }> {
     // service-owned (service/plugins.ts): listing verifies hashes against install records
-    return serverBridge.call(CALLS.listInstalledPlugins);
+    return serverCalls.listInstalledPlugins();
 }
 
 /** Moves a plugin to the trash; the service forgets its install record. */
 export async function uninstallPlugin(filename: string): Promise<void> {
     // service-owned: trash-first delete, never a bare fileApi.delete
-    await serverBridge.call(CALLS.deletePlugin, { filename });
+    await serverCalls.deletePlugin({ filename });
 }
 
 export interface ResolvedDownload {
@@ -320,12 +320,12 @@ export async function listProjectVersions(
 
 /** What installing a build takes: its file and every dependency, resolved by the service with no writes. */
 export function previewInstall(projectId: string, title: string, versionId: string, includeOptionalKeys: string[] = []): Promise<InstallPreview> {
-    return serverBridge.call(CALLS.previewPluginInstall, { projectId, title, versionId, includeOptionalKeys });
+    return serverCalls.previewPluginInstall({ projectId, title, versionId, includeOptionalKeys });
 }
 
 /** Installs a chosen build with its required dependencies (and checked optional ones), as Blocks does. */
 export function installProjectVersion(selection: InstallVersionSelection): Promise<InstalledFileSummary[]> {
-    return serverBridge.call(CALLS.installPluginVersion, { ...selection });
+    return serverCalls.installPluginVersion({ ...selection });
 }
 
 /** "unchecked": no Modrinth record says what it is (uploaded, or added by hand), so nothing could be looked up */
@@ -445,5 +445,5 @@ export async function installGeyserMCProject(source: GeyserMCSource, filename: s
 // trash-first removal of every jar under both plugins/ and mods/, plus the
 // install records — used when switching server software invalidates them all
 export async function uninstallAllPlugins(): Promise<void> {
-    await serverBridge.call(CALLS.uninstallAllPlugins);
+    await serverCalls.uninstallAllPlugins();
 }

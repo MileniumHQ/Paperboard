@@ -5,7 +5,7 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { processApi } from "@mileniumhq/paperapi";
-import { callServer } from "./helpers/serverCall";
+import { serverCalls } from "./helpers/serverCall";
 import { startTestDaemon, type TestDaemon } from "./helpers/crane";
 import { openPage, servePanel } from "./helpers/browser";
 import { servicesState } from "./helpers/installedPanel";
@@ -46,7 +46,7 @@ describe("Rust's Map tab", () => {
         const page = await openPage(`${served.url}/?server=${ID}`);
         const exited = new Promise<void>((resolve) => processApi.onExit(`${ID}-rust-server`, () => resolve()));
         try {
-            await callServer(ID, "start-server");
+            await serverCalls(ID).startServer();
             await state.waitFor(ID, (s) => s.serverStatus === "online", "Rust online");
             await page.waitFor(`document.querySelector('input[name=serverMenu][value="map"]')`, "the server menu");
             await page.click('input[name=serverMenu][value="map"]');
@@ -62,7 +62,7 @@ describe("Rust's Map tab", () => {
             // running, a wipe is not offered
             expect(await page.evaluate(`${button("Wipe")}.disabled`)).toBe(true);
 
-            await callServer(ID, "stop-server");
+            await serverCalls(ID).stopServer();
             await exited;
             await page.waitFor(`!${button("Wipe")}.disabled`, "Wipe offered once the server stopped");
             await page.evaluate(`${button("Wipe")}.click()`);

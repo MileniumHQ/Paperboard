@@ -11,11 +11,12 @@ import {
 } from "@mileniumhq/paperui";
 import InstallNotices, { type HostSupport } from "../../components/InstallNotices";
 import InstallProgressModal from "../../components/InstallProgressModal";
-import { serverBridge, serverSoftware, serverStatus, serverVersion } from "../../lib/server";
+import { serverSoftware, serverStatus, serverVersion } from "../../lib/server";
 import { errorMessage, type Outcome } from "../../lib/failure";
 import { softwareName, terrariaSoftware } from "./catalog";
 import ReleaseSelector, { releasesOf } from "./ReleaseSelector";
 import { createTerrariaInstall } from "./installRows";
+import { serverCalls } from "../../lib/api";
 
 export default function TerrariaVersions() {
     // a server keeps the software it was made with; only its releases are offered
@@ -31,7 +32,7 @@ export default function TerrariaVersions() {
 
     onMount(async () => {
         try {
-            setSupport((await serverBridge.call<{ hosts: Record<string, HostSupport> }>("terraria-versions")).hosts[software()] ?? null);
+            setSupport((await serverCalls.terrariaVersions()).hosts[software()] ?? null);
         } catch (err) {
             console.error("[Versions] Failed to read the Terraria releases:", err);
             setLoadFailure({ title: "Terraria releases could not be read", message: errorMessage(err) });

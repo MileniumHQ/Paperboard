@@ -1,7 +1,8 @@
 import { createEffect, createSignal, on } from "solid-js";
 import type { LoaderStatus } from "@mileniumhq/paperui";
 import type { InstallLoaderItem } from "../../components/InstallLoaders";
-import { installProgress, serverBridge, setInstallProgress } from "../../lib/server";
+import { installProgress, setInstallProgress } from "../../lib/server";
+import { serverCalls } from "../../lib/api";
 import { createInstallFlow } from "../installFlow";
 import type { SteamUpdateStatus } from "./installAction";
 export type { SteamUpdateStatus };
@@ -22,7 +23,7 @@ export interface SteamInstallInfo {
  * downloads, then checks the files, then the game's service sets the server
  * up. run() resolves true once installed.
  */
-export function createSteamInstall(action: string) {
+export function createSteamInstall() {
     const flow = createInstallFlow();
     const { error, installed, running } = flow;
 
@@ -31,7 +32,7 @@ export function createSteamInstall(action: string) {
             // a previous run's last stage is not this run's: an install already running reports its own
             setInstallProgress(null);
             setReached(-1);
-            await serverBridge.call(action, undefined, { timeoutMs: null });
+            await serverCalls.steamInstall();
         });
 
     // the row each stage belongs to; getting ready to download is the download's row

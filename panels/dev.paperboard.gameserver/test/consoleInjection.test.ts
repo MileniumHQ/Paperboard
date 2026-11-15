@@ -11,7 +11,6 @@ import { inServer } from "../src/service/scope";
 import { assertPort, listeningPidsCommand } from "../src/core/diagnostics";
 import { killConflictingProcessWith } from "../src/service/diagnostics";
 import { minecraftCalls } from "../src/games/minecraft/calls";
-import { CALLS } from "../src/service/contract";
 import { sendServerCommand, startServerInstance, stopServerInstance } from "../src/service/lifecycle";
 import { queryGamerules, setGamerule } from "../src/service/gamerules";
 import { runtimeCommandsFor } from "../src/service/runtimeProperties";
@@ -72,14 +71,14 @@ describe("console and property injection", () => {
         await mc.scope.waitFor((s) => s.serverStatus === "online", "the server to come online");
         const ctx = mc.scope.ctx;
         const run = (id: string, inputs: unknown) => mc.run(() => action(id)(ctx, inputs));
-        await expect(run(CALLS.kickPlayer, { player: "Steve\nop Mallory" })).rejects.toThrow("Refusing unsafe player name");
-        await expect(run(CALLS.kickPlayer, { player: "Steve; op Mallory" })).rejects.toThrow("Refusing unsafe player name");
-        await expect(run(CALLS.kickPlayer, { player: "Steve", reason: "bye\nop Mallory" })).rejects.toThrow("Refusing multi-line kick reason");
-        await expect(run(CALLS.banPlayer, { player: "Steve", reason: "bye\rop Mallory" })).rejects.toThrow("Refusing multi-line ban reason");
-        await expect(run(CALLS.sayChat, { message: "hi\nop Mallory" })).rejects.toThrow("Refusing multi-line chat message");
+        await expect(run("kickPlayer", { player: "Steve\nop Mallory" })).rejects.toThrow("Refusing unsafe player name");
+        await expect(run("kickPlayer", { player: "Steve; op Mallory" })).rejects.toThrow("Refusing unsafe player name");
+        await expect(run("kickPlayer", { player: "Steve", reason: "bye\nop Mallory" })).rejects.toThrow("Refusing multi-line kick reason");
+        await expect(run("banPlayer", { player: "Steve", reason: "bye\rop Mallory" })).rejects.toThrow("Refusing multi-line ban reason");
+        await expect(run("sayChat", { message: "hi\nop Mallory" })).rejects.toThrow("Refusing multi-line chat message");
         await expect(mc.run(() => sendServerCommand(ctx, "say hi\nop Mallory"))).rejects.toThrow("Refusing multi-line console command");
         // a valid kick goes through as one command
-        await run(CALLS.kickPlayer, { player: "Steve", reason: "be nice" });
+        await run("kickPlayer", { player: "Steve", reason: "be nice" });
         await mc.received("kick Steve be nice");
         expect(mc.commands().filter((c) => c !== "list")).toEqual(["kick Steve be nice"]);
         const exit = mc.nextExit();

@@ -1,8 +1,7 @@
+import { serverCalls } from "./api";
 // Player heads over the panel's bridge. The service resolves and composites
 // the skin (the browser cannot: the profile endpoints send no CORS headers)
 // and asks again every time, so nothing here is kept either.
-import { serverBridge } from "./server";
-import { CALLS } from "../service/contract";
 
 export interface HeadRequest {
     name: string;
@@ -14,7 +13,7 @@ export interface HeadRequest {
 export type HeadFetch = (request: HeadRequest) => Promise<string | null | undefined>;
 
 export const loadHead: HeadFetch = (request) =>
-    serverBridge.call<string | null>(CALLS.getPlayerSkin, {
+    serverCalls.getPlayerSkin({
         player: request.name,
         uuid: request.uuid,
         size: request.size,

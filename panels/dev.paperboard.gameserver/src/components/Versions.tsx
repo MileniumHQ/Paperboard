@@ -12,9 +12,8 @@ import {
     PaperText,
     PaperCard,
 } from "@mileniumhq/paperui";
-import { config } from "../lib/api";
+import { serverCalls } from "../lib/api";
 import InstallProgressModal from "./InstallProgressModal";
-import { PANEL_ID } from "../service/types";
 import { serverStatus } from "../lib/server";
 import { createInstallRun } from "../lib/installRun";
 import {
@@ -58,14 +57,15 @@ export default function Versions(props: { onRequestPluginUpdate?: () => void }) 
 
     onMount(async () => {
         try {
-            const saved = await config.get<any>(PANEL_ID);
-            if (isServerSoftware(saved?.software)) {
-                setInstalledSoftware(saved.software);
-                setSoftware(saved.software);
+            const saved = await serverCalls.readServerConfig();
+            const { software, version } = saved;
+            if (isServerSoftware(software)) {
+                setInstalledSoftware(software);
+                setSoftware(software);
             }
-            if (saved?.version) {
-                setInstalledVersion(saved.version);
-                setSelectedVersion(saved.version);
+            if (typeof version === "string" && version) {
+                setInstalledVersion(version);
+                setSelectedVersion(version);
             }
         } catch (err) {
             setError({ title: "Couldn't read the installed version", message: errorMessage(err) });

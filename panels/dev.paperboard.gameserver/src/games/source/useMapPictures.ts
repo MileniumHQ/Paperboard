@@ -1,7 +1,7 @@
 import { createSignal, onMount } from "solid-js";
-import { serverBridge } from "../../lib/server";
 import { errorMessage } from "../../lib/failure";
-import { sourceCalls, type SourceGameSpec, type SourceMapPictures } from "./index";
+import { type SourceGameSpec, type SourceMapPictures } from "./index";
+import { serverCalls } from "../../lib/api";
 
 /** A game's map pictures and names as a screen has them: asked for once, kept, and failing out loud. */
 export interface MapPicturesState {
@@ -31,13 +31,12 @@ const asked = new Set<string>();
  * source has none, and nothing to say about it.
  */
 export function createMapPictures(spec: SourceGameSpec): MapPicturesState {
-    const ids = sourceCalls(spec.id);
     const hasPictures = Boolean(spec.mapPictures || spec.installPictures);
     const [wiki, setWiki] = createSignal<SourceMapPictures | null>(null);
     const [error, setError] = createSignal("");
     const loadWiki = async () => {
         try {
-            setWiki(await serverBridge.call<SourceMapPictures>(ids.mapPictures));
+            setWiki(await serverCalls.sourceMapPictures());
         } catch (err) {
             setError(errorMessage(err));
         }
@@ -46,7 +45,7 @@ export function createMapPictures(spec: SourceGameSpec): MapPicturesState {
 
     const fetchPicture = async (map: string) => {
         try {
-            const picture = await serverBridge.call<string | null>(ids.mapPicture, { map });
+            const picture = await serverCalls.sourceMapPicture({ map });
             setFetched((have) => ({ ...have, [map]: picture }));
         } catch (err) {
             // asked again on Try again

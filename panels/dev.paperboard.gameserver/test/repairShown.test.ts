@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { processApi as rawProcess } from "@mileniumhq/paperapi";
-import { callServer } from "./helpers/serverCall";
+import { serverCalls } from "./helpers/serverCall";
 import { startTestDaemon, type TestDaemon } from "./helpers/crane";
 import { installFakeJava } from "./helpers/fakeJava";
 import { openPage, servePanel } from "./helpers/browser";
@@ -39,7 +39,7 @@ describe("the server issue repairs", () => {
         await gameServerService.ready;
         const served = await servePanel(daemon);
         const exited = new Promise<void>((resolve) => rawProcess.onExit("s-mc-mc-server", () => resolve()));
-        await callServer("s-mc", "start-server");
+        await serverCalls("s-mc").startServer();
         const page = await openPage(`${served.url}/?server=s-mc`);
         try {
             await page.waitFor(`document.body.innerText.includes("ONLINE")`, "the server to show online");
@@ -54,7 +54,7 @@ describe("the server issue repairs", () => {
         } finally {
             await page.close();
             rawProcess.run = run;
-            await callServer("s-mc", "stop-server");
+            await serverCalls("s-mc").stopServer();
             await exited;
             served.stop();
         }
@@ -84,7 +84,7 @@ describe("the server issue repairs", () => {
         const served = await servePanel(daemon);
         const nextExit = () => new Promise<void>((resolve) => rawProcess.onExit("s-eula-mc-server", () => resolve()));
         const refused = nextExit();
-        await callServer("s-eula", "start-server");
+        await serverCalls("s-eula").startServer();
         const page = await openPage(`${served.url}/?server=s-eula`);
         try {
             await page.waitFor(`document.body.innerText.includes("EULA Agreement Required")`, "the EULA to be asked for");
@@ -104,7 +104,7 @@ describe("the server issue repairs", () => {
         } finally {
             await page.close();
             const stopped = nextExit();
-            await callServer("s-eula", "stop-server");
+            await serverCalls("s-eula").stopServer();
             if (fs.readFileSync(path.join(dir, "runs.log"), "utf8").trim().split("\n").length > 1) await stopped;
             served.stop();
         }

@@ -1,9 +1,10 @@
 import { batch, createEffect, createSignal, on, Show } from "solid-js";
 import { PaperButton, PaperCard, PaperFlex, PaperIcon, PaperLoader, PaperModal, PaperPageHeader, PaperQuote, PaperSettingItem, PaperSettingList, PaperTable, PaperText, PaperToggle, createAction, createLatest } from "@mileniumhq/paperui";
-import { serverBridge, serverStatus } from "../../lib/server";
+import { serverStatus } from "../../lib/server";
 import { errorMessage } from "../../lib/failure";
 import type { RustMapView } from "./index";
 import styles from "./Map.module.css";
+import { serverCalls } from "../../lib/api";
 
 /**
  * The map a Rust server plays, and its wipe: a fresh map with everything on
@@ -29,8 +30,8 @@ export default function RustMap(props: { active: boolean }) {
     const load = async () => {
         const current = latest();
         try {
-            const view = await serverBridge.call<RustMapView>("rust-map");
-            const picture = await serverBridge.call<string | null>("rust-map-picture");
+            const view = await serverCalls.rustMap();
+            const picture = await serverCalls.rustMapPicture();
             if (!current()) return;
             batch(() => {
                 setView(view);
@@ -49,7 +50,7 @@ export default function RustMap(props: { active: boolean }) {
         setDrawing(true);
         setPictureError("");
         try {
-            setPicture(await serverBridge.call<string>("rust-map-draw"));
+            setPicture(await serverCalls.rustMapDraw());
         } catch (err) {
             setPictureError(errorMessage(err));
         } finally {
@@ -60,7 +61,7 @@ export default function RustMap(props: { active: boolean }) {
     const ask = () => { setBlueprints(false); wiping.setError(null); setOpen(true); };
     const wipe = () => wiping.run("Not wiped", async () => {
         const trashed = view()?.made === true;
-        setView(await serverBridge.call<RustMapView>("rust-wipe", { blueprints: blueprints() }));
+        setView(await serverCalls.rustWipe({ blueprints: blueprints() }));
         setPicture(null);
         setWiped({ trashed });
         setOpen(false);

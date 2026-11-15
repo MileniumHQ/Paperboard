@@ -1,13 +1,13 @@
 import { createSignal, For, Show } from "solid-js";
 import { PaperBadge, PaperCopyButton, PaperFlex, PaperQuote, PaperTable } from "@mileniumhq/paperui";
 import { fileApi } from "../../lib/api";
-import { serverBridge } from "../../lib/server";
 import { PANEL_ID } from "../../service/contract";
 import { GameOptionItem } from "../../components/GameOptions";
 import WorldsPage from "../../components/WorldsPage";
 import { options } from "./index";
 import { gameModeLabel, worldSizeLabel, type TerrariaWorldHeader } from "./worldFile";
 import type { TerrariaWorld } from "./worldStore";
+import { serverCalls } from "../../lib/api";
 
 const WLD_FILTERS = [{ name: "Terraria worlds", extensions: ["wld"] }];
 const UPLOAD_DIR = ".terraria-upload";
@@ -36,7 +36,7 @@ export default function TerrariaWorlds() {
 
     return (
         <WorldsPage
-            list={() => serverBridge.call<TerrariaWorld[]>("terraria-worlds")}
+            list={() => serverCalls.terrariaWorlds()}
             game={{
                 listName: "terraria-worlds",
                 title: (world) => world.header?.name ?? world.name,
@@ -122,8 +122,8 @@ export default function TerrariaWorlds() {
                 canDelete: (world) => world.generated,
                 canSwitch: (world) => world.header !== null,
                 download: (world) => fileApi.exportFile(`worlds/${world.name}.wld`, PANEL_ID, { suggestedName: `${world.name}.wld`, filters: WLD_FILTERS }),
-                switchTo: (world) => serverBridge.call("terraria-world", { name: world.name, create: false }),
-                remove: (world) => serverBridge.call("terraria-world-delete", { name: world.name }),
+                switchTo: (world) => serverCalls.terrariaWorld({ name: world.name, create: false }),
+                remove: (world) => serverCalls.terrariaWorldDelete({ name: world.name }),
                 deleteNote: (world) => `This moves "${world.name}" and its backup to the server folder's trash, with everything built in it.`,
                 takenNames: (worlds) => worlds.map((w) => w.name),
                 namePattern: NAME_PATTERN,
@@ -135,7 +135,7 @@ export default function TerrariaWorlds() {
                         for (let n = 2; ; n++) if (free(`World ${n}`)) return `World ${n}`;
                     },
                     load: async () => {
-                        const saved = await serverBridge.call<Record<string, unknown>>("read-game-options");
+                        const saved = await serverCalls.readGameOptions();
                         setGeneration(Object.fromEntries(GENERATION.map((field) => [field.id, saved[field.id] ?? (field.kind === "secret" ? "" : field.default)])));
                     },
                     fields: () => (
@@ -151,7 +151,7 @@ export default function TerrariaWorlds() {
                     ),
                     note: "The world is generated the next time the server starts.",
                     submit: async (name) => {
-                        await serverBridge.call("terraria-world", { name, create: true, generation: generation() });
+                        await serverCalls.terrariaWorld({ name, create: true, generation: generation() });
                     },
                 },
                 // the page brings the .wld in and the service checks it is a world
@@ -160,11 +160,11 @@ export default function TerrariaWorlds() {
                         const file = `upload-${crypto.randomUUID()}.wld`;
                         const result = await fileApi.importFile(`${UPLOAD_DIR}/${file}`, PANEL_ID, { filters: WLD_FILTERS });
                         if (result.status === "canceled") return null;
-                        const { header, suggestedName } = await serverBridge.call<{ header: TerrariaWorldHeader; suggestedName: string }>("terraria-world-inspect", { file });
+                        const { header, suggestedName } = await serverCalls.terrariaWorldInspect({ file });
                         return { file, name: suggestedName, note: `${header.name}: ${summary(header)}.` };
                     },
-                    discard: (file) => serverBridge.call("terraria-world-discard", { file }),
-                    add: (file, name) => serverBridge.call("terraria-world-import", { file, name }),
+                    discard: (file) => serverCalls.terrariaWorldDiscard({ file }),
+                    add: (file, name) => serverCalls.terrariaWorldImport({ file, name }),
                     label: "File name",
                 },
             }}

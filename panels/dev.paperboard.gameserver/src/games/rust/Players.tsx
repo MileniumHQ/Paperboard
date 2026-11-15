@@ -2,10 +2,10 @@ import { createMemo, Show } from "solid-js";
 import GameRoster, { CopyRow, createRosterState, type RosterPlayer } from "../../components/GameRoster";
 import { byName, withUniqueNames } from "../rosterNames";
 import PlayerAvatar from "../../components/PlayerAvatar";
-import { serverBridge } from "../../lib/server";
 import { durationLabel } from "../../core/format";
 import type { RustBan, RustSeen } from "./roster";
 import type { RustPlayer } from "./webrcon";
+import { serverCalls } from "../../lib/api";
 
 interface Player extends RosterPlayer {
     steamId: string;
@@ -17,11 +17,10 @@ interface Player extends RosterPlayer {
 }
 
 export default function RustPlayers() {
-    const state = createRosterState(() => serverBridge.call<{ seen: RustSeen[]; bans: RustBan[]; online: RustPlayer[] }>("rust-players"));
+    const state = createRosterState(() => serverCalls.rustPlayers());
     const seen = () => state.roster()?.seen ?? [];
     const bans = () => state.roster()?.bans ?? [];
     const online = () => state.roster()?.online ?? [];
-    const act = (action: string) => (player: Player) => serverBridge.call(action, { steamId: player.steamId });
 
     // Rust names need not be unique, so a clash gets the Steam id
     const players = createMemo(() => {
@@ -43,9 +42,9 @@ export default function RustPlayers() {
             playing={(player) => (player.connected !== undefined ? `Playing · on for ${durationLabel(player.connected)}` : "Playing")}
             pickHint="Players appear here once they join. Pick one to see their Steam id and to kick or ban them."
             moderation={{
-                kick: act("rust-kick"),
-                ban: act("rust-ban"),
-                unban: act("rust-unban"),
+                kick: (player) => serverCalls.rustKick({ steamId: player.steamId }),
+                ban: (player) => serverCalls.rustBan({ steamId: player.steamId }),
+                unban: (player) => serverCalls.rustUnban({ steamId: player.steamId }),
                 banNote: "Rust bans the player's Steam account, wherever they join from.",
                 needsServer: "Start the server to ban or unban. Rust keeps its own ban list.",
             }}

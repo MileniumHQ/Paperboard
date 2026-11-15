@@ -7,7 +7,6 @@ import { gameServer, type GameServer } from "./helpers/game";
 import { freePort, installPalworld } from "./helpers/palworld";
 import { placeStandIn } from "./helpers/standIn";
 import { PANEL_ID } from "../src/servers";
-import { CALLS } from "../src/service/contract";
 import { processApi } from "../src/service/api";
 import { sendServerCommand, startServerInstance, stopServerInstance } from "../src/service/lifecycle";
 import { gameServiceFor } from "../src/games/service";
@@ -59,7 +58,7 @@ describe("game server secrets and inputs", () => {
     test("Terraria's join password lives in the vault, is hidden in the console and chat, and is in its config only while it runs", async () => {
         const server = await terrariaServer();
         const secret = "tera-Secret-7";
-        await call(server, CALLS.writeGameOptions, { patch: { password: secret } });
+        await call(server, "writeGameOptions", { patch: { password: secret } });
         expect(await vault(server, "join-password")).toBe(secret);
         expect(JSON.stringify(server.scope.server.settings)).not.toContain(secret);
         expect(filesHolding(server.dir, secret)).toEqual([]);
@@ -94,21 +93,21 @@ describe("game server secrets and inputs", () => {
         });
         const service = gameServiceFor("team-fortress-2");
         await server.run(() => service.initialize(server.scope.ctx, false));
-        await call(server, CALLS.writeGameOptions, { patch: { rconPassword: "rcon-Secret-1", password: "join-Secret-1", hostname: "My Server" } });
+        await call(server, "writeGameOptions", { patch: { rconPassword: "rcon-Secret-1", password: "join-Secret-1", hostname: "My Server" } });
         expect([await vault(server, "rcon-password"), await vault(server, "join-password")]).toEqual(["rcon-Secret-1", "join-Secret-1"]);
         // writing the rotation writes the game's config files from the settings
-        await call(server, "team-fortress-2-map-cycle-set", { maps: ["ctf_2fort"] });
+        await call(server, "sourceMapCycleSet", { maps: ["ctf_2fort"] });
         expect(fs.existsSync(path.join(server.dir, "install", "tf", "cfg", "paperboard_mapcycle.txt"))).toBe(true);
         expect(JSON.stringify(server.scope.server.settings)).not.toMatch(/rcon-Secret-1|join-Secret-1/);
         expect([...filesHolding(server.dir, "rcon-Secret-1"), ...filesHolding(server.dir, "join-Secret-1")]).toEqual([]);
 
         const settingsBefore = JSON.stringify(server.scope.server.settings);
         for (const hostname of ['x"; rcon_password y', "a;quit", "two\nlines"]) {
-            await expect(call(server, CALLS.writeGameOptions, { patch: { hostname } })).rejects.toThrow();
+            await expect(call(server, "writeGameOptions", { patch: { hostname } })).rejects.toThrow();
         }
-        await expect(call(server, "team-fortress-2-map-cycle-set", { maps: ["../../cfg/server"] })).rejects.toThrow("Choose a map by its name");
-        await expect(call(server, "team-fortress-2-plugin-remove", { file: "../../../server.cfg" })).rejects.toThrow();
-        await expect(call(server, "team-fortress-2-ban", { steamId: "[U:1:1]; quit" })).rejects.toThrow("Steam id");
+        await expect(call(server, "sourceMapCycleSet", { maps: ["../../cfg/server"] })).rejects.toThrow("Choose a map by its name");
+        await expect(call(server, "sourcePluginRemove", { file: "../../../server.cfg" })).rejects.toThrow();
+        await expect(call(server, "sourceBan", { steamId: "[U:1:1]; quit" })).rejects.toThrow("Steam id");
         await expect(server.run(() => sendServerCommand(server.scope.ctx, "rcon_password stolen"))).rejects.toThrow("Paperboard manages the RCON password");
         await expect(server.run(() => service.assertFileAccess!(server.scope.ctx, "install/tf/cfg/paperboard_secrets.cfg", false))).rejects.toThrow("holds Team Fortress 2's passwords");
         expect(JSON.stringify(server.scope.server.settings)).toBe(settingsBefore);
@@ -123,15 +122,15 @@ describe("game server secrets and inputs", () => {
         const service = gameServiceFor("garrys-mod");
         await server.run(() => service.initialize(server.scope.ctx, false));
         // 12 bytes: its packet begins like a TLS hello, which the server takes for a web request
-        await expect(call(server, CALLS.writeGameOptions, { patch: { rconPassword: "abcdefghijkl" } })).rejects.toThrow("exactly 12 characters");
+        await expect(call(server, "writeGameOptions", { patch: { rconPassword: "abcdefghijkl" } })).rejects.toThrow("exactly 12 characters");
         expect(await vault(server, "rcon-password")).toBe("");
-        await call(server, CALLS.writeGameOptions, { patch: { rconPassword: "rcon-Secret-12" } });
+        await call(server, "writeGameOptions", { patch: { rconPassword: "rcon-Secret-12" } });
         expect(await vault(server, "rcon-password")).toBe("rcon-Secret-12");
         expect(filesHolding(server.dir, "rcon-Secret-12")).toEqual([]);
 
-        await call(server, "garrys-mod-ban", { steamId: "STEAM_0:1:12345" });
+        await call(server, "sourceBan", { steamId: "STEAM_0:1:12345" });
         expect(fs.readFileSync(path.join(server.dir, "install", "garrysmod", "cfg", "banned_user.cfg"), "utf8")).toBe("banid 0 STEAM_0:1:12345\n");
-        for (const steamId of ["[U:1:24691]", "STEAM_0:1:1; quit", "STEAM_0:1:1\nquit"]) await expect(call(server, "garrys-mod-ban", { steamId })).rejects.toThrow("Steam id");
+        for (const steamId of ["[U:1:24691]", "STEAM_0:1:1; quit", "STEAM_0:1:1\nquit"]) await expect(call(server, "sourceBan", { steamId })).rejects.toThrow("Steam id");
 
         const gameDir = path.join(server.dir, "install", "garrysmod");
         expect(await launchArgs({}, gameDir)).toEqual(["+gamemode", "sandbox"]);
@@ -149,8 +148,8 @@ describe("game server secrets and inputs", () => {
         const service = gameServiceFor("palworld");
         await server.run(() => service.initialize(server.scope.ctx, false));
         for (const userId of ["steam_1;rm -rf", "../players", "", "x".repeat(65)]) {
-            await expect(call(server, "palworld-kick", { userId })).rejects.toThrow("Choose a player by their Palworld user id");
-            await expect(call(server, "palworld-ban", { userId })).rejects.toThrow("Choose a player by their Palworld user id");
+            await expect(call(server, "palworldKick", { userId })).rejects.toThrow("Choose a player by their Palworld user id");
+            await expect(call(server, "palworldBan", { userId })).rejects.toThrow("Choose a player by their Palworld user id");
         }
         const binary = fs.readFileSync(path.join(server.dir, "install", "PalServer.sh"));
         await expect(server.run(() => service.assertFileAccess!(server.scope.ctx, "install/PalServer.sh", true))).rejects.toThrow("Installed Palworld files are managed by Updates");

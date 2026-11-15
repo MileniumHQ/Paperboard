@@ -126,18 +126,18 @@ describe("other games' files", () => {
         const call = (id: string, input: unknown) => server.run(() => calls[id]!(server.scope.ctx, input));
         const cfg = (name: string) => path.join(server.dir, "install", "tf", "cfg", name);
 
-        expect(await call("team-fortress-2-map-cycle", {})).toMatchObject({ maps: ["ctf_2fort", "cp_dustbowl"], custom: false, file: "cfg/mapcycle.txt" });
-        expect(await call("team-fortress-2-map-cycle-set", { maps: ["pl_upward", "ctf_2fort"] })).toMatchObject({ maps: ["pl_upward", "ctf_2fort"], custom: true, file: "cfg/paperboard_mapcycle.txt" });
+        expect(await call("sourceMapCycle", {})).toMatchObject({ maps: ["ctf_2fort", "cp_dustbowl"], custom: false, file: "cfg/mapcycle.txt" });
+        expect(await call("sourceMapCycleSet", { maps: ["pl_upward", "ctf_2fort"] })).toMatchObject({ maps: ["pl_upward", "ctf_2fort"], custom: true, file: "cfg/paperboard_mapcycle.txt" });
         expect(fs.readFileSync(cfg("paperboard_mapcycle.txt"), "utf8").split("\n").filter((l) => !l.startsWith("//"))).toEqual(["pl_upward", "ctf_2fort", ""]);
         expect(fs.readFileSync(cfg("mapcycle.txt"), "utf8")).toBe(userCycle);
 
         // handing the rotation back removes only Paperboard's file
-        await call("team-fortress-2-map-cycle-set", { maps: null });
+        await call("sourceMapCycleSet", { maps: null });
         expect(fs.existsSync(cfg("paperboard_mapcycle.txt"))).toBe(false);
         expect(fs.readFileSync(cfg("mapcycle.txt"), "utf8")).toBe(userCycle);
 
         fs.writeFileSync(path.join(server.dir, "server.cfg"), 'hostname "mine"\nmapcyclefile "custom_cycle.txt"\n');
-        await expect(call("team-fortress-2-map-cycle-set", { maps: ["pl_upward"] })).rejects.toThrow("server.cfg in the server folder sets mapcyclefile to custom_cycle.txt");
+        await expect(call("sourceMapCycleSet", { maps: ["pl_upward"] })).rejects.toThrow("server.cfg in the server folder sets mapcyclefile to custom_cycle.txt");
         expect(fs.existsSync(cfg("paperboard_mapcycle.txt"))).toBe(false);
         expect(fs.readFileSync(path.join(server.dir, "server.cfg"), "utf8")).toBe('hostname "mine"\nmapcyclefile "custom_cycle.txt"\n');
     });

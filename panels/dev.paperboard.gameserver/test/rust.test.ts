@@ -7,7 +7,7 @@ import { gameServer, type GameServer } from "./helpers/game";
 import { freePort } from "./helpers/palworld";
 import { allowLoopbackSocket, installRust } from "./helpers/rust";
 import { PANEL_ID } from "../src/servers";
-import { CALLS, TRIGGER_IDS } from "../src/service/contract";
+import { TRIGGER_IDS } from "../src/service/contract";
 import { playerPoller } from "../src/games/serviceKit";
 import { sendServerCommand, startServerInstance, stopServerInstance } from "../src/service/lifecycle";
 import { argValue, rconPasswordRule, rustService } from "../src/games/rust/service";
@@ -53,7 +53,7 @@ const BANNED = "76561198000000001";
 describe("Rust", () => {
     test("the RCON password lives in the vault, reaches the server only on its command line, and is hidden where the server prints that; save, bans and live options go over the remote console", async () => {
         const server = await rustServer();
-        await call(server, CALLS.writeGameOptions, { patch: { hostname: "My Rust", maxplayers: 20 } });
+        await call(server, "writeGameOptions", { patch: { hostname: "My Rust", maxplayers: 20 } });
         await online(server);
         const password = await vault(server);
         expect(password.length).toBeGreaterThanOrEqual(20);
@@ -75,17 +75,17 @@ describe("Rust", () => {
 
         const save = path.join(server.dir, "server", "paperboard", "proceduralmap.1000.12345.290.sav");
         expect(fs.existsSync(save)).toBe(false);
-        await call(server, CALLS.saveWorld);
+        await call(server, "saveWorld");
         expect(fs.readFileSync(save, "utf8")).toStartWith("save 1 ");
 
-        await call(server, "rust-ban", { steamId: BANNED });
-        expect((await call(server, "rust-players") as { bans: unknown[] }).bans).toEqual([{ steamId: BANNED, name: BANNED, reason: "Banned by the server admin" }]);
+        await call(server, "rustBan", { steamId: BANNED });
+        expect((await call(server, "rustPlayers") as { bans: unknown[] }).bans).toEqual([{ steamId: BANNED, name: BANNED, reason: "Banned by the server admin" }]);
         expect(fs.readFileSync(path.join(server.dir, "server", "paperboard", "cfg", "bans.cfg"), "utf8")).toBe(`banid ${BANNED} "${BANNED}" "Banned by the server admin" -1\n`);
-        await expect(call(server, "rust-kick", { steamId: BANNED })).rejects.toThrow("That player is not online");
-        for (const bad of ["STEAM_0:1:1", "[U:1:1]", `${BANNED}" "x`, "765611980000000019", ""]) await expect(call(server, "rust-ban", { steamId: bad })).rejects.toThrow("Steam id");
+        await expect(call(server, "rustKick", { steamId: BANNED })).rejects.toThrow("That player is not online");
+        for (const bad of ["STEAM_0:1:1", "[U:1:1]", `${BANNED}" "x`, "765611980000000019", ""]) await expect(call(server, "rustBan", { steamId: bad })).rejects.toThrow("Steam id");
 
-        await call(server, CALLS.writeGameOptions, { patch: { maxplayers: 12 } });
-        expect((await call(server, "rust-metrics") as { MaxPlayers: number }).MaxPlayers).toBe(12);
+        await call(server, "writeGameOptions", { patch: { maxplayers: 12 } });
+        expect((await call(server, "rustMetrics") as { MaxPlayers: number }).MaxPlayers).toBe(12);
 
         // the console: an answer is shown, a command Rust doesn't know fails out loud, and Stop's own commands are refused
         await server.run(() => sendServerCommand(server.scope.ctx, "status"));
@@ -98,16 +98,16 @@ describe("Rust", () => {
 
         await stop(server);
         // stopped: the ban list is read from the file the server keeps, and changing it waits for the server
-        expect((await call(server, "rust-players") as { bans: { steamId: string }[] }).bans.map((b) => b.steamId)).toEqual([BANNED]);
-        await expect(call(server, "rust-unban", { steamId: BANNED })).rejects.toThrow("Start the server to ban or unban players");
+        expect((await call(server, "rustPlayers") as { bans: { steamId: string }[] }).bans.map((b) => b.steamId)).toEqual([BANNED]);
+        await expect(call(server, "rustUnban", { steamId: BANNED })).rejects.toThrow("Start the server to ban or unban players");
     });
 
     test("the running server draws its map once, the world alone is kept beside the map's files, and a wipe takes it too", async () => {
         const server = await rustServer();
-        expect(await call(server, "rust-map-picture")).toBeNull();
-        await expect(call(server, "rust-map-draw")).rejects.toThrow("Start Rust to draw its map");
+        expect(await call(server, "rustMapPicture")).toBeNull();
+        await expect(call(server, "rustMapDraw")).rejects.toThrow("Start Rust to draw its map");
         await online(server);
-        const drawn = await call(server, "rust-map-draw") as string;
+        const drawn = await call(server, "rustMapDraw") as string;
         expect(drawn.startsWith("data:image/png;base64,")).toBe(true);
         // the ocean border is cut off: the picture starts at the world's corner, and is the world's width at the picture's scale
         const png = PNG.sync.read(Buffer.from(drawn.slice("data:image/png;base64,".length), "base64"));
@@ -118,11 +118,11 @@ describe("Rust", () => {
         expect(fs.readdirSync(path.join(server.dir, "install")).filter((name) => name.startsWith("map_"))).toEqual([]);
         const identity = path.join(server.dir, "server", "paperboard");
         expect(fs.existsSync(path.join(identity, "proceduralmap.1000.12345.png"))).toBe(true);
-        expect(await call(server, "rust-map-picture")).toBe(drawn);
+        expect(await call(server, "rustMapPicture")).toBe(drawn);
         await stop(server);
 
-        await call(server, "rust-wipe", { blueprints: false });
-        expect(await call(server, "rust-map-picture")).toBeNull();
+        await call(server, "rustWipe", { blueprints: false });
+        expect(await call(server, "rustMapPicture")).toBeNull();
         const trash = fs.readdirSync(server.dir).filter((name) => name.startsWith(".trash-"));
         expect(fs.readdirSync(path.join(server.dir, trash[0]!, "server", "paperboard"))).toContain("proceduralmap.1000.12345.png");
     });
@@ -130,15 +130,15 @@ describe("Rust", () => {
     test("a wipe moves the map and what was on it to the trash, keeps blueprints unless asked, gives a new seed, and never runs on a running server", async () => {
         const server = await rustServer();
         await online(server);
-        await call(server, CALLS.saveWorld);
-        await expect(call(server, "rust-wipe", { blueprints: false })).rejects.toThrow("Stop Rust");
+        await call(server, "saveWorld");
+        await expect(call(server, "rustWipe", { blueprints: false })).rejects.toThrow("Stop Rust");
         await stop(server);
         const identity = path.join(server.dir, "server", "paperboard");
         for (const name of ["proceduralmap.1000.12345.290.map", "player.states.290.db", "player.states.290.db-wal", "player.deaths.19.db", "sv.files.290.db", "player.blueprints.19.db", "player.blueprints.19.db-wal", "player.identities.19.db", "player.tokens.db"]) fs.writeFileSync(path.join(identity, name), name);
-        expect(await call(server, "rust-map")).toEqual({ size: 1000, seed: 12345, made: true, blueprints: true });
-        await expect(call(server, "rust-wipe", {})).rejects.toThrow("Choose whether blueprints are wiped too");
+        expect(await call(server, "rustMap")).toEqual({ size: 1000, seed: 12345, made: true, blueprints: true });
+        await expect(call(server, "rustWipe", {})).rejects.toThrow("Choose whether blueprints are wiped too");
 
-        const wiped = await call(server, "rust-wipe", { blueprints: false }) as { seed: number; made: boolean; blueprints: boolean };
+        const wiped = await call(server, "rustWipe", { blueprints: false }) as { seed: number; made: boolean; blueprints: boolean };
         expect(wiped).toMatchObject({ size: 1000, made: false, blueprints: true });
         expect(wiped.seed).not.toBe(12345);
         expect(server.scope.server.settings.seed).toBe(wiped.seed);
@@ -152,7 +152,7 @@ describe("Rust", () => {
         // nothing was deleted: the old map is whole in the trash
         expect(fs.readFileSync(path.join(server.dir, trash[0]!, "server", "paperboard", "proceduralmap.1000.12345.290.map"), "utf8")).toBe("proceduralmap.1000.12345.290.map");
 
-        expect(await call(server, "rust-wipe", { blueprints: true })).toMatchObject({ made: false, blueprints: false });
+        expect(await call(server, "rustWipe", { blueprints: true })).toMatchObject({ made: false, blueprints: false });
         expect(left()).toEqual(["player.identities.19.db", "player.tokens.db"]);
         // the next start is on the new seed
         await online(server);
@@ -170,7 +170,7 @@ describe("Rust", () => {
             // minutes past the last, so the first look that finds no new file is past it
             let skew = 0;
             Date.now = () => original() + (skew += 120_000);
-            await expect(call(server, CALLS.saveWorld)).rejects.toThrow("Timed out waiting for Rust to write its save");
+            await expect(call(server, "saveWorld")).rejects.toThrow("Timed out waiting for Rust to write its save");
         } finally { Date.now = original; }
         await stop(server);
     });
@@ -231,7 +231,7 @@ describe("Rust", () => {
         const server = await rustServer();
         const before = JSON.stringify(server.scope.server.settings);
         for (const patch of [{ hostname: 'x" +rcon.password "y' }, { description: "-nographics" }, { rconPassword: "short" }, { gamemode: "creative" }, { worldsize: 1250 }, { seed: -1 }, { maxplayers: 0 }]) {
-            await expect(call(server, CALLS.writeGameOptions, { patch })).rejects.toThrow();
+            await expect(call(server, "writeGameOptions", { patch })).rejects.toThrow();
         }
         expect(JSON.stringify(server.scope.server.settings)).toBe(before);
         expect(await vault(server)).toBe("");

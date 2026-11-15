@@ -11,13 +11,13 @@ import {
     PaperText,
     PaperToggle,
 } from "@mileniumhq/paperui";
-import { serverStatus, serverBridge, gamerules, serverVersion } from "../lib/server";
+import { serverStatus, gamerules, serverVersion } from "../lib/server";
 import { gamerulesFor, type GameruleEntry } from "../core/gamerules";
-import { CALLS } from "../service/contract";
 import { humanizeIdentifier } from "../core/format";
 import { errorMessage } from "../lib/failure";
 import { createSaves, type SavedSetting } from "../lib/saves";
 import { commitOnEnter } from "./GameOptions";
+import { serverCalls } from "../lib/api";
 
 const WIKI_URL = "https://minecraft.wiki/w/Game_rule";
 
@@ -61,15 +61,17 @@ export default function GameRules() {
     // running server (and re-applies offline edits at boot); responses
     // arrive through the log parser and sync into the gamerules() signal.
     // Until a response lands, the registry default is the honest fallback.
-    // a newer ask (or the server going offline) makes an older answer moot
+    // a newer ask (or the server going offline) makes an older answer moot;
+    // the service asks for every rule the server's version has, so a new
+    // version's list is asked again
     createEffect(
-        on([isOnline, available], ([online, rules]) => {
+        on([isOnline, available], ([online]) => {
             setSyncError("");
             if (!online) return;
             let current = true;
             onCleanup(() => (current = false));
-            serverBridge
-                .call(CALLS.queryGamerules, { names: rules.map((rule) => rule.name) })
+            serverCalls
+                .queryGamerules()
                 .catch((err) => current && setSyncError(errorMessage(err)));
         }),
     );
@@ -86,7 +88,7 @@ export default function GameRules() {
             rule.name,
             () => gamerules()[rule.name] ?? rule.defaultValue,
             async (value) => {
-                await serverBridge.call(CALLS.setGamerule, { name: rule.name, value });
+                await serverCalls.setGamerule({ name: rule.name, value });
             },
         );
 

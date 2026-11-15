@@ -1,20 +1,19 @@
 import { createMemo, createSignal, Show } from "solid-js";
 import { PaperAvatar, PaperButton, PaperModal, PaperQuote, PaperText } from "@mileniumhq/paperui";
 import ServerOverview, { EditableDetail } from "../../components/ServerOverview";
-import { gameSettings, serverBridge, serverLevel, serverStatus } from "../../lib/server";
+import { gameSettings, serverLevel, serverStatus } from "../../lib/server";
 import { errorMessage } from "../../lib/failure";
 import type { GameDefinition } from "../types";
-import { CALLS as A } from "../../service/contract";
 import { createMetrics, createUptime, overviewStats } from "../../components/overviewStats";
 import { humanizeIdentifier } from "../../core/format";
-import { mapMode, sourceCalls, type SourceGameSpec, type SourceMetrics } from "./index";
+import { mapMode, type SourceGameSpec } from "./index";
 import MapCards, { mapChoices, mapNames } from "./MapCards";
 import { createMapPictures } from "./useMapPictures";
 import { createWorkshopMaps } from "./useWorkshopMaps";
 import { canonicalMap } from "./workshop";
+import { serverCalls } from "../../lib/api";
 
 export default function SourceOverview(props: { spec: SourceGameSpec; game: GameDefinition }) {
-    const ids = sourceCalls(props.spec.id);
     const features = props.game.describe({ software: "", version: "" });
     // a running server's own map, which its map cycle changes; the one it starts on otherwise
     const map = () => canonicalMap(serverLevel() ?? String(gameSettings().map ?? ""));
@@ -25,7 +24,7 @@ export default function SourceOverview(props: { spec: SourceGameSpec; game: Game
     const [error, setError] = createSignal("");
     const pictures = createMapPictures(props.spec);
     const uptime = createUptime();
-    const metrics = createMetrics<SourceMetrics>(ids.metrics);
+    const metrics = createMetrics(serverCalls.sourceMetrics);
     /** how the server plays: the game mode it was started in, or its map's; a map of no listed mode is a custom one */
     const mode = () => {
         const chosen = gameSettings().gamemode;
@@ -41,7 +40,7 @@ export default function SourceOverview(props: { spec: SourceGameSpec; game: Game
         setError("");
         setOpen(true);
         try {
-            setMaps(await serverBridge.call<string[]>(ids.maps));
+            setMaps(await serverCalls.sourceMaps());
             if (props.spec.workshop) await workshop.reload();
             if (workshop.error()) setError(workshop.error());
         } catch (err) { setError(errorMessage(err)); }
@@ -50,7 +49,7 @@ export default function SourceOverview(props: { spec: SourceGameSpec; game: Game
         setBusy(true);
         setError("");
         try {
-            await serverBridge.call(ids.changeMap, { map: choice() });
+            await serverCalls.sourceChangeMap({ map: choice() });
             setOpen(false);
         } catch (err) {
             setError(errorMessage(err));
@@ -76,7 +75,7 @@ export default function SourceOverview(props: { spec: SourceGameSpec; game: Game
             }
             software="Steam"
             control={features.control}
-            world={features.calls.includes(A.saveWorld)}
+            world={features.calls.includes("saveWorld")}
             stats={metrics.value() && overviewStats(
                 uptime(),
                 { icon: "smart_toy", label: "Bots", value: String(metrics.value()!.bots) },

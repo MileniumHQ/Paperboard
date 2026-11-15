@@ -6,7 +6,6 @@ import { startTestDaemon, type TestDaemon } from "./helpers/crane";
 import { gameServer, type GameServer } from "./helpers/game";
 import { DEFAULT_PALWORLD_INI, freePort, installPalworld } from "./helpers/palworld";
 import { PANEL_ID } from "../src/servers";
-import { CALLS } from "../src/service/contract";
 import { startServerInstance, stopServerInstance } from "../src/service/lifecycle";
 import { palworldService } from "../src/games/palworld/service";
 import { decode, encode, parseOptionSettings, writeOptionSettings } from "../src/games/palworld/ini";
@@ -45,7 +44,7 @@ const action = async (id: string) => (await palworldService.calls())[id]!;
 describe("secrets", () => {
     test("Palworld's passwords live in the vault, are in its settings file only while it runs, and never reach the console", async () => {
         const server = await palworldServer();
-        await server.run(async () => (await action(CALLS.writeGameOptions))(server.scope.ctx, { patch: { password: "join-secret-1" } }));
+        await server.run(async () => (await action("writeGameOptions"))(server.scope.ctx, { patch: { password: "join-secret-1" } }));
         expect(await vault(server, "join-password")).toBe("join-secret-1");
 
         await server.run(() => startServerInstance(server.scope.ctx));

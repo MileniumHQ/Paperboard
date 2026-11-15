@@ -1,12 +1,12 @@
 import { createEffect, createSignal, on } from "solid-js";
 import type { LoaderStatus } from "@mileniumhq/paperui";
-import { CALLS } from "../service/contract";
 import type { InstallOutcome } from "../games/minecraft/softwareInstall";
 import { providerFor } from "../games/minecraft/providers";
 import { SOFTWARE_NAMES, getRequiredJavaVersion, type ServerSoftwareType } from "./software";
 import { ensureJavaRuntime, type DownloadedBytes } from "./ensureJava";
-import { installProgress, serverBridge, setInstallProgress } from "./server";
+import { installProgress, setInstallProgress } from "./server";
 import type { InstallLoaderItem } from "../components/InstallLoaders";
+import { serverCalls } from "./api";
 
 type Row = { percent: () => number; setPercent: (v: number) => void; status: () => LoaderStatus; setStatus: (v: LoaderStatus) => void };
 
@@ -112,13 +112,9 @@ export function createInstallRun() {
 
             download.setStatus("loading");
             try {
-                // a jar download plus a Forge or NeoForge installer outlasts the
-                // bridge's 30 s default; the service's progress shows it is alive
-                const outcome = await serverBridge.call<InstallOutcome>(
-                    CALLS.installServerVersion,
-                    { software, version },
-                    { timeoutMs: null },
-                );
+                // a jar download plus a Forge or NeoForge installer takes minutes:
+                // the contract waits it out, and the service's progress shows it is alive
+                const outcome = await serverCalls.installServerVersion({ software, version });
                 download.setStatus("success");
                 download.setPercent(100);
                 installer.setStatus("success");

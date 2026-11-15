@@ -16,7 +16,7 @@ export function gameFor(id: string): GameDefinition {
     if (!game) throw new Error(`Unsupported game: ${id}`);
     return game;
 }
-export function assertGameCall(game: GameDefinition, options: import("./types").GameOptions, id: string): void {
+export function assertGameCall(game: GameDefinition, options: import("./types").GameOptions, id: import("../service/contract").CallName): void {
     if (!game.describe(options).calls.includes(id))
         throw new Error(`${game.name} does not support "${id}" with this server's software and version`);
 }

@@ -11,12 +11,12 @@ import {
     playerStatSummaries,
     queryOnlinePlayers,
     seenPlayerNames,
-    serverBridge,
     serverStatus,
 } from "../../lib/server";
-import { CALLS, type CallName } from "../../service/contract";
+import { type CallName } from "../../service/contract";
 import type { BedrockNaming } from "../../core/bedrock";
 import { errorMessage, type Outcome } from "../../lib/failure";
+import { serverCalls } from "../../lib/api";
 
 const LIST_POLL_MS = 15000;
 const STATS_POLL_MS = 30000;
@@ -63,8 +63,8 @@ export function createPlayers() {
         const wanted = uuids.map((u) => u.toLowerCase()).filter((u) => !requestedNames.has(u));
         if (wanted.length === 0) return;
         for (const uuid of wanted) requestedNames.add(uuid);
-        serverBridge
-            .call<Record<string, string>>(CALLS.currentPlayerNames, { uuids: wanted })
+        serverCalls
+            .currentPlayerNames({ uuids: wanted })
             .then((names) => {
                 const entries = Object.entries(names ?? {});
                 if (entries.length === 0) return;
@@ -103,7 +103,7 @@ export function createPlayers() {
     const loadRoster = async (): Promise<void> => {
         const current = latestRoster();
         try {
-            const answer = await serverBridge.call<RosterEntry[]>(CALLS.listRoster);
+            const answer = await serverCalls.listRoster();
             if (!current()) return;
             const roster = answer ?? [];
             const listed = withCurrentNames(roster.map(({ banned: _banned, ...player }) => player));
@@ -141,8 +141,8 @@ export function createPlayers() {
             clearInterval(statsPoll);
         });
         void loadRoster();
-        serverBridge
-            .call<BedrockNaming | null>(CALLS.readBedrockNaming)
+        serverCalls
+            .readBedrockNaming()
             .then((naming) => setBedrock(naming ?? null))
             .catch((err) => {
                 console.error("[Players] read-bedrock-naming failed:", err);
@@ -208,10 +208,10 @@ export function createPlayers() {
         actionId: CallName,
         playerName: string,
         failure: string,
-        extra?: Record<string, unknown>,
+        run: () => Promise<unknown>,
     ): Promise<boolean> => {
         try {
-            await serverBridge.call(actionId, { player: playerName, ...extra });
+            await run();
             setFeedback(undefined);
             return true;
         } catch (err) {
@@ -234,13 +234,13 @@ export function createPlayers() {
 
     /** ops or whitelists a player, or takes it back; the error is in `feedback` */
     const setFlag = async (playerName: string, field: PlayerFlagField, value: boolean): Promise<boolean> => {
-        const actionId: CallName =
+        const actionId =
             field === "op"
-                ? value ? CALLS.opPlayer : CALLS.deopPlayer
-                : value ? CALLS.whitelistPlayer : CALLS.unwhitelistPlayer;
+                ? value ? "opPlayer" : "deopPlayer"
+                : value ? "whitelistPlayer" : "unwhitelistPlayer";
         const failure = field === "op" ? (value ? "made an operator" : "removed as an operator") : value ? "whitelisted" : "removed from the whitelist";
         const player = find(playerName);
-        if (!(await callPlayerAction(actionId, playerName, failure, { uuid: player?.uuid }))) return false;
+        if (!(await callPlayerAction(actionId, playerName, failure, () => serverCalls[actionId]({ player: playerName, uuid: player?.uuid })))) return false;
         markFlag(playerName, player?.uuid, field, value);
         // a stopped server's files were edited in place: read them back.
         // A running one writes them a moment after the command, so the
@@ -252,8 +252,8 @@ export function createPlayers() {
     /** bans or pardons; the service answers once the server has written its ban list, which is read back */
     const setBanned = async (playerName: string, banned: boolean, reason?: string): Promise<boolean> => {
         const done = banned
-            ? await callPlayerAction(CALLS.banPlayer, playerName, "banned", { reason })
-            : await callPlayerAction(CALLS.pardonPlayer, playerName, "pardoned");
+            ? await callPlayerAction("banPlayer", playerName, "banned", () => serverCalls.banPlayer({ player: playerName, reason }))
+            : await callPlayerAction("pardonPlayer", playerName, "pardoned", () => serverCalls.pardonPlayer({ player: playerName }));
         if (done) await loadRoster();
         return done;
     };
@@ -263,7 +263,7 @@ export function createPlayers() {
      * not joined) and opens them. Throws the service's refusal.
      */
     const whitelistName = async (name: string): Promise<void> => {
-        await serverBridge.call(CALLS.whitelistPlayer, { player: name });
+        await serverCalls.whitelistPlayer({ player: name });
         if (serverStatus() === "offline") {
             // the file now holds the account's own casing
             await loadRoster();
@@ -285,7 +285,7 @@ export function createPlayers() {
         // out first, then trash-first delete under the actual level-name.
         // Without a uuid the service resolves one from the server's files
         try {
-            await serverBridge.call(CALLS.deletePlayerData, { player: player.name, uuid: player.uuid });
+            await serverCalls.deletePlayerData({ player: player.name, uuid: player.uuid });
         } catch (err) {
             console.error("[Players] Failed to delete player data:", err);
             setFeedback({ title: `${player.name}'s data was not deleted`, message: errorMessage(err) });
@@ -314,8 +314,8 @@ export function createPlayers() {
         openPlayer,
         setFlag,
         setBanned,
-        kick: (playerName: string, reason?: string) => callPlayerAction(CALLS.kickPlayer, playerName, "kicked", { reason }),
-        kill: (playerName: string) => callPlayerAction(CALLS.killPlayer, playerName, "killed"),
+        kick: (playerName: string, reason?: string) => callPlayerAction("kickPlayer", playerName, "kicked", () => serverCalls.kickPlayer({ player: playerName, reason })),
+        kill: (playerName: string) => callPlayerAction("killPlayer", playerName, "killed", () => serverCalls.killPlayer({ player: playerName })),
         whitelistName,
         deleteOpenData,
     };

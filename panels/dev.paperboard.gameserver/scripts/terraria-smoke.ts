@@ -12,9 +12,9 @@ import { assert, PANEL, until, withScenarioDaemon } from "./scenarioDaemon";
 
 const VERSION = "1.4.5.8";
 
-await withScenarioDaemon("terraria-real", async ({ addServer }) => {
+await withScenarioDaemon("terrariaReal", async ({ addServer }) => {
     const { backupApi, backupLocationsApi, processApi, secretsApi } = await import("@mileniumhq/paperapi");
-    const server = await addServer("Terraria", "terraria", "terraria-server");
+    const server = await addServer("Terraria", "terraria", "terrariaServer");
     const proc = `${server.id}-terraria-server`;
     const online = (label: string, timeout = 300_000) => until(async () => {
         const s = await server.state();
@@ -26,11 +26,11 @@ await withScenarioDaemon("terraria-real", async ({ addServer }) => {
         await until(async () => (await server.state()).serverStatus === "offline", `${label}: offline state`);
     };
 
-    await server.call("terraria-install", { version: VERSION });
+    await server.calls.terrariaInstall({ software: "vanilla", version: VERSION });
     let rejected = "";
-    try { await server.call("op-player", { player: "Steve" }); } catch (err) { rejected = String(err); }
+    try { await server.calls.opPlayer({ player: "Steve" }); } catch (err) { rejected = String(err); }
     assert(/does not support|not found|Unknown/i.test(rejected), `A Minecraft-only call did not visibly refuse Terraria: ${rejected || "it was accepted"}`);
-    await server.call("write-game-options", { patch: { seed: "Paperboard", maxplayers: 4, password: "wire-secret" } });
+    await server.calls.writeGameOptions({ patch: { seed: "Paperboard", maxplayers: 4, password: "wire-secret" } });
     assert((await secretsApi.get(`${server.id}-terraria-join-password`, PANEL)).value === "wire-secret", "The join password did not reach the vault");
 
     // a port in use moves the server to another, which the launch then uses
@@ -38,8 +38,9 @@ await withScenarioDaemon("terraria-real", async ({ addServer }) => {
     await new Promise<void>((resolve) => blocker.listen(0, "0.0.0.0", resolve));
     const occupied = (blocker.address() as net.AddressInfo).port;
     try {
-        await server.call("terraria-world", { name: "Smoke", create: true, port: occupied });
-        await server.call("start-server");
+        await server.calls.writeGameOptions({ patch: { port: occupied } });
+        await server.calls.terrariaWorld({ name: "Smoke", create: true });
+        await server.calls.startServer();
         await online("first start");
         const up = await server.state();
         assert(Number(up.serverPort) !== occupied, "The occupied port was not relocated");
@@ -47,20 +48,20 @@ await withScenarioDaemon("terraria-real", async ({ addServer }) => {
         assert(!JSON.stringify(await server.console()).includes("wire-secret"), "The join password is in the console");
         console.log(`Terraria ${VERSION}: ONLINE, TCP ${up.serverPort}; collision ${occupied} relocated; host ${process.platform}/${process.arch}`);
 
-        await server.call("run-command", { command: "playing" });
-        await server.call("save-world");
+        await server.calls.runCommand({ command: "playing" });
+        await server.calls.saveWorld();
         console.log("save: returned console prompt and changed world file confirmed");
-        await server.call("stop-server");
+        await server.calls.stopServer();
         await offline("saved stop");
         const world = path.join(server.directory, "worlds", "Smoke.wld");
         assert(fs.statSync(world).size > 0, "The world was not created");
 
         // an unknown key on disk survives an option edit
         fs.appendFileSync(path.join(server.directory, "serverconfig.txt"), "npcstream=42\n");
-        await server.call("write-game-options", { patch: { motd: "Smoke backup" } });
+        await server.calls.writeGameOptions({ patch: { motd: "Smoke backup" } });
         assert(fs.readFileSync(path.join(server.directory, "serverconfig.txt"), "utf8").includes("npcstream=42"), "An unknown config key was lost");
 
-        await server.call("start-server");
+        await server.calls.startServer();
         await online("restart");
         await backupLocationsApi.setForPanel(PANEL, "local", undefined, server.id);
         const api = backupApi.forSource(PANEL, server.id);
@@ -74,7 +75,7 @@ await withScenarioDaemon("terraria-real", async ({ addServer }) => {
         assert((await secretsApi.get(`${server.id}-terraria-join-password`, PANEL)).value === "wire-secret", "Restore lost the vault's join password");
         console.log("restore: original world loaded, later file removed, vault credential retained, restarted ONLINE");
 
-        await server.call("stop-server");
+        await server.calls.stopServer();
         await offline("final stop");
         console.log("stop: exit completed; process absent; state OFFLINE");
     } finally { blocker.close(); }

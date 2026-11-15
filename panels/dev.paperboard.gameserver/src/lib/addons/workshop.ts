@@ -1,10 +1,11 @@
 import { createSignal } from "solid-js";
-import { serverBridge, serverVersion } from "../server";
+import { serverVersion } from "../server";
 import { formatCount, formatSize } from "./presentation";
 import { discardUpload, listAdded, pickFiles } from "./upload";
 import type { WorkshopItem, WorkshopMeta, WorkshopPage } from "../../games/steam/modscan";
 import type { InstalledMod } from "../../games/terraria/modStore";
 import type { AddonHit, AddonKind, AddonListing, AddonNotice, AddonSource, InstalledAddon } from "./kind";
+import { serverCalls } from "../api";
 
 // tModLoader's Mods: the Steam Workshop through modscan, searched and
 // installed by the service (modscan sends no CORS headers, and SteamCMD runs
@@ -32,7 +33,7 @@ const remember = (page: WorkshopPage) => {
 };
 
 export const lookupMods = async (ids: string[]): Promise<WorkshopItem[]> =>
-    remember(await serverBridge.call<WorkshopPage>("terraria-mod-items", { ids }));
+    remember(await serverCalls.terrariaModItems({ ids }));
 
 /** what `ids` require, and what that requires in turn, as the service installs them */
 export async function requiredChain(ids: string[]): Promise<WorkshopItem[]> {
@@ -156,13 +157,13 @@ export const workshopModsKind: AddonKind = {
     resultBadge: "Installed",
 
     async list(): Promise<AddonListing> {
-        const { mods } = await serverBridge.call<{ mods: InstalledMod[] }>("terraria-mods");
+        const { mods } = await serverCalls.terrariaMods();
         return { items: installedMods(mods), meta: undefined };
     },
     listFailureTitle: () => "Couldn't read tModLoader/Mods/",
 
     async search(query, signal) {
-        const page = await serverBridge.call<WorkshopPage>("terraria-mod-search", {
+        const page = await serverCalls.terrariaModSearch({
             query,
             sort: query ? "relevance" : "subscriptions",
         });
@@ -182,7 +183,7 @@ export const workshopModsKind: AddonKind = {
         sources: [pickFiles("Upload mods", ["tmod"])],
         failureTitle: "Not added",
         // checking the files and their references waits on any running change
-        commit: (stage) => serverBridge.call("terraria-mod-upload", { stage }, { timeoutMs: null }),
+        commit: (stage) => serverCalls.terrariaModUpload({ stage }),
         discard: discardUpload,
         describe: (outcome) => {
             const { result, restart } = outcome as ModChange<{ added: string[] }>;
@@ -199,11 +200,7 @@ export const workshopModsKind: AddonKind = {
         noVersions: () => ({ title: "Nothing to install", text: `Steam Workshop has no file for tModLoader ${serverVersion()}.` }),
         // SteamCMD's first run updates itself, then downloads; minutes, not seconds
         run: (target, _versionId, payload) =>
-            serverBridge.call<ModChange<string[]>>(
-                "terraria-mod-install",
-                { id: target.projectId, dependencies: Array.isArray(payload) ? payload : (target.dependencies ?? []) },
-                { timeoutMs: null },
-            ),
+            serverCalls.terrariaModInstall({ id: target.projectId, dependencies: Array.isArray(payload) ? payload : (target.dependencies ?? []) }),
     },
 
     remove: {
@@ -214,7 +211,7 @@ export const workshopModsKind: AddonKind = {
         describe: () =>
             "This moves the mod out of tModLoader/Mods/ into a .trash folder inside the server folder, where it can be restored, and turns it off. The change takes effect after a restart.",
         run: async (item) => {
-            await serverBridge.call("terraria-mod-remove", { file: item.id });
+            await serverCalls.terrariaModRemove({ file: item.id });
         },
     },
 };

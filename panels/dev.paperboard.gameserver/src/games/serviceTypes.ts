@@ -33,7 +33,7 @@ export type GameContractCalls = {
 };
 export interface GameService {
     initialState(): GameServerState;
-    /** The calls the server's page makes, by name; each is handed the server's context and the rest of the call's input. */
+    /** The contract's calls the game answers, and its blocks run; each is handed the server's context and the call's own input. */
     calls(): Promise<ServerCalls>;
     /** The contract's calls the game answers; a call it leaves out is refused for its servers. */
     contractCalls?(): Promise<Partial<GameContractCalls>>;

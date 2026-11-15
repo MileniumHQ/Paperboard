@@ -4,10 +4,10 @@
 // answer, never an empty server.
 import { createStateSignal, createLatest } from "@mileniumhq/paperui/headless";
 import { createSignal, onCleanup, type Accessor } from "solid-js";
-import { createPanelBridge, serviceApi, type WidgetContext } from "@mileniumhq/paperapi";
+import { createPanelBridge, serviceClient, type ServiceCalls, type WidgetContext } from "@mileniumhq/paperapi";
 import { gameFor } from "../games";
 import { serverStateOf } from "../servers";
-import { CALLS, PANEL_ID } from "../service/contract";
+import { PANEL_ID, gameServerContract } from "../service/contract";
 import type { ServersState } from "../service";
 import type { GameServerState } from "../service/types";
 import { errorMessage } from "../lib/failure";
@@ -67,7 +67,7 @@ export function selectedWidgetServer(state: ServersState, option: string | undef
             activeIssue: snapshot.activeIssue,
             supportsPlayers: features.widgets.includes("players"),
             softwareLabel: game.softwareLabel(options),
-            heads: features.calls.includes(CALLS.getPlayerSkin),
+            heads: features.calls.includes("getPlayerSkin"),
             nameBook: features.nameBook,
         },
     };
@@ -77,8 +77,8 @@ export interface WidgetServer {
     connection: Accessor<Connection>;
     visible: Accessor<boolean>;
     retry(): void;
-    /** calls one of the chosen server's calls; rejects when the widget is hidden */
-    call<R = unknown>(name: string, input?: Record<string, unknown>): Promise<R>;
+    /** runs one of the chosen server's calls; rejects when the widget is hidden */
+    call<R>(run: (calls: ServiceCalls<typeof gameServerContract>) => Promise<R>): Promise<R>;
 }
 
 /** Must run inside a Solid root: it cleans up with it. */
@@ -151,7 +151,7 @@ export function useWidgetServer(widget: WidgetContext): WidgetServer {
             setConnection({ phase: "loading" });
             refresh();
         },
-        call: <R,>(name: string, input?: Record<string, unknown>) =>
-            bridge && chosen ? serviceApi.call<R>(PANEL_ID, name, { ...input, server: chosen }) : Promise.reject(new Error("Choose a server in the widget options")),
+        call: (run) =>
+            bridge && chosen ? run(serviceClient(gameServerContract, { server: chosen }).calls) : Promise.reject(new Error("Choose a server in the widget options")),
     };
 }

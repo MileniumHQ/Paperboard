@@ -1,3 +1,4 @@
+import type { CallName } from "../service/contract";
 /** Bundled game metadata. Safe to import in renderers and widgets. */
 export interface GameOptions {
     settings?: Readonly<Record<string, unknown>>;
@@ -80,7 +81,7 @@ export interface GameFeatures {
     control: Control;
     tabs: readonly GameTab[];
     /** The calls this game, with this software and version, answers. */
-    calls: readonly string[];
+    calls: readonly CallName[];
     widgets: readonly string[];
     packages: readonly PackageRequirement[];
     /**

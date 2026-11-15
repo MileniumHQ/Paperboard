@@ -13,15 +13,16 @@ import {
     PaperText,
     createLatest,
 } from "@mileniumhq/paperui";
-import { serverBridge, serverLevel, serverStatus } from "../../lib/server";
+import { serverLevel, serverStatus } from "../../lib/server";
 import { errorMessage } from "../../lib/failure";
-import { mapMode, sourceCalls, type SourceGameSpec, type SourceMapCycle } from "./index";
+import { mapMode, type SourceGameSpec, type SourceMapCycle } from "./index";
 import MapCards, { MapPicturesCredit, MapPicturesFailure, mapChoices, mapNames, type MapChoice } from "./MapCards";
 import { createMapPictures } from "./useMapPictures";
 import { workshopChoice } from "./useWorkshopMaps";
 import WorkshopPane from "./WorkshopPane";
 import PictureAvatar from "../../components/PictureAvatar";
 import { canonicalMap, workshopId, workshopName, type SourceWorkshopHit, type SourceWorkshopMap } from "./workshop";
+import { serverCalls } from "../../lib/api";
 
 // The maps a server plays through, in order. The server reads a map cycle
 // file; until the rotation is edited here that is the game's own or one the
@@ -29,7 +30,6 @@ import { canonicalMap, workshopId, workshopName, type SourceWorkshopHit, type So
 // rotation Paperboard's, written to a file of its own that the server is
 // pointed at (games/source/mapcycle.ts).
 export default function SourceMaps(props: { spec: SourceGameSpec; active: boolean }) {
-    const ids = sourceCalls(props.spec.id);
     const [view, setView] = createSignal<SourceMapCycle | null>(null);
     const [loadError, setLoadError] = createSignal("");
     const [working, setWorking] = createSignal(false);
@@ -50,7 +50,7 @@ export default function SourceMaps(props: { spec: SourceGameSpec; active: boolea
         setLoadError("");
         const current = latest();
         try {
-            const answer = await serverBridge.call<SourceMapCycle>(ids.mapCycle);
+            const answer = await serverCalls.sourceMapCycle();
             if (current()) setView(answer);
         } catch (err) {
             if (current()) setLoadError(errorMessage(err));
@@ -65,7 +65,7 @@ export default function SourceMaps(props: { spec: SourceGameSpec; active: boolea
         setNotice("");
         const current = latest();
         try {
-            const answer = await serverBridge.call<SourceMapCycle>(ids.mapCycleSet, { maps });
+            const answer = await serverCalls.sourceMapCycleSet({ maps });
             if (current()) setView(answer);
             return true;
         } catch (err) {
@@ -104,7 +104,7 @@ export default function SourceMaps(props: { spec: SourceGameSpec; active: boolea
         setWorking(true);
         setError(null);
         try {
-            await serverBridge.call(ids.workshopAdd, { id: hit.id }, { timeoutMs: 30_000 });
+            await serverCalls.sourceWorkshopAdd({ id: hit.id });
         } catch (err) {
             setError({ title: `${hit.title} was not added`, message: errorMessage(err) });
             setWorking(false);
@@ -139,7 +139,7 @@ export default function SourceMaps(props: { spec: SourceGameSpec; active: boolea
         setWorking(true);
         setError(null);
         try {
-            await serverBridge.call(ids.workshopRemove, { id: map.id });
+            await serverCalls.sourceWorkshopRemove({ id: map.id });
             setRemovingWorkshop(null);
             await load();
         } catch (err) {

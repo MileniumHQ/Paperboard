@@ -1,6 +1,5 @@
-import { serverBridge } from "./server";
-import { CALLS } from "../service/contract";
 import type { MapDimension, RegionCoord } from "../core/map";
+import { serverCalls } from "./api";
 
 export interface MapDimensionRegions {
     dimension: MapDimension;
@@ -25,9 +24,7 @@ export interface RenderedTile {
 }
 
 export async function listMapRegions(): Promise<MapRegionsResult> {
-    const result = await serverBridge.call<Partial<MapRegionsResult>>(
-        CALLS.listMapRegions,
-    );
+    const result = await serverCalls.listMapRegions();
     // the service and this UI ship together; an unrecognized shape is a
     // failure, not "no terrain" — coercing it to empty hid real errors
     if (!result || !Array.isArray(result.dimensions)) {
@@ -46,7 +43,7 @@ export async function renderMapTile(
     /** the version of this tile already drawn; the same one comes back with no image */
     since?: number,
 ): Promise<RenderedTile | null> {
-    return serverBridge.call<RenderedTile | null>(CALLS.renderMapTile, {
+    return serverCalls.renderMapTile({
         dimension,
         rx,
         rz,

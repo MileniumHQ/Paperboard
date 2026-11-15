@@ -1,5 +1,4 @@
 import type { GameDefinition, GameOption, GameTab } from "../types";
-import { CALLS as A } from "../../service/contract";
 import { gameArt } from "../art";
 import { AUTOMATION_CALLS, AUTOMATION_TAB } from "../automation";
 import { hostRoutes } from "../host";
@@ -7,6 +6,7 @@ import type { ModscanGame } from "../steam/modscan";
 import type { SteamIdForm } from "./log";
 import type { SourcePlugin } from "./sourcemod";
 import type { SourceWorkshopMap } from "./workshop";
+import type { CallName } from "../../service/contract";
 
 /**
  * A Source engine option and how the server takes it. `cvar`: a console
@@ -146,34 +146,34 @@ export function mapMode(spec: Pick<SourceGameSpec, "mapModes">, map: string): st
     return spec.mapModes?.[map.split("_")[0]!.toLowerCase()];
 }
 
-/** Call names every Source game answers, prefixed with its game id. */
-export const sourceCalls = (id: string) => ({
-    info: `${id}-info`,
-    latest: `${id}-latest`,
-    install: `${id}-install`,
-    players: `${id}-players`,
-    metrics: `${id}-metrics`,
-    kick: `${id}-kick`,
-    ban: `${id}-ban`,
-    unban: `${id}-unban`,
-    changeMap: `${id}-change-map`,
-    maps: `${id}-maps`,
-    mapPictures: `${id}-map-pictures`,
-    mapPicture: `${id}-map-picture`,
-    mapCycle: `${id}-map-cycle`,
-    mapCycleSet: `${id}-map-cycle-set`,
-    play: `${id}-play`,
-    workshopMaps: `${id}-workshop-maps`,
-    workshopFind: `${id}-workshop-find`,
-    workshopAdd: `${id}-workshop-add`,
-    workshopRemove: `${id}-workshop-remove`,
-    sourcemod: `${id}-sourcemod`,
-    sourcemodSet: `${id}-sourcemod-set`,
-    plugin: `${id}-plugin`,
-    pluginRemove: `${id}-plugin-remove`,
-    pluginUpload: `${id}-plugin-upload`,
-    admin: `${id}-admin`,
-});
+/** The calls every Source game answers, by what each is for. */
+export const SOURCE_CALLS = {
+    info: "steamInfo",
+    latest: "steamLatest",
+    install: "steamInstall",
+    players: "sourcePlayers",
+    metrics: "sourceMetrics",
+    kick: "sourceKick",
+    ban: "sourceBan",
+    unban: "sourceUnban",
+    changeMap: "sourceChangeMap",
+    maps: "sourceMaps",
+    mapPictures: "sourceMapPictures",
+    mapPicture: "sourceMapPicture",
+    mapCycle: "sourceMapCycle",
+    mapCycleSet: "sourceMapCycleSet",
+    play: "sourcePlay",
+    workshopMaps: "sourceWorkshopMaps",
+    workshopFind: "sourceWorkshopFind",
+    workshopAdd: "sourceWorkshopAdd",
+    workshopRemove: "sourceWorkshopRemove",
+    sourcemod: "sourceSourcemod",
+    sourcemodSet: "sourceSourcemodSet",
+    plugin: "sourcePlugin",
+    pluginRemove: "sourcePluginRemove",
+    pluginUpload: "sourcePluginUpload",
+    admin: "sourceAdmin",
+} as const satisfies Record<string, CallName>;
 
 /** A running server's figures for its Overview. */
 export interface SourceMetrics {
@@ -182,8 +182,8 @@ export interface SourceMetrics {
 }
 
 /** The calls a game's server answers: every game's, and those of what the game has (a map rotation, Workshop maps, SourceMod). */
-export function describedCalls(spec: SourceGameSpec): string[] {
-    const ids = sourceCalls(spec.id);
+export function describedCalls(spec: SourceGameSpec): CallName[] {
+    const ids = SOURCE_CALLS;
     return [
         ids.info, ids.latest, ids.install, ids.players, ids.metrics, ids.kick, ids.ban, ids.unban, ids.changeMap, ids.maps,
         ...(spec.mapPictures ? [ids.mapPictures] : []),
@@ -230,7 +230,6 @@ export const SOURCEMOD_PACKAGES = [
 ] as const;
 
 export function sourceGame(spec: SourceGameSpec): GameDefinition {
-    const ids = sourceCalls(spec.id);
     const tabs: GameTab[] = [
         { id: "overview", label: "Overview", icon: "dashboard", owner: "game", variant: "fill", compactVariant: "page" },
         { id: "chat", label: "Chat", icon: "chat", group: "Play", owner: "game", variant: "fill" },
@@ -258,7 +257,7 @@ export function sourceGame(spec: SourceGameSpec): GameDefinition {
                 control: { kind: spec.control ?? "rcon" },
                 widgets: ["status", "console"],
                 packages: [{ id: "steamcmd", purpose: `Downloads and updates the ${spec.name} dedicated server from Steam` }, ...Object.values(spec.libraryPackages ?? {}), ...(spec.sourcemod ? SOURCEMOD_PACKAGES : [])],
-                calls: [A.startServer, A.stopServer, A.restartServer, A.runCommand, A.loadConfig, A.sayChat, A.listServerFiles, A.readServerFile, A.writeServerFile, A.listLogFiles, A.readLogFile, A.readGameOptions, A.writeGameOptions, ...describedCalls(spec), ...(spec.sourcemod ? [A.discardAddonUpload] : []), ...AUTOMATION_CALLS],
+                calls: ["startServer", "stopServer", "restartServer", "runCommand", "loadConfig", "sayChat", "listServerFiles", "readServerFile", "writeServerFile", "listLogFiles", "readLogFile", "readGameOptions", "writeGameOptions", ...describedCalls(spec), ...(spec.sourcemod ? (["discardAddonUpload"] as const) : []), ...AUTOMATION_CALLS],
                 tabs,
             };
         },

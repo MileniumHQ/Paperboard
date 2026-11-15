@@ -4,7 +4,7 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { callServer } from "./helpers/serverCall";
+import { serverCalls } from "./helpers/serverCall";
 import { startTestDaemon, type TestDaemon } from "./helpers/crane";
 import { openPage, servePanel } from "./helpers/browser";
 import { installFakeJava } from "./helpers/fakeJava";
@@ -52,7 +52,7 @@ describe("the home page", () => {
             await page.waitFor(`${card("Survival")} && ${card("Creative")}`, "both servers' cards");
             await page.settled();
             await page.evaluate(`${card("Survival")}.dataset.test = "kept"`);
-            await callServer("s-two", "rename-server", { name: "Skyblock" });
+            await serverCalls("s-two").renameServer({ name: "Skyblock" });
             await page.waitFor(`${card("Skyblock")}`, "the renamed server's card");
             expect(await page.evaluate<string | undefined>(`${card("Survival")}?.dataset.test`)).toBe("kept");
             expect(page.exceptions).toEqual([]);

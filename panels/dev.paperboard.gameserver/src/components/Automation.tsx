@@ -11,11 +11,10 @@ import {
     PaperText,
     PaperToggle,
 } from "@mileniumhq/paperui";
-import { serverBridge } from "../lib/server";
 import { errorMessage } from "../lib/failure";
 import { createSaves } from "../lib/saves";
-import { CALLS } from "../service/contract";
 import type { AutomationView } from "../service/automation";
+import { serverCalls } from "../lib/api";
 
 const OFF = "off";
 const HOURS = Array.from({ length: 24 }, (_, hour) => `${String(hour).padStart(2, "0")}:00`);
@@ -30,7 +29,7 @@ export default function Automation() {
     const load = async () => {
         setLoadError("");
         try {
-            setView(await serverBridge.call<AutomationView>(CALLS.readAutomation));
+            setView(await serverCalls.readAutomation());
         } catch (err) {
             setLoadError(errorMessage(err));
         }
@@ -41,7 +40,7 @@ export default function Automation() {
     // each switch and menu saves its own field; the answer is the whole view
     const field = <K extends "restartAfterCrash" | "dailyRestart" | "autoUpdate">(key: K) =>
         saves.setting<AutomationView[K]>(key, () => view()![key], async (value) => {
-            setView(await serverBridge.call<AutomationView>(CALLS.writeAutomation, { patch: { [key]: value } }));
+            setView(await serverCalls.writeAutomation({ patch: { [key]: value } }));
         });
 
     return (

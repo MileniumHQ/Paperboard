@@ -6,7 +6,7 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { startTestDaemon, type TestDaemon } from "./helpers/crane";
-import { callServer } from "./helpers/serverCall";
+import { serverCalls } from "./helpers/serverCall";
 import { openPage, servePanel } from "./helpers/browser";
 import { installFakeJava } from "./helpers/fakeJava";
 import { writeTree } from "./helpers/tmp";
@@ -95,7 +95,7 @@ describe("a player's detail on a phone", () => {
             expect(left).toBeGreaterThan(0);
 
             // pushed state about the server, not the player, changes nothing here
-            await callServer("s-mc", "update-panel-config", { patch: { ramGB: 3 } });
+            await serverCalls("s-mc").updatePanelConfig({ patch: { ramGB: 3 } });
             await page.received((f) => f.includes('"ramAllocation":3'), "the edited settings");
 
             // pressed where it is, as a finger would, without scrolling to it

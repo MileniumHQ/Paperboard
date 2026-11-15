@@ -10,7 +10,7 @@ import * as path from "node:path";
 import { startTestDaemon, type TestDaemon } from "./helpers/crane";
 import { openPage, servePanel } from "./helpers/browser";
 import { loopbackServer, routeHost } from "./helpers/http";
-import { callServer } from "./helpers/serverCall";
+import { serverCalls } from "./helpers/serverCall";
 import { fakeSteamcmd } from "./helpers/steamcmd";
 import { writeTree } from "./helpers/tmp";
 import { PANEL_ID } from "../src/servers";
@@ -111,7 +111,7 @@ describe("a Source game's Maps tab", () => {
 
     test("moving a map up or down, or removing one, changes the rotation the server reads; the last map stays with a reason", async () => {
         const served = await setUp();
-        await callServer("s-tf", "team-fortress-2-map-cycle-set", { maps: ["ctf_2fort", "pl_badwater", "koth_harvest_final"] });
+        await serverCalls("s-tf").sourceMapCycleSet({ maps: ["ctf_2fort", "pl_badwater", "koth_harvest_final"] });
         const page = await openMaps(served);
         const shows = (maps: string[], what: string) => page.waitFor(`JSON.stringify(${ROTATION}) === ${JSON.stringify(JSON.stringify(maps))} && !${rowButton(maps[0]!, (t) => `Remove ${t}`)}.disabled`, what);
         try {
@@ -143,7 +143,7 @@ describe("a Source game's Maps tab", () => {
 
     test("a Steam Workshop map found by searching joins the rotation, and comes off the server once it is out of the rotation", async () => {
         const served = await setUp();
-        await callServer("s-tf", "team-fortress-2-map-cycle-set", { maps: ["ctf_2fort"] });
+        await serverCalls("s-tf").sourceMapCycleSet({ maps: ["ctf_2fort"] });
         const page = await openMaps(served);
         try {
             await page.waitFor(`${button("Add maps")} && !${button("Add maps")}.disabled`, "the rotation");
