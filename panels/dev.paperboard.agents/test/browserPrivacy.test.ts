@@ -56,3 +56,19 @@ describe("the browser's privacy", () => {
         expect(fs.statSync(path.join(dir, "system")).isDirectory()).toBe(true);
     }, SLOW);
 });
+
+// A computer that can't do what it was asked says so in its state, not only in a log.
+describe("the computer's failures", () => {
+    test("a browser that can't be stopped leaves the computer failed with why: at start, on stop and on setup", async () => {
+        const { host, dir } = rig("linux");
+        const states = new Recorder<ComputerState>();
+        const refusing = { ...host, exists: async () => true, kill: async () => Promise.reject(new Error("the daemon refused")), packages: packageHost({}) };
+        const computer = new BrowserComputer({ host: refusing, dir, home: new HomeFolder(path.join(dir, "..", "home")), storagePath: "browser", onState: states.push, platform: "linux", arch: "x64" });
+        await expect(computer.init()).rejects.toThrow("the daemon refused");
+        expect(computer.state).toMatchObject({ phase: "failed", error: "The browser left running from before couldn't be stopped: the daemon refused" });
+        await expect(computer.stop()).rejects.toThrow("the daemon refused");
+        expect(computer.state).toMatchObject({ phase: "failed", error: "The browser couldn't be stopped: the daemon refused" });
+        await expect(computer.install()).rejects.toThrow("the daemon refused");
+        expect(computer.state).toMatchObject({ phase: "failed", error: "The computer couldn't be set up: the daemon refused" });
+    });
+});

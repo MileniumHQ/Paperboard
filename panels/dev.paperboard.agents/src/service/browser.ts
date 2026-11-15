@@ -202,10 +202,12 @@ export class BrowserComputer {
         }
         this.set({ phase: "stopped", installed: true });
         // a browser the last service generation left running is stopped: its tabs and connection were that generation's
-        if (await this.deps.host.exists(BROWSER_PROC_ID)) {
-            this.running = true;
-            await this.kill();
-        }
+        await this.failing("The browser left running from before couldn't be stopped", async () => {
+            if (await this.deps.host.exists(BROWSER_PROC_ID)) {
+                this.running = true;
+                await this.kill();
+            }
+        });
         await this.start();
     }
 
@@ -221,7 +223,7 @@ export class BrowserComputer {
     stop(): Promise<void> {
         return this.exclusive(async () => {
             this.set({ phase: "stopping" });
-            await this.kill();
+            await this.failing("The browser couldn't be stopped", () => this.kill());
             this.set({ phase: this.record.installed ? "stopped" : "none" });
         });
     }
@@ -239,6 +241,16 @@ export class BrowserComputer {
         // the caller gets the failure; the queue only waits for it to settle
         this.busy = run.catch(() => undefined);
         return run;
+    }
+
+    /** Run a step whose failure is the computer's: its state says why, and the caller still gets the failure. */
+    private async failing<T>(what: string, fn: () => Promise<T>): Promise<T> {
+        try {
+            return await fn();
+        } catch (e) {
+            this.set({ phase: "failed", error: `${what}: ${errorText(e)}` });
+            throw e;
+        }
     }
 
     private set(patch: Partial<ComputerState>) {
@@ -277,8 +289,9 @@ export class BrowserComputer {
 
     private async doInstall(erase: boolean) {
         if (!this.supported) throw new Error("no browser for this computer");
-        await this.kill();
-        if (erase) {
+        await this.failing("The computer couldn't be set up", async () => {
+            await this.kill();
+            if (!erase) return;
             // the browser is observed stopped first: nothing is writing its profile or home folder now
             this.record = { ...this.record, installed: false };
             this.writeRecord();
@@ -287,7 +300,7 @@ export class BrowserComputer {
             }
             // the computer's files are its home folder's: erasing it erases them too
             this.home.erase();
-        }
+        });
         const abort = (this.abort = new AbortController());
         const steps: SetupStep[] = SETUP_STEPS.map((id) => ({ id, status: "waiting", percent: null, bytes: null }));
         const step = (id: SetupStepId, patch: Partial<SetupStep>) => {
@@ -522,8 +535,13 @@ export class BrowserComputer {
         if (this.state.phase !== "ready") return; // starting fails on its own
         await this.exclusive(async () => {
             if (this.cdp !== cdp) return;
-            await this.kill();
-            this.set({ phase: "failed", error: `Lost the browser: ${why}` });
+            let stuck = "";
+            try {
+                await this.kill();
+            } catch (e) {
+                stuck = `. It couldn't be stopped either: ${errorText(e)}`;
+            }
+            this.set({ phase: "failed", error: `Lost the browser: ${why}${stuck}` });
         });
     }
 
