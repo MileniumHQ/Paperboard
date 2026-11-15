@@ -1,3 +1,4 @@
+import { createStateSignal } from "@mileniumhq/paperui";
 import { PANEL_ID, CALLS } from "../service/contract";
 import { createSignal } from "solid-js";
 import { createPanelBridge, errorMessage } from "./api";
@@ -29,7 +30,7 @@ import {
     type PlayerStatSummary,
 } from "./players";
 import { setActiveIssue, type ServerIssue } from "./diagnostics";
-import { applyStatePatch, createStateSignal } from "../core/state";
+import { applyStatePatch } from "../core/state";
 import type { ServerStatus as CoreServerStatus, ChatMessage as CoreChatMessage } from "../core/state";
 import { PLAYER_NAME_PATTERN as CORE_PLAYER_NAME_PATTERN, SERVER_PROC_ID as CORE_SERVER_PROC_ID } from "../core/players";
 

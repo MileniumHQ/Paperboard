@@ -14,12 +14,12 @@ import {
     PaperSettingList,
     PaperText,
     PaperToggle,
+    sameData,
 } from "@mileniumhq/paperui";
 import type { GameFeatures, GameOption, GameTab } from "../games";
 import { serverBridge, serverStatus } from "../lib/server";
 import { errorMessage } from "../lib/failure";
 import { createSaves } from "../lib/saves";
-import { sameData } from "../core/state";
 import { CALLS } from "../service/contract";
 import { fitsNumber, numberRule } from "../games/options";
 import { describeWithProblem } from "./PropertyFieldControl";

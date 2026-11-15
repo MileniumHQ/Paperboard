@@ -2,6 +2,7 @@
 // while the widget can be seen: hidden, it is disposed and nothing arrives;
 // shown again, it re-reads the state. "unavailable" is the service failing to
 // answer, never an empty server.
+import { createStateSignal } from "@mileniumhq/paperui";
 import { createSignal, onCleanup, type Accessor } from "solid-js";
 import { createPanelBridge, serviceApi, type WidgetContext } from "@mileniumhq/paperapi";
 import { gameFor } from "../games";
@@ -9,7 +10,7 @@ import { serverStateOf } from "../servers";
 import { CALLS, PANEL_ID } from "../service/contract";
 import type { ServersState } from "../service";
 import type { GameServerState } from "../service/types";
-import { createLatest, createStateSignal } from "../core/state";
+import { createLatest } from "../core/state";
 import { errorMessage } from "../lib/failure";
 
 /** the last log lines a widget keeps; the console tail shows two */

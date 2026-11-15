@@ -1,5 +1,5 @@
+import { sameData } from "@mileniumhq/paperui";
 import { batch, createEffect, createMemo, createSignal, on, untrack, type Accessor } from "solid-js";
-import { sameData } from "../core/state";
 
 /** One setting a tab saves: what its control shows, and how it changes. */
 export interface SavedSetting<T> {

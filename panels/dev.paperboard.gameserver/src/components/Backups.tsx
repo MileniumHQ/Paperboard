@@ -13,6 +13,7 @@ import {
     PaperSettingList,
     PaperText,
     PaperToggle,
+    createStateSignal,
 } from "@mileniumhq/paperui";
 import {
     backupApi,
@@ -28,7 +29,7 @@ import { selectedServerId } from "../lib/api";
 import { PANEL_ID } from "../service/contract";
 import { errorMessage, type Outcome } from "../lib/failure";
 import { createSaves } from "../lib/saves";
-import { createLatest, createStateSignal } from "../core/state";
+import { createLatest } from "../core/state";
 
 // Backups of the whole server folder (worlds, settings, plugins, mods),
 // made now or routinely by this computer's Paperboard Server, which makes

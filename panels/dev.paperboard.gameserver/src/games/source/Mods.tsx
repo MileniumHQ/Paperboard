@@ -10,11 +10,12 @@ import {
     PaperSettingList,
     PaperText,
     PaperToggle,
+    sameData,
 } from "@mileniumhq/paperui";
 import { serverBridge, serverStatus } from "../../lib/server";
 import { errorMessage } from "../../lib/failure";
 import { createSaves } from "../../lib/saves";
-import { createLatest, sameData } from "../../core/state";
+import { createLatest } from "../../core/state";
 import { discardUpload, listAdded, newStage, pickFiles, stageFolder } from "../../lib/addons/upload";
 import { sourceCalls, type SourceGameSpec, type SourceModView } from "./index";
 import type { SourcePlugin } from "./sourcemod";

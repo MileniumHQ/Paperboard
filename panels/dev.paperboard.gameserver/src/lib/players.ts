@@ -1,4 +1,4 @@
-import { createStateSignal } from "../core/state";
+import { createStateSignal } from "@mileniumhq/paperui";
 import { serverBridge } from "./server";
 import { CALLS } from "../service/contract";
 import type { PlayerStatData, PlayerPosition } from "../core/players";

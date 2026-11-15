@@ -9,6 +9,7 @@ import {
     PaperSettingList,
     PaperText,
     PaperToggle,
+    keepUnchanged,
 } from "@mileniumhq/paperui";
 import ConfigSettings from "./ConfigSettings";
 import { errorMessage } from "../lib/failure";
@@ -18,7 +19,7 @@ import { localIp, serverBridge, serverSoftware, serverStatus } from "../lib/serv
 import { CALLS } from "../service/contract";
 import type { CrossplayView } from "../service/crossplay";
 import { BEDROCK_PORT_SETTING_ID } from "../software/crossplay";
-import { createLatest, keepUnchanged } from "../core/state";
+import { createLatest } from "../core/state";
 
 // Crossplay: one switch for Geyser and Floodgate, then their settings.
 // Turning it off removes the jars and keeps their settings folders, so

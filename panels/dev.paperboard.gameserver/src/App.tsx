@@ -9,16 +9,16 @@ import {
     PaperMenuLabel,
     PaperInterfaceGroup,
     PaperInterfaceItem,
+    keepUnchanged,
+    createPaperCompact,
 } from "@mileniumhq/paperui";
 import { serversBridge, selectedServerId, selectedServer, openServer } from "./lib/api";
 import { loadServerConfig } from "./lib/server";
-import { createCompact } from "./lib/compact";
 import type { ServersState } from "./service";
 import ServersHome from "./components/ServersHome";
 import { serverSoftware, serverVersion, gameSettings, initFailure, recoveryBlock } from "./lib/server";
 import RecoveryNotice from "./components/RecoveryNotice";
 import { gameFor } from "./games";
-import { keepUnchanged } from "./core/state";
 import { errorMessage } from "./lib/failure";
 import { gameUIFor } from "./games/ui";
 import Files from "./components/Files";
@@ -117,7 +117,7 @@ export default function App() {
     // server's document loads inside it, and a document opened on a server
     // starts with its page already open. Going back slides the page out over
     // the list that is already underneath, then lets the server's page go.
-    const compact = createCompact();
+    const compact = createPaperCompact();
     const [shown, setShown] = createSignal<string | null>(selectedServerId);
     const [pageOpen, setPageOpen] = createSignal(selectedServerId !== null);
     // set once the page has slid away: this document no longer shows its server

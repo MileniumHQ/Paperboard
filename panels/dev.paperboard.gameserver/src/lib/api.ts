@@ -1,6 +1,7 @@
 // Each server page is a document of its own. Reloading on selection also
 // tears down pending renderer work, so an old dialog cannot edit a new server.
 export * from "@mileniumhq/paperapi";
+import { sameData } from "@mileniumhq/paperui";
 import {
     createPanelBridge as rawBridge,
     serviceApi,
@@ -18,7 +19,6 @@ import {
 } from "../core/portNames";
 import { scopedFiles } from "../scopedFiles";
 import { PANEL_ID, serverStateKey, serverStateOf } from "../servers";
-import { sameData } from "../core/state";
 import type { ServersState, ServerSummary } from "../service";
 export const selectedServerId =
     typeof window === "undefined" ? null : new URL(window.location.href).searchParams.get("server");

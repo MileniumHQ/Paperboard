@@ -13,9 +13,10 @@ import {
     PaperTable,
     PaperText,
     type PaperAvatarSize,
+    keepUnchanged,
 } from "@mileniumhq/paperui";
 import PlayerRoster, { statusColor } from "./PlayerRoster";
-import { createLatest, keepUnchanged } from "../core/state";
+import { createLatest } from "../core/state";
 import { createSaves } from "../lib/saves";
 import { onlinePlayerNames, serverStatus } from "../lib/server";
 import { errorMessage, type Outcome } from "../lib/failure";

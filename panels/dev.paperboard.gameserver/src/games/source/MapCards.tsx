@@ -13,11 +13,11 @@ import {
     PaperSelectMenu,
     PaperSelectMenuItem,
     PaperText,
+    sameData,
 } from "@mileniumhq/paperui";
 import { mapMode, type SourceGameSpec } from "./index";
 import type { MapPicturesState } from "./useMapPictures";
 import { workshopId } from "./workshop";
-import { sameData } from "../../core/state";
 import { createServedPicture } from "../../lib/pictures";
 
 /** A map to choose, as a card. */

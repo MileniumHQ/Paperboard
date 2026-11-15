@@ -15,10 +15,11 @@ import {
     PaperQuote,
     PaperSettingList,
     PaperText,
+    keepUnchanged,
 } from "@mileniumhq/paperui";
 import { serverStatus } from "../lib/server";
 import { errorMessage, type Outcome } from "../lib/failure";
-import { createLatest, keepUnchanged } from "../core/state";
+import { createLatest } from "../core/state";
 
 /** What every game's Worlds tab knows about a world. */
 export interface WorldEntry {

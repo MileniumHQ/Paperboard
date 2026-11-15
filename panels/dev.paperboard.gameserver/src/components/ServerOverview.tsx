@@ -14,6 +14,7 @@ import {
     PaperGrid,
     PaperQuote,
     PaperStatTile,
+    createPaperCompact,
 } from "@mileniumhq/paperui";
 import {
     serverActionError,
@@ -35,7 +36,6 @@ import ServerIssueModal from "./ServerIssueModal";
 import RecoveryNotice from "./RecoveryNotice";
 import { errorMessage } from "../lib/failure";
 import type { Control } from "../games/types";
-import { createCompact } from "../lib/compact";
 import type { OverviewStats } from "./overviewStats";
 
 /** What a game's Overview says under the address, beside the button that edits it. */
@@ -101,7 +101,7 @@ export default function ServerOverview(props: {
         sent.catch((err) => setCommandError(errorMessage(err)));
     };
 
-    const compact = createCompact();
+    const compact = createPaperCompact();
     const badge = () => getStatusBadge(serverStatus());
     const address = () => `${localIp()}:${serverPort()}`;
 

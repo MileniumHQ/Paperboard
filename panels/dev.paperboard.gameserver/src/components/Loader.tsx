@@ -1,13 +1,13 @@
 import { minecraftSoftware } from "../games/minecraft/index";
 import { createEffect, createSignal, on, Show } from "solid-js";
-import { PaperButton, PaperFlex, PaperPageHeader, PaperQuote } from "@mileniumhq/paperui";
+import { PaperButton, PaperFlex, PaperPageHeader, PaperQuote, keepUnchanged } from "@mileniumhq/paperui";
 import ConfigSettings from "./ConfigSettings";
 import { serverBridge, serverSoftware, serverStatus } from "../lib/server";
 import { CALLS } from "../service/contract";
 import { SOFTWARE_NAMES } from "../lib/software";
 import type { LoaderSettingsView } from "../service/loaderSettings";
 import { errorMessage } from "../lib/failure";
-import { createLatest, keepUnchanged } from "../core/state";
+import { createLatest } from "../core/state";
 
 // Loader: the installed software's own settings files (Paper's YAML,
 // NeoForge/Forge TOML). The service owns reading and writing; this tab

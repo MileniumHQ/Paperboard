@@ -1,5 +1,6 @@
 # Hermetic tests: test/hermetic.ts replaces the WebSocket constructor for the
 # whole test process so no suite can reach a live daemon discovered through
 # ~/.paperboard/local/crane.json. See test/hermetic.ts for why this matters.
+# test/support/paperui.ts gives suites PaperUI's plain parts, which load outside a page.
 [test]
-preload = ["./test/hermetic.ts"]
+preload = ["./test/hermetic.ts", "./test/support/paperui.ts"]

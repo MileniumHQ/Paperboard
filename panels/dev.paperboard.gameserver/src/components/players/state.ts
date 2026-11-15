@@ -2,6 +2,7 @@
 // everyone with data in this world), the names players have now, who is
 // banned, which player is open, and every change to them. The tab draws it;
 // every failure lands in `feedback`.
+import { keepUnchanged } from "@mileniumhq/paperui";
 import { batch, createEffect, createMemo, createSignal, on, onCleanup, onMount } from "solid-js";
 import {
     forgetPlayerData,
@@ -16,7 +17,7 @@ import {
 import { CALLS, type CallName } from "../../service/contract";
 import type { BedrockNaming } from "../../core/bedrock";
 import { errorMessage, type Outcome } from "../../lib/failure";
-import { createLatest, keepUnchanged } from "../../core/state";
+import { createLatest } from "../../core/state";
 
 const LIST_POLL_MS = 15000;
 const STATS_POLL_MS = 30000;

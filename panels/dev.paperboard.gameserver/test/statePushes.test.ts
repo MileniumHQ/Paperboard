@@ -1,9 +1,10 @@
 // Every push from the service is a fresh copy of a server's whole state. What
 // the page shows must only hear about what changed: a push that says nothing
 // new notifies no one, and one that does is seen once, all together.
+import { createStateSignal, keepUnchanged } from "@mileniumhq/paperui";
 import { describe, expect, test } from "bun:test";
 import { createEffect, createRoot, createSignal } from "solid-js";
-import { applyStatePatch, createStateSignal, keepUnchanged, type StateSetters } from "../src/core/state";
+import { applyStatePatch, type StateSetters } from "../src/core/state";
 
 /** the page's state signals, made the way lib/server.ts and lib/players.ts make them */
 function pageState() {

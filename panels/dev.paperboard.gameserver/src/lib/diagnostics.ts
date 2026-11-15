@@ -1,4 +1,4 @@
-import { createStateSignal } from "../core/state";
+import { createStateSignal } from "@mileniumhq/paperui";
 import { serverPort, serverBridge } from "./server";
 import { CALLS } from "../service/contract";
 import { checkLogForIssues as coreCheckLogForIssues } from "../core/diagnostics";
