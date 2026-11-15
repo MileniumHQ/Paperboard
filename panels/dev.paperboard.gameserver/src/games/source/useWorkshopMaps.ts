@@ -9,7 +9,7 @@ import { canonicalMap, workshopName, type SourceWorkshopMap } from "./workshop";
 export const WORKSHOP_GROUP = "Steam Workshop";
 
 /** A Workshop map as a card. */
-export const workshopChoice = (map: SourceWorkshopMap, note?: string): MapChoice => ({ name: workshopName(map.id), title: map.title, picture: map.previewImageUrl ?? undefined, mode: WORKSHOP_GROUP, note });
+export const workshopChoice = (map: SourceWorkshopMap, note?: string): MapChoice => ({ name: workshopName(map.id), title: map.title, preview: map.previewImageUrl ?? undefined, mode: WORKSHOP_GROUP, note });
 
 /** The Steam Workshop maps added to a server, asked for once; none for a game without them. */
 export function createWorkshopMaps(spec: SourceGameSpec) {

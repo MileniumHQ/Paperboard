@@ -14,6 +14,16 @@ export const SETUP_CALLS = {
     retryInitialize: "retry-initialize",
 } as const;
 
+/**
+ * The panel's call for a picture a page shows from elsewhere: a page never
+ * loads an address it was handed, the service fetches it and answers with a
+ * data: address (service/pictures.ts).
+ */
+export const PICTURE_CALL = "served-picture";
+
+/** Where such a picture comes from; each is fetched only from the hosts its source keeps pictures on. */
+export type PictureSource = "modrinth" | "steam-workshop" | "web";
+
 export const CALLS = {
     runCommand: "run-command",
     saveWorld: "save-world",

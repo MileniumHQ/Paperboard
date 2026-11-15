@@ -1,6 +1,5 @@
 import { createEffect, createMemo, createSignal, For, Show, untrack, type JSX, on, batch } from "solid-js";
 import {
-    PaperAvatar,
     PaperButton,
     PaperEffect,
     PaperFlex,
@@ -12,16 +11,43 @@ import {
     PaperTable,
     PaperText,
     usePaperPanel,
+    type MarkdownImage,
 } from "@mileniumhq/paperui";
 import type { AddonKind, AddonProject, AddonTarget, InstalledAddon } from "../../lib/addons/kind";
 import type { DetailTarget } from "./state";
 import { createLatest } from "../../core/state";
 import { errorMessage } from "../../lib/failure";
+import { createServedPicture } from "../../lib/pictures";
+import PictureAvatar from "../PictureAvatar";
 
 /** What a kind adds to its project page: buttons beside Uninstall, and a notice under the header. */
 export type DetailExtras = (entry: InstalledAddon, close: () => void) => { actions: JSX.Element; notice: JSX.Element };
 
 const truncate = (text: string, max: number) => (text.length > max ? `${text.slice(0, max).trimEnd()}…` : text);
+
+/**
+ * An image in a project's page, fetched by the service from wherever its
+ * author put it; its alt text stands in while it loads, and for an address
+ * that isn't on the web. One that fails says why where it would be.
+ */
+function BodyPicture(props: { image: MarkdownImage }) {
+    const address = () => (/^https?:\/\//i.test(props.image.src) ? props.image.src : null);
+    const picture = createServedPicture(() => "web", address);
+    return (
+        <Show
+            when={picture.src()}
+            fallback={
+                <Show when={picture.error()} fallback={<PaperText as="span" color="text-subtle">{props.image.alt}</PaperText>}>
+                    <PaperText as="span" size={1} color="danger">
+                        {props.image.alt ? `${props.image.alt}: ` : ""}The picture couldn't be loaded: {picture.error()}
+                    </PaperText>
+                </Show>
+            }
+        >
+            <img src={picture.src()} alt={props.image.alt} title={props.image.title ?? undefined} />
+        </Show>
+    );
+}
 
 /** A catalog project's page, with Install, or Uninstall and a kind's own buttons once it is installed. */
 export function AddonDetail<Meta>(props: {
@@ -96,8 +122,9 @@ export function AddonDetail<Meta>(props: {
             return (
                 <PaperFlex direction="column" gap="full">
                     <PaperFlex direction="row" gap="full" align="center" wrap>
-                        <PaperAvatar
-                            src={project()?.iconUrl ?? target.iconUrl}
+                        <PictureAvatar
+                            from={props.kind.source.pictures}
+                            url={project()?.iconUrl ?? target.iconUrl}
                             shape="square"
                             size="large"
                             fallbackIcon={props.kind.glyph}
@@ -179,8 +206,13 @@ export function AddonDetail<Meta>(props: {
                                     }
                                 >
                                     {/* Third-party markdown goes through PaperMarkdown, which renders PaperUI
-                                        elements instead of HTML; the source says whether its images may load. */}
-                                    <PaperMarkdown text={project()!.body} allowImages={project()!.allowImages} allowHtml={project()!.allowHtml} />
+                                        elements instead of HTML; the source says whether its images show,
+                                        and each is fetched by the service, never loaded by the page. */}
+                                    <PaperMarkdown
+                                        text={project()!.body}
+                                        renderImage={project()!.allowImages ? (image) => <BodyPicture image={image} /> : undefined}
+                                        allowHtml={project()!.allowHtml}
+                                    />
                                 </Show>
                             </Show>
                         </PaperFlex>

@@ -1,6 +1,5 @@
 import { For, Show } from "solid-js";
 import {
-    PaperAvatar,
     PaperBadge,
     PaperButton,
     PaperCard,
@@ -15,6 +14,7 @@ import {
 } from "@mileniumhq/paperui";
 import type { AddonHit, AddonKind, AddonListing, InstalledAddon } from "../../lib/addons/kind";
 import type { createAddonSearch } from "./state";
+import PictureAvatar from "../PictureAvatar";
 
 const truncate = (text: string, max: number) => (text.length > max ? `${text.slice(0, max).trimEnd()}…` : text);
 
@@ -52,7 +52,7 @@ export function AddonInstalledList<Meta>(props: {
                         {(item) => (
                             <PaperListItem
                                 value={item.id}
-                                icon={<PaperAvatar src={item.iconUrl} shape="square" size="large" fallbackIcon={props.kind.glyph} />}
+                                icon={<PictureAvatar from={props.kind.source.pictures} url={item.iconUrl} shape="square" size="large" fallbackIcon={props.kind.glyph} />}
                                 description={
                                     // a file name has no spaces to wrap at; it breaks where it must
                                     <PaperText breakWord size={1} weight={600}>
@@ -184,7 +184,7 @@ export function AddonResults<Meta>(props: {
                                 {(hit) => (
                                     <PaperListItem
                                         value={hit.projectId}
-                                        icon={<PaperAvatar src={hit.iconUrl} shape="square" size="large" fallbackIcon={props.kind.glyph} />}
+                                        icon={<PictureAvatar from={props.kind.source.pictures} url={hit.iconUrl} shape="square" size="large" fallbackIcon={props.kind.glyph} />}
                                         description={[truncate(hit.description, 110), hit.stat].filter(Boolean).join(" · ")}
                                         actions={
                                             <Show when={props.installedProjects.has(hit.projectId)}>

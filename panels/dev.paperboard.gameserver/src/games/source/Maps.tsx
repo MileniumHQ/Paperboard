@@ -20,6 +20,7 @@ import MapCards, { MapPicturesCredit, MapPicturesFailure, mapChoices, mapNames, 
 import { createMapPictures } from "./useMapPictures";
 import { workshopChoice } from "./useWorkshopMaps";
 import WorkshopPane from "./WorkshopPane";
+import PictureAvatar from "../../components/PictureAvatar";
 import { canonicalMap, workshopId, workshopName, type SourceWorkshopHit, type SourceWorkshopMap } from "./workshop";
 
 // The maps a server plays through, in order. The server reads a map cycle
@@ -213,7 +214,9 @@ export default function SourceMaps(props: { spec: SourceGameSpec; active: boolea
                                         return (
                                             <PaperListItem
                                                 value={name}
-                                                icon={<PaperAvatar size="large" shape="square" src={workshopMap(name)?.previewImageUrl ?? pictures.of(name)} alt={names().title} fallbackIcon="map" />}
+                                                icon={workshopId(name)
+                                                    ? <PictureAvatar from="steam-workshop" size="large" shape="square" url={workshopMap(name)?.previewImageUrl} alt={names().title} fallbackIcon="map" />
+                                                    : <PaperAvatar size="large" shape="square" src={pictures.of(name)} alt={names().title} fallbackIcon="map" />}
                                                 description={[names().file, !installed().has(name) ? "Not installed" : workshopId(name) ? "Steam Workshop" : label(name), serverLevel() !== null && canonicalMap(serverLevel()!) === name ? "Playing now" : undefined].filter(Boolean).join(" · ")}
                                                 actions={
                                                     <Show when={current().custom && editable()}>
@@ -240,7 +243,7 @@ export default function SourceMaps(props: { spec: SourceGameSpec; active: boolea
                                         {(map) => (
                                             <PaperListItem
                                                 value={map.id}
-                                                icon={<PaperAvatar size="large" shape="square" src={map.previewImageUrl ?? undefined} alt={map.title} fallbackIcon="map" />}
+                                                icon={<PictureAvatar from="steam-workshop" size="large" shape="square" url={map.previewImageUrl} alt={map.title} fallbackIcon="map" />}
                                                 description={current().workshopHeld[map.id] ?? "On this server"}
                                                 actions={<PaperButton variant="text" disabled={working() || !!current().workshopHeld[map.id]} onPointerDown={(e) => e.stopPropagation()} onClick={() => { setError(null); setRemovingWorkshop(map); }}>Remove</PaperButton>}
                                             >

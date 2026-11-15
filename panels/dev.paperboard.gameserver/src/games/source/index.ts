@@ -131,10 +131,9 @@ export interface SourceInstallPictures {
     loose?: string;
 }
 
-/** The pictures a game's wiki shows, by map name, and where they came from. */
+/** Where a game's wiki pictures come from, and what the wiki names its maps; each picture is the map picture call's. */
 export interface SourceMapPictures {
     source: { name: string; url: string };
-    pictures: Record<string, string>;
     /** the maps' real names ("2Fort" for ctf_2fort), by file name in lower case; a map the wiki names by its file name has none */
     titles: Record<string, string>;
 }
@@ -188,7 +187,7 @@ export function describedCalls(spec: SourceGameSpec): string[] {
     return [
         ids.info, ids.latest, ids.install, ids.players, ids.metrics, ids.kick, ids.ban, ids.unban, ids.changeMap, ids.maps,
         ...(spec.mapPictures ? [ids.mapPictures] : []),
-        ...(spec.installPictures ? [ids.mapPicture] : []),
+        ...(spec.mapPictures || spec.installPictures ? [ids.mapPicture] : []),
         ...(rotatesMaps(spec) ? [ids.mapCycle, ids.mapCycleSet, ids.play] : []),
         ...(spec.workshop ? [ids.workshopMaps, ids.workshopFind, ids.workshopAdd, ids.workshopRemove] : []),
         ...(spec.sourcemod ? [ids.sourcemod, ids.sourcemodSet, ids.plugin, ids.pluginRemove, ids.pluginUpload, ids.admin] : []),

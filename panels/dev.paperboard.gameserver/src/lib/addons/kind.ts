@@ -5,6 +5,8 @@
 // dialogs from one of these; a descriptor holds no JSX, so what it decides
 // is testable without a page.
 
+import type { PictureSource } from "../../service/contract";
+
 /** One build of a project the install dialog offers. */
 export interface AddonVersion {
     id: string;
@@ -38,7 +40,7 @@ export interface AddonProject {
     iconUrl?: string;
     /** markdown, drawn with PaperMarkdown */
     body: string;
-    /** images in the body load; only for catalogs that review what they host */
+    /** images in the body show, fetched by the service; only for catalogs that review what they host */
     allowImages: boolean;
     /** the body's HTML is drawn as formatting rather than shown as source */
     allowHtml: boolean;
@@ -56,6 +58,8 @@ export interface AddonNotice {
 export interface AddonSource {
     /** "Modrinth", for sentences */
     name: string;
+    /** where its icons are, for the service to fetch them from (a page never loads one itself) */
+    pictures: PictureSource;
     /** the catalog's browse page, linked under the search */
     url: string;
     /** the project page's link, "Open at Modrinth.com" */

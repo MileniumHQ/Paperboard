@@ -17,6 +17,7 @@ export const modrinthHits = (hits: ModrinthHit[]): AddonHit[] =>
 export function modrinthSource(path: string, browseUrl: string): AddonSource {
     return {
         name: "Modrinth",
+        pictures: "modrinth",
         url: browseUrl,
         pageLabel: "Open at Modrinth.com",
         pageUrl: (target) => `https://modrinth.com/${path}/${target.slug}`,

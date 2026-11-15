@@ -6,7 +6,7 @@ import SteamSetup from "../steam/SteamSetup";
 import { sourceCalls, type SourceGameSpec } from "./index";
 import MapCards, { MapPicturesCredit, MapPicturesFailure, mapChoices } from "./MapCards";
 import { playModes } from "./modes";
-import { createMapPictures, preloadMapPictures } from "./useMapPictures";
+import { createMapPictures } from "./useMapPictures";
 
 /** A banner of one big symbol, for a card whose pictures are not there. */
 const iconBanner = (icon: string) => (
@@ -21,13 +21,12 @@ type Choice = { mode: string | null; map: string };
 /**
  * Setup for a Source game: the download, then how the server plays, as
  * Minecraft's setup is laid out: one question a step, Next and Back between
- * them. The map pictures are fetched and loaded while the game downloads, so
- * the cards are drawn when their step opens.
+ * them. The map pictures are fetched by the service as the cards show their
+ * maps, once the download has said which maps there are.
  */
 export default function SourceSetup(props: { spec: SourceGameSpec; onComplete(): void }) {
     const ids = sourceCalls(props.spec.id);
     const pictures = createMapPictures(props.spec);
-    preloadMapPictures(pictures);
     // the maps are only there once the download is, so they are read when its step is left
     const [downloaded, setDownloaded] = createSignal(false);
     const [resource, { refetch }] = createResource(downloaded, () => serverBridge.call<string[]>(ids.maps));

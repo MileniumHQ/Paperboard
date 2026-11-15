@@ -18,7 +18,7 @@ import { workshopName } from "./workshop";
  * disclaimers come with every answer and are shown under it.
  */
 /** a Workshop hit brings its own picture; there are none to look up */
-const NO_PICTURES: MapPicturesState = { of: () => undefined, loading: () => false, titleOf: () => undefined, all: () => [], source: () => null, error: () => "", retry: () => {} };
+const NO_PICTURES: MapPicturesState = { of: () => undefined, loading: () => false, titleOf: () => undefined, source: () => null, error: () => "", retry: () => {} };
 
 export default function WorkshopPane(props: {
     spec: SourceGameSpec;

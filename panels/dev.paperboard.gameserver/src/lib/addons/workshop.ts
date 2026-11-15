@@ -76,6 +76,7 @@ export const workshopHits = (items: WorkshopItem[]): AddonHit[] =>
 
 export const workshopSource: AddonSource = {
     name: "Steam Workshop",
+    pictures: "steam-workshop",
     url: "https://steamcommunity.com/app/1281930/workshop/",
     pageLabel: "Open on Steam Workshop",
     pageUrl: (target) => `https://steamcommunity.com/sharedfiles/filedetails/?id=${target.projectId}`,

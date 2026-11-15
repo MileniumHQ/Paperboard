@@ -96,7 +96,11 @@
             },
             {
                 "name": "Modrinth",
-                "detail": "Finding plugins, mods and modpacks"
+                "detail": "Finding plugins, mods and modpacks, and showing their icons and pages"
+            },
+            {
+                "name": "Sites a Modrinth page shows pictures from",
+                "detail": "A plugin's, mod's or pack's page can show pictures its author keeps on any website; Paperboard fetches them to show the page"
             },
             {
                 "name": "GeyserMC",
@@ -116,7 +120,7 @@
             },
             {
                 "name": "Steam",
-                "detail": "Palworld, TF2, CS2, Garry's Mod and Rust servers and Workshop items through SteamCMD, Workshop search through Paperboard's modscan, and Garry's Mod collections"
+                "detail": "Palworld, TF2, CS2, Garry's Mod and Rust servers and Workshop items through SteamCMD, Workshop search through Paperboard's modscan, and Garry's Mod collections, and Workshop items' pictures"
             },
             {
                 "name": "Facepunch",

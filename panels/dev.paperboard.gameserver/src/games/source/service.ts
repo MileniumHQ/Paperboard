@@ -19,7 +19,7 @@ import { rotatesMaps, SOURCEMOD_PACKAGES, sourceCalls, type SourceGameSpec, type
 import { pluginFile, SourceMod, SOURCEMOD_MISSING } from "./sourcemod";
 import { cvarValue, mapName, optionValue, secretsCfg, serverCfg } from "./config";
 import { cfgMapCycleFile, checkRotation, DEFAULT_MAPCYCLE, findMap, installedMaps, mapCycleFile, PAPERBOARD_MAPCYCLE, readServerCycle } from "./mapcycle";
-import { mapPictures } from "./mapPictures";
+import { mapPictures, wikiMapPicture } from "./mapPictures";
 import { installMapPicture } from "./installPictures";
 import { playModes } from "./modes";
 import { canonicalMap, findWorkshopMaps, readWorkshopMaps, workshopId, workshopMapToAdd, workshopName, type SourceWorkshopMap } from "./workshop";
@@ -558,7 +558,11 @@ export function sourceService(spec: SourceGameSpec, game: GameDefinition): GameS
                 if (!spec.mapPictures) throw new Error(`${spec.name} has no source of map pictures`);
                 return mapPictures(spec.mapPictures);
             },
-            ...(spec.installPictures ? { [ids.mapPicture]: async (_ctx: unknown, { map }: { map?: unknown }) => installMapPicture(await gameDir(), spec.installPictures!, String(map ?? "")) } : {}),
+            ...(spec.mapPictures || spec.installPictures ? {
+                [ids.mapPicture]: async (_ctx: unknown, { map }: { map?: unknown }) => spec.installPictures
+                    ? installMapPicture(await gameDir(), spec.installPictures, String(map ?? ""))
+                    : wikiMapPicture(spec.mapPictures!, String(map ?? "")),
+            } : {}),
             [ids.workshopMaps]: () => workshopLibrary(),
             [ids.workshopFind]: async (_ctx, { query }) => {
                 if (typeof query !== "string") throw new Error("Type what to search the Steam Workshop for");

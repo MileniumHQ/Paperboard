@@ -25,7 +25,8 @@ import { announceChanges, bindBlocks, fireBackupEnded, fireTrigger, mergeBlocks,
 import { SERVER_EVENTS, serverType, serversBlocks, type ServersBlocksHost } from "./service/serversBlocks";
 import { processApi as scopedProcess } from "./service/api";
 import { type GameServerState, appendCapped } from "./service/types";
-import { CALLS, SETUP_CALLS } from "./service/contract";
+import { CALLS, PICTURE_CALL, SETUP_CALLS } from "./service/contract";
+import { pictureCall } from "./service/pictures";
 import { handleProcessData, handleProcessExit, stopServerInstance, cancelReadiness, restartServerInstance, startServerInstance } from "./service/lifecycle";
 import { cancelAutomation, readAutomation, scheduleDailyRestart, scheduleUpdateChecks } from "./service/automation";
 import { historyWriter, onlineSinceAfter, readHistory } from "./service/history";
@@ -456,13 +457,14 @@ const BLOCK_CATEGORIES = [
     { name: "Logs", icon: "receipt_long" },
 ];
 type RootCalls = Record<string, (ctx: ServiceContext<ServersState>, input: any) => unknown>;
-/** The calls that manage the saved servers; every other call is a server's own and names its server. */
+/** The calls that manage the saved servers, and the pages' pictures; every other call is a server's own and names its server. */
 const managementCalls: RootCalls = {
     "read-server-config": (_ctx, { server }) => requireServer(server).server.settings,
     "add-server": async (_ctx, { name, game }) => ({ id: await addServer(name, game) }),
     "rename-server": async (_ctx, { server, name }) => (await renameServer(server, name), true),
     "remove-server": async (_ctx, { server }) => (await removeServer(server), { removed: server }),
     [SETUP_CALLS.retryInitialize]: async (_ctx, { server }) => (await retryInitialize(server), true),
+    [PICTURE_CALL]: (_ctx, input) => pictureCall(input),
 };
 /** One root call for each name any game answers, which asks the server in its input. */
 const callNames = [...new Set([...gameCalls.values()].flatMap((calls) => Object.keys(calls)))];

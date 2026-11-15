@@ -18,6 +18,7 @@ import { mapMode, type SourceGameSpec } from "./index";
 import type { MapPicturesState } from "./useMapPictures";
 import { workshopId } from "./workshop";
 import { sameData } from "../../core/state";
+import { createServedPicture } from "../../lib/pictures";
 
 /** A map to choose, as a card. */
 export interface MapChoice {
@@ -25,8 +26,8 @@ export interface MapChoice {
     name: string;
     /** the card's title, when the name is no way to know it by */
     title?: string;
-    /** its picture, if there is one */
-    picture?: string;
+    /** its Steam Workshop preview's address, which the service fetches; other maps' pictures are the game's */
+    preview?: string;
     /** what it plays as ("Capture the Flag"); the filter chips group by it */
     mode?: string;
     /** a line at the card's foot, as a mod card's stat: "42.7k subscribers", "In the rotation" */
@@ -73,12 +74,13 @@ function PictureLoading() {
     );
 }
 
-/** A map without a picture says so; it is not given another map's. */
-function NoPicture() {
+/** A map without a picture says so, and that its picture failed, naming why to whoever points at it; it is not given another map's. */
+function NoPicture(props: { failed?: string | null }) {
+    const why = () => (props.failed ? `The picture couldn't be loaded: ${props.failed}` : undefined);
     return (
-        <PaperFlex center fullWidth fullHeight direction="column" gap="onefourth">
-            <PaperText size={10} color="text-subtle"><PaperIcon>map</PaperIcon></PaperText>
-            <PaperText size={1} color="text-subtle">No picture</PaperText>
+        <PaperFlex center fullWidth fullHeight direction="column" gap="onefourth" title={why()} role={why() ? "img" : undefined} aria-label={why()}>
+            <PaperText size={10} color={props.failed ? "danger" : "text-subtle"}><PaperIcon>{props.failed ? "broken_image" : "map"}</PaperIcon></PaperText>
+            <PaperText size={1} color="text-subtle">{props.failed ? "Picture didn't load" : "No picture"}</PaperText>
         </PaperFlex>
     );
 }
@@ -172,9 +174,13 @@ export default function MapCards(props: {
                     <For each={shown()}>
                         {(map) => {
                             const names = () => mapNames(map, props.pictures);
+                            const preview = createServedPicture(() => "steam-workshop", () => map.preview);
                             return (
                                 <PaperMediaCard
-                                    banner={map.picture ?? props.pictures.of(map.name) ?? (props.pictures.loading(map.name) ? <PictureLoading /> : <NoPicture />)}
+                                    banner={
+                                        preview.src() ?? props.pictures.of(map.name) ??
+                                        (preview.loading() || props.pictures.loading(map.name) ? <PictureLoading /> : <NoPicture failed={preview.error()} />)
+                                    }
                                     bannerAlt={names().title}
                                     title={breakable(names().title)}
                                     subtitle={names().file ? breakable(names().file!) : undefined}

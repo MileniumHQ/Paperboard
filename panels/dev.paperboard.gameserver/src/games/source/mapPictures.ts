@@ -1,12 +1,15 @@
 import { apiFetch } from "../../lib/userAgent";
+import { servedPicture } from "../../service/pictures";
 import type { SourceMapPictures, SourceMapPictureSource } from "./index";
 
 // A Source dedicated server ships no map pictures (its texture archives name
 // them, but the files aren't downloaded). A game's spec can name a wiki page
 // that lists its maps with a picture each, in the MediaWiki table layout the
 // Official Team Fortress Wiki uses: a row holds the map's file name in <code>
-// and a thumbnail <img>. The service reads that page at runtime and hands the
-// UI absolute picture addresses; nothing of the wiki's is stored in the app.
+// and a thumbnail <img>. The service reads that page at runtime, fetches each
+// picture from the wiki's own site when a page shows its map, and hands the
+// page the picture itself (service/pictures.ts), never the wiki's address.
+// Nothing of the wiki's is stored on disk.
 
 /** How long a page's answer is kept: the wiki changes when a game adds maps, not by the hour. */
 const KEEP_MS = 24 * 60 * 60 * 1000;
@@ -86,11 +89,11 @@ function largestPicture(src: string, srcset: string, page: string): URL {
     return new URL(best.url, page);
 }
 
-type Kept = { at: number; value: SourceMapPictures } | { at: number; error: Error };
+type Kept = { at: number; value: ParsedMapList } | { at: number; error: Error };
 const kept = new Map<string, Kept>();
-const inFlight = new Map<string, Promise<SourceMapPictures>>();
+const inFlight = new Map<string, Promise<ParsedMapList>>();
 
-async function load(source: SourceMapPictureSource): Promise<SourceMapPictures> {
+async function load(source: SourceMapPictureSource): Promise<ParsedMapList> {
     let response: Response;
     try {
         response = await apiFetch(source.page, { signal: AbortSignal.timeout(TIMEOUT_MS), headers: { Accept: "text/html" } });
@@ -103,17 +106,15 @@ async function load(source: SourceMapPictureSource): Promise<SourceMapPictures> 
     if (Number(response.headers.get("content-length") ?? 0) > MAX_BYTES) throw new Error(`${source.name}'s map list is larger than expected`);
     const html = await response.text();
     if (html.length > MAX_BYTES) throw new Error(`${source.name}'s map list is larger than expected`);
-    let parsed: ParsedMapList;
     try {
-        parsed = parseMapPictures(html, source.page);
+        return parseMapPictures(html, source.page);
     } catch (err) {
         throw new Error(`Couldn't read map pictures from ${source.name}: ${err instanceof Error ? err.message : String(err)}`);
     }
-    return { source: { name: source.name, url: source.page }, ...parsed };
 }
 
-/** A game's map pictures: from memory when fetched in the last day, else from its wiki, asked once at a time. */
-export async function mapPictures(source: SourceMapPictureSource): Promise<SourceMapPictures> {
+/** A game's wiki list: from memory when fetched in the last day, else from its wiki, asked once at a time. */
+async function mapList(source: SourceMapPictureSource): Promise<ParsedMapList> {
     const now = Date.now();
     const have = kept.get(source.page);
     if (have && now - have.at < ("error" in have ? FAILURE_MS : KEEP_MS)) {
@@ -131,7 +132,14 @@ export async function mapPictures(source: SourceMapPictureSource): Promise<Sourc
     return pending;
 }
 
-/** Forgets what was fetched, for tests that serve a page twice. */
-export function forgetMapPictures(): void {
-    kept.clear();
+/** Who a game's map pictures are from, and the maps' real names. */
+export async function mapPictures(source: SourceMapPictureSource): Promise<SourceMapPictures> {
+    return { source: { name: source.name, url: source.page }, titles: (await mapList(source)).titles };
+}
+
+/** A map's picture from the game's wiki as a data: address, or null when the wiki shows none for it. */
+export async function wikiMapPicture(source: SourceMapPictureSource, map: string): Promise<string | null> {
+    const { pictures } = await mapList(source);
+    const file = map.toLowerCase();
+    return Object.hasOwn(pictures, file) ? servedPicture(pictures[file], [new URL(source.page).host], source.name) : null;
 }
