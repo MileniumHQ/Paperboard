@@ -16,7 +16,7 @@ import { SOURCE_CALLS, type SourceMetrics } from "../source";
 import { cvarValue, mapName, optionValue } from "../source/config";
 import { consoleLine, logBody, parseLogLine, steamId, isSteamId, type SourceLogEvent } from "../source/log";
 import { mergeStats, noStats, SourceRoster, type SourceStats } from "../source/roster";
-import type { SourceOnline } from "../source/service";
+import type { SourceOnline } from "../source/people";
 import { installMapPicture } from "../source/installPictures";
 import { cs2, CS2, MODES, type Cs2Mode } from "./index";
 import { activatedMap, consoleSaid, isErrorLine, parseStatusPlayers, STATUS_END, STATUS_PLAYERS, withoutPositions } from "./console";

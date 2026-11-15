@@ -14,7 +14,7 @@ import { byName, withUniqueNames } from "../rosterNames";
 import PlayerAvatar from "../../components/PlayerAvatar";
 import { type SourceGameSpec } from "./index";
 import { noStats, type SourceBan, type SourceSeen, type SourceStats } from "./roster";
-import type { SourceOnline } from "./service";
+import type { SourceOnline } from "./people";
 import { useServer } from "../../lib/server";
 
 interface Player extends RosterPlayer {
