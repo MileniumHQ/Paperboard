@@ -306,7 +306,7 @@ describe("the agent's blocks", () => {
         const program = path.join(rig.root, "whoami-server");
         fs.copyFileSync(path.join(import.meta.dir, "support", "mcpServer.mjs"), program);
         fs.chmodSync(program, 0o755);
-        await rig.app.toolsSave({ server: { name: "whoami", transport: "stdio", command: program, args: [], env: {}, enabled: true } });
+        await rig.app.servers.save({ name: "whoami", transport: "stdio", command: program, args: [], env: {}, enabled: true });
         expect(await rig.blocks.read("tool-servers")).toEqual(["whoami"]);
         await rig.blocks.changes.until((c) => c.includes("tool-servers"), "Tool Servers to announce the change");
         expect(await rig.blocks.property("tool-server", "name", "whoami")).toBe("whoami");

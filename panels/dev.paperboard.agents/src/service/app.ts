@@ -5,21 +5,7 @@
 // conversation as chat-entry events plus a history call.
 
 import path from "node:path";
-import {
-    COMPACTIONS,
-    DEFAULT_MODEL,
-    HARNESSES,
-    LIMITS,
-    PANEL_ID,
-    EVENTS,
-    TRIGGER_IDS,
-    type AiState,
-    type Compaction,
-    type AccessView,
-    type Harness,
-    type MemoryList,
-    type Settings,
-} from "../contract";
+import { DEFAULT_MODEL, HARNESSES, EVENTS, TRIGGER_IDS, parseSettings, type AiState, type Harness, type Settings } from "../contract";
 import { HomeFolder, moveHomeFolder } from "./homeFolder";
 import { Checkpoints } from "./checkpoints";
 import { shellToolset } from "./shell";
@@ -40,7 +26,7 @@ import { actionsToolset, type ActionsHost } from "./actionsToolset";
 import { McpServers, type Vault } from "./mcpServers";
 import { checkSecretName } from "./mcpConfig";
 import { mcpToolset } from "./mcpToolset";
-import { TOOLS_EVENT, type ToolsConfig, type ToolsView } from "../toolsContract";
+import { TOOLS_EVENT, type ToolsConfig } from "../toolsContract";
 import { askClaudeModels, listModels } from "./models";
 import { Memory } from "./memory";
 import { messagesToolset } from "./messages";
@@ -52,7 +38,8 @@ import { ServerTools } from "./serverTools";
 import { describeSchedule, localStamp } from "../routineText";
 import { toolbox, type Toolbox } from "./toolsets";
 import { Asker } from "./ask";
-import { flowActions, type ConversationChoice, type FlowHost, type MessageReceived } from "./flowActions";
+import { FlowActionsPublisher, flowActions, type ConversationChoice, type FlowHost, type MessageReceived } from "./flowActions";
+import { BlocksSync } from "./blocksSync";
 import { flowBlocks, replyPayload, type ConversationFacts } from "./flowBlocks";
 import type { ActionDefinition, BlocksHandle } from "@mileniumhq/paperapi";
 export { findProgram } from "./which";
@@ -119,14 +106,8 @@ export class AiApp {
     asker!: Asker;
     /** the empty folder Claude runs in when it's asked for its models */
     private modelsDir = "";
-    /** the conversation dropdown as flows last got it, and the registration in flight */
-    private published = "";
-    private publishing: Promise<void> = Promise.resolve();
-    /** the blocks are registered, and the conversation values as Blocks was last told they were */
-    private blocksRegistered = false;
-    private readonly announced = new Map<string, string>();
-    /** the memory revision Blocks was last told about */
-    private memoryRevision = 0;
+    private readonly blocks: BlocksSync;
+    private readonly actions: FlowActionsPublisher;
     private settle!: (failure: Error | null) => void;
     private readonly settled = new Promise<Error | null>((ok) => (this.settle = ok));
 
@@ -136,30 +117,15 @@ export class AiApp {
         if (failure) throw new Error(`the Agent service didn't start: ${failure.message}`);
     }
 
-    constructor(private host: AppHost) {}
+    constructor(private host: AppHost) {
+        this.blocks = new BlocksSync({ blocks: host.blocks, watched: () => this.watched(), memory: () => this.memory.list() });
+        this.actions = new FlowActionsPublisher({ choices: () => this.conversationChoices(), actions: () => this.flowActions(), register: (def) => host.registerAction(def) });
+    }
 
     async init(ctx: AppContext) {
         try {
             await this.prepare(ctx);
-        } catch (e) {
-            this.settle(e instanceof Error ? e : new Error(String(e)));
-            throw e;
-        }
-        try {
-            await this.host.blocks.register(this.flowBlocks());
-            for (const [value, read] of Object.entries(this.watched())) {
-                try {
-                    this.announced.set(value, JSON.stringify(read()));
-                } catch (e) {
-                    // unreadable now (broken routines, say): the first change it reads after is announced
-                    console.error(`[agents] ${value} can't be read for Blocks:`, String(e));
-                }
-            }
-            await this.memory.list().then(
-                (list) => this.seeMemory(list, false),
-                (e) => console.error("[agents] memory can't be read for Blocks:", String(e)),
-            );
-            this.blocksRegistered = true;
+            await this.blocks.register(this.flowBlocks());
         } catch (e) {
             this.settle(e instanceof Error ? e : new Error(String(e)));
             throw e;
@@ -178,7 +144,7 @@ export class AiApp {
             dir: path.join(root, "memory"),
             onChange: (memory) => {
                 this.ctx.setState({ memory });
-                if (memory.revision !== this.memoryRevision) this.announceMemory(memory.revision);
+                this.blocks.memoryChanged(memory.revision);
             },
         });
         const t = this.host.tools;
@@ -189,7 +155,7 @@ export class AiApp {
             onChange: (view) => {
                 this.ctx.emit(TOOLS_EVENT, view);
                 this.serverTools?.seen(view);
-                this.announce("tool-servers");
+                this.blocks.announce("tool-servers");
             },
         });
         await this.servers.load();
@@ -202,11 +168,11 @@ export class AiApp {
                         (late && r.next ? ` It was due at ${localStamp(r.next)}; it's late because this computer was asleep or off.` : "") +
                         " Do it now. Text the user with send_message if there's something for them; a check that found nothing needs no text.",
                 );
-                this.fireBlock("routine-fired", { routine: r.id, task: r.what, late });
+                this.blocks.fire("routine-fired", { routine: r.id, task: r.what, late });
             },
             onChange: (routines) => {
                 this.ctx.setState({ routines });
-                this.announce("routines");
+                this.blocks.announce("routines");
             },
         });
         this.signIns = new SignIns({
@@ -267,7 +233,7 @@ export class AiApp {
             onChange: () => {
                 this.ctx.setState({ pages: { revision: this.ctx.state.pages.revision + 1 } });
                 // the Blocks list keeps its id from when pages were apps
-                this.announce("apps");
+                this.blocks.announce("apps");
             },
         });
         this.pages = pages;
@@ -329,7 +295,7 @@ export class AiApp {
             pages: (host, port) => pages.serves(host, port),
             onState: (computer) => {
                 this.ctx.setState({ computer });
-                this.announce("computer-running");
+                this.blocks.announce("computer-running");
             },
         });
         this.conversation = new Conversation({
@@ -353,12 +319,12 @@ export class AiApp {
                         replyTo: entry.replyTo ?? "",
                     };
                     this.ctx.trigger(TRIGGER_IDS.messageReceived, message);
-                    this.fireBlock(TRIGGER_IDS.messageReceived, replyPayload(message));
+                    this.blocks.fire(TRIGGER_IDS.messageReceived, replyPayload(message));
                 }
                 // its first message names the current conversation in the dropdown
                 if (entry.kind === "user" || entry.kind === "agent") this.publish();
             },
-            onTurnFailed: (error) => this.fireBlock("turn-failed", { error, conversation: this.conversation.id() }),
+            onTurnFailed: (error) => this.blocks.fire("turn-failed", { error, conversation: this.conversation.id() }),
             onTurnEnd: () => this.access.turnEnded(),
             onState: (chat) => this.ctx.setState({ chat }),
             codexHome: this.brains.homes.codex,
@@ -417,8 +383,8 @@ export class AiApp {
         }
         await this.host.writeSettings(settings);
         this.ctx.setState({ settings });
-        this.announce("current-brain");
-        this.announce("current-model");
+        this.blocks.announce("current-brain");
+        this.blocks.announce("current-model");
         return { saved: true };
     }
 
@@ -674,51 +640,6 @@ export class AiApp {
         };
     }
 
-    /** Tell Blocks a value changed, when it has since Blocks was last told. */
-    private announce(value: string) {
-        if (!this.blocksRegistered) return;
-        let next: string;
-        try {
-            next = JSON.stringify(this.watched()[value]!());
-        } catch (e) {
-            console.error(`[agents] ${value} can't be read for Blocks:`, String(e));
-            return;
-        }
-        this.changedTo(value, next, true);
-    }
-
-    private changedTo(value: string, next: string, tell: boolean) {
-        if (this.announced.get(value) === next) return;
-        this.announced.set(value, next);
-        if (!tell) return;
-        this.host.blocks.changed(value).catch((e) => {
-            // not told, so not announced: the next change to it tells Blocks again
-            if (this.announced.get(value) === next) this.announced.delete(value);
-            console.error(`[agents] the change to ${value} didn't reach Blocks:`, errorText(e));
-        });
-    }
-
-    /** Memory is read on its own queue: what changed is worked out once the read is done. */
-    private announceMemory(revision: number) {
-        if (!this.blocksRegistered) return;
-        this.memoryRevision = revision;
-        this.memory.list().then(
-            (list) => this.seeMemory(list, true),
-            (e) => console.error("[agents] memory can't be read for Blocks:", String(e)),
-        );
-    }
-
-    private seeMemory(list: MemoryList, tell: boolean) {
-        this.changedTo("facts", JSON.stringify(list.facts.map((f) => f.id)), tell);
-        this.changedTo("notes", JSON.stringify(list.notes.map((n) => n.key)), tell);
-    }
-
-    /** An event for the Blocks panel; nothing listens before the blocks are registered. */
-    private fireBlock(event: string, payload: Record<string, unknown>) {
-        if (!this.blocksRegistered) return;
-        this.host.blocks.fire(event, payload).catch((e) => console.error(`[agents] ${event} didn't reach Blocks:`, String(e)));
-    }
-
     /** The current conversation (once it has messages), then the history, newest first. */
     conversationChoices(): ConversationChoice[] {
         const current = this.conversation.current();
@@ -728,104 +649,14 @@ export class AiApp {
         ];
     }
 
-    /**
-     * Register the flow actions again when the dropdown has changed. In order, one at a time; a failure leaves
-     * flows with the last list they got, so it's reported and the next change tries again.
-     */
+    /** Blocks and flows follow the conversation dropdown: the history, or which conversation is current, changed. */
     publish(): Promise<void> {
-        this.announce("current-conversation");
-        this.announce("conversations");
-        this.publishing = this.publishing.then(async () => {
-            let choices: string;
-            try {
-                choices = JSON.stringify(this.conversationChoices());
-            } catch (e) {
-                console.error("[agents] the conversation dropdown can't be listed:", String(e));
-                return;
-            }
-            if (choices === this.published) return;
-            this.published = choices;
-            for (const def of this.flowActions()) {
-                try {
-                    await this.host.registerAction(def);
-                } catch (e) {
-                    this.published = "";
-                    console.error(`[agents] couldn't update the "${def.id}" action:`, errorText(e));
-                }
-            }
-        }).catch((e) => {
-            // the queue goes on: the next change publishes again
-            this.published = "";
-            console.error("[agents] the flow actions couldn't be published:", errorText(e));
-        });
-        return this.publishing;
-    }
-
-    // ------------------------------------------------------------- the Tools page
-
-    accessView(): AccessView {
-        return this.access.view();
-    }
-    answerAccess(i: Record<string, unknown>) {
-        return this.access.answer(i.id, i.how);
-    }
-    revokeAccess(i: Record<string, unknown>) {
-        return this.access.revoke(i.grant);
-    }
-    answerToolServer(i: Record<string, unknown>) {
-        return this.serverTools.answer(i.id, i.allow);
-    }
-
-    toolsView(): Promise<ToolsView> {
-        return this.servers.view();
-    }
-    toolsSave(i: Record<string, unknown>) {
-        return this.servers.save(i.server);
-    }
-    toolsRemove(i: Record<string, unknown>) {
-        return this.servers.remove(i.name);
-    }
-    toolsRestart(i: Record<string, unknown>) {
-        return this.servers.restart(i.name);
-    }
-    toolsSetActions(i: Record<string, unknown>) {
-        return this.servers.setActions(i.on);
-    }
-    toolsSetSecret(i: Record<string, unknown>) {
-        return this.servers.setSecret(i.server, i.name, i.value);
-    }
-    toolsSignIn(i: Record<string, unknown>) {
-        return this.servers.signIn(i.name);
-    }
-    toolsSignInFinish(i: Record<string, unknown>) {
-        return this.servers.finishSignIn(i.name, i.address);
-    }
-    toolsSignInCancel(i: Record<string, unknown>) {
-        return this.servers.cancelSignInFor(i.name);
+        this.blocks.announce("current-conversation");
+        this.blocks.announce("conversations");
+        return this.actions.publish();
     }
 
     // ------------------------------------------------------------- the user's view
-
-    windows() {
-        return browserView(this.computer, "view_windows", {});
-    }
-
-    frame(i: Record<string, unknown>) {
-        return browserView(this.computer, "view_frame", { window: i.window, since: i.since, quality: i.quality });
-    }
-
-    input(i: Record<string, unknown>) {
-        return browserView(this.computer, "view_input", { window: i.window, events: i.events });
-    }
-
-    closeWindow(i: Record<string, unknown>) {
-        return browserView(this.computer, "view_close", { window: i.window });
-    }
-
-    /** The user, in control, sends a window somewhere: an address, back, forward or reload. */
-    go(i: Record<string, unknown>) {
-        return browserView(this.computer, "view_go", { window: i.window, to: i.to });
-    }
 
     /** take (or renew) control with take: true; hand it back with take: false */
     control(i: Record<string, unknown>) {
@@ -833,29 +664,4 @@ export class AiApp {
         else this.computer.releaseControl();
         return { userControl: this.computer.state.userControl };
     }
-}
-
-// ------------------------------------------------------------- validation (the service owns these)
-
-/** The settings, checked; throws with what's wrong with them. */
-export function parseSettings(v: unknown): Settings {
-    if (!v || typeof v !== "object") throw new Error("there are no settings to save");
-    const s = v as Record<string, unknown>;
-    const name = typeof s.name === "string" ? s.name.trim() : "";
-    if (!name) throw new Error("give the agent a name");
-    if (name.length > LIMITS.name) throw new Error(`names are limited to ${LIMITS.name} characters`);
-    if (!HARNESSES.includes(s.harness as Harness)) throw new Error("pick a brain");
-    let model: string | null = null;
-    if (typeof s.model === "string" && s.model && s.model !== DEFAULT_MODEL) {
-        // it lands in argv after -m/--model: it can never be read as a flag
-        if (s.model.length > LIMITS.model || !/^\w[\w.:\-/]*$/.test(s.model)) throw new Error(`"${s.model.slice(0, LIMITS.model)}" isn't a model's name`);
-        model = s.model;
-    }
-    // settings saved before compaction was a choice summarize, as it's done since
-    if (s.compaction !== undefined && !COMPACTIONS.includes(s.compaction as Compaction)) throw new Error(`compaction is ${COMPACTIONS.join(" or ")}`);
-    const compaction = (s.compaction as Compaction | undefined) ?? "summarize";
-    if (s.automationInstructions !== undefined && typeof s.automationInstructions !== "string") throw new Error("instructions for automations are text");
-    const automationInstructions = s.automationInstructions?.trim() ?? "";
-    if (automationInstructions.length > LIMITS.instructions) throw new Error(`instructions for automations are limited to ${LIMITS.instructions} characters`);
-    return { name, harness: s.harness as Harness, model, compaction, ...(automationInstructions ? { automationInstructions } : {}) };
 }

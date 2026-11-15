@@ -3,6 +3,7 @@ import { DEFAULT_STATE, PANEL_ID, UI_ACTION_IDS, type AiState } from "./contract
 import { TOOLS_ACTION_IDS } from "./toolsContract";
 import { AiApp, findProgram, type AppHost } from "./service/app";
 import { fetchWebImage } from "./service/webImage";
+import { browserView } from "./service/browserView";
 
 // the tool servers and the actions switch: another document, so one never overwrites the other
 const TOOLS_PATH = "tools.json";
@@ -113,11 +114,11 @@ export const aiService = definePanelService({
         ui(UI_ACTION_IDS.installComputer, "Set up the agent's computer", () => app.installComputer()),
         ui(UI_ACTION_IDS.startComputer, "Start the agent's computer", () => app.startComputer()),
         ui(UI_ACTION_IDS.stopComputer, "Stop the agent's computer", () => app.stopComputer()),
-        ui(UI_ACTION_IDS.windows, "List the computer's windows", () => app.windows()),
-        ui(UI_ACTION_IDS.frame, "Show one of the computer's windows", (i) => app.frame(i)),
-        ui(UI_ACTION_IDS.input, "Use one of the computer's windows", (i) => app.input(i)),
-        ui(UI_ACTION_IDS.closeWindow, "Close one of the computer's windows", (i) => app.closeWindow(i)),
-        ui(UI_ACTION_IDS.go, "Go somewhere in one of the computer's windows", (i) => app.go(i)),
+        ui(UI_ACTION_IDS.windows, "List the computer's windows", () => browserView(app.computer, "view_windows", {})),
+        ui(UI_ACTION_IDS.frame, "Show one of the computer's windows", (i) => browserView(app.computer, "view_frame", i)),
+        ui(UI_ACTION_IDS.input, "Use one of the computer's windows", (i) => browserView(app.computer, "view_input", i)),
+        ui(UI_ACTION_IDS.closeWindow, "Close one of the computer's windows", (i) => browserView(app.computer, "view_close", i)),
+        ui(UI_ACTION_IDS.go, "Go somewhere in one of the computer's windows", (i) => browserView(app.computer, "view_go", i)),
         ui(UI_ACTION_IDS.startOver, "Start the conversation over", () => app.startOver()),
         ui(UI_ACTION_IDS.newConversation, "Start a new conversation, keeping this one in the history", () => app.newConversation()),
         ui(UI_ACTION_IDS.conversations, "List the conversations", () => ({ current: app.conversation.current(), past: app.conversation.past() })),
@@ -132,12 +133,12 @@ export const aiService = definePanelService({
         ui(UI_ACTION_IDS.signInShot, "The picture of a sign-in the agent asked for", (i) => app.signIns.shot(i.id)),
         ui(UI_ACTION_IDS.signIn, "Sign in where the agent asked, with values it never sees", (i) => app.signIns.submit(i.id, i.values)),
         ui(UI_ACTION_IDS.declineSignIn, "Say no to a sign-in the agent asked for", (i) => app.signIns.decline(i.id)),
-        ui(UI_ACTION_IDS.access, "List what the agent may do on your computer", () => app.accessView()),
-        ui(UI_ACTION_IDS.answerAccess, "Answer the agent's request for access to your computer", (i) => app.answerAccess(i)),
-        ui(UI_ACTION_IDS.revokeAccess, "Take back something the agent may do on your computer", (i) => app.revokeAccess(i)),
+        ui(UI_ACTION_IDS.access, "List what the agent may do on your computer", () => app.access.view()),
+        ui(UI_ACTION_IDS.answerAccess, "Answer the agent's request for access to your computer", (i) => app.access.answer(i.id, i.how)),
+        ui(UI_ACTION_IDS.revokeAccess, "Take back something the agent may do on your computer", (i) => app.access.revoke(i.grant)),
         ui(UI_ACTION_IDS.answerPrompt, "Answer what the agent asked, secret answers going to the vault", (i) => app.prompts.answer(i.id, i.values)),
         ui(UI_ACTION_IDS.declinePrompt, "Say no to what the agent asked", (i) => app.prompts.decline(i.id)),
-        ui(UI_ACTION_IDS.answerToolServer, "Allow or refuse a program the agent asks to run as a tool server", (i) => app.answerToolServer(i)),
+        ui(UI_ACTION_IDS.answerToolServer, "Allow or refuse a program the agent asks to run as a tool server", (i) => app.serverTools.answer(i.id, i.allow)),
         ui(UI_ACTION_IDS.pages, "List the pages the agent made", () => app.pages.list()),
         ui(UI_ACTION_IDS.openPage, "Open one of the agent's pages", (i) => app.pages.open(i.name)),
         ui(UI_ACTION_IDS.pagePicture, "The picture of one of the agent's pages", (i) => app.pages.pictureOf(i.name)),
@@ -145,15 +146,15 @@ export const aiService = definePanelService({
         ui(UI_ACTION_IDS.discardPagePdf, "Remove a page's PDF once it's saved", (i) => app.pages.discardPdf(i.file)),
         ui(UI_ACTION_IDS.deletePage, "Delete one of the agent's pages", (i) => app.pages.remove(i.name)),
         ui(UI_ACTION_IDS.control, "Take or hand back control of the computer", (i) => app.control(i)),
-        ui(TOOLS_ACTION_IDS.get, "Read the agent's tool servers", () => app.toolsView()),
-        ui(TOOLS_ACTION_IDS.save, "Save a tool server", (i) => app.toolsSave(i)),
-        ui(TOOLS_ACTION_IDS.remove, "Remove a tool server", (i) => app.toolsRemove(i)),
-        ui(TOOLS_ACTION_IDS.restart, "Restart a tool server", (i) => app.toolsRestart(i)),
-        ui(TOOLS_ACTION_IDS.setActions, "Allow or refuse Paperboard actions for the agent", (i) => app.toolsSetActions(i)),
-        ui(TOOLS_ACTION_IDS.setSecret, "Save a tool server's secret", (i) => app.toolsSetSecret(i)),
-        ui(TOOLS_ACTION_IDS.signIn, "Start signing in to a tool server", (i) => app.toolsSignIn(i)),
-        ui(TOOLS_ACTION_IDS.signInFinish, "Finish signing in to a tool server", (i) => app.toolsSignInFinish(i)),
-        ui(TOOLS_ACTION_IDS.signInCancel, "Stop signing in to a tool server", (i) => app.toolsSignInCancel(i)),
+        ui(TOOLS_ACTION_IDS.get, "Read the agent's tool servers", () => app.servers.view()),
+        ui(TOOLS_ACTION_IDS.save, "Save a tool server", (i) => app.servers.save(i.server)),
+        ui(TOOLS_ACTION_IDS.remove, "Remove a tool server", (i) => app.servers.remove(i.name)),
+        ui(TOOLS_ACTION_IDS.restart, "Restart a tool server", (i) => app.servers.restart(i.name)),
+        ui(TOOLS_ACTION_IDS.setActions, "Allow or refuse Paperboard actions for the agent", (i) => app.servers.setActions(i.on)),
+        ui(TOOLS_ACTION_IDS.setSecret, "Save a tool server's secret", (i) => app.servers.setSecret(i.server, i.name, i.value)),
+        ui(TOOLS_ACTION_IDS.signIn, "Start signing in to a tool server", (i) => app.servers.signIn(i.name)),
+        ui(TOOLS_ACTION_IDS.signInFinish, "Finish signing in to a tool server", (i) => app.servers.finishSignIn(i.name, i.address)),
+        ui(TOOLS_ACTION_IDS.signInCancel, "Stop signing in to a tool server", (i) => app.servers.cancelSignInFor(i.name)),
     ],
     async onInit(ctx) {
         await app.init({

@@ -5,6 +5,7 @@
 import { defineAction, type ActionDefinition } from "@mileniumhq/paperapi";
 import { ACTION_IDS, LIMITS, TRIGGER_IDS } from "../contract";
 import { ASK_MS } from "./ask";
+import { errorText } from "../lib/failure";
 
 /** One conversation in the dropdown: its title, valued by its id. */
 export interface ConversationChoice {
@@ -151,4 +152,51 @@ export function flowActions(host: FlowHost, conversations: ConversationChoice[])
             icon: "mark_chat_unread",
         }),
     ];
+}
+
+export interface PublisherDeps {
+    /** the conversation dropdown as it is now */
+    choices(): ConversationChoice[];
+    /** the actions with that dropdown */
+    actions(): ActionDefinition[];
+    register(def: ActionDefinition): Promise<void>;
+}
+
+/**
+ * Registers the flow actions again when the dropdown has changed. In order, one at a time; a failure leaves
+ * flows with the last list they got, so it's reported and the next change tries again.
+ */
+export class FlowActionsPublisher {
+    /** the conversation dropdown as flows last got it */
+    private published = "";
+    private publishing: Promise<void> = Promise.resolve();
+
+    constructor(private deps: PublisherDeps) {}
+
+    publish(): Promise<void> {
+        this.publishing = this.publishing.then(async () => {
+            let choices: string;
+            try {
+                choices = JSON.stringify(this.deps.choices());
+            } catch (e) {
+                console.error("[agents] the conversation dropdown can't be listed:", String(e));
+                return;
+            }
+            if (choices === this.published) return;
+            this.published = choices;
+            for (const def of this.deps.actions()) {
+                try {
+                    await this.deps.register(def);
+                } catch (e) {
+                    this.published = "";
+                    console.error(`[agents] couldn't update the "${def.id}" action:`, errorText(e));
+                }
+            }
+        }).catch((e) => {
+            // the queue goes on: the next change publishes again
+            this.published = "";
+            console.error("[agents] the flow actions couldn't be published:", errorText(e));
+        });
+        return this.publishing;
+    }
 }

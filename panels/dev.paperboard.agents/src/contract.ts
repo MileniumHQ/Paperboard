@@ -215,6 +215,29 @@ export const LIMITS = {
     },
 } as const;
 
+/** The settings, checked by the service as it saves or reads them; throws with what's wrong with them. */
+export function parseSettings(v: unknown): Settings {
+    if (!v || typeof v !== "object") throw new Error("there are no settings to save");
+    const s = v as Record<string, unknown>;
+    const name = typeof s.name === "string" ? s.name.trim() : "";
+    if (!name) throw new Error("give the agent a name");
+    if (name.length > LIMITS.name) throw new Error(`names are limited to ${LIMITS.name} characters`);
+    if (!HARNESSES.includes(s.harness as Harness)) throw new Error("pick a brain");
+    let model: string | null = null;
+    if (typeof s.model === "string" && s.model && s.model !== DEFAULT_MODEL) {
+        // it lands in argv after -m/--model: it can never be read as a flag
+        if (s.model.length > LIMITS.model || !/^\w[\w.:\-/]*$/.test(s.model)) throw new Error(`"${s.model.slice(0, LIMITS.model)}" isn't a model's name`);
+        model = s.model;
+    }
+    // settings saved before compaction was a choice summarize, as it's done since
+    if (s.compaction !== undefined && !COMPACTIONS.includes(s.compaction as Compaction)) throw new Error(`compaction is ${COMPACTIONS.join(" or ")}`);
+    const compaction = (s.compaction as Compaction | undefined) ?? "summarize";
+    if (s.automationInstructions !== undefined && typeof s.automationInstructions !== "string") throw new Error("instructions for automations are text");
+    const automationInstructions = s.automationInstructions?.trim() ?? "";
+    if (automationInstructions.length > LIMITS.instructions) throw new Error(`instructions for automations are limited to ${LIMITS.instructions} characters`);
+    return { name, harness: s.harness as Harness, model, compaction, ...(automationInstructions ? { automationInstructions } : {}) };
+}
+
 /** A conversation put away in the history. */
 /** the current conversation's id where it's listed with the past ones, whose ids are 12 hex digits */
 export const CURRENT_CONVERSATION = "current";

@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
 import { LIMITS } from "../../src/contract";
-import { parseSettings } from "../../src/service/app";
+import { parseSettings } from "../../src/contract";
 import { Asker } from "../../src/service/ask";
 import { MCP_TOKEN_ENV } from "../../src/service/computerMcp";
 import { conversationRig, settled, turnId, type Rig } from "../support/rig";
