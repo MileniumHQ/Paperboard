@@ -107,6 +107,21 @@ describe("failures are shown", () => {
         await mc.waitFor(quote("Command not run"), "the refused command to be shown");
         expect(await quoteText(mc, "Command not run")).toContain("Cannot execute command: server is offline.");
         expect(await mc.evaluate<string>("document.body.innerText")).toContain("Cannot execute command: server is offline.");
+
+        // the server list message saves into a folder that can't be written
+        const mcDir = path.join(filesRoot, "s-mc");
+        fs.mkdirSync(mcDir, { recursive: true });
+        fs.chmodSync(mcDir, 0o500);
+        try {
+            await mc.click('button[aria-label="Edit server list message"]');
+            await mc.waitFor(`[...document.querySelectorAll("button")].some((b) => b.innerText.trim() === "Save" && !b.disabled)`, "the message to load");
+            await mc.evaluate(`[...document.querySelectorAll("button")].find((b) => b.innerText.trim() === "Save").dataset.test = "motd"`);
+            await mc.click('button[data-test="motd"]');
+            await mc.waitFor(quote("Couldn't save"), "the refused message to be shown");
+            expect(await quoteText(mc, "Couldn't save")).toContain("Paperboard isn't allowed to");
+        } finally {
+            fs.chmodSync(mcDir, 0o700);
+        }
         await mc.close();
 
         const exited = new Promise<void>((resolve) => rawProcess.onExit("s-pal-palworld-server", () => resolve()));
@@ -118,6 +133,24 @@ describe("failures are shown", () => {
             await pal.click('button[data-test="save"]');
             await pal.waitFor(quote("World not saved"), "the refused save to be shown");
             expect(await quoteText(pal, "World not saved")).toContain("Palworld answered 500 to save: disk full");
+
+            // a description that can't be written says it in a sentence, from the readable failure
+            const ini = path.join(filesRoot, "s-pal", ...INI.split("/"));
+            fs.chmodSync(ini, 0o000);
+            try {
+                await pal.click('button[aria-label="Edit description"]');
+                await pal.waitFor(`document.querySelector('input[maxlength="256"]')`, "the description field");
+                await pal.type('input[maxlength="256"]', "A new description");
+                await pal.evaluate(`[...document.querySelectorAll("button")].find((b) => b.innerText.trim() === "Save").dataset.test = "describe"`);
+                await pal.click('button[data-test="describe"]');
+                await pal.waitFor(quote("Description not saved"), "the refused description to be shown");
+                expect(await quoteText(pal, "Description not saved")).toContain("Paperboard isn't allowed to");
+                await pal.evaluate(`[...document.querySelectorAll("button")].find((b) => b.innerText.trim() === "Cancel").dataset.test = "cancel"`);
+                await pal.click('button[data-test="cancel"]');
+                await pal.waitFor(`!document.querySelector('input[maxlength="256"]')`, "the dialog to close");
+            } finally {
+                fs.chmodSync(ini, 0o600);
+            }
 
             await pal.type('input[placeholder="Message everyone on the server..."]', "restart soon", true);
             await pal.waitFor(quote("Message not sent"), "the refused broadcast to be shown");
