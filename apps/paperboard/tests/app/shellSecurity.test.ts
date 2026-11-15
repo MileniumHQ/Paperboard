@@ -8,6 +8,7 @@ import { buildCraneCredentialPayload, buildPanelCsp, remotePanelHtmlCsp, resolve
 import { buildPanelCsp as daemonPanelCsp } from "../../papercrane/panelNet";
 import { parseLibraryMessage } from "../../src/renderer/src/lib/libraryFrame";
 import { PanelPermissionStore } from "../../src/main/panelPermissions";
+import { SHELL_CALLS } from "../../src/shared/shellContract";
 import { BUILD_TIMEOUT_MS, buildApp, buildCrane, installBuiltPanel, type BuiltApp } from "../platform/app/support/build";
 import { CraneSocket, startCrane, WAIT_MS, type RunningCrane } from "../platform/app/support/crane";
 import { domCondition, launchElectron, SHELL, shellReady, type ElectronApp } from "../platform/app/support/electron";
@@ -51,7 +52,7 @@ async function credentialsFrom(url: string): Promise<{ ok?: unknown; err?: strin
             preload: path.join(app.getAppPath(), "out", "preload", "index.js"), sandbox: true, contextIsolation: true } });
         await new Promise((resolve) => { win.webContents.once("did-finish-load", resolve); win.webContents.once("did-fail-load", resolve); win.loadURL(${JSON.stringify(url)}).catch((err) => err); });
         const answer = await win.webContents.executeJavaScript(
-            'window.electron.ipcRenderer.invoke("crane-credentials").then((ok) => ({ ok }), (e) => ({ err: String(e.message) }))', true);
+            'window.paperboardShell.invoke("crane-credentials").then((ok) => ({ ok }), (e) => ({ err: String(e.message) }))', true);
         answer.url = win.webContents.getURL();
         win.destroy();
         return answer;`);
@@ -60,7 +61,7 @@ async function credentialsFrom(url: string): Promise<{ ok?: unknown; err?: strin
 // Shell IPC answers only the shell, and the packaged shell is served from its own origin.
 describe("the shell's IPC, navigation, daemon origin and file server", () => {
     test("shell IPC answers the shell and refuses panel, file, look-alike and unknown senders", async () => {
-        const shell = await electron.evalIn(SHELL, `window.electron.ipcRenderer.invoke("crane-credentials")`);
+        const shell = await electron.evalIn(SHELL, `window.paperboardShell.invoke("crane-credentials")`);
         expect(shell).toMatchObject({ computerId: "local", port: daemon.handshake.port });
 
         const file = path.join(tempDir("file-page"), "page.html");
@@ -73,6 +74,20 @@ describe("the shell's IPC, navigation, daemon origin and file server", () => {
         expect(isRefusedFrame({})).toBe(true);
         expect(isRefusedFrame({ senderFrame: { url: "paperboard://shell/index.html" } })).toBe(false);
     }, WAIT_MS * 2);
+
+    // Inventory: Core contracts — the window serves every call the shell's contract declares, each reading its args first.
+    test("the window answers every declared call, and refuses args its contract doesn't name with the channel and the field", async () => {
+        const refusals = await electron.evalIn<Record<string, string>>(SHELL, `Promise.all(${JSON.stringify(Object.keys(SHELL_CALLS))}.map((channel) =>
+            window.paperboardShell.invoke(channel, { notAField: true }).then(() => [channel, "answered"], (err) => [channel, err.message]))).then(Object.fromEntries)`);
+        for (const [channel, refusal] of Object.entries(refusals)) {
+            expect({ channel, refusal }).toEqual({ channel, refusal: expect.stringContaining(`The shell's ${channel} call was refused: `) });
+        }
+        expect(refusals["computer-switch"]).toEndWith('there is no field "notAField"');
+        // a channel the contract doesn't declare never leaves the window
+        expect(await electron.evalIn(SHELL, `window.paperboardShell.invoke("screenshot:operation").then(() => "answered", (err) => err.message)`)).toBe(
+            "[paperboard] IPC channel not allowed: screenshot:operation",
+        );
+    });
 
     test("the shell window cannot navigate away from its origin", async () => {
         // (Chromium itself refuses a file:// navigation from this origin before main hears of it)
@@ -147,9 +162,9 @@ describe("panel frames", () => {
         for (const no of ["index.html", "dist/index.html", "dist/service.js", "branding/icon.svg", "../other/manifest.json", "store/../../x.png", "dist/manifest.json"]) {
             expect({ no, allowed: isListingFilePath(no) }).toEqual({ no, allowed: false });
         }
-        const manifest = await electron.evalIn(SHELL, `window.electron.ipcRenderer.invoke("panel-listing-file", { computerId: "local", panelId: "${PANEL}", path: "manifest.json" })`);
+        const manifest = await electron.evalIn(SHELL, `window.paperboardShell.invoke("panel-listing-file", { computerId: "local", panelId: "${PANEL}", path: "manifest.json" })`);
         expect(JSON.parse(Buffer.from(manifest, "base64").toString("utf8")).id).toBe(PANEL);
-        const html = await electron.evalIn(SHELL, `window.electron.ipcRenderer.invoke("panel-listing-file", { computerId: "local", panelId: "${PANEL}", path: "index.html" }).then(() => "served", (e) => e.message)`);
+        const html = await electron.evalIn(SHELL, `window.paperboardShell.invoke("panel-listing-file", { computerId: "local", panelId: "${PANEL}", path: "index.html" }).then(() => "served", (e) => e.message)`);
         expect(html).toContain("Not a listing file: index.html");
     }, WAIT_MS);
 
