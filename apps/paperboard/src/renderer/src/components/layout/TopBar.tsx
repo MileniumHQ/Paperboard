@@ -8,7 +8,7 @@ import type { UpdateQueueState } from "../../../../shared/updateQueue";
 import UpdatesButton from "./UpdatesButton";
 import { DEFAULT_LEFT_RESERVE, leftReserve, rightReserve, type OverlayLike } from "./titlebarInsets";
 import styles from "./TopBar.module.css";
-import { errorMessage } from "../../lib/errorMessage";
+import { errorMessage } from "@mileniumhq/paperapi";
 
 
 const TopBar: Component<{

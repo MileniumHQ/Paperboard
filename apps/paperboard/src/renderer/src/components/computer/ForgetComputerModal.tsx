@@ -1,7 +1,7 @@
 import { type Component, Show, createEffect, createSignal, on } from "solid-js";
 import { PaperButton, PaperModal, PaperQuote, PaperText } from "@mileniumhq/paperui";
 import { logToMain, type ComputerInfo } from "../../lib/shell";
-import { errorMessage } from "../../lib/errorMessage";
+import { errorMessage } from "@mileniumhq/paperapi";
 
 export interface ForgetComputerModalProps {
     /** the computer being forgotten; undefined closes the dialog */

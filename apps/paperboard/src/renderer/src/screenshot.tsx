@@ -4,7 +4,7 @@ import "./screenshot.css";
 import { render } from "solid-js/web";
 import { createSignal } from "solid-js";
 import { PaperProvider, PaperButton } from "@mileniumhq/paperui";
-import { errorMessage } from "./lib/errorMessage";
+import { errorMessage } from "@mileniumhq/paperapi";
 
 declare global {
     interface Window {

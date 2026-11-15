@@ -1,5 +1,5 @@
 import { type Accessor, batch, createSignal, onCleanup } from "solid-js";
-import { config } from "@mileniumhq/paperapi";
+import { config, errorMessage } from "@mileniumhq/paperapi";
 import { logToMain } from "../../lib/shell";
 import {
     HOME_LAYOUT_COMPUTER,
@@ -11,7 +11,6 @@ import {
     type HomeItem,
 } from "../../lib/homeLayout";
 import { defaultHomeItems } from "./builtins";
-import { errorMessage } from "../../lib/errorMessage";
 
 const SAVE_DEBOUNCE_MS = 250;
 

@@ -2,7 +2,7 @@ import { createEffect, createSignal, For, on, onCleanup, onMount, Show, type Com
 import { PaperButton, PaperFlex, PaperGrid, PaperMediaCard, PaperModal, PaperQuote, PaperText } from "@mileniumhq/paperui";
 import { panelPermissionsApi } from "../../lib/shell";
 import type { PanelPermission, PermissionAsk, PermissionFailure, ScreenPick, SystemBlock } from "../../../../shared/panelPermissions";
-import { errorMessage } from "../../lib/errorMessage";
+import { errorMessage } from "@mileniumhq/paperapi";
 
 const NOUNS: Record<PanelPermission, string> = {
     microphone: "microphone",

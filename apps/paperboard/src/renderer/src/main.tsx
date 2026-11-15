@@ -3,10 +3,9 @@ import "./shell.css";
 
 import { render } from "solid-js/web";
 import App from "./App";
-import { configureHostConnection, initPaperApi } from "@mileniumhq/paperapi";
+import { configureHostConnection, initPaperApi, errorMessage } from "@mileniumhq/paperapi";
 import { PaperButton, PaperEmptyState, PaperFlex, PaperProvider } from "@mileniumhq/paperui";
 import { logToMain, shellIpc } from "./lib/shell";
-import { errorMessage } from "./lib/errorMessage";
 
 async function startShell() {
     const close = configureHostConnection(() => shellIpc().invoke<{ port: number; token: string }>("crane-credentials"));

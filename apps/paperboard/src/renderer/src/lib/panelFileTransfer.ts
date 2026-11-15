@@ -13,7 +13,7 @@ import {
     type PanelFileTransferResult,
 } from "../../../shared/fileTransfer";
 import { isBrowserShell, logToMain, shellIpc } from "./shell";
-import { errorMessage } from "./errorMessage";
+import { errorMessage } from "@mileniumhq/paperapi";
 
 export const FILE_TRANSFER_REQUEST = "paperboard:file-transfer";
 export const FILE_TRANSFER_RESULT = "paperboard:file-transfer-result";

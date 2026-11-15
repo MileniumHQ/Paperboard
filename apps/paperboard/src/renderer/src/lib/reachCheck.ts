@@ -1,6 +1,6 @@
 import { createSignal } from "solid-js";
 import { computersApi, logToMain } from "./shell";
-import { errorMessage } from "./errorMessage";
+import { errorMessage } from "@mileniumhq/paperapi";
 
 /**
  * Whether a paired computer answers, for the dialogs that offer to try it

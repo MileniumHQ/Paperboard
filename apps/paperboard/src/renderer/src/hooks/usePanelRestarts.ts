@@ -1,6 +1,5 @@
 import { createEffect, createMemo, createSignal, on, type Setter } from "solid-js";
-import { panelsApi } from "@mileniumhq/paperapi";
-import { errorMessage } from "../lib/errorMessage";
+import { panelsApi, errorMessage } from "@mileniumhq/paperapi";
 import { logToMain } from "../lib/shell";
 import type { RestartState } from "../components/panels/PanelView";
 import type { useUpdateQueue } from "./useUpdateQueue";

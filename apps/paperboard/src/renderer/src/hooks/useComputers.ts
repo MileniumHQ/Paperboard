@@ -3,8 +3,8 @@ import { createStore, reconcile } from "solid-js/store";
 import { showToast } from "@mileniumhq/paperui";
 import { computersApi, logToMain, type ComputerInfo } from "../lib/shell";
 import { DAEMON_PORT } from "../lib/daemonPort";
-import { errorMessage } from "../lib/errorMessage";
 import { orderWithShown } from "../lib/phoneComputers";
+import { errorMessage } from "@mileniumhq/paperapi";
 
 // computers list + active selection
 export function useComputers() {

@@ -1,10 +1,9 @@
 import { batch, createMemo, createSignal } from "solid-js";
 import { createStore, produce, reconcile } from "solid-js/store";
-import { panelsApi, type InvalidPanel, type PanelItem } from "@mileniumhq/paperapi";
+import { panelsApi, type InvalidPanel, type PanelItem, errorMessage } from "@mileniumhq/paperapi";
 import { logToMain } from "../lib/shell";
 import { isShellTab } from "../lib/shellTabs";
 import { unsavedPanels } from "../lib/unsavedPanels";
-import { errorMessage } from "../lib/errorMessage";
 
 // every opened key is walked by PanelView's frame bookkeeping and LRU, so
 // the list is bounded: past the cap the oldest is dropped, and reopening it

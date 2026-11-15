@@ -1,10 +1,10 @@
 import { createEffect, createSignal, on } from "solid-js";
 import { computersApi, logToMain, type ComputerInfo } from "../lib/shell";
-import { errorMessage } from "../lib/errorMessage";
 import { START_ON_HOME } from "../lib/startOn";
 import type { AppSettingsData } from "../lib/appSettings";
 import type { useComputers } from "./useComputers";
 import type { usePanels } from "./usePanels";
+import { errorMessage } from "@mileniumhq/paperapi";
 
 export interface ComputerSelectionOptions {
     computers: ReturnType<typeof useComputers>;

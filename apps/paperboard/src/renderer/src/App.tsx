@@ -2,7 +2,6 @@ import { type Component, createEffect, createMemo, createSignal, on, onCleanup, 
 import { PaperProvider, PaperFlex, PaperModal, PaperSlidePage, showToast } from "@mileniumhq/paperui";
 import { isBrowserShell, quitApi } from "./lib/shell";
 import { unsavedPanels } from "./lib/unsavedPanels";
-import { errorMessage } from "./lib/errorMessage";
 import AppSettings from "./components/settings/AppSettings";
 import PanelPermissionPrompt from "./components/panels/PanelPermissionPrompt";
 import type { UninstallTarget } from "./components/panels/UninstallPanelModal";
@@ -28,6 +27,7 @@ import { usePanels } from "./hooks/usePanels";
 import { usePanelRestarts } from "./hooks/usePanelRestarts";
 import { useShellNavigation } from "./hooks/useShellNavigation";
 import { useStartUp } from "./hooks/useStartUp";
+import { errorMessage } from "@mileniumhq/paperapi";
 
 const App: Component = () => {
     const appUpdate = useAppUpdate();

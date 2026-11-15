@@ -1,8 +1,6 @@
 import { type Component, createSignal, For, onMount, Show } from "solid-js";
-import { PaperButton, PaperCard, PaperFlex, PaperSectionHeader, PaperSettingItem, PaperSettingList, PaperText, PaperToggle } from "@mileniumhq/paperui";
-import { portSettingsApi, type PortClaim, type PortPolicy, type PortProtocol } from "@mileniumhq/paperapi";
-import { createSavedValue } from "../../lib/saveQueue";
-import { errorMessage } from "../../lib/errorMessage";
+import { PaperButton, PaperCard, PaperFlex, PaperSectionHeader, PaperSettingItem, PaperSettingList, PaperText, PaperToggle, createSavedValue } from "@mileniumhq/paperui";
+import { portSettingsApi, type PortClaim, type PortPolicy, type PortProtocol, errorMessage } from "@mileniumhq/paperapi";
 
 const PROTOCOL_NAMES: Record<PortProtocol, string> = { tcp: "TCP", udp: "UDP", "tcp+udp": "TCP and UDP" };
 
@@ -10,7 +8,8 @@ const PROTOCOL_NAMES: Record<PortProtocol, string> = { tcp: "TCP", udp: "UDP", "
 // panels hold, and what happens when one a panel asks for is taken.
 const ComputerPorts: Component<{ computerId: string }> = (props) => {
     const [claims, setClaims] = createSignal<PortClaim[] | null>(null);
-    const policy = createSavedValue<PortPolicy>("next-free", async (next) => {
+    const [savedPolicy, setSavedPolicy] = createSignal<PortPolicy>("next-free");
+    const policy = createSavedValue(savedPolicy, async (next) => {
         await portSettingsApi.setPolicy(next, props.computerId);
     });
     const [loadError, setLoadError] = createSignal("");
@@ -21,7 +20,7 @@ const ComputerPorts: Component<{ computerId: string }> = (props) => {
         try {
             const state = await portSettingsApi.all(props.computerId);
             setClaims([...state.claims].sort((a, b) => a.port - b.port));
-            policy.loaded(state.policy);
+            setSavedPolicy(state.policy);
         } catch (err) {
             setClaims(null);
             setLoadError(`Ports could not be loaded: ${errorMessage(err)}`);
@@ -31,7 +30,7 @@ const ComputerPorts: Component<{ computerId: string }> = (props) => {
 
     const setRefuse = (refuse: boolean) => {
         setSaveError("");
-        return policy.change(refuse ? "refuse" : "next-free").catch((err) => {
+        return policy.set(refuse ? "refuse" : "next-free").catch((err) => {
             setSaveError(`The setting was not saved: ${errorMessage(err)}`);
         });
     };

@@ -1,4 +1,4 @@
-import { haptic, PaperButton, PaperEmptyState, PaperModal, PaperPresence, PaperText, showToast } from "@mileniumhq/paperui";
+import { haptic, PaperButton, PaperEmptyState, PaperModal, PaperPresence, PaperText, showToast, sameData } from "@mileniumhq/paperui";
 import {
     batch,
     type Component,
@@ -67,7 +67,7 @@ const HomeView: Component<HomeViewProps> = (props) => {
     const itemIds = createMemo(
         () => items().map((item) => item.id),
         [],
-        { equals: (a, b) => a.length === b.length && a.every((id, i) => id === b[i]) },
+        { equals: sameData },
     );
     const [editing, setEditingNow] = createSignal(false);
     // the canvas eases only while it changes size for the gallery, so a
@@ -363,7 +363,7 @@ const HomeView: Component<HomeViewProps> = (props) => {
                 a?.computerId === b?.computerId &&
                 a?.widgetId === b?.widgetId &&
                 a?.panelId === b?.panelId &&
-                JSON.stringify(a?.options) === JSON.stringify(b?.options),
+                sameData(a?.options, b?.options),
         },
     );
     const ghost = () => {
@@ -433,9 +433,7 @@ const HomeView: Component<HomeViewProps> = (props) => {
                                     // memos, so the frame's event handlers read plain values
                                     const live = createMemo(() => frames.live(id));
                                     const visible = createMemo(() => props.visible && frames.inView(id));
-                                    const size = createMemo(() => sizeOf(item()), undefined, {
-                                        equals: (a, b) => a.w === b.w && a.h === b.h,
-                                    });
+                                    const size = createMemo(() => sizeOf(item()), undefined, { equals: sameData });
                                     return (
                                         <WidgetTile
                                             ref={(el) => frames.observe(id, el)}

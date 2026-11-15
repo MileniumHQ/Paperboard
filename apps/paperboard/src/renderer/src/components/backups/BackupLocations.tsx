@@ -1,13 +1,12 @@
 import { type Component, createSignal, For, onMount, Show } from "solid-js";
 import { createStore, reconcile } from "solid-js/store";
-import { PaperButton, PaperCard, PaperFlex, PaperModal, PaperSectionHeader, PaperText } from "@mileniumhq/paperui";
-import { backupLocationLabel, backupLocationsApi, type BackupLocation } from "@mileniumhq/paperapi";
+import { PaperButton, PaperCard, PaperFlex, PaperModal, PaperSectionHeader, PaperText, createLatest } from "@mileniumhq/paperui";
+import { backupLocationLabel, backupLocationsApi, type BackupLocation, errorMessage } from "@mileniumhq/paperapi";
 import { isBrowserShell, shellIpc } from "../../lib/shell";
 import { loadUsage, usageText, type UsageState } from "./locationUsage";
 import { LocationLogo } from "./providers";
 import AddLocationModal from "./AddLocationModal";
 import styles from "./BackupLocations.module.css";
-import { errorMessage } from "../../lib/errorMessage";
 
 // The Backups section of a computer's Computer Info: the locations its
 // panels can keep backups in, what each holds and has free, adding one, and
@@ -28,30 +27,30 @@ const BackupLocations: Component<{ computerId: string; computerName: string }> =
     const [removeError, setRemoveError] = createSignal("");
 
     // a newer load (after an add, a remove, a reconnect) wins over an older one still out
-    let loads = 0;
+    const latest = createLatest();
     const load = async () => {
-        const request = ++loads;
+        const current = latest();
         setLoadError("");
         setProblem("");
         try {
             const damaged = await backupLocationsApi.problem(props.computerId);
-            if (request !== loads) return;
+            if (!current()) return;
             if (damaged) {
                 setLocations(null);
                 setProblem(damaged);
                 return;
             }
             const list = await backupLocationsApi.list(props.computerId);
-            if (request !== loads) return;
+            if (!current()) return;
             setLocations(list);
             // a location keeps the space it showed until its new answer is in
             for (const location of list) {
                 void loadUsage(location.id, props.computerId).then((usage) => {
-                    if (request === loads) setUsage((prev) => ({ ...prev, [location.id]: usage }));
+                    if (current()) setUsage((prev) => ({ ...prev, [location.id]: usage }));
                 });
             }
         } catch (err) {
-            if (request !== loads) return;
+            if (!current()) return;
             setLocations(null);
             setLoadError(`Backup locations could not be loaded: ${errorMessage(err)}`);
         }

@@ -3,7 +3,7 @@ import { PaperButton, PaperCheckbox, PaperFlex, PaperInput, PaperModal, PaperSel
 import { isBrowserShell } from "../../lib/shell";
 import { BACKUP_PROVIDERS, LocationLogo, type BackupProvider } from "./providers";
 import { uniqueLocationLabel } from "./locationLabel";
-import { errorMessage } from "../../lib/errorMessage";
+import { errorMessage } from "@mileniumhq/paperapi";
 
 // Adding a backup location: pick a provider from the dropdown, then fill in
 // that provider's form. The location is added on the computer, which checks

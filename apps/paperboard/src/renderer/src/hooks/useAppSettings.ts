@@ -1,12 +1,11 @@
 import { createSignal, createEffect, on, onCleanup } from "solid-js";
-import { config } from "@mileniumhq/paperapi";
+import { config, errorMessage } from "@mileniumhq/paperapi";
 import { showToast } from "@mileniumhq/paperui";
 import { logToMain, notifyAppSettingsChanged, shellApi } from "../lib/shell";
 import { createSaveQueue } from "../lib/saveQueue";
 import { withAppSettingsDefaults } from "../../../shared/appSettingsDefaults";
 import { effectiveLook, type Graphics } from "../../../shared/graphics";
 import { APP_SETTINGS_DEFAULTS, APP_SETTINGS_ID, type AppSettingsData } from "../lib/appSettings";
-import { errorMessage } from "../lib/errorMessage";
 
 export interface SettingsFailure {
     /** which way it failed: settings that didn't load leave the defaults

@@ -1,8 +1,8 @@
 import { createSignal, onMount } from "solid-js";
 import { showToast } from "@mileniumhq/paperui";
 import { initialUpdateQueueState, type UpdateItem, type UpdateQueueState } from "../../../shared/updateQueue";
-import { errorMessage } from "../lib/errorMessage";
 import { isBrowserShell, shellIpc, subscribeRevisioned } from "../lib/shell";
+import { errorMessage } from "@mileniumhq/paperapi";
 
 /** where an update ran, for messages: "" on this computer */
 export function updateWhere(item: { computerName: string | null }): string {

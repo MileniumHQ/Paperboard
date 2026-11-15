@@ -7,9 +7,8 @@ import {
     PaperText,
     showToast,
 } from "@mileniumhq/paperui";
-import { panelsApi, type PanelItem } from "@mileniumhq/paperapi";
+import { panelsApi, type PanelItem, errorMessage } from "@mileniumhq/paperapi";
 import { logToMain } from "../../lib/shell";
-import { errorMessage } from "../../lib/errorMessage";
 
 export interface UninstallTarget {
     compId: string;

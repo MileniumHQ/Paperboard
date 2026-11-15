@@ -3,11 +3,11 @@ import { showToast } from "@mileniumhq/paperui";
 import { logToMain, shellApi } from "../lib/shell";
 import { setMobileMode } from "../lib/mobileMode";
 import { startTarget } from "../lib/startOn";
-import { errorMessage } from "../lib/errorMessage";
 import type { useAppSettings } from "./useAppSettings";
 import type { useComputers } from "./useComputers";
 import type { usePanels } from "./usePanels";
 import type { useShellNavigation } from "./useShellNavigation";
+import { errorMessage } from "@mileniumhq/paperapi";
 
 export interface StartUpOptions {
     computers: ReturnType<typeof useComputers>;

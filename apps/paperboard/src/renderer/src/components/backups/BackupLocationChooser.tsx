@@ -1,10 +1,9 @@
 import { type Component, createEffect, createSignal, For, on, Show } from "solid-js";
 import { PaperButton, PaperFlex, PaperModal, PaperSelector, PaperSelectorItem, PaperText } from "@mileniumhq/paperui";
-import { backupApi, backupLocationLabel, backupLocationsApi, type BackupLocation } from "@mileniumhq/paperapi";
+import { backupApi, backupLocationLabel, backupLocationsApi, type BackupLocation, errorMessage } from "@mileniumhq/paperapi";
 import { loadUsage, usageText, type UsageState } from "./locationUsage";
 import { LocationLogo } from "./providers";
 import { createOpenings } from "../../lib/openings";
-import { errorMessage } from "../../lib/errorMessage";
 
 export type BackupLocationChoice = { status: "chosen"; location: BackupLocation } | { status: "canceled" } | { status: "failed"; message: string };
 

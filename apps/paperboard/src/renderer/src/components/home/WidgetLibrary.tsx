@@ -9,6 +9,7 @@ import {
     PaperSelectMenuItem,
     PaperText,
     getVarCss,
+    createLatest,
 } from "@mileniumhq/paperui";
 import { type Component, createMemo, createSignal, For, type JSX, onCleanup, onMount, Show } from "solid-js";
 import {
@@ -19,6 +20,7 @@ import {
     type WidgetDeclaration,
     type WidgetOptionValues,
     type WidgetSize,
+    errorMessage,
 } from "@mileniumhq/paperapi";
 import { type ComputerInfo, logToMain } from "../../lib/shell";
 import PanelIcon from "../computer/PanelIcon";
@@ -27,7 +29,6 @@ import { BUILTIN_WIDGETS, BuiltinView, builtinWidget } from "./builtins";
 import PanelWidgetFrame, { type FrameFacts } from "./PanelWidgetFrame";
 import paperboardIcon from "../../assets/Paperboard.png";
 import styles from "./Home.module.css";
-import { errorMessage } from "../../lib/errorMessage";
 
 /** One widget, at one size, ready to place. */
 export type LibraryEntry = {
@@ -299,11 +300,11 @@ const WidgetCard: Component<WidgetLibraryProps & { widget: WidgetDeclaration; en
         { kind: "loading" } | { kind: "ready"; lists: Record<string, WidgetChoice[]> } | { kind: "failed"; message: string }
     >({ kind: "loading" });
     const [chosen, setChosen] = createSignal<WidgetOptionValues>({});
-    let request = 0;
+    const latest = createLatest();
     const loadChoices = async () => {
         const from = props.entryAt(size());
         if (declared().length === 0) return;
-        const mine = ++request;
+        const current = latest();
         setChoices({ kind: "loading" });
         try {
             const offered =
@@ -312,7 +313,7 @@ const WidgetCard: Component<WidgetLibraryProps & { widget: WidgetDeclaration; en
                     : await Promise.all(
                           declared().map((option) => getWidgetChoices(from.computerId, from.panelId, props.widget.id, option.id)),
                       );
-            if (mine !== request) return;
+            if (!current()) return;
             const lists: Record<string, WidgetChoice[]> = {};
             const next: WidgetOptionValues = {};
             declared().forEach((option, index) => {
@@ -324,13 +325,12 @@ const WidgetCard: Component<WidgetLibraryProps & { widget: WidgetDeclaration; en
             setChosen(next);
             setChoices({ kind: "ready", lists });
         } catch (err) {
-            if (mine !== request) return;
+            if (!current()) return;
             logToMain("warn", `Couldn't load choices for widget ${props.widget.id}:`, err);
             setChoices({ kind: "failed", message: errorMessage(err) });
         }
     };
     onMount(() => void loadChoices());
-    onCleanup(() => { request++; });
     const listOf = (optionId: string) => {
         const state = choices();
         return state.kind === "ready" ? (state.lists[optionId] ?? []) : [];

@@ -16,9 +16,9 @@ import {
     PANEL_LIBRARY_URL,
     type InstalledPanelMedia,
     type PanelItem,
+    errorMessage,
 } from "@mileniumhq/paperapi";
 import { logToMain } from "../../lib/shell";
-import { errorMessage } from "../../lib/errorMessage";
 import {
     libraryFramePhase,
     libraryFrameSrc,

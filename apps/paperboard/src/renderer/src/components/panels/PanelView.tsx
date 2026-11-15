@@ -1,5 +1,5 @@
 import { PaperFlex, playHaptic, swipeFromFrame } from "@mileniumhq/paperui";
-import { backupApi, backupProgressFraction, backupProgressText, type BackupProgress } from "@mileniumhq/paperapi";
+import { backupApi, backupProgressFraction, backupProgressText, type BackupProgress, errorMessage } from "@mileniumhq/paperapi";
 import { type Component, type JSX, createEffect, createMemo, createSignal, For, on, Show, onCleanup, onMount } from "solid-js";
 import { recordUse, liveKeys, recordAway, withoutIdle, MAX_LIVE_IFRAMES, IDLE_UNLOAD_MS } from "./panelLru";
 import LoadingOverlay from "./LoadingOverlay";
@@ -9,7 +9,6 @@ import { MOBILE_MODE_MESSAGE, mobileMode, requireMobileMode } from "../../lib/mo
 import BackupLocationChooser from "../backups/BackupLocationChooser";
 import { unsavedPanels } from "../../lib/unsavedPanels";
 import { createFrameDocument, type ChooserRequest } from "./frameMessages";
-import { errorMessage } from "../../lib/errorMessage";
 
 // restarting: the panel's service restarts; updating: a new release of the panel installs
 export type RestartState = { kind: "restarting" } | { kind: "updating" } | { kind: "failed"; message: string };

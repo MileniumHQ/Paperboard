@@ -11,7 +11,7 @@
 // (src/main/loopbackRedirect.ts), checking the address again.
 import { parseLoopbackRedirectUri, type PanelLoopbackRedirectResult } from "../../../shared/loopbackRedirect";
 import { isBrowserShell, logToMain, shellIpc } from "./shell";
-import { errorMessage } from "./errorMessage";
+import { errorMessage } from "@mileniumhq/paperapi";
 
 export const LOOPBACK_REDIRECT_REQUEST = "paperboard:loopback-redirect";
 export const LOOPBACK_REDIRECT_CANCEL = `${LOOPBACK_REDIRECT_REQUEST}-cancel`;

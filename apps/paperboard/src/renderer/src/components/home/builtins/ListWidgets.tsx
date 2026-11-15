@@ -1,4 +1,4 @@
-import { PaperButton, PaperWidget, PaperWidgetMessage, PaperWidgetRows, type PaperWidgetRow } from "@mileniumhq/paperui";
+import { PaperButton, PaperWidget, PaperWidgetMessage, PaperWidgetRows, type PaperWidgetRow, sameData } from "@mileniumhq/paperui";
 import { type Component, createMemo, Show } from "solid-js";
 import type { BuiltinWidgetProps } from "./types";
 import { type PanelRunState, panelRunState, widgetTitle } from "./systemFigures";
@@ -34,7 +34,7 @@ export const Panels: Component<BuiltinWidgetProps> = (props) => {
                 : null;
         },
         null,
-        { equals: sameMembers },
+        { equals: sameData },
     );
     const rows = createMemo((): PaperWidgetRow[] =>
         (props.panels ?? []).map((panel) => {
@@ -102,8 +102,3 @@ export const Computers: Component<BuiltinWidgetProps> = (props) => {
         </PaperWidget>
     );
 };
-
-function sameMembers(a: ReadonlySet<string> | null, b: ReadonlySet<string> | null): boolean {
-    if (a === null || b === null) return a === b;
-    return a.size === b.size && [...a].every((id) => b.has(id));
-}

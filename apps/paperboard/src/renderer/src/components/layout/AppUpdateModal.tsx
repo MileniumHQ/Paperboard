@@ -1,9 +1,9 @@
 import { createSignal, Show } from "solid-js";
 import { PaperModal, PaperFlex, PaperText, PaperButton, PaperProgress, showToast } from "@mileniumhq/paperui";
 import type { AppUpdateState } from "../../../../shared/appUpdate";
-import { errorMessage } from "../../lib/errorMessage";
 import { shellIpc } from "../../lib/shell";
 import { checkForUpdates } from "../../hooks/useAppUpdate";
+import { errorMessage } from "@mileniumhq/paperapi";
 
 export default function AppUpdateModal(props: { state: AppUpdateState; open: boolean; onClose(): void }) {
     const [downloadError, setDownloadError] = createSignal<string | null>(null);

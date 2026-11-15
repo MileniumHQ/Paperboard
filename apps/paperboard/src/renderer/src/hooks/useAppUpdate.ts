@@ -1,8 +1,8 @@
 import { createSignal, onMount } from "solid-js";
 import { showToast } from "@mileniumhq/paperui";
 import { initialAppUpdateState, type AppUpdateState } from "../../../shared/appUpdate";
-import { errorMessage } from "../lib/errorMessage";
 import { isBrowserShell, shellIpc, subscribeRevisioned } from "../lib/shell";
+import { errorMessage } from "@mileniumhq/paperapi";
 
 /** looks for updates to everything now; the top bar lists what it finds and says each failure, a toast says a check that didn't start */
 export const checkForUpdates = () =>

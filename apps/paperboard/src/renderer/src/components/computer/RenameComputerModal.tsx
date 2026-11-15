@@ -1,7 +1,7 @@
 import { type Component, Show, createEffect, createSignal, on } from "solid-js";
 import { PaperButton, PaperInput, PaperModal, PaperText } from "@mileniumhq/paperui";
 import { computersApi, type ComputerInfo } from "../../lib/shell";
-import { errorMessage } from "../../lib/errorMessage";
+import { errorMessage } from "@mileniumhq/paperapi";
 
 // matches COMPUTER_NAME_MAX in main's ConnectionPool, which has the last word
 const NAME_MAX = 64;

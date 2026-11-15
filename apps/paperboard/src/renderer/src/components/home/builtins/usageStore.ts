@@ -2,9 +2,8 @@
 // gallery preview showing it. It runs only while a visible widget is
 // watching, and forgets the computer when the last one stops.
 import { type Accessor, createEffect, createMemo, createSignal, on, onCleanup, type Setter } from "solid-js";
-import { systemApi, type UsageReport } from "@mileniumhq/paperapi";
+import { systemApi, type UsageReport, errorMessage } from "@mileniumhq/paperapi";
 import { logToMain } from "../../../lib/shell";
-import { errorMessage } from "../../../lib/errorMessage";
 
 const POLL_MS = 2_000;
 // a computer that failed is asked again this much later, not every poll

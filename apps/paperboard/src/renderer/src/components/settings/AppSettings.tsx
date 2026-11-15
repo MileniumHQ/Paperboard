@@ -18,7 +18,6 @@ import {
     showToast,
 } from "@mileniumhq/paperui";
 import { isBrowserShell, shellIpc, signOutOfBrowser } from "../../lib/shell";
-import { errorMessage } from "../../lib/errorMessage";
 import { checkForUpdates } from "../../hooks/useAppUpdate";
 import type { SettingsFailure } from "../../hooks/useAppSettings";
 import { START_ON_HOME, startTarget } from "../../lib/startOn";
@@ -30,6 +29,7 @@ import PanelPermissionSettings from "./PanelPermissionSettings";
 import paperboardLicenseText from "../../../../../LICENSE?raw";
 import mitLicenseText from "../../../../../../../packages/paperui/LICENSE?raw";
 import { effectiveLook } from "../../../../shared/graphics";
+import { errorMessage } from "@mileniumhq/paperapi";
 
 /** a computer Paperboard can open on */
 export interface StartComputer {

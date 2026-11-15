@@ -19,8 +19,8 @@ import {
     type DiscoveredComputer,
 } from "../../lib/shell";
 import frameStyles from "./wizardFrame.module.css";
-import { errorMessage } from "../../lib/errorMessage";
 import { DAEMON_PORT } from "../../lib/daemonPort";
+import { errorMessage } from "@mileniumhq/paperapi";
 
 export interface ComputerSetupWizardProps {
     onClose: () => void;

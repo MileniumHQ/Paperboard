@@ -12,8 +12,8 @@ import {
     type UpdateQueueState,
 } from "../../../../shared/updateQueue";
 import { updateWhere } from "../../hooks/useUpdateQueue";
-import { errorMessage } from "../../lib/errorMessage";
 import { formatBytes } from "../../lib/formatBytes";
+import { errorMessage } from "@mileniumhq/paperapi";
 
 // how long the finished check (or cross) stays before the button goes
 const FINISH_MS = 1800;

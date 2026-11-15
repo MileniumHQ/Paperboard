@@ -1,10 +1,9 @@
-import { createEffect, createSignal, For, on, onCleanup, onMount, Show } from "solid-js";
+import { createSignal, For, onCleanup, onMount, Show } from "solid-js";
 import { createStore, reconcile } from "solid-js/store";
-import { PaperButton, PaperQuote, PaperSectionHeader, PaperSettingItem, PaperSettingList, PaperText, PaperToggle } from "@mileniumhq/paperui";
+import { createLatest, createSavedValue, PaperButton, PaperQuote, PaperSectionHeader, PaperSettingItem, PaperSettingList, PaperText, PaperToggle } from "@mileniumhq/paperui";
 import { panelPermissionsApi } from "../../lib/shell";
-import { createSavedValue } from "../../lib/saveQueue";
 import type { PanelPermission, PanelPermissionEntry } from "../../../../shared/panelPermissions";
-import { errorMessage } from "../../lib/errorMessage";
+import { errorMessage } from "@mileniumhq/paperapi";
 
 const TITLES: Record<PanelPermission, string> = {
     microphone: "Microphone",
@@ -23,16 +22,16 @@ export default function PanelPermissionSettings(props: { panelName: (panelId: st
     const failed = (title: string, err: unknown) => setError({ title, message: errorMessage(err) });
 
     // a newer reload wins over an older one still out
-    let loads = 0;
+    const latest = createLatest();
     const load = async () => {
-        const request = ++loads;
+        const current = latest();
         try {
             const list = await panelPermissionsApi.list();
-            if (request !== loads) return;
+            if (!current()) return;
             setEntries(reconcile(list.map((entry) => ({ ...entry, key: `${entry.panelId}\n${entry.permission}` })), { key: "key" }));
             setError(null);
         } catch (err) {
-            if (request === loads) failed("Panel permissions not loaded", err);
+            if (current()) failed("Panel permissions not loaded", err);
         }
     };
 
@@ -62,16 +61,16 @@ export default function PanelPermissionSettings(props: { panelName: (panelId: st
                     <For each={entries}>
                         {(entry) => {
                             // the switch flips at once; a reload brings what is saved
-                            const allowed = createSavedValue(entry.answer === "allowed", (next) =>
-                                panelPermissionsApi.set(entry.panelId, entry.permission, next ? "allowed" : "denied"),
+                            const allowed = createSavedValue(
+                                () => entry.answer === "allowed",
+                                (next) => panelPermissionsApi.set(entry.panelId, entry.permission, next ? "allowed" : "denied"),
                             );
-                            createEffect(on(() => entry.answer, (answer) => allowed.loaded(answer === "allowed"), { defer: true }));
                             return (
                                 <PaperSettingItem title={props.panelName(entry.panelId)} description={TITLES[entry.permission]}>
                                     <PaperToggle
                                         checked={allowed.value()}
                                         aria-label={`Let ${props.panelName(entry.panelId)} use the ${TITLES[entry.permission].toLowerCase()}`}
-                                        onChange={(checked) => allowed.change(checked).catch((err) => failed("Permission not changed", err))}
+                                        onChange={(checked) => allowed.set(checked).catch((err) => failed("Permission not changed", err))}
                                     />
                                 </PaperSettingItem>
                             );
