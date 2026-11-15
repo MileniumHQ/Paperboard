@@ -21,6 +21,7 @@ export default function Providers(props: { agent: Agent; open: boolean; onClose:
     // reconciled by id, so a re-read (after a connect or a sign-in) changes what differs and every row and form stays the one it was
     const [list, setList] = createStore<{ providers: ProviderInfo[] | null }>({ providers: null });
     const [listError, setListError] = createSignal<string | null>(null);
+    const { busy, error, setError, run: act } = createAction();
     const latest = createLatest();
     const refetch = async () => {
         const current = latest();
@@ -32,10 +33,18 @@ export default function Providers(props: { agent: Agent; open: boolean; onClose:
             if (current()) setListError(errorText(e));
         }
     };
-    // read afresh each time it opens
-    createEffect(on(() => props.open, (open) => open && void refetch()));
+    // read afresh each time it opens, with nothing refused yet
+    createEffect(
+        on(
+            () => props.open,
+            (open) => {
+                if (!open) return;
+                setError(null);
+                void refetch();
+            },
+        ),
+    );
     const [selected, setSelected] = createSignal<string>();
-    const { busy, error, setError, run: act } = createAction();
     const [key, setKey] = createSignal("");
     const [answers, setAnswers] = createSignal<Record<string, string>>({});
     const [attempt, setAttempt] = createSignal<{ provider: string; info: ProviderAttempt } | null>(null);
@@ -101,19 +110,20 @@ export default function Providers(props: { agent: Agent; open: boolean; onClose:
     // an automatic sign-in finishes on OpenCode's side: ask until it has, one question at a time
     createPolling(() => (attempt()?.info.mode === "auto" ? check() : undefined), POLL_MS);
 
+    /** resolves whether nothing is left signing in */
     const cancel = async () => {
         const a = attempt();
         setAttempt(null);
         setCode("");
-        if (a) await act("Sign-in not stopped", () => props.agent.cancelProvider(a.provider, a.info.id));
+        return !a || (await act("Sign-in not stopped", () => props.agent.cancelProvider(a.provider, a.info.id)));
     };
-    const close = () => {
-        void cancel();
-        props.onClose();
+    // a sign-in under way is stopped first: one OpenCode won't stop keeps the modal open to say so
+    const close = async () => {
+        if (await cancel()) props.onClose();
     };
 
     return (
-        <PaperModal open={props.open} onClose={close} title="OpenCode providers" size="large">
+        <PaperModal open={props.open} onClose={() => void close()} title="OpenCode providers" size="large">
             <PaperFlex gap="full">
                 <PaperText preset="hint">
                     OpenCode already has free models. Connect a provider to use its models too.

@@ -3,8 +3,9 @@
 // first one's status question is still on its way. That late answer belongs
 // to a sign-in that is gone, and must not end the new one. Then a key is
 // connected, and the list read again keeps the provider's forms the ones
-// they were.
-import { onCleanup } from "solid-js";
+// they were. Last, the modal is closed during a sign-in OpenCode won't stop:
+// it stays open to say so, and closes when asked again.
+import { createSignal, onCleanup } from "solid-js";
 import { render } from "solid-js/web";
 import { PaperProvider } from "@mileniumhq/paperui";
 import "@mileniumhq/paperui/style.css";
@@ -39,7 +40,11 @@ answers.set(UI_ACTION_IDS.providers, async () => ({
 }));
 answers.set(UI_ACTION_IDS.connectKey, async () => void (keyed = true));
 answers.set(UI_ACTION_IDS.beginProvider, async () => ({ id: `attempt${++begun}`, url: "https://acme.example/login", instructions: `Sign-in ${begun}`, mode: "auto" }));
-answers.set(UI_ACTION_IDS.cancelProvider, async () => ({}));
+let stops = true;
+answers.set(UI_ACTION_IDS.cancelProvider, async () => {
+    if (!stops) throw new Error("OpenCode is busy");
+    return {};
+});
 answers.set(UI_ACTION_IDS.providerAttempt, (inputs) => {
     questions.push(String(inputs.attempt));
     if (inputs.attempt === "attempt1") return new Promise<ProviderAttemptStatus>((resolve) => (answerFirst = resolve));
@@ -49,10 +54,11 @@ answers.set(UI_ACTION_IDS.providerAttempt, (inputs) => {
 const button = (text: string) => [...document.querySelectorAll<HTMLButtonElement>("button")].find((b) => b.textContent?.trim() === text);
 const shows = (text: string) => document.body.innerText.includes(text);
 
+const [open, setOpen] = createSignal(true);
 function Fixture() {
     const agent = createAgent();
     onCleanup(agent.dispose);
-    return <Providers agent={agent} open onClose={() => {}} />;
+    return <Providers agent={agent} open={open()} onClose={() => setOpen(false)} />;
 }
 
 async function run(): Promise<Record<string, unknown>> {
@@ -95,11 +101,28 @@ async function run(): Promise<Record<string, unknown>> {
     const signIn = button("Sign in")!;
     (await until("Connect", () => button("Connect") && !button("Connect")!.disabled && button("Connect")))!.click();
     await until("the list read again", () => shows("Acme key is connected."));
+    const formsKept = form.isConnected && signIn.isConnected;
+
+    // a sign-in under way, and OpenCode won't stop it: closing says so instead of hiding it
+    stops = false;
+    button("Sign in")!.click();
+    await until("a sign-in", () => shows("Waiting for you to finish signing in"));
+    document.querySelector<HTMLButtonElement>('button[aria-label="Close modal"]')!.click();
+    await until("the refusal", () => shows("OpenCode is busy"));
+    const openAfterRefusal = open();
+    // asked again, with nothing left signing in, it closes; opened again, nothing refused is left on it
+    document.querySelector<HTMLButtonElement>('button[aria-label="Close modal"]')!.click();
+    await until("the modal closed", () => !open());
+    setOpen(true);
+    await until("the modal again", () => button("Connect") || shows("Asking OpenCode"));
+    const staleRefusal = shows("OpenCode is busy");
 
     return {
         stillSigningIn,
         refused,
-        formsKept: form.isConnected && signIn.isConnected,
+        formsKept,
+        openAfterRefusal,
+        staleRefusal,
         uncaught: [...errors],
     };
 }
