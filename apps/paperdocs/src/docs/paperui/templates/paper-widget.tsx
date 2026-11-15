@@ -296,7 +296,7 @@ export function Widget() {
                 <li>Nothing is cut mid-word or pushed out of the tile. The header is one line: the title ends in an ellipsis when it is too long, and the detail shows whole or not at all. A stat value is drawn smaller until it fits its width.</li>
                 <li>A body too short for everything in it drops what matters least first: stat captions and message descriptions, then stat meters and a message title's second line. Only then are stat values drawn smaller to fit its height. A caption and a row label stay on one line and are ellipsized, so rows keep an even height.</li>
                 <li>Without <PaperCode>onPress</PaperCode>, the body keeps its own clicks, hovers, and scroll. With it, a button fills the tile behind the content and presses fall through to it, except on buttons, links, and fields inside the tile.</li>
-                <li>A widget is its own document and has no access to the panel's state. Read it through the panel bridge and show the failure in the tile with PaperWidgetMessage, as the create-panel template does.</li>
+                <li>A widget is its own document and has no access to the panel's state. Read it through a client of the panel's contract (<PaperLink href="/docs/paperapi/bridge/">serviceClient</PaperLink>) and show the failure in the tile with PaperWidgetMessage, as the create-panel template does.</li>
             </PaperTextList>
 
             <PaperText preset="subheader" as="h2" id="examples">Examples</PaperText>

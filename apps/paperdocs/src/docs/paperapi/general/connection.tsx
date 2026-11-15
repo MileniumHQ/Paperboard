@@ -170,7 +170,7 @@ try {
             <PaperTextList ordered>
                 <li>Connects, and reads the service's internal <PaperCode>panel-state</PaperCode> value when the manifest names a service. The service answers once it is ready.</li>
                 <li>On a widget page, mounts the widget the shell asked for.</li>
-                <li>Hydrates every <PaperLink href="/docs/paperapi/bridge/">panel bridge</PaperLink> on the page.</li>
+                <li>Reads the state into every <PaperLink href="/docs/paperapi/bridge/#readiness">state mirror</PaperLink> on the page: each client whose <PaperCode>state</PaperCode> was read.</li>
                 <li>Waits for fonts and images to paint, for at most 4 seconds.</li>
                 <li>Posts <PaperCode>paperboard:ready</PaperCode>, or <PaperCode>paperboard:failed</PaperCode> with the error message, which the shell shows.</li>
             </PaperTextList>

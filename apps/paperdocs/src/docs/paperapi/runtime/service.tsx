@@ -23,25 +23,24 @@ export default function ServiceApiDoc() {
             </PaperText>
             <PaperCode block language="tsx">
 {`import { blocksApi, definePanelService, secretsApi } from "@mileniumhq/paperapi";
-
-const PANEL_ID = "dev.example.weather";
-
-interface WeatherState {
-    lastCity: string;
-}
+import { PANEL_ID, weatherContract } from "./panel";
 
 const service = definePanelService({
-    id: PANEL_ID,
-    state: { lastCity: "" } as WeatherState,
-    // what the panel's own page asks: bridge.call("forecast", { city: "Oslo" })
+    // the calls, events and state the page and the service agree on
+    contract: weatherContract,
+    // one handler per call of the contract: weather.calls.forecast({ city: "Oslo" }) on the page
     calls: {
-        forecast: async (ctx, input?: { city?: string }) => {
+        forecast: async ({ city }, ctx) => {
             const key = await secretsApi.get("apiKey", PANEL_ID);
             if (!key.found) throw new Error("Add an API key in the Weather panel first");
-            if (!input?.city) throw new Error("Enter a city name");
-            ctx.setState({ lastCity: input.city });
-            ctx.emit("forecast-ready", { city: input.city });
-            return { city: input.city, high: 21, low: 12 };
+            if (!city.trim()) throw new Error("Enter a city name");
+            const today = { city, high: 21, low: 12 };
+            ctx.setState((prev) => ({ recent: [city, ...prev.recent].slice(0, 5) }));
+            ctx.emit("forecastRead", today);
+            return today;
+        },
+        clearRecent: (_input, ctx) => {
+            ctx.setState({ recent: [] });
         },
     },
     onInit: async (ctx) => {
@@ -57,25 +56,33 @@ const service = definePanelService({
                 run: ({ city }: { city: string }) => ({ city, high: 21, low: 12 }),
             }],
         });
-        console.log(\`Weather service ready, last city: \${ctx.state.lastCity || "none"}\`);
+        console.log(\`Weather service ready, recent cities: \${ctx.state.recent.join(", ") || "none"}\`);
     },
 });
 
 export default service;`}
             </PaperCode>
+            <PaperText preset="body" as="p">
+                <PaperCode>weatherContract</PaperCode> is the one on <PaperLink href="/docs/paperapi/bridge/#usage">Contract API</PaperLink>.
+            </PaperText>
 
             <PaperText preset="subheader" as="h2" id="api">API</PaperText>
             <PaperCode block language="tsx">
-{`function definePanelService<TState extends Record<string, any>, TCalls>(
-    options: DefinePanelServiceOptions<TState, TCalls>,
+{`function definePanelService<TState, C extends PanelContract>(
+    options: DefinePanelServiceOptions<TState, C>,
 ): {
     panelId: string;
     /** resolves once the service's own blocks are registered and onInit has finished */
     ready: Promise<void>;
-    ctx: ServiceContext<TState>;
-    getState(): TState;
-    setState(patchOrUpdater: Partial<TState> | ((prev: TState) => Partial<TState>)): void;
-};`}
+    ctx: ContractContext<C, TState>;
+    getState(): State;
+    setState(patchOrUpdater: Partial<State> | ((prev: State) => Partial<State>)): void;
+};
+
+/** the handlers of a contract's calls, to type them in a file of their own */
+type CallHandlers<C> = { [call]: (input, ctx: ContractContext<C>, scope) => output | Promise<output> };
+/** what handlers and hooks are given: the contract's state and events */
+type ContractContext<C, TState = Record<string, any>> = ServiceContext<State, Events>;`}
             </PaperCode>
             <PaperTable>
                 <thead>
@@ -88,22 +95,28 @@ export default service;`}
                 </thead>
                 <tbody>
                     <tr>
+                        <td><PaperCode>contract</PaperCode></td>
+                        <td><PaperCode>PanelContract</PaperCode></td>
+                        <td>No default (no calls, no events)</td>
+                        <td>The calls, events and state the panel's page and its service agree on, made with <PaperLink href="/docs/paperapi/bridge/">defineContract</PaperLink>. It gives the service its panel id and its state, and types <PaperCode>calls</PaperCode>, <PaperCode>emit</PaperCode> and <PaperCode>setState</PaperCode>.</td>
+                    </tr>
+                    <tr>
                         <td><PaperCode>id</PaperCode></td>
                         <td><PaperCode>string</PaperCode></td>
-                        <td><PaperCode>getPanelId()</PaperCode>, the id the daemon started the service with</td>
-                        <td>The panel the service registers its blocks under.</td>
+                        <td>The contract's panel id, or <PaperCode>getPanelId()</PaperCode>, the id the daemon started the service with</td>
+                        <td>The panel the service registers its blocks under. With a contract it must be the contract's, or <PaperCode>definePanelService</PaperCode> throws <PaperCode>{"[Service:<id>] its contract is <panel id>'s"}</PaperCode>.</td>
                     </tr>
                     <tr>
                         <td><PaperCode>state</PaperCode></td>
                         <td><PaperCode>TState</PaperCode></td>
-                        <td><PaperCode>{"{}"}</PaperCode></td>
-                        <td>The starting state. It lives in memory: save what must survive a restart with <PaperLink href="/docs/paperapi/config/">configApi</PaperLink>.</td>
+                        <td>The contract's <PaperCode>state.initial</PaperCode>, or <PaperCode>{"{}"}</PaperCode></td>
+                        <td>The starting state, for a contract that says nothing of the state. A contract that declares one says it instead, and this option is a type error. The state lives in memory: save what must survive a restart with <PaperLink href="/docs/paperapi/config/">configApi</PaperLink>.</td>
                     </tr>
                     <tr>
                         <td><PaperCode>calls</PaperCode></td>
-                        <td><PaperCode>Record&lt;string, (ctx, input?) =&gt; unknown | Promise&lt;unknown&gt;&gt;</PaperCode></td>
-                        <td>No default (no calls)</td>
-                        <td>What the panel's own page asks the service, by name: <PaperCode>bridge.call(name, input)</PaperCode>. See <PaperLink href="#calls">Calls</PaperLink>. For what other panels, flows and agents use, register blocks in <PaperCode>onInit</PaperCode> with <PaperLink href="/docs/paperapi/blocks/">blocksApi</PaperLink>.</td>
+                        <td><PaperCode>{"CallHandlers<typeof contract>"}</PaperCode>: <PaperCode>(input, ctx, scope) =&gt; output | Promise&lt;output&gt;</PaperCode></td>
+                        <td>Required for each call of the contract</td>
+                        <td>One handler for each of the contract's calls, given its checked input, the context and the scope's values, and returning its output. See <PaperLink href="#calls">Calls</PaperLink>. For what other panels, flows and agents use, register blocks in <PaperCode>onInit</PaperCode> with <PaperLink href="/docs/paperapi/blocks/">blocksApi</PaperLink>.</td>
                     </tr>
                     <tr>
                         <td><PaperCode>widgetChoices</PaperCode></td>
@@ -158,14 +171,17 @@ export default service;`}
 
             <PaperText preset="subheader" as="h3" id="service-context">ServiceContext</PaperText>
             <PaperCode block language="tsx">
-{`interface ServiceContext<TState> {
+{`interface ServiceContext<TState, TEvents> {
     /** the current state; always the latest value */
     readonly state: TState;
     setState(patchOrUpdater: Partial<TState> | ((prev: TState) => Partial<TState>)): void;
     /** tells the panel's page something happened; other panels can't hear it */
-    emit(event: string, payload?: unknown): void;
+    emit<E extends keyof TEvents>(event: E, payload: Infer<TEvents[E]>): void;
 }`}
             </PaperCode>
+            <PaperText preset="body" as="p">
+                Every handler and hook is given it as <PaperCode>ctx</PaperCode>. To type a helper that takes it, use <PaperCode>{"ContractContext<typeof weatherContract>"}</PaperCode>.
+            </PaperText>
             <PaperTable>
                 <thead>
                     <tr>
@@ -176,47 +192,38 @@ export default service;`}
                 <tbody>
                     <tr>
                         <td><PaperCode>setState</PaperCode></td>
-                        <td>Merges the patch into the state, one level deep, then sends the patch to every <PaperLink href="/docs/paperapi/bridge/">panel bridge</PaperLink> as the internal <PaperCode>panel-state-changed</PaperCode> event. One send is in flight at a time: patches made while it travels are merged into the next one, so a service that sets state hundreds of times a second sends far fewer events.</td>
+                        <td>Checks the patch against the contract's state, merges it into the state, one level deep, then sends it to every window's <PaperLink href="/docs/paperapi/bridge/#state-sync">state mirror</PaperLink> as the internal <PaperCode>panel-state-changed</PaperCode> event. A patch the state's shape doesn't allow throws <PaperCode>{"[Service:<id>] The state was not changed: <problem>"}</PaperCode>, or <PaperCode>{"The state has no field \"<key>\""}</PaperCode>, and changes nothing. One send is in flight at a time: patches made while it travels are merged into the next one, so a service that sets state hundreds of times a second sends far fewer events.</td>
                     </tr>
                     <tr>
                         <td><PaperCode>emit</PaperCode></td>
-                        <td>Returns at once. The page hears it through <PaperCode>bridge.on(event, callback)</PaperCode> or <PaperCode>serviceApi.on</PaperCode>. It fires the internal event <PaperCode>emit-&lt;kebab-name&gt;</PaperCode>, which is registered the first time it is emitted. A name that can't be made an id throws where it is emitted. A delivery that fails is reported as the panel's problem, <PaperCode>The panel's page missed an update</PaperCode>, with the event's name and why; see <PaperLink href="/docs/paperapi/problems/">problemsApi</PaperLink>.</td>
+                        <td>Typed by the contract's <PaperCode>events</PaperCode>: the event must be one it names, with the payload it says. Anything else throws where it is emitted, <PaperCode>{"[Service:<id>] The contract has no event \"<name>\""}</PaperCode> or <PaperCode>{"The event \"<name>\" was not sent: <problem>"}</PaperCode>, and nothing is sent. Returns at once. The page hears it through its client's <PaperCode>events</PaperCode>. It fires the internal event <PaperCode>emit-&lt;kebab-name&gt;</PaperCode>, which is registered the first time it is emitted. A delivery that fails is reported as the panel's problem, <PaperCode>The panel's page missed an update</PaperCode>, with the event's name and why; see <PaperLink href="/docs/paperapi/problems/">problemsApi</PaperLink>.</td>
                     </tr>
                 </tbody>
             </PaperTable>
             <PaperText preset="body" as="p">
-                The service registers the internal value <PaperCode>panel-state</PaperCode>, which returns the whole state once the service is ready, and the internal event <PaperCode>panel-state-changed</PaperCode>. Bridges read the value to hydrate and hear the event for each patch.
+                The service registers the internal value <PaperCode>panel-state</PaperCode>, which returns the whole state once the service is ready, and the internal event <PaperCode>panel-state-changed</PaperCode>. State mirrors read the value to hydrate and hear the event for each patch.
                 With <PaperCode>widgetChoices</PaperCode>, it also registers the internal command <PaperCode>widget-choices</PaperCode>.
             </PaperText>
 
             <PaperText preset="subheader" as="h2" id="calls">Calls</PaperText>
             <PaperText preset="body" as="p">
-                A call is what the panel's own page asks its service to do. Each entry of <PaperCode>calls</PaperCode> is registered as an internal command, <PaperCode>call-&lt;kebab-name&gt;</PaperCode>, so <PaperCode>followCity</PaperCode> becomes <PaperCode>call-follow-city</PaperCode>.
+                A call is what the panel's own page asks its service to do, declared in the <PaperLink href="/docs/paperapi/bridge/">contract</PaperLink>. Each is registered as an internal command, <PaperCode>call-&lt;kebab-name&gt;</PaperCode>, so <PaperCode>followCity</PaperCode> becomes <PaperCode>call-follow-city</PaperCode>.
             </PaperText>
             <PaperCode block language="tsx">
-{`type ServiceCall<TState> = (ctx: ServiceContext<TState>, input?: any) => unknown | Promise<unknown>;`}
+{`// in a file of its own, typed by the contract
+const calls = {
+    forecast: async ({ city }, ctx) => readForecast(city),
+    clearRecent: (_input, ctx) => ctx.setState({ recent: [] }),
+} satisfies CallHandlers<typeof weatherContract>;`}
             </PaperCode>
             <PaperTextList>
-                <li>A call gets one optional input, any JSON, and its return value goes back to the caller. Returning <PaperCode>undefined</PaperCode> gives the caller <PaperCode>null</PaperCode>.</li>
-                <li>A call that throws rejects the caller with the same message. Throw sentences the person using the panel can act on.</li>
-                <li>Two names that make the same id, such as <PaperCode>followCity</PaperCode> and <PaperCode>follow-city</PaperCode>, throw when the service is defined. A name of more than 59 characters, or one with no letters or digits, throws too.</li>
-                <li>Internal blocks are never listed, and the daemon refuses them to every other panel. Check a call's input all the same: <PaperCode>paperapi call</PaperCode> reaches it.</li>
-                <li>The input is not checked against a schema. For a block with typed, checked inputs, register one with <PaperLink href="/docs/paperapi/blocks/">blocksApi</PaperLink> in <PaperCode>onInit</PaperCode>.</li>
+                <li>A handler is <PaperCode>(input, ctx, scope)</PaperCode>: the call's own fields, checked; the <PaperLink href="#service-context">context</PaperLink>; and the contract's <PaperLink href="/docs/paperapi/bridge/#scope">scope</PaperLink> values. A call without <PaperCode>input</PaperCode> is given <PaperCode>undefined</PaperCode>.</li>
+                <li>The input is checked against its shape before the handler runs, and a field the shape doesn't name is refused. A refused call never reaches the handler, whoever made it, <PaperCode>paperapi call</PaperCode> included.</li>
+                <li>What the handler returns is checked against <PaperCode>output</PaperCode> before it leaves. Returning nothing, for a <PaperCode>shape.nothing()</PaperCode> call, gives the page <PaperCode>undefined</PaperCode>.</li>
+                <li>A handler that throws rejects the caller with the same message. Throw sentences the person using the panel can act on.</li>
+                <li>A shape says what a value is, not what it may be: refuse an empty city in the handler.</li>
+                <li>Internal blocks are never listed, and the daemon refuses them to every other panel. For what other panels, flows and agents use, register a block with <PaperLink href="/docs/paperapi/blocks/">blocksApi</PaperLink> in <PaperCode>onInit</PaperCode>.</li>
             </PaperTextList>
-
-            <PaperText preset="subheader" as="h3" id="service-api">serviceApi</PaperText>
-            <PaperText preset="body" as="p">
-                The page reaches its service with <PaperCode>serviceApi</PaperCode>, which <PaperLink href="/docs/paperapi/bridge/">createPanelBridge</PaperLink> wraps with the panel id filled in. Use it directly from code that has no bridge.
-            </PaperText>
-            <PaperCode block language="tsx">
-{`import { serviceApi } from "@mileniumhq/paperapi";
-
-serviceApi.call<T = unknown>(panelId: string, name: string, input?: unknown, options?: { timeoutMs?: number | null }): Promise<T>;
-serviceApi.on<T = unknown>(panelId: string, event: string, callback: (payload: T) => void): () => void;
-
-const forecast = await serviceApi.call<Forecast>("dev.example.weather", "forecast", { city: "Oslo" });
-const stop = serviceApi.on<{ city: string }>("dev.example.weather", "forecast-ready", (payload) => console.log(payload.city));`}
-            </PaperCode>
             <PaperTable>
                 <thead>
                     <tr>
@@ -228,11 +235,13 @@ const stop = serviceApi.on<{ city: string }>("dev.example.weather", "forecast-re
                     <tr><td><PaperCode>STATE_VALUE</PaperCode></td><td><PaperCode>"panel-state"</PaperCode>, the internal value holding the service's state.</td></tr>
                     <tr><td><PaperCode>STATE_EVENT</PaperCode></td><td><PaperCode>"panel-state-changed"</PaperCode>, the internal event each patch travels on.</td></tr>
                     <tr><td><PaperCode>WIDGET_CHOICES_COMMAND</PaperCode></td><td><PaperCode>"widget-choices"</PaperCode>, the internal command Home asks a widget option's dropdown from.</td></tr>
-                    <tr><td><PaperCode>callBlockId(name)</PaperCode>, <PaperCode>eventBlockId(name)</PaperCode></td><td>The block id a call name (<PaperCode>call-follow-city</PaperCode>) or an emitted event name (<PaperCode>emit-forecast-ready</PaperCode>) becomes. They throw for a name that can't be one.</td></tr>
+                    <tr><td><PaperCode>callBlockId(name)</PaperCode>, <PaperCode>eventBlockId(name)</PaperCode></td><td>The block id a call name (<PaperCode>call-follow-city</PaperCode>) or an event name (<PaperCode>emit-forecast-read</PaperCode>) becomes. They throw for a name that can't be one.</td></tr>
                 </tbody>
             </PaperTable>
+
+            <PaperText preset="subheader" as="h3" id="deprecated">Deprecated</PaperText>
             <PaperText preset="body" as="p">
-                Another panel calling <PaperCode>serviceApi.call</PaperCode> on your panel is refused: a call is internal.
+                <PaperCode>definePanelService</PaperCode> without a contract, with untyped <PaperCode>calls</PaperCode> by name, <PaperCode>untypedCalls</PaperCode> beside a contract, and <PaperCode>serviceApi.call</PaperCode> and <PaperCode>serviceApi.on</PaperCode> on the page are removed once Game Server and Agents use the contract. Don't use them in new code.
             </PaperText>
 
             <PaperText preset="subheader" as="h2" id="lifecycle">Lifecycle</PaperText>
@@ -298,7 +307,8 @@ const stop = serviceApi.on<{ city: string }>("dev.example.weather", "forecast-re
             <PaperTextList>
                 <li>A block that breaks a rule throws when it registers, before anything reaches the daemon. See <PaperLink href="/docs/paperapi/blocks/#registering">Registering</PaperLink>.</li>
                 <li>When a registration or <PaperCode>onInit</PaperCode> fails, <PaperCode>ready</PaperCode> rejects, the error is logged as <PaperCode>{"[Service:<id>] initialization failed:"}</PaperCode>, and the service never reports ready, so the daemon kills it after 20 seconds.</li>
-                <li>An error thrown by a call rejects the caller's <PaperCode>bridge.call</PaperCode> with the same message. Throw sentences the person using the panel can act on.</li>
+                <li>An error thrown by a handler rejects the page's call with the same message. Throw sentences the person using the panel can act on.</li>
+                <li>A contract whose <PaperCode>calls</PaperCode> don't match the handlers throws when the service is defined: <PaperCode>{"[Service:<id>] the call \"<name>\" has no handler"}</PaperCode>, or <PaperCode>{"[Service:<id>] \"<name>\" is not a call of its contract"}</PaperCode>.</li>
                 <li>A <PaperCode>beforeBackup</PaperCode> that throws refuses the backup with <PaperCode>The panel could not get ready for a backup: &lt;message&gt;</PaperCode>. A <PaperCode>beforeRestore</PaperCode> that throws refuses the restore with its own message.</li>
                 <li><PaperCode>afterBackup</PaperCode> and <PaperCode>afterRestore</PaperCode> are told only while the service is ready. A backup that ends while the service is stopped or still starting is not heard. An error they throw is reported as the panel's problem, <PaperCode>Finishing up after a backup failed</PaperCode> (or a restore), with its message.</li>
                 <li>The daemon waits at most 5 minutes for either hook, then fails with <PaperCode>Service &lt;id&gt; did not get ready for the backup within 300 s</PaperCode>. The hooks run only while the service is ready; a stopped or failed service is not asked.</li>
@@ -308,7 +318,7 @@ const stop = serviceApi.on<{ city: string }>("dev.example.weather", "forecast-re
             </PaperTextList>
 
             <PaperText preset="body" as="p">
-                Next: <PaperLink href="/docs/paperapi/bridge/">read the state from the panel page</PaperLink>.
+                Next: <PaperLink href="/docs/paperapi/bridge/">the contract the page and the service share</PaperLink>.
             </PaperText>
         </PaperFlex>
     );

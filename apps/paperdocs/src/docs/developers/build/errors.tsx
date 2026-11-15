@@ -52,23 +52,23 @@ export function dropsToFreezing(before: Forecast | undefined, after: Forecast, u
     return after.temperature <= limit && (before === undefined || before.temperature > limit);
 }`;
 
-const FOLLOW_RUN = `followCity: async (ctx: Ctx, input?: { city?: string }) => {
-    const city = cityName(input?.city);
+const FOLLOW_RUN = `followCity: async (input, ctx) => {
+    const city = cityName(input.city);
     const { settings } = ctx.state;
     if (settings.cities.includes(city)) throw new Error(\`Weather already follows \${city}\`);
     if (settings.cities.length >= 12) throw new Error("Weather follows at most 12 cities. Remove one first.");
     await saveSettings(ctx, { ...settings, cities: [...settings.cities, city] });
     await refreshCity(ctx, city);
-    return true;
 },`;
 
 const PAGE_CALL = `import { errorMessage } from "@mileniumhq/paperapi";
 import { showToast } from "@mileniumhq/paperui";
+import { service } from "../weather";
 
 const follow = async () => {
     setBusy(true);
     try {
-        await bridge.call<boolean>("followCity", { city: city() });
+        await service.followCity({ city: city() });
         setCity("");
     } catch (err) {
         showToast({ variant: "danger", title: "City not added", message: errorMessage(err) });
@@ -168,10 +168,14 @@ export default function ErrorsGuideDoc() {
             <PaperCode block language="tsx">{FOLLOW_RUN}</PaperCode>
             <PaperCode block language="sh">
 {`$ bunx paperapi call dev.example.weather followCity '{"city":"  "}'
-✗ dev.example.weather followCity failed: Enter a city name`}
+✗ dev.example.weather followCity failed: Enter a city name
+
+$ bunx paperapi call dev.example.weather followCity '{"town":"Oslo"}'
+✗ dev.example.weather followCity failed: The call "followCity" was refused: there is no field "town"`}
             </PaperCode>
             <PaperText preset="body" as="p">
-                Check the input before changing anything, so a refused call leaves nothing half done.
+                An input that is not the shape the <PaperLink href="/docs/paperapi/bridge/#errors">contract</PaperLink> says is refused before the handler runs, with a sentence that names the field.
+                The handler checks the rest, such as a city that is only spaces, before changing anything, so a refused call leaves nothing half done.
             </PaperText>
 
             <PaperText preset="subheader" as="h2" id="on-the-page">Show it on the page</PaperText>

@@ -177,39 +177,50 @@ $ bunx paperapi call dev.example.hello command.greet '{"name":"Grace"}'
             </PaperCode>
             <PaperText preset="body" as="p">
                 The count on the open Service page goes up at the same moment. The service owns the count, and every window mirrors it.
-                The Service page itself does not use the block. It asks the service with a call, <PaperCode>bridge.call("greet", name)</PaperCode>, which no other panel can make.
+                The Service page itself does not use the block. It asks the service with a call of the panel's <PaperLink href="/docs/paperapi/bridge/">contract</PaperLink>, <PaperCode>{"service.calls.greet({ name })"}</PaperCode>, which no other panel can make.
             </PaperText>
 
             <PaperText preset="subheader" as="h2" id="add-a-block">6. Add a block</PaperText>
             <PaperText preset="body" as="p">
                 Give the service a second block that sets the count back to zero, and a call so the page can use it.
-                Replace <PaperCode>src/service.ts</PaperCode> with this. The new parts are the <PaperCode>resetGreetings</PaperCode> call and the <PaperCode>reset-greetings</PaperCode> block.
+                A call starts in the contract, in <PaperCode>src/panel.ts</PaperCode>. Add <PaperCode>resetGreetings</PaperCode> to its calls. It takes nothing and gives nothing back:
             </PaperText>
             <PaperCode block language="tsx">
-{`import { blocksApi, definePanelService, type ServiceContext } from "@mileniumhq/paperapi";
+{`export const panelContract = defineContract(PANEL_ID, {
+    calls: {
+        greet: { input: shape.object({ name: shape.text() }), output: shape.text() },
+        resetGreetings: { output: shape.nothing() },
+    },
+    state: { shape: shape.object({ greetingCount: shape.number() }), initial: { greetingCount: 0 } },
+});`}
+            </PaperCode>
+            <PaperText preset="body" as="p">
+                Then replace <PaperCode>src/service.ts</PaperCode> with this. The new parts are the <PaperCode>resetGreetings</PaperCode> handler and the <PaperCode>reset-greetings</PaperCode> block.
+                Until the handler is there, the build fails: a service must answer every call of its contract.
+            </PaperText>
+            <PaperCode block language="tsx">
+{`import { blocksApi, definePanelService, type ContractContext } from "@mileniumhq/paperapi";
 import { buildGreeting } from "./lib/greet";
-import { DEFAULT_STATE, PANEL_ID, type PanelState } from "./panel";
+import { PANEL_ID, panelContract } from "./panel";
 
-type Ctx = ServiceContext<PanelState>;
+type Ctx = ContractContext<typeof panelContract>;
 
-function greet(ctx: Ctx, name: unknown): string {
+function greet(ctx: Ctx, name: string): string {
     const greeting = buildGreeting(name);
     ctx.setState({ greetingCount: ctx.state.greetingCount + 1 });
     return greeting;
 }
 
-function resetGreetings(ctx: Ctx): boolean {
+function resetGreetings(ctx: Ctx): void {
     ctx.setState({ greetingCount: 0 });
-    return true;
 }
 
 export default definePanelService({
-    id: PANEL_ID,
-    state: DEFAULT_STATE,
-    // what the panel's own page asks
+    contract: panelContract,
+    // what the panel's own page calls
     calls: {
-        greet: (ctx: Ctx, name?: unknown) => greet(ctx, name),
-        resetGreetings: (ctx: Ctx) => resetGreetings(ctx),
+        greet: ({ name }, ctx) => greet(ctx, name),
+        resetGreetings: (_input, ctx) => resetGreetings(ctx),
     },
     async onInit(ctx) {
         // what the Blocks panel and other panels can use
@@ -234,8 +245,6 @@ export default definePanelService({
                     description: "Sets the greeting count back to zero",
                     category: "General",
                     icon: "restart_alt",
-                    output: "boolean",
-                    outputName: "Reset",
                     run: () => resetGreetings(ctx),
                 },
             ],
@@ -252,7 +261,7 @@ export default definePanelService({
     const reset = async () => {
         setResetFailure("");
         try {
-            await bridge.call<boolean>("resetGreetings");
+            await service.calls.resetGreetings();
         } catch (err) {
             console.error("[Service] reset failed:", err);
             setResetFailure(errorMessage(err));
@@ -288,8 +297,7 @@ $ bunx paperapi restart
 ✓ Restarted dev.example.hello's service · ready in 58.6 ms
 
 $ bunx paperapi call dev.example.hello command.reset-greetings
-✓ dev.example.hello command.reset-greetings · 0.5 ms
-true`}
+✓ dev.example.hello command.reset-greetings · 0.5 ms`}
             </PaperCode>
             <PaperText preset="body" as="p">
                 <PaperCode>paperapi restart</PaperCode> runs the new service. The open window still shows the old page: right-click Hello in the list and choose Restart Panel, which restarts the service and reloads the page.

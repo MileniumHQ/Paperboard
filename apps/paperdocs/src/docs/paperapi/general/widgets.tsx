@@ -55,34 +55,30 @@ export default defineConfig({
 });`}
             </PaperCode>
             <PaperText preset="body" as="p">
-                The widget page's script calls <PaperCode>defineWidgets</PaperCode> with one mount function per declared widget id. This one reads the service's state through a <PaperLink href="/docs/paperapi/bridge/">panel bridge</PaperLink> and draws it with <PaperLink href="/docs/paperui/paperwidget/">PaperWidget</PaperLink>:
+                The widget page's script calls <PaperCode>defineWidgets</PaperCode> with one mount function per declared widget id. This one reads the service's state through a client of the panel's <PaperLink href="/docs/paperapi/bridge/">contract</PaperLink> and draws it with <PaperLink href="/docs/paperui/paperwidget/">PaperWidget</PaperLink>:
             </PaperText>
             <PaperCode block language="tsx">
 {`import { render } from "solid-js/web";
 import { createSignal, onCleanup, Show } from "solid-js";
 import { PaperProvider, PaperWidget, PaperWidgetStat } from "@mileniumhq/paperui";
-import { createPanelBridge, defineWidgets, type WidgetContext } from "@mileniumhq/paperapi";
+import { defineWidgets, errorMessage, serviceClient, type WidgetContext } from "@mileniumhq/paperapi";
 import "@mileniumhq/paperui/style.css";
-
-const PANEL_ID = "dev.example.weather";
-
-interface WeatherState {
-    forecasts: Record<string, { high: number; low: number }>;
-}
+import { weatherContract } from "./panel";
 
 function Forecast(props: { widget: WidgetContext }) {
     const city = props.widget.options.city;
-    const bridge = createPanelBridge<WeatherState>({ panelId: PANEL_ID, defaultState: { forecasts: {} } });
-    const [state, setState] = createSignal(bridge.getState());
+    // each placed tile makes its own client, and disposes its state when Home removes it
+    const weather = serviceClient(weatherContract);
+    const [state, setState] = createSignal(weather.state.current());
     const [error, setError] = createSignal("");
-    const off = bridge.onStateChange((_patch, full) => setState({ ...full }));
-    bridge.refreshState().then(
-        (full) => setState({ ...full }),
-        (err) => setError(err instanceof Error ? err.message : String(err)),
+    const off = weather.state.subscribe((full) => setState(full));
+    weather.state.refresh().then(
+        (full) => setState(full),
+        (err) => setError(errorMessage(err)),
     );
     onCleanup(() => {
         off();
-        bridge.dispose();
+        weather.state.dispose();
     });
 
     const forecast = () => (city ? state().forecasts[city] : undefined);
@@ -111,14 +107,28 @@ defineWidgets({
 });`}
             </PaperCode>
             <PaperText preset="body" as="p">
-                The service supplies the City dropdown that Home's widget gallery shows:
+                The contract, in <PaperCode>src/panel.ts</PaperCode>, says what the state is. The service supplies the City dropdown that Home's widget gallery shows:
             </PaperText>
             <PaperCode block language="tsx">
-{`import { definePanelService } from "@mileniumhq/paperapi";
+{`// src/panel.ts
+import { defineContract, shape } from "@mileniumhq/paperapi";
+
+export const weatherContract = defineContract("dev.example.weather", {
+    state: {
+        shape: shape.object({
+            cities: shape.list(shape.text()),
+            forecasts: shape.record(shape.object({ high: shape.number(), low: shape.number() })),
+        }),
+        initial: { cities: [], forecasts: {} },
+    },
+});
+
+// src/service.ts
+import { definePanelService } from "@mileniumhq/paperapi";
+import { weatherContract } from "./panel";
 
 definePanelService({
-    id: "dev.example.weather",
-    state: { cities: ["Oslo", "Lima"], forecasts: {} as Record<string, { high: number; low: number }> },
+    contract: weatherContract,
     widgetChoices: {
         forecast: {
             city: (ctx) => ctx.state.cities.map((city) => ({ value: city, label: city })),
@@ -261,7 +271,7 @@ widgetChoices?: Record<string, Record<string, (ctx: ServiceContext<TState>) => W
             <PaperText preset="subheader" as="h2" id="behavior">Behavior</PaperText>
             <PaperTextList>
                 <li>Home loads <PaperCode>widget.html</PaperCode> from the panel's origin, which serves <PaperCode>dist/widget.html</PaperCode>. Every widget of the panel shares that page, and each frame mounts the one widget the shell names.</li>
-                <li>A widget frame goes through the same start-up check as the panel page, plus the mount: the shell keeps it covered until the service answers, the widget is mounted, bridges are hydrated and it has painted. See <PaperLink href="/docs/paperapi/connection/#readiness">Readiness</PaperLink>.</li>
+                <li>A widget frame goes through the same start-up check as the panel page, plus the mount: the shell keeps it covered until the service answers, the widget is mounted, its state mirrors have read the state and it has painted. See <PaperLink href="/docs/paperapi/connection/#readiness">Readiness</PaperLink>.</li>
                 <li>The widget page holds the same credential as the panel page and can call every API, except the windows the shell opens for a panel page: <PaperCode>fileApi.exportFile</PaperCode> and the imports, and <PaperCode>backupApi.chooseLocation</PaperCode>. Call <PaperCode>openPanel()</PaperCode> for those.</li>
                 <li>A back swipe in a widget stays in the widget.</li>
             </PaperTextList>
@@ -283,7 +293,7 @@ widgetChoices?: Record<string, Record<string, (ctx: ServiceContext<TState>) => W
             </PaperTable>
             <PaperText preset="body" as="p">
                 The limits are exported: <PaperCode>MAX_WIDGETS_PER_PANEL</PaperCode>, <PaperCode>MAX_SIZES_PER_WIDGET</PaperCode>, <PaperCode>MAX_OPTIONS_PER_WIDGET</PaperCode>, <PaperCode>WIDGET_MAX_WIDTH</PaperCode>, <PaperCode>WIDGET_MAX_HEIGHT</PaperCode>, <PaperCode>MAX_WIDGET_CHOICES</PaperCode>, with <PaperCode>validateWidgetDeclarations</PaperCode> and <PaperCode>parseWidgetChoices</PaperCode>.
-                Next: <PaperLink href="/docs/paperapi/bridge/">createPanelBridge</PaperLink>.
+                Next: <PaperLink href="/docs/paperapi/bridge/">defineContract</PaperLink>.
             </PaperText>
         </PaperFlex>
     );

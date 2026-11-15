@@ -39,7 +39,7 @@
                     "name": "Blocks API"
                 },
                 "bridge": {
-                    "name": "Bridge API"
+                    "name": "Contract API"
                 },
                 "service": {
                     "name": "Service API"

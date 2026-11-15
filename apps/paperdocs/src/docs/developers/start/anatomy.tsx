@@ -78,11 +78,11 @@ export default function AnatomyDoc() {
                     <tr><td><PaperCode>bunfig.toml</PaperCode></td><td>Loads <PaperCode>test/hermetic.ts</PaperCode> before every test run.</td></tr>
                     <tr><td><PaperCode>index.html</PaperCode></td><td>The panel page. Its mount element has the id <PaperCode>app</PaperCode>, which PaperUI's <PaperCode>panel.css</PaperCode> sizes to the frame.</td></tr>
                     <tr><td><PaperCode>widget.html</PaperCode></td><td>The page every widget of the panel shares.</td></tr>
-                    <tr><td><PaperCode>src/panel.ts</PaperCode></td><td>What all three programs agree on: <PaperCode>PANEL_ID</PaperCode>, the state's type and its starting value. It imports nothing, so it runs in the browser and in Node.</td></tr>
+                    <tr><td><PaperCode>src/panel.ts</PaperCode></td><td>What all three programs agree on: <PaperCode>PANEL_ID</PaperCode> and the <PaperLink href="/docs/paperapi/bridge/">contract</PaperLink>, the service's calls and its state with its starting value. It imports only PaperAPI, so it runs in the browser and in Node.</td></tr>
                     <tr><td><PaperCode>src/index.tsx</PaperCode></td><td>Renders <PaperCode>App</PaperCode> inside <PaperLink href="/docs/paperui/paperprovider/">PaperProvider</PaperLink>, which every PaperUI page needs at its root.</td></tr>
                     <tr><td><PaperCode>src/App.tsx</PaperCode></td><td>The menu and the page it picked, laid out by <PaperLink href="/docs/paperui/paperpanel/">PaperPanel</PaperLink>. It imports PaperUI's two stylesheets.</td></tr>
                     <tr><td><PaperCode>src/pages/</PaperCode></td><td>One file per page. <PaperCode>CounterPage</PaperCode> keeps state in the window, <PaperCode>NotesPage</PaperCode> in the panel's config, <PaperCode>ServicePage</PaperCode> in the service.</td></tr>
-                    <tr><td><PaperCode>src/service.ts</PaperCode></td><td>The service: its state, its calls, its blocks and its start-up work, through <PaperLink href="/docs/paperapi/service/">definePanelService</PaperLink>.</td></tr>
+                    <tr><td><PaperCode>src/service.ts</PaperCode></td><td>The service: a handler for each call of the contract, its blocks and its start-up work, through <PaperLink href="/docs/paperapi/service/">definePanelService</PaperLink>.</td></tr>
                     <tr><td><PaperCode>src/widget.tsx</PaperCode></td><td>The widget page's mount functions, through <PaperLink href="/docs/paperapi/widgets/">defineWidgets</PaperLink>.</td></tr>
                     <tr><td><PaperCode>src/widget.css</PaperCode></td><td>Gives the widget page a full-height, painted body.</td></tr>
                     <tr><td><PaperCode>src/lib/</PaperCode></td><td>Logic with no PaperAPI and no interface in it, such as <PaperCode>greet.ts</PaperCode>. Code here is what the unit tests reach.</td></tr>
@@ -146,17 +146,20 @@ export default function AnatomyDoc() {
 
             <PaperText preset="subheader" as="h2" id="panel-id">Pass the panel id</PaperText>
             <PaperText preset="body" as="p">
-                <PaperCode>src/panel.ts</PaperCode> exports <PaperCode>PANEL_ID</PaperCode>, and every PaperAPI call that takes a panel id gets it: <PaperCode>configApi.get(PANEL_ID)</PaperCode>, <PaperCode>{"createPanelBridge({ panelId: PANEL_ID })"}</PaperCode>, <PaperCode>{"definePanelService({ id: PANEL_ID })"}</PaperCode>.
+                <PaperCode>src/panel.ts</PaperCode> exports <PaperCode>PANEL_ID</PaperCode>, and every PaperAPI call that takes a panel id gets it: <PaperCode>configApi.get(PANEL_ID)</PaperCode>, <PaperCode>{"blocksApi.panel(PANEL_ID)"}</PaperCode>, <PaperCode>{"defineContract(PANEL_ID, { ... })"}</PaperCode>. The service and the page take it from the contract.
                 Without it, PaperAPI works the id out from where the code runs. Passing it keeps every call pointed at this panel, wherever the code ends up.
             </PaperText>
             <PaperCode block language="tsx">
-{`export const PANEL_ID = "dev.example.hello";
+{`import { defineContract, shape } from "@mileniumhq/paperapi";
 
-export interface PanelState {
-    greetingCount: number;
-}
+export const PANEL_ID = "dev.example.hello";
 
-export const DEFAULT_STATE: PanelState = { greetingCount: 0 };`}
+export const panelContract = defineContract(PANEL_ID, {
+    calls: {
+        greet: { input: shape.object({ name: shape.text() }), output: shape.text() },
+    },
+    state: { shape: shape.object({ greetingCount: shape.number() }), initial: { greetingCount: 0 } },
+});`}
             </PaperCode>
 
             <PaperText preset="subheader" as="h2" id="data">Where the panel's data lives</PaperText>
@@ -175,7 +178,7 @@ export const DEFAULT_STATE: PanelState = { greetingCount: 0 };`}
                     <tr><td>Settings and small JSON documents</td><td><PaperLink href="/docs/paperapi/config/">configApi</PaperLink></td><td><PaperCode>configs/&lt;id&gt;.json</PaperCode>, and <PaperCode>files/&lt;id&gt;/</PaperCode> for named documents</td></tr>
                     <tr><td>Files</td><td><PaperLink href="/docs/paperapi/file/">fileApi</PaperLink></td><td><PaperCode>files/&lt;id&gt;/</PaperCode></td></tr>
                     <tr><td>API keys, tokens, passwords</td><td><PaperLink href="/docs/paperapi/secrets/">secretsApi</PaperLink></td><td><PaperCode>local/secrets.json</PaperCode></td></tr>
-                    <tr><td>The service's state</td><td><PaperLink href="/docs/paperapi/service/">definePanelService</PaperLink></td><td>Nowhere: it lives in memory and starts again from <PaperCode>state</PaperCode> on every service start</td></tr>
+                    <tr><td>The service's state</td><td><PaperLink href="/docs/paperapi/service/">definePanelService</PaperLink></td><td>Nowhere: it lives in memory and starts again from the contract's <PaperCode>initial</PaperCode> state on every service start</td></tr>
                 </tbody>
             </PaperTable>
             <PaperText preset="body" as="p">

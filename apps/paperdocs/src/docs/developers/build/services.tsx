@@ -7,55 +7,62 @@ import {
     PaperTextList,
 } from "@mileniumhq/paperui";
 
-const PANEL_TS = `// What the page, the service and the widget agree on. It runs in the
-// browser and in Node, so it imports nothing from either.
+const PANEL_TS = `// What the page, the service and the widget agree on: the state, the
+// calls, and the shapes they are made of. It runs in the browser and in
+// Node, so it imports nothing from either.
+import { defineContract, shape, type Infer } from "@mileniumhq/paperapi";
+
 export const PANEL_ID = "dev.example.weather";
 
-export type Units = "metric" | "imperial";
+const units = shape.oneOf("metric", "imperial");
+export type Units = Infer<typeof units>;
 
-export interface Forecast {
-    city: string;
-    temperature: number;
-    high: number;
-    low: number;
-    summary: string;
-    checkedAt: number;
-}
+const forecast = shape.object({
+    city: shape.text(),
+    temperature: shape.number(),
+    high: shape.number(),
+    low: shape.number(),
+    summary: shape.text(),
+    checkedAt: shape.number(),
+});
+export type Forecast = Infer<typeof forecast>;
 
 /** Saved with configApi. The service is its only writer. */
-export interface WeatherSettings {
-    cities: string[];
-    units: Units;
-}
+const settings = shape.object({ cities: shape.list(shape.text()), units });
+export type WeatherSettings = Infer<typeof settings>;
 
 /** What the service holds in memory and every window mirrors. */
-export interface WeatherState {
-    settings: WeatherSettings;
-    forecasts: Record<string, Forecast>;
+const weatherState = shape.object({
+    settings,
+    forecasts: shape.record(forecast),
     /** the reason each city's last check failed, by city */
-    failures: Record<string, string>;
-    hasKey: boolean;
+    failures: shape.record(shape.text()),
+    hasKey: shape.boolean(),
     /** set when the saved settings could not be read */
-    loadError: string | null;
-}
+    loadError: shape.nullable(shape.text()),
+});
+export type WeatherState = Infer<typeof weatherState>;
 
 export const DEFAULT_SETTINGS: WeatherSettings = { cities: [], units: "metric" };
 
-export const DEFAULT_STATE: WeatherState = {
-    settings: DEFAULT_SETTINGS,
-    forecasts: {},
-    failures: {},
-    hasKey: false,
-    loadError: null,
-};
+export const API_KEY_SECRET = "openweather-key";
 
-export const API_KEY_SECRET = "openweather-key";`;
+/** What the page asks the service, and the state every window mirrors. */
+export const weatherContract = defineContract(PANEL_ID, {
+    state: {
+        shape: weatherState,
+        initial: { settings: DEFAULT_SETTINGS, forecasts: {}, failures: {}, hasKey: false, loadError: null },
+    },
+    calls: {
+        followCity: { input: shape.object({ city: shape.text() }), output: shape.nothing() },
+    },
+});`;
 
-const SERVICE_TS = `import { configApi, definePanelService, errorMessage, secretsApi, type ServiceContext } from "@mileniumhq/paperapi";
+const SERVICE_TS = `import { configApi, definePanelService, errorMessage, secretsApi, type ContractContext } from "@mileniumhq/paperapi";
 import { cityName, currentWeatherUrl, readCurrentWeather } from "./lib/openWeather";
-import { API_KEY_SECRET, DEFAULT_SETTINGS, DEFAULT_STATE, PANEL_ID, type WeatherSettings, type WeatherState } from "./panel";
+import { API_KEY_SECRET, DEFAULT_SETTINGS, PANEL_ID, weatherContract, type WeatherSettings } from "./panel";
 
-type Ctx = ServiceContext<WeatherState>;
+type Ctx = ContractContext<typeof weatherContract>;
 
 const REFRESH_EVERY_MS = 15 * 60 * 1000;
 
@@ -86,20 +93,19 @@ async function refreshAll(ctx: Ctx): Promise<void> {
 }
 
 export default definePanelService({
-    id: PANEL_ID,
-    state: DEFAULT_STATE,
-    // what the panel's own page asks the service: bridge.call("followCity", { city })
+    // the panel's id and its starting state come with the contract
+    contract: weatherContract,
+    // one handler per call of the contract: service.followCity({ city }) on the page
     calls: {
-        followCity: async (ctx: Ctx, input?: { city?: string }) => {
-            const city = cityName(input?.city);
+        followCity: async (input, ctx) => {
+            const city = cityName(input.city);
             const { settings } = ctx.state;
             if (settings.cities.includes(city)) throw new Error(\`Weather already follows \${city}\`);
             await saveSettings(ctx, { ...settings, cities: [...settings.cities, city] });
             await refreshCity(ctx, city);
-            return true;
         },
     },
-    async onInit(ctx: Ctx) {
+    async onInit(ctx) {
         try {
             const saved = await configApi.get<WeatherSettings>(PANEL_ID);
             const stored = await secretsApi.get(API_KEY_SECRET, PANEL_ID);
@@ -116,16 +122,19 @@ export default definePanelService({
     },
 });`;
 
-const WEATHER_TS = `// The page's one bridge to the service. Made when the page loads, so the
-// shell waits for its first answer before it shows the panel.
+const WEATHER_TS = `// The page's one client for the service. Its state is read when the page
+// loads, so the shell waits for the first answer before it shows the panel.
 import { createSignal } from "solid-js";
-import { createPanelBridge } from "@mileniumhq/paperapi";
-import { DEFAULT_STATE, PANEL_ID, type WeatherState } from "./panel";
+import { serviceClient } from "@mileniumhq/paperapi";
+import { weatherContract, type WeatherState } from "./panel";
 
-export const bridge = createPanelBridge<WeatherState>({ panelId: PANEL_ID, defaultState: DEFAULT_STATE });
+const client = serviceClient(weatherContract);
 
-const [state, setState] = createSignal<WeatherState>(bridge.getState());
-bridge.onStateChange((_patch, full) => setState({ ...full }));
+/** The service's calls: service.followCity({ city }). */
+export const service = client.calls;
+
+const [state, setState] = createSignal<WeatherState>(client.state.current());
+client.state.subscribe((full) => setState(full));
 
 /** The service's state, updated on every change it sends. */
 export const weather = state;`;
@@ -156,7 +165,7 @@ export default function ServicesDoc() {
             <PaperText preset="body" as="p">
                 A panel made with <PaperCode>npm create @mileniumhq/panel</PaperCode>, as in <PaperLink href="/docs/developers/first-panel/">Your first panel</PaperLink>.
                 Its <PaperCode>src/service.ts</PaperCode> builds to <PaperCode>dist/service.js</PaperCode>, which the manifest names in <PaperCode>service</PaperCode>.
-                Every function used here is in the <PaperLink href="/docs/paperapi/service/">definePanelService</PaperLink> and <PaperLink href="/docs/paperapi/bridge/">createPanelBridge</PaperLink> references.
+                Every function used here is in the <PaperLink href="/docs/paperapi/service/">definePanelService</PaperLink> and <PaperLink href="/docs/paperapi/bridge/">Contract API</PaperLink> references.
             </PaperText>
 
             <PaperText preset="subheader" as="h2" id="when-you-need-one">When a panel needs a service</PaperText>
@@ -178,14 +187,16 @@ export default function ServicesDoc() {
 
             <PaperText preset="subheader" as="h2" id="shape-the-state">Shape the state</PaperText>
             <PaperText preset="body" as="p">
-                Write the state's type in a file that the service, the page and the widget all import.
-                Weather keeps it in <PaperCode>src/panel.ts</PaperCode>, next to the panel id and the defaults:
+                Write the state's shape in a file that the service, the page and the widget all import, and its type comes from it with <PaperCode>Infer</PaperCode>.
+                The <PaperLink href="/docs/paperapi/bridge/">contract</PaperLink> in the same file says what the state starts as and which calls the page can make.
+                Weather keeps them in <PaperCode>src/panel.ts</PaperCode>, next to the panel id:
             </PaperText>
             <PaperCode block language="tsx">{PANEL_TS}</PaperCode>
             <PaperTextList>
                 <li>Put in the state everything a window shows: the settings, the results, and the reason each thing failed. A page that needs something not in the state has to ask for it, and a widget has to ask again.</li>
                 <li>Keep the state plain JSON. It travels to every window as JSON.</li>
                 <li>Never put a key, a token or a password in the state. Every page and widget of the panel receives it. Weather keeps only <PaperCode>hasKey</PaperCode>. See <PaperLink href="/docs/developers/settings-and-secrets/">Settings and secrets</PaperLink>.</li>
+                <li>The service refuses a change its shape doesn't allow, so a typo in a field name throws where it was made instead of reaching every window.</li>
                 <li>This file runs in the browser and in Node, so it imports neither.</li>
             </PaperTextList>
 
@@ -205,7 +216,7 @@ export default function ServicesDoc() {
 
             <PaperText preset="title" as="h3" id="start-up">Rebuild the state in onInit</PaperText>
             <PaperText preset="body" as="p">
-                The state lives in memory. The service starts from <PaperCode>state</PaperCode> every time it starts: when Paperboard starts, after a crash, after an update, and on every restart.
+                The state lives in memory. The service starts from the contract's <PaperCode>initial</PaperCode> state every time it starts: when Paperboard starts, after a crash, after an update, and on every restart.
                 <PaperCode>onInit</PaperCode> runs before the service reports ready, and is where it reads back what it saved.
             </PaperText>
             <PaperTextList>
@@ -231,18 +242,18 @@ export default function ServicesDoc() {
 
             <PaperText preset="title" as="h3" id="calls">Answer the page with calls</PaperText>
             <PaperText preset="body" as="p">
-                <PaperCode>calls</PaperCode> is what the panel's own page asks its service to do. Each call gets one optional input, any JSON, and what it returns goes back to the page. Returning nothing gives the page <PaperCode>null</PaperCode>.
+                <PaperCode>calls</PaperCode> has one handler for each call of the contract. A handler is given the call's input, already checked against its shape, and what it returns goes back to the page. <PaperCode>followCity</PaperCode>'s output is <PaperCode>shape.nothing()</PaperCode>, so it returns nothing.
             </PaperText>
             <PaperTextList>
-                <li>A call that throws rejects the page's <PaperCode>bridge.call</PaperCode> with the same message. Throw a sentence the person can act on.</li>
+                <li>A handler that throws rejects the page's call with the same message. Throw a sentence the person can act on.</li>
                 <li>Calls are private to the panel. No other panel, flow or agent can run one, and none is listed. What they should be able to do is a block: see <PaperLink href="/docs/developers/blocks/">Expose blocks</PaperLink>.</li>
-                <li>Tell the page that something happened with <PaperCode>ctx.emit(event, payload)</PaperCode>. The page hears it with <PaperCode>bridge.on(event, callback)</PaperCode>. Use it for what is not state, such as a line of output.</li>
-                <li>Check the input of every call. The page is trusted no more than a person is: <PaperCode>cityName</PaperCode> refuses an empty city.</li>
+                <li>Tell the page that something happened with an event: declare it in the contract's <PaperCode>events</PaperCode>, fire it with <PaperCode>ctx.emit(event, payload)</PaperCode>, and the page hears it through its client's <PaperCode>events</PaperCode>. Use it for what is not state, such as a line of output.</li>
+                <li>The contract checks the input's shape: <PaperCode>{"{ town: \"Oslo\" }"}</PaperCode> is refused before the handler runs. Check what the value may be in the handler. The page is trusted no more than a person is: <PaperCode>cityName</PaperCode> refuses an empty city.</li>
             </PaperTextList>
 
             <PaperText preset="subheader" as="h2" id="mirror-on-the-page">Mirror the state on the page</PaperText>
             <PaperText preset="body" as="p">
-                The page makes one bridge when it loads and keeps the state in a Solid signal.
+                The page makes one client from the contract when it loads and keeps the state in a Solid signal.
                 Weather keeps both in <PaperCode>src/weather.ts</PaperCode>, so every page of the panel imports the same ones:
             </PaperText>
             <PaperCode block language="tsx">{WEATHER_TS}</PaperCode>
@@ -251,9 +262,9 @@ export default function ServicesDoc() {
             </PaperText>
             <PaperCode block language="tsx">{PAGE_USE}</PaperCode>
             <PaperTextList>
-                <li>Make the bridge at module level, not inside a component. Paperboard waits for the bridges a page makes as it loads before it shows the panel, and shows the failure in place of the panel when one can't reach the service.</li>
-                <li>The page changes state only by calling the service, with <PaperCode>{"bridge.call(\"followCity\", { city })"}</PaperCode>. The service's <PaperCode>setState</PaperCode> then reaches every window, including the one that called.</li>
-                <li><PaperCode>bridge.call</PaperCode> rejects with the message the call threw. Show it. See <PaperLink href="/docs/developers/errors/">Show every failure</PaperLink>.</li>
+                <li>Make the client and read its state at module level, not inside a component. Paperboard waits for the state a page reads as it loads before it shows the panel, and shows the failure in place of the panel when it can't reach the service.</li>
+                <li>The page changes state only by calling the service, with <PaperCode>{"service.followCity({ city })"}</PaperCode>. The service's <PaperCode>setState</PaperCode> then reaches every window, including the one that called.</li>
+                <li>A call rejects with the message the handler threw, or with why its input was refused. Show it. See <PaperLink href="/docs/developers/errors/">Show every failure</PaperLink>.</li>
             </PaperTextList>
 
             <PaperText preset="subheader" as="h2" id="programs">Run other programs</PaperText>

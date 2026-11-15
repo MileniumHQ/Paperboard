@@ -52,7 +52,8 @@ import {
     PaperStatTile,
     showToast,
 } from "@mileniumhq/paperui";
-import { bridge, errorMessage, weather } from "../weather";
+import { errorMessage } from "@mileniumhq/paperapi";
+import { service, weather } from "../weather";
 
 export default function ForecastPage(props: { openSettings: () => void }) {
     const [city, setCity] = createSignal("");
@@ -61,7 +62,7 @@ export default function ForecastPage(props: { openSettings: () => void }) {
     const follow = async () => {
         setBusy(true);
         try {
-            await bridge.call<boolean>("followCity", { city: city() });
+            await service.followCity({ city: city() });
             setCity("");
         } catch (err) {
             showToast({ variant: "danger", title: "City not added", message: errorMessage(err) });

@@ -286,7 +286,7 @@ Ready: Paperboard can run this panel.`}
             <PaperText preset="subheader" as="h2" id="call">call</PaperText>
             <PaperText preset="body" as="p">
                 The name decides what runs. A name shaped like a block, <PaperCode>command.get-forecast</PaperCode>, <PaperCode>value.player-count</PaperCode> or <PaperCode>server1/command.kick</PaperCode> for a block in a project, runs that block, and the inputs are one JSON object that names each input.
-                Any other name, such as <PaperCode>followCity</PaperCode>, runs the call of that name that the panel's service declares in <PaperCode>definePanelService</PaperCode>, and the inputs are any one JSON value.
+                Any other name, such as <PaperCode>followCity</PaperCode>, runs that call of the panel's <PaperLink href="/docs/paperapi/bridge/">contract</PaperLink>, and the inputs are the call's input as JSON. The service checks them against the call's shape, as it does for the page.
                 The result is printed as indented JSON on standard output, after a status line on standard error with the time the call took.
             </PaperText>
             <PaperText preset="body" as="p">

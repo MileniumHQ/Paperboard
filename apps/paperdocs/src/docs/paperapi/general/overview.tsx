@@ -87,8 +87,8 @@ export default function PaperApiOverviewDoc() {
                     <tr><td><PaperLink href="/docs/paperapi/backups/">backupApi</PaperLink></td><td>Backups of the panel's files and config, made now or on a schedule.</td></tr>
                     <tr><td><PaperLink href="/docs/paperapi/problems/">problemsApi</PaperLink></td><td>Failures no button was waiting for, shown on the panel's row until fixed or dismissed.</td></tr>
                     <tr><td><PaperLink href="/docs/paperapi/blocks/">blocksApi</PaperLink></td><td>Blocks: the commands, values and events other panels, flows and agents use.</td></tr>
-                    <tr><td><PaperLink href="/docs/paperapi/service/">definePanelService</PaperLink></td><td>The service's entry point: state, calls and lifecycle hooks.</td></tr>
-                    <tr><td><PaperLink href="/docs/paperapi/bridge/">createPanelBridge</PaperLink></td><td>The panel page's view of its service: state and calls.</td></tr>
+                    <tr><td><PaperLink href="/docs/paperapi/service/">definePanelService</PaperLink></td><td>The service's entry point: the contract's handlers, state and lifecycle hooks.</td></tr>
+                    <tr><td><PaperLink href="/docs/paperapi/bridge/">defineContract</PaperLink>, <PaperCode>serviceClient</PaperCode></td><td>What the panel page and its service agree on, and the page's typed client: calls, events and state.</td></tr>
                     <tr><td><PaperLink href="/docs/paperapi/widgets/">defineWidgets</PaperLink></td><td>The widget page's mount functions.</td></tr>
                     <tr><td><PaperLink href="/docs/paperapi/system/">systemApi</PaperLink></td><td>Facts about the computer: OS, address, GPUs, usage.</td></tr>
                     <tr><td><PaperLink href="/docs/paperapi/panels/">panelsApi</PaperLink></td><td>Installed panels and the Panel Library.</td></tr>

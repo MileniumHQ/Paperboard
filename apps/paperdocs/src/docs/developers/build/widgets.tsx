@@ -65,27 +65,28 @@ const WIDGET_TSX = `// The Forecast widget: one followed city's temperature on H
 import { render } from "solid-js/web";
 import { createSignal, onCleanup, Show } from "solid-js";
 import { PaperButton, PaperProvider, PaperWidget, PaperWidgetMessage, PaperWidgetStat } from "@mileniumhq/paperui";
-import { createPanelBridge, defineWidgets, errorMessage, type WidgetContext } from "@mileniumhq/paperapi";
+import { defineWidgets, errorMessage, serviceClient, type WidgetContext } from "@mileniumhq/paperapi";
 import "@mileniumhq/paperui/style.css";
 import "./widget.css";
-import { DEFAULT_STATE, PANEL_ID, type WeatherState } from "./panel";
+import { weatherContract, type WeatherState } from "./panel";
 
 function Forecast(props: { widget: WidgetContext }) {
     const city = props.widget.options.city;
-    const bridge = createPanelBridge<WeatherState>({ panelId: PANEL_ID, defaultState: DEFAULT_STATE });
+    // each placed tile mirrors the service's state for as long as it is shown
+    const weather = serviceClient(weatherContract);
     const [state, setState] = createSignal<WeatherState | null>(null);
     const [failure, setFailure] = createSignal("");
 
-    const off = bridge.onStateChange((_patch, full) => setState({ ...full }));
+    const off = weather.state.subscribe((full) => setState(full));
     onCleanup(() => {
         off();
-        bridge.dispose();
+        weather.state.dispose();
     });
 
     const load = async () => {
         setFailure("");
         try {
-            setState({ ...(await bridge.refreshState()) });
+            setState(await weather.state.refresh());
         } catch (err) {
             setFailure(errorMessage(err));
         }
@@ -224,8 +225,8 @@ export default function WidgetsGuideDoc() {
             <PaperCode block language="tsx">{WIDGET_TSX}</PaperCode>
             <PaperTextList>
                 <li>The tile is a <PaperCode>PaperWidget</PaperCode> with a title and icon. <PaperCode>onPress</PaperCode> makes the whole tile a button, here to open the panel.</li>
-                <li>A widget is its own page, with no access to the panel page's signals. It makes its own bridge, reads the state once with <PaperCode>refreshState</PaperCode>, and follows it with <PaperCode>onStateChange</PaperCode>.</li>
-                <li><PaperCode>onCleanup</PaperCode> disposes the bridge when Home removes the tile. Every placed copy of the widget makes a bridge, and a page that keeps too many open fails with <PaperCode>Too many panel bridges; dispose unused bridges</PaperCode>.</li>
+                <li>A widget is its own page, with no access to the panel page's signals. It makes its own client from the <PaperLink href="/docs/paperapi/bridge/">contract</PaperLink>, reads the state once with <PaperCode>state.refresh()</PaperCode>, and follows it with <PaperCode>state.subscribe</PaperCode>.</li>
+                <li><PaperCode>onCleanup</PaperCode> disposes the client's state when Home removes the tile. Every placed copy of the widget mirrors the state, and a page that keeps 128 mirrors open fails with <PaperCode>Too many state mirrors on this page; dispose the ones no longer shown</PaperCode>.</li>
                 <li><PaperCode>widget.options.city</PaperCode> is what the person picked in the gallery. It is fixed for the tile's life: picking another city means placing the widget again.</li>
             </PaperTextList>
 

@@ -14,12 +14,18 @@ async function saveSettings(ctx: Ctx, settings: WeatherSettings): Promise<void> 
     ctx.setState({ settings });
 }`;
 
-const SET_UNITS = `// in definePanelService's calls
-setUnits: async (ctx: Ctx, input?: { units?: string }) => {
-    if (input?.units !== "metric" && input?.units !== "imperial") throw new Error("Units are metric or imperial");
-    await saveSettings(ctx, { ...ctx.state.settings, units: input.units });
+const CONTRACT_CALLS = `// in src/panel.ts, the contract's calls
+calls: {
+    followCity: { input: shape.object({ city: shape.text() }), output: shape.nothing() },
+    setUnits: { input: shape.object({ units }), output: shape.nothing() },
+    /** reads the API key again after the settings page saved or removed it */
+    keyChanged: { output: shape.nothing() },
+},`;
+
+const SET_UNITS = `// in definePanelService's calls: units is "metric" or "imperial", or the call was refused
+setUnits: async ({ units }, ctx) => {
+    await saveSettings(ctx, { ...ctx.state.settings, units });
     await refreshAll(ctx);
-    return true;
 },`;
 
 const READ_KEY = `async function readKey(): Promise<string> {
@@ -29,11 +35,10 @@ const READ_KEY = `async function readKey(): Promise<string> {
 }`;
 
 const KEY_CHANGED = `// reads the API key again after the settings page saved or removed it
-keyChanged: async (ctx: Ctx) => {
+keyChanged: async (_input, ctx) => {
     const stored = await secretsApi.get(API_KEY_SECRET, PANEL_ID);
     ctx.setState({ hasKey: stored.found });
     await refreshAll(ctx);
-    return true;
 },`;
 
 const SETTINGS_PAGE = `import { createSignal, Show } from "solid-js";
@@ -51,9 +56,9 @@ import {
     PaperText,
     showToast,
 } from "@mileniumhq/paperui";
-import { secretsApi } from "@mileniumhq/paperapi";
+import { errorMessage, secretsApi } from "@mileniumhq/paperapi";
 import { API_KEY_SECRET, PANEL_ID } from "../panel";
-import { bridge, errorMessage, weather } from "../weather";
+import { service, weather } from "../weather";
 
 export default function SettingsPage() {
     const [key, setKey] = createSignal("");
@@ -61,7 +66,8 @@ export default function SettingsPage() {
 
     const setUnits = async (units: string | number) => {
         try {
-            await bridge.call<boolean>("setUnits", { units });
+            if (units !== "metric" && units !== "imperial") throw new Error(\`"\${units}" is not a unit Weather knows\`);
+            await service.setUnits({ units });
         } catch (err) {
             showToast({ variant: "danger", title: "Units not changed", message: errorMessage(err) });
         }
@@ -72,7 +78,7 @@ export default function SettingsPage() {
             // the key goes to the vault; the service reads it from there
             await secretsApi.set(API_KEY_SECRET, key(), PANEL_ID);
             setKey("");
-            await bridge.call<boolean>("keyChanged");
+            await service.keyChanged();
         } catch (err) {
             showToast({ variant: "danger", title: "API key not saved", message: errorMessage(err) });
         }
@@ -82,7 +88,7 @@ export default function SettingsPage() {
         setConfirmRemove(false);
         try {
             await secretsApi.delete(API_KEY_SECRET, PANEL_ID);
-            await bridge.call<boolean>("keyChanged");
+            await service.keyChanged();
         } catch (err) {
             showToast({ variant: "danger", title: "API key not removed", message: errorMessage(err) });
         }
@@ -188,11 +194,12 @@ export default function SettingsAndSecretsDoc() {
             </PaperText>
             <PaperCode block language="tsx">{SAVE_SETTINGS}</PaperCode>
             <PaperText preset="body" as="p">
-                The page changes a setting by calling the service, which checks the value before it saves:
+                The page changes a setting by calling the service. The call goes in the contract, whose <PaperCode>units</PaperCode> shape is <PaperCode>{"shape.oneOf(\"metric\", \"imperial\")"}</PaperCode>, so the service refuses any other value before the handler runs:
             </PaperText>
+            <PaperCode block language="tsx">{CONTRACT_CALLS}</PaperCode>
             <PaperCode block language="tsx">{SET_UNITS}</PaperCode>
             <PaperTextList>
-                <li>A call in <PaperCode>calls</PaperCode> is internal: the Blocks panel and agents never see it, and other panels are refused. Only the panel's own pages call it. See <PaperLink href="/docs/developers/blocks/#calls">Expose blocks</PaperLink>.</li>
+                <li>A call of the contract is internal: the Blocks panel and agents never see it, and other panels are refused. Only the panel's own pages call it. See <PaperLink href="/docs/developers/blocks/#calls">Expose blocks</PaperLink>.</li>
                 <li><PaperCode>configApi.get</PaperCode> resolves with <PaperCode>null</PaperCode> before the first save. Weather starts from <PaperCode>{"{ ...DEFAULT_SETTINGS, ...saved }"}</PaperCode> in <PaperCode>onInit</PaperCode>, so a setting added in a later version gets its default.</li>
                 <li>Settings are in the state, so every window shows the current value without asking.</li>
             </PaperTextList>

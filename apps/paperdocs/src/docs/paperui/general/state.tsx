@@ -230,7 +230,7 @@ createStateSignal<T>(initial: T): [Accessor<T>, (next: T | ((prev: T) => T)) => 
 {`import { createStateSignal } from "@mileniumhq/paperui";
 
 const [players, setPlayers] = createStateSignal<Player[]>([]);
-bridge.onStateChange((state) => setPlayers(state.players));
+service.state.subscribe((state) => setPlayers(state.players));
 
 <For each={players()}>{(player) => <PlayerRow player={player} />}</For>`}
             </PaperCode>

@@ -7,11 +7,11 @@ import {
     PaperTextList,
 } from "@mileniumhq/paperui";
 
-const REGISTER_BLOCKS = `import { blocksApi, type ServiceContext } from "@mileniumhq/paperapi";
+const REGISTER_BLOCKS = `import { blocksApi, type ContractContext } from "@mileniumhq/paperapi";
 import { cityName, fetchForecast } from "./lib/openWeather";
-import { PANEL_ID, type WeatherState } from "./panel";
+import { PANEL_ID, weatherContract } from "./panel";
 
-type Ctx = ServiceContext<WeatherState>;
+type Ctx = ContractContext<typeof weatherContract>;
 
 export const weatherBlocks = blocksApi.panel(PANEL_ID);
 
@@ -207,7 +207,7 @@ export default function BlocksGuideDoc() {
             <PaperCode block language="tsx">{FOLLOW_CITY}</PaperCode>
             <PaperCode block language="tsx">{FOLLOW_BLOCK}</PaperCode>
             <PaperText preset="body" as="p">
-                The call in <PaperCode>definePanelService</PaperCode> is <PaperCode>{"followCity: (ctx, input) => followCity(ctx, input?.city)"}</PaperCode>. <PaperCode>unfollow-city</PaperCode> has the same shape.
+                The call in <PaperCode>definePanelService</PaperCode> is <PaperCode>{"followCity: (input, ctx) => followCity(ctx, input.city)"}</PaperCode>. <PaperCode>unfollow-city</PaperCode> has the same shape.
             </PaperText>
 
             <PaperText preset="subheader" as="h2" id="events">An event</PaperText>
@@ -228,8 +228,8 @@ export default function BlocksGuideDoc() {
 
             <PaperText preset="subheader" as="h2" id="calls">Keep the page's calls private</PaperText>
             <PaperText preset="body" as="p">
-                The page asks the service to do things through <PaperCode>calls</PaperCode>, such as <PaperCode>setUnits</PaperCode> in <PaperLink href="/docs/developers/settings-and-secrets/#settings">Settings and secrets</PaperLink>.
-                They need no <PaperCode>text</PaperCode>, <PaperCode>category</PaperCode> or <PaperCode>icon</PaperCode>, since nothing shows them. Check their input all the same: <PaperCode>paperapi call</PaperCode> reaches them, and a bug in the page can send anything.
+                The page asks the service to do things through the calls of its <PaperLink href="/docs/paperapi/bridge/">contract</PaperLink>, such as <PaperCode>setUnits</PaperCode> in <PaperLink href="/docs/developers/settings-and-secrets/#settings">Settings and secrets</PaperLink>.
+                They need no <PaperCode>text</PaperCode>, <PaperCode>category</PaperCode> or <PaperCode>icon</PaperCode>, since nothing shows them. The contract checks each input's shape, whoever sends it: <PaperCode>paperapi call</PaperCode> reaches them, and a bug in the page can send anything. The handler checks what the value may be.
                 A call is an internal block: never listed, and refused to every other panel.
             </PaperText>
 
