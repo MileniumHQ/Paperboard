@@ -74,6 +74,9 @@ export default function MapView() {
     const store = createTileStore(calls, report);
     const head = createHeads(calls, report);
 
+    // a world nobody has played on holds only its spawn: the map says why it is so small
+    const [explained, setExplained] = createSignal(false);
+    const unexplored = () => !explained() && (info()?.dimensions?.length ?? 0) > 0 && playerKeys().length === 0;
     const availableDimensions = () => info()?.dimensions?.map((d) => d.dimension) ?? [];
     const regionsFor = (dim: MapDimension) =>
         info()?.dimensions?.find((d) => d.dimension === dim)?.regions ?? [];
@@ -351,8 +354,13 @@ export default function MapView() {
                 </div>
             </div>
 
-            <Show when={regionsError() || failure()}>
+            <Show when={regionsError() || failure() || unexplored()}>
                 <PaperFlex class={styles.bottomLeft} direction="column" gap="half">
+                    <Show when={unexplored()}>
+                        <PaperQuote variant="primary" icon="explore" title="Only the land around spawn so far" onDismiss={() => setExplained(true)}>
+                            Nobody has played on this world yet, so the server has saved only the area where players start. The map fills in as players explore, each time the server saves the world.
+                        </PaperQuote>
+                    </Show>
                     <Show when={regionsError()}>
                         {(message) => (
                             <PaperQuote variant="danger" icon="warning" title="Couldn't read the world's region files">
