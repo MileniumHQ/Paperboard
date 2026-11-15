@@ -383,12 +383,17 @@ export class AiApp {
         );
     }
 
-    async shutdown() {
-        // before the conversation closes, so a waiting request's bubble says it lapsed
+    /** What the conversation was waiting on lapses with it: its sign-in, access, prompt and tool-server requests. */
+    private lapseRequests() {
         this.signIns?.shutdown();
         this.access?.shutdown();
         this.prompts?.shutdown();
         this.serverTools?.shutdown();
+    }
+
+    async shutdown() {
+        // before the conversation closes, so a waiting request's bubble says it lapsed
+        this.lapseRequests();
         const stops = await Promise.allSettled([
             this.routines?.shutdown(),
             this.conversation?.shutdown(),
@@ -535,21 +540,16 @@ export class AiApp {
     }
 
     async startOver() {
-        this.access?.shutdown();
-        this.prompts?.shutdown();
-        this.serverTools?.shutdown();
+        this.lapseRequests();
         const r = await this.conversation.clear();
         this.ctx.emit(EVENTS.cleared, {});
         this.publish();
         return r;
     }
 
-    /** Start a new conversation, or continue a past one: a waiting sign-in belongs to the one being put away. */
+    /** Start a new conversation, or continue a past one: what's waiting belongs to the one being put away. */
     async newConversation() {
-        this.signIns?.shutdown();
-        this.access?.shutdown();
-        this.prompts?.shutdown();
-        this.serverTools?.shutdown();
+        this.lapseRequests();
         const r = await this.conversation.newConversation();
         this.ctx.emit(EVENTS.switched, {});
         this.publish();
@@ -557,10 +557,7 @@ export class AiApp {
     }
 
     async openConversation(id: unknown) {
-        this.signIns?.shutdown();
-        this.access?.shutdown();
-        this.prompts?.shutdown();
-        this.serverTools?.shutdown();
+        this.lapseRequests();
         const r = await this.conversation.open(id);
         this.ctx.emit(EVENTS.switched, {});
         this.publish();
@@ -693,7 +690,12 @@ export class AiApp {
     private changedTo(value: string, next: string, tell: boolean) {
         if (this.announced.get(value) === next) return;
         this.announced.set(value, next);
-        if (tell) this.host.blocks.changed(value).catch((e) => console.error(`[agents] the change to ${value} didn't reach Blocks:`, String(e)));
+        if (!tell) return;
+        this.host.blocks.changed(value).catch((e) => {
+            // not told, so not announced: the next change to it tells Blocks again
+            if (this.announced.get(value) === next) this.announced.delete(value);
+            console.error(`[agents] the change to ${value} didn't reach Blocks:`, errorText(e));
+        });
     }
 
     /** Memory is read on its own queue: what changed is worked out once the read is done. */
@@ -748,9 +750,13 @@ export class AiApp {
                     await this.host.registerAction(def);
                 } catch (e) {
                     this.published = "";
-                    console.error(`[agents] couldn't update the "${def.id}" action:`, String(e));
+                    console.error(`[agents] couldn't update the "${def.id}" action:`, errorText(e));
                 }
             }
+        }).catch((e) => {
+            // the queue goes on: the next change publishes again
+            this.published = "";
+            console.error("[agents] the flow actions couldn't be published:", errorText(e));
         });
         return this.publishing;
     }
