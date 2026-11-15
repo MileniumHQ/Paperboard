@@ -76,7 +76,8 @@ const bedrockNaming = (ctx: Server) =>
 // says so: "Banned Steve: reason" and "Unbanned Steve" (1.12 adds "player").
 // A refusal is a line of its own, which the call fails with. A plugin may
 // say it in words of its own, so the list it wrote is the record: watched
-// while the line is awaited, and read once more when none came.
+// while the line is awaited, and read once more when none came. The server
+// rewrites the list in place, so a read during its write is no answer yet.
 const BAN_ANSWER_MS = 15_000;
 const BAN_LIST_POLL_MS = 250;
 const BAN_REFUSED = /Nothing changed|That player does not exist|Unknown player|No player was found|Could not (un)?ban/i;
@@ -87,30 +88,27 @@ async function banCommand(ctx: Server, verb: "ban" | "pardon", name: string, com
     // a list that already shows it can only be refused, and the refusal says why
     const watchList = !(await recorded());
     const answer = waitForLine(ctx, (line) => done.test(line) || BAN_REFUSED.test(line), BAN_ANSWER_MS, verb === "ban" ? `the ban of ${name}` : `the pardon of ${name}`);
+    // however the call ends, nothing waits on the line after it
     try {
         await sendServerCommand(ctx, command);
-    } catch (err) {
-        answer.cancel();
-        throw err;
-    }
-    let answered = false;
-    const said = answer.done.finally(() => (answered = true));
-    while (watchList && !answered) {
-        if (await recorded()) {
-            answer.cancel();
-            return;
+        let answered = false;
+        const said = answer.done.finally(() => (answered = true));
+        while (watchList && !answered) {
+            if (await recorded()) return;
+            // quiet: said's failure is read below, where it is awaited
+            await Promise.race([said.catch(() => undefined), new Promise((resolve) => setTimeout(resolve, BAN_LIST_POLL_MS))]);
         }
-        // quiet: said's failure is read below, where it is awaited
-        await Promise.race([said.catch(() => undefined), new Promise((resolve) => setTimeout(resolve, BAN_LIST_POLL_MS))]);
+        let line: string;
+        try {
+            line = await said;
+        } catch (err) {
+            if (await recorded()) return;
+            throw new Error(`${errorMessage(err)}, and the ban list ${verb === "ban" ? "does not have" : "still has"} ${name}`);
+        }
+        if (!done.test(line)) throw new Error(`The server refused: ${line.replace(/^\[[^\]]*\]\s*(\[[^\]]*\]:?\s*)?/, "")}`);
+    } finally {
+        answer.cancel();
     }
-    let line: string;
-    try {
-        line = await said;
-    } catch (err) {
-        if (await recorded()) return;
-        throw new Error(`${errorMessage(err)}, and the ban list ${verb === "ban" ? "does not have" : "still has"} ${name}`);
-    }
-    if (!done.test(line)) throw new Error(`The server refused: ${line.replace(/^\[[^\]]*\]\s*(\[[^\]]*\]:?\s*)?/, "")}`);
 }
 
 /** Kicks or bans a player, with the reason they see when one is given; a ban resolves once the server has recorded it. */

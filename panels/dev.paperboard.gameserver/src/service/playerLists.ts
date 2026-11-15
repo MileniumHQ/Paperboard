@@ -69,10 +69,25 @@ async function readList(ctx: Server, path: string): Promise<ListEntry[]> {
     return parsed.filter((entry): entry is ListEntry => !!entry && typeof entry === "object");
 }
 
-/** Whether banned-players.json, as the server last wrote it, has a player of this name. */
-export async function isBanned(ctx: Server, name: string): Promise<boolean> {
+/**
+ * Whether banned-players.json has a player of this name, or null while the
+ * server is writing it: it rewrites the file in place, so a read during the
+ * write finds it empty or cut short.
+ */
+export async function isBanned(ctx: Server, name: string): Promise<boolean | null> {
+    const content = await ctx.files.read(LIST_FILES.banned, PANEL_ID);
+    // none written yet: nobody is banned
+    if (content === null) return false;
+    let parsed: unknown;
+    try {
+        parsed = JSON.parse(content);
+    } catch {
+        // quiet: a list cut short by the server's write says nothing yet; the caller reads it again
+        return null;
+    }
+    if (!Array.isArray(parsed)) throw new Error(`${LIST_FILES.banned} is not a list of players`);
     const wanted = name.toLowerCase();
-    return (await readList(ctx, LIST_FILES.banned)).some((entry) => typeof entry.name === "string" && entry.name.toLowerCase() === wanted);
+    return parsed.some((entry) => !!entry && typeof entry === "object" && typeof entry.name === "string" && entry.name.toLowerCase() === wanted);
 }
 
 function entryUuid(entry: ListEntry): string | null {

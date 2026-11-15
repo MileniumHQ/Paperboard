@@ -171,9 +171,21 @@ function server(): void {
                 const bans = (fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, "utf8")) : []) as { uuid: string }[];
                 const kept = bans.filter((entry) => entry.uuid !== known.uuid);
                 const reason = rest.slice(1).join(" ") || "Banned by an operator.";
-                fs.writeFileSync(file, JSON.stringify(verb === "ban" ? [...kept, { uuid: known.uuid, name: known.name, reason }] : kept));
+                const list = JSON.stringify(verb === "ban" ? [...kept, { uuid: known.uuid, name: known.name, reason }] : kept);
                 // a ban plugin's own words for a pardon, when the plan names them
-                log(verb === "ban" ? `Banned ${known.name}: ${reason}` : plan.pardonSays ?? `Unbanned ${known.name}`);
+                const said = verb === "ban" ? `Banned ${known.name}: ${reason}` : plan.pardonSays ?? `Unbanned ${known.name}`;
+                // Minecraft rewrites the list in place, then answers: a slow
+                // write leaves it cut short for `listWriteMs` before it ends
+                if (!plan.listWriteMs) {
+                    fs.writeFileSync(file, list);
+                    log(said);
+                    return;
+                }
+                fs.writeFileSync(file, list.slice(0, Math.ceil(list.length / 2)));
+                setTimeout(() => {
+                    fs.writeFileSync(file, list);
+                    log(said);
+                }, plan.listWriteMs);
                 return;
             }
             case "crash":

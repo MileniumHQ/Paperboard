@@ -2,7 +2,8 @@
 // recorded it: the badge comes from the ban list the server wrote, and a
 // server that refuses says why on the tab instead of looking banned, also
 // on a phone, where the player's page covers the roster. A ban plugin that
-// words its answer its own way is judged by the list it wrote. A head that
+// words its answer its own way is judged by the list it wrote, which is
+// read again while the server is still writing it. A head that
 // could not be looked up says why on the head, and in words on the player's page.
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import * as fs from "node:fs";
@@ -63,7 +64,8 @@ describe("the Players tab's bans", () => {
             "server.properties": "online-mode=false\n",
             "whitelist.json": JSON.stringify([{ uuid: STEVE, name: "Steve" }, { uuid: GHOST, name: "Ghost" }]),
             "usercache.json": JSON.stringify([{ name: "Steve", uuid: STEVE, expiresOn: "2030-01-01 00:00:00 +0000" }]),
-            "fake-server.json": JSON.stringify({ pardonSays: "[BanPlugin] Steve may join again." }),
+            // a slow write of the ban list: it is cut short while the service waits on it
+            "fake-server.json": JSON.stringify({ pardonSays: "[BanPlugin] Steve may join again.", listWriteMs: 1000 }),
         });
         installFakeJava(javaPackageFor("1.21.1")!);
         const { gameServerService } = await import("../src/service");
