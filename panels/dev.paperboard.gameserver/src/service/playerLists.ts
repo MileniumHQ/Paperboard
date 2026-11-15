@@ -28,6 +28,7 @@ import {
     type BedrockNaming,
 } from "../core/bedrock";
 import { type GameServerState, PANEL_ID } from "./types";
+import { inOrder } from "./inOrder";
 
 export type PlayerFlag = "op" | "whitelist";
 
@@ -59,7 +60,7 @@ const local = serverLocal(() => ({
     names: new Map<string, { name: string; at: number }>(),
     // one list edit at a time: two quick toggles must not read the same file
     // and each write back a copy missing the other's change
-    editing: Promise.resolve() as Promise<unknown>,
+    editing: inOrder(),
 }));
 
 async function readList(path: string): Promise<ListEntry[]> {
@@ -386,7 +387,5 @@ export async function setPlayerFlag(
     if (status !== "offline") {
         throw new Error("Wait until the server has finished stopping");
     }
-    const edit = local().editing.then(() => editListFile(flag, name, on, uuid, gamertag, naming));
-    local().editing = edit.catch(() => undefined);
-    await edit;
+    await local().editing(() => editListFile(flag, name, on, uuid, gamertag, naming));
 }

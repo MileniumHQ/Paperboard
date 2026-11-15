@@ -36,6 +36,7 @@ import { assertGameCall, gameFor, games } from "./games";
 import { loadServerOptions } from "./service/options";
 import { livePortDeps } from "./service/portDeps";
 import { report, waitUntil } from "./games/serviceKit";
+import { inOrder } from "./service/inOrder";
 export * from "./service/types";
 
 export interface ServerSummary extends Omit<StoredServer, "settings"> {
@@ -54,15 +55,11 @@ export interface ServersState extends Record<string, unknown> {
 const entries = new Map<string, ServerScope>();
 let saved: ServersConfig = readServersConfig(null);
 let rootContext: ServiceContext<ServersState>;
-let mutation: Promise<unknown> = Promise.resolve();
-function serial<T>(work: () => Promise<T>): Promise<T> {
-    const next = mutation.then(work, work);
-    mutation = next.catch((err) => console.error("[gameserver] server change failed:", err));
-    return next;
-}
-let configWrites: Promise<unknown> = Promise.resolve();
+// server changes, and the config writes inside them, one at a time
+const serial = inOrder();
+const configWrites = inOrder();
 function updateSaved(change: (current: ServersConfig) => ServersConfig): Promise<void> {
-    const work = configWrites.then(async () => {
+    return configWrites(async () => {
         const next = change(saved);
         await config.set(next, PANEL_ID);
         saved = next;
@@ -71,10 +68,6 @@ function updateSaved(change: (current: ServersConfig) => ServersConfig): Promise
             if (entry) entry.server = server;
         }
     });
-    configWrites = work.catch((err) =>
-        console.error("[gameserver] server config write failed:", err),
-    );
-    return work;
 }
 const icons = new Map<string, string | null>();
 /** A server as the Blocks Library shows it: as the server list does, by its own icon or else its game's. */

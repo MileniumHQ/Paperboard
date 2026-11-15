@@ -28,6 +28,7 @@ import {
 } from "../core/map";
 import { type GameServerState, PANEL_ID } from "./types";
 import { resolveLevelName } from "./worlds";
+import { inOrder } from "./inOrder";
 
 const local = serverLocal(() => ({ tileCache: new Map<string, CachedTile>() }));
 
@@ -284,15 +285,14 @@ function cacheSet(tiles: Map<string, CachedTile>, key: string, value: CachedTile
 // queue the rest of the panel keeps working beside, not a frozen service.
 const CHUNKS_PER_TURN = 8;
 const loopTurn = () => new Promise<void>((resolve) => setImmediate(resolve));
-let painting: Promise<unknown> = Promise.resolve();
+// the next region waits for this one to settle, whichever way it does
+const painting = inOrder();
 const paintingNow = new Map<string, Promise<string>>();
 
 export function paintInTurn(key: string, paint: () => Promise<string>): Promise<string> {
     const running = paintingNow.get(key);
     if (running) return running;
-    const mine = painting.then(paint).finally(() => paintingNow.delete(key));
-    // the next region waits for this one to settle, whichever way it does
-    painting = mine.catch(() => undefined);
+    const mine = painting(paint).finally(() => paintingNow.delete(key));
     paintingNow.set(key, mine);
     return mine;
 }
