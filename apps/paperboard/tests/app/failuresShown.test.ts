@@ -43,15 +43,31 @@ const rejection = (p: Promise<unknown>) => p.then(() => { throw new Error("it re
 describe("failures reach the caller", () => {
     test("App Settings shows a settings file that won't load, and a save that fails keeps the switch where it was", async () => {
         const dataDir = tempDataDir("settings-load");
-        fs.writeFileSync(path.join(dataDir, "local", "app-settings.json"), "{ not json");
+        const settingsFile = path.join(dataDir, "local", "app-settings.json");
+        fs.writeFileSync(settingsFile, "{ not json");
+        // Run on startup was on: settings that can't be read must not turn it off
+        const autostart = path.join(dataDir, "xdg-config", "autostart", "dev.paperboard.paperboard.desktop");
+        fs.mkdirSync(path.dirname(autostart), { recursive: true });
+        fs.writeFileSync(autostart, "[Desktop Entry]\n");
         const electron = await launchElectron({ appDir: app.dir, dataDir, args: ["--skip-update"] });
         await shellReady(electron);
+        const alerts = `[...document.querySelectorAll('[role=alert]')].map((a) => a.innerText)`;
+        // said at start, before anyone opens App Settings
+        await electron.evalIn(SHELL, domCondition(`document.body.innerText.includes("Settings not loaded")`));
         await electron.evalIn(SHELL, `document.querySelector('[role=radio][aria-label="Settings"]').click()`);
-        const loadAlert = await electron.evalIn(SHELL, domCondition(`document.querySelector('[role=alert]')?.innerText`));
+        const loadAlert = await electron.evalIn(SHELL, domCondition(`${alerts}.find((t) => t.includes("These are the defaults"))`));
         expect(loadAlert).toContain("Settings not loaded");
         expect(loadAlert).toContain("These are the defaults, not your settings: ");
         expect(loadAlert).toMatch(/JSON/);
+        // a change would save the defaults over the user's settings: it's refused, out loud
+        const blur = `document.querySelector('[role=switch]:has(input[name=disableBlur])')`;
+        const before = await electron.evalIn(SHELL, `${blur}.getAttribute("aria-checked")`);
+        await electron.evalIn(SHELL, `${blur}.click()`);
+        await electron.evalIn(SHELL, domCondition(`document.body.innerText.includes("Change not saved")`));
+        expect(await electron.evalIn(SHELL, `${blur}.getAttribute("aria-checked")`)).toBe(before);
         expect(await electron.quit()).toEqual({ code: 0, signal: null });
+        expect(fs.readFileSync(settingsFile, "utf8")).toBe("{ not json");
+        expect(fs.existsSync(autostart)).toBe(true);
 
         const saveDir = tempDataDir("settings-save");
         fs.writeFileSync(path.join(saveDir, "local", "app-settings.json"), JSON.stringify({ darkMode: "system", reducedMotion: false, runOnStartup: false }));

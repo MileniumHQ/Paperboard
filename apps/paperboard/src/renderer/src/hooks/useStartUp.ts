@@ -49,7 +49,14 @@ export function useStartUp(options: StartUpOptions) {
         // Data fetches are scoped per computer
         await options.panels.refreshPanelsForComputer(activeComputerId());
 
-        await settingsLoaded;
+        // App Settings says why; until then nothing would say they're not yours
+        if (!(await settingsLoaded)) {
+            showToast({
+                variant: "danger",
+                title: "Settings not loaded",
+                message: "Paperboard is showing the defaults, not your settings, and changes aren't saved. App Settings says why.",
+            });
+        }
 
         // Launch lands on Home or the computer App Settings starts on, never
         // on a panel: opening the last-used panel on boot made a misbehaving

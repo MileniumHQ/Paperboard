@@ -2,7 +2,7 @@
 // Every handler below validates event.senderFrame.url via shellGuard:
 // panel:// origins get a typed PANEL_IPC_REFUSED, never an answer.
 import { type IpcMain, type IpcMainInvokeEvent, type WebContents, BrowserWindow, app, dialog, nativeTheme, shell } from "electron";
-import { broadcastAppSettings, syncTitleBarOverlays, applyNativeTheme, applyRunOnStartup, currentGraphics } from "../appSettings";
+import { broadcastAppSettings, syncTitleBarOverlays, applyNativeTheme, applyRunOnStartup, currentGraphics, readAppSettings } from "../appSettings";
 import * as path from "path";
 import { sanitizeId } from "../../../papercrane/storage";
 import { logger } from "../../../papercrane/logger";
@@ -87,9 +87,10 @@ function loopbackRequestId(args: unknown): string {
 // main-side effects of freshly saved settings; browser mode runs the same.
 // Resolves to why Run on startup couldn't be applied, or null.
 export async function applySavedAppSettings(): Promise<string | null> {
-    applyNativeTheme();
-    const loginItemError = applyRunOnStartup();
-    await broadcastAppSettings().catch((err) => logger.warn("[shelldata] settings broadcast failed:", err));
+    const settings = readAppSettings();
+    applyNativeTheme(settings);
+    const loginItemError = applyRunOnStartup(settings);
+    await broadcastAppSettings();
     syncTitleBarOverlays();
     return loginItemError;
 }

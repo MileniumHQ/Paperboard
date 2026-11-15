@@ -55,6 +55,9 @@ export function useAppSettings() {
     // was read before the change was saved, and showing it would undo the
     // change on screen (and the next change would be built on it).
     let changes = 0;
+    // settings that didn't load are still on disk: a change saved over them
+    // would replace every one of them with the defaults showing
+    let unread = false;
 
     /** true when the stored settings were read */
     const loadAppSettings = async (): Promise<boolean> => {
@@ -63,12 +66,14 @@ export function useAppSettings() {
             const stored = await config.get<Partial<AppSettingsData>>(
                 APP_SETTINGS_ID,
             );
+            unread = false;
             if (asked !== changes) return true;
             // nothing saved yet is the defaults, also when a first change didn't save
             setAppSettings(stored ? withAppSettingsDefaults(APP_SETTINGS_DEFAULTS, stored) : APP_SETTINGS_DEFAULTS);
             return true;
         } catch (err) {
             logToMain("error", "Failed to load app settings; showing the defaults:", err);
+            unread = true;
             setSettingsFailure({ kind: "load", message: errorMessage(err) });
             return false;
         }
@@ -85,6 +90,14 @@ export function useAppSettings() {
     // undo the first. The saves themselves run one at a time, in order.
     const saves = createSaveQueue();
     const handleAppSettingsChange = (next: AppSettingsData): Promise<void> => {
+        if (unread) {
+            showToast({
+                variant: "danger",
+                title: "Change not saved",
+                message: "Your settings didn't load, and saving now would replace them with the defaults. Fix or remove app-settings.json, then retry loading.",
+            });
+            return Promise.resolve();
+        }
         changes++;
         setAppSettings(next);
         return saves((superseded) => persistAppSettings(next, superseded));

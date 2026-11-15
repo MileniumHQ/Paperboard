@@ -30,37 +30,37 @@ const DEFAULTS: AppSettings = {
     runOnStartup: false,
 };
 
-export function appSettingsPath(): string {
+function appSettingsPath(): string {
     return path.join(getLocalDir(), "app-settings.json");
 }
 
+/** The saved settings, the defaults on a fresh install. Throws when the file
+ * is there but can't be read: its defaults are not the user's settings, and
+ * applying them would undo the user's choices on the system (a login item
+ * removed, a theme reset). */
 export function readAppSettings(): AppSettings {
+    let text: string;
     try {
-        const raw = JSON.parse(fs.readFileSync(appSettingsPath(), "utf8"));
-        return withAppSettingsDefaults(DEFAULTS, raw);
+        text = fs.readFileSync(appSettingsPath(), "utf8");
     } catch (err: any) {
-        // missing is a fresh install; unreadable is reported, not hidden
-        if (err?.code !== "ENOENT") {
-            logger.warn("[appSettings] settings file unreadable, using defaults:", err?.message ?? err);
-        }
-        return { ...DEFAULTS };
+        if (err?.code === "ENOENT") return { ...DEFAULTS };
+        throw new Error(`Paperboard couldn't read ${appSettingsPath()}: ${err?.message ?? err}`);
+    }
+    try {
+        return withAppSettingsDefaults(DEFAULTS, JSON.parse(text));
+    } catch (err: any) {
+        throw new Error(`${appSettingsPath()} isn't valid settings: ${err?.message ?? err}`);
     }
 }
 
-export function applyNativeTheme(): void {
-    const { darkMode } = readAppSettings();
-    try {
-        nativeTheme.themeSource = darkMode;
-    } catch (err: any) {
-        logger.warn("[AppSettings] failed to set themeSource:", err?.message ?? err);
-    }
+export function applyNativeTheme(settings: AppSettings): void {
+    nativeTheme.themeSource = settings.darkMode;
 }
 
 /** Applies Run on startup; resolves to why the system refused it, or null. */
-export function applyRunOnStartup(): string | null {
-    const { runOnStartup } = readAppSettings();
+export function applyRunOnStartup(settings: AppSettings): string | null {
     try {
-        setRunOnStartup(runOnStartup, {
+        setRunOnStartup(settings.runOnStartup, {
             platform: process.platform,
             env: process.env,
             execPath: process.execPath,
@@ -145,8 +145,15 @@ export function syncTitleBarOverlays(): void {
 }
 
 export function initAppSettingsSync(): void {
-    applyNativeTheme();
-    applyRunOnStartup();
+    // settings that can't be read change nothing on the system; the window
+    // says so when its own read of them fails (useAppSettings)
+    try {
+        const settings = readAppSettings();
+        applyNativeTheme(settings);
+        applyRunOnStartup(settings);
+    } catch (err: any) {
+        logger.error("[AppSettings] settings not applied:", err?.message ?? err);
+    }
 
     app.on("web-contents-created", (_event, wc) => {
         wc.on("did-frame-finish-load", (_e, _isMainFrame, processId, routingId) => {

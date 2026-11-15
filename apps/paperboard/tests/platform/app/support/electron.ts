@@ -50,7 +50,15 @@ export async function launchElectron(options: {
     await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
     const port = (server.address() as net.AddressInfo).port;
     const userDataDir = options.userDataDir ?? tempDir("electron-profile");
-    const env: NodeJS.ProcessEnv = { ...process.env, ...options.env, PAPERBOARD_DIR: options.dataDir, PB_HARNESS_PORT: String(port) };
+    // XDG_CONFIG_HOME holds Linux's autostart entry: Run on startup must
+    // never reach the real one
+    const env: NodeJS.ProcessEnv = {
+        ...process.env,
+        XDG_CONFIG_HOME: path.join(options.dataDir, "xdg-config"),
+        ...options.env,
+        PAPERBOARD_DIR: options.dataDir,
+        PB_HARNESS_PORT: String(port),
+    };
     delete env.ELECTRON_RUN_AS_NODE;
     delete env.ELECTRON_RENDERER_URL;
     delete env.PAPERCRANE_PORT;
