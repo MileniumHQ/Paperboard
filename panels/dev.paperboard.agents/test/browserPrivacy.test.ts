@@ -74,6 +74,21 @@ describe("the computer's failures", () => {
         expect(computer.state).toMatchObject({ phase: "failed", error: "The computer couldn't be set up: the daemon refused" });
     });
 
+    test("a setup or a start that fails, with a browser that then can't be stopped, ends failed with both reasons", async () => {
+        const { host, dir } = rig("linux");
+        // nothing runs when the setup begins; once it fails, a browser is there and won't stop
+        let looks = 0;
+        const refusing = { ...host, exists: async () => ++looks > 1, kill: async () => Promise.reject(new Error("the daemon refused")), packages: packageHost({}) };
+        const computer = new BrowserComputer({ host: refusing, dir, home: new HomeFolder(path.join(dir, "..", "home")), storagePath: "browser", onState: () => {}, platform: "linux", arch: "x64" });
+        await expect(computer.install()).rejects.toThrow("the test has no download");
+        expect(computer.state.phase).toBe("failed");
+        expect(computer.state.error).toMatch(/the test has no download.*The browser couldn't be stopped either: the daemon refused/);
+        // the setup erased the record: a start now is refused, and the state says so too
+        await expect(computer.start()).rejects.toThrow("Set up the computer first.");
+        expect(computer.state).toMatchObject({ phase: "failed", installed: false });
+        expect(computer.state.error).toMatch(/^Set up the computer first\./);
+    });
+
     test("a page's picture that failed because the browser went away says why it failed, not that the browser is gone", async () => {
         let running = true;
         // the browser's side of DevTools, until it goes away mid-capture

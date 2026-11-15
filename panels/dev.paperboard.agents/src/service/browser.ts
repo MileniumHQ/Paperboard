@@ -130,7 +130,6 @@ export class BrowserComputer {
     // ------------------------------------------------------------- lifecycle
 
     async init(): Promise<void> {
-        fs.mkdirSync(this.deps.dir, { recursive: true });
         this.offs.push(
             this.deps.host.onExit(BROWSER_PROC_ID, (code) => this.onExited(code)),
             this.deps.host.onStderr(BROWSER_PROC_ID, (data) => {
@@ -138,6 +137,7 @@ export class BrowserComputer {
             }),
         );
         try {
+            fs.mkdirSync(this.deps.dir, { recursive: true });
             this.record = readRecord(this.deps.dir);
         } catch (e) {
             this.set({ phase: "failed", error: errorMessage(e) });
@@ -238,9 +238,8 @@ export class BrowserComputer {
             // the finished steps stay, each done: the setup ends on its loaders, not on a blank
             this.set({ phase: "ready", installed: true });
         } catch (e) {
-            await this.kill();
             if (current) step(current, { status: "failed" });
-            this.set({ phase: "failed", installed: this.record.installed, error: errorMessage(e) });
+            await this.failed(e, { installed: this.record.installed });
             throw e;
         } finally {
             if (this.abort === abort) this.abort = null;
@@ -248,10 +247,10 @@ export class BrowserComputer {
     }
 
     private async doStart() {
-        if (!this.record.installed) throw new Error("Set up the computer first.");
         if (this.on) return;
         const abort = (this.abort = new AbortController());
         try {
+            if (!this.record.installed) throw new Error("Set up the computer first.");
             if (!(await executable(this.deps.host.packages))) {
                 // no browser package yet (set up before it was one): fetched like a setup, the profile and home folder kept
                 await this.doInstall(false);
@@ -261,12 +260,17 @@ export class BrowserComputer {
             await this.launch(abort.signal);
             this.set({ phase: "ready" });
         } catch (e) {
-            await this.kill();
-            this.set({ phase: "failed", error: errorMessage(e) });
+            await this.failed(e);
             throw e;
         } finally {
             if (this.abort === abort) this.abort = null;
         }
+    }
+
+    /** A start or a setup that failed: the browser is stopped, and the state says why, with a stop that failed too. */
+    private async failed(e: unknown, patch: Partial<ComputerState> = {}) {
+        const unstopped = await this.kill().then(() => null, errorMessage);
+        this.set({ ...patch, phase: "failed", error: unstopped === null ? errorMessage(e) : `${errorMessage(e)}. The browser couldn't be stopped either: ${unstopped}` });
     }
 
     private profileDir() {

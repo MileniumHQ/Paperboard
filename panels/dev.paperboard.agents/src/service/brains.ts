@@ -144,7 +144,6 @@ export class Brains {
     /** Look at every brain once, when the service starts. A brain that can't be looked at shows why. */
     async init(): Promise<void> {
         for (const h of Object.keys(this.state) as Harness[]) fs.mkdirSync(this.home(h), { recursive: true });
-        // a look that fails is in the brain's state; one brain's trouble doesn't stop the service
         await Promise.all(
             (Object.keys(this.state) as Harness[]).map((h) =>
                 // quiet: a look that fails is in the brain's state; one brain's trouble doesn't stop the service
