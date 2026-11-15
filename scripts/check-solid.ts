@@ -84,6 +84,15 @@
 //    `<For each={…}>` given `x.map(cb)`/`x.flatMap(cb)` whose callback returns
 //    an object or array literal, or `Object.entries(…)`: fresh objects every
 //    read. A memo or store passed by name is not decidable and not flagged.
+//  cross-package-import (packages talk through their entry points)
+//    A relative import, export, import() or require() whose target lies in
+//    another workspace package than the file: a package is the nearest
+//    folder with a package.json, and the repository root (its scripts and
+//    the shared test harness in scripts/testing) belongs to none, so reaching
+//    it, or reaching from it, is not flagged. Import the package by name, and
+//    add a real public need to its package.json "exports". The files that
+//    still cross, outside the parts already moved, are KNOWN_CROSSINGS below;
+//    one that no longer crosses is a hit too, so the list only shrinks.
 //  test-sleep ("Tests are CI": deterministic, no sleeps tuned to timing)
 //    `Bun.sleep`/`Bun.sleepSync`, `await sleep(…)`, and `setTimeout` handed
 //    the resolve of the `new Promise` it is in (a fixed wait). A promise
@@ -91,9 +100,9 @@
 //
 // typescript is resolved from packages/paperui, which depends on it; the root
 // package.json does not, and a missing compiler fails the scan (exit 2).
-import { readdirSync, readFileSync, statSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { createRequire } from "node:module";
-import { join, relative } from "node:path";
+import { dirname, join, relative, resolve } from "node:path";
 import type * as TS from "typescript";
 
 const ROOT = join(import.meta.dir, "..");
@@ -500,6 +509,66 @@ function isTimerWait(call: TS.CallExpression): boolean {
 
 const QUIET = /\/\/\s*quiet:(.*)$/;
 
+// Files that still reach into another package by path, each until its part
+// is moved to package imports (by repo-relative path, with why it is left).
+const KNOWN_CROSSINGS: Record<string, string> = {
+    "apps/paperdocs/scripts/capture-integrations.ts": "reads the deprecated Actions panel's source and PaperAPI's",
+    "apps/paperdocs/scripts/marketing-flows.ts": "reads the deprecated Actions panel's source and PaperAPI's",
+    "apps/paperdocs/scripts/verify-marketing-flows.ts": "reads the deprecated Actions panel's source and PaperAPI's",
+    "packages/create-panel/src/scaffold.ts": "names PaperAPI's and PaperUI's versions and panel ids from their source",
+    "packages/create-panel/test/helpers/daemon.ts": "boots the app's daemon from source",
+    "packages/create-panel/test/scaffold.test.ts": "names PaperAPI's and PaperUI's versions",
+    "panels/dev.paperboard.gameserver/test/updates.test.ts": "uses the app's daemon test support (Game Server moves in a later phase)",
+};
+
+const packageDirs = new Map<string, string>();
+/** the workspace package a folder is in: the nearest one with a package.json, ROOT for none */
+function packageOf(dir: string): string {
+    const known = packageDirs.get(dir);
+    if (known !== undefined) return known;
+    const parent = dirname(dir);
+    const found = dir === ROOT || parent === dir || !dir.startsWith(ROOT) ? ROOT : existsSync(join(dir, "package.json")) ? dir : packageOf(parent);
+    packageDirs.set(dir, found);
+    return found;
+}
+
+/** the relative module specifiers a file names: imports, exports, import(), import types and require() */
+function relativeSpecifiers(sf: TS.SourceFile): TS.StringLiteralLike[] {
+    const found: TS.StringLiteralLike[] = [];
+    const take = (n: TS.Node | undefined) => {
+        if (n && ts.isStringLiteralLike(n) && /^\.\.?\//.test(n.text)) found.push(n);
+    };
+    const visit = (n: TS.Node): void => {
+        if (ts.isImportDeclaration(n) || ts.isExportDeclaration(n)) take(n.moduleSpecifier);
+        else if (ts.isImportTypeNode(n) && ts.isLiteralTypeNode(n.argument)) take(n.argument.literal);
+        else if (ts.isCallExpression(n) && (n.expression.kind === ts.SyntaxKind.ImportKeyword || (ts.isIdentifier(n.expression) && n.expression.text === "require"))) take(n.arguments[0]);
+        ts.forEachChild(n, visit);
+    };
+    visit(sf);
+    return found;
+}
+
+function checkPackageBoundary(sf: TS.SourceFile, file: string, report: (node: TS.Node, rule: string, message: string) => void, hit: (node: TS.Node, rule: string, message: string) => void): void {
+    const path = resolve(file);
+    const from = packageOf(dirname(path));
+    const crossings = from === ROOT ? [] : relativeSpecifiers(sf).filter((spec) => {
+        const target = resolve(dirname(path), spec.text.replace(/\?.*$/, ""));
+        const to = packageOf(existsSync(target) && statSync(target).isDirectory() ? target : dirname(target));
+        return to !== ROOT && to !== from;
+    });
+    const known = KNOWN_CROSSINGS[relative(ROOT, path)];
+    if (known !== undefined) {
+        if (crossings.length === 0) hit(sf, "cross-package-import", `this file no longer reaches into another package: take it off KNOWN_CROSSINGS in scripts/check-solid.ts`);
+        return;
+    }
+    for (const spec of crossings)
+        report(
+            spec,
+            "cross-package-import",
+            `${spec.text} reaches into another package by path; import that package by name, through an entry its package.json "exports" names`,
+        );
+}
+
 function checkHouseRules(sf: TS.SourceFile, file: string, hit: (node: TS.Node, rule: string, message: string) => void): void {
     const lines = sf.text.split("\n");
     const lineOf = (pos: number) => sf.getLineAndCharacterOfPosition(pos).line;
@@ -522,6 +591,7 @@ function checkHouseRules(sf: TS.SourceFile, file: string, hit: (node: TS.Node, r
         else if (reason === "") hit(node, rule, "a `// quiet:` marker needs a reason after the colon: say why this is safe");
     };
     const testFile = isTestFile(file);
+    checkPackageBoundary(sf, file, report, hit);
     const visit = (n: TS.Node): void => {
         // swallowed-error: a catch that only logs or does nothing.
         if (ts.isCatchClause(n) && logsOnly(n.block)) {
