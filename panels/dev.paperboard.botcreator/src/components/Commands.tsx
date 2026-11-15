@@ -109,6 +109,11 @@ export default function Commands(props: { bot: () => BotSummary }) {
         setCreateOpen(true);
     };
 
+    // a command being created can't be taken back: the form stays for its answer
+    const closeCreate = () => {
+        if (!busy()) setCreateOpen(false);
+    };
+
     const isDuplicate = () => {
         const candidate = normalizeCommandName(name());
         if (!candidate) return false;
@@ -336,12 +341,12 @@ export default function Commands(props: { bot: () => BotSummary }) {
 
             <PaperModal
                 open={createOpen()}
-                onClose={() => setCreateOpen(false)}
+                onClose={closeCreate}
                 title="Create Slash Command"
                 size="large"
                 footer={
                     <>
-                        <PaperButton variant="text" onClick={() => setCreateOpen(false)}>
+                        <PaperButton variant="text" disabled={busy()} onClick={closeCreate}>
                             Cancel
                         </PaperButton>
                         <PaperButton

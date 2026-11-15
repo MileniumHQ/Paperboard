@@ -36,13 +36,21 @@ export function botStatusText(bot: BotSummary): string {
 }
 
 export default function BotsHome(props: { bots: BotsState; onOpen: (bot: { id: string }) => void }) {
-    const bots = props.bots;
     const [failure, setFailure] = createSignal<{ title: string; text: string } | null>(null);
     const [adding, setAdding] = createSignal(false);
-    // a switch flips once its bot is on or off, and its thump waits for that
-    const setEnabled = (bot: BotSummary, enabled: boolean) =>
-        bots.setEnabled(bot.id, enabled).catch((err) =>
-            setFailure({ title: enabled ? `${bot.name} didn't come online` : `${bot.name} didn't go offline`, text: errorToMessage(err) }));
+    // a switch flips once its bot is on or off, and its thump waits for that;
+    // only the newest flip of a bot may say it failed
+    const flips = new Map<string, number>();
+    const setEnabled = async (bot: BotSummary, enabled: boolean) => {
+        const flip = (flips.get(bot.id) ?? 0) + 1;
+        flips.set(bot.id, flip);
+        setFailure(null);
+        try {
+            await props.bots.setEnabled(bot.id, enabled);
+        } catch (err) {
+            if (flips.get(bot.id) === flip) setFailure({ title: enabled ? `${bot.name} didn't come online` : `${bot.name} didn't go offline`, text: errorToMessage(err) });
+        }
+    };
 
     const menu = useContextMenuState("below-right");
     const [menuFor, setMenuFor] = createSignal<BotSummary | null>(null);
@@ -56,7 +64,7 @@ export default function BotsHome(props: { bots: BotsState; onOpen: (bot: { id: s
 
     const newBot = () => (
         <PaperEffect variant="success">
-            <PaperButton variant="success" disabled={!bots.ready() || Boolean(bots.state().botsError)} onClick={() => setAdding(true)}>
+            <PaperButton variant="success" disabled={!props.bots.ready() || Boolean(props.bots.state().botsError)} onClick={() => setAdding(true)}>
                 <PaperIcon>add</PaperIcon>
                 New bot
             </PaperButton>
@@ -68,7 +76,7 @@ export default function BotsHome(props: { bots: BotsState; onOpen: (bot: { id: s
             <PaperPage width="wide">
                 <PaperPageHeader icon="smart_toy" title="Bots">
                     {/* an empty page offers this in its empty state instead */}
-                    <Show when={bots.list().length > 0}>{newBot()}</Show>
+                    <Show when={props.bots.list().length > 0}>{newBot()}</Show>
                 </PaperPageHeader>
                 <Show when={failure()}>
                     {(f) => (
@@ -77,25 +85,25 @@ export default function BotsHome(props: { bots: BotsState; onOpen: (bot: { id: s
                         </PaperQuote>
                     )}
                 </Show>
-                <Show when={bots.state().botsError}>
+                <Show when={props.bots.state().botsError}>
                     {(text) => (
                         <PaperQuote variant="danger" icon="warning" title="Bots could not be read" role="alert">{text()}</PaperQuote>
                     )}
                 </Show>
                 <Show
-                    when={bots.ready()}
+                    when={props.bots.ready()}
                     fallback={
-                        <Show when={bots.loadError()} fallback={<PaperLoader loaderStatus="indeterminate" label="Loading bots" />}>
+                        <Show when={props.bots.loadError()} fallback={<PaperLoader loaderStatus="indeterminate" label="Loading bots" />}>
                             {(reason) => (
                                 <PaperEmptyState icon="error" title="Bots could not be loaded" description={reason()} role="alert">
-                                    <PaperButton onClick={() => void bots.load()}>Try again</PaperButton>
+                                    <PaperButton onClick={() => void props.bots.load()}>Try again</PaperButton>
                                 </PaperEmptyState>
                             )}
                         </Show>
                     }
                 >
                     <Show
-                        when={bots.list().length > 0}
+                        when={props.bots.list().length > 0}
                         fallback={
                             <PaperEmptyState icon="smart_toy" title="No bots yet" description="All a bot needs is a token from the Discord Developer Portal. Then decide what it does in Blocks.">
                                 {newBot()}
@@ -103,7 +111,7 @@ export default function BotsHome(props: { bots: BotsState; onOpen: (bot: { id: s
                         }
                     >
                         <PaperMediaCardGroup minCardWidth="card-min">
-                            <For each={bots.list()}>
+                            <For each={props.bots.list()}>
                                 {(bot) => (
                                     <PaperMediaCard
                                         effect={false}
@@ -153,9 +161,9 @@ export default function BotsHome(props: { bots: BotsState; onOpen: (bot: { id: s
                 <PaperSeparator role="separator" />
                 <PaperContextMenuItem icon="delete" danger onClick={fromMenu(setDeleting)}>Delete</PaperContextMenuItem>
             </PaperContextMenu>
-            <NewBotModal open={adding()} onAdd={bots.add} onAdded={props.onOpen} onClose={() => setAdding(false)} />
-            <ReplaceTokenModal bot={replacing()} onReplace={bots.replaceToken} onClose={() => setReplacing(null)} />
-            <DeleteBotModal bot={deleting()} onDelete={bots.remove} onClose={() => setDeleting(null)} />
+            <NewBotModal open={adding()} onAdd={props.bots.add} onAdded={props.onOpen} onClose={() => setAdding(false)} />
+            <ReplaceTokenModal bot={replacing()} onReplace={props.bots.replaceToken} onClose={() => setReplacing(null)} />
+            <DeleteBotModal bot={deleting()} onDelete={props.bots.remove} onClose={() => setDeleting(null)} />
         </PaperFlex>
     );
 }

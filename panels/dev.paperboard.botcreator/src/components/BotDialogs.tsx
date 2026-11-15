@@ -1,6 +1,6 @@
 // Adding a bot, replacing its token and deleting it, the same from the home
 // screen and the bot's own pages. Each says what failed, in place, instead
-// of closing on an error.
+// of closing on an error, and stays open until the service has answered.
 import { createEffect, createSignal, on, Show } from "solid-js";
 import {
     PaperButton,
@@ -60,6 +60,10 @@ export function NewBotModal(props: {
     const [token, setToken] = createSignal("");
     const [busy, setBusy] = createSignal(false);
     const [error, setError] = createSignal<string | null>(null);
+    // what was asked can't be taken back: the dialog stays for its answer
+    const close = () => {
+        if (!busy()) props.onClose();
+    };
     const appId = () => extractApplicationIdFromToken(token());
     // each opening starts empty
     createEffect(on(() => props.open, (open) => {
@@ -85,11 +89,11 @@ export function NewBotModal(props: {
     return (
         <PaperModal
             open={props.open}
-            onClose={props.onClose}
+            onClose={close}
             title="New bot"
             footer={
                 <PaperFlex direction="row" gap="half" justify="end" fullWidth>
-                    <PaperButton variant="text" onClick={props.onClose}>Cancel</PaperButton>
+                    <PaperButton variant="text" disabled={busy()} onClick={close}>Cancel</PaperButton>
                     <PaperButton variant="success" disabled={busy() || !appId()} onClick={() => void submit()}>
                         {busy() ? "Connecting…" : "Add bot"}
                     </PaperButton>
@@ -125,6 +129,10 @@ export function ReplaceTokenModal(props: {
     const [token, setToken] = createSignal("");
     const [busy, setBusy] = createSignal(false);
     const [error, setError] = createSignal<string | null>(null);
+    // what was asked can't be taken back: the dialog stays for its answer
+    const close = () => {
+        if (!busy()) props.onClose();
+    };
     const appId = () => extractApplicationIdFromToken(token());
     // a token for another application would quietly turn this bot into that one
     const fits = () => Boolean(appId()) && (!props.bot?.applicationId || appId() === props.bot.applicationId);
@@ -152,12 +160,12 @@ export function ReplaceTokenModal(props: {
     return (
         <PaperModal
             open={Boolean(props.bot)}
-            onClose={props.onClose}
+            onClose={close}
             title="Replace token"
             size="small"
             footer={
                 <PaperFlex direction="row" gap="half" justify="end" fullWidth>
-                    <PaperButton variant="text" onClick={props.onClose}>Cancel</PaperButton>
+                    <PaperButton variant="text" disabled={busy()} onClick={close}>Cancel</PaperButton>
                     <PaperButton variant="primary" disabled={busy() || !fits()} onClick={() => void submit()}>Replace</PaperButton>
                 </PaperFlex>
             }
@@ -184,6 +192,10 @@ export function DeleteBotModal(props: {
 }) {
     const [busy, setBusy] = createSignal(false);
     const [error, setError] = createSignal<string | null>(null);
+    // what was asked can't be taken back: the dialog stays for its answer
+    const close = () => {
+        if (!busy()) props.onClose();
+    };
     createEffect(on(() => props.bot?.id, (id) => {
         if (!id) return;
         setError(null);
@@ -206,19 +218,21 @@ export function DeleteBotModal(props: {
     return (
         <PaperModal
             open={Boolean(props.bot)}
-            onClose={props.onClose}
+            onClose={close}
             title="Delete bot?"
             size="small"
             footer={
                 <PaperFlex direction="row" gap="half" justify="end" fullWidth>
-                    <PaperButton variant="text" onClick={props.onClose}>Cancel</PaperButton>
+                    <PaperButton variant="text" disabled={busy()} onClick={close}>Cancel</PaperButton>
                     <PaperButton variant="danger" disabled={busy()} onClick={() => void confirm()}>Delete</PaperButton>
                 </PaperFlex>
             }
         >
             <PaperFlex direction="column" gap="half">
                 <PaperText preset="text">
-                    {props.bot?.name}'s slash commands are removed from Discord, it goes offline, and its token is deleted from Paperboard.
+                    {props.bot?.connected && props.bot.commands.length > 0
+                        ? `${props.bot.name}'s slash commands are removed from Discord, it goes offline, and`
+                        : `${props.bot?.name} goes offline and`} its token is deleted from Paperboard.
                     Flows that use it stop working. The application stays in the Discord Developer Portal.
                 </PaperText>
                 <Show when={props.bot && !props.bot.connected && props.bot.commands.length > 0}>

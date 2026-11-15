@@ -103,4 +103,32 @@ describe("a bot's on switch", () => {
             served.stop();
         }
     });
+
+    test("a card's failed flip is said until the next flip, and a flip that works takes it away", async () => {
+        const fake = discord.addBot({ username: "Wobbly", guilds: [guild("Home")] });
+        await savedBots([{ stored: storedBot("b-wobbly", fake.appId, { name: "Wobbly" }), token: fake.token }]);
+        await startService({ discordApi: discord.api });
+        await stateWhere<BotsServiceState>(PANEL_ID, (s) => Boolean(s.bots[0]?.connected), "Wobbly to connect");
+        const served = await servePanel();
+        const page = await browser.open(served.url);
+        const configs = path.join((await testDaemon()).dataDir, "configs");
+        try {
+            await page.waitFor(`${toggle("Wobbly")} !== null`, "the bot's card");
+            await page.evaluate(`${toggle("Wobbly")}.dataset.test = "switch"`);
+            fs.chmodSync(configs, 0o555);
+            try {
+                await page.click(`[data-test="switch"]`);
+                await page.waitFor(`document.body.innerText.includes("Wobbly didn't go offline")`, "the failed flip");
+            } finally {
+                fs.chmodSync(configs, 0o755);
+            }
+            expect(await press(page, toggle("Wobbly"), false)).toBe(true);
+            await stateWhere<BotsServiceState>(PANEL_ID, (s) => s.bots[0]?.enabled === false, "Wobbly to be off");
+            expect(await page.evaluate<string>(`document.body.innerText`)).not.toContain("didn't go offline");
+            expect(page.exceptions).toEqual([]);
+        } finally {
+            await page.close();
+            served.stop();
+        }
+    });
 });

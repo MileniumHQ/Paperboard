@@ -190,5 +190,3 @@ export default function Invite(props: { bot: () => BotSummary }) {
         </>
     );
 }
-
-export { Invite };
