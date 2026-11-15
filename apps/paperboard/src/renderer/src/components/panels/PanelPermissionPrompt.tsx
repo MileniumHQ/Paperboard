@@ -1,7 +1,7 @@
 import { createEffect, createSignal, For, on, onCleanup, onMount, Show, type Component } from "solid-js";
 import { PaperButton, PaperFlex, PaperGrid, PaperMediaCard, PaperModal, PaperQuote, PaperText } from "@mileniumhq/paperui";
 import { panelPermissionsApi } from "../../lib/shell";
-import type { PanelPermission, PermissionAsk, ScreenPick, SystemBlock } from "../../../../shared/panelPermissions";
+import type { PanelPermission, PermissionAsk, PermissionFailure, ScreenPick, SystemBlock } from "../../../../shared/panelPermissions";
 import { errorMessage } from "../../lib/errorMessage";
 
 const NOUNS: Record<PanelPermission, string> = {
@@ -27,11 +27,16 @@ const SYSTEM_SECTIONS: Record<PanelPermission, string> = {
     screen: "Screen & System Audio Recording",
 };
 
-type Question = { kind: "ask"; ask: PermissionAsk } | { kind: "pick"; pick: ScreenPick } | { kind: "system"; block: SystemBlock };
+type Question =
+    | { kind: "ask"; ask: PermissionAsk }
+    | { kind: "pick"; pick: ScreenPick }
+    | { kind: "system"; block: SystemBlock }
+    | { kind: "failed"; failure: PermissionFailure };
 
 // What panels ask of you: whether one may use your microphone, camera or
 // screen (asked once per panel, the answer kept), what screen to share, and
-// when the system itself blocks Paperboard. One question at a time, in order.
+// when the system itself blocks Paperboard or Paperboard couldn't decide.
+// One question at a time, in order.
 const PanelPermissionPrompt: Component<{ panelName: (computerId: string, panelId: string) => string }> = (props) => {
     const [queue, setQueue] = createSignal<Question[]>([]);
     const [error, setError] = createSignal<string | null>(null);
@@ -48,6 +53,7 @@ const PanelPermissionPrompt: Component<{ panelName: (computerId: string, panelId
             panelPermissionsApi.onAsk((ask) => push({ kind: "ask", ask })),
             panelPermissionsApi.onScreenPick((pick) => push({ kind: "pick", pick })),
             panelPermissionsApi.onSystemBlock((block) => push({ kind: "system", block })),
+            panelPermissionsApi.onFailure((failure) => push({ kind: "failed", failure })),
         ];
         onCleanup(() => offs.forEach((off) => off()));
     });
@@ -104,10 +110,16 @@ const PanelPermissionPrompt: Component<{ panelName: (computerId: string, panelId
     };
     const [ask, setAsk] = createSignal<PermissionAsk | null>(null);
     const [pick, setPick] = createSignal<ScreenPick | null>(null);
+    const failing = () => {
+        const q = current();
+        return q?.kind === "failed" ? q.failure : null;
+    };
     const [block, setBlock] = createSignal<SystemBlock | null>(null);
+    const [failed, setFailed] = createSignal<PermissionFailure | null>(null);
     createEffect(on(asking, (q) => q && setAsk(q)));
     createEffect(on(picking, (q) => q && setPick(q)));
     createEffect(on(blocked, (q) => q && setBlock(q)));
+    createEffect(on(failing, (q) => q && setFailed(q)));
     const system = () => SYSTEM_PATHS[block()?.platform ?? "darwin"];
     const blockedNoun = () => NOUNS[block()?.permission ?? "microphone"];
 
@@ -189,6 +201,22 @@ const PanelPermissionPrompt: Component<{ panelName: (computerId: string, panelId
                     </PaperText>
                     {failure()}
                 </PaperFlex>
+            </PaperModal>
+
+            <PaperModal
+                open={failing() !== null}
+                size="small"
+                title={`${name(failed())} can't use your ${permissionsText(failed()?.permissions ?? [])}`}
+                onClose={next}
+                footer={
+                    <PaperButton variant="text" onClick={next}>
+                        Close
+                    </PaperButton>
+                }
+            >
+                <PaperQuote variant="danger" icon="error" title="Paperboard refused it because something went wrong" role="alert">
+                    <PaperText preset="text" breakWord>{failed()?.message}</PaperText>
+                </PaperQuote>
             </PaperModal>
         </>
     );

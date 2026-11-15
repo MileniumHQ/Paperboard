@@ -24,7 +24,7 @@ import {
     type PanelPermission,
     type PermissionAnswer,
 } from "./panelPermissions";
-import type { ScreenSource, SystemBlock } from "../shared/panelPermissions";
+import type { PermissionFailure, ScreenSource, SystemBlock } from "../shared/panelPermissions";
 
 const SYSTEM_SETTINGS: Record<"darwin" | "win32", Partial<Record<PanelPermission, string>>> = {
     darwin: {
@@ -98,8 +98,15 @@ export function installPanelPermissions(ses: Session, store: PanelPermissionStor
         return true;
     };
 
-    const refuse = (what: string) => (err: unknown): false => {
-        logger.warn(`[Main] panel ${what} refused:`, err instanceof Error ? err.message : err);
+    // a failure to decide (an answers file that can't be read or saved)
+    // refuses, and the window the panel is in says why
+    const refuse = (wc: WebContents | null, asker: PanelAsker, permissions: PanelPermission[]) => (err: unknown): false => {
+        const message = err instanceof Error ? err.message : String(err);
+        logger.error(`[Main] panel ${permissions.join(" and ")} for ${asker.panelId} refused:`, message);
+        if (wc && !wc.isDestroyed()) {
+            const failure: PermissionFailure = { ...asker, permissions, message };
+            wc.send("panel-permission-failed", failure);
+        }
         return false;
     };
 
@@ -117,7 +124,7 @@ export function installPanelPermissions(ses: Session, store: PanelPermissionStor
         const asker = panelAsker(origin);
         const wanted = mediaPermissions(permission, mediaTypes);
         if (!asker || !wanted) return callback(false);
-        void allowed(wc, asker, wanted).catch(refuse(`${wanted.join(" and ")} for ${asker.panelId}`)).then(callback);
+        void allowed(wc, asker, wanted).catch(refuse(wc, asker, wanted)).then(callback);
     });
 
     ses.setPermissionCheckHandler((_wc, permission, requestingOrigin, details) => {
@@ -128,7 +135,9 @@ export function installPanelPermissions(ses: Session, store: PanelPermissionStor
         try {
             return store.get(asker.panelId, checked) === "allowed";
         } catch (err) {
-            return refuse(`${checked} check for ${asker.panelId}`)(err);
+            // a check is only a query; the request that follows says why
+            logger.warn(`[Main] panel ${checked} check for ${asker.panelId} refused:`, err instanceof Error ? err.message : err);
+            return false;
         }
     });
 
@@ -149,7 +158,7 @@ export function installPanelPermissions(ses: Session, store: PanelPermissionStor
             const chosen = await askShell(wc, "panel-screen-pick", { ...asker, sources: offered });
             return sources.find((s) => s.id === chosen) ?? null;
         })()
-            .catch(refuse(`screen for ${asker.panelId}`))
+            .catch(refuse(wc, asker, ["screen"]))
             .then((source) => (source ? callback({ video: source }) : nothing()));
     });
 }

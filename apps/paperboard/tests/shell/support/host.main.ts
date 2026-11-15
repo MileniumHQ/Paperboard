@@ -6,7 +6,8 @@
 // which finds nothing and can fail) and the system work main does after a
 // settings save. A test can hold a probe of an address, to answer it after a
 // newer one, and count the probes; make the next forget fail; hold or fail the saves of panel permissions, which it
-// keeps in the store main keeps them in; push the update queue's states,
+// keeps in the store main keeps them in; push what main pushes on its own
+// (the update queue's states, a permission it couldn't decide),
 // making the next Stop and update fail; and break discovery's socket.
 //
 // The test drives it over stdin, one JSON command per line, and reads each
@@ -137,7 +138,8 @@ type Command =
     | { cmd: "push-update-queue"; state: UpdateQueueState }
     | { cmd: "fail-release"; message: string }
     | { cmd: "next-release" }
-    | { cmd: "fail-mdns"; message: string };
+    | { cmd: "fail-mdns"; message: string }
+    | { cmd: "push"; channel: string; payload: unknown };
 
 async function run(command: Command): Promise<unknown> {
     switch (command.cmd) {
@@ -162,7 +164,7 @@ async function run(command: Command): Promise<unknown> {
             return (await connectionPool.pairComputer(command.host, command.port, command.code, command.name)).id;
         case "rename":
             // as another window of this app renaming it would: the change is pushed to every shell
-            return connectionPool.updateComputer(command.id, { name: command.name });
+            return connectionPool.renameComputer(command.id, command.name);
         case "fail-remove":
             failRemove = command.message;
             return true;
@@ -199,6 +201,10 @@ async function run(command: Command): Promise<unknown> {
             return releases.shift();
         case "fail-mdns":
             failMdns(command.message);
+            return true;
+        case "push":
+            // what main pushes to its windows on its own
+            pushToShells(command.channel, command.payload);
             return true;
     }
 }

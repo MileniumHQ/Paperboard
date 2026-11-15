@@ -3,7 +3,7 @@
 // against the host's real permission store.
 import { afterAll, beforeAll, expect, test } from "bun:test";
 import { ELECTRON_PRELOAD } from "./support/electronPreload";
-import { bootShell, type Shell } from "./support/shell";
+import { bootShell, clickText, type Shell } from "./support/shell";
 
 
 const PANEL = "dev.example.notes";
@@ -53,5 +53,22 @@ test("a panel permission switch flips at once and plays its press, saves, and pu
         "the switch back off, with why",
     );
     expect(await shell.host({ cmd: "permission", panelId: PANEL, permission: "microphone" })).toBe("denied");
+    expect(page.exceptions).toEqual([]);
+});
+
+// Inventory: Core contracts — a permission Paperboard couldn't decide is refused with why on screen, not a bare NotAllowedError.
+test("a panel's request that failed to be decided is said in the window, with why", async () => {
+    const { page } = shell;
+    await shell.host({
+        cmd: "push",
+        channel: "panel-permission-failed",
+        payload: { computerId: "local", panelId: PANEL, permissions: ["microphone", "camera"], message: "Panel permissions in panel-permissions.json aren't valid JSON" },
+    });
+    await page.waitFor(
+        `[...document.querySelectorAll("[role=dialog]")].some((d) => d.innerText.includes("${PANEL} can't use your microphone and camera") && d.innerText.includes("aren't valid JSON"))`,
+        "the failure, in a dialog",
+    );
+    await clickText(page, "button", "Close");
+    await page.waitFor(`![...document.querySelectorAll("[role=dialog]")].some((d) => d.innerText.includes("aren't valid JSON"))`, "the dialog closed");
     expect(page.exceptions).toEqual([]);
 });

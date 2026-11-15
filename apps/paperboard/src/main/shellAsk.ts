@@ -4,9 +4,10 @@
 import { randomUUID } from "crypto";
 import type { WebContents } from "electron";
 
+const GONE = ["destroyed", "render-process-gone", "did-navigate"] as const;
 const pending = new Map<string, { wc: WebContents; channel: string; settle: (value: unknown) => void }>();
 
-/** Ask the shell in `wc` on `channel`; null when the window goes away before it answers. */
+/** Ask the shell in `wc` on `channel`; null when the window goes away, or loads again, before it answers. */
 export function askShell(wc: WebContents | null, channel: string, payload: Record<string, unknown>): Promise<unknown> {
     if (!wc || wc.isDestroyed()) return Promise.reject(new Error("there's no window to ask in"));
     const askId = randomUUID();
@@ -14,13 +15,12 @@ export function askShell(wc: WebContents | null, channel: string, payload: Recor
         const gone = () => settle(null);
         const settle = (value: unknown) => {
             if (!pending.delete(askId)) return;
-            wc.off("destroyed", gone);
-            wc.off("render-process-gone", gone);
+            for (const event of GONE) wc.off(event as "destroyed", gone);
             resolve(value);
         };
         pending.set(askId, { wc, channel, settle });
-        wc.once("destroyed", gone);
-        wc.once("render-process-gone", gone);
+        // a reloaded shell has forgotten the question
+        for (const event of GONE) wc.once(event as "destroyed", gone);
         wc.send(channel, { askId, ...payload });
     });
 }

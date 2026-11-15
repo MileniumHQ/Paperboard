@@ -49,6 +49,7 @@ export const SHELL_ON_CHANNELS = [
     "panel-permission-ask",
     "panel-screen-pick",
     "panel-permission-system",
+    "panel-permission-failed",
     "panel-permissions-changed",
     "quit-ask",
 ] as const;

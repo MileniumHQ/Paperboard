@@ -4,7 +4,7 @@ import { panelPath } from "@mileniumhq/paperapi";
 import { createBrowserBridge, type ShellIpc } from "./browserBridge";
 import type { LaunchOptions } from "../../../shared/launchOptions";
 import type { Graphics } from "../../../shared/graphics";
-import type { PanelPermission, PanelPermissionEntry, PermissionAnswer, PermissionAsk, ScreenPick, SystemBlock } from "../../../shared/panelPermissions";
+import type { PanelPermission, PanelPermissionEntry, PermissionAnswer, PermissionAsk, PermissionFailure, ScreenPick, SystemBlock } from "../../../shared/panelPermissions";
 
 export interface ComputerInfo {
     id: string;
@@ -143,11 +143,8 @@ export const computersApi = {
             name,
         }),
 
-    update: (
-        id: string,
-        updates: { name?: string; port?: number },
-    ): Promise<boolean> =>
-        requireIpc().invoke<boolean>("computer-update", { id, ...updates }),
+    rename: (id: string, name: string): Promise<boolean> =>
+        requireIpc().invoke<boolean>("computer-update", { id, name }),
 
     /** null once forgotten; otherwise why the computer couldn't be told, and
      * nothing was forgotten unless `evenIfUntold` */
@@ -276,6 +273,7 @@ export const panelPermissionsApi = {
     onAsk: (cb: (ask: PermissionAsk) => void) => listen("panel-permission-ask", cb),
     onScreenPick: (cb: (pick: ScreenPick) => void) => listen("panel-screen-pick", cb),
     onSystemBlock: (cb: (block: SystemBlock) => void) => listen("panel-permission-system", cb),
+    onFailure: (cb: (failure: PermissionFailure) => void) => listen("panel-permission-failed", cb),
     onChanged: (cb: () => void) => listen("panel-permissions-changed", cb),
 };
 

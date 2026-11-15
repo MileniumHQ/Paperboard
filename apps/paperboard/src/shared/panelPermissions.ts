@@ -44,3 +44,11 @@ export interface SystemBlock {
     permission: PanelPermission;
     platform: "darwin" | "win32";
 }
+
+/** Paperboard couldn't decide whether the panel may use `permissions` (its answers file can't be read or saved), so it refused: why. */
+export interface PermissionFailure {
+    computerId: string;
+    panelId: string;
+    permissions: PanelPermission[];
+    message: string;
+}

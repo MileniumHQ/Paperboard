@@ -6,6 +6,7 @@ import { CraneSocket, startCrane, WAIT_MS, type RunningCrane } from "../platform
 import { domCondition, launchElectron, SHELL, shellReady } from "../platform/app/support/electron";
 import { tempDataDir, tempDir } from "../platform/app/support/temp";
 import { createShellInvokeHandlers } from "../../src/main/communication/shellHandlers";
+import { installDevPanelInto } from "../../scripts/devPanel";
 
 const PANEL = "dev.paperboard.failures";
 
@@ -90,6 +91,27 @@ describe("failures reach the caller", () => {
         }
         expect(JSON.parse(fs.readFileSync(path.join(saveDir, "local", "app-settings.json"), "utf8")).runOnStartup).toBe(false);
         expect(await second.quit()).toEqual({ code: 0, signal: null });
+    }, WAIT_MS * 3);
+
+    test("a panel's microphone request that Paperboard can't decide is refused, and the window says why", async () => {
+        const dataDir = tempDataDir("permissions-unreadable");
+        await installDevPanelInto({ source: path.join(import.meta.dir, "../shell/support/notes-panel"), pages: ["panel.ts"], service: "service.ts", html: ["index.html"] }, dataDir);
+        // the saved answers can't be read: nobody may be allowed or denied by a guess
+        fs.writeFileSync(path.join(dataDir, "local", "panel-permissions.json"), "{ not json");
+        const electron = await launchElectron({ appDir: app.dir, dataDir, args: ["--skip-update", "--use-fake-device-for-media-stream"] });
+        await shellReady(electron);
+        await electron.evalIn(SHELL, `document.querySelector('[role=radio][aria-label^="This Computer"]').click()`);
+        const item = `document.querySelector('[class*=panelList] label[data-value="dev.paperboard.testnotes"]')`;
+        await electron.evalIn(SHELL, domCondition(item));
+        await electron.evalIn(SHELL, `${item}.click()`);
+        const frame = "panel://local.dev.paperboard.testnotes/";
+        await electron.evalInFrame(frame, domCondition(`document.getElementById("note")`));
+        const refused = await electron.evalInFrame(frame, `navigator.mediaDevices.getUserMedia({ audio: true }).then(() => "allowed", (err) => err.name)`);
+        expect(refused).toBe("NotAllowedError");
+        const dialog = await electron.evalIn(SHELL, domCondition(`[...document.querySelectorAll("[role=dialog]")].map((d) => d.innerText).find((t) => t.includes("can't use your microphone"))`));
+        expect(dialog).toContain("aren't valid JSON");
+        expect(fs.readFileSync(path.join(dataDir, "local", "panel-permissions.json"), "utf8")).toBe("{ not json");
+        expect(await electron.quit()).toEqual({ code: 0, signal: null });
     }, WAIT_MS * 3);
 
     test("a folder that won't open answers with the reason the system gave", async () => {
