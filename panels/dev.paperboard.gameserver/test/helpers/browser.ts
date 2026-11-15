@@ -76,7 +76,7 @@ export async function waitForWidget(page: Page, predicate: string, what: string)
 /** serves the built UI with a panel credential the test daemon issued; widgetUrl() addresses a Home widget under it */
 export async function servePanel(daemon: TestDaemon): Promise<{ url: string; stop: () => void }> {
     const dist = panelUi();
-    const granted = await getTransport().call<{ token: string }>("auth:panel-token", { panelId: PANEL_ID });
+    const granted = await getTransport().call("auth:panel-token", { panelId: PANEL_ID });
     const creds = JSON.stringify({ port: daemon.port, token: granted.token, scoped: true, computerId: "local", panelId: PANEL_ID }).replace(/</g, "\\u003c");
     const server = Bun.serve({
         port: 0,

@@ -511,9 +511,7 @@ const QUIET = /\/\/\s*quiet:(.*)$/;
 
 // Files that still reach into another package by path, each until its part
 // is moved to package imports (by repo-relative path, with why it is left).
-const KNOWN_CROSSINGS: Record<string, string> = {
-    "panels/dev.paperboard.gameserver/test/updates.test.ts": "uses the app's daemon test support (Game Server moves in a later phase)",
-};
+const KNOWN_CROSSINGS: Record<string, string> = {};
 
 const packageDirs = new Map<string, string>();
 /** the workspace package a folder is in: the nearest one with a package.json, ROOT for none */

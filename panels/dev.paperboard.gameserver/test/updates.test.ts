@@ -10,8 +10,8 @@ import { exe } from "./helpers/standIn";
 import { writeTree } from "./helpers/tmp";
 import { PANEL_ID } from "../src/servers";
 import { javaPackageFor } from "../src/lib/versionProfile";
-import { FIXTURE_PUBLIC_KEY, serve, sha256, signPackage, type LoopbackServer } from "../../../apps/paperboard/tests/daemon/support/release";
-import { tarGz } from "../../../apps/paperboard/tests/daemon/support/archive";
+import { FIXTURE_PUBLIC_KEY, serve, sha256, signPackage, type LoopbackServer } from "paperboard/tests/daemon/support/release";
+import { tarGz } from "paperboard/tests/daemon/support/archive";
 
 const SERVERS = "servers-0123456789ab";
 const ID = "s-up";
@@ -77,13 +77,13 @@ describe("Stop and update", () => {
 
         const t = getTransport();
         const sha = releaseJava("21.0.99");
-        const staged = await t.call<{ waiting?: { blockedBy: { processId: string; holds: boolean }[] } }>("package:download", { packageName: JAVA, downloadId: "java", sha256: sha }, null);
+        const staged = await t.call("package:download", { packageName: JAVA, downloadId: "java", sha256: sha }, null);
         // the server is important: it holds the update, and keeps running
         expect(staged.waiting?.blockedBy).toEqual([expect.objectContaining({ processId: `${ID}-mc-server`, holds: true })]);
         expect(fs.existsSync(path.join(dataDir, "packages", JAVA, "release"))).toBe(false);
         expect((await state.server(ID))?.serverStatus).toBe("online");
 
-        const updated = await t.call<{ failures: Record<string, string> }>("update:inUse", { packages: [JAVA] }, null);
+        const updated = await t.call("update:inUse", { packages: [JAVA] }, null);
         expect(updated.failures).toEqual({});
         expect(fs.readFileSync(path.join(dataDir, "packages", JAVA, "release"), "utf8")).toContain("21.0.99");
         // stopped by its own stop command, so the world was saved, not a terminate signal
