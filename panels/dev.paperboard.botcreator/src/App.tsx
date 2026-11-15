@@ -4,7 +4,6 @@
 // (the button, the swipe) returns to it.
 import { createEffect, createSignal, on, Show } from "solid-js";
 import {
-    PaperAvatar,
     PaperFlex,
     PaperPanel,
     PaperMenu,
@@ -25,7 +24,7 @@ import SetupGuide from "./components/SetupGuide";
 import { createBots, type BotsState } from "./state";
 import { createCompact } from "./compact";
 import { errorToMessage } from "./types";
-import { picture } from "./picture";
+import { DiscordAvatar } from "./picture";
 import "@mileniumhq/paperui/style.css";
 import "@mileniumhq/paperui/panel.css";
 
@@ -158,7 +157,7 @@ export default function App() {
                 enabled={compact()}
                 open={shown() !== null}
                 title={(pageBot() && bots.find(pageBot()!)?.name) || ""}
-                icon={<PaperAvatar size="small" src={picture(pageBot() && bots.find(pageBot()!)?.avatar)} fallbackIcon="smart_toy" />}
+                icon={<DiscordAvatar size="small" url={pageBot() && bots.find(pageBot()!)?.avatar} fallbackIcon="smart_toy" />}
                 onBack={() => setOpened(null)}
             >
                 <Show when={pageBot()} keyed>

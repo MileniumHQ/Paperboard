@@ -25,7 +25,7 @@ import { DeleteBotModal, NewBotModal, ReplaceTokenModal } from "./BotDialogs";
 import type { BotsState } from "../state";
 import type { BotSummary } from "../bots";
 import { count, errorToMessage } from "../types";
-import { picture } from "../picture";
+import { pictureIcon } from "../picture";
 
 /** "3 servers" for a bot online, or why it isn't, as its card says it. */
 export function botStatusText(bot: BotSummary): string {
@@ -115,7 +115,7 @@ export default function BotsHome(props: { bots: BotsState; onOpen: (bot: { id: s
                                 {(bot) => (
                                     <PaperMediaCard
                                         effect={false}
-                                        icon={picture(bot.avatar) ?? "smart_toy"}
+                                        icon={pictureIcon(bot.avatar, "smart_toy")}
                                         title={bot.name}
                                         subtitle={botStatusText(bot)}
                                         description={bot.connected ? undefined : bot.lastError ?? undefined}

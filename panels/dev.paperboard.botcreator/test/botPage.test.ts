@@ -166,4 +166,35 @@ describe("a bot's page", () => {
             served.stop();
         }
     });
+
+    test("a picture whose fetch failed says so on every surface, and is never shown as broken once it loads", async () => {
+        const fake = discord.addBot({ username: "Blinked" });
+        // the CDN fails each default avatar once, then has it again
+        for (let n = 0; n < 6; n++) {
+            const path = `/cdn/embed/avatars/${n}.png`;
+            discord.cdnAnswers.set(path, () => {
+                discord.cdnAnswers.delete(path);
+                return new Response("busy", { status: 503 });
+            });
+        }
+        await savedBots([{ stored: storedBot("b-blink", fake.appId, { name: "Blinked" }), token: fake.token }]);
+        await startService({ discordApi: discord.api });
+        await stateWhere<BotsServiceState>(PANEL_ID, (s) => Boolean(s.bots[0]?.connected), "Blinked to connect");
+        const served = await servePanel();
+        const page = await browser.open(served.url);
+        try {
+            // the bot's card shows a broken picture, not its glyph or a picture
+            await page.waitFor(`document.body.innerText.includes("Blinked") && document.body.innerText.includes("broken_image")`, "the card's broken picture");
+            await clickText(page, "[class*=card], [class*=Card]", "Blinked");
+            await page.waitFor(`document.body.innerText.includes("Gateway status")`, "the Overview");
+            const said = `[...document.querySelectorAll("[title]")].filter((el) => /picture couldn't be shown: .*503/.test(el.title))`;
+            await page.waitFor(`${said}.length > 0`, "the Overview's avatar to say why it's empty");
+            expect(await page.evaluate<number>(`${said}.filter((el) => el.querySelector("img")).length`)).toBe(0);
+            expect(page.exceptions).toEqual([]);
+        } finally {
+            for (let n = 0; n < 6; n++) discord.cdnAnswers.delete(`/cdn/embed/avatars/${n}.png`);
+            await page.close();
+            served.stop();
+        }
+    });
 });

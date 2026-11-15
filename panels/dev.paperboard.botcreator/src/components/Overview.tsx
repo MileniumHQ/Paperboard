@@ -5,7 +5,6 @@ import {
     PaperText,
     PaperQuote,
     PaperButton,
-    PaperAvatar,
     PaperBadge,
     PaperTable,
     PaperCard,
@@ -22,7 +21,7 @@ import {
     type Health,
 } from "../types";
 import type { RecentMessage } from "../session";
-import { picture, pictureProblem } from "../picture";
+import { DiscordAvatar } from "../picture";
 
 const HEALTH_POLL_MS = 10000;
 
@@ -155,7 +154,7 @@ export default function Overview(props: OverviewProps) {
         <>
             <PaperCard>
                 <PaperFlex direction="row" padding="full" gap="full" align="center">
-                    <PaperAvatar src={picture(props.bot().avatar)} title={pictureProblem(props.bot().avatar)} accent={pictureProblem(props.bot().avatar) ? "danger" : undefined} fallbackIcon="smart_toy" alt={props.bot().name} size="xlarge" />
+                    <DiscordAvatar url={props.bot().avatar} fallbackIcon="smart_toy" alt={props.bot().name} size="xlarge" />
                     <PaperFlex direction="column" gap="onefourth" flex minWidth={0}>
                         <PaperFlex direction="row" gap="half" align="baseline" wrap>
                             <PaperText preset="title">{props.bot().name}</PaperText>

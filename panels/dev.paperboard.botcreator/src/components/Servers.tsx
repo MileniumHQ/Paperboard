@@ -4,7 +4,6 @@ import {
     PaperFlex,
     PaperText,
     PaperQuote,
-    PaperAvatar,
     PaperButton,
     PaperCard,
     PaperEmptyState,
@@ -25,7 +24,7 @@ import {
 } from "@mileniumhq/paperui";
 import { serviceApi } from "@mileniumhq/paperapi";
 import { PANEL_ID, type BotSummary } from "../bots";
-import { picture, pictureProblem } from "../picture";
+import { DiscordAvatar, pictureIcon } from "../picture";
 import {
     CHANNEL_KIND_LABELS,
     count,
@@ -337,13 +336,7 @@ export default function Servers(props: { bot: () => BotSummary }) {
                     <>
                         <PaperCard>
                             <PaperFlex direction="row" padding="full" gap="full" align="center">
-                                <PaperAvatar
-                                    src={picture(guild().icon)}
-                                    title={pictureProblem(guild().icon)}
-                                    accent={pictureProblem(guild().icon) ? "danger" : undefined}
-                                    fallbackIcon="dns"
-                                    size="xlarge"
-                                />
+                                <DiscordAvatar url={guild().icon} fallbackIcon="dns" size="xlarge" />
 
                                 <PaperFlex direction="column" gap="half" flex minWidth={0}>
                                     <PaperFlex direction="row" gap="half" align="center" wrap>
@@ -469,7 +462,7 @@ export default function Servers(props: { bot: () => BotSummary }) {
                                                         align="center"
                                                         fullWidth
                                                     >
-                                                        <PaperAvatar src={picture(member.avatar)} title={pictureProblem(member.avatar)} accent={pictureProblem(member.avatar) ? "danger" : undefined} size="medium" fallbackIcon="person" />
+                                                        <DiscordAvatar url={member.avatar} size="medium" fallbackIcon="person" />
                                                         <PaperFlex direction="column" gap="onefourth" flex minWidth={0}>
                                                             <PaperFlex
                                                                 direction="row"
@@ -589,7 +582,7 @@ export default function Servers(props: { bot: () => BotSummary }) {
                         <For each={guilds()}>
                             {(guild) => (
                                 <PaperMediaCard
-                                    icon={picture(guild.icon) ?? "dns"}
+                                    icon={pictureIcon(guild.icon, "dns")}
                                     title={guild.name}
                                     subtitle={count(guild.memberCount, "member")}
                                     description={`${count(guild.channelCount, "channel")} · ${count(guild.roleCount, "role")}`}
@@ -605,7 +598,7 @@ export default function Servers(props: { bot: () => BotSummary }) {
                 position="fixed"
                 open={selectedId() !== null}
                 title={detail()?.name ?? "Loading server…"}
-                icon={<PaperAvatar size="small" src={picture(detail()?.icon)} fallbackIcon="dns" />}
+                icon={<DiscordAvatar size="small" url={detail()?.icon} fallbackIcon="dns" />}
                 onBack={closeServer}
                 onClosed={clearServer}
             >
