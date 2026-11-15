@@ -8,6 +8,7 @@
 //   2  usage: the command line itself is wrong
 
 import path from "path";
+import { errorMessage } from "../errors";
 
 export const EXIT_OK = 0;
 export const EXIT_FAILED = 1;
@@ -111,7 +112,7 @@ export class Output {
             if (error.hint) this.stderr.write(`  ${this.err.dim(error.hint)}\n`);
             return error.exitCode;
         }
-        this.stderr.write(`${this.err.red("✗")} ${error instanceof Error ? error.message : String(error)}\n`);
+        this.stderr.write(`${this.err.red("✗")} ${errorMessage(error)}\n`);
         return EXIT_FAILED;
     }
 }

@@ -2,6 +2,7 @@ import { blocksApi } from "./blocks";
 import { getPanelId } from "./ipc";
 import { STATE_EVENT, STATE_VALUE, serviceApi } from "./serviceCalls";
 import { registerPanelHydrator } from "./panelHydration";
+import { errorMessage } from "./errors";
 
 export interface PanelBridgeOptions<TState extends Record<string, any>> {
     panelId?: string;
@@ -55,7 +56,7 @@ export function createPanelBridge<
         } catch (err) {
             // the caller hears it; the bridge keeps serving the last-known
             // (possibly default) state meanwhile
-            if (read === latestRead) status = { ready: false, error: err instanceof Error ? err.message : String(err) };
+            if (read === latestRead) status = { ready: false, error: errorMessage(err) };
             throw err;
         } finally {
             patchedDuring.delete(read);

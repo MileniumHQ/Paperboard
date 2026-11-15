@@ -6,6 +6,7 @@ import { defineType } from "./schema";
 import { STATE_EVENT, STATE_VALUE, WIDGET_CHOICES_COMMAND, callBlockId, eventBlockId } from "./serviceCalls";
 import { parseWidgetChoices, type WidgetChoice } from "./widgetManifest";
 import type { BackupEnded } from "./backups";
+import { errorMessage } from "./errors";
 
 export interface ServiceContext<TState> {
     state: TState;
@@ -329,7 +330,7 @@ function answerTheDaemon(panelId: string, options: AnyOptions, ctx: ServiceConte
             const done = `${type}-done`;
             void (async () => run(message))().then(
                 () => process.send?.({ type: done, requestId: message.requestId }),
-                (err) => process.send?.({ type: done, requestId: message.requestId, error: err instanceof Error ? err.message : String(err) }),
+                (err) => process.send?.({ type: done, requestId: message.requestId, error: errorMessage(err) }),
             );
         });
     };

@@ -1,4 +1,5 @@
 import { currentFrameSession } from "./frameSession";
+import { errorMessage } from "./errors";
 
 // Unsaved work on a panel page. The page tells its shell when it has some
 // and when it no longer does; while it has some, the shell keeps the page
@@ -44,7 +45,7 @@ const answer = async (requestId: string, generation: string) => {
         reply({ leave: (await ask()) === true });
     } catch (err) {
         console.error("[paperapi] asking about unsaved changes failed:", err);
-        reply({ leave: false, error: err instanceof Error ? err.message : String(err) });
+        reply({ leave: false, error: errorMessage(err) });
     }
 };
 

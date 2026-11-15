@@ -6,6 +6,7 @@ import { hydratePanelBridges } from "./panelHydration";
 import { waitForContentPainted } from "./paintReady";
 import { mountRequestedWidget, parseWidgetInitialize } from "./widget";
 import { frameComputerName, setFrameSession } from "./frameSession";
+import { errorMessage } from "./errors";
 
 // A document load is not readiness. The shell challenges this generation;
 // only an authenticated connection, and service hydration when the panel
@@ -37,7 +38,7 @@ if (typeof window !== "undefined" && window.parent !== window) {
             window.parent.postMessage({ type: "paperboard:ready", generation, panelId }, "*");
         } catch (err) {
             console.error("[paperapi] panel initialization failed:", err);
-            window.parent.postMessage({ type: "paperboard:failed", generation, message: err instanceof Error ? err.message : String(err) }, "*");
+            window.parent.postMessage({ type: "paperboard:failed", generation, message: errorMessage(err) }, "*");
         }
     };
     window.addEventListener("message", receive);

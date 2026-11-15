@@ -23,6 +23,12 @@
             "import": "./dist/net.es.js",
             "require": "./dist/net.cjs"
         },
+        "./fs": {
+            "bun": "./src/fs.ts",
+            "types": "./dist/fs.d.ts",
+            "import": "./dist/fs.es.js",
+            "require": "./dist/fs.cjs"
+        },
         "./package.json": "./package.json"
     },
     "bin": {

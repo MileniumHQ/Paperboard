@@ -7,6 +7,7 @@ import { grantedComputerId, resolveDefaultPanelId } from "./identity";
 import { resolveCredentials, type CraneCredentials, type ResolvedCredentials } from "./transport/credentials";
 import { webSocketImpl, type TransportSocket } from "./transport/socket";
 import { answerActionCall, currentActionCall, loadActionCallScope } from "./transport/actionCalls";
+import { errorMessage } from "./errors";
 
 export { craneEndpoint, type CraneCredentials } from "./transport/credentials";
 
@@ -247,7 +248,7 @@ export class CraneTransport {
         if (this.closedByUser) return;
         this.ensureConnected().catch((err) => {
             debugErr(`reconnect to ${this.computerId} failed`, err);
-            this.emitStatus(false, err instanceof Error ? err.message : String(err));
+            this.emitStatus(false, errorMessage(err));
             this.scheduleReconnect();
         });
     }

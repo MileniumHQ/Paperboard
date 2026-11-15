@@ -4,6 +4,7 @@ import { requirePanelId } from "./panelIdentity";
 import { debugErr } from "./debug";
 import { panelsDir as getPanelsDir } from "./cli/paths";
 import { daemonAnswers } from "./cli/daemon";
+import { errorMessage } from "./errors";
 
 export interface LinkOptions {
     targetDir?: string;
@@ -123,7 +124,7 @@ export function linkAllPanels(
         } catch (err) {
             skipped.push({
                 dir,
-                reason: err instanceof Error ? err.message : String(err),
+                reason: errorMessage(err),
             });
         }
     }
