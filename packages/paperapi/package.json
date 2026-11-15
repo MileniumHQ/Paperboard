@@ -17,6 +17,12 @@
             "import": "./dist/paperapi.es.js",
             "require": "./dist/paperapi.cjs"
         },
+        "./net": {
+            "bun": "./src/net.ts",
+            "types": "./dist/net.d.ts",
+            "import": "./dist/net.es.js",
+            "require": "./dist/net.cjs"
+        },
         "./package.json": "./package.json"
     },
     "bin": {

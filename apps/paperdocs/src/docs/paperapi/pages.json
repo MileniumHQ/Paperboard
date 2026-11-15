@@ -78,6 +78,9 @@
                 "process": {
                     "name": "Process API"
                 },
+                "public-fetch": {
+                    "name": "Public fetch"
+                },
                 "secrets": {
                     "name": "Secrets API"
                 },

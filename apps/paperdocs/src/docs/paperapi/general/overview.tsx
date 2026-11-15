@@ -92,6 +92,7 @@ export default function PaperApiOverviewDoc() {
                     <tr><td><PaperLink href="/docs/paperapi/system/">systemApi</PaperLink></td><td>Facts about the computer: OS, address, GPUs, usage.</td></tr>
                     <tr><td><PaperLink href="/docs/paperapi/panels/">panelsApi</PaperLink></td><td>Installed panels and the Panel Library.</td></tr>
                     <tr><td><PaperLink href="/docs/paperapi/shell/">resolveOneShotShell</PaperLink></td><td>The platform shell for running one command line.</td></tr>
+                    <tr><td><PaperLink href="/docs/paperapi/public-fetch/">fetchPublic</PaperLink></td><td>A service's fetch of an untrusted web address: public internet only, bounded in size and time.</td></tr>
                 </tbody>
             </PaperTable>
             <PaperText preset="body" as="p">

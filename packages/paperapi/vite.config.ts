@@ -10,13 +10,16 @@ export default defineConfig({
   ],
   build: {
     lib: {
-      entry: path.resolve(import.meta.dirname, "src/index.ts"),
-      name: "paperapi",
-      fileName: (format) => format === "es" ? "paperapi.es.js" : "paperapi.cjs",
+      // net is service-only (Node's network modules): its own entry keeps it out of pages
+      entry: {
+        index: path.resolve(import.meta.dirname, "src/index.ts"),
+        net: path.resolve(import.meta.dirname, "src/net.ts"),
+      },
+      fileName: (format, entry) => `${entry === "index" ? "paperapi" : entry}.${format === "es" ? "es.js" : "cjs"}`,
       formats: ["es", "cjs"],
     },
     rollupOptions: {
-      external: ["electron"],
+      external: ["electron", /^node:/],
       output: {
         globals: {
           electron: "electron",
