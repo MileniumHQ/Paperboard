@@ -50,6 +50,22 @@ describe("a turn's time limit", () => {
     }, SLOW);
 });
 
+// The service's notices while a turn runs.
+describe("notices", () => {
+    test("past the backlog a notice is refused, never one dropped unread", async () => {
+        rig = await conversationRig({ harness: "codex" });
+        rig.conversation.send("busy [[hold]]");
+        await rig.host.printed(turnId, "fake.holding");
+        for (let i = 0; i < 10; i++) rig.conversation.notice(`routine ${i} is due`);
+        expect(() => rig!.conversation.notice("routine 10 is due")).toThrow("the agent has 10 things waiting to be read already");
+        release(rig.root);
+        await rig.states.until(() => rig!.turns().length === 2, "the notices' turn");
+        await settled(rig);
+        const next = rig.turns()[1].message as string;
+        for (let i = 0; i < 10; i++) expect(next).toContain(`routine ${i} is due`);
+    }, SLOW);
+});
+
 // Messages during a turn.
 describe("messages during a turn", () => {
     test("a message sent mid-turn stops it with one SIGTERM, and the next turn resumes the thread with every queued message", async () => {

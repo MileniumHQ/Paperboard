@@ -240,14 +240,14 @@ export class Conversation {
 
     /**
      * Start the agent on something the service noticed (a routine is due): read on its next turn, which may
-     * end without a text. Throws when there's no agent to tell yet.
+     * end without a text. Throws when there's no agent to tell yet, or it has too much waiting.
      */
     notice(text: string) {
         if (this.closed) throw new Error("the conversation is shutting down");
         if (!this.deps.settings()) throw new Error("the agent isn't set up yet");
+        // a backlog this long means turns aren't keeping up: this one is refused, and whoever sent it shows why
+        if (this.notices.length >= MAX_NOTICES) throw new Error(`the agent has ${MAX_NOTICES} things waiting to be read already`);
         this.notices.push(text);
-        // a backlog this long means turns aren't keeping up: the oldest notice is the least useful one
-        if (this.notices.length > MAX_NOTICES) console.error("[agents] dropped a notice nobody read:", this.notices.shift()!.slice(0, 120));
         this.pump();
     }
 
@@ -662,6 +662,8 @@ export class Conversation {
     private async launched(settings: Settings, launch: TurnLaunch, mcp: ReturnType<ConversationDeps["mcp"]>, message: string) {
         const log = this.deps.log ?? null;
         let buf = "";
+        /** the rest of a line past MAX_LINE is still coming: it's skipped, not read as a line of its own */
+        let overlong = false;
         let stderr = "";
         const failures: string[] = [];
         const plain = this.plain;
@@ -734,10 +736,16 @@ export class Conversation {
                 this.deps.host.onStdout(TURN_PROC_ID, (data) => {
                     buf += data;
                     for (let i = buf.indexOf("\n"); i >= 0; i = buf.indexOf("\n")) {
-                        onLine(buf.slice(0, i));
+                        if (overlong) overlong = false;
+                        else onLine(buf.slice(0, i));
                         buf = buf.slice(i + 1);
                     }
-                    if (buf.length > MAX_LINE) buf = ""; // a line past the cap is dropped, not buffered forever
+                    // a line past the cap isn't buffered forever: it's dropped to its end, and the turn says so
+                    if (buf.length > MAX_LINE) {
+                        if (!overlong) failures.push(`${HARNESS_NAMES[settings.harness]} printed a line over ${MAX_LINE / 1024 / 1024} MB, which couldn't be read`);
+                        overlong = true;
+                        buf = "";
+                    }
                 }),
                 this.deps.host.onStderr(TURN_PROC_ID, (data) => {
                     log?.line("stderr", data);
@@ -775,7 +783,7 @@ export class Conversation {
             const driven = acp?.run();
             code = await exited;
             await fed;
-            if (buf.trim()) onLine(buf);
+            if (buf.trim() && !overlong) onLine(buf);
             acp?.close();
             await driven;
         } finally {
