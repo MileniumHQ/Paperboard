@@ -3,7 +3,7 @@
 // which projects exist and whether their flows run; each canvas is its own
 // file. The store runs in the service and in the tests, over any storage
 // that reads and writes JSON by path.
-import { EMPTY_FLOWS as EMPTY, PANEL_ID, type CanvasPreview, type PreviewRect, type ProjectMeta, type ProjectSummary, type SavedFlows } from "../panel";
+import { EMPTY_FLOWS as EMPTY, MAX_PREVIEW_BLOCKS, MAX_PREVIEW_PATH, PANEL_ID, type CanvasPreview, type PreviewBlock, type PreviewRect, type ProjectMeta, type ProjectSummary, type SavedFlows } from "../panel";
 import { readFlows } from "./flows";
 import { isHat } from "./interpreter";
 import { errorMessage, isRecord, SerialQueue } from "@mileniumhq/paperapi";
@@ -17,8 +17,6 @@ export const NEW_PROJECT_NAME = "Untitled project";
 export const MAX_PROJECT_NAME = 128;
 /** a project is a canvas a person keeps; more than this is not a workspace */
 export const MAX_PROJECTS = 200;
-/** the most stacks a card's miniature draws */
-export const MAX_PREVIEW_RECTS = 200;
 
 /** Reads and writes JSON by path; `undefined` is the panel's config document. */
 export interface ProjectStorage {
@@ -62,12 +60,18 @@ export function nextProjectName(names: readonly string[], base = NEW_PROJECT_NAM
 const isFiniteNumber = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
 const isRect = (v: unknown): v is PreviewRect => isRecord(v) && isFiniteNumber(v.x) && isFiniteNumber(v.y) && isFiniteNumber(v.w) && isFiniteNumber(v.h) && v.w >= 0 && v.h >= 0;
 
+/** An SVG outline: path commands and numbers only, and no longer than a block's needs. */
+const isOutline = (v: unknown): v is string => typeof v === "string" && v.length <= MAX_PREVIEW_PATH && /^[MmLlHhVvCcSsQqTtAaZz0-9.,\se+-]*$/.test(v);
+const isPreviewBlock = (v: unknown): v is PreviewBlock =>
+    isRecord(v) && isFiniteNumber(v.x) && isFiniteNumber(v.y) && isOutline(v.path) && typeof v.fill === "string" && /^[a-z0-9-]+$/.test(v.fill);
+
 /** A miniature the page sent, or null when it isn't one. */
 export function readPreview(raw: unknown): CanvasPreview | null {
     if (raw === null || raw === undefined) return null;
-    if (!isRecord(raw) || !isRect(raw.bounds) || !Array.isArray(raw.rects) || !raw.rects.every(isRect)) throw new Error("The canvas preview is broken");
-    if (raw.rects.length > MAX_PREVIEW_RECTS) return { bounds: raw.bounds, rects: raw.rects.slice(0, MAX_PREVIEW_RECTS) };
-    return { bounds: raw.bounds, rects: raw.rects };
+    // stacks drawn as boxes, by a Blocks from before miniatures showed their blocks: drawn again on the next edit
+    if (isRecord(raw) && "rects" in raw && !("blocks" in raw)) return null;
+    if (!isRecord(raw) || !isRect(raw.bounds) || !Array.isArray(raw.blocks) || !raw.blocks.every(isPreviewBlock)) throw new Error("The canvas preview is broken");
+    return { bounds: raw.bounds, blocks: raw.blocks.slice(0, MAX_PREVIEW_BLOCKS) };
 }
 
 /**

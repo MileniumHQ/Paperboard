@@ -23,9 +23,16 @@ export interface SavedFlows {
 export const EMPTY_FLOWS: SavedFlows = { workspace: {}, schemas: {} };
 
 const rect = shape.object({ x: shape.number(), y: shape.number(), w: shape.number(), h: shape.number() });
-/** A project's canvas in miniature: where each stack of blocks sits, as the page last drew them. */
-const canvasPreview = shape.object({ bounds: rect, rects: shape.list(rect) });
+/** One block in miniature: its outline where it sits, filled with its PaperUI colour (a token's name). */
+const previewBlock = shape.object({ x: shape.number(), y: shape.number(), path: shape.text(), fill: shape.text() });
+/** A project's canvas in miniature: each block's outline, as the page last drew them, parents before what they hold. */
+const canvasPreview = shape.object({ bounds: rect, blocks: shape.list(previewBlock) });
 export type PreviewRect = Infer<typeof rect>;
+/** the most blocks a card's miniature draws */
+export const MAX_PREVIEW_BLOCKS = 200;
+/** the longest outline a miniature keeps for one block */
+export const MAX_PREVIEW_PATH = 4000;
+export type PreviewBlock = Infer<typeof previewBlock>;
 export type CanvasPreview = Infer<typeof canvasPreview>;
 
 /** A project as the windows see it. */

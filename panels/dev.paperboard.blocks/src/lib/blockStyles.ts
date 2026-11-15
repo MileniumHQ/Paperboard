@@ -225,3 +225,12 @@ export function blockIcon(block: Blockly.Block): BlockIcon {
     if (!section) throw new Error(`The style "${name}" names the section "${style.section}", which the Library doesn't have`);
     return { symbol: section.icon };
 }
+
+/** The PaperUI colour a block is filled with, as a token's name: a field's for the value typed into it. */
+export function blockFill(block: Blockly.Block): string {
+    if (block.isShadow()) return "field";
+    const name = block.getStyleName();
+    const style: Style | undefined = name.startsWith(PANEL_STYLE_PREFIX) ? PANEL_SWATCHES[Number(name.slice(PANEL_STYLE_PREFIX.length))] : STYLES[name as BlockStyleName];
+    if (!style) throw new Error(`${block.type} has the style "${name}", which Blocks doesn't draw`);
+    return style.deep ? `${style.role}-deep` : style.role;
+}

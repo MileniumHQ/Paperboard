@@ -9,6 +9,7 @@ import { PaperProvider } from "@mileniumhq/paperui";
 import App from "../../src/App";
 import { createRuntime, type RuntimeDeps } from "../../src/runtime";
 import { PANEL_ID } from "../../src/panel";
+import { BUILTIN } from "../../src/lib/names";
 import type { ProjectStorage } from "../../src/lib/projects";
 import { memoryBlocks } from "@mileniumhq/paperapi";
 import { service } from "./serviceStub";
@@ -104,8 +105,22 @@ async function run(): Promise<Record<string, unknown>> {
     await until("the next editor", () => !leaving.isConnected);
     const fromMenu = await editorName();
     await shoot("drafts-editor");
+
+    // a flow on its canvas, and home: the project's card shows it in miniature, each block in its own colour
+    Blockly.serialization.blocks.append(
+        { type: BUILTIN.onRun, x: 40, y: 40, inputs: { DO: { block: { type: BUILTIN.log, inputs: { TEXT: { shadow: { type: "text", fields: { TEXT: "hello" } } } } } } } },
+        canvas()!,
+    );
+    const onCanvas = canvas()!
+        .getAllBlocks(true)
+        .map((block) => getComputedStyle(block.pathObject.svgPath).fill);
+    document.querySelector<HTMLElement>('[aria-label="All projects"]')!.click();
+    await home();
+    const miniature = await until("the card's miniature", () => document.querySelector('svg[class*="_preview_"]')?.querySelectorAll("path").length && document.querySelector('svg[class*="_preview_"]'));
+    const onCard = [...miniature.querySelectorAll("path")].map((path) => getComputedStyle(path).fill);
+    await shoot("miniature-home");
     dispose();
-    return { first, shown, emptyState, fromHome, fromMenu, uncaught: [...errors] };
+    return { first, shown, emptyState, fromHome, fromMenu, onCanvas, onCard, uncaught: [...errors] };
 }
 
 run()

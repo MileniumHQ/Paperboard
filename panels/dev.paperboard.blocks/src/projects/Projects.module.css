@@ -1,4 +1,4 @@
-/* A project card's miniature: each stack of blocks drawn as the room it takes */
+/* A project card's miniature: each block's outline, in its colour */
 .preview {
     display: block;
     width: 100%;
@@ -10,11 +10,4 @@
     align-items: center;
     justify-content: center;
     color: var(--paper-text-subtle);
-}
-
-.previewStack {
-    fill: color-mix(in srgb, var(--paper-primary) 18%, var(--paper-surface));
-    stroke: var(--paper-primary);
-    stroke-width: var(--paper-border-width);
-    vector-effect: non-scaling-stroke;
 }

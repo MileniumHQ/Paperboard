@@ -9,13 +9,13 @@ import { createLatest } from "@mileniumhq/paperui";
 import { blocksApi, panelsApi, type BlockInfo, type BlockProjectInfo, type PanelItem, errorMessage } from "@mileniumhq/paperapi";
 import { BUILTIN_BLOCKS, choicesSources, registryDefinitions, type Definitions } from "./lib/blockDefs";
 import { refreshChoices } from "./lib/choicesField";
-import { assignPanelStyles } from "./lib/blockStyles";
+import { assignPanelStyles, blockFill } from "./lib/blockStyles";
 import { setResultBlocks, sourceOf } from "./lib/results";
 import { parseRegistryBlockType } from "./lib/names";
 import { appendWorkspace } from "./lib/appendWorkspace";
 import { uiGap } from "./lib/libraryFlyout";
 import type { SavedWorkspace } from "./lib/interpreter";
-import type { CanvasPreview, SavedFlows } from "./panel";
+import { MAX_PREVIEW_BLOCKS, MAX_PREVIEW_PATH, type CanvasPreview, type SavedFlows } from "./panel";
 import { service, type Notice } from "./bridge";
 
 type Json = Record<string, unknown>;
@@ -42,18 +42,29 @@ export function define(blocks: Json[]): void {
     Blockly.common.defineBlocksWithJsonArray(blocks);
 }
 
-/** Where each stack sits on the canvas, for the project's card. */
+/** An outline's numbers to a tenth of a pixel: finer than a card's miniature can show. */
+const roundOutline = (path: string) => path.replace(/-?(?:\d+\.?\d*|\.\d+)(?:e[-+]?\d+)?/gi, (n) => String(Math.round(Number(n) * 10) / 10));
+
+/** The canvas in miniature, for the project's card: each block's outline where it sits, in its colour. */
 function canvasPreview(workspace: Blockly.WorkspaceSvg): CanvasPreview | null {
-    const rects = workspace.getTopBlocks(false).map((block) => {
-        const r = block.getBoundingRectangle();
-        return { x: r.left, y: r.top, w: r.right - r.left, h: r.bottom - r.top };
-    });
-    if (!rects.length) return null;
-    const left = Math.min(...rects.map((r) => r.x));
-    const top = Math.min(...rects.map((r) => r.y));
-    const right = Math.max(...rects.map((r) => r.x + r.w));
-    const bottom = Math.max(...rects.map((r) => r.y + r.h));
-    return { bounds: { x: left, y: top, w: right - left, h: bottom - top }, rects };
+    const stacks = workspace.getTopBlocks(false).map((block) => block.getBoundingRectangle());
+    if (!stacks.length) return null;
+    const left = Math.min(...stacks.map((r) => r.left));
+    const top = Math.min(...stacks.map((r) => r.top));
+    const right = Math.max(...stacks.map((r) => r.right));
+    const bottom = Math.max(...stacks.map((r) => r.bottom));
+    // each stack's blocks in order, a block before what it holds: what it holds is drawn over it, as on the canvas
+    const blocks = workspace
+        .getAllBlocks(true)
+        .filter((block) => !block.isInsertionMarker())
+        .map((block) => {
+            const at = block.getRelativeToSurfaceXY();
+            return { x: at.x, y: at.y, path: roundOutline(block.pathObject.svgPath.getAttribute("d") ?? ""), fill: blockFill(block) };
+        })
+        // a block too intricate to keep in miniature is left out of it, as are the blocks past the most a card draws
+        .filter((block) => block.path.length <= MAX_PREVIEW_PATH)
+        .slice(0, MAX_PREVIEW_BLOCKS);
+    return { bounds: { x: left, y: top, w: right - left, h: bottom - top }, blocks };
 }
 
 export function createEditorFlows(options: {
