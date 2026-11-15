@@ -1,5 +1,6 @@
 import { config, processApi, type ServiceContext } from "./api";
 import { PANEL_ID, SERVER_PROC_ID, type GameServerState } from "./types";
+import { applyPendingEdits } from "./pendingEdits";
 
 // Runtime-applicable server.properties values. Most keys (port, motd,
 // world generation, max-players, ...) are only read by the JVM at startup;
@@ -93,46 +94,13 @@ async function persistPendingProperties(values: Record<string, string>): Promise
     await config.set({ ...saved, pendingProperties: pending }, PANEL_ID);
 }
 
-// re-applies offline runtime edits once the server reports online, then
-// clears them. A later in-game change must not be clobbered by a stale
-// saved value on the following boot.
-export async function applyPendingRuntimeProperties(
-    ctx: ServiceContext<GameServerState>,
-): Promise<void> {
-    let saved: Record<string, unknown> | undefined;
-    try {
-        saved = await config.get<Record<string, unknown>>(PANEL_ID);
-    } catch (err) {
-        console.error("[Service:Properties] config read failed; offline edits not applied:", err);
-        return;
-    }
-    const pending = saved?.pendingProperties;
-    if (!pending || typeof pending !== "object") return;
-
-    // re-validate at this boundary: the config file is user-editable, and
-    // these strings become console commands
-    const values: Record<string, string> = {};
-    const rawPending = pending as Record<string, unknown>;
-    if (typeof rawPending.difficulty === "string") values.difficulty = rawPending.difficulty;
-    if (typeof rawPending.gamemode === "string") values.gamemode = rawPending.gamemode;
-    if (rawPending["force-gamemode"] === "true") values["force-gamemode"] = "true";
-
-    const commands = runtimeCommandsFor(values);
-    try {
-        for (const command of commands) {
-            await processApi.write(SERVER_PROC_ID, `${command}\n`);
-        }
-    } catch (err) {
-        // the edits stay saved and apply on the next boot
-        console.error("[Service:Properties] pending edit not applied:", err);
-        return;
-    }
-
-    try {
-        // re-read: the config may have changed while the commands went out
-        const fresh = await config.get<Record<string, unknown> | null>(PANEL_ID);
-        await config.set({ ...(fresh && typeof fresh === "object" ? fresh : {}), pendingProperties: {} }, PANEL_ID);
-    } catch (err) {
-        console.error("[Service:Properties] clearing applied edits failed:", err);
-    }
+/** Sends the property edits made while the server was offline; throws why they were not. */
+export function applyPendingRuntimeProperties(): Promise<void> {
+    return applyPendingEdits("pendingProperties", (pending) => {
+        const values: Record<string, string> = {};
+        if (typeof pending.difficulty === "string") values.difficulty = pending.difficulty;
+        if (typeof pending.gamemode === "string") values.gamemode = pending.gamemode;
+        if (pending["force-gamemode"] === "true") values["force-gamemode"] = "true";
+        return runtimeCommandsFor(values);
+    });
 }

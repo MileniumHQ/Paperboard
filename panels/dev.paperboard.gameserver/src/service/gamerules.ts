@@ -14,6 +14,7 @@ import {
     type VersionProfile,
 } from "../lib/versionProfile";
 import { PANEL_ID, SERVER_PROC_ID, type GameServerState } from "./types";
+import { applyPendingEdits } from "./pendingEdits";
 
 // gamerule truth comes from the running server, not from registry
 // defaults: query responses ("is currently set to") and write
@@ -89,61 +90,17 @@ export function queryGamerules(
     return true;
 }
 
-// offline edits re-apply the moment the server reports online, then leave
-// the config — an in-game change after boot must never be clobbered by a
-// stale saved value on the next boot
-export async function applyPendingGamerules(
-    ctx: ServiceContext<GameServerState>,
-): Promise<void> {
-    let saved: Record<string, unknown> | undefined;
-    try {
-        saved = await config.get<Record<string, unknown>>(PANEL_ID);
-    } catch (err) {
-        console.error("[Service:Gamerules] config read failed; offline edits not applied:", err);
-        return;
-    }
-    const pending = saved?.pendingGamerules;
-    if (!pending || typeof pending !== "object") return;
-
-    const entries = Object.entries(pending as Record<string, string>);
-    if (entries.length === 0) return;
-    if (entries.length > MAX_GAMERULE_WRITES) {
-        console.error(
-            `[Service:Gamerules] refusing ${entries.length} pending edits (cap ${MAX_GAMERULE_WRITES})`,
-        );
-        return;
-    }
-
+/** Sends the gamerule edits made while the server was offline; throws why they were not. */
+export function applyPendingGamerules(ctx: ServiceContext<GameServerState>): Promise<void> {
     const profile = profileFor(ctx);
-    let undelivered = false;
-    for (const [name, value] of entries) {
-        try {
-            // re-validate at this boundary: the config file is edited by
-            // users too, and these strings reach console commands
+    return applyPendingEdits("pendingGamerules", (pending) => {
+        const entries = Object.entries(pending);
+        if (entries.length > MAX_GAMERULE_WRITES) throw new Error(`${entries.length} saved gamerule edits is more than the ${MAX_GAMERULE_WRITES} a boot sends`);
+        return entries.map(([name, value]) => {
             const safeName = assertGameruleName(name);
-            const safeValue = assertGameruleValue(safeName, value);
-            await processApi.write(
-                SERVER_PROC_ID,
-                `gamerule ${serverGameruleName(profile, safeName)} ${serverGameruleValue(profile, safeName, safeValue)}\n`,
-            );
-        } catch (err) {
-            console.error(`[Service:Gamerules] pending edit not applied:`, err);
-            undelivered = true;
-        }
-    }
-    // a write that failed keeps its edits saved for the next boot
-    if (undelivered) return;
-
-    try {
-        // re-read: the config may have changed while the commands went out
-        const fresh = await config.get<Record<string, unknown> | null>(PANEL_ID);
-        await config.set({ ...(fresh && typeof fresh === "object" ? fresh : {}), pendingGamerules: {} }, PANEL_ID);
-    } catch (err) {
-        console.error("[Service:Gamerules] clearing applied edits failed:", err);
-    }
+            const safeValue = assertGameruleValue(safeName, String(value));
+            return `gamerule ${serverGameruleName(profile, safeName)} ${serverGameruleValue(profile, safeName, safeValue)}`;
+        });
+    });
 }
 
-// called once when the server first reports online
-export async function onServerOnline(ctx: ServiceContext<GameServerState>): Promise<void> {
-    await applyPendingGamerules(ctx);
-}

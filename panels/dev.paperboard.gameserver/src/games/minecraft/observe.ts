@@ -7,8 +7,9 @@ import { resolveVersionProfile } from "../../lib/versionProfile";
 import { trackPlayerActivity, handleStatResponse, handlePositionResponse, queryOnlinePlayers } from "../../service/players";
 import { assertSingleLine, isStatQueryReply, extractPosition, extractDimension, isPlayerListResponse } from "../../core/players";
 import { checkLogForIssues } from "../../service/diagnostics";
-import { onServerOnline } from "../../service/gamerules";
+import { applyPendingGamerules } from "../../service/gamerules";
 import { applyPendingRuntimeProperties } from "../../service/runtimeProperties";
+import { report } from "../serviceKit";
 import { observeSavingLine } from "./saving";
 import { type GameServerState, SERVER_PROC_ID, appendCapped } from "../../service/types";
 import { TRIGGER_IDS } from "../../service/contract";
@@ -88,12 +89,8 @@ export function onReady(ctx: ServiceContext<GameServerState>): void {
     // after the other: each clears its pending edits by rewriting the whole
     // panel config, so running both at once puts back the other's edits.
     void (async () => {
-        await onServerOnline(ctx).catch((err) =>
-            console.error("[Service:Lifecycle] gamerule boot sync failed:", err),
-        );
-        await applyPendingRuntimeProperties(ctx).catch((err) =>
-            console.error("[Service:Lifecycle] runtime property boot sync failed:", err),
-        );
+        await applyPendingGamerules(ctx).catch((err) => report(ctx, "Gamerule edits made while the server was offline were not applied", err));
+        await applyPendingRuntimeProperties().catch((err) => report(ctx, "Difficulty and game mode edits made while the server was offline were not applied", err));
     })();
 }
 
