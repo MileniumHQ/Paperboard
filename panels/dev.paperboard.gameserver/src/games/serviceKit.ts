@@ -246,24 +246,33 @@ export interface OfflineBackupSpec {
  * the server when Paperboard comes back.
  */
 export function offlineBackup(spec: OfflineBackupSpec): GameService["backup"] {
+    /** Starts the server again when this backup stopped it, and drops the marker. */
+    const recover = async (ctx: Context) => resumeAfterBackup(ctx, spec.gameId, await processApi.exists(spec.processId));
     async function before(ctx: Context) {
         const flag = spec.flag();
         if (flag.busy) throw new Error(`Wait for the ${spec.name} operation to finish`);
         if (ctx.state.serverStatus === "offline") { await spec.clean(); return; }
         if (ctx.state.serverStatus !== "online") throw new Error(`${spec.name} is starting or stopping; wait before backup or restore`);
         flag.busy = true;
+        let marked = false;
         try {
             await spec.announce(ctx);
             await spec.save(ctx);
             await writePrivate(await resumeMarker(spec.gameId), "resume after offline operation\n");
+            marked = true;
             const saved = await spec.exitStamp?.();
             await (await import("../service/lifecycle")).stopServerInstance(ctx);
             await waitUntil(async () => !(await processApi.exists(spec.processId)), 125_000, `${spec.name} to exit`);
             await spec.clean();
             if (saved !== undefined && (await spec.exitStamp!()) === saved) throw new Error(`${spec.name} exited without confirming its shutdown save; no backup was copied`);
+        } catch (err) {
+            // refused after it stopped: the server starts again, as the copy would have ended
+            flag.busy = false;
+            if (marked) await recover(ctx).catch((startErr) => report(ctx, `${spec.name} could not start again after the refused backup`, startErr));
+            throw err;
         } finally { flag.busy = false; }
     }
-    return { mode: "offline", before, recover: async () => {}, async withConsistentData(ctx, work) { await before(ctx); return work(); } };
+    return { mode: "offline", before, recover, async withConsistentData(ctx, work) { await before(ctx); return work(); } };
 }
 
 /**

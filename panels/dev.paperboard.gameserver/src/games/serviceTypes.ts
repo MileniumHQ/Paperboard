@@ -75,7 +75,8 @@ export interface GameService {
     backup: {
         mode: "quiesce" | "offline";
         before(ctx: Context): Promise<void>;
-        recover(): Promise<unknown>;
+        /** Undoes `before` when the backup it readied is refused. */
+        recover(ctx: Context): Promise<unknown>;
         withConsistentData<T>(ctx: Context, work: () => Promise<T>): Promise<T>;
     };
 }

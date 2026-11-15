@@ -35,7 +35,7 @@ import { settingsBlocks } from "./service/settingsBlocks";
 import { assertGameCall, gameFor, games } from "./games";
 import { loadServerOptions } from "./service/options";
 import { livePortDeps } from "./service/portDeps";
-import { waitUntil } from "./games/serviceKit";
+import { report, waitUntil } from "./games/serviceKit";
 export * from "./service/types";
 
 export interface ServerSummary extends Omit<StoredServer, "settings"> {
@@ -555,7 +555,10 @@ export const gameServerService = definePanelService({
                 paused.push(entry);
             }
         } catch (err) {
-            for (const entry of paused) await inServer(entry, () => currentGameService().backup.recover());
+            for (const entry of paused) {
+                await inServer(entry, () => currentGameService().backup.recover(entry.ctx)).catch((recoverErr) =>
+                    inServer(entry, () => report(entry.ctx, "Could not undo the preparation for the refused backup", recoverErr)));
+            }
             throw err;
         }
     },

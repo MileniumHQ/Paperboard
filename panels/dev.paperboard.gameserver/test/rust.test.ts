@@ -165,12 +165,28 @@ describe("Rust", () => {
         await online(server);
         const original = Date.now;
         try {
-            // the wait for the file is a minute; the clock is run forward once the answer is in
-            const saving = call(server, CALLS.saveWorld);
-            await Bun.sleep(300);
-            Date.now = () => original() + 120_000;
-            await expect(saving).rejects.toThrow("Timed out waiting for Rust to write its save");
+            // the wait for the file is a minute; every reading of the clock is two
+            // minutes past the last, so the first look that finds no new file is past it
+            let skew = 0;
+            Date.now = () => original() + (skew += 120_000);
+            await expect(call(server, CALLS.saveWorld)).rejects.toThrow("Timed out waiting for Rust to write its save");
         } finally { Date.now = original; }
+        await stop(server);
+    });
+
+    test("a backup refused after Rust stopped for it starts Rust again and drops its resume marker", async () => {
+        const server = await rustServer();
+        await online(server);
+        const marker = path.join(process.env.PAPERBOARD_DIR!, "files", PANEL_ID, ".rust-resume", server.scope.server.id);
+        const exit = server.nextExit();
+        await server.run(() => rustService.backup.before(server.scope.ctx));
+        expect(await exit).toBe(0);
+        expect(server.scope.ctx.state.serverStatus).toBe("offline");
+        expect(fs.existsSync(marker)).toBe(true);
+        // the panel's backup is refused (another server would not stop): this one is put back as it was
+        await server.run(() => rustService.backup.recover(server.scope.ctx));
+        await server.scope.waitFor((s) => s.serverStatus === "online", "Rust to start again");
+        expect(fs.existsSync(marker)).toBe(false);
         await stop(server);
     });
 
