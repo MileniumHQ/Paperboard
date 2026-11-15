@@ -62,6 +62,7 @@ export interface StateSetters {
     setOnlineSince?: (v: number | null) => void;
     setActiveIssue: (v: ServerIssue | null) => void;
     setRecoveryBlock: (v: string | null) => void;
+    setInitFailure: (v: string | null) => void;
     setOnlinePlayerNames: (v: Set<string>) => void;
     setSeenPlayerNames: (v: Set<string>) => void;
     setPlayerStats: (v: Map<string, PlayerStatData>) => void;
@@ -200,6 +201,7 @@ function applyEach(source: Record<string, unknown>, setters: StateSetters): void
         { key: "ramAllocation", apply: (v) => setters.setRamAllocation(v as number) },
         { key: "activeIssue", apply: (v) => setters.setActiveIssue(v as ServerIssue | null) },
         { key: "recoveryBlock", apply: (v) => setters.setRecoveryBlock((v as string | null) ?? null) },
+        { key: "initFailure", apply: (v) => setters.setInitFailure((v as string | null) ?? null) },
         {
             key: "onlinePlayers",
             apply: (v) => setters.setOnlinePlayerNames(new Set<string>(v as string[])),

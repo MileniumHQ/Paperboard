@@ -33,7 +33,10 @@ let daemon: TestDaemon;
 beforeAll(async () => {
     installPanel(dataDir);
     fs.mkdirSync(path.join(dataDir, "configs"), { recursive: true });
-    fs.writeFileSync(path.join(dataDir, "configs", `${PANEL_ID}.json`), JSON.stringify({ version: 2, serversDirectory: SERVERS, servers: [stored("s-a"), stored("s-b")] }));
+    fs.writeFileSync(path.join(dataDir, "configs", `${PANEL_ID}.json`), JSON.stringify({ version: 2, serversDirectory: SERVERS, servers: [stored("s-a"), stored("s-b"), { ...stored("s-c"), settings: {} }] }));
+    // s-c can't be set up: a file stands where its folder goes
+    fs.mkdirSync(filesRoot, { recursive: true });
+    fs.writeFileSync(serverDir("s-c"), "not a folder");
     for (const id of ["s-a", "s-b"]) writeTree(serverDir(id), { "server.jar": "jar", "eula.txt": "eula=true\n", "world/level.dat": `${id} world` });
     writeTree(serverDir("s-a"), { "fake-server.json": JSON.stringify({ players: ["alice", "bob"], maxPlayers: 10 }) });
     installFakeJava(javaPackageFor("1.21.1")!, dataDir);
@@ -49,6 +52,21 @@ afterAll(async () => {
 
 // Game Server keeps servers, history and backups through restarts and migration.
 describe("servers through restarts", () => {
+    test("a server that could not be set up says why, refuses its calls, and is set up again once the cause is gone", async () => {
+        const state = servicesState();
+        const failed = await state.waitFor("s-c", (s) => typeof s.initFailure === "string", "s-c's setup failure");
+        expect(failed.initFailure).toContain("EEXIST");
+        // not an interrupted install: there is nothing to clean up
+        expect(failed.recoveryBlock).toBeNull();
+        await expect(callServer("s-c", "start-server")).rejects.toThrow("could not be set up");
+        fs.rmSync(serverDir("s-c"));
+        expect(await callServer("s-c", "retry-initialize")).toBe(true);
+        expect((await state.server("s-c"))!.initFailure).toBeNull();
+        expect(fs.statSync(serverDir("s-c")).isDirectory()).toBe(true);
+        expect(await callServer("s-c", "read-automation")).toBeTruthy();
+        expect(await call("remove-server", { server: "s-c" })).toEqual({ removed: "s-c" });
+    });
+
     test("a server running when the service starts again is shown online with its players and its console history", async () => {
         const state = servicesState();
         await callServer("s-a", "start-server");

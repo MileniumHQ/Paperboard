@@ -24,9 +24,8 @@ import type { ServerCalls } from "./service/calls";
 import { announceChanges, bindBlocks, fireBackupEnded, fireTrigger, mergeBlocks, serverOperation, sharedBlocks, sharedTypes } from "./service/blocks";
 import { SERVER_EVENTS, serverType, serversBlocks, type ServersBlocksHost } from "./service/serversBlocks";
 import { processApi as scopedProcess } from "./service/api";
-import { type GameServerState, SERVER_PROC_ID, appendCapped } from "./service/types";
-import { CALLS } from "./service/contract";
-import { setRecoveryBlock } from "./service/recoveryState";
+import { type GameServerState, appendCapped } from "./service/types";
+import { CALLS, SETUP_CALLS } from "./service/contract";
 import { handleProcessData, handleProcessExit, stopServerInstance, cancelReadiness, restartServerInstance, startServerInstance } from "./service/lifecycle";
 import { cancelAutomation, readAutomation, scheduleDailyRestart, scheduleUpdateChecks } from "./service/automation";
 import { historyWriter, onlineSinceAfter, readHistory } from "./service/history";
@@ -44,7 +43,7 @@ export interface ServerSummary extends Omit<StoredServer, "settings"> {
     icon: string | null;
     state: Pick<
         GameServerState,
-        "serverStatus" | "serverSoftware" | "serverVersion" | "serverPort" | "recoveryBlock" | "maxPlayers"
+        "serverStatus" | "serverSoftware" | "serverVersion" | "serverPort" | "recoveryBlock" | "initFailure" | "maxPlayers"
     > & { playerCount: number };
 }
 export interface ServersState extends Record<string, unknown> {
@@ -121,6 +120,7 @@ function publish(changed?: ServerScope): void {
                 serverVersion: state.serverVersion,
                 serverPort: state.serverPort,
                 recoveryBlock: state.recoveryBlock,
+                initFailure: state.initFailure,
                 maxPlayers: state.maxPlayers,
                 playerCount: state.onlinePlayers.length,
             },
@@ -142,6 +142,12 @@ function requireServer(id: unknown): ServerScope {
     if (!entry) throw new Error("Choose a server that has not been removed");
     return entry;
 }
+/** A server that could not be set up runs nothing until setting it up again succeeds. */
+function requireInitialized(scope: ServerScope): ServerScope {
+    const failure = scope.ctx.state.initFailure;
+    if (failure !== null) throw new Error(`${scope.server.name} could not be set up (${failure}). Try again from its Overview tab.`);
+    return scope;
+}
 /** Every game's calls, by game; a server answers the ones its game does. */
 const gameCalls = new Map<string, ServerCalls>(await Promise.all(games.map(async (game): Promise<[string, ServerCalls]> => [game.id, await gameServiceFor(game.id).calls()])));
 // what a server's icon call changes in the lists that show it
@@ -150,7 +156,7 @@ const ICON_CALLS: readonly string[] = [CALLS.setServerIcon, CALLS.removeServerIc
 async function serverCall(name: string, input: unknown): Promise<unknown> {
     if (!input || typeof input !== "object" || Array.isArray(input)) throw new Error(`${name} needs the server it is for`);
     const { server, ...rest } = input as Record<string, unknown>;
-    const scope = requireServer(server);
+    const scope = requireInitialized(requireServer(server));
     if (scope.removing) throw new Error("This server was removed or is being removed");
     assertGameCall(gameFor(scope.server.game), {
         settings: scope.ctx.state.gameSettings,
@@ -307,12 +313,24 @@ async function initialize(scope: ServerScope): Promise<ServerScope> {
         });
         return scope;
     } catch (err) {
-        const reason = `Server initialization failed: ${errorText(err)}`;
-        inServer(scope, () => setRecoveryBlock(reason));
-        scope.ctx.setState({ recoveryBlock: reason });
-        publish(scope);
+        scope.ctx.setState((prev) => ({
+            initFailure: errorText(err),
+            serverEntries: appendCapped(prev.serverEntries, { type: "error", content: `[Server] The server could not be set up: ${errorText(err)}` }),
+        }));
         throw err;
     }
+}
+/** Sets up a server whose setup failed again, from nothing: what the failed setup started is undone first. */
+function retryInitialize(id: unknown): Promise<void> {
+    return serial(async () => {
+        const scope = requireServer(id);
+        if (scope.ctx.state.initFailure === null) throw new Error(`${scope.server.name} is already set up`);
+        for (const off of scope.unsubscribe.splice(0)) off();
+        await inServer(scope, async () => { cancelReadiness(); cancelAutomation(); await currentGameService().dispose(); });
+        scope.ctx.setState({ initFailure: null });
+        await initialize(scope);
+        publish();
+    });
 }
 /** The servers that run any of these processes (their ids as the daemon knows them). */
 function serversRunning(processes: string[]): ServerScope[] {
@@ -427,7 +445,7 @@ const serversHost: ServersBlocksHost = {
     rename: renameServer,
     remove: removeServer,
     operate: (id, work) => {
-        const scope = requireServer(id);
+        const scope = requireInitialized(requireServer(id));
         return serverOperation(scope, () => work(scope.ctx));
     },
 };
@@ -455,6 +473,7 @@ const managementCalls: RootCalls = {
     "add-server": async (_ctx, { name, game }) => ({ id: await addServer(name, game) }),
     "rename-server": async (_ctx, { server, name }) => (await renameServer(server, name), true),
     "remove-server": async (_ctx, { server }) => (await removeServer(server), { removed: server }),
+    [SETUP_CALLS.retryInitialize]: async (_ctx, { server }) => (await retryInitialize(server), true),
 };
 /** One root call for each name any game answers, which asks the server in its input. */
 const callNames = [...new Set([...gameCalls.values()].flatMap((calls) => Object.keys(calls)))];

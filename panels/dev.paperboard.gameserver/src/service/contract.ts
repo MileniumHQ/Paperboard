@@ -9,6 +9,11 @@
 
 export const PANEL_ID = "dev.paperboard.gameserver";
 
+/** A call about a server that its game does not answer: the panel's own, made for any game's server. */
+export const SETUP_CALLS = {
+    retryInitialize: "retry-initialize",
+} as const;
+
 export const CALLS = {
     runCommand: "run-command",
     saveWorld: "save-world",
@@ -58,6 +63,8 @@ export const CALLS = {
     listMapRegions: "list-map-regions",
     renderMapTile: "render-map-tile",
     listInstalledPlugins: "list-installed-plugins",
+    previewPluginInstall: "preview-plugin-install",
+    installPluginVersion: "install-plugin-version",
     deletePlugin: "delete-plugin",
     recordPluginInstalls: "record-plugin-installs",
     uninstallAllPlugins: "uninstall-all-plugins",

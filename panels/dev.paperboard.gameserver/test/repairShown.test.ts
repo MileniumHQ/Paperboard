@@ -20,13 +20,15 @@ afterAll(async () => {
 
 const SERVERS = "servers-0123456789ab";
 
-// A repair that fails says why.
+// A repair that fails says why, and a server that could not be set up offers setting it up again.
 describe("the server issue repairs", () => {
     test("a port conflict's Kill Process & Retry that could not look up the port shows the service's reason", async () => {
         const config = path.join(daemon.dataDir, "configs", `${PANEL_ID}.json`);
         fs.mkdirSync(path.dirname(config), { recursive: true });
-        fs.writeFileSync(config, JSON.stringify({ version: 2, serversDirectory: SERVERS, servers: [{ id: "s-mc", name: "s-mc", game: "minecraft", directory: `${SERVERS}/s-mc`, createdAt: 0, settings: { configured: true, software: "paper", version: "1.21.1" } }] }));
+        fs.writeFileSync(config, JSON.stringify({ version: 2, serversDirectory: SERVERS, servers: [{ id: "s-mc", name: "s-mc", game: "minecraft", directory: `${SERVERS}/s-mc`, createdAt: 0, settings: { configured: true, software: "paper", version: "1.21.1" } }, { id: "s-bad", name: "Broken", game: "minecraft", directory: `${SERVERS}/s-bad`, createdAt: 0, settings: {} }] }));
         writeTree(path.join(daemon.dataDir, "files", PANEL_ID, SERVERS, "s-mc"), { "server.jar": "jar", "eula.txt": "eula=true\n", "fake-server.json": "{}" });
+        // s-bad can't be set up: a file stands where its folder goes
+        fs.writeFileSync(path.join(daemon.dataDir, "files", PANEL_ID, SERVERS, "s-bad"), "not a folder");
         installFakeJava(javaPackageFor("1.21.1")!, daemon.dataDir);
         // the lookup of what holds the port fails the way a missing or refused lsof does
         const run = rawProcess.run;
@@ -53,6 +55,25 @@ describe("the server issue repairs", () => {
             rawProcess.run = run;
             await callServer("s-mc", "stop-server");
             await exited;
+            served.stop();
+        }
+    });
+
+    test("a server that could not be set up says why and sets itself up again from its Overview", async () => {
+        const served = await servePanel(daemon);
+        const page = await openPage(`${served.url}/?server=s-bad`);
+        const button = (label: string) => `[...document.querySelectorAll("button")].find((b) => b.innerText.trim() === ${JSON.stringify(label)})`;
+        try {
+            await page.waitFor(`document.body.innerText.includes("This server could not be set up")`, "the setup failure on the Overview");
+            expect(await page.evaluate<string>("document.body.innerText")).toContain("EEXIST");
+            expect(await page.evaluate<string>("document.body.innerText")).not.toContain("needs cleaning up");
+            fs.rmSync(path.join(daemon.dataDir, "files", PANEL_ID, SERVERS, "s-bad"));
+            await page.evaluate(`${button("Try again")}.click()`);
+            await page.waitFor(`!document.body.innerText.includes("This server could not be set up")`, "the notice to go once it is set up");
+            expect(fs.statSync(path.join(daemon.dataDir, "files", PANEL_ID, SERVERS, "s-bad")).isDirectory()).toBe(true);
+            expect(page.exceptions).toEqual([]);
+        } finally {
+            await page.close();
             served.stop();
         }
     });

@@ -118,20 +118,21 @@ export default function ServersHome(props: {
                                     title={server.name}
                                     subtitle={serverSubtitle(gameFor(server.game), { software: server.state.serverSoftware, version: server.state.serverVersion })}
                                     description={
+                                        server.state.initFailure ??
                                         server.state.recoveryBlock ??
                                         (!server.configured ? "Finish setup" : undefined)
                                     }
                                     badge={
                                         <PaperBadge
                                             variant={
-                                                server.state.recoveryBlock
+                                                server.state.initFailure ?? server.state.recoveryBlock
                                                     ? "danger"
                                                     : server.state.serverStatus === "online"
                                                       ? "success"
                                                       : "monochrome"
                                             }
                                         >
-                                            {server.state.recoveryBlock
+                                            {server.state.initFailure ?? server.state.recoveryBlock
                                                 ? "Error"
                                                 : server.state.serverStatus}
                                         </PaperBadge>

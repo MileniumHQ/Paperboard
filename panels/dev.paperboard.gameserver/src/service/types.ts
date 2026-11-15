@@ -64,6 +64,9 @@ export interface GameServerState {
     // why an interrupted install or modpack change could not be settled;
     // starting and installing refuse while set. null when settled.
     recoveryBlock: string | null;
+    // why the server could not be set up when the service started or it was
+    // made; every call but setting it up again refuses while set
+    initFailure: string | null;
 }
 
 export const SERVER_PROC_ID = CORE_SERVER_PROC_ID;

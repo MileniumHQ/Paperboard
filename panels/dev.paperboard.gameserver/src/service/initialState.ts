@@ -24,4 +24,5 @@ export const initialServerState = (): GameServerState => ({
     modpackProgress: null,
     activeIssue: null,
     recoveryBlock: null,
+    initFailure: null,
 });

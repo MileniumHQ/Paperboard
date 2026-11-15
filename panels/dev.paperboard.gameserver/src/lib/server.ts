@@ -66,6 +66,8 @@ export const [installProgress, setInstallProgress] = createStateSignal<InstallPr
 export const [modpackProgress, setModpackProgress] = createStateSignal<ModpackProgress | null>(null);
 // why an interrupted install could not be settled; starting and installing refuse while set
 export const [recoveryBlock, setRecoveryBlock] = createSignal<string | null>(null);
+// why the server could not be set up; every call but setting it up again refuses while set
+export const [initFailure, setInitFailure] = createSignal<string | null>(null);
 // last lifecycle (start/stop/restart) failure, surfaced on the Overview
 // tab — bridge-call rejections otherwise land in console.error only, and
 // a button that does nothing is a silent failure with a click handler.
@@ -93,6 +95,7 @@ function currentSetters() {
         setRamAllocation,
         setActiveIssue,
         setRecoveryBlock,
+        setInitFailure,
         setOnlinePlayerNames,
         setSeenPlayerNames,
         setPlayerStats,

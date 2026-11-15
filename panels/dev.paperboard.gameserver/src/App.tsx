@@ -15,7 +15,8 @@ import { loadServerConfig } from "./lib/server";
 import { createCompact } from "./lib/compact";
 import type { ServersState } from "./service";
 import ServersHome from "./components/ServersHome";
-import { serverSoftware, serverVersion, gameSettings } from "./lib/server";
+import { serverSoftware, serverVersion, gameSettings, initFailure, recoveryBlock } from "./lib/server";
+import RecoveryNotice from "./components/RecoveryNotice";
 import { gameFor } from "./games";
 import { keepUnchanged } from "./core/state";
 import { errorMessage } from "./lib/failure";
@@ -194,6 +195,12 @@ export default function App() {
                                 <PaperIcon>arrow_back</PaperIcon>
                             </PaperButton>
                             <PaperText preset="title">{selectedServer(servers()!).name}</PaperText>
+                        </PaperFlex>
+                    </Show>
+                    {/* a server that could not be set up can't run its wizard either */}
+                    <Show when={initFailure() ?? recoveryBlock()}>
+                        <PaperFlex padding="full">
+                            <RecoveryNotice />
                         </PaperFlex>
                     </Show>
                     <PaperFlex direction="column" fullWidth fullHeight>
