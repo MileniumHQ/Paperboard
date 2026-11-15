@@ -16,6 +16,9 @@ export interface TurnMode {
     instructions?: string;
 }
 
+/** a tool's refusal, which the model reads as the reason */
+export const fault = (text: string): ToolResult => ({ isError: true, text });
+
 /** a turn that answers the user: the mode when none is given */
 export const USER_TURN: TurnMode = { fromFlow: false };
 

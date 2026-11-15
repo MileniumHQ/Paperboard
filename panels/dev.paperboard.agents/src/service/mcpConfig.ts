@@ -26,7 +26,8 @@ const fail = (m: string): never => {
     throw new Error(m);
 };
 
-const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
+/** a JSON object: not null, not a list */
+export const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
 
 function exactKeys(o: Record<string, unknown>, allowed: string[], what: string) {
     for (const k of Object.keys(o)) if (!allowed.includes(k)) fail(`${what}: "${k}" isn't a setting`);

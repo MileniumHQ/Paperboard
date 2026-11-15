@@ -155,4 +155,5 @@ export function createFiles(call: Call) {
 
 export type Files = ReturnType<typeof createFiles>;
 
+/** "1.2 MB": a file's size as the chat and the agent are shown it */
 export const sizeText = (n: number) => (n < 1024 ? `${n} B` : n < 1024 * 1024 ? `${Math.round(n / 1024)} KB` : `${(n / 1024 / 1024).toFixed(1)} MB`);

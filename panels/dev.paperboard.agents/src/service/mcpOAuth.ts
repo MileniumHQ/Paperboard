@@ -18,6 +18,7 @@ import crypto from "node:crypto";
 import http from "node:http";
 import type { AddressInfo } from "node:net";
 import { errorText } from "../lib/failure";
+import { isRecord } from "./mcpConfig";
 
 /** what is kept in the vault for a signed-in server */
 export interface Tokens {
@@ -52,7 +53,8 @@ export const SIGN_IN_MS = 15 * 60_000;
 /** tokens this close to expiring are refreshed before use */
 const EARLY_MS = 60_000;
 
-const LOOPBACK = new Set(["localhost", "127.0.0.1", "[::1]", "::1"]);
+/** this computer's names, as a URL's hostname spells them */
+export const LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]"]);
 
 export class SignInNeeded extends Error {}
 
@@ -68,7 +70,7 @@ function checkEndpoint(raw: unknown, what: string): string {
     } catch {
         throw new Error(`the sign-in server's ${what} isn't an address`);
     }
-    if (u.protocol !== "https:" && !(u.protocol === "http:" && LOOPBACK.has(u.hostname))) throw new Error(`the sign-in server's ${what} isn't https (${u.origin})`);
+    if (u.protocol !== "https:" && !(u.protocol === "http:" && LOOPBACK_HOSTS.has(u.hostname))) throw new Error(`the sign-in server's ${what} isn't https (${u.origin})`);
     if (u.username || u.password) throw new Error(`the sign-in server's ${what} holds a password`);
     return u.href;
 }
@@ -83,7 +85,6 @@ async function readJson(res: Response): Promise<unknown> {
     }
 }
 
-const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
 
 /** GET a metadata document; null when it isn't there (404 and the like), an error when it's broken */
 async function getMetadata(f: typeof fetch, url: string): Promise<Record<string, unknown> | null> {

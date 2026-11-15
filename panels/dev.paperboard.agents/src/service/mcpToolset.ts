@@ -20,7 +20,7 @@
 import type { ToolResult } from "./computerMcp";
 import type { ToolSpec } from "./computerTools";
 import type { McpServers } from "./mcpServers";
-import type { Toolset } from "./toolsets";
+import { fault, type Toolset } from "./toolsets";
 
 const DIRECT_MAX = 12;
 const MAX_FOUND = 10;
@@ -168,4 +168,3 @@ function score(name: string, description: string, server: string, words: string[
 }
 
 const cut = (s: string, n: number) => (s.length > n ? s.slice(0, n - 1) + "…" : s);
-const fault = (text: string): ToolResult => ({ isError: true, text });

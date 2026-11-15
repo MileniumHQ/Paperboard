@@ -19,7 +19,7 @@
 import { PANEL_ID } from "../contract";
 import type { ToolResult } from "./computerMcp";
 import type { ToolSpec } from "./computerTools";
-import type { Toolset } from "./toolsets";
+import { fault, type Toolset } from "./toolsets";
 import { errorText } from "../lib/failure";
 
 /**
@@ -264,4 +264,3 @@ function describe(a: ActionEntry, descriptionChars: number) {
 }
 
 const cut = (s: string, n: number) => (s.length > n ? s.slice(0, n - 1) + "…" : s);
-const fault = (text: string): ToolResult => ({ isError: true, text });

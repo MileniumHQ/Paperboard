@@ -9,7 +9,7 @@ import crypto from "node:crypto";
 import { LIMITS, type PromptEntry, type PromptField } from "../contract";
 import type { ToolResult } from "./computerMcp";
 import type { ToolSpec } from "./computerTools";
-import type { Toolset } from "./toolsets";
+import { fault, type Toolset } from "./toolsets";
 import { errorText } from "../lib/failure";
 
 const L = LIMITS.prompt;
@@ -70,7 +70,6 @@ export interface PromptDeps {
     waitMs?: number;
 }
 
-const fault = (text: string): ToolResult => ({ isError: true, text });
 const text = (v: unknown) => (typeof v === "string" ? v.trim() : "");
 /** what the user typed, after its prefix; a value they pasted with the prefix already on keeps just the one */
 const withPrefix = (value: string, prefix?: string) => (!prefix || value.toLowerCase().startsWith(prefix.toLowerCase()) ? value : prefix + value);

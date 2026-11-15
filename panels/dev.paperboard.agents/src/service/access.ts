@@ -20,9 +20,10 @@ import { LIMITS, type AccessEntry, type AccessGrant, type AccessItem, type Acces
 import type { ToolResult } from "./computerMcp";
 import type { ToolSpec } from "./computerTools";
 import type { Launch } from "./which";
-import type { Toolset } from "./toolsets";
+import { fault, type Toolset } from "./toolsets";
 import { errorText } from "../lib/failure";
 import { writeAtomic } from "./writeAtomic";
+import { isRecord } from "./mcpConfig";
 
 const L = LIMITS.access;
 /** what one read or one command may hand back before the rest is cut */
@@ -157,8 +158,6 @@ interface Once {
     skip: number;
 }
 
-const fault = (text: string): ToolResult => ({ isError: true, text });
-const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
 
 /** `child` is `parent` or under it (both already resolved) */
 function within(child: string, parent: string): boolean {

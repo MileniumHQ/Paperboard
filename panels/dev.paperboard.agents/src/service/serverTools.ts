@@ -17,7 +17,7 @@ import type { ToolSpec } from "./computerTools";
 import { parseServer, secretNames } from "./mcpConfig";
 import type { McpServers } from "./mcpServers";
 import type { Launch } from "./which";
-import type { Toolset } from "./toolsets";
+import { fault, type Toolset } from "./toolsets";
 import { errorText } from "../lib/failure";
 
 const L = LIMITS.toolServers;
@@ -93,7 +93,6 @@ export interface ServerToolsDeps {
     startMs?: number;
 }
 
-const fault = (text: string): ToolResult => ({ isError: true, text });
 
 const WEB_KEYS = ["url", "oauth", "sse", "headers"];
 const PROGRAM_KEYS = ["command", "args", "env"];

@@ -8,6 +8,7 @@
 // carries what the harness did print.
 
 import type { Harness, LoginPrompt } from "../contract";
+import { LOOPBACK_HOSTS } from "./mcpOAuth";
 
 /** Sign-in methods the UI can ask for: the browser (default) or, away from the computer's own screen, a code. */
 export type LoginMethod = "browser" | "code";
@@ -81,8 +82,6 @@ export function loginTail(text: string, lines = 3): string {
 const URL_RE = /https:\/\/[^\s"'<>)]+/;
 // Codex's one-time code: groups of letters and digits around a dash ("RJEL-90J2I")
 const CODE_RE = /\b([A-Z0-9]{4}-[A-Z0-9]{4,6})\b/;
-
-const LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]"]);
 
 /** A loopback http address with its own port, or null. */
 function loopback(text: string): URL | null {

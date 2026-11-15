@@ -7,7 +7,7 @@
 
 import { LIMITS } from "../contract";
 import type { Attachments } from "./attachments";
-import { sizeText } from "./attachments";
+import { sizeText } from "../lib/files";
 import { isImageType, type ToolResult } from "./computerMcp";
 import type { ToolSpec } from "./computerTools";
 import { USER_TURN, type Toolset, type TurnMode } from "./toolsets";
