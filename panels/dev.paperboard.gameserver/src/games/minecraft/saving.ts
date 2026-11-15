@@ -20,7 +20,7 @@ const PAUSED_MARKER = ".paperboard-saving-paused";
 const FLUSH_TIMEOUT_MS = 120_000;
 const COMMAND_TIMEOUT_MS = 15_000;
 
-type Waiter = { match: (line: string) => boolean; resolve: () => void };
+type Waiter = { match: (line: string) => boolean; resolve: (line: string) => void };
 // at most one pause at a time, so at most two waiters (off, flushed)
 
 /** every console line passes here (lifecycle.handleProcessData) */
@@ -28,16 +28,17 @@ export function observeSavingLine(line: string): void {
     for (const waiter of local().waiters) {
         if (waiter.match(line)) {
             local().waiters.delete(waiter);
-            waiter.resolve();
+            waiter.resolve(line);
         }
     }
 }
 
-function waitForLine(match: (line: string) => boolean, timeoutMs: number, what: string): { done: Promise<void>; cancel: () => void } {
+/** the next console line `match` accepts, or a failure naming `what` once `timeoutMs` passes without one */
+export function waitForLine(match: (line: string) => boolean, timeoutMs: number, what: string): { done: Promise<string>; cancel: () => void } {
     let waiter!: Waiter;
     let timer: ReturnType<typeof setTimeout> | undefined;
-    const done = new Promise<void>((resolve, reject) => {
-        waiter = { match, resolve: () => { clearTimeout(timer); resolve(); } };
+    const done = new Promise<string>((resolve, reject) => {
+        waiter = { match, resolve: (line) => { clearTimeout(timer); resolve(line); } };
         timer = setTimeout(() => {
             local().waiters.delete(waiter);
             reject(new Error(`The server did not confirm ${what} within ${Math.round(timeoutMs / 1000)} seconds`));

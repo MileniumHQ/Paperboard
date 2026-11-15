@@ -147,6 +147,24 @@ function server(): void {
             case "say":
                 log(`[Server] ${rest.join(" ")}`);
                 return;
+            case "ban":
+            case "pardon": {
+                // the profile comes from the server's name book, as Minecraft finds it
+                const name = rest[0] ?? "";
+                const known = (JSON.parse(fs.existsSync(path.join(cwd, "usercache.json")) ? fs.readFileSync(path.join(cwd, "usercache.json"), "utf8") : "[]") as { name: string; uuid: string }[])
+                    .find((entry) => entry.name.toLowerCase() === name.toLowerCase());
+                if (!known) {
+                    log("That player does not exist");
+                    return;
+                }
+                const file = path.join(cwd, "banned-players.json");
+                const bans = (fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, "utf8")) : []) as { uuid: string }[];
+                const kept = bans.filter((entry) => entry.uuid !== known.uuid);
+                const reason = rest.slice(1).join(" ") || "Banned by an operator.";
+                fs.writeFileSync(file, JSON.stringify(verb === "ban" ? [...kept, { uuid: known.uuid, name: known.name, reason }] : kept));
+                log(verb === "ban" ? `Banned ${known.name}: ${reason}` : `Unbanned ${known.name}`);
+                return;
+            }
             case "crash":
                 process.exit(Number(rest[0] ?? 1));
             default:

@@ -2,6 +2,7 @@ import { minecraftSoftware } from "./index";
 import { sharedCalls, type ServerCalls } from "../../service/calls";
 import { files as fileApi, type ServiceContext } from "../../service/api";
 import { sendServerCommand } from "../../service/lifecycle";
+import { waitForLine } from "./saving";
 import {
     queryOnlinePlayers,
     queryPlayerStats,
@@ -72,16 +73,39 @@ const bedrockNaming = (ctx: ServiceContext<GameServerState>) =>
 
 // What the calls and the blocks of a Minecraft server both run.
 
-/** Kicks or bans a player, with the reason they see when one is given. */
+// The server writes banned-players.json as it takes a ban or a pardon, then
+// says so: "Banned Steve: reason" and "Unbanned Steve" (1.12 adds "player").
+// A refusal is a line of its own, which the call fails with.
+const BAN_ANSWER_MS = 15_000;
+const BAN_REFUSED = /Nothing changed|That player does not exist|Unknown player|No player was found|Could not (un)?ban/i;
+
+async function banCommand(ctx: ServiceContext<GameServerState>, verb: "ban" | "pardon", name: string, command: string): Promise<void> {
+    const done = new RegExp(`\\b${verb === "ban" ? "Banned" : "Unbanned"} (player )?${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i");
+    const answer = waitForLine((line) => done.test(line) || BAN_REFUSED.test(line), BAN_ANSWER_MS, verb === "ban" ? `the ban of ${name}` : `the pardon of ${name}`);
+    try {
+        await sendServerCommand(ctx, command);
+    } catch (err) {
+        answer.cancel();
+        throw err;
+    }
+    const line = await answer.done;
+    if (!done.test(line)) throw new Error(`The server refused: ${line.replace(/^\[[^\]]*\]\s*(\[[^\]]*\]:?\s*)?/, "")}`);
+}
+
+/** Kicks or bans a player, with the reason they see when one is given; a ban resolves once the server has recorded it. */
 export async function punishPlayer(ctx: ServiceContext<GameServerState>, verb: "kick" | "ban", player: unknown, reason?: unknown): Promise<void> {
     const name = assertPlayerName(player);
     const why = reason ? assertSingleLine(String(reason).trim(), `${verb} reason`) : "";
-    await sendServerCommand(ctx, why ? `${verb} ${name} ${why}` : `${verb} ${name}`);
+    const command = why ? `${verb} ${name} ${why}` : `${verb} ${name}`;
+    if (verb === "ban") await banCommand(ctx, "ban", name, command);
+    else await sendServerCommand(ctx, command);
 }
 
-/** Pardons or kills a player. */
+/** Pardons or kills a player; a pardon resolves once the server has recorded it. */
 export async function playerCommand(ctx: ServiceContext<GameServerState>, verb: "pardon" | "kill", player: unknown): Promise<void> {
-    await sendServerCommand(ctx, `${verb} ${assertPlayerName(player)}`);
+    const name = assertPlayerName(player);
+    if (verb === "pardon") await banCommand(ctx, "pardon", name, `pardon ${name}`);
+    else await sendServerCommand(ctx, `kill ${name}`);
 }
 
 /** Makes a player an operator or whitelisted, or takes it back; edits the lists' files while offline. */
