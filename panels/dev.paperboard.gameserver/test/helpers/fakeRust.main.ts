@@ -6,7 +6,9 @@
 // of an answer carries the command's Identifier, a log frame (Identifier 0)
 // may come in between, and a command it doesn't know gets nothing. Its
 // behaviour comes from fake-rust.json in its working directory:
-// { "noSave": true } answers a save without writing the file.
+// { "noSave": true } answers a save without writing the file, and
+// { "renderFails": "<reason>" }, read again at each world.rendermap, answers
+// it the way Rust does when it can't draw the map.
 import * as fs from "node:fs";
 import { PNG } from "pngjs";
 import * as path from "node:path";
@@ -82,7 +84,10 @@ Bun.serve<undefined, never>({
             else if ((match = /^unban (\d+)$/.exec(Message))) answer(bans.delete(match[1]!) ? `Unbanned User: ${match[1]}` : `User ${match[1]} isn't banned`);
             else if (Message === "banlistex") answer([...bans].map(([id, ban], i) => `${i + 1} ${id} "${ban.name}" "${ban.reason}" -1\n`).join(""));
             else if (/^kick /.test(Message)) answer("Player not found");
-            else if ((match = /^world\.rendermap ([\d.]+)$/.exec(Message))) answer(`Saved map render to: ${renderMap(Number(match[1]))}`);
+            else if ((match = /^world\.rendermap ([\d.]+)$/.exec(Message))) {
+                const now = fs.existsSync(planFile) ? JSON.parse(fs.readFileSync(planFile, "utf8")) : {};
+                answer(now.renderFails ? `Failed to render: ${now.renderFails}` : `Saved map render to: ${renderMap(Number(match[1]))}`);
+            }
             else if ((match = /^server\.maxplayers (\d+)$/.exec(Message))) { maxPlayers = Number(match[1]); answer(`server.maxplayers: "${maxPlayers}"`); }
             else if ((match = /^(server\.\w+) (.+)$/.exec(Message))) answer(`${match[1]}: ${match[2]}`);
             else if (Message === "status") answer(`hostname: ${setting("server.hostname")}\nversion : 2636 secure (secure mode enabled, connected to Steam3)\nmap     : Procedural Map\nplayers : 0 (${maxPlayers} max) (0 queued) (0 joining)\n\nid name ping connected addr owner violation kicks entityId \n`);
