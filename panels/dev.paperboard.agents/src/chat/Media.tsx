@@ -8,7 +8,7 @@
 // fetches it under the agent's network rule: a message, written by the model or
 // by a page it read, never gets this page to ask a host for anything.
 
-import { createContext, createMemo, createResource, createSignal, For, Match, Switch, useContext, type JSX, type ParentProps } from "solid-js";
+import { createContext, createMemo, createSignal, For, Match, Switch, useContext, type JSX, type ParentProps } from "solid-js";
 import {
     PaperAudio,
     PaperButton,
@@ -17,6 +17,7 @@ import {
     PaperLink,
     PaperPreview,
     PaperVideo,
+    createRead,
     previewKind,
     sameData,
     type MarkdownImage,
@@ -78,10 +79,7 @@ async function saveFile(files: Files, id: string) {
 /** The chat's files and its one preview: everything under it shows files and opens them there. */
 export function MediaProvider(props: ParentProps<{ files: Files }>) {
     const [shown, setShown] = createSignal<{ id: string; name: string } | null>(null);
-    const [read] = createResource(
-        () => shown()?.id,
-        (id) => props.files.read(id),
-    );
+    const read = createRead((id: string) => props.files.read(id), { source: () => shown()?.id });
     const [saveError, setSaveError] = createSignal<string | null>(null);
     const media: Media = {
         files: props.files,
@@ -91,7 +89,7 @@ export function MediaProvider(props: ParentProps<{ files: Files }>) {
         },
         save: (id) => saveFile(props.files, id),
     };
-    const file = () => (read.loading || read.error ? undefined : read());
+    const file = () => (read.loading() || read.error() ? undefined : read.value());
 
     return (
         <MediaContext.Provider value={media}>
@@ -102,7 +100,7 @@ export function MediaProvider(props: ParentProps<{ files: Files }>) {
                 name={file()?.file.name ?? shown()?.name ?? ""}
                 type={file()?.file.type}
                 src={file()?.url}
-                error={read.error ? `${shown()?.name ?? "The file"} couldn't be read: ${errorMessage(read.error)}` : (saveError() ?? undefined)}
+                error={read.error() ? `${shown()?.name ?? "The file"} couldn't be read: ${read.error()}` : (saveError() ?? undefined)}
                 actions={
                     <PaperButton
                         size="small"
@@ -150,29 +148,26 @@ function FileCard(props: { file: Attachment }) {
 /** A picture, video or recording, read from the service and played where it is. */
 function PlayedFile(props: { file: Attachment; caption?: string }) {
     const media = useMedia();
-    const [read] = createResource(
-        () => props.file,
-        (file) => media.files.read(file.id, file.bytes),
-    );
+    const read = createRead((file: Attachment) => media.files.read(file.id, file.bytes), { source: () => props.file });
     const name = () => props.caption || props.file.name;
     return (
         <Switch>
-            <Match when={read.error}>
-                <Missing caption={name()} why={errorMessage(read.error)} />
+            <Match when={read.error()}>
+                {(why) => <Missing caption={name()} why={why()} />}
             </Match>
-            <Match when={read.loading || !read()}>
+            <Match when={read.loading() || !read.value()}>
                 <span class={styles.loading} classList={{ [styles.loadingAudio!]: props.file.kind === "audio" }} aria-label={`Loading ${name()}`} />
             </Match>
             <Match when={props.file.kind === "image"}>
                 <button type="button" class={styles.mediaButton} onClick={() => media.open(props.file.id, props.file.name)} aria-label={`Open ${name()}`}>
-                    <img class={styles.media} src={read()!.url} alt={name()} title={props.file.name} />
+                    <img class={styles.media} src={read.value()!.url} alt={name()} title={props.file.name} />
                 </button>
             </Match>
             <Match when={props.file.kind === "video"}>
-                <PaperVideo class={styles.video} src={read()!.url} label={name()} />
+                <PaperVideo class={styles.video} src={read.value()!.url} label={name()} />
             </Match>
             <Match when={props.file.kind === "audio"}>
-                <PaperAudio class={styles.audio} src={read()!.url} label={name()} />
+                <PaperAudio class={styles.audio} src={read.value()!.url} label={name()} />
             </Match>
         </Switch>
     );
@@ -189,21 +184,18 @@ function Missing(props: { caption: string; why: string }) {
 /** A picture on the web, as the service fetched it; why not, when it couldn't or wouldn't. */
 function WebImage(props: { url: string; alt: string; title?: string }) {
     const media = useMedia();
-    const [read] = createResource(
-        () => props.url,
-        (url) => media.files.webImage(url),
-    );
+    const read = createRead((url: string) => media.files.webImage(url), { source: () => props.url });
     const name = () => props.alt || "A picture";
     return (
         <Switch>
-            <Match when={read.error}>
-                <Missing caption={name()} why={errorMessage(read.error)} />
+            <Match when={read.error()}>
+                {(why) => <Missing caption={name()} why={why()} />}
             </Match>
-            <Match when={read.loading || !read()}>
+            <Match when={read.loading() || !read.value()}>
                 <span class={styles.loading} aria-label={`Loading ${name()}`} />
             </Match>
             <Match when={true}>
-                <img class={styles.media} src={read()!} alt={props.alt} title={props.title} />
+                <img class={styles.media} src={read.value()!} alt={props.alt} title={props.title} />
             </Match>
         </Switch>
     );
@@ -212,23 +204,20 @@ function WebImage(props: { url: string; alt: string; title?: string }) {
 /** A file of the conversation, by id: looked up from the service, then shown for what it is. */
 function FileView(props: { id: string; caption?: string }) {
     const media = useMedia();
-    const [info] = createResource(
-        () => props.id,
-        (id) => media.files.info(id),
-    );
+    const info = createRead((id: string) => media.files.info(id), { source: () => props.id });
     return (
         <Switch>
-            <Match when={info.error}>
-                <Missing caption={props.caption || "A file"} why={errorMessage(info.error)} />
+            <Match when={info.error()}>
+                {(why) => <Missing caption={props.caption || "A file"} why={why()} />}
             </Match>
-            <Match when={info.loading || !info()}>
+            <Match when={info.loading() || !info.value()}>
                 <span class={styles.loading} aria-label={`Loading ${props.caption || "a file"}`} />
             </Match>
-            <Match when={info()!.kind !== "file"}>
-                <PlayedFile file={info()!} caption={props.caption} />
+            <Match when={info.value()!.kind !== "file"}>
+                <PlayedFile file={info.value()!} caption={props.caption} />
             </Match>
             <Match when={true}>
-                <FileCard file={info()!} />
+                <FileCard file={info.value()!} />
             </Match>
         </Switch>
     );
@@ -237,18 +226,14 @@ function FileView(props: { id: string; caption?: string }) {
 /** A file named in a sentence: a chip with its icon and name that opens it. */
 function FileChip(props: { id: string; label: string }) {
     const media = useMedia();
-    const [info] = createResource(
-        () => props.id,
-        (id) => media.files.info(id),
-    );
+    const info = createRead((id: string) => media.files.info(id), { source: () => props.id });
     const [failed, setFailed] = createSignal<string | null>(null);
-    // a resource read while it's failed throws: the chip shows the failure instead
-    const file = () => (info.state === "ready" ? info() : undefined);
+    const file = () => (info.loading() || info.error() ? undefined : info.value());
     const label = () => props.label.trim() || file()?.name || "A file";
-    const problem = () => failed() ?? (info.error ? `${label()} couldn't be found: ${errorMessage(info.error)}` : null);
+    const problem = () => failed() ?? (info.error() ? `${label()} couldn't be found: ${info.error()}` : null);
     const press = () => {
-        const file = info.state === "ready" ? info() : undefined;
-        if (!file) return;
+        const file = info.value();
+        if (!file || info.loading() || info.error()) return;
         setFailed(null);
         if (previewable(file)) media.open(file.id, file.name);
         else media.save(file.id).catch((e) => setFailed(`${file.name} couldn't be saved: ${errorMessage(e)}`));

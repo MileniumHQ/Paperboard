@@ -19,14 +19,16 @@ function launcher(pages: () => Promise<PageInfo[]>, pagePicture: (name: string) 
 
 describe("pages launcher", () => {
     test("a read that finishes late doesn't replace a newer one", async () => {
-        const reads = [later<PageInfo[]>(), later<PageInfo[]>()];
+        // the launcher reads as it is made, then twice more
+        const reads = [later<PageInfo[]>(), later<PageInfo[]>(), later<PageInfo[]>()];
         let n = 0;
         const l = launcher(() => reads[n++]!.promise);
         l.reload();
         l.reload();
-        reads[1]!.resolve([page("new")]);
+        reads[2]!.resolve([page("new")]);
         await settle();
-        reads[0]!.resolve([page("old")]);
+        reads[1]!.resolve([page("old")]);
+        reads[0]!.resolve([page("first")]);
         await settle();
         expect(l.list()!.map((p) => p.name)).toEqual(["new"]);
     });

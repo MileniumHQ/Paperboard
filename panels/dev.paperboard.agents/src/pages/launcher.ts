@@ -3,10 +3,8 @@
 // picture, and the one open beside the chat.
 
 import { createEffect, createSignal, on } from "solid-js";
-import { createStore, reconcile } from "solid-js/store";
-import { errorMessage } from "@mileniumhq/paperapi";
-import { createLatest } from "@mileniumhq/paperui/headless";
-import type { PageInfo, PageKind } from "../contract";
+import { createRead } from "@mileniumhq/paperui/headless";
+import type { PageKind } from "../contract";
 import type { Agent } from "../lib/agent";
 
 export interface OpenPage {
@@ -19,39 +17,29 @@ export interface OpenPage {
 export type Launcher = ReturnType<typeof createLauncher>;
 
 export function createLauncher(agent: Agent) {
-    // the pages are a store reconciled by name, so a re-read changes what differs and every row stays the row it was
-    const [state, setState] = createStore<{ pages: PageInfo[] | null }>({ pages: null });
-    const list = () => state.pages;
-    const [listError, setListError] = createSignal<string | null>(null);
+    // each page's picture, read once per time it was taken; a newer one replaces the old, and a deleted page's goes
+    // (dropped with any answer: an older list missing a page only costs that page one more read)
+    const pictures = new Map<string, { at: number; image: Promise<string> }>();
+    const read = async () => {
+        const pages = await agent.pages();
+        for (const name of pictures.keys()) if (!pages.some((p) => p.name === name)) pictures.delete(name);
+        return pages;
+    };
+    // every change to the pages (a new one, a new picture, a deletion) bumps the revision; reconciled by name, so a re-read changes what differs and every row stays the row it was
+    const pages = createRead(read, { source: () => agent.state.pages.revision, key: "name" });
+    const list = () => pages.value() ?? null;
     const [shown, setShown] = createSignal<OpenPage | null>(null);
 
-    // each page's picture, read once per time it was taken; a newer one replaces the old, and a deleted page's goes
-    const pictures = new Map<string, { at: number; image: Promise<string> }>();
-    const prune = (pages: PageInfo[]) => {
-        for (const name of pictures.keys()) if (!pages.some((p) => p.name === name)) pictures.delete(name);
-    };
-
-    // a slow older read never replaces a newer one
-    const latest = createLatest();
-    const load = () => {
-        const current = latest();
-        setListError(null);
-        agent.pages().then(
-            (pages) => {
-                if (!current()) return;
-                setState("pages", reconcile(pages, { key: "name" }));
-                prune(pages);
-                // deleted, by the user or the agent: it goes from beside the chat too
+    // deleted, by the user or the agent: it goes from beside the chat too
+    createEffect(
+        on(
+            () => list()?.map((p) => p.name),
+            (names) => {
                 const s = shown();
-                if (s && !pages.some((a) => a.name === s.name)) setShown(null);
+                if (names && s && !names.includes(s.name)) setShown(null);
             },
-            (e) => {
-                if (current()) setListError(errorMessage(e));
-            },
-        );
-    };
-    // every change to the pages (a new one, a new picture, a deletion) bumps the revision
-    createEffect(on(() => agent.state.pages.revision, load));
+        ),
+    );
 
     const picture = (name: string, at: number) => {
         const kept = pictures.get(name);
@@ -69,8 +57,8 @@ export function createLauncher(agent: Agent) {
     return {
         /** the pages, newest first; null until read */
         list,
-        listError,
-        reload: load,
+        listError: pages.error,
+        reload: pages.reload,
         /** when a page's picture was taken, or undefined while the pages are unread, the page is gone or it has none */
         pictureAt: (name: string) => list()?.find((a) => a.name === name)?.pictureAt || undefined,
         /** whether a page is still there: a card for a deleted one says so */
@@ -87,7 +75,7 @@ export function createLauncher(agent: Agent) {
             await agent.deletePage(name);
             if (shown()?.name === name) setShown(null);
             pictures.delete(name);
-            if (state.pages) setState("pages", reconcile(state.pages.filter((a) => a.name !== name), { key: "name" }));
+            pages.set((left) => left?.filter((a) => a.name !== name));
         },
         /** the page as a PDF in the agent's browser, saved where the user chooses; the service's copy goes after */
         async savePdf(name: string) {

@@ -6,8 +6,7 @@
 // user's back.
 
 import { For, Match, Show, Switch, createEffect, createSignal, on, onCleanup } from "solid-js";
-import { createStore, reconcile } from "solid-js/store";
-import { PaperButton, PaperEmptyState, PaperFlex, PaperIcon, PaperList, PaperListItem, PaperLoader, PaperQuote, PaperText, createAction } from "@mileniumhq/paperui";
+import { PaperButton, PaperEmptyState, PaperFlex, PaperIcon, PaperList, PaperListItem, PaperLoader, PaperQuote, PaperText, createAction, createPolling, createRead } from "@mileniumhq/paperui";
 import { errorMessage } from "@mileniumhq/paperapi";
 import type { ComputerWindow } from "../contract";
 import type { Agent } from "../lib/agent";
@@ -34,69 +33,29 @@ export default function ComputerView(props: { agent: Agent }) {
 
     // ------------------------------------------------------------- its windows
 
-    const [windows, setWindows] = createStore<ComputerWindow[]>([]);
-    const [listError, setListError] = createSignal<string | null>(null);
-    const [listed, setListed] = createSignal(false);
+    // tabs go by id, so a tab never jumps (and the window being used never loses focus to a move)
+    const listed = createRead(() => props.agent.windows().then((list) => list.sort((a, b) => a.id - b.id)), { source: ready });
+    const windows = () => listed.value() ?? [];
     const [chosen, setChosen] = createSignal<number | null>(null);
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    let disposed = false;
-    // one poll at a time: starting another, or stopping, makes an answer still on its way the old poll's, and it is dropped
-    let poll = 0;
-    const stopPolling = () => {
-        poll++;
-        clearTimeout(timer);
-    };
-    const refresh = async () => {
-        stopPolling();
-        const mine = poll;
-        if (disposed || !ready() || listError()) return;
-        if (!document.hidden) {
-            try {
-                // tabs go by id, so a tab never jumps (and the window being used never loses focus to a move)
-                const list = (await props.agent.windows()).sort((a, b) => a.id - b.id);
-                if (mine !== poll) return;
-                setWindows(reconcile(list, { key: "id" }));
-                setListed(true);
-            } catch (e) {
-                // shown once, until the user tries again; polling a failure would only repeat it
-                if (mine === poll) setListError(errorMessage(e));
-                return;
-            }
-        }
-        timer = setTimeout(() => void refresh(), WINDOWS_POLL_MS);
-    };
-    createEffect(
-        on(ready, (on) => {
-            setListError(null);
-            if (on) void refresh();
-            else {
-                stopPolling();
-                setWindows([]);
-                setListed(false);
-            }
-        }),
-    );
-    onCleanup(() => {
-        disposed = true;
-        stopPolling();
-    });
-    const retryList = () => {
-        setListError(null);
-        void refresh();
-    };
+    // a computer that stopped has no windows; one that starts again is looked at afresh
+    createEffect(on(ready, (on) => !on && listed.set(undefined), { defer: true }));
+    // looked at again while it's on and seen; a failure is shown once, until the user tries again: polling it would only repeat it
+    createPolling(() => (ready() && !listed.error() && !document.hidden ? listed.reload() : undefined), WINDOWS_POLL_MS);
 
     // the chosen tab, or the first when it closes
-    const shown = () => (windows.some((w) => w.id === chosen()) ? chosen() : (windows[0]?.id ?? null));
+    const shown = () => (windows().some((w) => w.id === chosen()) ? chosen() : (windows()[0]?.id ?? null));
 
     const closeWindow = (w: ComputerWindow) =>
         void act("Window not closed", async () => {
             await props.agent.closeWindow(w.id);
-            setWindows(windows.filter((x) => x.id !== w.id));
+            listed.set((list) => list?.filter((x) => x.id !== w.id));
         });
 
     // ------------------------------------------------------------- control, taken by using it
 
     const [holding, setHolding] = createSignal(false);
+    let disposed = false;
+    onCleanup(() => (disposed = true));
     let taking: Promise<void> | null = null;
     let idle: ReturnType<typeof setTimeout> | undefined;
     const giveBack = () =>
@@ -145,9 +104,9 @@ export default function ComputerView(props: { agent: Agent }) {
 
     return (
         <div class={styles.view}>
-            <Show when={ready() && windows.length > 0}>
+            <Show when={ready() && windows().length > 0}>
                 <PaperList direction="horizontal" name="computer-windows" value={shown() ?? ""} onValueChange={(v) => setChosen(Number(v))}>
-                    <For each={windows}>
+                    <For each={windows()}>
                         {(w) => (
                             <PaperListItem icon="language" value={w.id} onClosed={() => closeWindow(w)} title={w.title || w.app}>
                                 {clip(w.title || w.app, TITLE_CHARS)}
@@ -214,24 +173,24 @@ export default function ComputerView(props: { agent: Agent }) {
                             </PaperButton>
                         </PaperEmptyState>
                     </Match>
-                    <Match when={listError()}>
-                        <PaperEmptyState icon="web_asset_off" title="Couldn't see its windows" description={listError() ?? undefined}>
-                            <PaperButton variant="primary" onClick={retryList}>
+                    <Match when={listed.error()}>
+                        <PaperEmptyState icon="web_asset_off" title="Couldn't see its windows" description={listed.error() ?? undefined}>
+                            <PaperButton variant="primary" onClick={() => void listed.reload()}>
                                 Try again
                             </PaperButton>
                         </PaperEmptyState>
                     </Match>
-                    <Match when={!listed()}>
+                    <Match when={listed.value() === undefined}>
                         <PaperFlex center>
                             <PaperLoader loaderStatus="indeterminate" label="Looking" />
                         </PaperFlex>
                     </Match>
-                    <Match when={windows.length === 0}>
+                    <Match when={windows().length === 0}>
                         <PaperEmptyState icon="web_asset" title="Nothing is open" description={`When ${name()} opens a page, you can watch it here.`} />
                     </Match>
                     <Match when={true}>
                         {/* every tab stays mounted (a window keeps its last frame); only the chosen one shows and polls */}
-                        <For each={windows}>
+                        <For each={windows()}>
                             {(w) => (
                                 <div class={styles.pane} classList={{ [styles.shown!]: shown() === w.id }}>
                                     <WindowView agent={props.agent} window={w} active={shown() === w.id} holding={holding()} onUse={use} />

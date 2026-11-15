@@ -126,7 +126,7 @@ function AgentSettings(props: { agent: Agent }) {
                 </PaperSettingItem>
                 <PaperSettingItem title="Model" description="Leave it on the default to use whatever the harness is set to already.">
                     <Show
-                        when={!models.error}
+                        when={!models.error()}
                         fallback={
                             <PaperInput
                                 name="model"
@@ -166,9 +166,9 @@ function AgentSettings(props: { agent: Agent }) {
                     </Show>
                 </PaperSettingItem>
             </PaperSettingList>
-            <Show when={models.error}>
+            <Show when={models.error()}>
                 <PaperQuote variant="danger" icon="error" title="Models not listed" role="alert">
-                    {errorMessage(models.error).replace(/[.\s]+$/, "")}. Type a model's id instead.
+                    {models.error()!.replace(/[.\s]+$/, "")}. Type a model's id instead.
                 </PaperQuote>
             </Show>
             <Show when={error()}>

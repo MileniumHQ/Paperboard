@@ -3,40 +3,32 @@
 // for good after saying so.
 
 import { For, Match, Show, Switch, createEffect, createSignal, on } from "solid-js";
-import { PaperButton, PaperEmptyState, PaperFlex, PaperIcon, PaperList, PaperListItem, PaperLoader, PaperModal, PaperQuote, PaperText, type ActionFailure, createAction, createLatest } from "@mileniumhq/paperui";
-import { errorMessage } from "@mileniumhq/paperapi";
+import { PaperButton, PaperEmptyState, PaperFlex, PaperIcon, PaperList, PaperListItem, PaperLoader, PaperModal, PaperQuote, PaperText, type ActionFailure, createAction, createRead } from "@mileniumhq/paperui";
 import { CURRENT_CONVERSATION as CURRENT, type PastConversation } from "../contract";
 import type { Agent } from "../lib/agent";
 const when = (at: number) => new Date(at).toLocaleString([], { dateStyle: "medium", timeStyle: "short" });
 
 export default function History(props: { agent: Agent; open: boolean; onClose: () => void }) {
-    const [list, setList] = createSignal<{ current: PastConversation | null; past: PastConversation[] } | null>(null);
-    const [readError, setReadError] = createSignal<string | null>(null);
+    // read afresh each time it opens: the agent may have started or reopened one meanwhile
+    const history = createRead(() => props.agent.conversations(), { source: () => props.open });
+    const list = history.value;
     const { busy, error: openError, setError: setOpenError, run } = createAction();
     const [deleteError, setDeleteError] = createSignal<ActionFailure | null>(null);
     const [deleting, setDeleting] = createSignal<PastConversation | null>(null);
     // the current one is marked; one being opened is, until it's open or wasn't
     const [chosen, setChosen] = createSignal(CURRENT);
     const all = () => (list() ? [...(list()!.current ? [list()!.current!] : []), ...list()!.past] : []);
-
-    // latest read wins: an older answer (the modal opened, closed and opened again) never replaces a newer one
-    const latest = createLatest();
-    const load = async () => {
-        const current = latest();
-        setReadError(null);
-        setOpenError(null);
-        setList(null);
-        setChosen(CURRENT);
-        try {
-            const next = await props.agent.conversations();
-            if (current()) setList(next);
-        } catch (e) {
-            if (current()) setReadError(errorMessage(e));
-        }
-    };
-
-    // read afresh each time it opens: the agent may have started or reopened one meanwhile
-    createEffect(on(() => props.open, (open) => open && void load()));
+    // each opening starts with nothing refused
+    createEffect(
+        on(
+            () => props.open,
+            (open) => {
+                if (!open) return;
+                setOpenError(null);
+                setChosen(CURRENT);
+            },
+        ),
+    );
 
     const reopen = async (c: PastConversation) => {
         setChosen(c.id);
@@ -56,7 +48,7 @@ export default function History(props: { agent: Agent; open: boolean; onClose: (
             async () => {
                 await props.agent.deleteConversation(c.id);
                 setDeleting(null);
-                setList((l) => l && { ...l, past: l.past.filter((x) => x.id !== c.id) });
+                history.set((l) => l && { ...l, past: l.past.filter((x) => x.id !== c.id) });
             },
             setDeleteError,
         );
@@ -72,17 +64,19 @@ export default function History(props: { agent: Agent; open: boolean; onClose: (
                 noPadding
             >
                 <Switch>
-                    <Match when={list() === null && readError()}>
-                        <PaperFlex padding="double">
-                            <PaperEmptyState icon="error" title="The history can't be read" description={readError()!}>
-                                <PaperButton onClick={() => void load()}>Try again</PaperButton>
-                            </PaperEmptyState>
-                        </PaperFlex>
-                    </Match>
-                    <Match when={list() === null}>
+                    <Match when={history.loading() || (!list() && !history.error())}>
                         <PaperFlex padding="double">
                             <PaperLoader loaderStatus="indeterminate" label="Reading the history" />
                         </PaperFlex>
+                    </Match>
+                    <Match when={history.error()}>
+                        {(why) => (
+                            <PaperFlex padding="double">
+                                <PaperEmptyState icon="error" title="The history can't be read" description={why()}>
+                                    <PaperButton onClick={() => void history.reload()}>Try again</PaperButton>
+                                </PaperEmptyState>
+                            </PaperFlex>
+                        )}
                     </Match>
                     <Match when={all().length === 0}>
                         <PaperFlex padding="double">

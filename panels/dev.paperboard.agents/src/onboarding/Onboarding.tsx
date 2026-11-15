@@ -396,9 +396,9 @@ function Scenes(props: {
                             )}
                         </For>
                     </PaperSelector>
-                    <Show when={models.error}>
+                    <Show when={models.error()}>
                         <PaperQuote variant="danger" icon="error" title="Models not listed" role="alert">
-                            {errorMessage(models.error).replace(/[.\s]+$/, "")}. You can pick one later in settings.
+                            {models.error()!.replace(/[.\s]+$/, "")}. You can pick one later in settings.
                         </PaperQuote>
                     </Show>
                 </Reveal>

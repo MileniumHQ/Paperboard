@@ -2,9 +2,8 @@
 // they allowed, always or for this time, and taking any of them back. The
 // agent asks in the chat; this page follows every change as it happens.
 
-import { For, Match, Show, Switch, createSignal, onCleanup } from "solid-js";
-import { createStore, reconcile } from "solid-js/store";
-import { PaperButton, PaperEmptyState, PaperFlex, PaperIcon, PaperList, PaperListItem, PaperLoader, PaperQuote, createLatest } from "@mileniumhq/paperui";
+import { For, Match, Show, Switch, createSignal } from "solid-js";
+import { PaperButton, PaperEmptyState, PaperFlex, PaperIcon, PaperList, PaperListItem, PaperLoader, PaperQuote, createRead } from "@mileniumhq/paperui";
 import { errorMessage } from "@mileniumhq/paperapi";
 import type { AccessGrant, AccessView } from "../contract";
 import type { Agent } from "../lib/agent";
@@ -16,40 +15,19 @@ const grantKey = (g: AccessGrant) => `${g.kind}:${itemText(g).what}:${g.kind ===
 
 export default function Access(props: { agent: Agent }) {
     const name = () => props.agent.name();
-    // the grants are a store reconciled by what each one is, so a change pushed to the page touches only what changed
-    const [grants, setGrants] = createStore<{ key: string; grant: AccessGrant }[]>([]);
-    const [view, setViewState] = createSignal<{ error: string | null } | null>(null);
-    const [error, setError] = createSignal<string | null>(null);
-    // a view that arrives, by a read or a push, is what's shown: a read that failed before it is over
-    const setView = (next: AccessView) => {
-        setGrants(reconcile(next.grants.map((grant) => ({ key: grantKey(grant), grant })), { key: "key" }));
-        setViewState({ error: next.error });
-        setError(null);
-    };
-    const [failed, setFailed] = createSignal<string | null>(null);
-
+    // each grant keyed by what it is, so a change, read or pushed, touches only what changed
+    const shape = (view: AccessView) => ({ error: view.error, grants: view.grants.map((grant) => ({ key: grantKey(grant), grant })) });
     // a change pushed while the first read is out is newer than it: the read doesn't replace it
-    const latest = createLatest();
-    onCleanup(
-        props.agent.onAccess((next) => {
-            if (latest()()) setView(next);
-        }),
-    );
-    const load = async () => {
-        const current = latest();
-        try {
-            const next = await props.agent.access();
-            if (current()) setView(next);
-        } catch (e) {
-            if (current()) setError(errorMessage(e));
-        }
-    };
-    holdPage(load());
+    const access = createRead(() => props.agent.access().then(shape), { key: "key", follow: (land) => props.agent.onAccess((next) => land(shape(next))) });
+    const view = access.value;
+    const grants = () => view()?.grants ?? [];
+    const [failed, setFailed] = createSignal<string | null>(null);
+    holdPage(access.ready());
 
     const revoke = async (g: AccessGrant) => {
         setFailed(null);
         try {
-            setView(await props.agent.revokeAccess(g.kind === "folder" ? { kind: "folder", path: g.path } : { kind: "command", command: g.command, anyArguments: g.anyArguments }));
+            access.set(shape(await props.agent.revokeAccess(g.kind === "folder" ? { kind: "folder", path: g.path } : { kind: "command", command: g.command, anyArguments: g.anyArguments })));
         } catch (e) {
             setFailed(errorMessage(e));
         }
@@ -57,16 +35,16 @@ export default function Access(props: { agent: Agent }) {
 
     return (
         <Switch>
-            <Match when={error()}>
+            <Match when={access.error()}>
                 {(why) => (
                     <PaperFlex padding="double">
                         <PaperEmptyState icon="error" title="Access can't be read" description={why()}>
-                            <PaperButton onClick={() => void load()}>Try again</PaperButton>
+                            <PaperButton onClick={() => void access.reload()}>Try again</PaperButton>
                         </PaperEmptyState>
                     </PaperFlex>
                 )}
             </Match>
-            <Match when={view() === null}>
+            <Match when={view() === undefined}>
                 <PaperFlex padding="double">
                     <PaperLoader loaderStatus="indeterminate" label="Reading what's allowed" />
                 </PaperFlex>
@@ -88,7 +66,7 @@ export default function Access(props: { agent: Agent }) {
                         </PaperFlex>
                     </Show>
                     <Show
-                        when={grants.length > 0}
+                        when={grants().length > 0}
                         fallback={
                             <PaperFlex padding="double">
                                 <PaperEmptyState
@@ -100,7 +78,7 @@ export default function Access(props: { agent: Agent }) {
                         }
                     >
                         <PaperList selectable={false} borderless fullWidth fullHeight>
-                            <For each={grants}>
+                            <For each={grants()}>
                                 {(row) => {
                                     const g = row.grant;
                                     const t = itemText(g);

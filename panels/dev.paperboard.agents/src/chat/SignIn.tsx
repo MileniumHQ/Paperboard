@@ -1,6 +1,5 @@
-import { For, Match, Show, Switch, createSignal, onMount } from "solid-js";
-import { PaperButton, PaperCard, PaperFlex, PaperIcon, PaperInput, PaperLoader, PaperQuote, PaperText, createAction } from "@mileniumhq/paperui";
-import { errorMessage } from "@mileniumhq/paperapi";
+import { For, Match, Show, Switch, createSignal } from "solid-js";
+import { PaperButton, PaperCard, PaperFlex, PaperIcon, PaperInput, PaperLoader, PaperQuote, PaperText, createAction, createRead } from "@mileniumhq/paperui";
 import { LIMITS, type SignInEntry } from "../contract";
 import type { Agent } from "../lib/agent";
 import RequestEnd from "./RequestEnd";
@@ -19,20 +18,13 @@ export interface SignInDraft {
 export default function SignIn(props: { agent: Agent; entry: SignInEntry; name: string; draft: SignInDraft; onDone: () => void }) {
     const e = () => props.entry;
     const [values, setValues] = createSignal<string[]>(props.draft.values.length ? props.draft.values : e().fields.map(() => ""));
-    const [image, setImage] = createSignal<string | null>(props.draft.image);
-    const [shotError, setShotError] = createSignal<string | null>(null);
-    const { busy, error, run } = createAction();
-
-    const loadShot = () => {
-        setShotError(null);
-        props.agent.signInShot(e().id).then(
-            (r) => setImage((props.draft.image = r.image)),
-            (err) => setShotError(errorMessage(err)),
-        );
-    };
-    onMount(() => {
-        if (e().status === "waiting" && !image()) loadShot();
+    // the draft keeps the picture for the card that replaces this one when the chat redraws
+    const kept = props.draft.image;
+    const shot = createRead((id: string) => props.agent.signInShot(id).then((r) => (props.draft.image = r.image)), {
+        source: () => (e().status === "waiting" && !kept ? e().id : undefined),
     });
+    const image = () => shot.value() ?? kept;
+    const { busy, error, run } = createAction();
 
     const setValue = (i: number, v: string) => {
         const next = values().slice();
@@ -68,13 +60,13 @@ export default function SignIn(props: { agent: Agent; entry: SignInEntry; name: 
                         <Show
                             when={image()}
                             fallback={
-                                <Show when={shotError()} fallback={<PaperLoader loaderStatus="indeterminate" label="Loading the page's picture" />}>
+                                <Show when={shot.error()} fallback={<PaperLoader loaderStatus="indeterminate" label="Loading the page's picture" />}>
                                     <PaperFlex gap="half">
                                         <PaperQuote variant="danger" icon="error" title="Picture not loaded" role="alert">
-                                            {shotError()}
+                                            {shot.error()}
                                         </PaperQuote>
                                         <PaperFlex direction="row">
-                                            <PaperButton size="small" onClick={loadShot}>
+                                            <PaperButton size="small" onClick={() => void shot.reload()}>
                                                 Try again
                                             </PaperButton>
                                         </PaperFlex>

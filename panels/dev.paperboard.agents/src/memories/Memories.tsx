@@ -4,8 +4,7 @@
 // them and can make it forget any. The list follows the service's memory
 // revision, so what the agent remembers shows up live.
 
-import { For, Match, Show, Switch, createEffect, createSignal, on } from "solid-js";
-import { createStore, reconcile } from "solid-js/store";
+import { For, Match, Show, Switch, createSignal } from "solid-js";
 import {
     PaperButton,
     PaperCard,
@@ -19,51 +18,29 @@ import {
     PaperSectionHeader,
     PaperText,
     createAction,
-    createLatest,
+    createRead,
 } from "@mileniumhq/paperui";
-import { errorMessage } from "@mileniumhq/paperapi";
 import type { MemoryList } from "../contract";
 import type { Agent } from "../lib/agent";
 import { holdPage } from "../lib/pageHold";
 
 export default function Memories(props: { agent: Agent }) {
     const name = () => props.agent.name();
-    // facts by id and notes by key, so a re-read changes what differs and every card stays the card it was
-    const [facts, setFacts] = createStore<MemoryList["facts"]>([]);
-    const [notes, setNotes] = createStore<MemoryList["notes"]>([]);
-    const [read, setRead] = createSignal(false);
-    const list = () => (read() ? { facts, notes } : null);
-    const [error, setError] = createSignal<string | null>(null);
+    // follows the memory revision; a re-read changes only what differs, and every card stays the card it was
+    const memory = createRead(() => props.agent.memory(), { source: () => props.agent.state.memory.revision });
+    const list = () => memory.value() ?? null;
     const [open, setOpen] = createSignal<string | null>(null);
-
-    // latest read wins: an older answer never replaces a newer one
-    const latest = createLatest();
-    const load = async () => {
-        const current = latest();
-        try {
-            const next = await props.agent.memory();
-            if (current()) {
-                setFacts(reconcile(next.facts, { key: "id" }));
-                setNotes(reconcile(next.notes, { key: "key" }));
-                setRead(true);
-                setError(null);
-            }
-        } catch (e) {
-            if (current()) setError(errorMessage(e));
-        }
-    };
     // the page before this one stays up until the first read is in
-    holdPage(load());
-    createEffect(on(() => props.agent.state.memory.revision, () => void load(), { defer: true }));
+    holdPage(memory.ready());
 
     const empty = () => list() !== null && list()!.facts.length === 0 && list()!.notes.length === 0;
 
     return (
         <Switch>
-            <Match when={error() ?? props.agent.state.memory.error}>
+            <Match when={memory.error() ?? props.agent.state.memory.error}>
                 {(why) => (
                     <PaperEmptyState icon="error" title="Memory can't be read" description={why()}>
-                        <PaperButton onClick={() => void load()}>Try again</PaperButton>
+                        <PaperButton onClick={() => void memory.reload()}>Try again</PaperButton>
                     </PaperEmptyState>
                 )}
             </Match>
@@ -129,19 +106,8 @@ function Facts(props: { agent: Agent; facts: MemoryList["facts"] }) {
 }
 
 function Note(props: { agent: Agent; noteKey: string; onDone: () => void }) {
-    const [note, setNote] = createSignal<{ when: string; body: string } | null>(null);
-    const [readError, setReadError] = createSignal<string | null>(null);
+    const note = createRead(() => props.agent.readNote(props.noteKey));
     const { busy: forgetting, error, run } = createAction();
-
-    const load = async () => {
-        setReadError(null);
-        try {
-            setNote(await props.agent.readNote(props.noteKey));
-        } catch (e) {
-            setReadError(errorMessage(e));
-        }
-    };
-    void load();
 
     const forget = async () => {
         if (await run("Note not forgotten", () => props.agent.deleteNote(props.noteKey))) props.onDone();
@@ -156,11 +122,11 @@ function Note(props: { agent: Agent; noteKey: string; onDone: () => void }) {
                 </PaperButton>
             </PaperFlex>
             <Show
-                when={note()}
+                when={note.value()}
                 fallback={
-                    <Show when={readError()} fallback={<PaperLoader loaderStatus="indeterminate" label="Reading note" />}>
-                        <PaperEmptyState icon="error" title="Note can't be read" description={readError()!}>
-                            <PaperButton onClick={() => void load()}>Try again</PaperButton>
+                    <Show when={note.error()} fallback={<PaperLoader loaderStatus="indeterminate" label="Reading note" />}>
+                        <PaperEmptyState icon="error" title="Note can't be read" description={note.error()!}>
+                            <PaperButton onClick={() => void note.reload()}>Try again</PaperButton>
                         </PaperEmptyState>
                     </Show>
                 }
