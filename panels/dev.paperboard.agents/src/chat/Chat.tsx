@@ -1,5 +1,5 @@
 import { For, Show, createComputed, createEffect, createMemo, createSignal, on, onCleanup, onMount, type JSX } from "solid-js";
-import { PAPER_PANEL_COMPACT_WIDTH, PaperButton, PaperCard, PaperContextMenu, PaperContextMenuItem, PaperEmptyState, PaperFlex, PaperIcon, copyText, haptic, PaperMarkdown, useContextMenuState, PaperPresence, PaperProgress, PaperText, showError, type MarkdownImage, type MarkdownLink } from "@mileniumhq/paperui";
+import { PAPER_PANEL_COMPACT_WIDTH, PaperButton, PaperContextMenu, PaperError, PaperContextMenuItem, PaperEmptyState, PaperFlex, PaperIcon, copyText, haptic, PaperMarkdown, useContextMenuState, PaperPresence, PaperProgress, PaperText, showError, type MarkdownImage, type MarkdownLink } from "@mileniumhq/paperui";
 import { createStore, reconcile } from "solid-js/store";
 import { Face } from "../face/Face";
 import { skinFor } from "../face/skins";
@@ -454,25 +454,16 @@ export default function Chat(props: { agent: Agent; face: FaceController; pages:
 const SIDES: Partial<Record<ChatEntry["kind"], Row["side"]>> = { user: "me", agent: "them", "sign-in": "card", access: "access", prompt: "prompt", "tool-server": "tool-server", "tool-sign-in": "tool-sign-in", app: "app" };
 const sideOf = (e: ChatEntry): Row["side"] => SIDES[e.kind] ?? "note";
 
-/** A turn that failed, as the chat keeps it: a card like the agent's requests, with what went wrong. */
+/**
+ * A turn that failed, as the chat keeps it: a PaperError in the column the agent's requests take, with what went
+ * wrong, said every time the chat is opened (a region, not an alert). One kept from before turns had titles is its words alone.
+ */
 function FailedTurn(props: { entry: Extract<ChatEntry, { kind: "error" }> }) {
     return (
         <PaperFlex direction="row">
-            <PaperCard fullWidth={false} shrink maxWidth="panel-small" padding="full" role="region" aria-label={props.entry.title ?? props.entry.text} data-message={props.entry.id} data-card-error>
-                <PaperFlex direction="row" align="start" gap="half">
-                    <PaperIcon>error</PaperIcon>
-                    <PaperFlex gap="onefourth" minWidth={0}>
-                        <Show when={props.entry.title}>
-                            <PaperText preset="label" color="danger">
-                                {props.entry.title}
-                            </PaperText>
-                        </Show>
-                        <PaperText preset="hint" breakWord>
-                            {props.entry.text}
-                        </PaperText>
-                    </PaperFlex>
-                </PaperFlex>
-            </PaperCard>
+            <PaperFlex maxWidth="panel-small" data-message={props.entry.id}>
+                <PaperError title={props.entry.title ?? props.entry.text} error={props.entry.title ? props.entry.text : undefined} />
+            </PaperFlex>
         </PaperFlex>
     );
 }

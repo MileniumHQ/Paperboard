@@ -1,10 +1,10 @@
 import { Show } from "solid-js";
-import { PaperFlex, PaperIcon, PaperText } from "@mileniumhq/paperui";
+import { PaperError, PaperText } from "@mileniumhq/paperui";
 
 /**
  * How every request card in the chat ends, whatever it asked: refused, lapsed, or failed at the service
  * (told under the card's own `failed` title). It's the card's record in the conversation, so a failure is
- * the card's own line, like its other endings, not an alert.
+ * a PaperError in the card, said every time the chat is opened: a region, not an alert.
  */
 export default function RequestEnd(props: { entry: { status: string; error?: string }; name: string; failed?: string }) {
     return (
@@ -16,14 +16,7 @@ export default function RequestEnd(props: { entry: { status: string; error?: str
                 <PaperText preset="hint">This request lapsed. {props.name} can ask again.</PaperText>
             </Show>
             <Show when={props.entry.status === "failed" && props.failed}>
-                {(title) => (
-                    <PaperFlex direction="row" align="start" gap="half" data-card-error>
-                        <PaperIcon>error</PaperIcon>
-                        <PaperText preset="hint" color="danger" breakWord>
-                            {title()}: {props.entry.error}. {props.name} was told and can ask again.
-                        </PaperText>
-                    </PaperFlex>
-                )}
+                {(title) => <PaperError title={title()} error={`${props.entry.error}. ${props.name} was told and can ask again.`} />}
             </Show>
         </>
     );

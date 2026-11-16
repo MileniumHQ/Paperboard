@@ -1,5 +1,5 @@
 import { Match, Switch } from "solid-js";
-import { PaperButton, PaperCard, PaperFlex, PaperIcon, PaperLoader, PaperText, createAction } from "@mileniumhq/paperui";
+import { PaperButton, PaperCard, PaperError, PaperFlex, PaperIcon, PaperLoader, PaperText, createAction } from "@mileniumhq/paperui";
 import type { ToolSignInEntry } from "../contract";
 import { createTools } from "../tools/api";
 import SignInSteps from "../tools/SignInSteps";
@@ -35,14 +35,8 @@ export default function ToolSignIn(props: { entry: ToolSignInEntry; name: string
                 </PaperFlex>
 
                 <Switch>
-                    {/* the toast says why, once for every card */}
-                    <Match when={tools.load() === "failed"}>
-                        <PaperFlex direction="row" align="center" gap="half" wrap>
-                            <PaperText preset="hint">Couldn't check the sign-in.</PaperText>
-                            <PaperButton size="small" onClick={() => void tools.refresh()}>
-                                Try again
-                            </PaperButton>
-                        </PaperFlex>
+                    <Match when={tools.load() === "failed" && tools.loadError()}>
+                        {(err) => <PaperError title="Couldn't check the sign-in" error={err()} action={{ label: "Try again", onClick: () => void tools.refresh() }} />}
                     </Match>
                     <Match when={!tools.view()}>
                         <PaperLoader loaderStatus="indeterminate" label="Reading the tools" />
@@ -68,20 +62,11 @@ export default function ToolSignIn(props: { entry: ToolSignInEntry; name: string
                     </Match>
                     <Match when={failed()}>
                         {(why) => (
-                            <PaperFlex gap="half">
-                                {/* how the card's ask ended: its own line, like the others */}
-                                <PaperFlex direction="row" align="start" gap="half" data-card-error>
-                                    <PaperIcon>error</PaperIcon>
-                                    <PaperText preset="hint" color="danger" breakWord>
-                                        {e().server} didn't start: {why()}
-                                    </PaperText>
-                                </PaperFlex>
-                                <PaperFlex direction="row">
-                                    <PaperButton disabled={busy()} onClick={() => void run(`Couldn't start ${e().server}`, () => tools.restart(e().server))}>
-                                        <PaperIcon>refresh</PaperIcon> Try again
-                                    </PaperButton>
-                                </PaperFlex>
-                            </PaperFlex>
+                            <PaperError
+                                title={`Couldn't start ${e().server}`}
+                                error={why()}
+                                action={{ label: "Try again", disabled: busy(), onClick: () => void run(`Couldn't start ${e().server}`, () => tools.restart(e().server)) }}
+                            />
                         )}
                     </Match>
                     <Match when={state()}>{(s) => <PaperText preset="hint">{stateText(s())}</PaperText>}</Match>

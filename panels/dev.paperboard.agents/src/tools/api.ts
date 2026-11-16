@@ -4,8 +4,7 @@
 // call and are never kept here.
 
 import { errorMessage, serviceClient } from "@mileniumhq/paperapi";
-import { createRoot, createSignal, onCleanup } from "solid-js";
-import { createFailureToast } from "@mileniumhq/paperui/headless";
+import { createSignal, onCleanup } from "solid-js";
 import { createStore, reconcile } from "solid-js/store";
 import { agentsContract } from "../contract";
 import type { ServerSpec, ToolsView } from "../toolsContract";
@@ -46,19 +45,11 @@ function openTools() {
             setLoad("failed");
         }
     };
-    // the first read, settled either way (a failure is in load and loadError)
+    // the first read, settled either way (a failure is in load and loadError, said where the tools are shown)
     const first = refresh();
-    // said once for everything that reads them, not once per sign-in card; it goes with the client
-    const stopToast = createRoot((dispose) => {
-        createFailureToast(() => load() === "failed" && loadError(), { title: "Couldn't load the tools" });
-        return dispose;
-    });
 
     return {
-        close: () => {
-            off();
-            stopToast();
-        },
+        close: off,
         first,
         view,
         load,

@@ -1,8 +1,9 @@
 // A failure the conversation keeps, in the real chat over the real service
 // (test/support/panel.ts): a turn that failed and a request that failed at
-// the service are records of the chat, so each is its card's own line, said
-// as the chat says it every time it's opened. Neither is an alert, and
-// neither is a toast: toasts are for what the person just did.
+// the service are records of the chat, so each is a PaperError where it
+// happened (the turn's place in the chat, the request's card), said as the
+// chat says it every time it's opened. Neither is an alert, and neither is a
+// toast: toasts are for what the person just did.
 import { afterAll, beforeAll, describe, expect, setDefaultTimeout, test } from "bun:test";
 import { bootPanel, seedConversation, type BootedPanel, type Page } from "./support/panel";
 
@@ -29,15 +30,24 @@ beforeAll(async () => {
 });
 afterAll(() => panel?.close());
 
-const lineOf = (id: string) => `(document.querySelector('[data-message="${id}"] [data-card-error], [data-message="${id}"][data-card-error]')?.innerText ?? null)`;
+/** the PaperError a message holds (or is): its name, role and words */
+const errorOf = (id: string) =>
+    `(() => { const e = document.querySelector('[data-message="${id}"] [data-paper-error]'); return e && { title: e.getAttribute("aria-label"), role: e.getAttribute("role"), text: e.innerText }; })()`;
 
 describe("a failure the conversation keeps", () => {
-    test("is its card's own line, not an alert or a toast", async () => {
-        expect(await page.evaluate(lineOf("e1"))).toContain(TURN);
-        expect(await page.evaluate(lineOf("e1"))).toContain("Not answered");
-        expect(await page.evaluate(lineOf("p1"))).toEndWith(`Not sent: ${REFUSED}. Ada was told and can ask again.`);
+    test("is a PaperError where it happened, not an alert or a toast", async () => {
+        const turn = await page.evaluate<{ title: string; role: string; text: string } | null>(errorOf("e1"));
+        expect(turn, "the failed turn isn't a PaperError").not.toBeNull();
+        expect(turn).toMatchObject({ title: "Not answered", role: "region" });
+        expect(turn!.text).toContain(TURN);
+        const request = await page.evaluate<{ title: string; role: string; text: string } | null>(errorOf("p1"));
+        expect(request, "the failed request isn't a PaperError on its card").not.toBeNull();
+        expect(request).toMatchObject({ title: "Not sent", role: "region" });
+        expect(request!.text).toContain(`${REFUSED}. Ada was told and can ask again.`);
+        // the card is still the request's: its title is there with the failure
+        expect(await page.evaluate(`document.querySelector('[data-message="p1"]').innerText`)).toContain("Connect Linear");
         expect(await page.evaluate(`[...document.querySelectorAll("[role=alert]")].map((a) => a.innerText)`), "a record of the chat is an alert").toEqual([]);
-        expect(await page.evaluate(`document.querySelector("[data-paper-toasts]")`), "a record of the chat is a toast").toBeNull();
+        expect(await page.evaluate(`document.querySelector("[data-paper-toasts] [role=alert], [data-paper-toasts] [role=status]")`), "a record of the chat is a toast").toBeNull();
         expect(page.exceptions).toEqual([]);
     });
 });
