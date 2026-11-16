@@ -3,7 +3,7 @@
 // agent asks in the chat; this page follows every change as it happens.
 
 import { For, Match, Show, Switch } from "solid-js";
-import { PaperButton, PaperEmptyState, PaperFlex, PaperIcon, PaperList, PaperListItem, PaperLoader, createFailureToast, createRead, showError } from "@mileniumhq/paperui";
+import { PaperButton, PaperEmptyState, PaperError, PaperFlex, PaperIcon, PaperList, PaperListItem, PaperLoader, createRead, showError } from "@mileniumhq/paperui";
 import type { AccessGrant, AccessView } from "../contract";
 import type { Agent } from "../lib/agent";
 import { holdPage } from "../lib/pageHold";
@@ -20,12 +20,9 @@ export default function Access(props: { agent: Agent }) {
     const access = createRead(() => props.agent.calls.access().then(shape), {
         key: "key",
         follow: (land) => props.agent.events.access((next) => land(shape(next))),
-        failure: { title: "Couldn't load what's allowed" },
     });
     const view = access.value;
     const grants = () => view()?.grants ?? [];
-    // the grants file couldn't be read: nothing it held is allowed, and the toast says why
-    createFailureToast(() => view()?.error, { title: "Couldn't read what you allowed" });
     holdPage(access.ready());
 
     const revoke = (g: AccessGrant) =>
@@ -37,13 +34,7 @@ export default function Access(props: { agent: Agent }) {
     return (
         <Switch>
             <Match when={view() === undefined && access.error()}>
-                <PaperFlex padding="double">
-                    <PaperEmptyState icon="error" title="Couldn't load">
-                        <PaperButton disabled={access.loading()} onClick={() => void access.reload()}>
-                            Try again
-                        </PaperButton>
-                    </PaperEmptyState>
-                </PaperFlex>
+                {(err) => <PaperError fill title="Couldn't load what's allowed" error={err()} action={{ label: "Try again", disabled: access.loading(), onClick: () => void access.reload() }} />}
             </Match>
             <Match when={view() === undefined}>
                 <PaperFlex padding="double">
@@ -51,6 +42,14 @@ export default function Access(props: { agent: Agent }) {
                 </PaperFlex>
             </Match>
             <Match when={true}>
+                {/* the grants file couldn't be read when the service started: nothing it held is allowed, and the words say how to fix it */}
+                <Show when={view()!.error}>
+                    {(err) => (
+                        <PaperFlex padding="full">
+                            <PaperError title="Couldn't read what you allowed" error={err()} />
+                        </PaperFlex>
+                    )}
+                </Show>
                 <PaperFlex flex minHeight={0}>
                     <Show
                         when={grants().length > 0}

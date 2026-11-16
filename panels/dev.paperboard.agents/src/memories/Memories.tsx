@@ -9,6 +9,7 @@ import {
     PaperButton,
     PaperCard,
     PaperEmptyState,
+    PaperError,
     PaperFlex,
     PaperIcon,
     PaperLoader,
@@ -34,15 +35,14 @@ export default function Memories(props: { agent: Agent }) {
     holdPage(memory.ready());
 
     const empty = () => list() !== null && list()!.facts.length === 0 && list()!.notes.length === 0;
+    // the read's failure, or the service's own: memory it can't read
+    const why = () => memory.error() ?? props.agent.state.memory.error;
+    const retry = () => ({ label: "Try again", disabled: memory.loading(), onClick: () => void memory.reload() });
 
     return (
         <Switch>
-            <Match when={memory.error() ?? props.agent.state.memory.error}>
-                {(why) => (
-                    <PaperEmptyState icon="error" title="Memory can't be read" description={why()}>
-                        <PaperButton onClick={() => void memory.reload()}>Try again</PaperButton>
-                    </PaperEmptyState>
-                )}
+            <Match when={list() === null && why()}>
+                {(err) => <PaperError fill title="Couldn't read the memory" error={err()} action={retry()} />}
             </Match>
             <Match when={list() === null}>
                 <PaperLoader loaderStatus="indeterminate" label="Reading memory" />
@@ -52,6 +52,8 @@ export default function Memories(props: { agent: Agent }) {
             </Match>
             <Match when={true}>
                 <PaperFlex gap="full">
+                    {/* what was read last stays, under why it couldn't be read again */}
+                    <Show when={why()}>{(err) => <PaperError title="Couldn't read the memory" error={err()} action={retry()} />}</Show>
                     <Show when={empty()}>
                         <PaperEmptyState icon="neurology" title="Nothing yet" description={`${name()} hasn't remembered anything. It will as you talk.`} />
                     </Show>
@@ -120,9 +122,7 @@ function Note(props: { agent: Agent; noteKey: string; onDone: () => void }) {
                 when={note.value()}
                 fallback={
                     <Show when={note.error()} fallback={<PaperLoader loaderStatus="indeterminate" label="Reading note" />}>
-                        <PaperEmptyState icon="error" title="Note can't be read" description={note.error()!}>
-                            <PaperButton onClick={() => void note.reload()}>Try again</PaperButton>
-                        </PaperEmptyState>
+                        {(err) => <PaperError fill title="Couldn't read the note" error={err()} action={{ label: "Try again", disabled: note.loading(), onClick: () => void note.reload() }} />}
                     </Show>
                 }
             >

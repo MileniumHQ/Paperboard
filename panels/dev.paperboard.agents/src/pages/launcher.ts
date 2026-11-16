@@ -26,7 +26,7 @@ export function createLauncher(agent: Agent) {
         return pages;
     };
     // every change to the pages (a new one, a new picture, a deletion) bumps the revision; reconciled by name, so a re-read changes what differs and every row stays the row it was
-    const pages = createRead(read, { source: () => agent.state.pages.revision, key: "name", failure: { title: "Couldn't load the pages", retry: true } });
+    const pages = createRead(read, { source: () => agent.state.pages.revision, key: "name" });
     const list = () => pages.value() ?? null;
     const [shown, setShown] = createSignal<OpenPage | null>(null);
 
@@ -57,7 +57,9 @@ export function createLauncher(agent: Agent) {
     return {
         /** the pages, newest first; null until read */
         list,
+        /** why the newest read of the pages failed, until one goes through; the list it had stays */
         listError: pages.error,
+        loading: pages.loading,
         reload: pages.reload,
         /** when a page's picture was taken, or undefined while the pages are unread, the page is gone or it has none */
         pictureAt: (name: string) => list()?.find((a) => a.name === name)?.pictureAt || undefined,

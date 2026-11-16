@@ -3,14 +3,14 @@
 // for good after saying so.
 
 import { For, Match, Show, Switch, createEffect, createSignal, on } from "solid-js";
-import { PaperButton, PaperEmptyState, PaperFlex, PaperIcon, PaperList, PaperListItem, PaperLoader, PaperModal, PaperText, createAction, createRead } from "@mileniumhq/paperui";
+import { PaperButton, PaperEmptyState, PaperError, PaperFlex, PaperIcon, PaperList, PaperListItem, PaperLoader, PaperModal, PaperText, createAction, createRead } from "@mileniumhq/paperui";
 import { CURRENT_CONVERSATION as CURRENT, type PastConversation } from "../contract";
 import type { Agent } from "../lib/agent";
 const when = (at: number) => new Date(at).toLocaleString([], { dateStyle: "medium", timeStyle: "short" });
 
 export default function History(props: { agent: Agent; open: boolean; onClose: () => void }) {
     // read afresh each time it opens: the agent may have started or reopened one meanwhile
-    const history = createRead(() => props.agent.calls.conversations(), { source: () => props.open, failure: { title: "Couldn't load the conversations" } });
+    const history = createRead(() => props.agent.calls.conversations(), { source: () => props.open });
     const list = history.value;
     // a refusal is a toast over the dialog, which stays open
     const { busy, run } = createAction();
@@ -54,12 +54,8 @@ export default function History(props: { agent: Agent; open: boolean; onClose: (
                             <PaperLoader loaderStatus="indeterminate" label="Reading the history" />
                         </PaperFlex>
                     </Match>
-                    <Match when={!list()}>
-                        <PaperFlex padding="double">
-                            <PaperEmptyState icon="error" title="Couldn't load">
-                                <PaperButton onClick={() => void history.reload()}>Try again</PaperButton>
-                            </PaperEmptyState>
-                        </PaperFlex>
+                    <Match when={!list() && history.error()}>
+                        {(err) => <PaperError fill title="Couldn't load the conversations" error={err()} action={{ label: "Try again", onClick: () => void history.reload() }} />}
                     </Match>
                     <Match when={all().length === 0}>
                         <PaperFlex padding="double">
@@ -67,6 +63,14 @@ export default function History(props: { agent: Agent; open: boolean; onClose: (
                         </PaperFlex>
                     </Match>
                     <Match when={true}>
+                        {/* a read again that failed: the list it had stays, under why */}
+                        <Show when={history.error()}>
+                            {(err) => (
+                                <PaperFlex padding="full">
+                                    <PaperError title="Couldn't load the conversations" error={err()} action={{ label: "Try again", onClick: () => void history.reload() }} />
+                                </PaperFlex>
+                            )}
+                        </Show>
                         <PaperList
                             name="agents-history"
                             value={chosen()}

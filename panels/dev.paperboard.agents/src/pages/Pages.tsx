@@ -3,7 +3,7 @@
 // so a page the agent makes or deletes shows up live.
 
 import { For, Match, Show, Switch, createSignal } from "solid-js";
-import { PaperButton, PaperEmptyState, PaperFlex, PaperIcon, PaperList, PaperListItem, PaperLoader, PaperModal, PaperText, createAction } from "@mileniumhq/paperui";
+import { PaperButton, PaperEmptyState, PaperError, PaperFlex, PaperIcon, PaperList, PaperListItem, PaperLoader, PaperModal, PaperText, createAction } from "@mileniumhq/paperui";
 import type { PageInfo } from "../contract";
 import type { Launcher } from "./launcher";
 import Picture from "./Picture";
@@ -34,11 +34,7 @@ export default function Pages(props: { pages: Launcher; name: string; onOpened: 
         <>
             <Switch>
                 <Match when={props.pages.list() === null && props.pages.listError()}>
-                    <PaperFlex padding="double">
-                        <PaperEmptyState icon="error" title="Couldn't load">
-                            <PaperButton onClick={() => props.pages.reload()}>Try again</PaperButton>
-                        </PaperEmptyState>
-                    </PaperFlex>
+                    {(err) => <PaperError fill title="Couldn't load the pages" error={err()} action={{ label: "Try again", disabled: props.pages.loading(), onClick: () => void props.pages.reload() }} />}
                 </Match>
                 <Match when={props.pages.list() === null}>
                     <PaperFlex padding="double">
@@ -51,6 +47,14 @@ export default function Pages(props: { pages: Launcher; name: string; onOpened: 
                     </PaperFlex>
                 </Match>
                 <Match when={true}>
+                    {/* a read again that failed: the list it had stays, under why */}
+                    <Show when={props.pages.listError()}>
+                        {(err) => (
+                            <PaperFlex padding="full">
+                                <PaperError title="Couldn't load the pages" error={err()} action={{ label: "Try again", disabled: props.pages.loading(), onClick: () => void props.pages.reload() }} />
+                            </PaperFlex>
+                        )}
+                    </Show>
                     <PaperFlex flex minHeight={0}>
                         {/* the page open beside the chat is marked */}
                         <PaperList

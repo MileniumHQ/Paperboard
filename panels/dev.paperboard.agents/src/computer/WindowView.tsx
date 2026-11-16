@@ -5,7 +5,7 @@
 // takes control of the computer first (onUse), and the input follows.
 
 import { Show, createEffect, createSignal, on, onCleanup } from "solid-js";
-import { PaperButton, PaperEmptyState, PaperFlex, PaperIcon, PaperInput, PaperLoader, PaperText, createPaperMobile, showError } from "@mileniumhq/paperui";
+import { PaperButton, PaperError, PaperIcon, PaperInput, PaperLoader, PaperText, createPaperMobile, showError } from "@mileniumhq/paperui";
 import { errorMessage } from "@mileniumhq/paperapi";
 import type { ComputerWindow, InputEvent, PageDialog } from "../contract";
 import type { Agent } from "../lib/agent";
@@ -249,16 +249,18 @@ export function WindowView(props: {
                 <Show
                     when={!error()}
                     fallback={
-                        <PaperEmptyState icon="broken_image" title="Couldn't show this window" description={error() ?? undefined}>
-                            <PaperButton
-                                onClick={() => {
+                        <PaperError
+                            fill
+                            title="Couldn't show this window"
+                            error={error()}
+                            action={{
+                                label: "Try again",
+                                onClick: () => {
                                     hash = null;
                                     setError(null);
-                                }}
-                            >
-                                Try again
-                            </PaperButton>
-                        </PaperEmptyState>
+                                },
+                            }}
+                        />
                     }
                 >
                     <Show when={src()} fallback={<PaperLoader loaderStatus="indeterminate" label="Looking" />}>

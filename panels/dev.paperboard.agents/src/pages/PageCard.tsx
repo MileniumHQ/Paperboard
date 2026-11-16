@@ -2,7 +2,7 @@
 // and Open, which puts it beside the chat. It is never a link.
 
 import { Show } from "solid-js";
-import { PaperButton, PaperCard, PaperFlex, PaperIcon, PaperText, createAction } from "@mileniumhq/paperui";
+import { PaperButton, PaperCard, PaperError, PaperFlex, PaperIcon, PaperText, createAction } from "@mileniumhq/paperui";
 import type { PageEntry } from "../contract";
 import type { Launcher } from "./launcher";
 import Picture from "./Picture";
@@ -37,14 +37,9 @@ export default function PageCard(props: { entry: PageEntry; pages: Launcher }) {
                         </PaperButton>
                     </Show>
                 </PaperFlex>
-                {/* the pages were never read: whether this one is still there isn't known (the toast says why) */}
+                {/* the pages were never read: whether this one is still there isn't known */}
                 <Show when={props.pages.list() === null && props.pages.listError()}>
-                    <PaperFlex direction="row" align="center" gap="half" wrap>
-                        <PaperText preset="hint">Couldn't check that it's still there.</PaperText>
-                        <PaperButton size="small" onClick={() => props.pages.reload()}>
-                            Try again
-                        </PaperButton>
-                    </PaperFlex>
+                    {(err) => <PaperError title="Couldn't check that it's still there" error={err()} action={{ label: "Try again", disabled: props.pages.loading(), onClick: () => void props.pages.reload() }} />}
                 </Show>
             </PaperCard>
         </PaperFlex>

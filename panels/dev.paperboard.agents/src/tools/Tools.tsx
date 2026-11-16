@@ -10,7 +10,7 @@
 import { For, Match, Show, Switch, createComputed, createEffect, createMemo, createSignal, on } from "solid-js";
 import {
     PaperButton,
-    PaperEmptyState,
+    PaperError,
     PaperFlex,
     PaperIcon,
     PaperInput,
@@ -24,7 +24,6 @@ import {
     PaperText,
     PaperToggle,
     createAction,
-    createFailureToast,
     createSavedValue,
     showError,
 } from "@mileniumhq/paperui";
@@ -46,12 +45,8 @@ export default function Tools(props: { agent: Agent }) {
 
     return (
         <Switch>
-            <Match when={tools.load() === "failed"}>
-                <PaperFlex padding="double">
-                    <PaperEmptyState icon="error" title="Couldn't load">
-                        <PaperButton onClick={() => void tools.refresh()}>Try again</PaperButton>
-                    </PaperEmptyState>
-                </PaperFlex>
+            <Match when={!tools.view() && tools.load() === "failed" && tools.loadError()}>
+                {(err) => <PaperError fill title="Couldn't load the tools" error={err()} action={{ label: "Try again", onClick: () => void tools.refresh() }} />}
             </Match>
             <Match when={tools.view()}>
                 <List tools={tools} name={name()} />
@@ -79,7 +74,6 @@ function List(props: { tools: ToolsClient; name: string }) {
     // a refusal is a toast; a refused removal's shows over the confirmation, which stays open
     const action = createAction();
     const busy = action.busy;
-    createFailureToast(() => view().configError, { title: `Couldn't read ${props.name}'s tools file` });
     // the server whose sign-in is shown, while it's under way
     const [signingIn, setSigningIn] = createSignal<string | null>(null);
     const full = () => view().config.servers.length >= TOOL_LIMITS.servers;
@@ -119,14 +113,20 @@ function List(props: { tools: ToolsClient; name: string }) {
         <>
             <PaperFlex flex minHeight={0}>
                 <Show when={view().configError}>
-                    <PaperFlex padding="full" gap="half">
-                        <PaperText preset="hint">Nothing was changed. Fix or delete tools.json in the panel's config, then try again.</PaperText>
-                        <PaperFlex direction="row">
-                            <PaperButton onClick={() => void props.tools.refresh()}>
-                                <PaperIcon>refresh</PaperIcon> Try again
-                            </PaperButton>
+                    {(err) => (
+                        <PaperFlex padding="full" gap="half">
+                            <PaperError title={`Couldn't read ${props.name}'s tools file`} error={err()} action={{ label: "Try again", disabled: props.tools.load() === "loading", onClick: () => void props.tools.refresh() }} />
+                            <PaperText preset="hint">Nothing was changed. Fix or delete tools.json in the panel's config, then try again.</PaperText>
                         </PaperFlex>
-                    </PaperFlex>
+                    )}
+                </Show>
+                {/* a read again that failed: the servers it had stay, under why */}
+                <Show when={props.tools.load() === "failed" && props.tools.loadError()}>
+                    {(err) => (
+                        <PaperFlex padding="full">
+                            <PaperError title="Couldn't load the tools" error={err()} action={{ label: "Try again", onClick: () => void props.tools.refresh() }} />
+                        </PaperFlex>
+                    )}
                 </Show>
                 {/* the server being edited is marked */}
                 <PaperList name="agents-tools" value={form()?.editing ? rowOf(form()!.name) : ""} onValueChange={(v) => choose(String(v))} borderless fullWidth fullHeight>

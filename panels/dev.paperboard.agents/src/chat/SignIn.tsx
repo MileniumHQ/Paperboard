@@ -1,5 +1,5 @@
 import { For, Match, Show, Switch, createSignal } from "solid-js";
-import { PaperButton, PaperCard, PaperFlex, PaperIcon, PaperInput, PaperLoader, PaperText, createAction, createRead } from "@mileniumhq/paperui";
+import { PaperButton, PaperCard, PaperError, PaperFlex, PaperIcon, PaperInput, PaperLoader, PaperText, createAction, createRead } from "@mileniumhq/paperui";
 import { LIMITS, type SignInEntry } from "../contract";
 import type { Agent } from "../lib/agent";
 import RequestEnd from "./RequestEnd";
@@ -22,7 +22,6 @@ export default function SignIn(props: { agent: Agent; entry: SignInEntry; name: 
     const kept = props.draft.image;
     const shot = createRead((id: string) => props.agent.calls.signInShot({ id }).then((r) => (props.draft.image = r.image)), {
         source: () => (e().status === "waiting" && !kept ? e().id : undefined),
-        failure: { title: "Couldn't load the page's picture" },
     });
     const image = () => shot.value() ?? kept;
     const { busy, run } = createAction();
@@ -62,12 +61,7 @@ export default function SignIn(props: { agent: Agent; entry: SignInEntry; name: 
                             when={image()}
                             fallback={
                                 <Show when={shot.error()} fallback={<PaperLoader loaderStatus="indeterminate" label="Loading the page's picture" />}>
-                                    <PaperFlex direction="row" align="center" gap="half" wrap>
-                                        <PaperText preset="hint">Couldn't load the page's picture.</PaperText>
-                                        <PaperButton size="small" disabled={shot.loading()} onClick={() => void shot.reload()}>
-                                            Try again
-                                        </PaperButton>
-                                    </PaperFlex>
+                                    {(err) => <PaperError title="Couldn't load the page's picture" error={err()} action={{ label: "Try again", disabled: shot.loading(), onClick: () => void shot.reload() }} />}
                                 </Show>
                             }
                         >

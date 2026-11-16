@@ -4,7 +4,7 @@
 // A key goes from its field to OpenCode and is kept nowhere else.
 
 import { For, Match, Show, Switch, createEffect, createSignal, on } from "solid-js";
-import { createPolling, PaperButton, PaperCopyButton, PaperFlex, PaperInput, PaperLink, PaperLoader, PaperModal, PaperEmptyState, PaperSectionHeader, PaperSelectMenu, PaperSelectMenuItem, PaperText, createAction, createRead, showError } from "@mileniumhq/paperui";
+import { createPolling, PaperButton, PaperCopyButton, PaperFlex, PaperInput, PaperLink, PaperLoader, PaperModal, PaperError, PaperSectionHeader, PaperSelectMenu, PaperSelectMenuItem, PaperText, createAction, createRead, showError } from "@mileniumhq/paperui";
 import type { ProviderAttempt, ProviderField, ProviderInfo, ProviderMethod } from "../contract";
 import type { Agent } from "../lib/agent";
 
@@ -16,7 +16,7 @@ const shown = (field: ProviderField, values: Record<string, string>) =>
 
 export default function Providers(props: { agent: Agent; open: boolean; onClose: () => void }) {
     // read afresh each time it opens, with nothing refused yet; a re-read (after a connect or a sign-in) changes what differs, and every row and form stays the one it was
-    const providers = createRead(() => props.agent.calls.providers(), { source: () => props.open, failure: { title: "Couldn't list the providers" } });
+    const providers = createRead(() => props.agent.calls.providers(), { source: () => props.open });
     const refetch = providers.reload;
     // a refusal is a toast over the dialog, which stays open to try again
     const action = createAction();
@@ -108,15 +108,17 @@ export default function Providers(props: { agent: Agent; open: boolean; onClose:
                     OpenCode already has free models. Connect a provider to use its models too.
                 </PaperText>
                 <Switch>
-                    <Match when={!providers.loading() && providers.error()}>
-                        <PaperEmptyState icon="error" title="Couldn't load">
-                            <PaperButton onClick={() => void refetch()}>Try again</PaperButton>
-                        </PaperEmptyState>
+                    <Match when={providers.value() === undefined && !providers.loading() && providers.error()}>
+                        {(err) => <PaperError fill title="Couldn't list the providers" error={err()} action={{ label: "Try again", onClick: () => void refetch() }} />}
                     </Match>
                     <Match when={providers.value() === undefined}>
                         <PaperLoader loaderStatus="indeterminate" label="Asking OpenCode for its providers" />
                     </Match>
                     <Match when={true}>
+                        {/* a read again that failed: the providers it had stay, under why */}
+                        <Show when={providers.error()}>
+                            {(err) => <PaperError title="Couldn't list the providers" error={err()} action={{ label: "Try again", disabled: providers.loading(), onClick: () => void refetch() }} />}
+                        </Show>
                         <PaperSelectMenu name="provider" aria-label="Provider" searchable value={selected()} onValueChange={(v) => setSelected(String(v))}>
                             <For each={providers.value() ?? []}>
                                 {(p) => (
