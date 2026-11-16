@@ -66,3 +66,19 @@ export const TOASTS = `[...document.querySelectorAll("[aria-label=Notifications]
 /** a wait expression: a failure toast titled `title` shows, saying `text` when given */
 export const toastShows = (title: string, text = "") =>
     `[...document.querySelectorAll("[aria-label=Notifications] [role=alert]")].some((t) => t.innerText.includes(${JSON.stringify(title)}) && t.innerText.includes(${JSON.stringify(text)}))`;
+
+/** a wait expression: a PaperError titled `title` stands on the page, saying `text` when given, and no toast says it */
+export const errorShows = (title: string, text = "") =>
+    `[...document.querySelectorAll("[data-paper-error]")].some((e) => e.getAttribute("aria-label") === ${JSON.stringify(title)} && e.innerText.includes(${JSON.stringify(text)})) && !${toastShows(title)}`;
+
+/** the PaperError titled `title`, as an expression (null while none stands) */
+export const paperError = (title: string) => `document.querySelector(${JSON.stringify(`[data-paper-error][aria-label="${title.replace(/"/g, '\\"')}"]`)})`;
+
+/** whether the PaperError titled `title` fills its view (a column, centred) rather than sitting in line */
+export const errorFills = (title: string) => `getComputedStyle(${paperError(title)}).flexDirection === "column"`;
+
+/** a selector for the button of the PaperError titled `title` (its Details toggle aside) */
+export const errorButtonAt = (title: string) => `[data-paper-error][aria-label="${title.replace(/"/g, '\\"')}"] button:not([aria-expanded])`;
+
+/** the button of the PaperError titled `title`, as an expression */
+export const errorButton = (title: string) => `document.querySelector(${JSON.stringify(errorButtonAt(title))})`;

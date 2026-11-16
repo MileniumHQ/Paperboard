@@ -3,8 +3,7 @@ import {
     PaperFlex,
     PaperText,
     PaperQuote,
-    PaperButton,
-    PaperEmptyState,
+    PaperError,
     PaperBadge,
     PaperCard,
     PaperKeyValue,
@@ -16,7 +15,6 @@ import {
     createPolling,
     createLatest,
     createRead,
-    createFailureToast,
     dismissToast,
     showError,
 } from "@mileniumhq/paperui";
@@ -41,9 +39,6 @@ interface OverviewProps {
 export default function Overview(props: OverviewProps) {
     // the bot's name, avatar and connection are the service's, kept live
     const connected = () => props.bot().connected;
-    // a connection that failed, or blocks that couldn't be added to Blocks
-    createFailureToast(() => props.bot().lastError, { title: "This bot has a problem" });
-
     // the bot's tag and the messages its session last received, oldest
     // first; reconciled by message id, so a reread keeps the rows already
     // shown. Each message the service emits shows at once, and joins a read
@@ -62,15 +57,13 @@ export default function Overview(props: OverviewProps) {
                             : { tag, recentMessages: appendCapped(recentMessages, heard, RECENT_MESSAGE_CAP) },
                     );
                 }),
-            failure: { title: "Couldn't read the bot's details" },
         },
     );
     const tag = () => info.value()?.tag ?? "";
     const recent = () => info.value()?.recentMessages ?? [];
-    // the last good reading stays on screen while a toast says the newest
-    // failed; the toast stays through the polls that fail the same way
+    // the last good reading stays on screen under the newest failure, which
+    // stands through the polls that fail the same way
     const health = createRead(() => botCreator.calls.getHealth({ bot: props.bot().id }));
-    createFailureToast(health.error, { title: "Couldn't check health" });
     createPolling(health.reload, HEALTH_POLL_MS);
 
     // a bot that comes online has a tag and a fresh session to show
@@ -110,6 +103,19 @@ export default function Overview(props: OverviewProps) {
 
     return (
         <>
+            {/* a connection that failed, or blocks that couldn't be added to Blocks */}
+            <Show when={props.bot().lastError}>
+                {(why) => <PaperError title="Couldn't run the bot" error={why()} />}
+            </Show>
+            <Show when={info.error()}>
+                {(err) => (
+                    <PaperError
+                        title="Couldn't read the bot's details"
+                        error={err()}
+                        action={{ label: "Try again", disabled: info.loading(), onClick: () => void info.reload() }}
+                    />
+                )}
+            </Show>
             <PaperCard>
                 <PaperFlex direction="row" padding="full" gap="full" align="center">
                     <DiscordAvatar url={props.bot().avatar} fallbackIcon="smart_toy" alt={props.bot().name} size="xlarge" />
@@ -152,16 +158,16 @@ export default function Overview(props: OverviewProps) {
                         <PaperText preset="hint">Refreshes every {HEALTH_POLL_MS / 1000}s</PaperText>
                     </PaperFlex>
 
-                    <Show
-                        when={health.value()}
-                        fallback={
-                            <Show when={health.error()} fallback={<PaperText preset="hint">Checking health…</PaperText>}>
-                                <PaperEmptyState icon="error" title="Couldn't load">
-                                    <PaperButton disabled={health.loading()} onClick={() => void health.reload()}>Try again</PaperButton>
-                                </PaperEmptyState>
-                            </Show>
-                        }
-                    >
+                    <Show when={health.error()}>
+                        {(err) => (
+                            <PaperError
+                                title="Couldn't check health"
+                                error={err()}
+                                action={{ label: "Try again", disabled: health.loading(), onClick: () => void health.reload() }}
+                            />
+                        )}
+                    </Show>
+                    <Show when={health.value()} fallback={<Show when={!health.error()}><PaperText preset="hint">Checking health…</PaperText></Show>}>
                         {(h) => (
                             <PaperKeyValueList>
                                 <PaperKeyValue label="Gateway status">{connected() ? "Connected" : "Disconnected"}</PaperKeyValue>

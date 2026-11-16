@@ -8,6 +8,7 @@ import {
     PaperBadge,
     PaperCard,
     PaperEmptyState,
+    PaperError,
     PaperInput,
     PaperModal,
     PaperEffect,
@@ -18,7 +19,6 @@ import {
     PaperSelectMenuItem,
     PaperCheckbox,
     PaperCopyButton,
-    createFailureToast,
     showError,
 } from "@mileniumhq/paperui";
 import type { BotSummary } from "../bots";
@@ -80,8 +80,8 @@ export default function Commands(props: { bot: () => BotSummary }) {
     );
 
     // the last sync's outcome is announced with the bot, so it is said
-    // however the commands changed
-    createFailureToast(() => props.bot().connected && props.bot().commandSyncError, { title: "Not live on Discord yet" });
+    // however the commands changed, above them, until a sync goes through
+    const syncError = () => (props.bot().connected ? props.bot().commandSyncError : null);
     // a command saved whose flow trigger Blocks didn't take
     const sayTrigger = (result: CommandMutationResult) => {
         if (result.triggerError) showError("Flow trigger not registered", result.triggerError);
@@ -241,6 +241,10 @@ export default function Commands(props: { bot: () => BotSummary }) {
                     Commands are stored here and register the next time the bot
                     connects.
                 </PaperQuote>
+            </Show>
+
+            <Show when={syncError()}>
+                {(why) => <PaperError title="Couldn't register the commands with Discord" error={why()} />}
             </Show>
 
             <Show

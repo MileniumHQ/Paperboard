@@ -6,6 +6,7 @@ import {
     PaperButton,
     PaperCard,
     PaperEmptyState,
+    PaperError,
     PaperIcon,
     PaperBadge,
     PaperInput,
@@ -24,7 +25,6 @@ import {
     usePaperPanel,
     createLatest,
     createRead,
-    createFailureToast,
     showError,
 } from "@mileniumhq/paperui";
 import type { BotSummary } from "../bots";
@@ -94,17 +94,11 @@ export default function Servers(props: { bot: () => BotSummary }) {
     const detail = () => detailRead.value();
     // the open server's name: as read, or as announced while it is read or couldn't be
     const serverName = () => detail()?.name ?? guilds().find((g) => g.id === shownId())?.name ?? "Loading server…";
-    // said while the server's page is open; a read again hides it until it answers
-    createFailureToast(() => (selectedId() && !detailRead.loading() ? detailRead.error() : null), {
-        title: "Couldn't load this server",
-        action: { label: "Try again", onClick: () => void detailRead.reload() },
-    });
 
     const [memberQuery, setMemberQuery] = createSignal("");
     // a search is asked by pressing Search: each press is a new one
     const [search, setSearch] = createSignal<{ guildId: string; query: string } | null>(null);
     const membersRead = createRead((asked) => botCreator.calls.searchGuildMembers({ bot: bot(), ...asked }), { source: search });
-    createFailureToast(() => (search() && !membersRead.loading() ? membersRead.error() : null), { title: "Couldn't search the members" });
     const members = () => (membersRead.error() ? undefined : membersRead.value());
 
     // the channel picked to send to; the server's first until one is picked
@@ -267,21 +261,25 @@ export default function Servers(props: { bot: () => BotSummary }) {
 
             {status()}
 
-            <Show when={detailRead.loading() && !detail()}>
+            {/* above what was read before, or in its place when nothing was */}
+            <Show when={detailRead.error()}>
+                {(err) => (
+                    <PaperError
+                        fill={!detail()}
+                        title="Couldn't load this server"
+                        error={err()}
+                        action={{ label: "Try again", disabled: detailRead.loading(), onClick: () => void detailRead.reload() }}
+                    />
+                )}
+            </Show>
+
+            <Show when={detailRead.loading() && !detail() && !detailRead.error()}>
                 <PaperCard>
                     <PaperFlex padding="double" center>
                         <PaperText preset="hint">
                             Loading server…
                         </PaperText>
                     </PaperFlex>
-                </PaperCard>
-            </Show>
-
-            <Show when={!detail() && !detailRead.loading() && detailRead.error()}>
-                <PaperCard>
-                    <PaperEmptyState icon="error" title="Couldn't load">
-                        <PaperButton onClick={() => void detailRead.reload()}>Try again</PaperButton>
-                    </PaperEmptyState>
                 </PaperCard>
             </Show>
 
@@ -386,6 +384,15 @@ export default function Servers(props: { bot: () => BotSummary }) {
                                     </PaperButton>
                                 </PaperFlex>
 
+                                <Show when={search() && membersRead.error()}>
+                                    {(err) => (
+                                        <PaperError
+                                            title="Couldn't search the members"
+                                            error={err()}
+                                            action={{ label: "Try again", disabled: membersRead.loading(), onClick: () => void membersRead.reload() }}
+                                        />
+                                    )}
+                                </Show>
                                 <Show when={members()}>
                                     <Show
                                         when={members()!.length > 0}

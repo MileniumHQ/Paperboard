@@ -3,7 +3,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import type { BotsServiceState } from "../src/bots";
 import { GLOBAL_SCOPE } from "../src/types";
-import { panelBrowser, servePanel, TOASTS, toastShows, type Page } from "./helpers/browser";
+import { errorButton, errorButtonAt, errorFills, errorShows, panelBrowser, paperError, servePanel, TOASTS, toastShows, type Page } from "./helpers/browser";
 import { testDaemon } from "./helpers/daemon";
 import { guild, startFakeDiscord, type FakeDiscord } from "./helpers/discord";
 import { PANEL_ID, savedBots, startService, stopServices, storedBot } from "./helpers/service";
@@ -57,13 +57,16 @@ describe("failures are shown, never guessed", () => {
         const page = await browser.open(served.url);
         const configs = path.join((await testDaemon()).dataDir, "configs");
         try {
-            // an invite link that can't be made says so, instead of "Generating…"
+            // an invite link that can't be made says so where the link would be, instead of "Generating…"
             await page.waitFor(`document.body.innerText.includes("Nameless")`, "the bot list");
             await clickText(page, "[class*=card], [class*=Card]", "Nameless");
             await openTab(page, "invite");
-            await page.waitFor(toastShows("Couldn't make the invite link", "Cannot build an invite URL: no application ID is known."), "the invite failure");
-            expect(await body(page)).toContain("No invite link");
+            await page.waitFor(errorShows("Couldn't make the invite link", "Cannot build an invite URL: no application ID is known."), "the invite failure, in place");
             expect(await body(page)).not.toContain("Generating invite link…");
+            expect(await page.evaluate<string>(`${errorButton("Couldn't make the invite link")}?.innerText ?? ""`)).toBe("Try again");
+            // the install link has no application ID to name either
+            await page.waitFor(errorShows("Couldn't make the install link"), "the install link failure, in place");
+            expect(await body(page)).not.toContain("Generating user install link…");
             await openTab(page, "home");
 
             // a delete the service refuses keeps the bot, the modal and the reason
@@ -90,12 +93,12 @@ describe("failures are shown, never guessed", () => {
             // instead of showing an offline bot or a table of zeros
             await service.stop();
             await clickText(page, "[class*=card], [class*=Card]", "Keeper");
-            await page.waitFor(toastShows("Couldn't check health", "dev.paperboard.botcreator"), "the failed health read");
+            await page.waitFor(errorShows("Couldn't check health", "dev.paperboard.botcreator"), "the failed health read, in its card");
             const overview = await body(page);
             expect(overview).not.toContain("Gateway status");
             expect(overview).not.toContain("Checking health…");
-            // with no reading to keep, the card says it couldn't load instead of going blank
-            expect(overview).toContain("Couldn't load");
+            // with no reading to keep, the card says it couldn't check instead of going blank, with Try again
+            expect(await page.evaluate<string>(`${errorButton("Couldn't check health")}?.innerText ?? ""`)).toBe("Try again");
             expect(page.exceptions).toEqual([]);
         } finally {
             await page.close();
@@ -169,7 +172,7 @@ describe("failures are shown, never guessed", () => {
         }
     });
 
-    test("saved bots that can't be read say why in a toast, and the list says it couldn't load instead of No bots yet", async () => {
+    test("saved bots that can't be read say why in place of the list, instead of No bots yet", async () => {
         const fake = discord.addBot({ username: "Damaged" });
         const ping = { id: "c-ping", name: "ping", description: "Pong", scope: GLOBAL_SCOPE, options: [], userInstall: false };
         await savedBots([{ stored: storedBot("b-damaged", fake.appId, { commands: [ping, { ...ping, id: "c-again" }] }), token: fake.token }]);
@@ -178,8 +181,9 @@ describe("failures are shown, never guessed", () => {
         const served = await servePanel();
         const page = await browser.open(served.url);
         try {
-            await page.waitFor(toastShows("Couldn't read the saved bots", "/ping is saved twice"), "the toast saying why");
-            await page.waitFor(`document.body.innerText.includes("Couldn't load")`, "the list to say it couldn't load");
+            await page.waitFor(errorShows("Couldn't read the saved bots", "/ping is saved twice"), "the list's place saying why");
+            // nothing else shows: it fills the list's place
+            expect(await page.evaluate<boolean>(errorFills("Couldn't read the saved bots"))).toBe(true);
             const shown = await body(page);
             expect(shown).not.toContain("No bots yet");
             expect(shown).not.toContain("Set up your first bot");
@@ -192,7 +196,7 @@ describe("failures are shown, never guessed", () => {
         }
     });
 
-    test("Try again on Couldn't load reads the saved bots again: still damaged, a toast says why and it stays; mended, the bots come", async () => {
+    test("Try again on the saved bots' failure reads them again: still damaged, it says why and stays; mended, the bots come", async () => {
         const fake = discord.addBot({ username: "Mended" });
         const ping = { id: "c-ping", name: "ping", description: "Pong", scope: GLOBAL_SCOPE, options: [], userInstall: false };
         await savedBots([{ stored: storedBot("b-mended", fake.appId, { commands: [ping, { ...ping, id: "c-again" }] }), token: fake.token }]);
@@ -200,19 +204,20 @@ describe("failures are shown, never guessed", () => {
         await stateWhere<BotsServiceState>(PANEL_ID, (s) => Boolean(s.botsError), "the refusal");
         const served = await servePanel();
         const page = await browser.open(served.url);
-        const tryAgain = `[...document.querySelectorAll("button")].find((b) => b.innerText.includes("Try again"))`;
+        const tryAgain = errorButton("Couldn't read the saved bots");
         try {
-            await page.waitFor(`Boolean(${tryAgain})`, "Try again on Couldn't load");
+            await page.waitFor(`${tryAgain}?.innerText === "Try again"`, "Try again on the failure");
             expect(await body(page)).not.toContain("Restart Paperboard");
-            await clickText(page, "button", "Try again");
-            await page.waitFor(toastShows("Couldn't read the saved bots", "/ping is saved twice"), "the toast saying it still can't");
+            await page.click(errorButtonAt("Couldn't read the saved bots"));
+            // the read again goes, and the failure still stands, saying why, with its button back
+            await page.waitFor(`${tryAgain}?.disabled === false && ${errorShows("Couldn't read the saved bots", "/ping is saved twice")}`, "the failure saying it still can't");
             expect(await page.evaluate<boolean>(`Boolean(${tryAgain})`), "Try again went away with the bots still unread").toBe(true);
 
             const file = path.join((await testDaemon()).dataDir, "configs", `${PANEL_ID}.json`);
             fs.writeFileSync(file, JSON.stringify({ version: 2, bots: [storedBot("b-mended", fake.appId, { commands: [ping] })] }));
-            await clickText(page, "button", "Try again");
+            await page.click(errorButtonAt("Couldn't read the saved bots"));
             await page.waitFor(`document.body.innerText.includes("Bot b-mended")`, "the bot read again");
-            expect(await body(page)).not.toContain("Couldn't load");
+            expect(await page.evaluate<boolean>(`${paperError("Couldn't read the saved bots")} === null`)).toBe(true);
             expect(page.exceptions).toEqual([]);
         } finally {
             await page.close();

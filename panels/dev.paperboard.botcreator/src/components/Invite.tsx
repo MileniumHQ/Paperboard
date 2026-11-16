@@ -1,10 +1,11 @@
-import { createSignal, For } from "solid-js";
+import { createSignal, For, Show } from "solid-js";
 import {
     PaperFlex,
     PaperText,
     PaperCard,
     PaperCheckbox,
     PaperCopyButton,
+    PaperError,
     PaperGrid,
     PaperPageHeader,
     PaperSeparator,
@@ -26,13 +27,10 @@ export default function Invite(props: { bot: () => BotSummary }) {
     // read again for each change of the permissions; only the newest lands
     const invite = createRead((permissions) => botCreator.calls.getInviteUrl({ bot: props.bot().id, permissions }), {
         source: selectedPermissions,
-        failure: { title: "Couldn't make the invite link" },
     });
     // a link for the old permissions must not be copied as the new one
     const inviteUrl = () => (invite.error() ? "" : invite.value() ?? "");
-    const userInstall = createRead(() => botCreator.calls.getUserInstallUrl({ bot: props.bot().id }), {
-        failure: { title: "Couldn't make the install link" },
-    });
+    const userInstall = createRead(() => botCreator.calls.getUserInstallUrl({ bot: props.bot().id }));
     const userInstallUrl = () => userInstall.value() ?? "";
 
     const isSelected = (permId: string) =>
@@ -78,21 +76,35 @@ export default function Invite(props: { bot: () => BotSummary }) {
                 subtitle="Add the bot to a server with the permissions it needs"
             />
 
-            <PaperCard>
-                <PaperFlex direction="row" padding="full" gap="full" align="center">
-                    <PaperFlex flex minWidth={0}>
-                        <PaperText preset="text" truncate>
-                            {inviteUrl() || (invite.error() && !invite.loading() ? "No invite link" : "Generating invite link…")}
-                        </PaperText>
-                    </PaperFlex>
+            {/* the link stands where it would be copied from, or why there is none */}
+            <Show
+                when={invite.error()}
+                fallback={
+                    <PaperCard>
+                        <PaperFlex direction="row" padding="full" gap="full" align="center">
+                            <PaperFlex flex minWidth={0}>
+                                <PaperText preset="text" truncate>
+                                    {inviteUrl() || "Generating invite link…"}
+                                </PaperText>
+                            </PaperFlex>
 
-                    <PaperCopyButton
-                        label="Copy"
-                        text={inviteUrl()}
-                        disabled={!inviteUrl()}
+                            <PaperCopyButton
+                                label="Copy"
+                                text={inviteUrl()}
+                                disabled={!inviteUrl()}
+                            />
+                        </PaperFlex>
+                    </PaperCard>
+                }
+            >
+                {(err) => (
+                    <PaperError
+                        title="Couldn't make the invite link"
+                        error={err()}
+                        action={{ label: "Try again", disabled: invite.loading(), onClick: () => void invite.reload() }}
                     />
-                </PaperFlex>
-            </PaperCard>
+                )}
+            </Show>
 
             {/* three groups fill the row; an auto-filling grid would leave a column empty */}
             <PaperGrid columns={compact() ? 1 : 3}>
@@ -121,19 +133,32 @@ export default function Invite(props: { bot: () => BotSummary }) {
                         group chats. Needs User Install enabled in the Discord
                         developer portal.
                     </PaperText>
-                    <PaperFlex direction="row" gap="full" align="center">
-                        <PaperFlex flex minWidth={0}>
-                            <PaperText preset="text" truncate>
-                                {userInstallUrl() || (userInstall.error() ? "No install link" : "Generating user install link…")}
-                            </PaperText>
-                        </PaperFlex>
+                    <Show
+                        when={userInstall.error()}
+                        fallback={
+                            <PaperFlex direction="row" gap="full" align="center">
+                                <PaperFlex flex minWidth={0}>
+                                    <PaperText preset="text" truncate>
+                                        {userInstallUrl() || "Generating user install link…"}
+                                    </PaperText>
+                                </PaperFlex>
 
-                        <PaperCopyButton
-                            label="Copy"
-                            text={userInstallUrl()}
-                            disabled={!userInstallUrl()}
-                        />
-                    </PaperFlex>
+                                <PaperCopyButton
+                                    label="Copy"
+                                    text={userInstallUrl()}
+                                    disabled={!userInstallUrl()}
+                                />
+                            </PaperFlex>
+                        }
+                    >
+                        {(err) => (
+                            <PaperError
+                                title="Couldn't make the install link"
+                                error={err()}
+                                action={{ label: "Try again", disabled: userInstall.loading(), onClick: () => void userInstall.reload() }}
+                            />
+                        )}
+                    </Show>
                 </PaperFlex>
             </PaperCard>
         </>

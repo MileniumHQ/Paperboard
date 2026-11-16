@@ -1,7 +1,7 @@
 // The first thing Bot Creator shows: every bot as a card, whether it is
 // online and how many servers it is in, and a way to add another. Each bot
 // runs on its own, with its own token, commands and Blocks project.
-import { createSignal, For, Show } from "solid-js";
+import { createSignal, For, Match, Show, Switch } from "solid-js";
 import {
     PaperBadge,
     PaperButton,
@@ -9,6 +9,7 @@ import {
     PaperContextMenuItem,
     PaperEffect,
     PaperEmptyState,
+    PaperError,
     PaperFlex,
     PaperIcon,
     PaperLoader,
@@ -19,7 +20,6 @@ import {
     PaperSeparator,
     PaperToggle,
     createAction,
-    createFailureToast,
     dismissToast,
     showError,
     useContextMenuState,
@@ -40,11 +40,8 @@ function botStatusText(bot: BotSummary): string {
 
 export default function BotsHome(props: { bots: BotsState; onOpen: (bot: { id: string }) => void }) {
     const [adding, setAdding] = createSignal(false);
-    // the service's refusal stands as one toast; while it reads again it goes, and comes back with why if it still can't
+    // the service reading its saved bots again: the list's failure says why it still can't
     const reading = createAction({ toast: false });
-    // the list can't be read: the service's saved bots, or its state
-    createFailureToast(() => (reading.busy() ? null : (reading.error()?.message ?? props.bots.state().botsError)), { title: "Couldn't read the saved bots" });
-    createFailureToast(props.bots.loadError, { title: "Couldn't load the bots" });
     // a switch flips once saved; its thump waits for the bot to be on or off.
     // Only the newest flip of a bot may say it failed, and the next flip
     // takes back what the last one said
@@ -89,17 +86,25 @@ export default function BotsHome(props: { bots: BotsState; onOpen: (bot: { id: s
                 <Show
                     when={props.bots.ready() && !props.bots.state().botsError}
                     fallback={
-                        <Show when={props.bots.loadError() || props.bots.state().botsError} fallback={<PaperLoader loaderStatus="indeterminate" label="Loading bots" />}>
-                            {/* why is the toast's: this window couldn't ask, or the service couldn't read its saved bots */}
-                            <PaperEmptyState icon="error" title="Couldn't load">
-                                <PaperButton
-                                    disabled={reading.busy()}
-                                    onClick={() => void (props.bots.loadError() ? props.bots.load() : reading.run("Couldn't read the saved bots", props.bots.readAgain))}
-                                >
-                                    Try again
-                                </PaperButton>
-                            </PaperEmptyState>
-                        </Show>
+                        <Switch fallback={<PaperLoader loaderStatus="indeterminate" label="Loading bots" />}>
+                            {/* this window couldn't ask the service */}
+                            <Match when={props.bots.loadError()}>
+                                {(why) => (
+                                    <PaperError fill title="Couldn't load the bots" error={why()} action={{ label: "Try again", onClick: () => void props.bots.load() }} />
+                                )}
+                            </Match>
+                            {/* the service couldn't read its saved bots */}
+                            <Match when={props.bots.state().botsError}>
+                                {(why) => (
+                                    <PaperError
+                                        fill
+                                        title="Couldn't read the saved bots"
+                                        error={reading.error()?.message ?? why()}
+                                        action={{ label: "Try again", disabled: reading.busy(), onClick: () => void reading.run("Couldn't read the saved bots", props.bots.readAgain) }}
+                                    />
+                                )}
+                            </Match>
+                        </Switch>
                     }
                 >
                     <Show
