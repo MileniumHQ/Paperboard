@@ -6,7 +6,7 @@ import {
     createRead,
     PaperButton,
     PaperCard,
-    PaperEmptyState,
+    PaperError,
     PaperFlex,
     PaperInput,
     PaperLoader,
@@ -31,13 +31,10 @@ export default function ServicePage() {
     });
 
     // unavailable is not empty: a service that has not answered is said, with a way to try again
-    const hydrated = createRead(
-        async () => {
-            setState({ ...(await service.state.refresh()) });
-            return true;
-        },
-        { failure: { title: "Couldn't reach the service", retry: true } },
-    );
+    const hydrated = createRead(async () => {
+        setState({ ...(await service.state.refresh()) });
+        return true;
+    });
 
     const greet = async () => {
         if (busy()) return;
@@ -83,11 +80,14 @@ export default function ServicePage() {
                     </PaperCard>
                 </Match>
                 <Match when={hydrated.error()}>
-                    <PaperEmptyState icon="cloud_off" title="Couldn't load">
-                        <PaperButton disabled={hydrated.loading()} onClick={() => void hydrated.reload()}>
-                            Try again
-                        </PaperButton>
-                    </PaperEmptyState>
+                    {(err) => (
+                        <PaperError
+                            fill
+                            title="Couldn't reach the service"
+                            error={err()}
+                            action={{ label: "Try again", disabled: hydrated.loading(), onClick: () => void hydrated.reload() }}
+                        />
+                    )}
                 </Match>
                 <Match when={true}>
                     <PaperLoader loaderStatus="indeterminate" label="Connecting to the service" />

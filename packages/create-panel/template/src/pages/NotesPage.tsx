@@ -1,11 +1,12 @@
 // A page that keeps something: the panel's config, saved under its own id.
-// A read or write that fails is said in a toast, with the reason, never dropped.
+// A note that can't be read is said where it would be, with Try again; a save
+// that fails is said in a toast. Neither is ever dropped.
 import { createSignal, Match, Show, Switch } from "solid-js";
 import {
     createRead,
     PaperButton,
     PaperCard,
-    PaperEmptyState,
+    PaperError,
     PaperFlex,
     PaperInput,
     PaperLoader,
@@ -25,14 +26,11 @@ export default function NotesPage() {
     const [saved, setSaved] = createSignal(false);
 
     // the saved note, read once: until it is, there is nothing to edit
-    const stored = createRead(
-        async () => {
-            const read = await config.get<PanelConfig>(PANEL_ID);
-            setNote(typeof read?.note === "string" ? read.note : "");
-            return true;
-        },
-        { failure: { title: "Couldn't load the note" } },
-    );
+    const stored = createRead(async () => {
+        const read = await config.get<PanelConfig>(PANEL_ID);
+        setNote(typeof read?.note === "string" ? read.note : "");
+        return true;
+    });
 
     const save = async () => {
         setSaved(false);
@@ -75,11 +73,14 @@ export default function NotesPage() {
                     </PaperCard>
                 </Match>
                 <Match when={stored.error()}>
-                    <PaperEmptyState icon="error" title="Couldn't load">
-                        <PaperButton disabled={stored.loading()} onClick={() => void stored.reload()}>
-                            Try again
-                        </PaperButton>
-                    </PaperEmptyState>
+                    {(err) => (
+                        <PaperError
+                            fill
+                            title="Couldn't load the note"
+                            error={err()}
+                            action={{ label: "Try again", disabled: stored.loading(), onClick: () => void stored.reload() }}
+                        />
+                    )}
                 </Match>
                 <Match when={true}>
                     <PaperLoader loaderStatus="indeterminate" label="Reading the note" />
