@@ -68,6 +68,21 @@ export const updateQueueState = shape.object({
 });
 export type UpdateQueueState = Infer<typeof updateQueueState>;
 
+/**
+ * What one look for updates came to, as Settings says it: how many updates
+ * ran, waited for what uses them, or failed; the linked panels it left
+ * alone (they run from their source folder); and the first reason anything
+ * went wrong.
+ */
+export const updateCheckOutcome = shape.object({
+    updated: shape.number(),
+    held: shape.number(),
+    failed: shape.number(),
+    linked: shape.number(),
+    problem: shape.nullable(shape.text()),
+});
+export type UpdateCheckOutcome = Infer<typeof updateCheckOutcome>;
+
 export const initialUpdateQueueState: UpdateQueueState = {
     revision: 0,
     checking: false,

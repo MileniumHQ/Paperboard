@@ -127,3 +127,25 @@ test("updates waiting on a computer that couldn't be read are said", async () =>
     await page.waitFor(`document.body.innerText.includes(${JSON.stringify(why)})`, "the unread computer, said");
     expect(page.exceptions).toEqual([]);
 });
+
+// Inventory: Updates — Update everything now says every outcome: looking, up to date, installed, failed with why, and the linked panels it can't update.
+test("Update everything now says what it is doing and what it came to", async () => {
+    const { page } = shell;
+    const says = (text: string) => `document.body.innerText.includes(${JSON.stringify(text)})`;
+    await page.click("[role=radio][aria-label='Settings']");
+    await page.waitFor(`[...document.querySelectorAll("button")].some((b) => b.textContent.includes("Update everything now"))`, "App Settings");
+
+    await clickText(page, "button", "Update everything now");
+    await page.waitFor(says("Looking for updates to Paperboard"), "the look, said while it runs");
+    await shell.host({ cmd: "answer-update-check", outcome: { updated: 0, held: 0, failed: 0, linked: 2, problem: null } });
+    await page.waitFor(says("Everything is up to date. 2 linked panels weren't updated: they run from their source folder."), "up to date, and the linked panels, said");
+
+    await clickText(page, "button", "Update everything now");
+    await shell.host({ cmd: "answer-update-check", outcome: { updated: 3, held: 0, failed: 0, linked: 0, problem: null } });
+    await page.waitFor(says("Installed 3 updates."), "the updates installed, said");
+
+    await clickText(page, "button", "Update everything now");
+    await shell.host({ cmd: "answer-update-check", outcome: { updated: 0, held: 0, failed: 1, linked: 0, problem: "Widget Demo didn't update: the download was refused" } });
+    await page.waitFor(`${says("Not everything updated")} && ${says("Widget Demo didn't update: the download was refused.")}`, "the failure and its reason, said");
+    expect(page.exceptions).toEqual([]);
+});

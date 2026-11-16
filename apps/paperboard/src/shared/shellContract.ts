@@ -19,7 +19,7 @@ import { launchOptions } from "./launchOptions";
 import { panelFileTransferResult } from "./fileTransfer";
 import { panelLoopbackRedirectResult } from "./loopbackRedirect";
 import { panelPermission, panelPermissionEntry, permissionAnswer, permissionAsk, permissionFailure, screenPick, systemBlock } from "./panelPermissions";
-import { updateQueueState } from "./updateQueue";
+import { updateCheckOutcome, updateQueueState } from "./updateQueue";
 
 // ─── What crosses ───────────────────────────────────────────────────────────
 
@@ -172,8 +172,8 @@ export const SHELL_CALLS = {
     "update-queue": { args: none, answer: updateQueueState },
     // Stop and update: resolves when the held updates ran
     "update-release": { args: shape.object({ keys: updateKeys }), answer: none },
-    // look for updates to everything, now
-    "update-check": { args: none, answer: none },
+    // look for updates to everything, now, and what that came to
+    "update-check": { args: none, answer: updateCheckOutcome },
     "open-update-download": { args: none, answer: none },
     // false when a page with unsaved work kept Paperboard open
     "quit-and-install": { args: none, answer: shape.boolean() },

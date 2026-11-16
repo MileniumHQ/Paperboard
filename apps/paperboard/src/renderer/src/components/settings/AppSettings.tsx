@@ -22,6 +22,7 @@ import { checkForUpdates } from "../../hooks/useAppUpdate";
 import type { SettingsFailure } from "../../hooks/useAppSettings";
 import { START_ON_HOME, startTarget } from "../../lib/startOn";
 import type { AppSettingsData } from "../../lib/appSettings";
+import type { UpdateCheckOutcome } from "../../../../shared/updateQueue";
 import { computerIcon } from "../computer/computerIcon";
 import PanelPermissionSettings from "./PanelPermissionSettings";
 // Inlined at build time: the viewer always shows the exact files shipped
@@ -75,6 +76,23 @@ const LICENSE_TEXTS: Record<LicenseKind, string> = {
 };
 
 const UPDATE_NOTE = "Looks for updates to Paperboard, every panel, package, and computer now. The top bar shows them as they run.";
+const UPDATE_CHECKING = "Looking for updates to Paperboard, every panel, package, and computer...";
+
+const count = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+const sentence = (text: string) => (/[.!?]$/.test(text) ? text : `${text}.`);
+
+/** what a look for updates came to, in words */
+export function updateOutcomeText(outcome: UpdateCheckOutcome): string {
+    const said: string[] = [];
+    if (outcome.updated) said.push(`Installed ${count(outcome.updated, "update", "updates")}.`);
+    if (outcome.held) said.push(`${count(outcome.held, "update waits", "updates wait")} until what uses it stops. The top bar lists them.`);
+    if (outcome.failed) said.push(sentence(outcome.problem ?? `${count(outcome.failed, "update", "updates")} failed`));
+    if (!said.length) said.push("Everything is up to date.");
+    if (outcome.linked) {
+        said.push(`${count(outcome.linked, "linked panel wasn't", "linked panels weren't")} updated: ${outcome.linked === 1 ? "it runs" : "they run"} from ${outcome.linked === 1 ? "its" : "their"} source folder.`);
+    }
+    return said.join(" ");
+}
 const QUIT_NOTE = "Stops the panels on this computer, unless its server daemon runs as a service. Panels on other computers keep running.";
 
 const quitApp = () => shellIpc().send("quit-app");
@@ -104,6 +122,26 @@ export default function AppSettings(props: {
     const viewLicense = (kind: LicenseKind) => {
         setLicense(kind);
         setLicenseOpen(true);
+    };
+
+    // the last look for updates from here: running, or what it came to
+    const [updateCheck, setUpdateCheck] = createSignal<"checking" | UpdateCheckOutcome | null>(null);
+    const updateNow = () => {
+        setUpdateCheck("checking");
+        checkForUpdates().then(
+            (outcome) => {
+                setUpdateCheck(outcome);
+                if (outcome.failed) showToast({ variant: "danger", title: "Not everything updated", message: updateOutcomeText(outcome) });
+            },
+            (err) => {
+                setUpdateCheck(null);
+                showToast({ variant: "danger", title: "Couldn't check for updates", message: errorMessage(err) });
+            },
+        );
+    };
+    const updateNote = () => {
+        const check = updateCheck();
+        return check === null ? UPDATE_NOTE : check === "checking" ? UPDATE_CHECKING : updateOutcomeText(check);
     };
 
     const startOnMissing = () => startTarget(props.settings.startOn, props.computers).missing;
@@ -192,9 +230,9 @@ export default function AppSettings(props: {
 
                 {/* browser mode runs no updates */}
                 <Show when={!props.compact && !isBrowserShell()}>
-                    <PaperSettingItem title="Updates" description={UPDATE_NOTE}>
+                    <PaperSettingItem title="Updates" description={updateNote()}>
                         <PaperEffect variant="primary">
-                            <PaperButton onClick={() => void checkForUpdates()}>
+                            <PaperButton onClick={updateNow}>
                                 <PaperIcon>update</PaperIcon>
                                 Update everything now
                             </PaperButton>

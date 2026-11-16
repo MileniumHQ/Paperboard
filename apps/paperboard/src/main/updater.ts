@@ -18,6 +18,7 @@ import { updateQueue } from "./updateQueue";
 import { refreshHolds, resumeHoldRefresh, stopHoldRefresh } from "./updateHolds";
 import { PING_TIMEOUT_MS, taskJob } from "./updateTasks";
 import type { AppUpdateState } from "../shared/appUpdate";
+import type { UpdateCheckOutcome } from "../shared/updateQueue";
 import { errorMessage } from "@mileniumhq/paperapi/errors";
 
 // registry override policy shared with the daemon: env override honored only
@@ -110,48 +111,54 @@ async function fetchIndex(
     }
 }
 
-// guard overlapping runs so a stalled run can't double-install
-let orchestratorRunning = false;
+// one run at a time, so a stalled run can't double-install: a look asked
+// for while one runs gets that run's outcome
+let running: Promise<UpdateCheckOutcome> | null = null;
 
 /**
  * Looks for updates of Paperboard, its panels, runtime packages and paired
  * computers' Paperboard Server, and runs them in the update queue. A panel
  * or package in use is held, not stopped. Resolves once the queue has run
- * every update it found.
+ * every update it found, with what that came to.
  */
-export async function runUpdateOrchestrator(): Promise<void> {
-    if (orchestratorRunning) {
-        logger.debug("[Updater] orchestrator already running, skipping");
-        return;
-    }
-    orchestratorRunning = true;
-    let failures = 0;
+export function runUpdateOrchestrator(): Promise<UpdateCheckOutcome> {
+    running ??= runOrchestrator().finally(() => {
+        running = null;
+    });
+    return running;
+}
+
+async function runOrchestrator(): Promise<UpdateCheckOutcome> {
+    let outcome: UpdateCheckOutcome = { updated: 0, held: 0, failed: 0, linked: 0, problem: null };
     let appRun: Promise<AppUpdateState> | null = null;
     updateQueue.setChecking(true);
     try {
         appRun = appUpdater().check();
-        failures = await runOrchestratorInner();
+        outcome = await runOrchestratorInner();
     } catch (err) {
-        failures++;
         logger.error("[Updater] update check failed:", err);
-        updateQueue.setChecking(false, `Paperboard could not check for updates: ${errorMessage(err)}`);
-    } finally {
-        try {
-            const state = appRun ? await appRun : getAppUpdateState();
-            if (state.status === "failed") failures++;
-            recordRunOutcome(failures);
-        } catch (err) {
-            // the cooldown bookkeeping wasn't saved: the update list says so
-            logger.error("[Updater] could not record the update check:", err);
-            const earlier = updateQueue.snapshot().checkError;
-            const said = `Paperboard could not record this update check: ${errorMessage(err)}`;
-            updateQueue.setChecking(false, earlier ? `${earlier} ${said}` : said);
-        } finally {
-            orchestratorRunning = false;
-            // staged runtime updates may now wait for panels to stop
-            await refreshHolds();
-        }
+        outcome = { ...outcome, failed: outcome.failed + 1, problem: `Paperboard could not check for updates: ${errorMessage(err)}` };
+        updateQueue.setChecking(false, outcome.problem);
     }
+    try {
+        const state = appRun ? await appRun : getAppUpdateState();
+        if (state.status === "failed") {
+            outcome = { ...outcome, failed: outcome.failed + 1, problem: outcome.problem ?? `Paperboard itself didn't update: ${state.error ?? "the update failed"}` };
+        }
+        if (state.status === "downloading" || state.status === "ready") outcome = { ...outcome, updated: outcome.updated + 1 };
+        recordRunOutcome(outcome.failed);
+    } catch (err) {
+        // the cooldown bookkeeping wasn't saved: the update list says so
+        logger.error("[Updater] could not record the update check:", err);
+        const earlier = updateQueue.snapshot().checkError;
+        const said = `Paperboard could not record this update check: ${errorMessage(err)}`;
+        updateQueue.setChecking(false, earlier ? `${earlier} ${said}` : said);
+        outcome = { ...outcome, problem: outcome.problem ?? said };
+    } finally {
+        // staged runtime updates may now wait for panels to stop
+        await refreshHolds();
+    }
+    return outcome;
 }
 
 let recheckTimer: ReturnType<typeof setInterval> | null = null;
@@ -177,9 +184,9 @@ export function stopBackgroundUpdates(): void {
     stopHoldRefresh();
 }
 
-/** Looks for updates now, whatever the cooldown says (Settings, Update everything now). */
-export async function checkForUpdatesNow(): Promise<void> {
-    await runUpdateOrchestrator();
+/** Looks for updates now, whatever the cooldown says (Settings, Update everything now), and says what that came to. */
+export function checkForUpdatesNow(): Promise<UpdateCheckOutcome> {
+    return runUpdateOrchestrator();
 }
 
 // every paired computer's panels, packages and system, eight at a time; a
@@ -216,8 +223,8 @@ async function readCraneVersion(computerId: string): Promise<string | null> {
     }
 }
 
-// the panels, packages and servers to update; resolves with how many failed
-async function runOrchestratorInner(): Promise<number> {
+// the panels, packages and servers to update; resolves with what that came to
+async function runOrchestratorInner(): Promise<UpdateCheckOutcome> {
     const [registryPanels, registryPackages, craneDlIndex] = await Promise.all([
         fetchIndex(`${REGISTRY_URL}/panels/index.json`),
         fetchIndex(`${REGISTRY_URL}/package/index.json`),
@@ -242,21 +249,32 @@ async function runOrchestratorInner(): Promise<number> {
     });
 
     for (const reason of refused) logger.warn(`[Updater] refused an update: ${reason}`);
-    let failures = unavailable + installed.failures + refused.length;
-    updateQueue.setChecking(false, unavailable
+    const checkError = unavailable
         ? `Paperboard could not reach ${unavailable === 1 ? "1 computer" : `${unavailable} computers`} to check for updates.`
         : installed.failures
           ? `Paperboard could not check ${installed.failures === 1 ? "1 panel" : `${installed.failures} panels`} for updates (${installed.reasons[0]}).`
           : refused.length
             ? `Paperboard refused ${refused.length === 1 ? "1 update" : `${refused.length} updates`} it could not verify (${refused[0]}).`
-            : null);
+            : null;
+    updateQueue.setChecking(false, checkError);
 
+    const outcome: UpdateCheckOutcome = {
+        updated: 0,
+        held: 0,
+        failed: unavailable + installed.failures + refused.length,
+        // a linked panel runs from its source folder: there is nothing to install over it
+        linked: reached.reduce((sum, comp) => sum + comp.panels.filter((p) => p.isDevLink || p.isLinked).length, 0),
+        problem: checkError,
+    };
     const results = (await Promise.all(tasks.map((task) => updateQueue.enqueue(taskJob(task))))).flat();
     for (const item of results) {
-        if (item.status === "failed") {
-            failures++;
+        if (item.status === "done") outcome.updated++;
+        else if (item.status === "held") outcome.held++;
+        else if (item.status === "failed") {
+            outcome.failed++;
+            outcome.problem ??= `${item.name} didn't update: ${item.error ?? "the update failed"}`;
             logger.warn(`[Updater] Failed: ${item.kind} ${item.name} on ${item.computerId}: ${item.error}`);
         }
     }
-    return failures;
+    return outcome;
 }

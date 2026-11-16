@@ -43,7 +43,8 @@ export default function AppUpdateModal(props: { state: AppUpdateState; open: boo
                 <Show when={!packageManaged() || packageDownload()}><PaperButton variant="text" onClick={openDownload}>Download manually</PaperButton></Show>
                 <PaperButton onClick={() => {
                     props.onClose();
-                    void checkForUpdates();
+                    // what it finds shows here again, and the top bar lists the rest
+                    checkForUpdates().catch((err) => showToast({ variant: "danger", title: "Couldn't check for updates", message: errorMessage(err) }));
                 }}>{packageManaged() ? "Retry check" : "Retry update"}</PaperButton>
             </Show>
             <Show when={ready()}>

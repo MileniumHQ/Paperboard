@@ -31,7 +31,7 @@ import { launchOptionsFromArgv } from "../../../src/shared/launchOptions";
 import { PanelPermissionStore } from "../../../src/main/panelPermissions";
 import type { PanelPermission, PermissionAnswer } from "../../../src/shared/panelPermissions";
 import { initialAppUpdateState } from "../../../src/shared/appUpdate";
-import { initialUpdateQueueState, type UpdateQueueState } from "../../../src/shared/updateQueue";
+import { initialUpdateQueueState, type UpdateCheckOutcome, type UpdateQueueState } from "../../../src/shared/updateQueue";
 import { cancelGoogleSignIn, signInToGoogleDrive } from "../../../src/main/googleOAuth";
 import { ANSWER } from "./protocol";
 
@@ -72,6 +72,10 @@ let failPermissionSave: string | null = null;
 // counted and never comes back, and nothing past it is reachable
 let googleSignIns = 0;
 const googleSignInWaiters: (() => void)[] = [];
+
+// a look for updates waits here until a test says what it came to
+const updateChecks: ((outcome: UpdateCheckOutcome) => void)[] = [];
+const updateCheckWaiters: (() => void)[] = [];
 
 // what an Electron window serves that this suite has no part in
 const notHere = (channel: string) => () => {
@@ -133,7 +137,11 @@ const calls: CallHandlers<ShellCall, unknown> = {
             },
         ),
     "backup-gdrive-cancel": () => cancelGoogleSignIn(),
-    "update-check": notHere("update-check"),
+    "update-check": () =>
+        new Promise<UpdateCheckOutcome>((resolve) => {
+            updateChecks.push(resolve);
+            for (const wake of updateCheckWaiters.splice(0)) wake();
+        }),
     "open-update-download": notHere("open-update-download"),
     "quit-and-install": notHere("quit-and-install"),
     "panel-file-export": notHere("panel-file-export"),
@@ -176,6 +184,7 @@ type Command =
     | { cmd: "release-permission-save"; fail?: string }
     | { cmd: "push-update-queue"; state: UpdateQueueState }
     | { cmd: "fail-release"; message: string }
+    | { cmd: "answer-update-check"; outcome: UpdateCheckOutcome }
     | { cmd: "next-release" }
     | { cmd: "google-sign-ins"; atLeast: number }
     | { cmd: "fail-mdns"; message: string }
@@ -233,6 +242,12 @@ async function run(command: Command): Promise<unknown> {
         case "fail-release":
             failRelease = command.message;
             return true;
+        case "answer-update-check": {
+            // the oldest look for updates comes to this, once one was asked for
+            while (updateChecks.length === 0) await new Promise<void>((wake) => updateCheckWaiters.push(wake));
+            updateChecks.shift()!(command.outcome);
+            return true;
+        }
         case "next-release":
             // resolves with the keys of the oldest Stop and update that ran, once one has
             while (releases.length === 0) await new Promise<void>((wake) => releaseWaiters.push(wake));
