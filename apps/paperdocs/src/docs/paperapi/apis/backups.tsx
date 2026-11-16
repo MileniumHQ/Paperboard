@@ -173,7 +173,7 @@ onCleanup(backupApi.onProgress(PANEL_ID, (change) => setProgress(change.progress
 }));
 
 <Show when={lost()}>
-    {(why) => <PaperError title="Can't follow backups" error={\`\${why()}. Paperboard keeps trying.\`} />}
+    {(why) => <PaperError title="Couldn't follow backups" error={\`\${why()}. Paperboard keeps trying.\`} />}
 </Show>
 <PaperButton disabled={progress() !== null}>
     {progress() ? backupProgressText(progress()!) : "Back Up Now"}
