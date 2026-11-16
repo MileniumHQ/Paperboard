@@ -1,3 +1,31 @@
+/* The field and what is wrong with it, under it. The box inside takes the
+   field's width, so a class that widens the field widens the box. */
+.field {
+    display: flex;
+    flex-direction: column;
+    gap: var(--paper-uigap-onefourth);
+    width: fit-content;
+    min-width: 0;
+}
+.field.fullWidth {
+    width: 100%;
+}
+.field > .PaperInput {
+    width: auto;
+}
+
+/* never wider than the field: a long message wraps under it */
+.error {
+    width: 0;
+    min-width: 100%;
+    padding: 0 var(--paper-uigap);
+    box-sizing: border-box;
+    font-family: var(--paper-font-family);
+    font-size: var(--paper-text-size-2);
+    color: var(--paper-danger);
+    overflow-wrap: anywhere;
+}
+
 .PaperInput {
     position: relative;
     width: fit-content;

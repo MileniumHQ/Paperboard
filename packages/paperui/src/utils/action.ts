@@ -1,9 +1,10 @@
 import { createSignal, type Accessor } from "solid-js";
 import { errorMessage } from "./errorMessage";
+import { dismissToast, showError } from "./toasts";
 
 /** An action that didn't happen, as a view shows it: what didn't happen, and why. */
 export interface ActionFailure {
-    /** the action that didn't happen, such as "Server not removed" */
+    /** the action that didn't happen, such as "Couldn't remove the server" */
     title: string;
     /** the failure's own words */
     message: string;
@@ -16,12 +17,11 @@ export interface Action {
     error: Accessor<ActionFailure | null>;
     setError: (failure: ActionFailure | null) => void;
     /**
-     * Runs `fn`, busy until it settles. A failure becomes `{ title, message }`
-     * in `error`, or in `setFailure` when the run shows it somewhere else (a
-     * confirmation that stays open). Resolves whether `fn` went through;
-     * never rejects.
+     * Runs `fn`, busy until it settles. A failure is a danger toast titled
+     * `title`, saying why, and it closes once a run of the same title goes
+     * through. Resolves whether `fn` went through; never rejects.
      */
-    run: (title: string, fn: () => Promise<unknown>, setFailure?: (failure: ActionFailure | null) => void) => Promise<boolean>;
+    run: (title: string, fn: () => Promise<unknown>) => Promise<boolean>;
 }
 
 export interface ActionOptions {
@@ -31,21 +31,34 @@ export interface ActionOptions {
      * EACCES as "Paperboard isn't allowed to open server.properties".
      */
     message?: (err: unknown) => string;
+    /**
+     * Whether a failure is a toast (default true). False keeps it only in
+     * `error`, for a view that says it in place: a field's error, a
+     * widget's own message.
+     */
+    toast?: boolean;
 }
 
-/** An action a button starts: busy while it runs, and its own error when it didn't happen. Make one per action. */
+/** An action a button starts: busy while it runs, and a toast when it didn't happen. Make one per action. */
 export function createAction(options: ActionOptions = {}): Action {
     const message = options.message ?? errorMessage;
     const [running, setRunning] = createSignal(0);
     const [error, setError] = createSignal<ActionFailure | null>(null);
-    const run: Action["run"] = async (title, fn, setFailure = setError) => {
+    // the toast of each title's last failure
+    const failed = new Map<string, string>();
+    const run: Action["run"] = async (title, fn) => {
         setRunning((n) => n + 1);
-        setFailure(null);
+        setError(null);
         try {
             await fn();
+            const toast = failed.get(title);
+            failed.delete(title);
+            if (toast) dismissToast(toast);
             return true;
         } catch (err) {
-            setFailure({ title, message: message(err) });
+            const words = message(err);
+            setError({ title, message: words });
+            if (options.toast ?? true) failed.set(title, showError(title, words));
             return false;
         } finally {
             setRunning((n) => n - 1);

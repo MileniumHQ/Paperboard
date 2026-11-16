@@ -21,7 +21,7 @@ async function failWithDialogOpen() {
 
 // Inventory: PaperToast — a failure said while a dialog is open.
 describe("a failure toast over an open PaperModal", () => {
-    test("shows above the scrim, is read, takes the press on its close, and the dialog stays open", async () => {
+    test("shows in the dialog, is read, takes the press on its close, and the dialog stays open", async () => {
         await failWithDialogOpen();
         const close = await page.center(CLOSE);
         // what a press there hits is the toast, not the scrim or the page under it
@@ -41,20 +41,29 @@ describe("a failure toast over an open PaperModal", () => {
         expect(await page.eval("t.presses")).toBe(0);
     });
 
-    test("Tab reaches its close from the dialog and goes back in; once it is closed, focus stays in the dialog", async () => {
+    test("a failure outlives the dialog it showed in: back on the page, the same element", async () => {
         await failWithDialogOpen();
-        await page.eval(`document.getElementById("save").focus()`);
+        await page.eval(`document.querySelector('${TOAST}').dataset.kept = "yes"`);
+        await page.press("Escape");
+        await page.waitFor(`!document.querySelector('[data-paper-toasts]').closest('${DIALOG}')`, "the toast back on the page");
+        expect(await page.eval(`document.querySelector('${TOAST}')?.dataset.kept`)).toBe("yes");
+    });
+
+    test("Tab reaches its close in the dialog's own turn, between its content and its buttons; once it is closed, focus stays in the dialog", async () => {
+        await failWithDialogOpen();
+        await page.eval(`document.getElementById("name").focus()`);
         await page.press("Tab");
         expect(await focused()).toBe("Close");
         expect(await page.eval(`!!document.activeElement.closest('[data-paper-toasts]')`)).toBe(true);
+        await page.press("Tab");
+        expect(await focused()).toBe("save");
         // round the cycle, and back the other way
         await page.press("Tab");
-        expect(await page.eval(`!!document.activeElement.closest('${DIALOG}')`)).toBe(true);
-        await page.press("Tab", 8);
-        expect(await page.eval(`!!document.activeElement.closest('[data-paper-toasts]')`)).toBe(true);
+        expect(await focused()).toBe("Close modal");
         await page.press("Tab", 8);
         expect(await focused()).toBe("save");
-        await page.press("Tab");
+        await page.press("Tab", 8);
+        expect(await focused()).toBe("Close");
 
         await page.press("Enter");
         await page.waitFor(`!document.querySelector('${TOAST}')`, "the toast to close from the keyboard");

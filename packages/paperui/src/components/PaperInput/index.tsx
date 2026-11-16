@@ -33,7 +33,13 @@ export interface PaperInputProps extends Omit<JSX.InputHTMLAttributes<HTMLInputE
     icon?: JSX.Element | string;
     compact?: boolean;
     fullWidth?: boolean;
+    /** Draws the field as wrong, with no words. A field with something to say gets `error`. */
     invalid?: boolean;
+    /**
+     * What is wrong with the value, said under the field: the field is drawn
+     * as wrong, and the message is its description to a screen reader.
+     */
+    error?: string;
     validate?: (value: string) => boolean;
     defaultValue?: string | number;
     ref?: HTMLInputElement | HTMLTextAreaElement | ((el: HTMLInputElement) => void);
@@ -53,6 +59,7 @@ export function PaperInput(props: PaperInputProps) {
         "compact",
         "fullWidth",
         "invalid",
+        "error",
         "validate",
         "value",
         "defaultValue",
@@ -94,6 +101,7 @@ export function PaperInput(props: PaperInputProps) {
     };
 
     const isInvalid = () => {
+        if (local.error) return true;
         if (local.invalid !== undefined) return local.invalid;
         if (local.validate) return !local.validate(currentValue());
         return false;
@@ -170,6 +178,9 @@ export function PaperInput(props: PaperInputProps) {
     const isMultiline = () => Boolean(local.multiline);
     const generatedId = createUniqueId();
     const fieldId = () => local.id ?? (local.label ? `paper-input-${generatedId}` : undefined);
+    const errorId = `paper-input-error-${generatedId}`;
+    // the field's own description first, then what is wrong with it
+    const describedBy = () => [rest["aria-describedby"], local.error ? errorId : undefined].filter(Boolean).join(" ") || undefined;
 
     // width:fit-content assumes a single-line field; a textarea should fill the
     // frame it is given, and its resize handle must not be clipped.
@@ -184,65 +195,73 @@ export function PaperInput(props: PaperInputProps) {
             local.disabled ? styles.disabled : "",
             isMultiline() ? styles.multiline : "",
             isMultiline() && local.resize === false ? styles.fixedSize : "",
-            local.class,
         );
 
     return (
         <div
-            class={className()}
+            class={cx(styles.field, local.fullWidth || isMultiline() ? styles.fullWidth : "", local.class)}
             classList={local.classList}
             data-disabled={local.disabled ? "true" : "false"}
             data-invalid={isInvalid() ? "true" : "false"}
         >
-            <Show when={local.label}>
-                {/* the legend cuts the notch in the border; the visible name is the label */}
-                <fieldset class={styles.outline} aria-hidden="true">
-                    <legend>
-                        <span>{local.label}</span>
-                    </legend>
-                </fieldset>
-                <label class={styles.label} for={fieldId()}>
-                    {local.label}
-                </label>
-            </Show>
-            <Show when={icon()}>
-                {typeof icon() === "string" ? (
-                    <PaperIcon class={styles.inputIcon} zeroHeight>
-                        {icon()}
-                    </PaperIcon>
-                ) : (
-                    <span class={styles.inputIcon}>{icon()}</span>
-                )}
-            </Show>
-            <Show
-                when={isMultiline()}
-                fallback={
-                    <input
-                        {...rest}
+            <div class={className()}>
+                <Show when={local.label}>
+                    {/* the legend cuts the notch in the border; the visible name is the label */}
+                    <fieldset class={styles.outline} aria-hidden="true">
+                        <legend>
+                            <span>{local.label}</span>
+                        </legend>
+                    </fieldset>
+                    <label class={styles.label} for={fieldId()}>
+                        {local.label}
+                    </label>
+                </Show>
+                <Show when={icon()}>
+                    {typeof icon() === "string" ? (
+                        <PaperIcon class={styles.inputIcon} zeroHeight>
+                            {icon()}
+                        </PaperIcon>
+                    ) : (
+                        <span class={styles.inputIcon}>{icon()}</span>
+                    )}
+                </Show>
+                <Show
+                    when={isMultiline()}
+                    fallback={
+                        <input
+                            {...rest}
+                            id={fieldId()}
+                            type={local.type ?? "text"}
+                            disabled={local.disabled}
+                            ref={local.ref as never}
+                            value={currentValue()}
+                            aria-invalid={isInvalid() ? "true" : undefined}
+                            aria-describedby={describedBy()}
+                            onInput={handleInput as never}
+                            onChange={handleChange as never}
+                            onBlur={handleBlur as never}
+                        />
+                    }
+                >
+                    <textarea
+                        {...(rest as unknown as JSX.TextareaHTMLAttributes<HTMLTextAreaElement>)}
                         id={fieldId()}
-                        type={local.type ?? "text"}
+                        rows={local.rows ?? 4}
                         disabled={local.disabled}
                         ref={local.ref as never}
                         value={currentValue()}
                         aria-invalid={isInvalid() ? "true" : undefined}
+                        aria-describedby={describedBy()}
                         onInput={handleInput as never}
                         onChange={handleChange as never}
                         onBlur={handleBlur as never}
                     />
-                }
-            >
-                <textarea
-                    {...(rest as unknown as JSX.TextareaHTMLAttributes<HTMLTextAreaElement>)}
-                    id={fieldId()}
-                    rows={local.rows ?? 4}
-                    disabled={local.disabled}
-                    ref={local.ref as never}
-                    value={currentValue()}
-                    aria-invalid={isInvalid() ? "true" : undefined}
-                    onInput={handleInput as never}
-                    onChange={handleChange as never}
-                    onBlur={handleBlur as never}
-                />
+                </Show>
+            </div>
+            <Show when={local.error}>
+                <span id={errorId} class={styles.error}>
+                    {local.error}
+                </span>
             </Show>
         </div>
     );

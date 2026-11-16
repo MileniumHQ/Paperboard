@@ -185,6 +185,19 @@
     gap: 0 !important;
 }
 
+/* the toasts said while this is the top dialog, between its content and
+   its buttons: they take room of their own and cover neither */
+.toastSlot {
+    flex-shrink: 0;
+    max-height: var(--paper-size-panel-height-small);
+    overflow-y: auto;
+    padding: 0 var(--paper-uigap) var(--paper-uigap);
+}
+
+.toastSlot:empty {
+    display: none;
+}
+
 .footer {
     display: flex;
     align-items: center;

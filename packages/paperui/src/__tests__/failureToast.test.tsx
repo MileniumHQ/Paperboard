@@ -36,6 +36,16 @@ describe("showError", () => {
         shownToasts()[0].action!.onClick();
         expect(retries).toBe(1);
     });
+
+    test("a reason's first line is the message and the lines after it are the details, kept whole", () => {
+        showError("Couldn't update the server", new Error("SteamCMD exited with code 8\nLogging in anonymously...\nERROR! Failed to install app '2394010' (Disk write failure)\n"));
+        expect(shownToasts().map((t) => [t.message, t.details])).toEqual([
+            ["SteamCMD exited with code 8", "Logging in anonymously...\nERROR! Failed to install app '2394010' (Disk write failure)"],
+        ]);
+        // one line has no details, and given details are kept
+        showError("Couldn't start", "The port is taken", { details: "listen EADDRINUSE :::25565" });
+        expect(shownToasts()[1]).toMatchObject({ message: "The port is taken", details: "listen EADDRINUSE :::25565" });
+    });
 });
 
 describe("createFailureToast", () => {

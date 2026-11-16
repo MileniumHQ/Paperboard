@@ -15,7 +15,13 @@ export interface PaperToastAction {
 
 export interface PaperToastOptions {
     title: string;
+    /** Why, in one line under the title. */
     message?: string;
+    /**
+     * Anything longer, such as what a tool printed: hidden under Details,
+     * where it can be read whole and copied.
+     */
+    details?: string;
     variant?: PaperToastVariant;
     /** A Material Symbols name; each variant has its own by default. */
     icon?: string;
@@ -52,13 +58,15 @@ let nextId = 0;
 export const shownToasts = (): readonly ToastEntry[] => toasts;
 
 /**
- * Shows a toast in the bottom right corner of the window: what failed or
- * finished, said where it will be seen. Returns its id, for dismissToast.
+ * Shows a toast: what failed or finished, said where it will be seen. It
+ * shows in the middle of the window where it covers no control, or inside
+ * the dialog that is open, above its buttons.
+ * Returns its id, for dismissToast.
  */
 export function showToast(options: PaperToastOptions): string {
     const at = options.key === undefined ? -1 : toasts.findIndex((toast) => toast.key === options.key);
     if (at >= 0) {
-        setToasts(at, { title: options.title, message: options.message, icon: options.icon, action: options.action });
+        setToasts(at, { title: options.title, message: options.message, details: options.details, icon: options.icon, action: options.action });
         return toasts[at].id;
     }
     const id = `toast-${++nextId}`;
@@ -76,21 +84,37 @@ export interface ShowErrorOptions {
     retry?: () => void;
     /** What the failure is about (default its title): while one with the same key shows, it takes the newest reason. */
     key?: string;
+    /** More than the reason's first line, such as what a tool printed; default the reason's other lines. */
+    details?: string;
+}
+
+/**
+ * A failure's words as a toast says them: the first line is the reason,
+ * and the lines after it (what a tool printed, a stack of causes) are its
+ * details, read and copied under Details.
+ */
+export function failureWords(words: string): { message: string; details?: string } {
+    const [first = "", ...rest] = words.split(/\r?\n/);
+    const details = rest.join("\n").trim();
+    return { message: first.trim(), details: details === "" ? undefined : details };
 }
 
 /**
  * Says a failure as a danger toast: `title` is what failed ("Couldn't save
  * the server"), `err` whatever was caught (an Error, a string, anything),
- * shown in words. It stays until it is closed, and a failure that repeats
- * shows once. Returns the toast's id.
+ * shown in words: its first line, and the rest under Details. It stays
+ * until it is closed, and a failure that repeats shows once. Returns the
+ * toast's id.
  *
  *     save().catch((err) => showError("Couldn't save the server", err, { retry: save }));
  */
 export function showError(title: string, err: unknown, options: ShowErrorOptions = {}): string {
+    const words = failureWords(errorMessage(err));
     return showToast({
         variant: "danger",
         title,
-        message: errorMessage(err),
+        message: words.message,
+        details: options.details ?? words.details,
         key: options.key ?? title,
         action: options.retry ? { label: "Try again", onClick: options.retry } : undefined,
     });
@@ -127,7 +151,7 @@ let nextFailure = 0;
 /**
  * A standing failure, said as a danger toast: while `failure` gives
  * something (an Error, a string, whatever was caught) the toast shows it in
- * words, the newest in place, and it closes when it clears to `null`,
+ * words (its first line, and the rest under Details), the newest in place, and it closes when it clears to `null`,
  * `undefined`, `false` or "". A toast the person closed stays closed until
  * the failure's words change, or it clears and comes back.
  *
@@ -160,7 +184,7 @@ export function createFailureToast(failure: Accessor<unknown>, options: FailureT
             }
             if (words === closed) return;
             closed = null;
-            shown = showToast({ key, variant: "danger", title: options.title, message: words, action: options.action });
+            shown = showToast({ key, variant: "danger", title: options.title, ...failureWords(words), action: options.action });
         }),
     );
 

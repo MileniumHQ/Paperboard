@@ -3,6 +3,7 @@ import { fireEvent, render } from "@solidjs/testing-library";
 import { afterEach, describe, expect, test } from "vitest";
 import { PaperToggle } from "../components/PaperToggle";
 import { createAction } from "../utils/action";
+import { dismissToast, shownToasts } from "../utils/toasts";
 import { createStateSignal, keepUnchanged, sameData } from "../utils/keepUnchanged";
 import { createLatest } from "../utils/latest";
 import { createSavedValue } from "../utils/savedValue";
@@ -33,6 +34,7 @@ function inRoot<T>(fn: () => T): T {
 }
 afterEach(() => {
     for (const dispose of roots.splice(0)) dispose();
+    for (const toast of [...shownToasts()]) dismissToast(toast.id);
 });
 
 describe("createLatest", () => {
@@ -86,12 +88,22 @@ describe("createAction", () => {
         expect(await again).toBe(true);
     });
 
-    test("a run can show its failure somewhere else, and the action's own error is left alone", async () => {
+    test("a failure is a toast that closes once a run of the same title goes through; toast: false keeps it only in error", async () => {
         const action = inRoot(() => createAction());
-        let shown: unknown = "untouched";
-        expect(await action.run("Not renamed", () => Promise.reject("taken"), (f) => (shown = f))).toBe(false);
-        expect(shown).toEqual({ title: "Not renamed", message: "taken" });
-        expect(action.error()).toBeNull();
+        const titles = () => shownToasts().map((t) => `${t.title}: ${t.message}`);
+        expect(await action.run("Couldn't rename it", () => Promise.reject("taken"))).toBe(false);
+        expect(await action.run("Couldn't move it", () => Promise.reject("full"))).toBe(false);
+        expect(titles()).toEqual(["Couldn't rename it: taken", "Couldn't move it: full"]);
+        // another title going through leaves the rename's failure standing
+        expect(await action.run("Couldn't move it", async () => {})).toBe(true);
+        expect(titles()).toEqual(["Couldn't rename it: taken"]);
+        expect(await action.run("Couldn't rename it", async () => {})).toBe(true);
+        expect(titles()).toEqual([]);
+
+        const inPlace = inRoot(() => createAction({ toast: false }));
+        expect(await inPlace.run("Couldn't rename it", () => Promise.reject("taken"))).toBe(false);
+        expect(inPlace.error()).toEqual({ title: "Couldn't rename it", message: "taken" });
+        expect(titles()).toEqual([]);
     });
 
     test("a failure's words come from the action's own formatter when it has one", async () => {

@@ -40,6 +40,7 @@ import {
     createPaperCompact,
     createRead,
     createPolling,
+    showError,
     setHapticPlayer,
     useContextMenuState,
     type PaperFileBrowserRef,
@@ -169,6 +170,71 @@ const scenarios: Record<string, () => JSX.Element> = {
                 </div>
             );
         });
+    },
+
+    // a page with buttons along its top bar (its corners and its middle)
+    // and along its bottom, the way a panel lays out its header, a wizard
+    // and a composer; ?dialog adds a
+    // dialog with its footer. t.fail(n) says n failures, the first with details.
+    toastCover() {
+        // what the dialog is about: open while there is one, and a new copy of it keeps it open
+        const [about, setAbout] = createSignal<{ name: string } | null>(query.has("dialog") ? { name: "Claude" } : null);
+        window.t = {
+            setOpen: (open: boolean) => setAbout(open ? { name: "Claude" } : null),
+            renew: () => setAbout({ name: "Claude" }),
+            fail: (n: number) => {
+                for (let i = 1; i <= n; i++)
+                    showError(`Couldn't install ${i}`, i === 1 ? "SteamCMD exited with code 8\nLogging in anonymously...\nERROR! Failed to install app '2394010' (Disk write failure)" : "The disk is full");
+            },
+        };
+        return shell(() => (
+            <div style={{ display: "flex", "flex-direction": "column", height: "100vh", "box-sizing": "border-box" }}>
+                <div style={{ display: "flex", "justify-content": "space-between", padding: "8px" }}>
+                    <PaperButton id="back" data-control>Back</PaperButton>
+                    {/* a name in the middle that opens a menu, as a chat's header has */}
+                    <PaperButton id="name" variant="text" data-control>Ada</PaperButton>
+                    <PaperButton id="new" data-control>New bot</PaperButton>
+                </div>
+                <div style={{ flex: "1" }} />
+                <div style={{ display: "flex", "justify-content": "space-between", padding: "8px" }}>
+                    <PaperButton id="previous" data-control>Back</PaperButton>
+                    <PaperButton id="finish" variant="primary" data-control>Finish</PaperButton>
+                </div>
+                <div style={{ display: "flex", gap: "8px", padding: "8px" }}>
+                    <div style={{ flex: "1" }}>
+                        <PaperInput id="composer" fullWidth placeholder="Message" data-control />
+                    </div>
+                    <PaperButton id="send" variant="primary" data-control>Send</PaperButton>
+                </div>
+                <PaperModal
+                    open={!!about()}
+                    onClose={() => setAbout(null)}
+                    title="Claude"
+                    size="small"
+                    footer={
+                        <>
+                            <PaperButton id="cancel" variant="text" data-dialog-control>Cancel</PaperButton>
+                            <PaperButton id="install" variant="primary" data-dialog-control>Install</PaperButton>
+                        </>
+                    }
+                >
+                    <PaperInput id="key" label="API key" fullWidth data-dialog-control />
+                    <PaperButton id="sign-in" data-dialog-control>Sign in instead</PaperButton>
+                </PaperModal>
+            </div>
+        ));
+    },
+
+    fieldError() {
+        const [error, setError] = createSignal<string | undefined>(undefined);
+        window.t = { setError };
+        return shell(() => (
+            <div style={{ display: "flex", "align-items": "center", "justify-content": "space-between", gap: "24px", padding: "24px", width: "520px" }}>
+                <span>Server name</span>
+                <PaperInput id="name" label="Name" aria-describedby="name-hint" error={error()} />
+                <span id="name-hint">Shown in the server list</span>
+            </div>
+        ));
     },
 
     failedRead() {

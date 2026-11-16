@@ -1,21 +1,49 @@
+/* In the middle of the window, as near its top as it can be while it
+   covers no button, field or link the page shows (PaperToastRegion
+   measures them and slides it down past them), or else along the bottom:
+   a toast never hides what a person is about to press. */
 .region {
     position: fixed;
-    right: calc(var(--paper-uigap) + var(--paper-safe-area-right));
-    bottom: calc(var(--paper-uigap) + var(--paper-safe-area-bottom));
+    top: calc(var(--paper-uigap) + var(--paper-safe-area-top));
+    left: 50%;
+    transform: translateX(-50%);
     z-index: var(--paper-z-chrome);
     display: flex;
     flex-direction: column;
-    align-items: flex-end;
+    align-items: center;
     gap: var(--paper-uigap-half);
-    max-width: calc(100vw - var(--paper-uigap-double));
     pointer-events: none;
     font-family: var(--paper-font-family);
+}
+
+.atBottom {
+    top: auto;
+    bottom: calc(var(--paper-uigap) + var(--paper-safe-area-bottom));
+}
+
+/* laid out where it would go, unseen, while the region measures what it
+   would cover there */
+.measuring {
+    visibility: hidden;
+}
+
+/* the theme's root rule paints every [data-paperui-theme] the app's
+   surface: the region is only where toasts stack, so it draws nothing */
+.region[data-paper-toasts] {
+    background: none;
+}
+
+/* inside the top dialog (PaperModal's slot), in its flow: it takes room
+   of its own between the content and the buttons */
+.inDialog {
+    position: static;
+    transform: none;
 }
 
 .toast {
     pointer-events: auto;
     box-sizing: border-box;
-    width: min(var(--paper-size-menu-max), calc(100vw - var(--paper-uigap-double)));
+    width: min(var(--paper-size-menu-max), calc(100vw - var(--paper-uigap-double) - var(--paper-safe-area-left) - var(--paper-safe-area-right)));
     display: flex;
     align-items: flex-start;
     gap: var(--paper-uigap-half);
@@ -60,6 +88,19 @@
     padding-top: var(--paper-uigap-onefourth);
 }
 
+.inDialog .toast {
+    width: 100%;
+    box-shadow: none;
+    background: var(--paper-surface);
+}
+
+/* what a tool printed, read whole under Details */
+.details {
+    max-height: var(--paper-size-panel-height-small);
+    overflow-x: hidden;
+    overflow-y: auto;
+}
+
 .actions {
     display: flex;
     gap: var(--paper-uigap-half);
@@ -69,7 +110,7 @@
 @keyframes toastEnter {
     from {
         opacity: 0;
-        transform: translateY(var(--paper-uigap)) scale(0.97);
+        transform: translateY(calc(-1 * var(--paper-uigap))) scale(0.97);
     }
 }
 

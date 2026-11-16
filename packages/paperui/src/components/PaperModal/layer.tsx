@@ -37,13 +37,25 @@ export interface ModalLayerProps extends JSX.HTMLAttributes<HTMLDivElement> {
     backdropClass?: string;
     /** the dialog's content, drawn while open and held through the exit */
     content: () => JSX.Element;
+    /**
+     * Where toasts go while this is the top dialog: an element in it above
+     * its buttons. Without one they stay on the page.
+     */
+    toastSlot?: () => HTMLElement | undefined;
+}
+
+interface OpenModal {
+    toastSlot?: () => HTMLElement | undefined;
 }
 
 // open modals, newest last: only the top one answers the keyboard, so
 // Escape on a modal opened over another closes just that one. A modal
 // under another steps back out of sight, and the one over it brings no
 // scrim of its own, so the page is dimmed once however many are stacked.
-const [openModals, setOpenModals] = createSignal<object[]>([]);
+const [openModals, setOpenModals] = createSignal<OpenModal[]>([]);
+
+/** The element toasts go in: the top open dialog's slot, or null for the page. */
+export const toastSlot = (): HTMLElement | null => openModals().at(-1)?.toastSlot?.() ?? null;
 
 // how long a closed dialog waits for a frame before it leaves without one
 const LEAVE_WITHOUT_FRAME_MS = 100;
@@ -117,6 +129,7 @@ export function ModalLayer(props: ModalLayerProps) {
         "concealed",
         "backdropClass",
         "content",
+        "toastSlot",
         "ref",
         "class",
         "children",
@@ -132,8 +145,12 @@ export function ModalLayer(props: ModalLayerProps) {
     // sees the claim dropped on a later frame. Without an exit animation,
     // under reduced motion, nothing else would wait that long.
     const [shown, setShown] = createSignal(!!local.open);
+    // whether it is open, changing only when that does: a prop worked out
+    // from something else (the item a dialog is about) is read again each
+    // time that changes, and the dialog must not close and open for it
+    const isOpen = createMemo(() => !!local.open);
     // this modal's place in the stack while open, and whether it opened over another
-    const [layer, setLayer] = createSignal<object | null>(null);
+    const [layer, setLayer] = createSignal<OpenModal | null>(null);
     const [over, setOver] = createSignal(false);
     const covered = () => {
         const own = layer();
@@ -142,7 +159,7 @@ export function ModalLayer(props: ModalLayerProps) {
     };
     createEffect(
         on(
-            () => local.open,
+            isOpen,
             (open) => {
                 if (open) {
                     setShown(true);
@@ -162,11 +179,12 @@ export function ModalLayer(props: ModalLayerProps) {
         ),
     );
 
-    createEffect(on(() => local.open, (open) => {
+    createEffect(on(isOpen, (open) => {
         if (!open) return;
 
         const previousActiveElement = opener();
-        const layer = {};
+        // a concealed dialog shows nothing, toasts included
+        const layer: OpenModal = { toastSlot: () => (local.concealed ? undefined : local.toastSlot?.()) };
         setOver(untrack(openModals).length > 0);
         setOpenModals((stack) => [...stack, layer]);
         setLayer(layer);
@@ -191,8 +209,10 @@ export function ModalLayer(props: ModalLayerProps) {
             if (e.key === "Tab" && dialog) {
                 // the toasts take turns too: a failure said while the dialog
                 // is open is read and closed from the keyboard, then focus
-                // comes back in, never to the page under the scrim
-                const toasts = document.querySelector<HTMLElement>("[data-paper-toasts]");
+                // comes back in, never to the page under the scrim. In a
+                // PaperModal they are its own, already in its turn.
+                const region = document.querySelector<HTMLElement>("[data-paper-toasts]");
+                const toasts = region && !dialog.contains(region) ? region : null;
                 const inDialog = focusablesIn(dialog);
                 const inToasts = toasts ? focusablesIn(toasts) : [];
                 const cycle = [...inDialog, ...inToasts];
@@ -261,7 +281,7 @@ export function ModalLayer(props: ModalLayerProps) {
                         {...rest}
                         class={cx(styles.dialog, local.class)}
                     >
-                        <Held open={!!local.open}>{local.content}</Held>
+                        <Held open={isOpen()}>{local.content}</Held>
                     </div>
                 </div>
             </PaperPresence>
