@@ -45,7 +45,6 @@ export const resourcePackKind = ({ calls, files, serverVersion }: ServerPage): A
     glyph: "texture",
     noun: "resource pack",
     source: modrinthSource("resourcepack", "https://modrinth.com/resourcepacks"),
-    searchPlaceholder: "Search Resource Packs",
     searchScope: () => `Resource packs for Minecraft ${serverVersion()}`,
     emptySearch: () => `No resource packs for Minecraft ${serverVersion()} matched your search.`,
     installedTitle: "Current Resource Pack",

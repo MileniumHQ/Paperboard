@@ -237,6 +237,7 @@ export default function GameRoster<T extends RosterPlayer>(props: {
             <PaperPageHeader icon="group" title="Players" />
             <PlayerRoster
                 search={search()}
+                total={players().length}
                 onSearch={setSearch}
                 filters={[
                     { label: "Online", count: players().filter((p) => p.online).length, selected: showOnline(), onToggle: () => setShowOnline((v) => !v) },

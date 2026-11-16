@@ -34,7 +34,6 @@ export const datapacksKind = ({ calls, files, serverStatus, serverVersion }: Ser
     glyph: "dataset",
     noun: "datapack",
     source: modrinthSource("datapack", "https://modrinth.com/datapacks"),
-    searchPlaceholder: "Search Datapacks",
     searchScope: () => `Datapacks for Minecraft ${serverVersion()}`,
     emptySearch: () => `No datapacks for Minecraft ${serverVersion()} matched your search.`,
     installedTitle: "Installed Datapacks",

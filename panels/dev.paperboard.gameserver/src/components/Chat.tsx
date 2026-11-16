@@ -133,7 +133,7 @@ export default function Chat(props: { avatar: (name: string) => JSX.Element }) {
                     <PaperFlex grow>
                         <PaperInput
                             fullWidth
-                            placeholder="Message server..."
+                            placeholder="Message"
                             value={inputVal()}
                             onInput={(e) => setInputVal(e.currentTarget.value)}
                             disabled={serverStatus() === "offline"}

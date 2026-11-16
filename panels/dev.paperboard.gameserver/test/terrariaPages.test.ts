@@ -185,7 +185,7 @@ describe("a tModLoader server's Mods tab", () => {
         try {
             await openTab(page, "mods");
             await page.waitFor(`${row("addon-installed", "HandMade.tmod")}?.parentElement.textContent.includes("Hand Made")`, "the mod put in by hand");
-            await page.type(`input[placeholder="Search Mods"]`, "wing", true);
+            await page.type(`input[placeholder="Mod"]`, "wing", true);
             await page.waitFor(`${row("addon-results", WING_SLOT)}?.parentElement.textContent.includes("Wing Slot")`, "the Workshop's answer");
             await page.evaluate(`${row("addon-results", WING_SLOT)}.click()`);
             await page.waitFor(`${button("Install", DIALOG)}`, "Wing Slot's page");

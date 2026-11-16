@@ -155,7 +155,7 @@ export default function MapCards(props: {
             <Show when={!props.bare}>
             <MapPicturesFailure pictures={props.pictures} />
             <PaperFlex direction="row" gap="half" align="center">
-                <PaperInput fullWidth icon="search" placeholder={props.placeholder ?? "Search maps"} value={query()} onInput={(e) => setQuery(e.currentTarget.value)} />
+                <PaperInput fullWidth icon="search" placeholder={props.placeholder ?? "Map"} value={query()} onInput={(e) => setQuery(e.currentTarget.value)} />
                 <Show when={modes().length > 1}>
                     <PaperSelectMenu name="map-mode" placeholder="All modes" value={mode() ?? ALL_MODES} onValueChange={(value) => setMode(value === ALL_MODES ? null : String(value))}>
                         <PaperSelectMenuItem value={ALL_MODES} description={`${maps().length} maps`}>All modes</PaperSelectMenuItem>

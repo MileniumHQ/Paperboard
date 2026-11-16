@@ -128,7 +128,7 @@ export default function Logs() {
                         <PaperInput
                             fullWidth
                             icon="search"
-                            placeholder="Filter lines..."
+                            placeholder="Text"
                             value={filter()}
                             onInput={(e) => setFilter(e.currentTarget.value)}
                         />

@@ -278,7 +278,7 @@ export default function GameOptions(props: {
                     <PaperInput
                         fullWidth
                         icon="search"
-                        placeholder={`Search ${props.tab.label.toLowerCase()}...`}
+                        placeholder="Setting"
                         value={search()}
                         onInput={(e) => setSearch(e.currentTarget.value)}
                     />

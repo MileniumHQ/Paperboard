@@ -51,9 +51,6 @@ export function pluginsKind(server: ServerPage): AddonKind {
         return isMods() ? "mod" : "plugin";
     },
     source: modrinthSource("project", "https://modrinth.com"),
-    get searchPlaceholder() {
-        return isMods() ? "Search Mods" : "Search Plugins";
-    },
     searchScope: () => "Projects",
     emptySearch: () => `No ${isMods() ? "mod" : "plugin"}s matched your search.`,
     get installedTitle() {

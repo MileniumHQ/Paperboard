@@ -25,9 +25,10 @@ import { unlessMissing } from "../../service/failures";
 // start, and the ports it was given are written into Geyser's config then.
 
 export const DEFAULT_JAVA_PORT = 25565;
-const JAVA_LABEL = "Game Server (Java)";
-const BEDROCK_LABEL = "Game Server (Bedrock)";
-const NETHERNET_LABEL = "Game Server (Bedrock NetherNet)";
+// each follows the server's name in Paperboard's port list: "Survival · Minecraft"
+const JAVA_LABEL = "Minecraft";
+const BEDROCK_LABEL = "Minecraft Bedrock";
+const NETHERNET_LABEL = "Minecraft Bedrock NetherNet";
 
 
 function fsOf(deps: LoaderDeps): LoaderFs {
@@ -46,7 +47,8 @@ export async function readJavaPort(deps: LoaderDeps): Promise<number> {
     return Number.isInteger(port) && port >= 1 && port <= 65535 ? port : DEFAULT_JAVA_PORT;
 }
 
-const javaMove = (moves: readonly PortMove[]) => moves.find((move) => move.label === JAVA_LABEL);
+// the Java port is claimed first, so it is the one players join on
+const javaMove = (moves: readonly PortMove[]) => moves.find((move) => move.primary);
 
 /** server.properties' port as the user chose it: the run's own, which a moved run's server wrote there, reads as the one it moved from. */
 export function chosenJavaPort(port: string | undefined, moves: readonly PortMove[]): string | undefined {

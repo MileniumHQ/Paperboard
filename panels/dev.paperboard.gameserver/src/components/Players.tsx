@@ -62,7 +62,12 @@ export default function Players() {
         changed: () => roster.setFeedback(undefined),
     });
 
-    const playtimeText = (player: PlayerInfo) => formatPlaytime(roster.leaderboard.playtimeSeconds(player));
+    // a player with no playtime in this world has not joined it, said as the other games say it
+    const rowText = (player: PlayerInfo) => {
+        const seconds = roster.leaderboard.playtimeSeconds(player);
+        if (isPlayerOn(player.name)) return seconds === undefined ? "Playing" : `Playing · ${formatPlaytime(seconds)}`;
+        return seconds === undefined ? "Not seen yet" : `Played ${formatPlaytime(seconds)}`;
+    };
 
     return (
         <>
@@ -96,6 +101,7 @@ export default function Players() {
 
             <PlayerRoster
                 search={searchQuery()}
+                total={roster.all().length}
                 onSearch={setSearchQuery}
                 filters={[
                     { label: "Online", count: onlineCount(), selected: showOnline(), onToggle: () => setShowOnline((v) => !v) },
@@ -106,9 +112,7 @@ export default function Players() {
                 onDismissFeedback={() => roster.setFeedback(undefined)}
                 sections={sections()}
                 icon={(player) => <PlayerHead name={player.name} uuid={player.uuid} size="medium" />}
-                description={(player) =>
-                    isPlayerOn(player.name) ? `Playing · ${playtimeText(player)}` : `Played ${playtimeText(player)}`
-                }
+                description={rowText}
                 badges={(player) => (
                     <>
                         <Show when={player.op}>

@@ -216,7 +216,7 @@ export default function ResourcePack(props: { active: boolean }) {
                             <PaperInput
                                 fullWidth
                                 icon="link"
-                                placeholder="https://example.com/pack.zip"
+                                placeholder="URL"
                                 value={customUrl()}
                                 onInput={(e) => setCustomUrl(e.currentTarget.value)}
                                 onKeyDown={(e) => {

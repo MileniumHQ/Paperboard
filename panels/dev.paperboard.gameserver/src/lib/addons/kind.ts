@@ -138,10 +138,9 @@ export interface AddonKind<Meta = undefined> {
     icon: string;
     /** the avatar of a card without an icon */
     glyph: string;
-    /** "plugin", for sentences */
+    /** "plugin", for sentences; the search box names it */
     noun: string;
     source: AddonSource;
-    searchPlaceholder: string;
     /** "Datapacks for Minecraft 1.21" — what the search covers, before "provided by <source>" */
     searchScope(): string;
     emptySearch(): string;

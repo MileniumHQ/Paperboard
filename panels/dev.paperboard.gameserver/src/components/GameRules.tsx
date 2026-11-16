@@ -111,7 +111,7 @@ export default function GameRules() {
                     <PaperInput
                         fullWidth
                         icon="search"
-                        placeholder="Search game rules..."
+                        placeholder="Game rule"
                         value={search()}
                         onInput={(e) => setSearch(e.currentTarget.value)}
                     />

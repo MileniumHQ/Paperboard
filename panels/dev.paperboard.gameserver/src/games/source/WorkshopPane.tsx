@@ -48,7 +48,7 @@ export default function WorkshopPane(props: {
                 <PaperInput
                     fullWidth
                     icon="search"
-                    placeholder="Search the Steam Workshop, or paste a Workshop link"
+                    placeholder="Map or Workshop link"
                     value={query()}
                     onInput={(e) => setQuery(e.currentTarget.value)}
                     onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); void search(); } }}

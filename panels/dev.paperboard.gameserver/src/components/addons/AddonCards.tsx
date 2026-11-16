@@ -96,7 +96,7 @@ export function AddonSearchCard<Meta>(props: { kind: AddonKind<Meta>; search: Re
                 <PaperInput
                     fullWidth
                     icon="search"
-                    placeholder={props.kind.searchPlaceholder}
+                    placeholder={props.kind.noun[0]!.toUpperCase() + props.kind.noun.slice(1)}
                     value={props.search.query()}
                     onInput={(e) => props.search.type(e.currentTarget.value)}
                     onKeyDown={(e) => {

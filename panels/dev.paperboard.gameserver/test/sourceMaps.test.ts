@@ -157,8 +157,8 @@ describe("a Source game's Maps tab", () => {
             await page.waitFor(card("koth_harvest_final", "[role=dialog]"), "the server's maps");
             const before = await page.evaluate<number>(height);
             await page.evaluate(`${chip}.click()`);
-            await page.waitFor(`document.querySelector("[role=dialog] input[placeholder^='Search the Steam Workshop']")`, "the Workshop search");
-            await page.type("[role=dialog] input[placeholder^='Search the Steam Workshop']", "upward", true);
+            await page.waitFor(`document.querySelector("[role=dialog] input[placeholder='Map or Workshop link']")`, "the Workshop search");
+            await page.type("[role=dialog] input[placeholder='Map or Workshop link']", "upward", true);
             const hit = card("Upward Remix", "[role=dialog]");
             await page.waitFor(`${hit} && document.querySelector("[role=dialog]").innerText.includes("1 result is not a map and left out.")`, "the search's maps");
             expect(await page.evaluate<number>(height)).toBe(before);

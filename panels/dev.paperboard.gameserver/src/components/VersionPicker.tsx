@@ -94,7 +94,7 @@ export default function VersionPicker(props: {
             <PaperInput
                 fullWidth
                 icon="search"
-                placeholder="Search versions..."
+                placeholder="Version"
                 value={searchQuery()}
                 onInput={(e) => setSearchQuery(e.currentTarget.value)}
             />

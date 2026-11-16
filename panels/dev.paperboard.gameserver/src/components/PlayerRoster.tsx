@@ -38,6 +38,8 @@ export function statusColor(online: boolean, banned: boolean): PaperColor {
  */
 export default function PlayerRoster<T extends { name: string }>(props: {
     search: string;
+    /** every player before the search and filters: an empty list says whether they left nobody, or nobody has joined */
+    total: number;
     onSearch(query: string): void;
     filters: readonly RosterFilter[];
     /** the last thing that went wrong with the roster, quoted above the list */
@@ -87,7 +89,7 @@ export default function PlayerRoster<T extends { name: string }>(props: {
                             <PaperInput
                                 fullWidth
                                 icon="search"
-                                placeholder="Search players"
+                                placeholder="Player"
                                 value={props.search}
                                 onInput={(e) => props.onSearch(e.currentTarget.value)}
                             />
@@ -109,7 +111,7 @@ export default function PlayerRoster<T extends { name: string }>(props: {
                             when={any()}
                             fallback={
                                 <PaperFlex padding="full" center>
-                                    <PaperText size={3}>No players match these filters.</PaperText>
+                                    <PaperText size={3}>{props.total > 0 ? "No players match these filters." : "No players yet. Players who join show up here."}</PaperText>
                                 </PaperFlex>
                             }
                         >

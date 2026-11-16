@@ -151,7 +151,6 @@ export function workshopMods({ calls, files, serverVersion }: ServerPage): { kin
     glyph: "extension",
     noun: "mod",
     source: workshopSource(steam),
-    searchPlaceholder: "Search Mods",
     searchScope: () => "tModLoader mods",
     emptySearch: () => "No mods matched your search.",
     installedTitle: "Installed Mods",

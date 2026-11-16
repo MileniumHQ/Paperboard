@@ -38,7 +38,6 @@ export function modpacksKind({ calls, files, serverSoftware, serverStatus, serve
     glyph: "package_2",
     noun: "modpack",
     source: modrinthSource("modpack", "https://modrinth.com/modpacks"),
-    searchPlaceholder: "Search Modpacks",
     searchScope: () => `${loader()} modpacks that run on a server`,
     emptySearch: () => `No ${loader()} modpacks matched your search.`,
     installedTitle: "Installed Modpack",

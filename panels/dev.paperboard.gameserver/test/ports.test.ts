@@ -64,7 +64,7 @@ describe("ports", () => {
             expect(moved).toBeLessThanOrEqual(held.port + 100);
             // the server opens the free port, and the page says so while it runs
             expect(argv().slice(-2)).toEqual(["--port", String(moved)]);
-            expect(mc.server.state.portMoves).toEqual([{ label: "Game Server (Java)", from: held.port, to: moved, primary: true }]);
+            expect(mc.server.state.portMoves).toEqual([{ label: "Minecraft", from: held.port, to: moved, primary: true }]);
             expect(mc.server.state.serverPort).toBe(String(held.port));
             // the server saved the run's port into the file, as Paper does; Options still says the chosen one
             expect(property(mc, "server-port")).toBe(String(moved));
@@ -107,7 +107,7 @@ describe("ports", () => {
             await held.release();
         }
         expect(mc.server.state.serverStatus).toBe("offline");
-        expect(mc.server.state.serverEntries.map((e) => e.content).join("\n")).toContain(`Game Server (Java) can't use port ${held.port}`);
+        expect(mc.server.state.serverEntries.map((e) => e.content).join("\n")).toContain(`Minecraft can't use port ${held.port}`);
         expect(fs.existsSync(path.join(mc.dir, "runs.log"))).toBe(false);
         expect(fs.readFileSync(path.join(mc.dir, "server.properties"), "utf8")).toBe(original);
         expect(await claims(mc)).toEqual({});
@@ -129,7 +129,7 @@ describe("ports", () => {
             // Geyser reads its port only from its config: it can't move for one run
             fs.writeFileSync(path.join(mc.dir, "plugins", "Geyser-Spigot", "config.yml"), settled.replace("  port: 19132\n", `  port: ${held.port}\n`));
             const before = geyser();
-            await expect(prepareServerPorts("paper", livePortDeps(mc.server))).rejects.toThrow(`Game Server (Bedrock) can't use port ${held.port}`);
+            await expect(prepareServerPorts("paper", livePortDeps(mc.server))).rejects.toThrow(`Minecraft Bedrock can't use port ${held.port}`);
             expect(geyser()).toBe(before);
 
             fs.rmSync(path.join(mc.dir, "plugins", "Geyser.jar"));
