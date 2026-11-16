@@ -57,6 +57,23 @@
     max-width: 100%;
 }
 
+/* a failure that stands, over the corner of the page and of any loader on it */
+.frameNotice {
+    position: absolute;
+    left: var(--paper-uigap);
+    bottom: var(--paper-uigap);
+    z-index: var(--paper-z-raised);
+    width: min(var(--paper-size-menu-max), calc(100% - var(--paper-uigap-double)));
+    border-radius: var(--paper-border-radius);
+    background: var(--paper-surface-raised);
+    box-shadow: var(--paper-element-shadow);
+}
+
+/* a failure fills the overlay's width, and keeps to the height of what it says */
+.overlayError {
+    width: 100%;
+}
+
 /* a long panel name ends in an ellipsis instead of leaving the overlay */
 .overlayHeading {
     max-width: 100%;

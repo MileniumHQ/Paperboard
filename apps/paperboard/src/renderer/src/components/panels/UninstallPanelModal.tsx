@@ -5,7 +5,7 @@ import {
     PaperFlex,
     PaperButton,
     PaperText,
-    showToast,
+    PaperError,
     createAction,
 } from "@mileniumhq/paperui";
 import { panelsApi, type PanelItem } from "@mileniumhq/paperapi";
@@ -25,17 +25,21 @@ export interface UninstallPanelModalProps {
 }
 
 // Confirmation dialog for uninstalling a panel. Data is kept unless the
-// person ticks the box, and each opening starts with it unticked.
+// person ticks the box, and each opening starts with it unticked. An
+// uninstall that left packages behind keeps the dialog open to say so.
 const UninstallPanelModal: Component<UninstallPanelModalProps> = (props) => {
     const action = createAction();
     const busy = action.busy;
     const [deleteData, setDeleteData] = createSignal(false);
+    // the panel is gone, but the packages only it used are still on the computer: why
+    const [leftBehind, setLeftBehind] = createSignal("");
 
     createEffect(
         on(
             () => props.target,
             () => {
                 setDeleteData(false);
+                setLeftBehind("");
             },
         ),
     );
@@ -51,10 +55,8 @@ const UninstallPanelModal: Component<UninstallPanelModalProps> = (props) => {
             try {
                 const { packagesWarning } = await panelsApi.uninstall(target.panel.id, target.compId, { deleteData: deleteData() });
                 await props.onUninstalled(target);
-                if (packagesWarning) {
-                    showToast({ variant: "warning", title: `${target.panel.name} is uninstalled`, message: packagesWarning });
-                }
-                props.onClose();
+                if (packagesWarning) setLeftBehind(packagesWarning);
+                else props.onClose();
             } catch (err) {
                 logToMain("error", "Failed to uninstall panel:", err);
                 throw err;
@@ -66,20 +68,23 @@ const UninstallPanelModal: Component<UninstallPanelModalProps> = (props) => {
         <PaperModal
             open={props.target !== null}
             onClose={close}
-            title="Uninstall Panel"
+            title={leftBehind() ? "Panel Uninstalled" : "Uninstall Panel"}
             size="small"
             footer={
-                <>
+                <Show when={!leftBehind()} fallback={<PaperButton onClick={close}>Close</PaperButton>}>
                     <PaperButton onClick={close} variant="text" disabled={busy()}>
                         Cancel
                     </PaperButton>
                     <PaperButton onClick={() => void confirm()} variant="danger" disabled={busy()}>
                         {busy() ? "Uninstalling..." : "Uninstall"}
                     </PaperButton>
-                </>
+                </Show>
             }
         >
-            <Show when={props.target}>
+            <Show when={leftBehind()}>
+                {(why) => <PaperError alert title={`Couldn't remove the packages only ${props.target?.panel.name ?? "the panel"} used`} error={why()} />}
+            </Show>
+            <Show when={!leftBehind() && props.target}>
                 {(target) => (
                     <PaperFlex direction="column" gap="half">
                         <PaperText preset="text">

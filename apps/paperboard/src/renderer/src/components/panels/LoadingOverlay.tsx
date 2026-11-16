@@ -1,7 +1,6 @@
 import { type Component, type JSX, Show } from "solid-js";
 import {
-    PaperButton,
-    PaperEmptyState,
+    PaperError,
     PaperFlex,
     PaperProgress,
     PaperText,
@@ -23,6 +22,8 @@ export interface LoadingOverlayProps {
     detail?: string;
     /** When set, replaces the loader with the failure and its recovery. */
     error?: string;
+    /** What failed, as "Couldn't …", over the failure's reason. */
+    errorTitle?: string;
     retryLabel?: string;
     onRetry?: () => void;
 }
@@ -54,15 +55,20 @@ const LoadingOverlay: Component<LoadingOverlayProps> = (props) => (
             <PaperText preset="label">{props.title}</PaperText>
         </Show>
         <Show when={props.error}>
-            <PaperEmptyState role="alert" icon="error" title="Couldn't load" description={props.error} />
+            {(error) => (
+                <div class={styles.overlayError}>
+                    <PaperError
+                        fill
+                        alert
+                        title={props.errorTitle ?? "Couldn't load"}
+                        error={error()}
+                        action={props.onRetry ? { label: props.retryLabel ?? "Reload", onClick: props.onRetry } : undefined}
+                    />
+                </div>
+            )}
         </Show>
         <Show when={props.detail}>
             <PaperText preset="hint">{props.detail}</PaperText>
-        </Show>
-        <Show when={props.error && props.onRetry}>
-            <PaperButton onClick={props.onRetry}>
-                {props.retryLabel ?? "Reload"}
-            </PaperButton>
         </Show>
     </PaperFlex>
 );

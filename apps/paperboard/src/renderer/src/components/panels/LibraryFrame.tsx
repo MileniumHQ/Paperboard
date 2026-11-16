@@ -240,7 +240,8 @@ const LibraryFrame: Component<LibraryFrameProps> = (props) => {
             </Show>
             <Show when={phase() === "failed"}>
                 <LoadingOverlay
-                    error="Couldn't reach the panel library."
+                    errorTitle="Couldn't load the panel library"
+                    error="The panel library didn't answer."
                     retryLabel="Reload library"
                     onRetry={props.onReload}
                 />

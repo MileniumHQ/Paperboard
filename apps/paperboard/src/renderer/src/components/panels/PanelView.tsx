@@ -1,4 +1,4 @@
-import { dismissToast, PaperFlex, playHaptic, showToast, swipeFromFrame } from "@mileniumhq/paperui";
+import { PaperError, PaperFlex, playHaptic, swipeFromFrame } from "@mileniumhq/paperui";
 import { backupApi, backupProgressFraction, backupProgressText, type BackupProgress, errorMessage, PAGE_BACK_MESSAGE, PAGE_BARS_MESSAGE } from "@mileniumhq/paperapi";
 import { type Component, type JSX, createEffect, createMemo, createSignal, For, on, Show, onCleanup, onMount } from "solid-js";
 import { recordUse, liveKeys, recordAway, withoutIdle, MAX_LIVE_IFRAMES, IDLE_UNLOAD_MS } from "./panelLru";
@@ -58,22 +58,6 @@ interface PanelFrameProps {
     backs: Map<string, () => void>;
 }
 
-// Every open frame of a computer follows its backups over the one
-// connection to it: while that is lost, one notice says so, until it is back
-// or no frame follows any more.
-const lostFrames = new Map<string, { frames: Set<string>; toast: string }>();
-function progressLost(computerId: string, frameKey: string, why: string | null): void {
-    const lost = lostFrames.get(computerId);
-    if (why !== null) {
-        if (lost) lost.frames.add(frameKey);
-        else lostFrames.set(computerId, { frames: new Set([frameKey]), toast: showToast({ variant: "warning", key: `backup-progress:${computerId}`, title: "Can't follow backups", message: `${why}. Paperboard keeps trying.` }) });
-        return;
-    }
-    if (!lost?.frames.delete(frameKey) || lost.frames.size > 0) return;
-    lostFrames.delete(computerId);
-    dismissToast(lost.toast);
-}
-
 const PanelFrame: Component<PanelFrameProps> = (props) => {
     // the frame is keyed by its panel (PanelView's <For> over the keys), so these name one panel for its life
     const computerId = () => props.panelKey.split("::")[0];
@@ -89,6 +73,8 @@ const PanelFrame: Component<PanelFrameProps> = (props) => {
     const held = () => Object.values(backups()).find((p) => p.servicePaused) ?? null;
     // a failed look says so under a failure it may have explained
     const [backupsError, setBackupsError] = createSignal("");
+    // why the backups can't be followed: a backup that starts meanwhile can't cover the page
+    const [progressLost, setProgressLost] = createSignal<string | null>(null);
     const refreshBackups = () => backupApi.progress(panelId(), computerId()).then(
         (list) => {
             setBackups(Object.fromEntries(list.map((p) => [p.sourceId ?? "", p])));
@@ -106,14 +92,11 @@ const PanelFrame: Component<PanelFrameProps> = (props) => {
             else delete next[change.sourceId ?? ""];
             return next;
         }), computerId(), (why) => {
-            progressLost(computerId(), props.panelKey, why === null ? null : `${props.computerName}: ${why}`);
+            setProgressLost(why);
             // what changed while it was lost (a backup's end) is read again
             if (why === null) void refreshBackups();
         });
-        onCleanup(() => {
-            off();
-            progressLost(computerId(), props.panelKey, null);
-        });
+        onCleanup(off);
         void refreshBackups();
     });
     const isHeld = () => held() !== null;
@@ -181,12 +164,22 @@ const PanelFrame: Component<PanelFrameProps> = (props) => {
             setChooser(null);
             if (request && request.generation === generation) request.answer(result);
         }} />
+        {/* over the page's corner while it is lost, and gone once it is back */}
+        <Show when={progressLost()}>{(why) => (
+            <div class={styles.frameNotice}>
+                <PaperError
+                    title="Couldn't follow backups"
+                    error={`${props.computerName}: ${why()}. Paperboard keeps trying.`}
+                />
+            </div>
+        )}</Show>
         <Show when={props.restart}>{(restart) => (
             <LoadingOverlay
                 heading={props.heading}
                 compact={props.mobile}
                 label={restart().kind === "failed" ? undefined : restart().kind === "updating" ? "Updating panel…" : "Restarting panel service…"}
                 error={restart().kind === "failed" ? (restart() as { message: string }).message : undefined}
+                errorTitle={`Couldn't restart ${props.heading.name}`}
                 retryLabel="Restart panel"
                 onRetry={props.retryRestart}
             />
@@ -207,6 +200,7 @@ const PanelFrame: Component<PanelFrameProps> = (props) => {
                 compact={props.mobile}
                 label={failure() ? undefined : "Connecting panel…"}
                 error={failure() || undefined}
+                errorTitle={`Couldn't load ${props.heading.name}`}
                 detail={failure() ? (props.heading.serviceError ? `Its service stopped: ${props.heading.serviceError}` : backupsError() || undefined) : undefined}
                 retryLabel="Reload panel"
                 onRetry={props.retry}

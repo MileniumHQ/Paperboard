@@ -5,7 +5,7 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { API_DEMO, bootShell, WIDGET_DEMO, type DevPanel, type Shell, toastShown } from "./support/shell";
+import { API_DEMO, bootShell, errorShown, WIDGET_DEMO, type DevPanel, type Shell } from "./support/shell";
 
 // an editor whose note is unsaved until Save, and asks before it goes
 const NOTES: DevPanel = {
@@ -121,8 +121,8 @@ test("a panel whose manifest is broken says why it can't load", async () => {
     await page.click("[role=radio][aria-label='Home']");
     await page.click("[role=radio][aria-label='This Computer (127.0.0.1)']");
     await page.waitFor(
-        toastShown("Couldn't load panels on This Computer", "dev.example.broken: "),
-        "the broken panel, with why, in a toast",
+        errorShown("Couldn't load some panels", "dev.example.broken: "),
+        "the broken panel, with why, over the computer's panels",
     );
     expect(page.exceptions).toEqual([]);
 });
@@ -134,7 +134,8 @@ test("a panel whose service can't start shows the service's own reason under the
     await page.waitFor(`document.querySelector("label[data-value='dev.paperboard.testfailing']")`, "the failing panel in the sidebar");
     await page.click("label[data-value='dev.paperboard.testfailing']");
     await page.waitFor(
-        `[...document.querySelectorAll("[role=alert]")].some((a) => a.offsetParent !== null && a.nextElementSibling?.innerText === "Its service stopped: the config file is unreadable")`,
+        // the failure says itself at once, in place over the page, and the reason is the line under it
+        `[...document.querySelectorAll("[data-paper-error][role=alert]")].some((a) => a.offsetParent !== null && a.getAttribute("aria-label").startsWith("Couldn't load ") && a.parentElement.nextElementSibling?.innerText === "Its service stopped: the config file is unreadable")`,
         "the service's reason under the panel's failure",
     );
     expect(page.exceptions).toEqual([]);

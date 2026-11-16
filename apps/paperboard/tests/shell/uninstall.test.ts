@@ -1,10 +1,11 @@
 // Uninstalling a panel from the real shell: its data stays unless the
 // person asks for it to go, and packages the uninstall could not remove are
-// told to them, though the panel itself is gone.
+// told to them in its dialog, which stays open to say so, though the panel
+// itself is gone.
 import { afterAll, beforeAll, expect, test } from "bun:test";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { API_DEMO, bootShell, clickText, WIDGET_DEMO, type Shell } from "./support/shell";
+import { API_DEMO, bootShell, clickText, errorShown, WIDGET_DEMO, type Shell } from "./support/shell";
 
 let shell: Shell;
 const API_DEMO_ID = "dev.paperboard.apidemo";
@@ -51,7 +52,7 @@ test("a panel uninstalled as the dialog opens keeps its configuration and files"
 });
 
 // Inventory: Core contracts — what an uninstall left behind is told to the person who asked for it.
-test("an uninstall whose packages can't be removed says so once the panel is gone", async () => {
+test("an uninstall whose packages can't be removed says so in its dialog once the panel is gone, until it is closed", async () => {
     const { page } = shell;
     // which panels use which package can't be read, so none can be released
     const users = path.join(shell.dataDir, "packages", "users.json");
@@ -59,10 +60,16 @@ test("an uninstall whose packages can't be removed says so once the panel is gon
     fs.writeFileSync(users, "{ not json");
 
     await uninstall(WIDGET_DEMO_ID);
+    const dialog = `[...document.querySelectorAll("[role=dialog]")].find((d) => d.innerText.includes("Panel Uninstalled"))`;
+    const title = "Couldn't remove the packages only Widget Demo used";
     await page.waitFor(
-        `[...document.querySelectorAll("[role=region][aria-label=Notifications] [role=status]")].some((t) => t.innerText.includes("${WIDGET_DEMO_ID} is uninstalled, but the packages only it used could not be removed"))`,
-        "the uninstall's warning",
+        `${errorShown(title, `${WIDGET_DEMO_ID} is uninstalled, but the packages only it used could not be removed`)} && !!${dialog}?.querySelector("[data-paper-error][role=alert]")`,
+        "the uninstall's warning, in its dialog",
     );
     expect(fs.existsSync(path.join(shell.dataDir, "panels", WIDGET_DEMO_ID))).toBe(false);
+    // nothing more to confirm: the dialog only closes
+    expect(await page.evaluate<string[]>(`[...${dialog}.querySelectorAll("button:not([aria-label])")].map((b) => b.innerText.trim())`)).toEqual(["Close"]);
+    await clickText(page, "button", "Close");
+    await page.waitFor(`![...document.querySelectorAll("[role=dialog]")].some((d) => d.innerText.includes("Panel Uninstalled"))`, "the dialog closed");
     expect(page.exceptions).toEqual([]);
 });
