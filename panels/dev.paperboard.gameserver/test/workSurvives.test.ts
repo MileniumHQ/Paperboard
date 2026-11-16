@@ -224,47 +224,57 @@ describe("leaving Files with an unsaved edit asks first", () => {
         }
     }, 60_000);
 
-    test("on a phone, every Back asks: the file's, the system's and the server's", async () => {
+    test("on a phone, every Back asks: the bar's and the system's, and the bar walks back to the servers once discarded", async () => {
         const served = await setUp();
         fs.writeFileSync(eula(), EULA);
         const page = await openPage(`${served.url}/?server=s-mc`, "400,800");
-        /** the Back button on the bar of the page named `name` */
-        const back = (name: string) => `[...document.querySelectorAll("[role=region]")].find((r) => r.getAttribute("aria-label").startsWith(${JSON.stringify(name)})).querySelector(":scope > header button[aria-label=Back]")`;
-        const pressBack = async (name: string) => {
+        // one bar shows, the outermost page's ("Survival › Files › eula.txt"); its Back goes back from the innermost open page
+        const bar = `[...document.querySelectorAll("[role=region]")].find((r) => r.getAttribute("aria-label").startsWith("Survival"))`;
+        const back = `${bar}.querySelector(":scope > header button[aria-label=Back]")`;
+        const pressBack = async () => {
             // a page slides without changing the DOM, so this is looked at until it is in place
-            const inPlace = `Math.abs(${back(name)}.closest("[role=region]").getBoundingClientRect().left) < 1`;
+            const inPlace = `Math.abs(${bar}.getBoundingClientRect().left) < 1`;
             const deadline = Date.now() + 5_000;
             while (!(await page.evaluate<boolean>(inPlace))) {
-                if (Date.now() > deadline) throw new Error(`The ${name} page never slid into place`);
+                if (Date.now() > deadline) throw new Error("The server's page never slid into place");
                 await Bun.sleep(25); // quiet: a deadline-bound poll for the page to slide into place
             }
-            await page.evaluate(`${back(name)}.dataset.test = "back"`);
+            await page.evaluate(`${back}.dataset.test = "back"`);
             await page.click('[data-test="back"]');
             await page.evaluate(`delete document.querySelector('[data-test="back"]').dataset.test`);
         };
         const systemBack = () => page.evaluate<boolean>(`(() => { const e = new Event("paperboard:back", { cancelable: true }); window.dispatchEvent(e); return e.defaultPrevented; })()`);
-        const serverOpen = `!${back("Survival")}.closest("[inert]")`;
+        const visibleBacks = `[...document.querySelectorAll("button[aria-label=Back]")].filter((b) => b.checkVisibility() && !b.closest("[inert]")).length`;
         try {
             await editEula(page);
-            // the open file is a page of its own: its Back closes the file
-            await pressBack("eula.txt");
+            expect(await page.evaluate<number>(visibleBacks)).toBe(1);
+            await pressBack();
             await answer(page, "Cancel");
             await stayed(page);
-            // the file's page never slid away
-            expect(await page.evaluate<boolean>(`${back("eula.txt")}.closest("[inert]") === null`)).toBe(true);
+            expect(await page.evaluate<boolean>(`${bar}.closest("[inert]") === null`)).toBe(true);
             expect(await systemBack()).toBe(true);
             await answer(page, "Cancel");
             await stayed(page);
-
-            await pressBack("Survival");
+            // asked again, it asks again
+            await pressBack();
             await answer(page, "Cancel");
             await stayed(page);
-            expect(await page.evaluate<boolean>(serverOpen)).toBe(true);
 
-            await pressBack("Survival");
+            await pressBack();
             await answer(page, "Discard");
-            await page.waitFor(`!new URLSearchParams(location.search).has("server")`, "the servers list");
+            await page.waitFor(`!${editor}`, "the file to close");
             expect(fs.readFileSync(eula(), "utf8")).toBe(EULA);
+            // nothing is left to ask about: each Back goes up a page until the servers list
+            const deadline = Date.now() + 10_000;
+            while (await page.evaluate<boolean>(`Boolean(${bar})`)) {
+                if (Date.now() > deadline) throw new Error("Back never reached the servers list");
+                expect(await page.evaluate<boolean>(`Boolean(${question})`)).toBe(false);
+                const before = await page.evaluate<string>(`${bar}.getAttribute("aria-label")`);
+                await pressBack();
+                // each press goes up exactly one page: the bar names one page fewer, or the server page is gone
+                await page.waitFor(`!${bar} || ${bar}.getAttribute("aria-label") !== ${JSON.stringify(before)}`, "the page above");
+            }
+            await page.waitFor(`!new URLSearchParams(location.search).has("server")`, "the servers list");
             expect(page.exceptions).toEqual([]);
         } finally {
             await page.close();
