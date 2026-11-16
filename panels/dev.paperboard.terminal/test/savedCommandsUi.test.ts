@@ -2,7 +2,7 @@
 // modal, run from the toolbar's menu, and run from the Home widget.
 import { afterEach, describe, expect, setDefaultTimeout, test } from "bun:test";
 import { clearWorkloads } from "./helpers/crane";
-import { alertShows, panelBrowser, servePanel, type Page } from "./helpers/browser";
+import { panelBrowser, toastShows, servePanel, type Page } from "./helpers/browser";
 import { call, panelFiles, startService, stopServices } from "./helpers/service";
 
 setDefaultTimeout(90_000);
@@ -28,7 +28,7 @@ async function fill(page: Page, label: string, text: string) {
 }
 
 describe("saved commands in the panel", () => {
-    test("are added, run and removed in the modal, and a run the menu couldn't start is said there", async () => {
+    test("are added, run and removed in the modal, and a run the menu couldn't start is said in a toast", async () => {
         await panelFiles({ "tabs.json": TABS });
         const service = await startService();
         const served = await servePanel();
@@ -62,17 +62,39 @@ describe("saved commands in the panel", () => {
             await page.press("Escape");
             await page.waitFor(`!${dialog}`, "the modal to close");
 
-            // the service is gone: a run from the menu can't start, and the modal says why
+            // the service is gone: a run from the menu can't start, and a toast says why
             await service.crash();
             await page.click('button[aria-label="Saved commands"]');
             await page.clickText("[role=menuitem]", "Greet");
-            await page.waitFor(`${dialog} && ${alertShows("Command not started", "run-saved-command")}`, "the refused run in the modal");
+            await page.waitFor(toastShows("Couldn't start the command", "run-saved-command"), "the refused run's toast");
             expect(page.exceptions).toEqual([]);
         } finally {
             await page.close();
             served.stop();
         }
     });
+    test("saved commands that can't be read show Couldn't load in the modal, and a toast says why", async () => {
+        await panelFiles({ "tabs.json": TABS, "saved-commands.json": '{"version": 1, "commands": [' });
+        await startService();
+        const served = await servePanel();
+        const page = await browser.open(served.url);
+        try {
+            await page.waitFor(`document.querySelectorAll(".xterm").length === 1`, "the shell");
+            await page.click('button[aria-label="Saved commands"]');
+            await page.clickText("[role=menuitem]", "Manage saved commands");
+            await page.waitFor(`${dialog}?.innerText.includes("Couldn't load")`, "the modal to say it couldn't load");
+            await page.waitFor(toastShows("Couldn't read the saved commands", "Saved commands could not be read"), "the toast saying why");
+            expect(await page.evaluate<boolean>(`${dialog}.innerText.includes("No saved commands")`)).toBe(false);
+            // the toast goes with the modal
+            await page.press("Escape");
+            await page.waitFor(`!${dialog} && !(${toastShows("Couldn't read the saved commands", "")})`, "the modal and its toast to close");
+            expect(page.exceptions).toEqual([]);
+        } finally {
+            await page.close();
+            served.stop();
+        }
+    });
+
     test("a failed run shows what it printed, an unnamed command is said once, and a labelled field doesn't repeat its label as a placeholder", async () => {
         await panelFiles({ "tabs.json": TABS });
         await startService();

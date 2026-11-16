@@ -13,14 +13,14 @@ import {
     PaperList,
     PaperListItem,
     PaperModal,
-    PaperQuote,
     PaperText,
     stripAnsi,
     type PaperColor,
     createAction,
+    createFailureToast,
+    showError,
     type ActionFailure,
 } from "@mileniumhq/paperui";
-import { errorMessage } from "@mileniumhq/paperapi";
 import { terminal } from "./client";
 import type { CommandRun, SavedCommand } from "./lib/contract";
 import { MAX_LABEL_LENGTH, MAX_SAVED_COMMANDS } from "./lib/savedCommands";
@@ -35,6 +35,10 @@ const TONE_COLOR: Record<RunTone, PaperColor> = {
     danger: "danger",
     warning: "warning",
 };
+
+const START_FAILED = "Couldn't start the command";
+// an action's failure, said as a toast over the modal, which stays open
+const toast = (failure: ActionFailure | null) => failure && showError(failure.title, failure.message);
 
 /** The last lines a finished run printed, as plain text: how a failure says why. */
 function runOutput(run: CommandRun | undefined): string[] {
@@ -52,21 +56,8 @@ interface SavedCommandsProps {
 export default function SavedCommands(props: SavedCommandsProps & { menu: MenuState }) {
     const now = createAgoClock(props.menu.isOpen);
     const [isOpen, setOpen] = createSignal(false);
-    // a run started from the menu that the service refused: shown in the
-    // modal, since the menu has closed by then
-    const [runError, setRunError] = createSignal("");
-    const open = (error = "") => {
-        setRunError(error);
-        setOpen(true);
-    };
-    const run = async (id: string) => {
-        setRunError("");
-        try {
-            await terminal.calls.runSavedCommand({ id });
-        } catch (err) {
-            open(errorMessage(err));
-        }
-    };
+    // a run started from the menu that the service refused: a toast, since the menu has closed by then
+    const run = (id: string) => terminal.calls.runSavedCommand({ id }).catch((err) => showError(START_FAILED, err));
     return (
         <>
             <Menu state={props.menu}>
@@ -96,17 +87,13 @@ export default function SavedCommands(props: SavedCommandsProps & { menu: MenuSt
                         </PaperContextMenuItem>
                     )}
                 </For>
-                <PaperContextMenuItem value="manage-saved-commands" icon="edit" onClick={() => open()}>
+                <PaperContextMenuItem value="manage-saved-commands" icon="edit" onClick={() => setOpen(true)}>
                     Manage saved commands…
                 </PaperContextMenuItem>
             </Menu>
             <SavedCommandsModal
                 open={isOpen()}
-                runError={runError()}
-                onClose={() => {
-                    setOpen(false);
-                    setRunError("");
-                }}
+                onClose={() => setOpen(false)}
                 commands={props.commands}
                 runs={props.runs}
                 loadError={props.loadError}
@@ -121,30 +108,27 @@ function SavedCommandsModal(props: {
     commands: SavedCommand[];
     runs: Record<string, CommandRun>;
     loadError: string;
-    /** A run started from the toolbar dropdown that failed. */
-    runError?: string;
 }) {
     const now = createAgoClock(() => props.open);
     const [label, setLabel] = createSignal("");
     const [command, setCommand] = createSignal("");
     // a row's buttons never wait on another call: the service orders them,
     // and the row's run state is what says a command is already going
-    const { busy, error, run } = createAction();
+    const { busy, run: runAction } = createAction();
+    const run = (title: string, fn: () => Promise<unknown>) => runAction(title, fn, toast);
+    // unreadable is not empty: the list says it couldn't load, and the toast says why
+    createFailureToast(() => props.open && props.loadError, { title: "Couldn't read the saved commands" });
 
     const full = () => props.commands.length >= MAX_SAVED_COMMANDS;
     const canSave = () => !busy() && !props.loadError && !full() && command().trim() !== "";
 
     const save = async () => {
         if (!canSave()) return;
-        if (await run("Command not saved", () => terminal.calls.saveCommand({ label: label(), command: command() }))) {
+        if (await run("Couldn't save the command", () => terminal.calls.saveCommand({ label: label(), command: command() }))) {
             setLabel("");
             setCommand("");
         }
     };
-
-    // this modal's own failure, else the dropdown's run that brought it open
-    const shownError = (): ActionFailure | null =>
-        error() ?? (props.runError ? { title: "Command not started", message: props.runError } : null);
 
     return (
         <PaperModal open={props.open} onClose={props.onClose} title="Saved commands" size="medium">
@@ -152,15 +136,13 @@ function SavedCommandsModal(props: {
                 <PaperText preset="text">
                     Run these from here, or pin one to Home with the Pinned command widget.
                 </PaperText>
-                <Show when={props.loadError}>
-                    <PaperQuote variant="danger" icon="warning" title="Saved commands unreadable" role="alert">
-                        {props.loadError}
-                    </PaperQuote>
-                </Show>
                 <Show
                     when={props.commands.length > 0}
                     fallback={
-                        <Show when={!props.loadError}>
+                        <Show
+                            when={!props.loadError}
+                            fallback={<PaperEmptyState icon="error" title="Couldn't load" />}
+                        >
                             <PaperEmptyState icon="bookmarks" title="No saved commands" description="Save one below." />
                         </Show>
                     }
@@ -201,7 +183,7 @@ function SavedCommandsModal(props: {
                                                     disabled={props.runs[saved.id]?.state === "running"}
                                                     title={`Run ${saved.command}`}
                                                     aria-label={`Run ${saved.label}`}
-                                                    onClick={() => void run("Command not started", () => terminal.calls.runSavedCommand({ id: saved.id }))}
+                                                    onClick={() => void run(START_FAILED, () => terminal.calls.runSavedCommand({ id: saved.id }))}
                                                 >
                                                     <PaperIcon>play_arrow</PaperIcon>
                                                 </PaperButton>
@@ -211,7 +193,7 @@ function SavedCommandsModal(props: {
                                                     icon
                                                     title={`Remove ${saved.label}`}
                                                     aria-label={`Remove ${saved.label}`}
-                                                    onClick={() => void run("Command not removed", () => terminal.calls.removeSavedCommand({ id: saved.id }))}
+                                                    onClick={() => void run("Couldn't remove the command", () => terminal.calls.removeSavedCommand({ id: saved.id }))}
                                                 >
                                                     <PaperIcon>delete</PaperIcon>
                                                 </PaperButton>
@@ -254,13 +236,6 @@ function SavedCommandsModal(props: {
                         </PaperText>
                     </Show>
                 </PaperFlex>
-                <Show when={shownError()}>
-                    {(shown) => (
-                        <PaperQuote variant="danger" icon="warning" title={shown().title} role="alert">
-                            {shown().message}
-                        </PaperQuote>
-                    )}
-                </Show>
             </PaperFlex>
         </PaperModal>
     );

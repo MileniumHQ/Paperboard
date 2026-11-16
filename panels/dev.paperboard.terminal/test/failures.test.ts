@@ -2,7 +2,7 @@ import { afterEach, describe, expect, setDefaultTimeout, test } from "bun:test";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { clearWorkloads, testDaemon } from "./helpers/crane";
-import { alertShows, panelBrowser, servePanel, type Page } from "./helpers/browser";
+import { alertShows, panelBrowser, toastShows, servePanel, type Page } from "./helpers/browser";
 import { call, panelFiles, runBlock, startService, stopServices } from "./helpers/service";
 
 // each wait below has its own bound; a test as a whole may take longer than bun's 5 s default
@@ -75,14 +75,14 @@ describe("failures are shown", () => {
             await page.waitFor(screenShows(0, "pasted-2"), "the pasted lines to be read");
             expect(fs.readFileSync(path.join((await testDaemon()).home, "paste.txt"), "utf8")).toBe(lines);
             await paste(page, `"z".repeat(${17 * 1024 * 1024})`);
-            await page.waitFor(alertShows("Nothing pasted", "a terminal takes at most 16 MB at once. Nothing was sent."), "the refused paste");
+            await page.waitFor(toastShows("Couldn't paste", "a terminal takes at most 16 MB at once. Nothing was sent."), "the refused paste");
             await page.insertText("echo alive-$((2+2))");
             await pressEnter(page);
             await page.waitFor(screenShows(0, "alive-4"), "the session to keep working");
             expect(await page.evaluate<string>(`(${screens})[0]`)).not.toContain("Lost this terminal");
 
             // a rename the service refuses (the tab was closed from another
-            // window meanwhile) keeps the modal open with the reason
+            // window meanwhile) keeps the modal open, and a toast says why
             await page.evaluate(`document.querySelector('label[data-value="tab1"]').dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 40, clientY: 10 }))`);
             await page.waitFor(`[...document.querySelectorAll("[data-context-item]")].some((i) => i.innerText.includes("Rename Tab"))`, "the tab menu");
             await page.evaluate(`[...document.querySelectorAll("[data-context-item]")].find((i) => i.innerText.includes("Rename Tab")).click()`);
@@ -92,7 +92,7 @@ describe("failures are shown", () => {
             await page.evaluate(`document.querySelector("[role=dialog] input").select()`);
             await page.insertText("Renamed");
             await page.evaluate(`[...document.querySelectorAll("[role=dialog] button")].find((b) => b.innerText.trim() === "Save").click()`);
-            await page.waitFor(alertShows("Tab not renamed", 'Unknown terminal tab "tab1"'), "the refused rename");
+            await page.waitFor(toastShows("Couldn't rename the tab", 'Unknown terminal tab "tab1"'), "the refused rename");
             expect(await page.evaluate<boolean>(`Boolean(document.querySelector("[role=dialog] input"))`)).toBe(true);
             await page.evaluate(`[...document.querySelectorAll("[role=dialog] button")].find((b) => b.innerText.trim() === "Cancel").click()`);
             await page.waitFor(`!document.querySelector("[role=dialog] input")`, "the rename modal to close");
@@ -100,7 +100,7 @@ describe("failures are shown", () => {
             // with the service gone, a new tab can't open, and the panel says so
             await service.crash();
             await page.click('button[aria-label="New Tab"]');
-            await page.waitFor(alertShows("Tab not opened", "create-tab"), "the refused new tab");
+            await page.waitFor(toastShows("Couldn't open a tab", "create-tab"), "the refused new tab");
             expect(page.exceptions).toEqual([]);
         } finally {
             await page.close();
@@ -166,7 +166,7 @@ describe("failures are shown", () => {
                     .then(() => page.evaluate(`[...document.querySelectorAll("[role=menuitem]")].find((i) => i.innerText.includes(${JSON.stringify(name)}) && !i.innerText.includes(${JSON.stringify(not)})).click()`));
 
             await menuItem("Copy", "Last Output");
-            await page.waitFor(alertShows("Nothing copied", "Nothing is selected"), "the empty copy to be said");
+            await page.waitFor(toastShows("Couldn't copy", "Nothing is selected"), "the empty copy to be said");
             expect(await page.evaluate<unknown>("window.copied")).toBeUndefined();
 
             await runBlock("type-in-tab", { tab: "tab1", text: "echo copied-$((2+3))\n" });

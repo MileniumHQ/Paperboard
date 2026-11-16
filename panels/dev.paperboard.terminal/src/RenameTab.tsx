@@ -1,35 +1,31 @@
 // Renaming a tab. The modal stays open until the service has the new name,
-// so a refusal is shown beside the field that caused it.
-import { createSignal, Show } from "solid-js";
-import { PaperButton, PaperFlex, PaperInput, PaperModal, PaperQuote } from "@mileniumhq/paperui";
-import { errorMessage } from "@mileniumhq/paperapi";
+// so a refusal is a toast over it, and the name typed is still there to retry.
+import { createSignal } from "solid-js";
+import { PaperButton, PaperFlex, PaperInput, PaperModal, showError } from "@mileniumhq/paperui";
 import { terminal } from "./client";
 
 export function createRenameTab() {
     const [tabId, setTabId] = createSignal<string | null>(null);
     const [value, setValue] = createSignal("");
     const [saving, setSaving] = createSignal(false);
-    const [error, setError] = createSignal("");
 
     /** opens on the tab, starting from the name it shows */
     const open = (id: string, shown: string) => {
         setTabId(id);
         setValue(shown);
-        setError("");
     };
     const close = () => setTabId(null);
     const canSave = () => value().trim() !== "" && !saving();
     const save = async () => {
         const id = tabId();
         if (!id || !canSave()) return;
-        setError("");
         setSaving(true);
         try {
             // the new label arrives through the service's state
             await terminal.calls.renameTab({ id, label: value().trim() });
             close();
         } catch (err) {
-            setError(errorMessage(err));
+            showError("Couldn't rename the tab", err);
         } finally {
             setSaving(false);
         }
@@ -61,11 +57,6 @@ export function createRenameTab() {
                     }}
                     autofocus
                 />
-                <Show when={error()}>
-                    <PaperQuote variant="danger" icon="warning" title="Tab not renamed" role="alert">
-                        {error()}
-                    </PaperQuote>
-                </Show>
             </PaperFlex>
         </PaperModal>
     );

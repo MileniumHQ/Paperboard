@@ -3,7 +3,7 @@ import { Terminal, type IMarker } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { SearchAddon } from "@xterm/addon-search";
 import { WebLinksAddon } from "@xterm/addon-web-links";
-import { copyText, createLatest, pasteText, type ActionFailure } from "@mileniumhq/paperui";
+import { copyText, createLatest, pasteText, showError } from "@mileniumhq/paperui";
 import { terminalApi, errorMessage } from "@mileniumhq/paperapi";
 import { terminal } from "./client";
 import { terminalKeyAction, type TerminalKeyAction } from "./keys";
@@ -74,8 +74,6 @@ export async function pasteClipboard(id: string) {
 export interface TerminalComponentProps {
     id: string;
     onContextMenu?: (e: MouseEvent | PointerEvent) => void;
-    /** a copy, paste or link that failed, said where the panel can show it */
-    onFailure: (failure: ActionFailure) => void;
     /** the screen took the keyboard */
     onFocus?: () => void;
     /** Ctrl and Alt latched by the key row, applied to the next key typed */
@@ -108,7 +106,7 @@ export function TerminalComponent(props: TerminalComponentProps) {
 
         const openLink = (uri: string) => {
             if (!linkOpens(uri)) {
-                props.onFailure({ title: "Link not opened", message: `${uri} isn't a web address. Links open when they start with https://, or http:// on this computer.` });
+                showError("Couldn't open the link", `${uri} isn't a web address. Links open when they start with https://, or http:// on this computer.`);
                 return;
             }
             window.open(uri, "_blank", "noopener,noreferrer");
@@ -205,7 +203,7 @@ export function TerminalComponent(props: TerminalComponentProps) {
                 .catch((err) => {
                     if (refused === `${cols}x${rows}`) return;
                     refused = `${cols}x${rows}`;
-                    props.onFailure({ title: "Screen size not sent", message: `The shell didn't take this screen's size, so long lines may wrap wrong: ${errorMessage(err)}` });
+                    showError("Couldn't send the screen size", `The shell didn't take this screen's size, so long lines may wrap wrong: ${errorMessage(err)}`);
                 });
         };
         // fit before attach so the pty starts at its real size
@@ -222,7 +220,7 @@ export function TerminalComponent(props: TerminalComponentProps) {
                     term.options.fontFamily = family;
                     fit();
                 },
-                (err) => props.onFailure({ title: "Font not loaded", message: errorMessage(err) }),
+                (err) => showError("Couldn't load the code font", err),
             );
         }
         const resizeObserver = new ResizeObserver(fit);
@@ -233,9 +231,7 @@ export function TerminalComponent(props: TerminalComponentProps) {
             const action = terminalKeyAction(arg);
             if (!action) return true;
             if (action === "copy") {
-                copySelection(props.id).catch((err) =>
-                    props.onFailure({ title: "Nothing copied", message: errorMessage(err) }),
-                );
+                copySelection(props.id).catch((err) => showError("Couldn't copy", err));
             } else if (action === "previous-prompt" || action === "next-prompt") {
                 handle.jumpToPrompt(action === "previous-prompt" ? -1 : 1);
             } else {
@@ -319,7 +315,7 @@ export function TerminalComponent(props: TerminalComponentProps) {
             // an oversized paste is refused whole, and the session is fine
             const refusal = writeRefusal(data);
             if (refusal) {
-                props.onFailure({ title: "Nothing pasted", message: refusal });
+                showError("Couldn't paste", refusal);
                 return;
             }
             writeTerminal(props.id, data).catch((err) => {
@@ -388,7 +384,7 @@ export function TerminalComponent(props: TerminalComponentProps) {
             if (!text || !pasteRunsAtOnce(text, { atPrompt, bracketedPaste: term.modes.bracketedPasteMode })) return;
             ev.preventDefault();
             ev.stopPropagation();
-            handle.paste(text).catch((err) => props.onFailure({ title: "Nothing pasted", message: errorMessage(err) }));
+            handle.paste(text).catch((err) => showError("Couldn't paste", err));
         };
         containerRef.addEventListener("paste", onPasteHere, true);
 
@@ -404,7 +400,7 @@ export function TerminalComponent(props: TerminalComponentProps) {
             const text = ev.clipboardData?.getData("text/plain");
             if (!text) return;
             ev.preventDefault();
-            handle.paste(text).catch((err) => props.onFailure({ title: "Nothing pasted", message: errorMessage(err) }));
+            handle.paste(text).catch((err) => showError("Couldn't paste", err));
         };
         document.addEventListener("paste", onPaste);
 

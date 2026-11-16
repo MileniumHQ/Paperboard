@@ -11,8 +11,8 @@ import {
     useContextMenuState,
     copyText,
     createPaperMobile,
+    showError,
     showToast,
-    type ActionFailure,
     createPaperCompact,
     createRead,
 } from "@mileniumhq/paperui";
@@ -41,13 +41,8 @@ import type { SessionErrorKind, SplitDirection, TabLayout, TerminalState, Termin
 export default function App() {
     const [activeTab, setActiveTab] = createSignal("");
     const [contextTabId, setContextTabId] = createSignal<string | null>(null);
-    // a tab action the service refused: shown over the terminals until
-    // dismissed, or until the next action replaces it
-    const [failure, setFailure] = createSignal<ActionFailure | null>(null);
-    const report = (title: string, after = "") => (err: unknown) => {
-        console.error(`[terminal] ${title}:`, err);
-        setFailure({ title, message: errorMessage(err) + after });
-    };
+    // a tab action the service refused, said as a toast
+    const report = (title: string, after = "") => (err: unknown) => showError(title, errorMessage(err) + after);
     // the tab list is the service's: every window on every computer mirrors
     // it, so a tab opened, renamed, moved or closed anywhere shows up here.
     // Keyed by id, so a tab keeps its object (and its live terminal) across
@@ -180,12 +175,10 @@ export default function App() {
         }
         // the tab leaves when the service says it closed; a failed close
         // leaves it in place, where closing it again retries
-        setFailure(null);
-        terminal.calls.closeTab({ id: closedId }).catch(report("Tab not closed"));
+        terminal.calls.closeTab({ id: closedId }).catch(report("Couldn't close the tab"));
     };
     // a new tab opens where you are: in the folder of the shell in front
     const addTab = async (shell?: string) => {
-        setFailure(null);
         try {
             const besides = currentSession();
             const id = await terminal.calls.createTab({ besides: besides || undefined, shell });
@@ -196,7 +189,7 @@ export default function App() {
             setActiveTab(id);
             focusSession(id);
         } catch (err) {
-            report("Tab not opened")(err);
+            report("Couldn't open a tab")(err);
         }
     };
     const handleSwitchTab = (id: string) => {
@@ -204,7 +197,7 @@ export default function App() {
         // the last used tab is what the next window opens on
         terminal.calls
             .touchTab({ id })
-            .catch(report("Tab not remembered", ". The next window may open on another tab."));
+            .catch(report("Couldn't remember the tab", ". The next window may open on another tab."));
     };
     // a shell picked in the tab list: its tab is shown, and it has the keyboard
     const chooseSession = (id: string) => {
@@ -222,18 +215,16 @@ export default function App() {
         // shown at once; the service's order is the truth, so a failed
         // reorder pulls it back
         service.set((prev) => prev && { ...prev, tabs: reordered });
-        setFailure(null);
         terminal.calls
             .reorderTabs({ orderedIds: reordered.map((t) => t.id) })
             .catch((err) => {
-                report("Tab order not saved", ". The tabs are back in their saved order.")(err);
+                report("Couldn't save the tab order", ". The tabs are back in their saved order.")(err);
                 terminal.state
                     .refresh()
-                    .catch(report("Tabs not reloaded", ". This window may show an order the service doesn't have."));
+                    .catch(report("Couldn't reload the tabs", ". This window may show an order the service doesn't have."));
             });
     };
     const split = (tabId: string, direction: SplitDirection) => {
-        setFailure(null);
         terminal.calls
             .splitTab({ id: tabId, direction })
             .then(async (pane) => {
@@ -242,44 +233,36 @@ export default function App() {
                 setFocusedPane(tabId, pane);
                 focusSession(pane);
             })
-            .catch(report("Tab not split"));
+            .catch(report("Couldn't split the tab"));
     };
     const unsplit = async (tabId: string) => {
         const pane = tabs().find((t) => t.id === tabId)?.split?.session.id;
         const busy = pane ? runningIn([pane]) : [];
         if (busy.length > 0 && !(await closeConfirm.confirm("split", busy))) return;
-        setFailure(null);
-        terminal.calls.unsplitTab({ id: tabId }).catch(report("Split not closed"));
+        terminal.calls.unsplitTab({ id: tabId }).catch(report("Couldn't close the split"));
     };
     const toggleLayout = () => {
-        setFailure(null);
         const next: TabLayout = vertical() ? "horizontal" : "vertical";
         // shown at once; the service's layout is the truth
         const setLayout = (layout: TabLayout) => service.set((prev) => prev && { ...prev, layout });
         setLayout(next);
         terminal.calls.setTabLayout({ layout: next }).catch((err) => {
             setLayout(next === "vertical" ? "horizontal" : "vertical");
-            report("Layout not saved")(err);
+            report("Couldn't save the layout")(err);
         });
     };
     // the phone shows no pointer or selection handles, so a copy says it happened
     const copied = (what: string) => mobile() && showToast({ title: `${what} copied`, variant: "success", duration: 1500 });
     const copy = () => {
-        setFailure(null);
-        copySelection(currentSession()).then(() => copied("Selection"), report("Nothing copied"));
+        copySelection(currentSession()).then(() => copied("Selection"), report("Couldn't copy"));
     };
     const paste = () => {
-        setFailure(null);
-        pasteClipboard(currentSession()).catch(report("Nothing pasted"));
+        pasteClipboard(currentSession()).catch(report("Couldn't paste"));
     };
     const copyLastOutput = () => {
-        setFailure(null);
         const output = currentScreen()?.lastOutput();
         if (output === null || output === undefined) {
-            setFailure({
-                title: "No output to copy",
-                message: "No command has finished in this shell yet. bash, zsh, fish and PowerShell mark their commands; sh and cmd don't.",
-            });
+            showError("Couldn't copy the last output", "No command has finished in this shell yet. bash, zsh, fish and PowerShell mark their commands; sh and cmd don't.");
             return;
         }
         copyText(output)
@@ -287,7 +270,7 @@ export default function App() {
                 if (!ok) throw new Error("The clipboard refused the output.");
                 copied("Last output");
             })
-            .catch(report("Output not copied"));
+            .catch(report("Couldn't copy the last output"));
     };
     // the phone can't select text on the screen, so its Copy copies what is
     // selected or, with nothing selected, the last command's output
@@ -338,7 +321,6 @@ export default function App() {
                 focused={activeTab() === paneProps.tab.id && focusedOf(paneProps.tab) === paneProps.session}
                 onFocus={() => setFocusedPane(paneProps.tab.id, paneProps.session)}
                 onContextMenu={terminalMenu.openAtMouse}
-                onFailure={(shown) => setFailure(shown)}
                 onActivity={() => attention.output(paneProps.session)}
                 onBell={() => attention.bell(paneProps.session)}
                 onRunning={(command) => setRunning(paneProps.session, command)}
@@ -395,15 +377,8 @@ export default function App() {
                     </PaperFlex>
                 </Show>
                 <PaperFlex direction="column" flex minWidth={0} minHeight={0} fullHeight={vertical()}>
-                    <Show when={failure() || sessionErrors().length > 0}>
+                    <Show when={sessionErrors().length > 0}>
                         <PaperFlex direction="column" gap="half" fullWidth padding="half">
-                            <Show when={failure()}>
-                                {(shown) => (
-                                    <PaperQuote variant="danger" icon="warning" title={shown().title} role="alert" onDismiss={() => setFailure(null)}>
-                                        {shown().message}
-                                    </PaperQuote>
-                                )}
-                            </Show>
                             <For each={sessionErrors()}>
                                 {(key) => (
                                     <PaperQuote variant="warning" icon="warning" title={describeSessionError(key).title} role="alert" onDismiss={() => setPutAway(key, true)}>
