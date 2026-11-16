@@ -24,7 +24,11 @@ afterEach(async () => {
 
 const NEXT = `document.querySelector('form button[type=submit]')`;
 const CHAT = `document.querySelector('[aria-label="Ada: computer and settings"]')`;
-const SAVE_ERROR = `[...document.querySelectorAll("[data-paper-toasts] [role=alert]")].find((a) => a.innerText.includes("Couldn't save the settings"))`;
+// a refused save stands until Finish goes through, so it's said in place, never in a toast that could cover Finish
+const SAVE_ERROR = `document.querySelector(${JSON.stringify(`[data-paper-error][aria-label="Couldn't save the settings"]`)})`;
+const TOASTS = `[...document.querySelectorAll("[data-paper-toasts] [role=alert], [data-paper-toasts] [role=status]")].map((a) => a.innerText)`;
+/** whether nothing covers the middle of Finish: what's there is Finish itself */
+const FINISH_CLEAR = `(() => { const r = ${NEXT}.getBoundingClientRect(); const at = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2); return Boolean(at && ${NEXT}.contains(at)); })()`;
 
 // the name step's field, found by its label and marked to be typed in
 const NAME = `[data-test-field="name"]`;
@@ -83,14 +87,16 @@ describe("the first meeting", () => {
             // still the meeting, with its way to finish
             expect(await page.evaluate(`Boolean(${CHAT})`)).toBe(false);
             expect(await page.evaluate(`${NEXT}.innerText`)).toContain("Let's chat");
+            // said where it happened, at once (it came of pressing Finish), and why
+            expect(await page.evaluate(`${SAVE_ERROR}.getAttribute("role")`)).toBe("alert");
+            expect(await page.evaluate<string>(`${SAVE_ERROR}.innerText.replace("Couldn't save the settings", "")`), "the refusal doesn't say why").toMatch(/\S/);
+            expect(await page.evaluate(TOASTS), "a refusal that stands is a toast").toEqual([]);
+            // nothing covers Finish, which is the way to try again: the error doesn't repeat it
+            expect(await page.evaluate(FINISH_CLEAR), "Finish is covered").toBe(true);
+            expect(await page.evaluate(`Boolean(${SAVE_ERROR}.querySelector("button"))`)).toBe(false);
         } finally {
             fs.rmSync(blocked, { recursive: true, force: true });
         }
-        // the toast doesn't repeat Finish: Finish itself is the way to try again,
-        // once the toast in the corner is closed
-        expect(await page.evaluate(`Boolean(${SAVE_ERROR}.querySelector('button:not([aria-label="Close"])'))`)).toBe(false);
-        await page.click(`[data-paper-toasts] [role=alert] [aria-label="Close"]`);
-        await page.waitFor(`!${SAVE_ERROR}`, "the toast closed");
         await next(page, "Finish, still there to try again");
         await panel.settingsSaved(SAVED);
         await page.waitFor(CHAT, "the chat");

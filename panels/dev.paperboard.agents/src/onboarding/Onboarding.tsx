@@ -1,7 +1,7 @@
 import { For, Index, Match, Show, Switch, createEffect, createSignal, on, onCleanup, onMount, type JSX } from "solid-js";
 import {
     PaperButton,
-    PaperEmptyState,
+    PaperError,
     PaperFlex,
     PaperInput,
     PaperCard,
@@ -12,7 +12,6 @@ import {
     PaperWizard,
     PaperText,
     PaperWizardStep,
-    createFailureToast,
     useWizard,
 } from "@mileniumhq/paperui";
 import { errorMessage } from "@mileniumhq/paperapi";
@@ -163,9 +162,7 @@ function Scenes(props: {
     wizard.setCurrentStep(Math.min(props.keptStep, STEP.computer));
     const name = () => props.name().trim();
     const machine = () => props.agent.state.computer;
-    // a refused save says why; Finish (for "Not yet") and the setup step each have their own Try again
-    createFailureToast(() => props.computer() === "later" && props.saveError(), { title: "Couldn't save the settings" });
-    createFailureToast(() => props.computer() === "setup" && props.saveError(), { title: "Couldn't start the setup" });
+    // a refused save says why on the last step, in place; Finish (for "Not yet") and the setup's Try again each try it again
 
     // what the scene shows besides the speech, once the speech is done
     const [revealed, setRevealed] = createSignal(false);
@@ -197,7 +194,6 @@ function Scenes(props: {
 
     // the chosen brain's own models; a model belongs to its harness, so another brain is chosen afresh
     const models = createModels(props.agent, () => (brainReady() ? props.harness() : undefined));
-    createFailureToast(models.error, { title: "Couldn't list the models" });
     createEffect(
         on(
             props.harness,
@@ -301,22 +297,16 @@ function Scenes(props: {
     // leaving the panel part way doesn't start the meeting over; the newest
     // answer's failure is the one shown
     const [keepError, setKeepError] = createSignal<string | null>(null);
-    createFailureToast(keepError, { title: "Couldn't keep your answers so far" });
     let keeping = 0;
-    createEffect(
-        on(
-            [wizard.currentStep, props.name, props.harness, props.model],
-            ([step, typed, h, m]) => {
-                if (step > STEP.computer) return;
-                const mine = ++keeping;
-                props.agent.calls.keepOnboarding({ step, name: typed, harness: h ?? null, model: m ?? null }).then(
-                    () => mine === keeping && setKeepError(null),
-                    (e) => mine === keeping && setKeepError(errorMessage(e)),
-                );
-            },
-            { defer: true },
-        ),
-    );
+    const keep = (step: number, typed: string, h: Harness | undefined, m: string | undefined) => {
+        if (step > STEP.computer) return;
+        const mine = ++keeping;
+        props.agent.calls.keepOnboarding({ step, name: typed, harness: h ?? null, model: m ?? null }).then(
+            () => mine === keeping && setKeepError(null),
+            (e) => mine === keeping && setKeepError(errorMessage(e)),
+        );
+    };
+    createEffect(on([wizard.currentStep, props.name, props.harness, props.model], ([step, typed, h, m]) => keep(step, typed, h, m), { defer: true }));
 
     // the speaker glides when a step's content re-centers the column, instead of jumping
     let above: HTMLDivElement | undefined;
@@ -395,7 +385,7 @@ function Scenes(props: {
                                         <PaperText preset="hint">{brainLine(h(), brain()!)}</PaperText>
                                     </Show>
                                     {/* only while there's something to show: an empty one would still take a gap */}
-                                    <Show when={brain()?.phase !== "ready" && brain()?.phase !== "installed" && brain()?.phase !== "failed"}>
+                                    <Show when={brain()?.phase !== "ready" && brain()?.phase !== "installed"}>
                                         <BrainStatus agent={props.agent} harness={h()} actions={actions} />
                                     </Show>
                                     <Show when={!["installing", "signing-in", "unsupported"].includes(brain()?.phase ?? "")}>
@@ -427,7 +417,12 @@ function Scenes(props: {
                         </For>
                     </PaperSelector>
                     <Show when={models.error()}>
-                        <PaperText preset="hint">You can pick one later in settings.</PaperText>
+                        {(err) => (
+                            <>
+                                <PaperError title="Couldn't list the models" error={err()} action={{ label: "Try again", disabled: models.loading(), onClick: () => void models.reload() }} />
+                                <PaperText preset="hint">You can pick one later in settings.</PaperText>
+                            </>
+                        )}
                     </Show>
                 </Reveal>
             </PaperWizardStep>
@@ -454,27 +449,22 @@ function Scenes(props: {
 
             {/* always there, so the computer's step is never taken for the last one before it's answered */}
             <PaperWizardStep class={styles.step} index={STEP.last} canProceed={ready()}>
+                {/* "Not yet": Finish saves, and a refused save says why here, clear of Finish, which tries it again */}
+                <Show when={props.computer() === "later" && props.saveError()}>
+                    {(err) => <PaperError alert title="Couldn't save the settings" error={err()} />}
+                </Show>
                 <Show when={props.computer() === "setup"}>
                     <Show when={revealed()}>
                         <div class={styles.install}>
                             <PaperSectionHeader title={`Setting up ${name()}'s computer`} role="heading" aria-level={2} />
                             <Switch>
                                 <Match when={props.saveError()}>
-                                    <PaperEmptyState icon="error" title="Couldn't start">
-                                        <PaperButton disabled={props.saving()} onClick={() => void props.save()}>
-                                            Try again
-                                        </PaperButton>
-                                    </PaperEmptyState>
+                                    {(err) => <PaperError alert title="Couldn't start the setup" error={err()} action={{ label: "Try again", disabled: props.saving(), onClick: () => void props.save() }} />}
                                 </Match>
                                 <Match when={true}>
-                                    <SetupProgress computer={machine()} />
+                                    <SetupProgress computer={machine()} retry={{ label: "Try again", disabled: props.saving(), onClick: () => void props.save() }} />
                                     <Show when={machine().phase === "failed" || machine().phase === "unsupported"}>
-                                        <PaperFlex direction="row" wrap gap="full">
-                                            <Show when={machine().phase === "failed"}>
-                                                <PaperButton disabled={props.saving()} onClick={() => void props.save()}>
-                                                    Try again
-                                                </PaperButton>
-                                            </Show>
+                                        <PaperFlex direction="row">
                                             <PaperButton variant="text" onClick={props.onDone}>
                                                 Chat without it for now
                                             </PaperButton>
@@ -486,6 +476,16 @@ function Scenes(props: {
                     </Show>
                 </Show>
             </PaperWizardStep>
+            {/* the answers so far aren't kept: the meeting goes on, but leaving it now starts it over */}
+            <Show when={wizard.currentStep() <= STEP.computer && keepError()}>
+                {(err) => (
+                    <PaperError
+                        title="Couldn't keep your answers so far"
+                        error={err()}
+                        action={{ label: "Try again", onClick: () => keep(wizard.currentStep(), props.name(), props.harness(), props.model()) }}
+                    />
+                )}
+            </Show>
             <div class={styles.below} />
             <Providers agent={props.agent} open={providers()} onClose={() => setProviders(false)} />
         </div>
