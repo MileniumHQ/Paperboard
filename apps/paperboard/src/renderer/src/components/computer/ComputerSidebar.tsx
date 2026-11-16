@@ -57,7 +57,9 @@ const ComputerSidebar: Component<ComputerSidebarProps> = (props) => (
                 const updating = (panel: PanelItem) => props.updatingPanels.has(`${comp.id}::${panel.id}`);
                 const problems = followPanelProblems(comp.id, () => comp.name, () => props.panelsLoadError[comp.id] === "");
                 const switchFailed = () => props.switchError[comp.id];
-                const listFailed = () => !switchFailed() && props.panelsLoadError[comp.id];
+                // with none listed, the computer's own page says it beside this list: once is enough
+                const saidBeside = () => !props.mobile && panels().length === 0 && tab() === "landing";
+                const listFailed = () => !switchFailed() && !saidBeside() && props.panelsLoadError[comp.id];
                 const retry = () => (switchFailed() ? props.onRetrySwitch(comp.id) : props.onRetryPanels(comp.id));
                 // installed panels the computer refuses, each with why
                 const refused = () => (props.invalidPanelsByComputer[comp.id] ?? []).map((broken) => `${broken.id}: ${broken.error}`).join("\n");

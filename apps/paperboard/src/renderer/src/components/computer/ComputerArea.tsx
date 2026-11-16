@@ -175,7 +175,12 @@ export default function ComputerArea(props: {
                                 overflow="hidden"
                                 hidden={!(activeComputerId() === comp.id && getSelectedTab(comp.id) === "landing")}
                             >
-                                <LandingView computer={comp} panelCount={panelsByComputer()[comp.id]?.length} />
+                                <LandingView
+                                    computer={comp}
+                                    panelCount={panelsByComputer()[comp.id]?.length}
+                                    loadError={props.panels.panelsLoadError()[comp.id]}
+                                    onRetry={() => void refreshPanelsForComputer(comp.id)}
+                                />
                             </PaperFlex>
                         )}
                     </For>

@@ -10,17 +10,26 @@ import { API_DEMO, bootShell, clickText, errorGone, errorShown, type Shell } fro
 
 // The daemon refuses the shell's calls of an action while it is broken here:
 // each goes out under a name the daemon doesn't know, and comes back with its
-// own refusal. Panel pages are frames, with sockets of their own.
+// own refusal; a paired computer's calls ride a tunnel frame, refused inside it.
+// Panel pages are frames, with sockets of their own.
 const BREAK_CALLS = `(() => {
     if (window !== window.top) return;
     const broken = new Set();
     const refused = {};
+    const refuse = (message) => {
+        if (!message || !broken.has(message.action)) return null;
+        refused[message.action] = (refused[message.action] ?? 0) + 1;
+        return { ...message, action: message.action + ":refused" };
+    };
     const send = WebSocket.prototype.send;
     WebSocket.prototype.send = function (data) {
         const message = typeof data === "string" ? JSON.parse(data) : null;
-        if (!message || !broken.has(message.action)) return send.call(this, data);
-        refused[message.action] = (refused[message.action] ?? 0) + 1;
-        send.call(this, JSON.stringify({ ...message, action: message.action + ":refused" }));
+        if (message?.type === "tunnel") {
+            const inner = refuse(JSON.parse(message.payload));
+            return send.call(this, inner ? JSON.stringify({ ...message, payload: JSON.stringify(inner) }) : data);
+        }
+        const changed = refuse(message);
+        return send.call(this, changed ? JSON.stringify(changed) : data);
     };
     window.__break = (action) => broken.add(action);
     window.__mend = (action) => broken.delete(action);
@@ -81,6 +90,36 @@ test("a panel list that can't be read stands over the panels it last listed, and
     await page.evaluate(`window.__mend("panel:list")`);
     await pressIn(title, "Try again");
     await page.waitFor(`${errorGone(title)} && !!${row}`, "the list, and the failure gone");
+    expect(page.exceptions).toEqual([]);
+});
+
+// Inventory: Core contracts — a computer whose panels couldn't be listed never says "No panels yet": its main view says why, with Try again.
+test("a computer whose panel list can't be read says so in its main view, never No panels yet, and Try again lists them", async () => {
+    const { page } = shell;
+    await page.click(WORKSHOP);
+    await page.waitFor(`document.querySelector(${JSON.stringify(WORKSHOP)})?.getAttribute("aria-checked") === "true"`, "Workshop open");
+    const noPanels = `document.body.innerText.includes("No panels yet")`;
+    await page.waitFor(noPanels, "Workshop's empty page");
+    await page.evaluate(`window.__break("panel:list")`);
+    // choosing the computer again lists its panels again
+    await page.click(rail("Home"));
+    await page.click(WORKSHOP);
+    const title = "Couldn't load this computer's panels";
+    await page.waitFor(errorShown(title, "Unknown action: panel:list:refused", "Try again"), "why, in Workshop's main view");
+    expect(await page.evaluate(noPanels)).toBe(false);
+    // said once: the list beside it doesn't say it again
+    expect(await page.evaluate(`[...document.querySelectorAll("[data-paper-error]")].filter((e) => e.offsetParent !== null).length`)).toBe(1);
+
+    // Try again in the main view asks again, and a refusal leaves the failure standing
+    const asked = await page.evaluate<number>(`window.__refused("panel:list")`);
+    await pressIn(title, "Try again");
+    await page.waitFor(`window.__refused("panel:list") > ${asked} && ${errorShown(title)}`, "Try again to ask again, and still be refused");
+    // once the computer answers, the empty page it really has. Pressed in
+    // the page itself: the shell lists the panels again on its own as
+    // Workshop's tunnel settles, and that answer may land first
+    await page.evaluate(`window.__mend("panel:list")`);
+    await page.evaluate(`[...document.querySelectorAll("[data-paper-error]")].find((e) => e.getAttribute("aria-label") === ${JSON.stringify(title)})?.querySelector("button")?.click()`);
+    await page.waitFor(`${errorGone(title)} && ${noPanels}`, "the empty page, and the failure gone");
     expect(page.exceptions).toEqual([]);
 });
 
