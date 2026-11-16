@@ -7,7 +7,7 @@ import { initialServerState } from "../../service/initialState";
 import { appendCapped } from "../../service/types";
 import type { GameService } from "../serviceTypes";
 import {
-    ConsoleBuffer, assertHost, exclusive, exists, fileStamp, hostSupportHere, offlineBackup, pushChat, redact, report, resumeAfterBackup,
+    ConsoleBuffer, assertHost, exclusive, exists, fileStamp, hostSupportHere, offlineBackup, pushChat, redact, report,
     serverSecret, settingPort, settled, singleLine, unlessMissing, waitUntil, writePrivate,
 } from "../serviceKit";
 import { terraria } from "./index";
@@ -300,7 +300,6 @@ export function terrariaService(ctx: Server): GameService {
                 for (const directory of installDirectories()) await recoverRelease(path.join(await ctx.root(), "install", directory));
                 await generate("");
             }
-            await resumeAfterBackup(ctx, GAME, running);
         },
         async beforeRemove() { if (local.busy) throw new Error("Wait for Terraria's current operation"); },
         async dispose() { local.console.dispose(); },
@@ -382,7 +381,7 @@ export function terrariaService(ctx: Server): GameService {
             yield settingPort({ name: "terraria", label: "Terraria", protocol: "tcp", key: "port", fallback: DEFAULT_PORT }, saved);
         },
         backup: offlineBackup(ctx, {
-            gameId: GAME, name: "Terraria", processId: PROC, flag: () => local,
+            name: "Terraria", processId: PROC, flag: () => local,
             announce: () => ctx.process.write(PROC, "say Server stopping for backup or restore.\n"),
             save, clean: () => generate(""),
             // Terraria saves again as it exits; an unchanged world means that save failed

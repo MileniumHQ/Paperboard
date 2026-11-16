@@ -273,22 +273,26 @@ export function settingPort(spec: { name: string; label: string; protocol: PortS
 }
 
 /**
- * The resume marker of an offline backup or restore. It lives outside the
- * server folder: a restored snapshot must never decide whether to restart.
+ * The resume marker of a backup or restore that stopped a running server. It
+ * lives outside the server folder: a restored snapshot must never decide
+ * whether to restart.
  */
-const resumeMarker = (ctx: Server, gameId: string) => rawFiles.getPath(`.${gameId}-resume/${ctx.id}`, PANEL_ID);
+const resumeMarker = (ctx: Server) => rawFiles.getPath(`.${ctx.stored.game}-resume/${ctx.id}`, PANEL_ID);
 
-/** Starts a server an offline backup stopped, once Paperboard is back. */
-export async function resumeAfterBackup(ctx: Server, gameId: string, running: boolean) {
-    const marker = await resumeMarker(ctx, gameId);
-    if (!(await exists(marker))) return;
-    // lifecycle reaches every game's service, which import this module
-    if (!running) await (await import("../service/lifecycle")).startServerInstance(ctx);
+/** Marks a running server to start again once the service is back, the work that stops it done. */
+export async function markResume(ctx: Server) {
+    await writePrivate(await resumeMarker(ctx), "resume after offline operation\n");
+}
+
+/** Takes a server's resume marker: true when a backup or restore stopped it and it should start again. */
+export async function takeResume(ctx: Server): Promise<boolean> {
+    const marker = await resumeMarker(ctx);
+    if (!(await exists(marker))) return false;
     await fs.unlink(marker);
+    return true;
 }
 
 export interface OfflineBackupSpec {
-    gameId: string;
     name: string;
     processId: string;
     flag: () => BusyFlag;
@@ -308,7 +312,10 @@ export interface OfflineBackupSpec {
  */
 export function offlineBackup(ctx: Server, spec: OfflineBackupSpec): GameService["backup"] {
     /** Starts the server again when this backup stopped it, and drops the marker. */
-    const recover = async () => resumeAfterBackup(ctx, spec.gameId, await ctx.process.exists(spec.processId));
+    const recover = async () => {
+        // lifecycle reaches every game's service, which import this module
+        if ((await takeResume(ctx)) && !(await ctx.process.exists(spec.processId))) await (await import("../service/lifecycle")).startServerInstance(ctx);
+    };
     async function before() {
         const flag = spec.flag();
         if (flag.busy) throw new Error(`Wait for the ${spec.name} operation to finish`);
@@ -319,7 +326,7 @@ export function offlineBackup(ctx: Server, spec: OfflineBackupSpec): GameService
         try {
             await spec.announce();
             await spec.save();
-            await writePrivate(await resumeMarker(ctx, spec.gameId), "resume after offline operation\n");
+            await markResume(ctx);
             marked = true;
             const saved = await spec.exitStamp?.();
             await (await import("../service/lifecycle")).stopServerInstance(ctx);

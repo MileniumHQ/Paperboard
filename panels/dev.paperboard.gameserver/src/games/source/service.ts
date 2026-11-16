@@ -6,7 +6,7 @@ import path from "node:path";
 import { initialServerState } from "../../service/initialState";
 import { validateOptions } from "../options";
 import { steamInstall, steamInstallCalls, steamUpdateStatus, type SteamInstallSpec } from "../steam/installAction";
-import { isLinked, offlineBackup, redact, report, resumeAfterBackup, settingPort, singleLine } from "../serviceKit";
+import { isLinked, offlineBackup, redact, report, settingPort, singleLine } from "../serviceKit";
 import type { GameDefinition } from "../types";
 import type { GameService } from "../serviceTypes";
 import { rotatesMaps, type SourceGameSpec } from "./index";
@@ -94,7 +94,6 @@ export function sourceService(spec: SourceGameSpec, definition: GameDefinition):
                     game.modsActive = (await modsOn(game)) && (await isLinked(path.join(await game.gameDir(), "addons")));
                     await game.players.readStatus().catch((err) => report(ctx, `Could not read who is on ${spec.name}`, err));
                 } else await releaseFiles().catch((err) => report(ctx, `Could not put ${spec.name}'s files back after its last run`, err));
-                if (spec.offlineBackups) await resumeAfterBackup(ctx, spec.id, running);
             },
             async beforeRemove() { if (game.busy) throw new Error(`Wait for ${spec.name}'s current operation`); },
             async dispose() {
@@ -167,7 +166,7 @@ export function sourceService(spec: SourceGameSpec, definition: GameDefinition):
             },
             backup: spec.offlineBackups
                 ? offlineBackup(ctx, {
-                    gameId: spec.id, name: spec.name, processId: game.processId, flag: () => game,
+                    name: spec.name, processId: game.processId, flag: () => game,
                     announce: async () => { await game.rcon().exec("say The server is stopping for a backup and will be back shortly."); },
                     // the server writes what it keeps as it goes, and closes it as it quits
                     save: async () => {},

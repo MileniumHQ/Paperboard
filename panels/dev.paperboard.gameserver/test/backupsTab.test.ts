@@ -6,7 +6,7 @@ import * as path from "node:path";
 import { backupApi, backupLocationsApi } from "@mileniumhq/paperapi";
 import { startTestDaemon, type TestDaemon } from "./helpers/crane";
 import { installPanel, restartService } from "./helpers/installedPanel";
-import { openPage, servePanel } from "./helpers/browser";
+import { openPage, panelHostUrl, PANEL_DOC, servePanel } from "./helpers/browser";
 import { writeTree } from "./helpers/tmp";
 import { PANEL_ID } from "../src/servers";
 
@@ -20,8 +20,12 @@ beforeAll(async () => {
     // the daemon runs the installed service: a restore stops and starts it
     installPanel(dataDir);
     fs.mkdirSync(path.join(dataDir, "configs"), { recursive: true });
-    fs.writeFileSync(path.join(dataDir, "configs", `${PANEL_ID}.json`), JSON.stringify({ version: 2, serversDirectory: SERVERS, servers: [{ id: "s-mc", name: "Survival", game: "minecraft", directory: `${SERVERS}/s-mc`, createdAt: 0, settings: { configured: true, software: "paper", version: "1.21.1" } }] }));
+    fs.writeFileSync(path.join(dataDir, "configs", `${PANEL_ID}.json`), JSON.stringify({ version: 2, serversDirectory: SERVERS, servers: [
+        { id: "s-mc", name: "Survival", game: "minecraft", directory: `${SERVERS}/s-mc`, createdAt: 0, settings: { configured: true, software: "paper", version: "1.21.1" } },
+        { id: "s-new", name: "Creative", game: "minecraft", directory: `${SERVERS}/s-new`, createdAt: 0, settings: { configured: true, software: "paper", version: "1.21.1" } },
+    ] }));
     writeTree(folder, { "server.jar": "jar", "eula.txt": "eula=true\n", "notes.txt": "kept" });
+    writeTree(path.join(dataDir, "files", PANEL_ID, SERVERS, "s-new"), { "server.jar": "jar", "eula.txt": "eula=true\n" });
     daemon = await startTestDaemon();
     await restartService();
 });
@@ -66,6 +70,26 @@ describe("the Backups tab", () => {
             expect(fs.readFileSync(notes, "utf8")).toBe("kept");
             await page.settled();
             expect(await page.evaluate<string | undefined>(`${row("Before the update")}?.dataset.test`)).toBe("kept");
+            expect(page.exceptions).toEqual([]);
+        } finally {
+            await page.close();
+            served.stop();
+        }
+    }, 90_000);
+    test("Back Up Now with no location says it is backing up only once the chooser is answered", async () => {
+        const served = await servePanel(daemon);
+        const page = await openPage(panelHostUrl(served.url, "s-new"));
+        const inFrame = (expression: string) => `((document) => ${expression})(${PANEL_DOC})`;
+        const backUpNow = `[...document.querySelectorAll("button")].find((b) => b.innerText.includes("Back Up Now") && !b.disabled)`;
+        try {
+            await page.waitFor(inFrame(`document?.querySelector('input[name=serverMenu][value="backups"]')`), "the server menu");
+            await page.evaluate(inFrame(`document.querySelector('input[name=serverMenu][value="backups"]').click()`));
+            await page.waitFor(inFrame(`!!${backUpNow}`), "Back Up Now");
+            await page.evaluate(inFrame(`${backUpNow}.click()`));
+            // the shell's location chooser is open, and nobody has answered it
+            await page.waitFor(`window.shellRequests.includes("paperboard:backup-location")`, "the location chooser asked for");
+            await page.settled();
+            expect(await page.evaluate<string>(inFrame(`document.body.innerText`))).not.toContain("Backing up");
             expect(page.exceptions).toEqual([]);
         } finally {
             await page.close();

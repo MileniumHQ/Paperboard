@@ -123,7 +123,7 @@ describe("servers through restarts", () => {
             const after = await state.waitFor("s-e", (s) => s.serverStatus === "online", "s-e online again after the restart");
             // the address players copy is the port it listens on, and the Overview still says why
             expect(joinPort(after)).toBe(String(moved));
-            expect(after.portMoves).toEqual([{ label: "Game Server (Java)", from: chosen, to: moved, primary: true }]);
+            expect(after.portMoves).toEqual([{ label: "Minecraft", from: chosen, to: moved, primary: true }]);
             expect((await serverCalls("s-e").readGameOptions())["server-port"]).toBe(chosen);
 
             await serverCalls("s-e").stopServer();
@@ -188,5 +188,26 @@ describe("servers through restarts", () => {
         expect(readTree(serverDir("s-b"))).toEqual(before);
         const saved = JSON.parse(fs.readFileSync(path.join(dataDir, "configs", `${PANEL_ID}.json`), "utf8"));
         expect(saved.servers.map((s: { id: string }) => s.id)).toEqual(["s-a"]);
+    });
+
+    test("a running server a restore replaces starts again on the restored files, as a restore and not a crash", async () => {
+        const state = servicesState();
+        // a crash would leave it stopped: only the restore's own resume starts it
+        await serverCalls("s-a").writeAutomation({ patch: { restartAfterCrash: false } });
+        await backupLocationsApi.setForPanel(PANEL_ID, "local", undefined, "s-a");
+        const a = backupApi.forSource(PANEL_ID, "s-a");
+        const backup = await a.create({ label: "running" });
+        await serverCalls("s-a").startServer();
+        const seen = (await state.waitFor("s-a", (s) => s.serverStatus === "online", "s-a online")).serverEntries.length;
+        // its stand-in notes each start's pid in the server folder, which the restore replaces too
+        const pid = runs("s-a").at(-1);
+        fs.writeFileSync(path.join(serverDir("s-a"), "world", "level.dat"), "s-a after the backup");
+        await a.restore(backup.id);
+        expect(fs.readFileSync(path.join(serverDir("s-a"), "world", "level.dat"), "utf8")).toBe("s-a world");
+        const back = await state.waitFor("s-a", (s) => s.serverStatus === "online" && runs("s-a").at(-1) !== pid, "s-a started again on the restored files");
+        expect(alive(pid!)).toBe(false);
+        expect(back.serverEntries.slice(seen).map((e) => e.content).join("\n")).not.toContain("stopped while Paperboard was not running");
+        await serverCalls("s-a").stopServer();
+        await state.waitFor("s-a", (s) => s.serverStatus === "offline", "s-a to stop");
     });
 });

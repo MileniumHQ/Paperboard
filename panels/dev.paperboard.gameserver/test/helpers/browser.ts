@@ -57,6 +57,33 @@ frame.addEventListener("load", () => {
 });
 </script></body></html>`;
 
+// The shell's side of a panel frame: the panel's page for the server in
+// ?server= in a frame, challenged as the shell does it, so it can ask the
+// shell for what only the shell shows (the backup location chooser). Each
+// request it sends is kept in window.shellRequests and left unanswered, as
+// a chooser still open would be. Read the frame with PANEL_DOC.
+const PANEL_HOST = `<!doctype html><html><head><meta charset="utf-8"></head><body style="margin:0">
+<iframe id="panel" style="border:0;width:100vw;height:100vh"></iframe>
+<script>
+const frame = document.getElementById("panel");
+window.shellRequests = [];
+let changes = 0;
+const changed = () => (document.body.dataset.changes = String(++changes));
+window.addEventListener("message", (event) => {
+    if (event.source === frame.contentWindow && typeof event.data?.requestId === "string") { window.shellRequests.push(event.data.type); changed(); }
+});
+frame.addEventListener("load", () => {
+    new MutationObserver(changed).observe(frame.contentDocument, { subtree: true, childList: true, attributes: true, characterData: true });
+    frame.contentWindow.postMessage({ type: "paperboard:initialize", generation: "g1" }, "*");
+});
+frame.src = "./?server=" + encodeURIComponent(new URLSearchParams(location.search).get("server"));
+</script></body></html>`;
+
+/** the address of the shell's frame showing the page of `server`, under a servePanel() url */
+export const panelHostUrl = (served: string, server: string) => `${served}/panel-host.html?${new URLSearchParams({ server })}`;
+/** a page expression: the panel frame's document */
+export const PANEL_DOC = `document.getElementById("panel").contentDocument`;
+
 /** the address of Home's frame showing widget `id` at `w`x`h` for `server`, under a servePanel() url */
 export const widgetUrl = (served: string, id: string, server: string, size = { w: 2, h: 2 }) =>
     `${served}/widget-host.html?${new URLSearchParams({ id, server, w: String(size.w), h: String(size.h) })}`;
@@ -73,7 +100,7 @@ export async function waitForWidget(page: Page, predicate: string, what: string)
     }
 }
 
-/** serves the built UI with a panel credential the test daemon issued; widgetUrl() addresses a Home widget under it */
+/** serves the built UI with a panel credential the test daemon issued; widgetUrl() addresses a Home widget under it, panelHostUrl() a framed page */
 export async function servePanel(daemon: TestDaemon): Promise<{ url: string; stop: () => void }> {
     const dist = panelUi();
     const granted = await getTransport().call("auth:panel-token", { panelId: PANEL_ID });
@@ -84,6 +111,7 @@ export async function servePanel(daemon: TestDaemon): Promise<{ url: string; sto
         async fetch(req) {
             const pathname = new URL(req.url).pathname;
             if (pathname === "/widget-host.html") return new Response(WIDGET_HOST, { headers: { "content-type": "text/html; charset=utf-8" } });
+            if (pathname === "/panel-host.html") return new Response(PANEL_HOST, { headers: { "content-type": "text/html; charset=utf-8" } });
             const file = path.join(dist, pathname === "/" ? "index.html" : pathname);
             if (!file.startsWith(dist) || !fs.existsSync(file) || fs.statSync(file).isDirectory()) return new Response("Not found", { status: 404 });
             if (file.endsWith(".html")) {

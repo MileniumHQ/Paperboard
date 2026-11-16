@@ -12,7 +12,7 @@ import { steamInstall, steamInstallCalls, steamUpdateStatus, type SteamInstallSp
 import type { GameService } from "../serviceTypes";
 import {
     ConsoleBuffer, assertHost, exists, fileStamp, hostSupportHere, linkFolder, offlineBackup, playerPoller, pushChat, redact, report,
-    resumeAfterBackup, serverSecret, settingPort, settled, singleLine, waitUntil, writePrivate,
+    serverSecret, settingPort, settled, singleLine, waitUntil, writePrivate,
 } from "../serviceKit";
 import { palworld, options, PALWORLD_APP_ID } from "./index";
 import { decode, encode, parseOptionSettings, writeOptionSettings, type IniEntry } from "./ini";
@@ -254,7 +254,6 @@ export function palworldService(ctx: Server): GameService {
                     .then((metrics) => ctx.setState({ maxPlayers: metrics.maxplayernum }))
                     .catch((err) => report(ctx, "Could not read Palworld's player limit", err));
             } else await stripSecrets();
-            await resumeAfterBackup(ctx, GAME, running);
         },
         async beforeRemove() { if (local.busy) throw new Error("Wait for Palworld's current operation"); },
         async dispose() {
@@ -362,7 +361,7 @@ export function palworldService(ctx: Server): GameService {
             yield settingPort({ name: "palworld-rest", label: "Palworld REST API", protocol: "tcp", key: "restPort", fallback: DEFAULT_REST_PORT }, saved);
         },
         backup: offlineBackup(ctx, {
-            gameId: GAME, name: "Palworld", processId: PROC, flag: () => local,
+            name: "Palworld", processId: PROC, flag: () => local,
             announce: () => rest().announce("The server is stopping for a backup and will be back shortly."),
             save, clean: stripSecrets,
         }),

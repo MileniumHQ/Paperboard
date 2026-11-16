@@ -38,7 +38,7 @@ import { settingsBlocks } from "./service/settingsBlocks";
 import { assertGameCall, gameFor, games } from "./games";
 import { loadServerOptions } from "./service/options";
 import { joinPort } from "./core/portNames";
-import { report, waitUntil } from "./games/serviceKit";
+import { markResume, report, takeResume, waitUntil } from "./games/serviceKit";
 export * from "./service/types";
 
 export type { ServerSummary };
@@ -270,17 +270,22 @@ async function initialize(server: Server): Promise<Server> {
         if (server.icon) {
             await blocks.update(blocksProject(server)).catch((err) => report(server, "The Blocks Library can't show this server's icon", err));
         }
+        // a backup or restore that stopped the running server left a marker:
+        // it starts again, as that work would have at its end
+        const resume = await takeResume(server);
         // the server was running when this service last saw it and nobody
         // stopped it: it went down while Paperboard was not watching (the
-        // computer restarted, or the system ended it), which is a crash
-        if (wasRunning && !running) {
-            const restart = automation.restartAfterCrash;
-            server.setState((prev) => ({ serverEntries: appendCapped(prev.serverEntries, { type: "warn", content: `[Server] The server stopped while Paperboard was not running.${restart ? " Starting it again." : ""}` }) }));
+        // computer restarted, or the system ended it), which is a crash,
+        // unless a restore ended it
+        const crashed = wasRunning && !running;
+        const restart = !running && (resume || (crashed && automation.restartAfterCrash));
+        if (crashed) {
+            if (!resume) server.setState((prev) => ({ serverEntries: appendCapped(prev.serverEntries, { type: "warn", content: `[Server] The server stopped while Paperboard was not running.${restart ? " Starting it again." : ""}` }) }));
             // the game takes back what that run set aside, as it would have at its exit
             await releaseServer(server, portMoves);
-            // quiet: startServerInstance puts its own failure in the console
-            if (restart) void startServerInstance(server).catch((err) => console.error(`[gameserver] ${server.name} could not start again:`, err));
         }
+        // quiet: startServerInstance puts its own failure in the console
+        if (restart) void startServerInstance(server).catch((err) => console.error(`[gameserver] ${server.name} could not start again:`, err));
         return server;
     } catch (err) {
         server.setState((prev) => ({
@@ -571,10 +576,14 @@ export const gameServerService = definePanelService({
             );
         }
     },
+    // a restore ends each server it replaces; one that was running starts
+    // again on the restored files once the service is back
     async beforeRestore(_ctx, { sourceId }) {
         const selected = sourceId === undefined ? [...entries.values()] : [requireServer(sourceId)];
-        for (const server of selected)
+        for (const server of selected) {
             if (server.game.backup.mode === "offline") await server.game.backup.before();
+            else if (await server.process.exists(server.game.primaryProcessId)) await markResume(server);
+        }
     },
     // a server's backup fires its Blocks events; a backup of the whole panel is no one server's
     afterBackup(_ctx, ended) {

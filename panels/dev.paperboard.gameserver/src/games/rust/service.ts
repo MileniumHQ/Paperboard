@@ -10,7 +10,7 @@ import { steamInstall, steamInstallCalls, steamUpdateStatus, type SteamInstallSp
 import type { GameService } from "../serviceTypes";
 import {
     ConsoleBuffer, assertHost, exclusive, exists, fileStamp, linkFolder, offlineBackup, playerPoller, pushChat, redact, report,
-    resumeAfterBackup, serverSecret, settingPort, settled, singleLine, unlessMissing, waitUntil,
+    serverSecret, settingPort, settled, singleLine, unlessMissing, waitUntil,
 } from "../serviceKit";
 import { trashDirName } from "../../service/trash";
 import { rust, options, RUST_APP_ID, type RustMapView, type RustOption } from "./index";
@@ -352,7 +352,6 @@ export function rustService(ctx: Server): GameService {
                     .then((answer) => ctx.setState({ maxPlayers: answer.MaxPlayers }))
                     .catch((err) => report(ctx, "Could not read Rust's player limit", err));
             }
-            await resumeAfterBackup(ctx, GAME, running);
         },
         async beforeRemove() { if (local.busy) throw new Error("Wait for Rust's current operation"); },
         async dispose() {
@@ -463,7 +462,7 @@ export function rustService(ctx: Server): GameService {
             yield settingPort({ name: "rust-app", label: "Rust+ app", protocol: "tcp", key: "appPort", fallback: DEFAULT_APP_PORT }, saved);
         },
         backup: offlineBackup(ctx, {
-            gameId: GAME, name: "Rust", processId: PROC, flag: () => local,
+            name: "Rust", processId: PROC, flag: () => local,
             announce: async () => { await rcon().exec("say The server is stopping for a backup and will be back shortly."); },
             save, clean: async () => {},
         }),

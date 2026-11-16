@@ -132,8 +132,10 @@ export default function Backups(props: { active: boolean; whileRunning: "quiesce
             : null;
     });
 
-    const backUpNow = () => act("create", "Backup failed", async () => {
+    // "Backing up" once a backup runs: a first one waits on the location picker before it
+    const backUpNow = () => act(status()?.location ? "create" : "location", "Backup failed", async () => {
         if (!(await ensureLocation())) return null;
+        setBusy("create");
         const record = await backupsApi.create();
         return { title: "Backed up", message: `Backed up the server (${sizeText(record.size)}).` };
     });
@@ -194,6 +196,9 @@ export default function Backups(props: { active: boolean; whileRunning: "quiesce
         await load();
     };
 
+    /** a backup named in a sentence: its label, or when it was made */
+    const backupName = (record: BackupRecord) =>
+        record.label === ROUTINE_BACKUP_LABEL || !record.label ? `the backup from ${dateText(record.createdAt)}` : `“${record.label}”`;
     const recordTitle = (record: BackupRecord) => record.label === ROUTINE_BACKUP_LABEL || !record.label ? dateText(record.createdAt) : record.label;
     const recordDetail = (record: BackupRecord) =>
         [record.label === ROUTINE_BACKUP_LABEL ? "Routine" : record.label ? dateText(record.createdAt) : "Made by hand", sizeText(record.size)].join(" · ");
@@ -330,7 +335,7 @@ export default function Backups(props: { active: boolean; whileRunning: "quiesce
 
             <PaperModal
                 open={confirmOpen()}
-                title={confirming()?.kind === "delete" ? "Delete this backup?" : "Restore this backup?"}
+                title={confirming() ? `${confirming()!.kind === "delete" ? "Delete" : "Restore"} ${backupName(confirming()!.record)}?` : ""}
                 size="small"
                 onClose={() => { if (!confirmBusy()) setConfirmOpen(false); }}
                 footer={
@@ -347,8 +352,8 @@ export default function Backups(props: { active: boolean; whileRunning: "quiesce
                 <PaperFlex direction="column" gap="half">
                     <PaperText preset="body">
                         {confirming()?.kind === "delete"
-                            ? `The backup from ${confirming() ? dateText(confirming()!.record.createdAt) : ""} is deleted from ${status()?.location?.label ?? "its location"}.`
-                            : `The server stops, and its whole folder (worlds, settings, plugins and mods) is replaced with the backup from ${confirming() ? dateText(confirming()!.record.createdAt) : ""}. Anything since then is lost. Offline-only games restart if they were running; otherwise start the server afterwards.`}
+                            ? `It is deleted from ${status()?.location?.label ?? "its location"}.`
+                            : `The server stops, and its whole folder (worlds, settings, plugins and mods) is replaced with this backup${confirming() ? `, made ${dateText(confirming()!.record.createdAt)}` : ""}. Anything since then is lost. A running server starts again on it.`}
                     </PaperText>
                     <Show when={confirmError()}>
                         <PaperText size={2} color="danger">{confirmError()}</PaperText>
