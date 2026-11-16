@@ -9,7 +9,8 @@ import {
 } from "../../../../papercrane/storage";
 import { getLocalDir } from "../../../../papercrane/paths";
 import { logger } from "../../../../papercrane/logger";
-import { pinnedRequest } from "../../../../papercrane/pinnedTls";
+import { certFingerprint, pinnedRequest } from "../../../../papercrane/pinnedTls";
+import { readTlsCert } from "../../../../papercrane/tlsIdentity";
 import { bareHost, bracketHost, checkProbeTarget, isLoopback } from "./probeTarget";
 import { PaperCraneClient } from "./PaperCraneClient";
 import { errorMessage } from "@mileniumhq/paperapi/errors";
@@ -55,6 +56,9 @@ const NOT_THE_DAEMON = "Something answered on that port, but not the way the Pap
 // a daemon started with --host 127.0.0.1 serves plain HTTP, which only this computer's own app may use
 const LOOPBACK_DAEMON =
     "That port answers only on this computer, without encryption, so Paperboard can't pair with it. Start that daemon with --host 0.0.0.0 to pair it over your network";
+
+const OWN_DAEMON =
+    "That address reaches this computer's own Paperboard server, not another computer. If you meant a tunnel to another computer, check that it is running and forwards to that computer's port";
 
 /** a plain (unencrypted) server answered where a paired daemon's TLS was expected */
 function isPlaintextAnswer(err: any): boolean {
@@ -285,13 +289,17 @@ export class ConnectionPool extends EventEmitter {
         const tempClient = new PaperCraneClient();
         try {
             await tempClient.connectForPairing(host, checked.port);
+            const cert = tempClient.getCert();
+            if (!cert) throw new Error("Pairing failed: the computer presented no certificate");
+            // who answered is told by its certificate, never by the address:
+            // an ssh tunnel and this computer's own daemon share 127.0.0.1
+            const own = readTlsCert(getLocalDir());
+            if (own && certFingerprint(own) === certFingerprint(cert)) throw new Error(OWN_DAEMON);
             // send our hostname, never the server name; customName stays local-only
             const pairRes = await tempClient.pair(code, os.hostname().replace(/\.local$/i, "") || "Paperboard App");
             if (!pairRes.success || !pairRes.token) {
                 throw new Error("Pairing rejected: invalid code or daemon refused");
             }
-            const cert = tempClient.getCert();
-            if (!cert) throw new Error("Pairing failed: the computer presented no certificate");
 
             // explicit identity: millisecond timestamps collide; a random
             // suffix keeps two paired-in-a-blink computers distinct

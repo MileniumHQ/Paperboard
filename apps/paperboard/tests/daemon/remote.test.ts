@@ -12,6 +12,7 @@ import { PaperCraneEngine } from "../../papercrane/engine";
 import { pinnedTlsOptions } from "../../papercrane/pinnedTls";
 import { createTlsIdentity } from "../../papercrane/tlsIdentity";
 import { setupWebSocketServer } from "../../papercrane/ws";
+import { ConnectionPool } from "../../src/main/communication/papercrane/ConnectionPool";
 import { PaperCraneClient } from "../../src/main/communication/papercrane/PaperCraneClient";
 import { dataDir, modeOf, restoreEnv, tempDir } from "./support/fs";
 import { type InProcessDaemon, request, startDaemon, stopDaemon } from "./support/inproc";
@@ -248,6 +249,59 @@ describe("paired computers", () => {
 		} finally {
 			client.disconnect();
 			await hop.close();
+		}
+	});
+
+	// While `remote` runs, PAPERBOARD_DIR is its data folder: to a pool opened
+	// now it is this computer's own daemon. An ssh tunnel puts another
+	// computer at 127.0.0.1 too, so the address tells neither apart.
+	// Inventory: Security — pairing lands on the computer that answered, never on this one's own daemon.
+	test("pairing at 127.0.0.1 pairs the tunnel's computer pinned, and refuses this computer's own daemon in words before the code is sent", async () => {
+		const far = await scriptedRemote((frame, reply) => {
+			if (frame.action === "auth:pair") {
+				reply({ type: "response", id: frame.id, result: { success: true, token: "pc_far", hostname: "far", os: "linux", arch: "x64" } });
+			}
+		});
+		const pool = new ConnectionPool();
+		try {
+			const paired = await pool.pairComputer("127.0.0.1", far.port, "123456");
+			expect(paired.cert).toBe(far.cert);
+			expect(far.frames.map((f) => JSON.parse(f).params?.code)).toContain("123456");
+
+			const clientsBefore = remote.instance.auth.getAuthorizedClients().length;
+			const code = remote.instance.auth.startPairing();
+			await expect(pool.pairComputer("127.0.0.1", remote.port, code)).rejects.toThrow(
+				"That address reaches this computer's own Paperboard server, not another computer.",
+			);
+			expect(remote.instance.auth.getAuthorizedClients()).toHaveLength(clientsBefore);
+		} finally {
+			pool.dispose();
+			await far.close();
+		}
+	});
+
+	// Inventory: Security — a credential never crosses an unencrypted socket, whatever the address.
+	test("a computer with no pinned certificate is never sent its token or a pairing code, at a loopback address too", async () => {
+		const frames: string[] = [];
+		const server = http.createServer();
+		const wss = new WebSocketServer({ server });
+		wss.on("connection", (ws) => ws.on("message", (data) => frames.push(data.toString())));
+		await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+		const port = (server.address() as net.AddressInfo).port;
+		const client = new PaperCraneClient({ reconnectBaseMs: 60_000, reconnectMaxMs: 60_000 });
+		const pool = new ConnectionPool();
+		try {
+			await expect(client.connect("127.0.0.1", port, "pc_paired_secret")).rejects.toThrow("has no pinned certificate");
+			await expect(client.request("/health")).rejects.toThrow("has no pinned certificate");
+			await expect(pool.pairComputer("127.0.0.1", port, "654321")).rejects.toThrow();
+			expect(frames).toEqual([]);
+		} finally {
+			client.disconnect();
+			pool.dispose();
+			for (const ws of wss.clients) ws.terminate();
+			wss.close();
+			server.closeAllConnections();
+			await new Promise<void>((resolve) => server.close(() => resolve()));
 		}
 	});
 });

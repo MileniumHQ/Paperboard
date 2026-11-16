@@ -25,7 +25,7 @@ import {
 } from "../../../../papercrane/pinnedTls";
 import type { TLSSocket } from "tls";
 import { pinnableWebSocket } from "../../../../papercrane/pinnableWebSocket";
-import { bracketHost, isLoopback } from "./probeTarget";
+import { bracketHost } from "./probeTarget";
 import { errorMessage } from "@mileniumhq/paperapi/errors";
 
 
@@ -118,6 +118,10 @@ export class PaperCraneConnection extends EventEmitter {
     // remote daemon certificate: pinned after pairing, captured during it
     private cert?: string;
     private trustOnFirstUse = false;
+    // this data directory's own daemon, as opposed to a paired or pairing
+    // one: set by what was asked for (no credential, no certificate), never
+    // by the address, which an ssh tunnel to another computer shares
+    private own = true;
     private embeddedServer: ServerInstance | null = null;
     private isConnected: boolean = false;
     private localIdentityVerified = false;
@@ -180,7 +184,7 @@ export class PaperCraneConnection extends EventEmitter {
     }
 
     public getLocalCredentials(): CraneHandshakeFile | null {
-        if (!this.isConnected || !this.localIdentityVerified || !isLoopback(this.host) || !this.token) return null;
+        if (!this.isConnected || !this.localIdentityVerified || !this.own || !this.token) return null;
         return { port: this.port, token: this.token };
     }
 
@@ -188,12 +192,12 @@ export class PaperCraneConnection extends EventEmitter {
         return this.cert;
     }
 
-    // HTTP to this computer's daemon: plaintext on loopback, pinned TLS
-    // for a paired remote
+    // HTTP to this computer's own daemon in plaintext on loopback, pinned
+    // TLS for a paired remote at any address
     public async request(subpath: string, init: PinnedRequestInit = {}): Promise<PinnedResponse> {
         const cleanSub = subpath.startsWith("/") ? subpath : `/${subpath}`;
-        if (isLoopback(this.host)) {
-            const res = await fetch(`http://${this.host}:${this.port}${cleanSub}`, {
+        if (this.own) {
+            const res = await fetch(`http://127.0.0.1:${this.port}${cleanSub}`, {
                 method: init.method,
                 headers: init.headers,
                 body: init.body,
@@ -215,7 +219,7 @@ export class PaperCraneConnection extends EventEmitter {
     }
 
     public getStatus(): TargetStatus {
-        const isRemote = !isLoopback(this.host);
+        const isRemote = !this.own;
         return {
             connected: this.isConnected,
             isRemote,
@@ -329,11 +333,12 @@ export class PaperCraneConnection extends EventEmitter {
             throw err;
         };
 
-        const isLocal = isLoopback(host);
-        if (!isLocal && !cert && !this.trustOnFirstUse) failBeforeSocket(new Error(this.missingCertMessage()), false);
+        this.own = !token && !cert && !this.trustOnFirstUse;
+        // a credential goes only where a pinned certificate guards it
+        if (token && !cert) failBeforeSocket(new Error(this.missingCertMessage()), false);
 
         let localSocket: WebSocket | undefined;
-        if (isLocal && !token) {
+        if (this.own) {
             // a daemon that didn't start may start on the next try
             try { localSocket = await this.localDaemonSocket(gen); }
             catch (err) { failBeforeSocket(err, true); }
@@ -343,12 +348,9 @@ export class PaperCraneConnection extends EventEmitter {
         let ws: WebSocket;
         try {
             const Socket = pinnableWebSocket();
-            ws = localSocket ?? (isLocal
-                ? new Socket(`ws://${host}:${this.port}`)
-                : new Socket(
-                      `wss://${bracketHost(host)}:${this.port}`,
-                      cert ? pinnedTlsOptions(cert) : { rejectUnauthorized: false },
-                  ));
+            ws =
+                localSocket ??
+                new Socket(`wss://${bracketHost(host)}:${this.port}`, cert ? pinnedTlsOptions(cert) : { rejectUnauthorized: false });
         } catch (err) {
             // an unreadable pinned certificate fails the same way every time
             failBeforeSocket(new Error(`Cannot connect to ${bracketHost(host)}:${this.port}: ${errorMessage(err)}`, { cause: err }), false);
@@ -375,7 +377,7 @@ export class PaperCraneConnection extends EventEmitter {
                 ws.terminate();
             }, this.connectTimeoutMs);
 
-            if (!isLocal && !cert) {
+            if (!localSocket && !cert) {
                 // pairing: capture the certificate before any credential is sent
                 ws.on("upgrade", (res) => {
                     try {

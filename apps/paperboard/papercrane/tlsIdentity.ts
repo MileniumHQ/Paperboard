@@ -83,6 +83,17 @@ function parseIdentity(raw: string, file: string): TlsIdentity {
     return { key: parsed.key, cert: parsed.cert };
 }
 
+/** The certificate this data directory's daemon serves, or null while it has none (it listens on loopback only). */
+export function readTlsCert(dir: string): string | null {
+    const file = path.join(dir, IDENTITY_FILE);
+    try {
+        return parseIdentity(fs.readFileSync(file, "utf8"), file).cert;
+    } catch (err: any) {
+        if (err?.code === "ENOENT") return null;
+        throw err;
+    }
+}
+
 export function loadOrCreateTlsIdentity(dir: string): TlsIdentity {
     const file = path.join(dir, IDENTITY_FILE);
     let raw: string | null = null;
