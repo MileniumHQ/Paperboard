@@ -725,10 +725,13 @@ async function dataValue(run: Run, block: SavedBlock): Promise<unknown> {
             return crypto.randomUUID();
         case BUILTIN.jsonParse: {
             const t = await textOf(run, block, "TEXT");
+            if (!t.trim()) throw new BlockError("There's no text to read as JSON", block.id);
             try {
                 return JSON.parse(t);
-            } catch (err) {
-                throw new BlockError(`That isn't JSON: ${errorMessage(err)}`, block.id);
+            } catch {
+                // quiet: the parser's own words name its internals, not the text; the text is what's said
+                const shown = [...t.trim()];
+                throw new BlockError(`"${shown.length > 40 ? `${shown.slice(0, 39).join("")}…` : shown.join("")}" isn't JSON`, block.id);
             }
         }
         case BUILTIN.jsonText:

@@ -117,6 +117,19 @@ describe("Blockly's own blocks give the answers they show", () => {
         expect(err.message).toBe("There's no #3 in a list of 1");
         expect(err.blockId).toBe(find(ws, "lists_getIndex").id);
     });
+
+    // what the parser calls its internals is no help: the text is named, and an empty one is said as empty
+    test("read JSON of text that isn't JSON fails on that block, naming the text in words", async () => {
+        const failure = async (input: string) => {
+            const ws = saved([{ type: BUILTIN.onRun, inputs: { DO: steps(log(v(BUILTIN.jsonParse, { inputs: { TEXT: text(input) } }))) } }]);
+            const err = await runHat(top(ws, BUILTIN.onRun), null, ws, host().host).catch((e) => e);
+            expect(err.blockId).toBe(find(ws, BUILTIN.jsonParse).id);
+            return err.message;
+        };
+        expect(await failure("{ not json")).toBe('"{ not json" isn\'t JSON');
+        expect(await failure("  ")).toBe("There's no text to read as JSON");
+        expect(await failure(`{"players": [${"1,".repeat(30)}`)).toBe('"{"players": [1,1,1,1,1,1,1,1,1,1,1,1,1,…" isn\'t JSON');
+    });
 });
 
 describe("this panel's blocks", () => {

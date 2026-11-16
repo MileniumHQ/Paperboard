@@ -175,7 +175,7 @@ describe("the service's runtime", () => {
         const broken = await s.make("Broken", flows(onRun({ type: "pb_no_such_block" })));
         await s.call.runFlows({ project: broken });
         await until("the failure to be said", () => s.said(broken).length === 2);
-        expect(s.said(broken)[1]).toBe('error: "When a Flow Fails" didn\'t hear this failure: the registry is away');
+        expect(s.said(broken)[1]).toBe('error: "When a Flow Fails" didn\'t hear this failure: the registry is away.');
     });
 
     test("a change to the project list that doesn't reach the registry is shown, and told again once it is back", async () => {

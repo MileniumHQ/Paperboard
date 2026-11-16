@@ -89,10 +89,11 @@ async function run(): Promise<Record<string, unknown>> {
     await shoot("drafts-editor");
 
     // a flow on its canvas, and home: the project's card shows it in miniature, each block in its own colour
-    Blockly.serialization.blocks.append(
-        { type: BUILTIN.onRun, x: 40, y: 40, inputs: { DO: { block: { type: BUILTIN.log, inputs: { TEXT: { shadow: { type: "text", fields: { TEXT: "hello" } } } } } } } },
-        canvas()!,
-    );
+    // the Log is dropped into When Run is clicked, and the editor left before Blockly drew the drop
+    const hat = Blockly.serialization.blocks.append({ type: BUILTIN.onRun, x: 40, y: 40 }, canvas()!);
+    const logBlock = Blockly.serialization.blocks.append({ type: BUILTIN.log, x: 400, y: 300, inputs: { TEXT: { shadow: { type: "text", fields: { TEXT: "hello" } } } } }, canvas()!);
+    await frame();
+    hat.getInput("DO")!.connection!.connect(logBlock.previousConnection!);
     const onCanvas = canvas()!
         .getAllBlocks(true)
         .map((block) => getComputedStyle(block.pathObject.svgPath).fill);
@@ -100,9 +101,24 @@ async function run(): Promise<Record<string, unknown>> {
     await home();
     const miniature = await until("the card's miniature", () => document.querySelector('svg[class*="_preview_"]')?.querySelectorAll("path").length && document.querySelector('svg[class*="_preview_"]'));
     const onCard = [...miniature.querySelectorAll("path")].map((path) => getComputedStyle(path).fill);
+    // every outline the card draws lies whole inside its frame (a hat's curve rises above its block)
+    const frameBox = miniature.viewBox.baseVal;
+    const outside = [...miniature.querySelectorAll("path")].filter((path) => {
+        const box = path.getBBox();
+        const at = path.transform.baseVal.consolidate()?.matrix ?? { e: 0, f: 0 };
+        const [l, t] = [at.e + box.x, at.f + box.y];
+        return l < frameBox.x - 0.5 || t < frameBox.y - 0.5 || l + box.width > frameBox.x + frameBox.width + 0.5 || t + box.height > frameBox.y + frameBox.height + 0.5;
+    }).length;
+    // the Log sits inside the hat on the card, as it does on the canvas
+    const [hatBox, logBox] = [...miniature.querySelectorAll("path")].slice(0, 2).map((path) => {
+        const box = path.getBBox();
+        const at = path.transform.baseVal.consolidate()?.matrix ?? { e: 0, f: 0 };
+        return { l: at.e + box.x, t: at.f + box.y, r: at.e + box.x + box.width, b: at.f + box.y + box.height };
+    });
+    const nested = logBox.l >= hatBox.l && logBox.r <= hatBox.r && logBox.t >= hatBox.t && logBox.b <= hatBox.b;
     await shoot("miniature-home");
     dispose();
-    return { first, shown, emptyState, fromHome, fromMenu, onCanvas, onCard, uncaught: [...errors] };
+    return { first, shown, emptyState, fromHome, fromMenu, onCanvas, onCard, outside, nested, uncaught: [...errors] };
 }
 
 run()

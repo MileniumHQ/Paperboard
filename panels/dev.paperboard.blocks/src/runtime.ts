@@ -39,7 +39,9 @@ export function createRuntime({ storage, blocks, handle }: RuntimeDeps) {
     const listening = new Map<string, () => void>();
 
     function log(project: string, level: LogEntry["level"], text: string, blockId?: string): void {
-        const entry: LogEntry = { id: nextLogId++, at: Date.now(), level, message: text, project, ...(blockId ? { blockId } : {}) };
+        // a failure is said as a sentence in the console and on its block, whoever worded it
+        const message = level === "error" && !/[.!?…]$/.test(text) ? `${text}.` : text;
+        const entry: LogEntry = { id: nextLogId++, at: Date.now(), level, message, project, ...(blockId ? { blockId } : {}) };
         setState((prev) => ({ log: [...prev.log, entry].slice(-MAX_LOG) }));
     }
 

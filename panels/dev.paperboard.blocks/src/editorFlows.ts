@@ -47,6 +47,8 @@ const roundOutline = (path: string) => path.replace(/-?(?:\d+\.?\d*|\.\d+)(?:e[-
 
 /** The canvas in miniature, for the project's card: each block's outline where it sits, in its colour. */
 function canvasPreview(workspace: Blockly.WorkspaceSvg): CanvasPreview | null {
+    // Blockly draws a change on the next frame: a block just dropped into another is drawn in place first
+    Blockly.renderManagement.triggerQueuedRenders(workspace);
     const stacks = workspace.getTopBlocks(false).map((block) => block.getBoundingRectangle());
     if (!stacks.length) return null;
     const left = Math.min(...stacks.map((r) => r.left));
