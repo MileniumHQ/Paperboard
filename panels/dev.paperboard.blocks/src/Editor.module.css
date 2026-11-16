@@ -1,4 +1,5 @@
-/* The Library and the canvas side by side over the run log. Blockly draws
+/* The Library beside the canvas, and under the canvas a dock for the
+   notices and the run log, which the canvas makes room for. Blockly draws
    into a real element that needs a size: the stage gives it one. */
 /* Run and Stop, in the editor's bar */
 .topbar {
@@ -13,14 +14,39 @@
     flex-direction: row;
 }
 
+/* the canvas over its dock; what's in the dock sizes itself to this (the console) */
+.main {
+    flex: 1 1 0;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    container-type: size;
+}
+
 .stage {
     /* the Library's width: the header and the list read it */
     --library-width: var(--paper-size-panel-small);
     position: relative;
     flex: 1 1 0;
-    min-width: 0;
-    /* what's over the canvas sizes itself to it (the console) */
-    container-type: size;
+    min-height: 0;
+}
+
+/* the notices over the run log, under the canvas: they never cover a block,
+   and the canvas keeps at least half of the room */
+.dock {
+    flex: none;
+    max-height: 50cqh;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: var(--paper-uigap-half);
+    padding: var(--paper-uigap-half);
+    background: var(--paper-surface);
+    border-top: var(--paper-border-width) solid var(--paper-border);
+}
+
+.dock > * {
+    flex: none;
 }
 
 .canvas {
@@ -97,25 +123,6 @@
 
 .stage :global(.blocklyFlyout) :global(.blocklyFlyoutButton:hover) {
     opacity: var(--paper-opacity-soft);
-}
-
-/* the console, top right over the canvas, never reaching over the Library */
-.topRight {
-    position: absolute;
-    position-anchor: --library-list;
-    top: var(--paper-uigap);
-    right: var(--paper-uigap);
-    left: calc(anchor(right, 0px) + var(--paper-uigap));
-    display: flex;
-    flex-direction: column;
-    align-items: flex-end;
-    gap: var(--paper-uigap-half);
-    /* as wide as the canvas: only what's in it takes the pointer, not the room beside it */
-    pointer-events: none;
-}
-
-.topRight > * {
-    pointer-events: auto;
 }
 
 /* zoom over the trash, bottom right */

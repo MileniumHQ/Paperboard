@@ -154,22 +154,39 @@ async function consoleChecks() {
 const NARROWEST = { width: 620, height: 520 };
 
 /**
- * The console and the Library, with log lines shown: the console is opaque,
- * so the blocks under it don't show through its lines, and never reaches
- * over the Library; in the narrowest window the Library leaves the canvas
- * as much room as it takes.
+ * The console and the Library, with log lines and a notice shown: they sit
+ * in the dock under the canvas, never over a block, and the console is
+ * opaque. The narrowest window starts with the Library collapsed, so the
+ * canvas has the panel's whole width; a person who opens or collapses it
+ * keeps it so as the window is resized.
  */
 async function layoutChecks() {
     const panel = document.querySelector<HTMLElement>('[title="Clear Console"]')!.closest<HTMLElement>('[class*="_panel_"]')!;
+    // a notice, beside the log: Run is refused
+    refuse("runFlows", true);
+    await clickAt(document.querySelector('[aria-label="Run"]')!);
+    const notice = await until("the refused run's notice", () => alertSaying("Run didn't start"));
+    await settle();
     const look = () => {
         const host = canvas()!.getInjectionDiv().getBoundingClientRect();
-        const library = canvas()!.getFlyout()!.getWorkspace().getParentSvg().getBoundingClientRect();
-        const log = panel.getBoundingClientRect();
+        const flyout = canvas()!.getFlyout()!;
+        const shown = flyout.isVisible() && Boolean(byText("[role=radio], button, label", "Logic"));
+        const list = flyout.getWorkspace().getParentSvg().getBoundingClientRect();
+        // how much of each docked card lies over the canvas, and outside the panel
+        const overlap = (r: DOMRect) => Math.max(0, Math.min(r.right, host.right) - Math.max(r.left, host.left)) * Math.max(0, Math.min(r.bottom, host.bottom) - Math.max(r.top, host.top));
+        const outside = (r: DOMRect) => Math.max(0, -r.left, -r.top, r.right - innerWidth, r.bottom - innerHeight);
+        const docked = [panel, notice].map((el) => el.getBoundingClientRect());
         return {
-            libraryWidth: Math.round(library.width),
-            canvasRoom: Math.round(host.right - library.right),
-            consoleOverLibrary: Math.round(library.right - log.left),
-            consoleOutside: Math.round(log.right - host.right),
+            dockHeight: Math.round(panel.parentElement!.getBoundingClientRect().height),
+            libraryShown: shown,
+            // the rail and the list, from the panel's edge; and the list alone
+            libraryWidth: shown ? Math.round(list.right) : 0,
+            listWidth: shown ? Math.round(list.width) : 0,
+            panelWidth: innerWidth,
+            canvasRoom: Math.round(host.right - (shown ? list.right : host.left)),
+            canvasHeight: Math.round(host.height),
+            dockOverCanvas: Math.round(Math.max(...docked.map(overlap))),
+            dockOutside: Math.round(Math.max(...docked.map(outside))),
         };
     };
     const background = getComputedStyle(panel).backgroundColor;
@@ -179,16 +196,37 @@ async function layoutChecks() {
     await viewport(NARROWEST);
     await settle();
     const narrow = look();
-    await viewport(null);
-    await settle();
     for (const theme of ["light", "dark"]) {
         document.documentElement.setAttribute("data-paperui-theme", theme);
         await settle();
         await fetch("/screenshot", { method: "POST", body: JSON.stringify({ name: `console-narrowest-${theme}`, ...NARROWEST }) });
     }
     document.documentElement.removeAttribute("data-paperui-theme");
+    // a screenshot leaves the window at its own size
+    await viewport(NARROWEST);
     await settle();
-    return { alpha: alpha ?? 1, backdrop: getComputedStyle(panel).backdropFilter, wide, narrow, back: look() };
+    // the person opens the Library in the narrow window: it stays open, and open as the window widens
+    byText("button", "Library")!.click();
+    await settle();
+    const narrowOpened = look();
+    await fetch("/screenshot", { method: "POST", body: JSON.stringify({ name: "library-opened-narrowest", ...NARROWEST }) });
+    await viewport(null);
+    await settle();
+    const back = look();
+    // and collapsed in the wide window, it stays collapsed in the narrow one and wide again
+    document.querySelector<HTMLElement>('[title="Collapse Library"]')!.click();
+    await settle();
+    await viewport(NARROWEST);
+    await settle();
+    const collapsedNarrow = look();
+    await viewport(null);
+    await settle();
+    const collapsedWide = look();
+    byText("button", "Library")!.click();
+    refuse("runFlows", false);
+    notice.querySelector<HTMLElement>('[aria-label="Dismiss"]')!.click();
+    await settle();
+    return { alpha: alpha ?? 1, backdrop: getComputedStyle(panel).backdropFilter, wide, narrow, narrowOpened, back, collapsedNarrow, collapsedWide, reopened: look() };
 }
 
 /** The project list changes under the editor's Rename and Delete dialogs. */
@@ -240,22 +278,24 @@ async function libraryChecks() {
     for (let i = 1; i <= 40; i++) map.createVariable(`counter_${i}`);
     await settle();
     const list = canvas()!.getFlyout()!.getWorkspace();
-    const startY = list.scrollY;
+    // where the list is, to a hundredth of a pixel: Blockly's arithmetic on a list laid out again differs past that
+    const at = () => Math.round(list.scrollY * 100) / 100;
+    const startY = at();
     list.scrollbar!.setY(600);
     await settle();
-    const scrolledY = list.scrollY;
+    const scrolledY = at();
     map.createVariable("made_while_reading");
     await settle();
-    const afterCreate = list.scrollY;
+    const afterCreate = at();
     map.renameVariable(map.getVariable("counter_5")!, "renamed_while_reading");
     await settle();
-    const afterRename = list.scrollY;
+    const afterRename = at();
     (await railItem("Logic")).click();
     await settle();
-    const otherCategory = list.scrollY;
+    const otherCategory = at();
     (await railItem("Variables")).click();
     await settle();
-    const backAgain = list.scrollY;
+    const backAgain = at();
     return { startY, scrolledY, afterCreate, afterRename, otherCategory, backAgain };
 }
 

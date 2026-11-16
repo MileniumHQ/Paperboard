@@ -1,7 +1,8 @@
 // The Blocks editor for one project: a top bar with its name, menus, its
 // switch, Stop and Run, then the Library (a rail of categories, and the
-// chosen one's blocks in Blockly's flyout) and the canvas. Edits save as you
-// make them; the service runs the flows.
+// chosen one's blocks in Blockly's flyout) and the canvas, with a dock under
+// it for the notices and the run log. Edits save as you make them; the
+// service runs the flows.
 import { createEffect, createMemo, createSignal, on, onCleanup, onMount, Show } from "solid-js";
 import * as Blockly from "blockly";
 import { blocksApi, setUnsavedChanges, errorMessage } from "@mileniumhq/paperapi";
@@ -22,6 +23,7 @@ import {
 import { BUILTIN_BLOCKS, builtinPlaceholder } from "./lib/blockDefs";
 import { registerChoicesField, setChoicesProject } from "./lib/choicesField";
 import { setLibraryTop } from "./lib/libraryFlyout";
+import { tokenPixels } from "./lib/tokens";
 import { loadBlockFonts } from "./lib/paperRenderer";
 import { setPanelIcons } from "./lib/blockStyles";
 import { HEADING_KIND, type HeadingInfo } from "./lib/libraryHeading";
@@ -58,7 +60,11 @@ export default function Editor(props: {
     const [trash, setTrash] = createSignal<TrashState>({ dragging: false, over: false });
     let workspace: Blockly.WorkspaceSvg | undefined;
     const [notice, setNotice] = createSignal<Notice | null>(null);
-    const [collapsed, setCollapsed] = createSignal(false);
+    // the Library is collapsed as the person chose, or else while the editor is too narrow
+    // for it to leave the canvas the larger share
+    const [collapseChoice, setCollapsed] = createSignal<boolean | null>(null);
+    const [narrow, setNarrow] = createSignal(false);
+    const collapsed = () => collapseChoice() ?? narrow();
     const [ready, setReady] = createSignal(false);
     // the newest log line already pointed at on the canvas
     let shownLogId = 0;
@@ -190,6 +196,13 @@ export default function Editor(props: {
             Blockly.svgResize(workspace);
         }),
     );
+
+    /** Narrow: the editor is less wide than the room the Library and the canvas need side by side. */
+    const bodyRef = (el: HTMLDivElement) => {
+        const observer = new ResizeObserver(() => setNarrow(el.clientWidth < tokenPixels("--paper-size-panel-wide")));
+        observer.observe(el);
+        onCleanup(() => observer.disconnect());
+    };
 
     /** The list starts where the header ends. */
     const headerRef = (el: HTMLDivElement) => {
@@ -406,90 +419,94 @@ export default function Editor(props: {
                 }}
                 onClose={() => setDeleting(false)}
             />
-            <div class={styles.body}>
+            <div class={styles.body} ref={bodyRef}>
                 <Show when={libraryShown()}>
                     <LibraryRail builtins={library.builtins} panels={library.panels()} selected={library.selected()} onSelect={library.choose} />
                 </Show>
-                <div class={styles.stage}>
-                    <div ref={host} class={styles.canvas} />
-                    <Show when={!flows.loadError()}>
-                        <Show
-                            when={!collapsed()}
-                            fallback={
-                                <div class={styles.expand}>
-                                    <PaperButton onClick={() => setCollapsed(false)} title="Open the Library">
-                                        <PaperIcon>menu_open</PaperIcon>
-                                        Library
-                                    </PaperButton>
-                                </div>
-                            }
-                        >
-                            <LibraryHeader
-                                category={library.category()}
-                                selected={library.selected()}
-                                search={library.search()}
-                                onSearch={library.typeSearch}
-                                count={library.count()}
-                                projects={library.projects()}
-                                project={library.shownProject()}
-                                onProject={library.chooseProject}
-                                sections={library.sectionNames()}
-                                onJump={jump}
-                                onCollapse={() => setCollapsed(true)}
-                                onCreateVariable={library.showsVariables() && ready() ? () => Blockly.Variables.createVariableButtonHandler(workspace!) : undefined}
-                                headerRef={headerRef}
-                            />
-                        </Show>
-                    </Show>
-                    <div class={styles.topRight}>
-                        <Show when={flows.loadError()}>
-                            {(why) => (
-                                <PaperQuote variant="danger" icon="warning" title="Your flows couldn't be loaded" role="alert">
-                                    <PaperFlex direction="column" align="flex-start" gap="half">
-                                        <span>Nothing here can be changed until they load: {why()}</span>
-                                        <PaperButton variant="danger" onClick={() => void flows.load()}>
-                                            Try again
+                <div class={styles.main}>
+                    <div class={styles.stage}>
+                        <div ref={host} class={styles.canvas} />
+                        <Show when={!flows.loadError()}>
+                            <Show
+                                when={!collapsed()}
+                                fallback={
+                                    <div class={styles.expand}>
+                                        <PaperButton onClick={() => setCollapsed(false)} title="Open the Library">
+                                            <PaperIcon>menu_open</PaperIcon>
+                                            Library
                                         </PaperButton>
-                                    </PaperFlex>
-                                </PaperQuote>
-                            )}
+                                    </div>
+                                }
+                            >
+                                <LibraryHeader
+                                    category={library.category()}
+                                    selected={library.selected()}
+                                    search={library.search()}
+                                    onSearch={library.typeSearch}
+                                    count={library.count()}
+                                    projects={library.projects()}
+                                    project={library.shownProject()}
+                                    onProject={library.chooseProject}
+                                    sections={library.sectionNames()}
+                                    onJump={jump}
+                                    onCollapse={() => setCollapsed(true)}
+                                    onCreateVariable={library.showsVariables() && ready() ? () => Blockly.Variables.createVariableButtonHandler(workspace!) : undefined}
+                                    headerRef={headerRef}
+                                />
+                            </Show>
                         </Show>
-                        <Show when={notice()}>
-                            {(shown) => (
-                                <PaperQuote
-                                    variant={shown().kind === "failed" ? "danger" : "success"}
-                                    icon={shown().kind === "failed" ? "warning" : "check_circle"}
-                                    title={shown().title}
-                                    role={shown().kind === "failed" ? "alert" : "status"}
-                                    onDismiss={() => setNotice(null)}
-                                >
-                                    {shown().text}
-                                </PaperQuote>
-                            )}
-                        </Show>
-                        <Console entries={log()} onClear={() => service.clearLog({ project: props.projectId }).catch(fail("The log wasn't cleared"))} />
-                    </div>
-                    <div class={styles.bottomRight}>
-                        <PaperFlex direction="column" gap="half">
-                            <PaperButton variant="primary" icon onClick={() => zoom(1)} title="Zoom in" aria-label="Zoom in">
-                                <PaperIcon>add</PaperIcon>
-                            </PaperButton>
-                            <PaperButton variant="primary" icon onClick={() => zoom(-1)} title="Zoom out" aria-label="Zoom out">
-                                <PaperIcon>remove</PaperIcon>
-                            </PaperButton>
-                            <PaperButton variant="primary" icon onClick={resetView} title="Reset the view" aria-label="Reset the view">
-                                <PaperIcon>center_focus_strong</PaperIcon>
-                            </PaperButton>
-                        </PaperFlex>
-                        <div
-                            ref={trashTile}
-                            class={styles.trash}
-                            classList={{ [styles.trashDragging!]: trash().dragging, [styles.trashOver!]: trash().over }}
-                            title="Drop a block here to delete it"
-                        >
-                            <PaperIcon>{trash().over ? "delete_forever" : "delete"}</PaperIcon>
+                        <div class={styles.bottomRight}>
+                            <PaperFlex direction="column" gap="half">
+                                <PaperButton variant="primary" icon onClick={() => zoom(1)} title="Zoom in" aria-label="Zoom in">
+                                    <PaperIcon>add</PaperIcon>
+                                </PaperButton>
+                                <PaperButton variant="primary" icon onClick={() => zoom(-1)} title="Zoom out" aria-label="Zoom out">
+                                    <PaperIcon>remove</PaperIcon>
+                                </PaperButton>
+                                <PaperButton variant="primary" icon onClick={resetView} title="Reset the view" aria-label="Reset the view">
+                                    <PaperIcon>center_focus_strong</PaperIcon>
+                                </PaperButton>
+                            </PaperFlex>
+                            <div
+                                ref={trashTile}
+                                class={styles.trash}
+                                classList={{ [styles.trashDragging!]: trash().dragging, [styles.trashOver!]: trash().over }}
+                                title="Drop a block here to delete it"
+                            >
+                                <PaperIcon>{trash().over ? "delete_forever" : "delete"}</PaperIcon>
+                            </div>
                         </div>
                     </div>
+                    <Show when={flows.loadError() || notice() || log().length > 0}>
+                        <div class={styles.dock}>
+                            <Show when={flows.loadError()}>
+                                {(why) => (
+                                    <PaperQuote variant="danger" icon="warning" title="Your flows couldn't be loaded" role="alert">
+                                        <PaperFlex direction="column" align="flex-start" gap="half">
+                                            <span>Nothing here can be changed until they load: {why()}</span>
+                                            <PaperButton variant="danger" onClick={() => void flows.load()}>
+                                                Try again
+                                            </PaperButton>
+                                        </PaperFlex>
+                                    </PaperQuote>
+                                )}
+                            </Show>
+                            <Show when={notice()}>
+                                {(shown) => (
+                                    <PaperQuote
+                                        variant={shown().kind === "failed" ? "danger" : "success"}
+                                        icon={shown().kind === "failed" ? "warning" : "check_circle"}
+                                        title={shown().title}
+                                        role={shown().kind === "failed" ? "alert" : "status"}
+                                        onDismiss={() => setNotice(null)}
+                                    >
+                                        {shown().text}
+                                    </PaperQuote>
+                                )}
+                            </Show>
+                            <Console entries={log()} onClear={() => service.clearLog({ project: props.projectId }).catch(fail("The log wasn't cleared"))} />
+                        </div>
+                    </Show>
                 </div>
             </div>
             <BlocklyDialogs />

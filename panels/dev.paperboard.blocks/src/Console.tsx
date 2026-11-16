@@ -1,6 +1,5 @@
-// The run log: a card in
-// the canvas's top-right corner, there while it has lines, newest at the
-// bottom and kept in view.
+// The run log: a card in the dock under the canvas, there while it has
+// lines, newest at the bottom and kept in view.
 import { createEffect, For, on, Show } from "solid-js";
 import { PaperButton, PaperIcon, PaperText } from "@mileniumhq/paperui";
 import type { LogEntry } from "./panel";

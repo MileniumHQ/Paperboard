@@ -1,10 +1,8 @@
-/* The run log: a card over the canvas, opaque so the blocks under it never show through its lines. */
+/* The run log: a card in the dock under the canvas. */
 
 .panel {
-    width: var(--paper-size-split-side);
-    max-width: 100%;
-    /* the top half of a short canvas at most, clear of the zoom buttons under it */
-    max-height: min(var(--paper-size-panel-height-small), 50cqh);
+    /* a quarter of the editor at most, so the canvas keeps the most of it */
+    max-height: min(var(--paper-size-panel-height-small), 25cqh);
     border-radius: var(--paper-border-radius);
     background: var(--paper-surface);
     border: var(--paper-border-width) solid var(--paper-border);
