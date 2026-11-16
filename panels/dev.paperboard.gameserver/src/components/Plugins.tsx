@@ -3,13 +3,13 @@ import {
     PaperButton,
     PaperCheckbox,
     PaperEffect,
+    PaperError,
     PaperFlex,
     PaperIcon,
     PaperModal,
     PaperQuote,
     PaperText,
     type PaperFileReveal,
-    createFailureToast,
     createLatest,
     showError,
 } from "@mileniumhq/paperui";
@@ -42,7 +42,6 @@ function DependencyPreview(props: InstallExtrasProps) {
     const [optional, setOptional] = createSignal<string[]>([]);
     // why the plan couldn't be resolved: Install waits until it is
     const [error, setError] = createSignal("");
-    createFailureToast(error, { title: "Couldn't resolve its dependencies" });
     // Try again asks once more for the same version
     const [attempt, setAttempt] = createSignal(0);
 
@@ -85,9 +84,7 @@ function DependencyPreview(props: InstallExtrasProps) {
                 </PaperText>
             </Show>
             <Show when={error()}>
-                <PaperFlex>
-                    <PaperButton onClick={() => setAttempt((n) => n + 1)}>Try again</PaperButton>
-                </PaperFlex>
+                {(err) => <PaperError title="Couldn't resolve its dependencies" error={err()} action={{ label: "Try again", onClick: () => setAttempt((n) => n + 1) }} />}
             </Show>
             <Show when={!loading() && preview()}>
                 {(plan) => (

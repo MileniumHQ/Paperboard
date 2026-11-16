@@ -1,4 +1,4 @@
-import { createEffect, createSignal, For, Index, on, onMount, Show, type JSX } from "solid-js";
+import { createEffect, createSignal, For, Index, on, Show, type JSX } from "solid-js";
 import {
     PaperFlex,
     PaperText,
@@ -15,7 +15,7 @@ import {
     PaperStatTile,
     PaperModal,
     createAction,
-    createFailureToast,
+    showError,
 } from "@mileniumhq/paperui";
 import { getStatusBadge, useServer } from "../lib/server";
 import ServerIssueModal from "./ServerIssueModal";
@@ -65,33 +65,35 @@ export default function ServerOverview(props: {
     /** false for a game that keeps no world, which has no Save world */
     world?: boolean;
 }) {
-    const { calls, summary, serverStatus, serverEntries, onlinePlayers, localIp, serverPort, portMoves, serverVersion, loadServerConfig, startServer, stopServer, restartServer } = useServer();
-    // loading the config also reads the server's state
-    onMount(() => void loadServerConfig());
+    const { calls, summary, serverStatus, serverEntries, onlinePlayers, localIp, serverPort, portMoves, serverVersion, initFailure, loadServerConfig, startServer, stopServer, restartServer } = useServer();
+    // loading the config also reads the server's state; a server that isn't
+    // set up has none to load (RecoveryNotice says why), and loads it once it is
+    createEffect(
+        on(
+            () => initFailure() === null,
+            (ready) => {
+                if (ready) void loadServerConfig();
+            },
+        ),
+    );
 
     const saving = createAction({ message: errorMessage });
     // resolves once the game confirms it wrote its world to disk
     const save = () => saving.run("Couldn't save the world", () => calls.saveWorld());
     const control = () => props.control?.kind ?? "stdin";
-    // why the last line typed didn't go out, until the next one or the server's state changes
-    const [commandError, setCommandError] = createSignal("");
-    createFailureToast(commandError, { title: control() === "broadcast" ? "Couldn't send the message" : "Couldn't run the command" });
+    // a line typed that didn't go out says why, once
     const runCommand = (line: string) => {
-        setCommandError("");
-        const sent = control() === "broadcast" ? calls.sayChat({ message: line }) : calls.runCommand({ command: line });
-        sent.catch((err) => setCommandError(errorMessage(err)));
+        const broadcast = control() === "broadcast";
+        const sent = broadcast ? calls.sayChat({ message: line }) : calls.runCommand({ command: line });
+        sent.catch((err) => showError(broadcast ? "Couldn't send the message" : "Couldn't run the command", errorMessage(err)));
     };
 
     // stopping disconnects whoever is playing, so with anyone on it asks first
     const [askStop, setAskStop] = createSignal(false);
     const playing = () => onlinePlayers().length;
     const stop = () => (playing() > 0 ? setAskStop(true) : stopServer());
-    // a command refused for the server's state, and the question of stopping
-    // it, say nothing once that state is gone
-    createEffect(on(serverStatus, () => {
-        setCommandError("");
-        setAskStop(false);
-    }, { defer: true }));
+    // the question of stopping it says nothing once that state is gone
+    createEffect(on(serverStatus, () => setAskStop(false), { defer: true }));
     const badge = () => getStatusBadge(serverStatus());
     const address = () => `${localIp()}:${joinPort({ serverPort: serverPort(), portMoves: portMoves() })}`;
 

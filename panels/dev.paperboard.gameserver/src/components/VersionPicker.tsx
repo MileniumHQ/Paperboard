@@ -1,21 +1,18 @@
 import { createEffect, createSignal, For, Show, untrack, on, batch } from "solid-js";
 import { useServer } from "../lib/server";
 import {
-    PaperButton,
     PaperCheckbox,
-    PaperEmptyState,
+    PaperError,
     PaperFlex,
     PaperInput,
     PaperList,
     PaperListItem,
     PaperQuote,
     PaperText,
-    createFailureToast,
     createLatest,
 } from "@mileniumhq/paperui";
 import type { ServerSoftwareType, VersionItem } from "../lib/software";
-import FailureOutput from "./FailureOutput";
-import { errorMessage, splitFailure } from "../lib/failure";
+import { errorMessage } from "../lib/failure";
 
 // Shared Minecraft version picker: search, release-channel filters and the
 // version list. Used by onboarding (Setup) and the Versions tab so there is
@@ -32,7 +29,6 @@ export default function VersionPicker(props: {
     const [allVersions, setAllVersions] = createSignal<VersionItem[]>([]);
     const [loading, setLoading] = createSignal(true);
     const [error, setError] = createSignal("");
-    createFailureToast(() => error() && splitFailure(error()).summary, { title: "Couldn't load the versions" });
     const latest = createLatest();
 
     const [includeReleases, setIncludeReleases] = createSignal(true);
@@ -142,10 +138,7 @@ export default function VersionPicker(props: {
                                     </PaperFlex>
                                 }
                             >
-                                <PaperEmptyState icon="error" title="Couldn't load">
-                                    <PaperButton onClick={() => void loadVersions()}>Try again</PaperButton>
-                                </PaperEmptyState>
-                                <FailureOutput message={error()} />
+                                {(err) => <PaperError fill title="Couldn't load the versions" error={err()} action={{ label: "Try again", onClick: () => void loadVersions() }} />}
                             </Show>
                         }
                     >

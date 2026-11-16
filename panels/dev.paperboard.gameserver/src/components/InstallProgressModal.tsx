@@ -1,13 +1,12 @@
-import { createEffect, on } from "solid-js";
-import { PaperButton, PaperFlex, PaperModal, showError } from "@mileniumhq/paperui";
+import { Show } from "solid-js";
+import { PaperButton, PaperError, PaperFlex, PaperModal } from "@mileniumhq/paperui";
 import InstallLoaders, { type InstallLoaderItem } from "./InstallLoaders";
-import { splitFailure, type Outcome } from "../lib/failure";
-import FailureOutput from "./FailureOutput";
+import type { Outcome } from "../lib/failure";
 
 /**
  * What an install in the Versions tab shows: its rows, which nothing closes
- * while it runs, and once it fails a Dismiss. The failure's first line is a
- * toast; what the tool printed after it stays here.
+ * while it runs, and once it fails why, with what the tool printed under
+ * its Details, until Dismiss.
  */
 export default function InstallProgressModal(props: {
     open: boolean;
@@ -15,14 +14,6 @@ export default function InstallProgressModal(props: {
     failure?: Outcome;
     onDismiss(): void;
 }) {
-    createEffect(
-        on(
-            () => props.failure,
-            (failure) => {
-                if (failure) showError(failure.title, splitFailure(failure.message).summary);
-            },
-        ),
-    );
     return (
         <PaperModal
             open={props.open}
@@ -35,7 +26,9 @@ export default function InstallProgressModal(props: {
             <PaperFlex fullWidth center>
                 <PaperFlex direction="column" gap="half" fullWidth maxWidth="panel-small">
                     <InstallLoaders items={props.rows} />
-                    <FailureOutput message={props.failure?.message ?? ""} />
+                    <Show when={props.failure}>
+                        {(failure) => <PaperError alert title={failure().title} error={failure().message} />}
+                    </Show>
                 </PaperFlex>
             </PaperFlex>
         </PaperModal>

@@ -3,18 +3,17 @@ import {
     PaperButton,
     PaperCenteredInterface,
     PaperEmptyState,
+    PaperError,
     PaperModal,
     PaperText,
     PaperWizard,
     PaperWizardStep,
-    showError,
 } from "@mileniumhq/paperui";
 import InstallStepView, { createWizardInstall } from "../../components/InstallStepView";
 import { UnsupportedHost } from "../../components/InstallNotices";
 import { useServer } from "../../lib/server";
-import { errorMessage, splitFailure } from "../../lib/failure";
+import { errorMessage } from "../../lib/failure";
 import { createSteamInstall, type SteamInstallInfo } from "./installRows";
-import FailureOutput from "../../components/FailureOutput";
 import InstallLoaders from "../../components/InstallLoaders";
 import { formatSize } from "../../lib/addons/presentation";
 
@@ -23,7 +22,7 @@ function InstallStep(props: { name: string }) {
     const install = createSteamInstall();
     const { run, wizard, disposed } = createWizardInstall(install.run);
     // what stops the download: a computer the game can't run on, or a check that failed (its words, with SteamCMD's output)
-    const [blocked, setBlocked] = createSignal<{ failure?: string; host?: SteamInstallInfo["host"] } | null>(null);
+    const [blocked, setBlocked] = createSignal<{ failure?: { title: string; message: string }; host?: SteamInstallInfo["host"] } | null>(null);
     // the download's size, asked of Steam before it starts; the user says when it does
     const [size, setSize] = createSignal<number | null>(null);
     const [asking, setAsking] = createSignal(false);
@@ -34,12 +33,10 @@ function InstallStep(props: { name: string }) {
         void run();
     };
 
-    /** a check that failed: the toast says why, and the step offers Try again */
+    /** a check that failed: the step says why, with what SteamCMD printed under Details, and offers Try again */
     const failed = (title: string, err: unknown) => {
         if (disposed()) return;
-        const message = errorMessage(err);
-        setBlocked({ failure: message });
-        showError(title, splitFailure(message).summary);
+        setBlocked({ failure: { title, message: errorMessage(err) } });
     };
 
     // the host is checked first, so an unsupported computer is told why instead of downloading
@@ -87,16 +84,8 @@ function InstallStep(props: { name: string }) {
             fallback={
                 <PaperCenteredInterface>
                     <UnsupportedHost game={props.name} host={blocked()!.host ?? null} />
-                    <Show when={blocked()!.failure}>
-                        {(message) => (
-                            <>
-                                <PaperEmptyState icon="error" title="Couldn't load">
-                                    <PaperButton onClick={() => void check()}>Try again</PaperButton>
-                                </PaperEmptyState>
-                                {/* what SteamCMD printed, which the toast leaves out */}
-                                <FailureOutput message={message()} />
-                            </>
-                        )}
+                    <Show when={blocked()?.failure}>
+                        {(failure) => <PaperError fill title={failure().title} error={failure().message} action={{ label: "Try again", onClick: () => void check() }} />}
                     </Show>
                 </PaperCenteredInterface>
             }

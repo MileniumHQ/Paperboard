@@ -1,5 +1,5 @@
 import { createEffect, createSignal, For, on, Show } from "solid-js";
-import { createFailureToast, PaperButton, PaperEffect, PaperEmptyState, PaperIcon, PaperQuote, PaperText, showError } from "@mileniumhq/paperui";
+import { PaperButton, PaperEffect, PaperError, PaperIcon, PaperQuote, PaperText, showError } from "@mileniumhq/paperui";
 import { errorMessage } from "../../lib/failure";
 import { listAdded } from "../../lib/addons/upload";
 import { changeMessage, workshopMods, type ModChange } from "../../lib/addons/workshop";
@@ -16,7 +16,6 @@ function RequiredMods(props: InstallExtrasProps & { requiredChain(ids: string[])
     const [titles, setTitles] = createSignal<string[] | null>(null);
     // the install waits until they are resolved, so a failure holds it
     const [error, setError] = createSignal("");
-    createFailureToast(error, { title: "Couldn't resolve its dependencies" });
     const required = () => props.target.dependencies ?? [];
 
     const resolve = () => {
@@ -47,9 +46,7 @@ function RequiredMods(props: InstallExtrasProps & { requiredChain(ids: string[])
                 </PaperText>
             </Show>
             <Show when={error()}>
-                <PaperEmptyState icon="error" title="Couldn't load">
-                    <PaperButton onClick={resolve}>Try again</PaperButton>
-                </PaperEmptyState>
+                {(err) => <PaperError title="Couldn't resolve its dependencies" error={err()} action={{ label: "Try again", onClick: resolve }} />}
             </Show>
             <Show when={titles()?.length}>
                 <PaperText size={3} weight={700}>

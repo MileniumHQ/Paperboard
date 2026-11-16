@@ -66,15 +66,16 @@ describe("the server issue repairs", () => {
     test("a server that could not be set up says why and sets itself up again from its Overview", async () => {
         const served = await servePanel(daemon);
         const page = await openPage(`${served.url}/?server=s-bad`);
-        const button = (label: string) => `[...document.querySelectorAll("button")].find((b) => b.innerText.trim() === ${JSON.stringify(label)})`;
         try {
-            const toast = `[...document.querySelectorAll("[data-paper-toasts] [role=alert]")].find((t) => t.innerText.includes("Couldn't set up this server"))`;
-            await page.waitFor(`${toast} && document.body.innerText.includes("This server isn't set up")`, "the setup failure on the Overview");
-            expect(await page.evaluate<string>(`${toast}.innerText`)).toContain("EEXIST");
-            expect(await page.evaluate<string>("document.body.innerText")).not.toContain("needs cleaning up");
+            // it stands on the Overview, with why, never as a toast
+            const failure = `document.querySelector(${JSON.stringify(`[data-paper-error][aria-label="Couldn't set up this server"]`)})`;
+            await page.waitFor(failure, "the setup failure on the Overview");
+            expect(await page.evaluate<string>(`${failure}.innerText`)).toContain("EEXIST");
+            expect(await page.evaluate<number>(`document.querySelectorAll("[data-paper-toasts] [role=alert]").length`)).toBe(0);
+            expect(await page.evaluate<string>("document.body.innerText")).not.toContain("Couldn't clean up the server folder");
             fs.rmSync(path.join(daemon.dataDir, "files", PANEL_ID, SERVERS, "s-bad"));
-            await page.evaluate(`${button("Try again")}.click()`);
-            await page.waitFor(`!${toast} && !document.body.innerText.includes("This server isn't set up")`, "the notice and its toast to go once it is set up");
+            await page.evaluate(`[...${failure}.querySelectorAll("button")].find((b) => b.innerText.trim() === "Try again").click()`);
+            await page.waitFor(`!document.querySelector("[data-paper-error]")`, "the failure to go once it is set up");
             expect(fs.statSync(path.join(daemon.dataDir, "files", PANEL_ID, SERVERS, "s-bad")).isDirectory()).toBe(true);
             expect(page.exceptions).toEqual([]);
         } finally {

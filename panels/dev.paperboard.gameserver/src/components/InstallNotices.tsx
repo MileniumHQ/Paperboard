@@ -1,7 +1,6 @@
-import { createEffect, on, Show } from "solid-js";
+import { Show } from "solid-js";
 import { useServer } from "../lib/server";
-import { PaperQuote, showError } from "@mileniumhq/paperui";
-import type { Outcome } from "../lib/failure";
+import { PaperError, PaperQuote } from "@mileniumhq/paperui";
 
 export interface HostSupport {
     supported: boolean;
@@ -21,31 +20,26 @@ export function UnsupportedHost(props: { game: string; host: HostSupport | null 
 
 /**
  * What stands in the way of installing, above a Versions tab: a server that
- * has to be stopped first, and a computer the game does not run on. What
- * could not be read is a toast.
+ * has to be stopped first, a computer the game does not run on, and what
+ * could not be read, with Try again.
  */
 export default function InstallNotices(props: {
     game: string;
     /** what stopping the server is for: "reinstall or change its version" */
     stopFor: string;
-    loadFailure?: Outcome;
+    loadFailure?: { title: string; error: string; retry: () => void; retrying: boolean };
     host: HostSupport | null;
 }) {
     const { serverStatus } = useServer();
-    createEffect(
-        on(
-            () => props.loadFailure,
-            (failure) => {
-                if (failure) showError(failure.title, failure.message);
-            },
-        ),
-    );
     return (
         <>
             <Show when={serverStatus() !== "offline"}>
                 <PaperQuote variant="warning" icon="warning" title="Server running">
                     Stop the server to {props.stopFor}.
                 </PaperQuote>
+            </Show>
+            <Show when={props.loadFailure}>
+                {(failure) => <PaperError title={failure().title} error={failure().error} action={{ label: "Try again", disabled: failure().retrying, onClick: failure().retry }} />}
             </Show>
             <UnsupportedHost game={props.game} host={props.host} />
         </>

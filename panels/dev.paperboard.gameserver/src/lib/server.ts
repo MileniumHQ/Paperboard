@@ -2,7 +2,7 @@
 // shows and hands it down through ServerContext; switching servers makes
 // another and drops this one with everything it owns, so nothing of one
 // server's page can reach the next.
-import { createFailureToast, createStateSignal, showError } from "@mileniumhq/paperui/headless";
+import { createStateSignal, showError } from "@mileniumhq/paperui/headless";
 import { createContext, onCleanup, useContext, type Accessor } from "solid-js";
 import { callsFor, filesFor, portsFor, serverStates, type ServerCalls, fileApi, portApi } from "./api";
 import { errorMessage } from "./failure";
@@ -36,7 +36,7 @@ export interface ServerPage extends Omit<Fields, "playerStats" | "playerPlaytime
     readonly playerStats: Accessor<ReadonlyMap<string, PlayerStatData>>;
     readonly playerPlaytime: Accessor<ReadonlyMap<string, number>>;
     readonly playerPositions: Accessor<ReadonlyMap<string, PlayerPosition>>;
-    /** the service reloads the server's config; a failure is a toast */
+    /** the service reloads the server's config, once the server is set up; a failure is a toast */
     loadServerConfig(): Promise<void>;
     updatePanelConfig(patch: Record<string, unknown>): Promise<void>;
     startServer(): void;
@@ -72,9 +72,7 @@ export function createServerPage(summary: Accessor<ServerSummary>): ServerPage {
         run().catch((err) => showError(title, errorMessage(err)));
     };
     const fields = serverFields(state);
-    // what blocks the whole server is said once for its page; RecoveryNotice offers the way out
-    createFailureToast(fields.initFailure, { title: "Couldn't set up this server" });
-    createFailureToast(fields.recoveryBlock, { title: "Couldn't clean up the server folder" });
+    // what blocks the whole server stands where it is started (RecoveryNotice), with the way out
     return {
         ...fields,
         id,
@@ -86,6 +84,8 @@ export function createServerPage(summary: Accessor<ServerSummary>): ServerPage {
         refresh: read,
         patch: (change) => setState((prev) => (prev ? { ...prev, ...change } : prev)),
         loadServerConfig: async () => {
+            // a server that isn't set up has no config to load: RecoveryNotice says why
+            if (fields.initFailure() !== null) return;
             try {
                 await calls.loadConfig();
                 await read();

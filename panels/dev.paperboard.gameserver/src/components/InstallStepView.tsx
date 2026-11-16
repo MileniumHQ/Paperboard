@@ -1,8 +1,6 @@
 import { onCleanup, Show, type JSX } from "solid-js";
-import { PaperButton, PaperCenteredInterface, PaperFlex, createFailureToast, useWizard } from "@mileniumhq/paperui";
+import { PaperCenteredInterface, PaperError, PaperFlex, useWizard } from "@mileniumhq/paperui";
 import InstallLoaders, { type InstallLoaderItem } from "./InstallLoaders";
-import FailureOutput from "./FailureOutput";
-import { splitFailure } from "../lib/failure";
 
 /**
  * Runs a setup wizard's install: Back and Next are hidden while it runs, and
@@ -28,8 +26,8 @@ export function createWizardInstall(install: () => Promise<boolean>) {
 
 /**
  * The install step of every game's setup wizard: its rows, and a failure
- * with Retry beside what else the user can do. The failure's first line is
- * a toast; what the tool printed after it stays here.
+ * that stands above them with Retry setup, what the tool printed under its
+ * Details, and what else the user can do under it.
  */
 export default function InstallStepView(props: {
     rows: InstallLoaderItem[];
@@ -40,17 +38,17 @@ export default function InstallStepView(props: {
     /** notices above the failure */
     children?: JSX.Element;
 }) {
-    createFailureToast(() => props.error && splitFailure(props.error).summary, { title: "Couldn't set up the server" });
     return (
         <PaperCenteredInterface>
             <PaperFlex direction="column" gap="full" center fullWidth>
                 {props.children}
                 <Show when={props.error}>
-                    <FailureOutput message={props.error} />
-                    <PaperFlex gap="half">
-                        <PaperButton onClick={props.onRetry}>Retry setup</PaperButton>
-                        {props.actions}
-                    </PaperFlex>
+                    {(err) => (
+                        <>
+                            <PaperError title="Couldn't set up the server" error={err()} action={{ label: "Retry setup", onClick: props.onRetry }} />
+                            {props.actions}
+                        </>
+                    )}
                 </Show>
                 <InstallLoaders items={props.rows} />
             </PaperFlex>

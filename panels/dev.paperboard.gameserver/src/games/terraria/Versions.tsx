@@ -13,7 +13,7 @@ import {
 import InstallNotices, { type HostSupport } from "../../components/InstallNotices";
 import InstallProgressModal from "../../components/InstallProgressModal";
 import { useServer } from "../../lib/server";
-import { errorMessage, type Outcome } from "../../lib/failure";
+import { errorMessage } from "../../lib/failure";
 import { softwareName, terrariaSoftware } from "./catalog";
 import ReleaseSelector, { releasesOf } from "./ReleaseSelector";
 import { createTerrariaInstall } from "./installRows";
@@ -26,7 +26,10 @@ export default function TerrariaVersions() {
     const [selected, setSelected] = createSignal(serverVersion() || releasesOf(software())[0]!.version);
     const hosts = createRead(async (): Promise<Record<string, HostSupport>> => (await calls.terrariaVersions()).hosts, { message: errorMessage });
     const support = () => hosts.value()?.[software()] ?? null;
-    const loadFailure = (): Outcome | undefined => (hosts.error() ? { title: "Terraria releases could not be read", message: hosts.error()! } : undefined);
+    const loadFailure = () => {
+        const error = hosts.error();
+        return error === null ? undefined : { title: "Couldn't read the Terraria releases", error, retry: () => void hosts.reload(), retrying: hosts.loading() };
+    };
     const [confirmOpen, setConfirmOpen] = createSignal(false);
     const [installOpen, setInstallOpen] = createSignal(false);
     const install = createTerrariaInstall();

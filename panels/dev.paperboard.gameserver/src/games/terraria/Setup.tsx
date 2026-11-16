@@ -3,7 +3,7 @@ import {
     createRead,
     PaperButton,
     PaperCenteredInterface,
-    PaperEmptyState,
+    PaperError,
     PaperFlex,
     PaperIcon,
     PaperSelector,
@@ -61,7 +61,6 @@ export default function TerrariaSetup(props: { onComplete(): void }) {
     // what this computer runs: Next waits for it
     const releasesRead = createRead(async (): Promise<Record<TerrariaSoftware, HostSupport>> => (await calls.terrariaVersions()).hosts, {
         message: errorMessage,
-        failure: { title: "Couldn't load the Terraria releases" },
     });
     const support = () => releasesRead.value()?.[software()] ?? null;
 
@@ -108,10 +107,14 @@ export default function TerrariaSetup(props: { onComplete(): void }) {
                         <PaperText preset="body">
                             Select a release for your {software() === "tmodloader" ? "tModLoader" : "Terraria"} dedicated server. A world is created on the first start; to choose its size, difficulty and seed, make one in Worlds first.
                         </PaperText>
-                        <Show when={!releasesRead.value() && releasesRead.error() && !releasesRead.loading()}>
-                            <PaperEmptyState icon="error" title="Couldn't load">
-                                <PaperButton onClick={() => void releasesRead.reload()}>Try again</PaperButton>
-                            </PaperEmptyState>
+                        <Show when={releasesRead.error()}>
+                            {(err) => (
+                                <PaperError
+                                    title="Couldn't load the Terraria releases"
+                                    error={err()}
+                                    action={{ label: "Try again", disabled: releasesRead.loading(), onClick: () => void releasesRead.reload() }}
+                                />
+                            )}
                         </Show>
                         <UnsupportedHost game="Terraria" host={support()} />
                         <ReleaseSelector software={software()} value={version()} onChange={setVersion} />

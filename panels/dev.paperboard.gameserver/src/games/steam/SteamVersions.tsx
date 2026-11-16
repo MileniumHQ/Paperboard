@@ -4,6 +4,7 @@ import {
     createRead,
     PaperButton,
     PaperCard,
+    PaperError,
     PaperFlex,
     PaperIcon,
     PaperLoader,
@@ -26,11 +27,11 @@ export default function SteamVersions(props: { name: string }) {
     const { calls, serverStatus } = useServer();
     const [installOpen, setInstallOpen] = createSignal(false);
     const install = createSteamInstall();
-    const read = createRead((): Promise<SteamInstallInfo> => calls.steamInfo(), { message: errorMessage, failure: { title: `Couldn't read the ${props.name} install` } });
+    const read = createRead((): Promise<SteamInstallInfo> => calls.steamInfo(), { message: errorMessage });
     const info = read.value;
     const loadFailed = () => !read.loading() && !!read.error();
     // a check waits behind a download in progress, and asks Steam over the network
-    const latest = createRead((): Promise<SteamUpdateStatus> => calls.steamLatest(), { message: errorMessage, failure: { title: `Couldn't check ${props.name} for updates` } });
+    const latest = createRead((): Promise<SteamUpdateStatus> => calls.steamLatest(), { message: errorMessage });
     const checking = latest.loading;
     // a failed check knows nothing of the newest build
     const status = () => (latest.error() ? undefined : latest.value());
@@ -63,6 +64,19 @@ export default function SteamVersions(props: { name: string }) {
             <PaperPageHeader icon="update" title="Updates" />
 
             <InstallNotices game={props.name} stopFor="update it" host={info()?.host ?? null} />
+
+            <Show when={read.error()}>
+                {(err) => (
+                    <PaperError
+                        title={`Couldn't read the ${props.name} install`}
+                        error={err()}
+                        action={{ label: "Try again", disabled: read.loading(), onClick: () => void read.reload() }}
+                    />
+                )}
+            </Show>
+            <Show when={latest.error()}>
+                {(err) => <PaperError title={`Couldn't check ${props.name} for updates`} error={err()} action={{ label: "Try again", disabled: checking(), onClick: () => void check() }} />}
+            </Show>
 
             <PaperCard>
                 <PaperFlex direction="column" gap="half" padding="full">
