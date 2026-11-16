@@ -240,15 +240,18 @@ export async function runPair(): Promise<number> {
         const known = new Set(before.computers.map((c) => `${c.name}\n${c.pairedAt}`));
         const { code } = await daemon.call("system:pairing-start");
         const listen = daemon.handshake.listen;
-        const address = listen ? `${getDisplayHost(listen.host)}:${listen.port}` : null;
         console.log(`Pairing code: ${code.slice(0, 3)} ${code.slice(3)}`);
         console.log("");
-        console.log("In Paperboard on the other computer, press Add Computer and pick this computer,");
-        console.log(`${address ? `or choose Custom IP and type ${address}. Then ` : "then "}enter the code.`);
+        // a daemon on loopback serves plain HTTP: Paperboard pairs only a daemon it reaches encrypted
         if (listen && isLoopbackHost(listen.host)) {
-            console.log(`This daemon only listens on ${listen.host}, so another computer reaches it only through a tunnel (such as ssh -L).`);
+            console.log(`This daemon only listens on ${listen.host}, without encryption, so Paperboard can't pair with it.`);
+            console.log("Start it with --host 0.0.0.0 to pair it from Paperboard over your network.");
+        } else {
+            const address = listen ? `${getDisplayHost(listen.host)}:${listen.port}` : null;
+            console.log("In Paperboard on the other computer, press Add Computer and pick this computer,");
+            console.log(`${address ? `or choose Custom IP and type ${address}. Then ` : "then "}enter the code.`);
+            console.log("Pair only on a network you trust; once paired, the connection is encrypted.");
         }
-        console.log("Pair only on a network you trust; once paired, the connection is encrypted.");
         console.log("");
         console.log("Waiting for a computer to pair... (Ctrl+C cancels)");
         for (;;) {

@@ -49,7 +49,7 @@ Waiting for a computer to pair... (Ctrl+C cancels)`}
             <PaperTextList ordered>
                 <li>In Paperboard, select <b>Add Computer</b>, the plus button in the rail.</li>
                 <li>On <b>Connect a Computer</b>, the computers Paperboard finds on your network are listed by name. Select yours and then <b>Next</b>.</li>
-                <li>If it is not listed, select <b>Custom IP</b>. On <b>Computer Details</b>, type its address in <b>Computer address</b>, and its port in <b>Server port</b> if it is not <PaperCode>45464</PaperCode>. <b>Next</b> turns on once Paperboard reaches the computer.</li>
+                <li>If it is not listed, select <b>Custom IP</b>. On <b>Computer Details</b>, type its address in <b>Computer address</b>, and its port in <b>Server port</b> if it is not <PaperCode>45464</PaperCode>. The address and port as <PaperCode>papercrane pair</PaperCode> prints them, such as <PaperCode>192.168.1.50:45464</PaperCode>, also go in <b>Computer address</b> whole. <b>Next</b> turns on once Paperboard reaches the computer.</li>
                 <li>On <b>Pairing Verification</b>, type the code into <b>Pairing code</b>, with or without the space.</li>
                 <li>Select <b>Add Computer</b>.</li>
             </PaperTextList>
@@ -65,6 +65,7 @@ Waiting for a computer to pair... (Ctrl+C cancels)`}
                 <li>After 10 wrong codes, that address cannot pair until you start pairing again on the daemon.</li>
                 <li>After 100 wrong codes in total, the daemon ends pairing. Start it again for a new code.</li>
                 <li>While pairing, Paperboard saves the daemon's certificate. From then on it connects only to a daemon that shows that same certificate, and the connection is encrypted.</li>
+                <li>A daemon that listens only on <PaperCode>127.0.0.1</PaperCode> serves no encryption, so Paperboard can't pair with it, and <PaperCode>papercrane pair</PaperCode> says so. Start it with <PaperCode>--host 0.0.0.0</PaperCode> to pair it over your network.</li>
             </PaperTextList>
             <PaperText preset="body" as="p">
                 A daemon holds at most 200 paired computers.

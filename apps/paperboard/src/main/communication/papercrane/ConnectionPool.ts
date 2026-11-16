@@ -47,11 +47,19 @@ export function classifyProbeError(err: any): string {
     if (code === "EHOSTUNREACH" || code === "ENETUNREACH") {
         return "Network unreachable. Is this device on the same network?";
     }
-    // a plain (unencrypted) server where the daemon's TLS was expected, or the reverse
-    if (code === "EPROTO" || /SSL|TLS|WRONG_VERSION_NUMBER/.test(msg)) {
-        return "Something answered on that port, but not the way the Paperboard server daemon does. Check the port number";
-    }
+    if (isPlaintextAnswer(err)) return NOT_THE_DAEMON;
     return msg || "Unreachable";
+}
+
+const NOT_THE_DAEMON = "Something answered on that port, but not the way the Paperboard server daemon does. Check the port number";
+// a daemon started with --host 127.0.0.1 serves plain HTTP, which only this computer's own app may use
+const LOOPBACK_DAEMON =
+    "That port answers only on this computer, without encryption, so Paperboard can't pair with it. Start that daemon with --host 0.0.0.0 to pair it over your network";
+
+/** a plain (unencrypted) server answered where a paired daemon's TLS was expected */
+function isPlaintextAnswer(err: any): boolean {
+    const code = err?.cause?.code || err?.code;
+    return code === "EPROTO" || /SSL|TLS|WRONG_VERSION_NUMBER/.test(String(err?.message || ""));
 }
 
 const LOCAL_COMPUTER_NAME = "This Computer";
@@ -242,11 +250,8 @@ export class ConnectionPool extends EventEmitter {
         if ("error" in checked) return checked;
         try {
             // reachability only: no credential crosses this request, so the
-            // not-yet-pinned certificate is not checked here. A daemon on
-            // loopback serves plain HTTP, as the client dials it
-            const res = isLoopback(host)
-                ? await fetch(`http://${host}:${checked.port}/health`, { signal: AbortSignal.timeout(2000) })
-                : await pinnedRequest(`https://${bracketHost(host)}:${checked.port}/health`, null, { timeoutMs: 2000 });
+            // not-yet-pinned certificate is not checked here
+            const res = await pinnedRequest(`https://${bracketHost(host)}:${checked.port}/health`, null, { timeoutMs: 2000 });
             if (res.ok) {
                 // /health carries liveness + version only; hostname arrives
                 // over the authenticated pair/verify handshake instead
@@ -259,7 +264,7 @@ export class ConnectionPool extends EventEmitter {
                 error: `Something other than the Paperboard server daemon answered on that port (HTTP ${res.status}). Check the port number`,
             };
         } catch (err: any) {
-            return { reachable: false, error: classifyProbeError(err) };
+            return { reachable: false, error: isLoopback(host) && isPlaintextAnswer(err) ? LOOPBACK_DAEMON : classifyProbeError(err) };
         }
     }
 
@@ -285,9 +290,8 @@ export class ConnectionPool extends EventEmitter {
             if (!pairRes.success || !pairRes.token) {
                 throw new Error("Pairing rejected: invalid code or daemon refused");
             }
-            // a daemon on loopback is dialed in plaintext, so it has no certificate to pin
             const cert = tempClient.getCert();
-            if (!cert && !isLoopback(host)) throw new Error("Pairing failed: the computer presented no certificate");
+            if (!cert) throw new Error("Pairing failed: the computer presented no certificate");
 
             // explicit identity: millisecond timestamps collide; a random
             // suffix keeps two paired-in-a-blink computers distinct

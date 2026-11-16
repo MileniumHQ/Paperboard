@@ -256,7 +256,8 @@ export async function bootShell(options: BootOptions = {}): Promise<Shell> {
                 const timer = setTimeout(() => reject(new Error(`papercrane pair printed no code:\n${said}`)), WAIT_MS);
                 const read = (chunk: Buffer) => {
                     said += chunk.toString("utf8");
-                    const match = /Pairing code: (\w+) (\w+)/.exec(said);
+                    // the code, once all pair says about it is printed
+                    const match = /Pairing code: (\w+) (\w+)[\s\S]*Waiting for a computer to pair/.exec(said);
                     if (match) {
                         clearTimeout(timer);
                         resolve(`${match[1]}${match[2]}`);
