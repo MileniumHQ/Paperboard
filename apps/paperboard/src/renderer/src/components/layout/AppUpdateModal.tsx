@@ -1,12 +1,10 @@
 import { Show } from "solid-js";
-import { PaperModal, PaperFlex, PaperText, PaperButton, PaperProgress, showError, createFailureToast } from "@mileniumhq/paperui";
+import { PaperModal, PaperFlex, PaperText, PaperButton, PaperProgress, PaperError, showError } from "@mileniumhq/paperui";
 import type { AppUpdateState } from "../../../../shared/appUpdate";
 import { shellIpc } from "../../lib/shell";
 import { checkForUpdates } from "../../hooks/useAppUpdate";
 
 export default function AppUpdateModal(props: { state: AppUpdateState; open: boolean; onClose(): void }) {
-    // why the update failed, said while the dialog that offers a retry is open
-    createFailureToast(() => (props.open && failed() ? props.state.error : null), { title: "Paperboard couldn't update" });
     const failed = () => props.state.status === "failed";
     const ready = () => props.state.status === "ready";
     const packageManaged = () => props.state.installMode !== "automatic";
@@ -56,6 +54,10 @@ export default function AppUpdateModal(props: { state: AppUpdateState; open: boo
                     : ready() ? `Version ${props.state.version} is downloaded. Restart Paperboard to apply it.`
                     : `Downloading Paperboard ${props.state.version ?? ""}${props.state.percent === null ? "…" : `: ${props.state.percent}%`}`}
             </PaperText>
+            {/* why it failed, above the retry the footer offers */}
+            <Show when={failed() && props.state.error}>
+                {(why) => <PaperError title="Paperboard couldn't update" error={why()} />}
+            </Show>
             <Show when={props.state.status === "downloading"}>
                 <PaperProgress value={props.state.percent ?? undefined} max={100} />
             </Show>

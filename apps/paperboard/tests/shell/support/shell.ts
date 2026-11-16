@@ -60,6 +60,20 @@ export function toastShown(...texts: string[]): string {
     return `[...document.querySelectorAll("[aria-label=Notifications] [role=alert]")].some((t) => ${JSON.stringify(texts)}.every((x) => t.innerText.includes(x)))`;
 }
 
+/**
+ * An expression for page.waitFor: whether a failure stands in place, a
+ * PaperError on screen titled `title` whose text includes every one of
+ * `texts`, and no toast says it too.
+ */
+export function errorShown(title: string, ...texts: string[]): string {
+    return `([...document.querySelectorAll("[data-paper-error]")].some((e) => e.getAttribute("aria-label") === ${JSON.stringify(title)} && e.offsetParent !== null && ${JSON.stringify(texts)}.every((x) => e.innerText.includes(x))) && !${toastShown(title)})`;
+}
+
+/** An expression for page.waitFor: whether no failure titled `title` stands anywhere, in place or as a toast. */
+export function errorGone(title: string): string {
+    return `(![...document.querySelectorAll("[data-paper-error]")].some((e) => e.getAttribute("aria-label") === ${JSON.stringify(title)}) && !${toastShown(title)})`;
+}
+
 /** the selector of the field fieldShown(label) found */
 export function fieldOf(label: string): string {
     return `[data-field=${JSON.stringify(label)}]`;

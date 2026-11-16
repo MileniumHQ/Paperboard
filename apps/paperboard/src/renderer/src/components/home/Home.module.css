@@ -236,18 +236,15 @@
     z-index: calc(var(--paper-z-raised) + 2);
 }
 
+/* a save that failed floats over Home's corner until a save goes through */
 .banner {
     position: absolute;
     left: var(--paper-uigap);
     bottom: var(--paper-uigap);
     z-index: calc(var(--paper-z-raised) + 2);
-    display: flex;
-    align-items: center;
-    gap: var(--paper-uigap-half);
-    padding: var(--paper-uigap-half) var(--paper-uigap);
+    width: min(var(--paper-size-menu-max), calc(100% - var(--paper-uigap-double)));
     border-radius: var(--paper-border-radius);
     background: var(--paper-surface-raised);
-    border: var(--paper-border-width) solid var(--paper-danger);
     box-shadow: var(--paper-element-shadow);
 }
 

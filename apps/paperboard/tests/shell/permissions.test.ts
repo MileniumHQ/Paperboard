@@ -3,7 +3,7 @@
 // against the host's real permission store.
 import { afterAll, beforeAll, expect, test } from "bun:test";
 import { ELECTRON_PRELOAD } from "./support/electronPreload";
-import { bootShell, clickText, toastShown, type Shell } from "./support/shell";
+import { bootShell, clickText, errorGone, errorShown, toastShown, type Shell } from "./support/shell";
 
 
 const PANEL = "dev.example.notes";
@@ -73,16 +73,15 @@ test("a panel's request that failed to be decided is said in a toast, with why",
     expect(page.exceptions).toEqual([]);
 });
 
-// Inventory: Core contracts — a view that couldn't load says "Couldn't load" with Try again, and a toast says why.
-test("panel permissions that can't be listed say Couldn't load, with why in a toast, and Try again lists them", async () => {
+// Inventory: Core contracts — a view that couldn't load says so in place, with why and Try again, and never in a toast.
+test("panel permissions that can't be listed say so in place of the list, with why, and Try again lists them", async () => {
     const { page } = shell;
     await page.click("[role=radio][aria-label='Home']");
     await shell.host({ cmd: "fail-permission-list", message: "The permissions file is locked" });
     await page.click("[role=radio][aria-label='Settings']");
-    await page.waitFor(toastShown("Couldn't load panel permissions", "The permissions file is locked"), "a toast saying why");
-    await page.waitFor(`document.body.innerText.includes("Couldn't load") && !document.querySelector(${JSON.stringify(SWITCH)})`, "Couldn't load, in place of the list");
+    await page.waitFor(`${errorShown("Couldn't load panel permissions", "The permissions file is locked", "Try again")} && !document.querySelector(${JSON.stringify(SWITCH)})`, "the failure, with why, in place of the list");
     await clickText(page, "button", "Try again");
-    await page.waitFor(`!!document.querySelector(${JSON.stringify(SWITCH)}) && !${toastShown("Couldn't load panel permissions")}`, "the list, and the toast gone");
+    await page.waitFor(`!!document.querySelector(${JSON.stringify(SWITCH)}) && ${errorGone("Couldn't load panel permissions")}`, "the list, and the failure gone");
     expect(page.exceptions).toEqual([]);
 });
 

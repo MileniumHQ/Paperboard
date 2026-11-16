@@ -2,11 +2,12 @@
 // none): the host pushes the update queue's states the way main's queue
 // does while it runs. An open panel shows that it is updating and loads
 // again once its new release is in place, unless the update was held back;
-// and a Stop and update that fails says why.
+// a Stop and update that fails says why, and so does Paperboard's own update
+// that failed, in its dialog.
 import { afterAll, beforeAll, expect, test } from "bun:test";
 import type { UpdateHold, UpdateItem, UpdateQueueState } from "../../src/shared/updateQueue";
 import { ELECTRON_PRELOAD } from "./support/electronPreload";
-import { bootShell, clickText, WIDGET_DEMO, type Shell } from "./support/shell";
+import { bootShell, clickText, errorShown, WIDGET_DEMO, type Shell } from "./support/shell";
 
 const PANEL = "dev.paperboard.widgetdemo";
 const KEY = `local::${PANEL}`;
@@ -147,5 +148,21 @@ test("Update everything now says what it is doing and what it came to", async ()
     await clickText(page, "button", "Update everything now");
     await shell.host({ cmd: "answer-update-check", outcome: { updated: 0, held: 0, failed: 1, linked: 0, problem: "Widget Demo didn't update: the download was refused" } });
     await page.waitFor(`${says("Not everything updated")} && ${says("Widget Demo didn't update: the download was refused.")}`, "the failure and its reason, said");
+    expect(page.exceptions).toEqual([]);
+});
+
+// Inventory: Updates — an update that failed says why in its dialog, beside the retry.
+test("an update that failed says why in its dialog, never only in a toast", async () => {
+    const { page } = shell;
+    await shell.host({
+        cmd: "push",
+        channel: "app-update-state",
+        payload: { revision: 1000, status: "failed", installMode: "automatic", version: "1.4.0", percent: null, error: "The download was cut off: the update server closed the connection" },
+    });
+    const dialog = `[...document.querySelectorAll("[role=dialog]")].find((d) => d.innerText.includes("Paperboard update failed"))`;
+    const title = "Paperboard couldn't update";
+    await page.waitFor(`${errorShown(title, "The download was cut off")} && !!${dialog}?.querySelector("[data-paper-error]")`, "the failure, in the update dialog");
+    await clickText(page, "button", "Later");
+    await page.waitFor(`!${dialog}`, "the dialog closed");
     expect(page.exceptions).toEqual([]);
 });

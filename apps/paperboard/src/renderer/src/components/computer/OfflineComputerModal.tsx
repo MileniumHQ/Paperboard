@@ -1,5 +1,5 @@
 import { type Component, createEffect, on, Show } from "solid-js";
-import { PaperFlex, PaperText, PaperButton, PaperIcon, PaperModal, createFailureToast } from "@mileniumhq/paperui";
+import { PaperError, PaperFlex, PaperText, PaperButton, PaperIcon, PaperModal } from "@mileniumhq/paperui";
 import type { ComputerInfo } from "../../lib/shell";
 import { createReachCheck } from "../../lib/reachCheck";
 
@@ -35,8 +35,6 @@ export const OfflineComputerModal: Component<OfflineComputerModalProps> = (
         ),
     );
 
-    createFailureToast(() => (props.open ? reach.error() : null), { title: "Couldn't reach this computer" });
-
     return (
         <PaperModal
             open={props.open}
@@ -57,7 +55,11 @@ export const OfflineComputerModal: Component<OfflineComputerModalProps> = (
                 </>
             }
         >
-            <PaperFlex direction="column" gap="half">
+            <PaperFlex direction="column" gap="full">
+                {/* why the last look found nothing; Try Again looks again */}
+                <Show when={reach.error()}>
+                    {(why) => <PaperError title="Couldn't reach this computer" error={why()} />}
+                </Show>
                 <Show when={props.computer}>
                     {(comp) => (
                         <PaperText preset="text">

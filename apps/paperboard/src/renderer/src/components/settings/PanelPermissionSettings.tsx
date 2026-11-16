@@ -1,9 +1,8 @@
-import { For, Match, onCleanup, Switch } from "solid-js";
+import { For, Match, onCleanup, Show, Switch } from "solid-js";
 import {
     createRead,
     createSavedValue,
-    PaperButton,
-    PaperEmptyState,
+    PaperError,
     PaperSectionHeader,
     PaperSettingItem,
     PaperSettingList,
@@ -28,7 +27,7 @@ export default function PanelPermissionSettings(props: { panelName: (panelId: st
     // reloads.
     const permissions = createRead(
         async () => (await panelPermissionsApi.list()).map((entry) => ({ ...entry, key: `${entry.panelId}\n${entry.permission}` })),
-        { key: "key", failure: { title: "Couldn't load panel permissions", retry: true } },
+        { key: "key" },
     );
     const entries = () => permissions.value() ?? [];
     onCleanup(panelPermissionsApi.onChanged(() => void permissions.reload()));
@@ -36,14 +35,18 @@ export default function PanelPermissionSettings(props: { panelName: (panelId: st
     return (
         <>
             <PaperSectionHeader icon="privacy_tip" title="Panel permissions" />
+            <Show when={permissions.error()}>
+                {(err) => (
+                    <PaperError
+                        title="Couldn't load panel permissions"
+                        error={err()}
+                        action={{ label: "Try again", disabled: permissions.loading(), onClick: () => void permissions.reload() }}
+                    />
+                )}
+            </Show>
             <Switch>
-                <Match when={permissions.value() === undefined && permissions.error()}>
-                    <PaperEmptyState icon="error" title="Couldn't load">
-                        <PaperButton disabled={permissions.loading()} onClick={() => void permissions.reload()}>
-                            Try again
-                        </PaperButton>
-                    </PaperEmptyState>
-                </Match>
+                {/* a first read that failed has no list to show under its failure */}
+                <Match when={permissions.value() === undefined && permissions.error()}>{null}</Match>
                 <Match when={entries().length === 0}>
                     <PaperText preset="hint" inset>When a panel asks for your microphone, camera or screen, your answer shows up here.</PaperText>
                 </Match>

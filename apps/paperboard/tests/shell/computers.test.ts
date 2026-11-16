@@ -2,7 +2,7 @@
 // list keeps, and how often a dialog checks a computer. Everything waits on
 // what the page does, never on a delay.
 import { afterAll, beforeAll, expect, test } from "bun:test";
-import { bootShell, clickText, fieldOf, fieldShown, toastShown, type Shell } from "./support/shell";
+import { bootShell, clickText, errorShown, fieldOf, fieldShown, toastShown, type Shell } from "./support/shell";
 
 let shell: Shell;
 let workshop: Awaited<ReturnType<Shell["pairComputer"]>>;
@@ -159,7 +159,7 @@ test("the can't-reach dialog checks the computer once when it opens and once per
     await workshop.daemon.stop();
     const before = await shell.host<number>({ cmd: "probes" });
     await page.click(SHED);
-    await page.waitFor(`document.body.innerText.includes("Can't reach Shed") && ${toastShown("Couldn't reach this computer")}`, "the can't-reach dialog with its answer, in a toast");
+    await page.waitFor(`document.body.innerText.includes("Can't reach Shed") && ${errorShown("Couldn't reach this computer")} && !!document.querySelector("[role=dialog] [data-paper-error]")`, "the can't-reach dialog with its answer, in the dialog");
     expect(await shell.host<number>({ cmd: "probes" })).toBe(before + 1);
 
     await clickText(page, "button", "Try Again");

@@ -12,7 +12,7 @@ import {
     PaperModal,
     PaperPage,
     PaperPageHeader,
-    PaperEmptyState,
+    PaperError,
     PaperSectionHeader,
     showError,
     showToast,
@@ -107,8 +107,8 @@ export default function AppSettings(props: {
     panelName?: (panelId: string) => string;
     /** the phone layout: a page of its own, with only what applies on a phone */
     compact?: boolean;
-    /** the stored settings couldn't be read: they show "Couldn't load", and a toast says why */
-    loadFailed?: boolean;
+    /** why the stored settings couldn't be read: none of them shows, only the failure, with Try again */
+    loadError?: string | null;
     /** false where there's no GPU: animations and blur are off until the user chooses */
     gpu: boolean;
     onRetryLoad?: () => void;
@@ -167,16 +167,18 @@ export default function AppSettings(props: {
                     subtitle={isBrowserShell() ? "Appearance, startup, and licenses." : "Appearance, startup, updates, and licenses."}
                 />
             </Show>
+            {/* settings that didn't load are the defaults, not yours: none shows until they load */}
+            <Show when={props.loadError}>
+                {(why) => (
+                    <PaperError
+                        title="Couldn't load your settings"
+                        error={`Paperboard is showing the defaults, and changes aren't saved: ${why()}`}
+                        action={{ label: "Try again", onClick: () => props.onRetryLoad?.() }}
+                    />
+                )}
+            </Show>
             <PaperSettingList autoHeight value={settingsValue()} onValueChange={handleChange}>
-                {/* settings that didn't load are the defaults, not yours: none shows until they load */}
-                <Show
-                    when={!props.loadFailed}
-                    fallback={
-                        <PaperEmptyState icon="error" title="Couldn't load">
-                            <PaperButton onClick={() => props.onRetryLoad?.()}>Try again</PaperButton>
-                        </PaperEmptyState>
-                    }
-                >
+                <Show when={!props.loadError}>
                     <PaperSettingItem title="Appearance" description="Match the operating system appearance or force light or dark.">
                         <PaperSelectMenu name="darkMode" value={props.settings.darkMode} fullWidth={!props.compact}>
                             <PaperSelectMenuItem value="system" icon="contrast">System</PaperSelectMenuItem>

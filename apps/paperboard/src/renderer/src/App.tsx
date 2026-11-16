@@ -41,7 +41,7 @@ const App: Component = () => {
     const panelName = (compId: string, panelId: string) =>
         panelsByComputer()[compId]?.find((p) => p.id === panelId)?.name || panelId;
     const settings = useAppSettings();
-    const { appSettings, graphics, handleAppSettingsChange, loadFailed, retryLoadAppSettings } = settings;
+    const { appSettings, graphics, handleAppSettingsChange, loadError, retryLoadAppSettings } = settings;
     const selection = useComputerSelection({
         computers: computerState,
         panels: panelState,
@@ -179,7 +179,7 @@ const App: Component = () => {
                                     panelName={(panelId) => Object.values(panelsByComputer()).flat().find((p) => p.id === panelId)?.name || panelId}
                                     onChange={handleAppSettingsChange}
                                     computers={listedComputers()}
-                                    loadFailed={loadFailed()}
+                                    loadError={loadError()}
                                     gpu={graphics().gpu}
                                     onRetryLoad={retryLoadAppSettings}
                                 />
@@ -231,7 +231,7 @@ const App: Component = () => {
                             settings={appSettings()}
                             onChange={handleAppSettingsChange}
                             computers={listedComputers()}
-                            loadFailed={loadFailed()}
+                            loadError={loadError()}
                             gpu={graphics().gpu}
                             onRetryLoad={retryLoadAppSettings}
                         />

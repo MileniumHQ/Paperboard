@@ -1,4 +1,4 @@
-import { haptic, PaperButton, PaperEmptyState, PaperModal, PaperPresence, PaperText, showToast, sameData, createFailureToast } from "@mileniumhq/paperui";
+import { haptic, PaperButton, PaperEmptyState, PaperError, PaperFlex, PaperModal, PaperPresence, PaperText, showToast, sameData } from "@mileniumhq/paperui";
 import {
     batch,
     type Component,
@@ -61,8 +61,6 @@ const HomeView: Component<HomeViewProps> = (props) => {
     const phone = () => !!props.mobile;
     // the layout and its saves (homePersistence.ts)
     const layout = createHomePersistence(phone);
-    // why the arrangement isn't saved; the banner keeps Retry once the toast is closed
-    createFailureToast(layout.saveError, { title: "Couldn't save Home", action: { label: "Retry", onClick: () => layout.retrySave() } });
     const items = layout.items;
     const loadState = layout.loadState;
     const itemsById = createMemo(() => new Map(items().map((item) => [item.id, item])));
@@ -493,11 +491,16 @@ const HomeView: Component<HomeViewProps> = (props) => {
                 </Show>
                 <Show when={typeof loadState() === "object" ? (loadState() as { error: string }) : null}>
                     {(failed) => (
-                        <div class={styles.centerState} role="alert">
-                            <PaperEmptyState icon="error" title="Couldn't load Home" description={failed().error}>
-                                <PaperButton variant="primary" onClick={() => void layout.load()}>Retry</PaperButton>
+                        <div class={styles.centerState}>
+                            <PaperFlex direction="column" align="center" gap="half">
+                                <PaperError
+                                    fill
+                                    title="Couldn't load Home"
+                                    error={failed().error}
+                                    action={{ label: "Try again", onClick: () => void layout.load() }}
+                                />
                                 <PaperButton variant="danger" onClick={() => void layout.startOver()}>Start over with an empty Home</PaperButton>
-                            </PaperEmptyState>
+                            </PaperFlex>
                         </div>
                     )}
                 </Show>
@@ -530,10 +533,16 @@ const HomeView: Component<HomeViewProps> = (props) => {
                     </div>
                 </Show>
                 <Show when={layout.saveError()}>
-                    <div class={styles.banner}>
-                        <PaperText preset="hint">Changes to Home aren't saved.</PaperText>
-                        <PaperButton size="tiny" variant="text" onClick={layout.retrySave}>Retry</PaperButton>
-                    </div>
+                    {(why) => (
+                        <div class={styles.banner}>
+                            <PaperError
+                                alert
+                                title="Couldn't save Home"
+                                error={`Changes to Home aren't saved: ${why()}`}
+                                action={{ label: "Try again", onClick: () => layout.retrySave() }}
+                            />
+                        </div>
+                    )}
                 </Show>
             </div>
 

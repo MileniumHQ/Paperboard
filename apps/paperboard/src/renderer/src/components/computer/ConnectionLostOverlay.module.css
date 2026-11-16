@@ -38,3 +38,10 @@
     text-align: center;
     max-width: var(--paper-size-panel-small);
 }
+
+/* why the last attempt found nothing, as wide as the message over it */
+.failure {
+    width: 100%;
+    max-width: var(--paper-size-panel-small);
+    text-align: start;
+}

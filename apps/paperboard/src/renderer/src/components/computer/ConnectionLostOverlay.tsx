@@ -1,5 +1,5 @@
 import { type Component, Show } from "solid-js";
-import { PaperFlex, PaperText, PaperButton, PaperIcon, createFailureToast } from "@mileniumhq/paperui";
+import { PaperError, PaperFlex, PaperText, PaperButton, PaperIcon } from "@mileniumhq/paperui";
 import styles from "./ConnectionLostOverlay.module.css";
 import type { ComputerInfo } from "../../lib/shell";
 import { createReachCheck } from "../../lib/reachCheck";
@@ -17,9 +17,6 @@ export const ConnectionLostOverlay: Component<ConnectionLostOverlayProps> = (
     const handleReconnect = async () => {
         if (!reach.checking() && (await reach.check(props.computer))) props.onReconnectSuccess();
     };
-
-    // why the last Attempt Reconnect found nothing, said apart from the view
-    createFailureToast(reach.error, { title: "Couldn't reach this computer" });
 
     return (
         <PaperFlex
@@ -48,6 +45,15 @@ export const ConnectionLostOverlay: Component<ConnectionLostOverlayProps> = (
                     </PaperText>
                 </Show>
             </PaperFlex>
+
+            {/* why the last Attempt Reconnect found nothing */}
+            <Show when={reach.error()}>
+                {(why) => (
+                    <div class={styles.failure}>
+                        <PaperError alert title="Couldn't reach this computer" error={why()} />
+                    </div>
+                )}
+            </Show>
 
             <PaperFlex center direction="column" gap="half">
                 <PaperButton size="tiny"

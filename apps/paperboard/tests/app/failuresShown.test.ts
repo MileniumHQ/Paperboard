@@ -42,7 +42,7 @@ const rejection = (p: Promise<unknown>) => p.then(() => { throw new Error("it re
 
 // Failures reach the caller instead of being swallowed.
 describe("failures reach the caller", () => {
-    test("a settings file that won't load is a toast and Couldn't load, and a save that fails keeps the switch where it was", async () => {
+    test("a settings file that won't load is a toast, then stands in App Settings with Try again, and a save that fails keeps the switch where it was", async () => {
         const dataDir = tempDataDir("settings-load");
         const settingsFile = path.join(dataDir, "local", "app-settings.json");
         fs.writeFileSync(settingsFile, "{ not json");
@@ -59,7 +59,10 @@ describe("failures reach the caller", () => {
         expect(loadToast).toMatch(/JSON/);
         // the defaults aren't the user's settings: App Settings shows none of them, so none can be saved over the file
         await electron.evalIn(SHELL, `document.querySelector('[role=radio][aria-label="Settings"]').click()`);
-        await electron.evalIn(SHELL, domCondition(`document.body.innerText.includes("Couldn't load") && [...document.querySelectorAll("button")].some((b) => b.innerText === "Try again")`));
+        // and App Settings holds it in place, with why and Try again, after the toast has gone
+        const standing = await electron.evalIn(SHELL, domCondition(`[...document.querySelectorAll("[data-paper-error]")].find((e) => e.getAttribute("aria-label") === ${JSON.stringify("Couldn't load your settings")} && e.offsetParent !== null &&[...e.querySelectorAll("button")].some((b) => b.innerText === "Try again"))?.innerText`));
+        expect(standing).toContain("Paperboard is showing the defaults, and changes aren't saved: ");
+        expect(standing).toMatch(/JSON/);
         expect(await electron.evalIn(SHELL, `!!document.querySelector('[role=switch]:has(input[name=disableBlur])')`)).toBe(false);
         expect(await electron.quit()).toEqual({ code: 0, signal: null });
         expect(fs.readFileSync(settingsFile, "utf8")).toBe("{ not json");

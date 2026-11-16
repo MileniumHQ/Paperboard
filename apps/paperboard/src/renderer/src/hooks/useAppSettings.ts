@@ -1,6 +1,6 @@
 import { createSignal, createEffect, on, onCleanup } from "solid-js";
 import { config, errorMessage, SerialQueue } from "@mileniumhq/paperapi";
-import { createFailureToast, showError } from "@mileniumhq/paperui";
+import { showError } from "@mileniumhq/paperui";
 import { logToMain, notifyAppSettingsChanged, shellApi } from "../lib/shell";
 import { withAppSettingsDefaults } from "../../../shared/appSettingsDefaults";
 import { effectiveLook, type Graphics } from "../../../shared/graphics";
@@ -9,8 +9,9 @@ import { APP_SETTINGS_DEFAULTS, APP_SETTINGS_ID, type AppSettingsData } from "..
 const APPLY_FAILED = "Couldn't apply Run on startup";
 
 // App-wide settings: load, mirror reduced motion and blur onto the document, persist
-// before notifying main. Settings that didn't load stand as a toast, with
-// Try again, until a load works; a save or an apply that fails is a toast.
+// before notifying main. Settings that didn't load are said as a toast when
+// they fail, and stand in App Settings, with Try again, until a load works; a
+// save or an apply that fails is a toast.
 export function useAppSettings() {
     const [appSettings, setAppSettings] =
         createSignal<AppSettingsData>(APP_SETTINGS_DEFAULTS);
@@ -66,15 +67,15 @@ export function useAppSettings() {
             logToMain("error", "Failed to load app settings; showing the defaults:", err);
             unread = true;
             setLoadError(errorMessage(err));
+            // said as it happens, wherever the person is; App Settings holds it, with Try again, until a load works
+            showError("Couldn't load your settings", `Paperboard is showing the defaults, and changes aren't saved: ${errorMessage(err)}`, {
+                retry: () => void loadAppSettings(),
+            });
             return false;
         }
     };
 
     const retryLoadAppSettings = () => void loadAppSettings();
-    createFailureToast(() => loadError() && `Paperboard is showing the defaults, and changes aren't saved: ${loadError()}`, {
-        title: "Couldn't load your settings",
-        action: { label: "Try again", onClick: retryLoadAppSettings },
-    });
 
     // A change shows at once, and the next change is built on it: settings
     // that only changed once the save came back would hand a second change,
@@ -137,7 +138,8 @@ export function useAppSettings() {
         loadAppSettings,
         applyAppSettings,
         handleAppSettingsChange,
-        loadFailed: () => loadError() !== null,
+        /** why the stored settings couldn't be read, while they can't */
+        loadError,
         retryLoadAppSettings,
     };
 }

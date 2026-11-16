@@ -1,5 +1,5 @@
 import { type Component, createEffect, createSignal, For, on, Show } from "solid-js";
-import { PaperButton, PaperCard, PaperEmptyState, PaperFlex, PaperModal, PaperSectionHeader, PaperText, createAction, createFailureToast, createLatest, createRead } from "@mileniumhq/paperui";
+import { PaperButton, PaperCard, PaperError, PaperFlex, PaperModal, PaperSectionHeader, PaperText, createAction, createLatest, createRead } from "@mileniumhq/paperui";
 import { backupLocationLabel, backupLocationsApi, type BackupLocation } from "@mileniumhq/paperapi";
 import { isBrowserShell, shellIpc } from "../../lib/shell";
 import { createLocationUsage, usageText } from "./locationUsage";
@@ -18,18 +18,16 @@ const BackupLocations: Component<{ computerId: string; computerName: string; sho
             const damaged = await backupLocationsApi.problem(props.computerId);
             return damaged ? { problem: damaged } : { locations: await backupLocationsApi.list(props.computerId) };
         },
-        { failure: { title: "Couldn't load backup locations", retry: true } },
     );
-    const now = () => (read.error() ? undefined : read.value());
+    // a read that failed keeps the locations it last showed, under the failure
     const locations = () => {
-        const shown = now();
+        const shown = read.value();
         return shown && "locations" in shown ? shown.locations : null;
     };
     const problem = () => {
-        const shown = now();
+        const shown = read.value();
         return shown && "problem" in shown ? shown.problem : "";
     };
-    createFailureToast(problem, { title: "The backup locations file is damaged" });
     // each location's space is read again with every reload; it keeps the space it showed until its new answer is in
     const [round, setRound] = createSignal(0);
     const load = () => {
@@ -95,21 +93,27 @@ const BackupLocations: Component<{ computerId: string; computerName: string; sho
 
             <PaperFlex direction="column" gap="full" fullWidth>
                 <Show when={read.error()}>
-                    <PaperEmptyState icon="error" title="Couldn't load">
-                        <PaperButton disabled={read.loading()} onClick={() => void load()}>Try again</PaperButton>
-                    </PaperEmptyState>
+                    {(err) => (
+                        <PaperError
+                            title="Couldn't load backup locations"
+                            error={err()}
+                            action={{ label: "Try again", disabled: read.loading(), onClick: () => void load() }}
+                        />
+                    )}
                 </Show>
-                <Show when={problem()}>
-                    <PaperEmptyState
-                        icon="error"
-                        title="Couldn't load"
-                        description="Starting fresh keeps the damaged file beside it and empties this list. Panels choose a location again; backups already at your locations are not deleted."
-                    >
-                        <PaperButton variant="danger" disabled={recovering()} onClick={() => void recover()}>
-                            {recovering() ? "Setting Aside..." : "Set Aside and Start Fresh"}
-                        </PaperButton>
-                        <PaperButton variant="text" disabled={recovering()} onClick={() => void load()}>Try again</PaperButton>
-                    </PaperEmptyState>
+                <Show when={!read.error() && problem()}>
+                    {(why) => (
+                        <>
+                            <PaperError
+                                title="The backup locations file is damaged"
+                                error={why()}
+                                action={{ label: recovering() ? "Setting Aside..." : "Set Aside and Start Fresh", disabled: recovering(), onClick: () => void recover() }}
+                            />
+                            <PaperText preset="hint" inset>
+                                Starting fresh empties this list, and panels choose a location again. Backups already at your locations are not deleted.
+                            </PaperText>
+                        </>
+                    )}
                 </Show>
                 <Show when={!read.value() && !read.error()}>
                     <PaperText preset="hint" inset>Loading locations…</PaperText>

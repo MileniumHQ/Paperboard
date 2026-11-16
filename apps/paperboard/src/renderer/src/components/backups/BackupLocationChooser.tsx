@@ -1,5 +1,5 @@
 import { type Component, createEffect, createSignal, For, on, Show } from "solid-js";
-import { PaperButton, PaperEmptyState, PaperFlex, PaperModal, PaperSelector, PaperSelectorItem, PaperText, createAction, createRead } from "@mileniumhq/paperui";
+import { PaperButton, PaperError, PaperFlex, PaperModal, PaperSelector, PaperSelectorItem, PaperText, createAction, createRead } from "@mileniumhq/paperui";
 import { backupApi, backupLocationLabel, backupLocationsApi, type BackupLocation } from "@mileniumhq/paperapi";
 import { createLocationUsage, usageText } from "./locationUsage";
 import { LocationLogo } from "./providers";
@@ -18,7 +18,7 @@ const BackupLocationChooser: Component<{ computerId: string; computerName: strin
             const [locations, status] = await Promise.all([backupLocationsApi.list(props.computerId), props.sourceId ? backupApi.forSource(props.panelId, props.sourceId, props.computerId).status() : backupApi.status(props.panelId, props.computerId)]);
             return { locations, chosen: status.location?.id ?? locations[0]?.id ?? "" };
         },
-        { source: () => props.open, failure: { title: "Couldn't load backup locations", retry: true } },
+        { source: () => props.open },
     );
     // the list as this opening read it: the last opening's goes while the new one is read
     const locations = () => (read.loading() ? undefined : read.value()?.locations);
@@ -67,22 +67,22 @@ const BackupLocationChooser: Component<{ computerId: string; computerName: strin
             footer={
                 <>
                     <PaperButton variant="text" disabled={saving()} onClick={dismiss}>Cancel</PaperButton>
-                    <Show when={read.error() && !locations()} fallback={
-                        <PaperButton disabled={saving() || !selected()} onClick={() => void choose()}>{saving() ? "Saving..." : "Use this location"}</PaperButton>
-                    }>
-                        <PaperButton onClick={() => void read.reload()}>Try again</PaperButton>
-                    </Show>
+                    <PaperButton disabled={saving() || !locations() || !selected()} onClick={() => void choose()}>{saving() ? "Saving..." : "Use this location"}</PaperButton>
                 </>
             }
         >
             <PaperFlex direction="column" gap="half">
                 <PaperText preset="text">This panel's files and settings are copied here each time it makes a backup.</PaperText>
-                <Show when={locations()} fallback={
-                    <Show
-                        when={!read.error()}
-                        fallback={<PaperEmptyState icon="error" title="Couldn't load" />}
-                    ><PaperText preset="hint">Loading locations…</PaperText></Show>
-                }>
+                <Show when={read.error()}>
+                    {(err) => (
+                        <PaperError
+                            title="Couldn't load backup locations"
+                            error={err()}
+                            action={{ label: "Try again", disabled: read.loading(), onClick: () => void read.reload() }}
+                        />
+                    )}
+                </Show>
+                <Show when={locations()} fallback={<Show when={!read.error()}><PaperText preset="hint">Loading locations…</PaperText></Show>}>
                     {(list) => (
                         <PaperSelector name="backup-location" value={selected()} onValueChange={(value) => setPicked(String(value))}>
                             <For each={list()}>

@@ -1,11 +1,11 @@
 // Home in the real shell, and what it keeps on disk: a layout that can't be
 // read is shown as an error and never saved over, an arrangement made with
 // the mouse or the keyboard lands in the layout file, and a save that fails
-// says so and is saved by Retry.
+// says so in place and is saved by Try again.
 import { afterAll, beforeAll, expect, test } from "bun:test";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { bootShell, clickText, type Shell } from "./support/shell";
+import { bootShell, clickText, errorGone, errorShown, type Shell } from "./support/shell";
 
 let shell: Shell;
 // the window's Home layout, beside the daemon's own state
@@ -60,10 +60,10 @@ async function press(key: string, code: number): Promise<void> {
 // Inventory: Data loss — a Home layout that can't be read is never saved over unless asked.
 test("a layout that can't be read is shown with why, and the file stays as it was until Start over", async () => {
     const { page } = shell;
-    await page.waitFor(alertSays("Couldn't load Home"), "Home to say it couldn't load");
+    await page.waitFor(`${errorShown("Couldn't load Home", "Try again")} && [...document.querySelectorAll("button")].some((b) => b.textContent === "Start over with an empty Home")`, "Home to say it couldn't load");
     // looking again reads it again, and still writes nothing
-    await clickText(page, "button", "Retry");
-    await page.waitFor(alertSays("Couldn't load Home"), "Home to say again it couldn't load");
+    await clickText(page, "button", "Try again");
+    await page.waitFor(errorShown("Couldn't load Home"), "Home to say again it couldn't load");
     await page.settled();
     expect(await page.evaluate(`!!document.querySelector("button") && [...document.querySelectorAll("button")].some((b) => b.textContent === "Edit Home")`)).toBe(false);
     expect(fs.readFileSync(layoutFile(), "utf8")).toBe(UNREADABLE);
@@ -104,8 +104,8 @@ test("a widget added from the gallery, dragged and moved with the keyboard, is s
     expect(page.exceptions).toEqual([]);
 });
 
-// Inventory: Data loss — a Home save that fails says so, and Retry saves the arrangement.
-test("a save that fails is shown, and Retry saves what is on screen", async () => {
+// Inventory: Data loss — a Home save that fails says so in place, and Try again saves the arrangement.
+test("a save that fails is shown in place, and Try again saves what is on screen", async () => {
     const { page } = shell;
     const before = await savedLayout((saved) => saved.items.length === 1, "the arranged layout");
     const { x, y } = before.items[0];
@@ -116,11 +116,11 @@ test("a save that fails is shown, and Retry saves what is on screen", async () =
     await clickText(page, "button", "Edit Home");
     await page.evaluate(`document.querySelector(${JSON.stringify(tile("Uptime"))}).focus()`);
     await press("ArrowRight", 39);
-    await page.waitFor(alertSays("Couldn't save Home"), "Home to say its save failed");
+    await page.waitFor(`${errorShown("Couldn't save Home", "Changes to Home aren't saved")} && ${alertSays("Couldn't save Home")}`, "Home to say its save failed");
 
     fs.rmSync(layoutFile(), { recursive: true });
-    await clickText(page, "button", "Retry");
+    await clickText(page, "button", "Try again");
     await savedLayout((saved) => saved.items.length === 1 && saved.items[0].x === x + 1 && saved.items[0].y === y, "the retried save");
-    await page.waitFor(`!(${alertSays("Couldn't save Home")})`, "the save failure to go");
+    await page.waitFor(errorGone("Couldn't save Home"), "the save failure to go");
     expect(page.exceptions).toEqual([]);
 });
