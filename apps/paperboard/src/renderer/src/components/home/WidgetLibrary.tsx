@@ -198,8 +198,8 @@ const WidgetLibrary: Component<WidgetLibraryProps> = (props) => {
                                             </PaperText>
                                         </Show>
                                         <Show when={props.panelsLoadFailed[computer.id]}>
-                                            <div class={styles.libraryNote} role="alert">
-                                                <PaperText preset="error">Couldn't load widgets from {computer.name}.</PaperText>
+                                            <div class={styles.libraryNote}>
+                                                <PaperText preset="hint">Widgets from {computer.name} didn't load.</PaperText>
                                                 <PaperButton size="tiny" variant="text" onClick={() => props.onRetry(computer.id)}>Retry</PaperButton>
                                             </div>
                                         </Show>

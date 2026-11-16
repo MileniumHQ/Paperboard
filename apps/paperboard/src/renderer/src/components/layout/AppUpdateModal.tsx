@@ -1,12 +1,12 @@
-import { createSignal, Show } from "solid-js";
-import { PaperModal, PaperFlex, PaperText, PaperButton, PaperProgress, showError } from "@mileniumhq/paperui";
+import { Show } from "solid-js";
+import { PaperModal, PaperFlex, PaperText, PaperButton, PaperProgress, showError, createFailureToast } from "@mileniumhq/paperui";
 import type { AppUpdateState } from "../../../../shared/appUpdate";
 import { shellIpc } from "../../lib/shell";
 import { checkForUpdates } from "../../hooks/useAppUpdate";
-import { errorMessage } from "@mileniumhq/paperapi";
 
 export default function AppUpdateModal(props: { state: AppUpdateState; open: boolean; onClose(): void }) {
-    const [downloadError, setDownloadError] = createSignal<string | null>(null);
+    // why the update failed, said while the dialog that offers a retry is open
+    createFailureToast(() => (props.open && failed() ? props.state.error : null), { title: "Paperboard couldn't update" });
     const failed = () => props.state.status === "failed";
     const ready = () => props.state.status === "ready";
     const packageManaged = () => props.state.installMode !== "automatic";
@@ -18,11 +18,8 @@ export default function AppUpdateModal(props: { state: AppUpdateState; open: boo
             : "Update Paperboard with the package manager you used to install it.";
         return `${lead} ${how} You can keep using this version in the meantime.`;
     };
-    const openDownload = async () => {
-        setDownloadError(null);
-        try { await shellIpc().invoke("open-update-download"); }
-        catch (err) { setDownloadError(`Could not open downloads: ${errorMessage(err)}`); }
-    };
+    const openDownload = () =>
+        shellIpc().invoke("open-update-download").catch((err) => showError("Couldn't open downloads", err));
     // the dialog closes first: a page with unsaved work asks in its own
     const restart = () => {
         props.onClose();
@@ -59,13 +56,9 @@ export default function AppUpdateModal(props: { state: AppUpdateState; open: boo
                     : ready() ? `Version ${props.state.version} is downloaded. Restart Paperboard to apply it.`
                     : `Downloading Paperboard ${props.state.version ?? ""}${props.state.percent === null ? "…" : `: ${props.state.percent}%`}`}
             </PaperText>
-            <Show when={failed() && props.state.error}>
-                <PaperText preset="error" breakWord>{props.state.error}</PaperText>
-            </Show>
             <Show when={props.state.status === "downloading"}>
                 <PaperProgress value={props.state.percent ?? undefined} max={100} />
             </Show>
-            <Show when={downloadError()}><PaperText preset="error" role="alert">{downloadError()}</PaperText></Show>
         </PaperFlex>
     </PaperModal>;
 }

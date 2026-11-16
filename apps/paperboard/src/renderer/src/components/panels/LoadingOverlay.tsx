@@ -1,6 +1,7 @@
 import { type Component, type JSX, Show } from "solid-js";
 import {
     PaperButton,
+    PaperEmptyState,
     PaperFlex,
     PaperProgress,
     PaperText,
@@ -53,7 +54,7 @@ const LoadingOverlay: Component<LoadingOverlayProps> = (props) => (
             <PaperText preset="label">{props.title}</PaperText>
         </Show>
         <Show when={props.error}>
-            <PaperText preset="error" role="alert">{props.error}</PaperText>
+            <PaperEmptyState role="alert" icon="error" title="Couldn't load" description={props.error} />
         </Show>
         <Show when={props.detail}>
             <PaperText preset="hint">{props.detail}</PaperText>

@@ -1,4 +1,4 @@
-import { haptic, PaperButton, PaperEmptyState, PaperModal, PaperPresence, PaperText, showToast, sameData } from "@mileniumhq/paperui";
+import { haptic, PaperButton, PaperEmptyState, PaperModal, PaperPresence, PaperText, showToast, sameData, createFailureToast } from "@mileniumhq/paperui";
 import {
     batch,
     type Component,
@@ -61,6 +61,8 @@ const HomeView: Component<HomeViewProps> = (props) => {
     const phone = () => !!props.mobile;
     // the layout and its saves (homePersistence.ts)
     const layout = createHomePersistence(phone);
+    // why the arrangement isn't saved; the banner keeps Retry once the toast is closed
+    createFailureToast(layout.saveError, { title: "Couldn't save Home", action: { label: "Retry", onClick: () => layout.retrySave() } });
     const items = layout.items;
     const loadState = layout.loadState;
     const itemsById = createMemo(() => new Map(items().map((item) => [item.id, item])));
@@ -528,8 +530,8 @@ const HomeView: Component<HomeViewProps> = (props) => {
                     </div>
                 </Show>
                 <Show when={layout.saveError()}>
-                    <div class={styles.banner} role="alert">
-                        <PaperText preset="error">Couldn't save Home: {layout.saveError()}</PaperText>
+                    <div class={styles.banner}>
+                        <PaperText preset="hint">Changes to Home aren't saved.</PaperText>
                         <PaperButton size="tiny" variant="text" onClick={layout.retrySave}>Retry</PaperButton>
                     </div>
                 </Show>

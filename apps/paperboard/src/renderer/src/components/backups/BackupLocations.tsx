@@ -1,6 +1,6 @@
 import { type Component, createEffect, createSignal, For, on, Show } from "solid-js";
-import { PaperButton, PaperCard, PaperFlex, PaperModal, PaperSectionHeader, PaperText, createLatest, createRead } from "@mileniumhq/paperui";
-import { backupLocationLabel, backupLocationsApi, type BackupLocation, errorMessage } from "@mileniumhq/paperapi";
+import { PaperButton, PaperCard, PaperEmptyState, PaperFlex, PaperModal, PaperSectionHeader, PaperText, createAction, createFailureToast, createLatest, createRead } from "@mileniumhq/paperui";
+import { backupLocationLabel, backupLocationsApi, type BackupLocation } from "@mileniumhq/paperapi";
 import { isBrowserShell, shellIpc } from "../../lib/shell";
 import { createLocationUsage, usageText } from "./locationUsage";
 import { LocationLogo } from "./providers";
@@ -18,89 +18,73 @@ const BackupLocations: Component<{ computerId: string; computerName: string; sho
             const damaged = await backupLocationsApi.problem(props.computerId);
             return damaged ? { problem: damaged } : { locations: await backupLocationsApi.list(props.computerId) };
         },
-        { message: (err) => `Backup locations could not be loaded: ${errorMessage(err)}` },
+        { failure: { title: "Couldn't load backup locations", retry: true } },
     );
     const now = () => (read.error() ? undefined : read.value());
     const locations = () => {
         const shown = now();
         return shown && "locations" in shown ? shown.locations : null;
     };
-    const [recoverError, setRecoverError] = createSignal("");
     const problem = () => {
         const shown = now();
-        return recoverError() || (shown && "problem" in shown ? shown.problem : "");
+        return shown && "problem" in shown ? shown.problem : "";
     };
+    createFailureToast(problem, { title: "The backup locations file is damaged" });
     // each location's space is read again with every reload; it keeps the space it showed until its new answer is in
     const [round, setRound] = createSignal(0);
     const load = () => {
         setRound((n) => n + 1);
-        setRecoverError("");
         return read.reload();
     };
     // the page stays mounted while hidden: what a panel backed up meanwhile is counted as it comes back into view
     createEffect(on(() => props.shown, (shown) => {
         if (shown) void load();
     }, { defer: true }));
-    const [recovering, setRecovering] = createSignal(false);
+    const recovery = createAction();
+    const recovering = recovery.busy;
     const [adding, setAdding] = createSignal(false);
     const [removing, setRemoving] = createSignal<BackupLocation | null>(null);
-    const [removeBusy, setRemoveBusy] = createSignal(false);
-    const [removeError, setRemoveError] = createSignal("");
+    const removal = createAction();
+    const removeBusy = removal.busy;
 
     // signing a Google Drive location in again keeps its folder and backups
     const [reconnecting, setReconnecting] = createSignal<string | null>(null);
-    const [reconnectError, setReconnectError] = createSignal("");
+    const reconnection = createAction();
     // a reconnect that was canceled drops its answer
     const reconnects = createLatest();
     const reconnect = async (location: BackupLocation) => {
         const current = reconnects();
         setReconnecting(location.id);
-        setReconnectError("");
-        try {
-            await shellIpc().invoke("backup-gdrive-connect", { computerId: props.computerId, locationId: location.id });
-            if (current()) await load();
-        } catch (err) {
-            if (current()) setReconnectError(`${location.label} could not be reconnected: ${errorMessage(err)}`);
-        } finally {
-            if (current()) setReconnecting(null);
-        }
+        await reconnection.run(`${location.label} couldn't be reconnected`, async () => {
+            try {
+                await shellIpc().invoke("backup-gdrive-connect", { computerId: props.computerId, locationId: location.id });
+                if (current()) await load();
+            } catch (err) {
+                if (current()) throw err;
+            }
+        });
+        if (current()) setReconnecting(null);
     };
     const cancelReconnect = async () => {
         reconnects.cancel();
         setReconnecting(null);
-        try {
-            await shellIpc().invoke("backup-gdrive-cancel");
-        } catch (err) {
-            setReconnectError(`The sign-in could not be canceled: ${errorMessage(err)}`);
-        }
+        await reconnection.run("The sign-in could not be canceled", () => shellIpc().invoke("backup-gdrive-cancel"));
     };
 
-    const recover = async () => {
-        setRecovering(true);
-        try {
+    const recover = () =>
+        recovery.run("The damaged locations file could not be set aside", async () => {
             await backupLocationsApi.recover(props.computerId);
             await load();
-        } catch (err) {
-            setRecoverError(`The damaged locations file could not be set aside: ${errorMessage(err)}`);
-        } finally {
-            setRecovering(false);
-        }
-    };
+        });
 
     const remove = async () => {
         const target = removing();
         if (!target) return;
-        setRemoveBusy(true);
-        setRemoveError("");
-        try {
+        await removal.run(`Couldn't remove ${target.label}`, async () => {
             await backupLocationsApi.remove(target.id, props.computerId);
             setRemoving(null);
             await load();
-        } catch (err) {
-            setRemoveError(errorMessage(err));
-        } finally {
-            setRemoveBusy(false);
-        }
+        });
     };
 
     return (
@@ -111,34 +95,24 @@ const BackupLocations: Component<{ computerId: string; computerName: string; sho
 
             <PaperFlex direction="column" gap="full" fullWidth>
                 <Show when={read.error()}>
-                    <PaperCard accent="danger" padding="inset">
-                        <PaperFlex direction="row" gap="full" align="center" justify="space-between">
-                            <PaperText preset="error">{read.error()}</PaperText>
-                            <PaperButton onClick={() => void load()}>Try Again</PaperButton>
-                        </PaperFlex>
-                    </PaperCard>
+                    <PaperEmptyState icon="error" title="Couldn't load">
+                        <PaperButton disabled={read.loading()} onClick={() => void load()}>Try again</PaperButton>
+                    </PaperEmptyState>
                 </Show>
                 <Show when={problem()}>
-                    <PaperCard accent="danger" padding="inset">
-                        <PaperFlex direction="column" gap="half">
-                            <PaperText preset="error">{problem()}</PaperText>
-                            <PaperText preset="hint">
-                                Starting fresh keeps the damaged file beside it and empties this list. Panels choose a location again; backups already at your locations are not deleted.
-                            </PaperText>
-                            <PaperFlex direction="row" gap="half">
-                                <PaperButton variant="danger" disabled={recovering()} onClick={() => void recover()}>
-                                    {recovering() ? "Setting Aside..." : "Set Aside and Start Fresh"}
-                                </PaperButton>
-                                <PaperButton variant="text" disabled={recovering()} onClick={() => void load()}>Try Again</PaperButton>
-                            </PaperFlex>
-                        </PaperFlex>
-                    </PaperCard>
+                    <PaperEmptyState
+                        icon="error"
+                        title="Couldn't load"
+                        description="Starting fresh keeps the damaged file beside it and empties this list. Panels choose a location again; backups already at your locations are not deleted."
+                    >
+                        <PaperButton variant="danger" disabled={recovering()} onClick={() => void recover()}>
+                            {recovering() ? "Setting Aside..." : "Set Aside and Start Fresh"}
+                        </PaperButton>
+                        <PaperButton variant="text" disabled={recovering()} onClick={() => void load()}>Try again</PaperButton>
+                    </PaperEmptyState>
                 </Show>
                 <Show when={!read.value() && !read.error()}>
                     <PaperText preset="hint" inset>Loading locations…</PaperText>
-                </Show>
-                <Show when={reconnectError()}>
-                    <PaperText preset="error" inset>{reconnectError()}</PaperText>
                 </Show>
                 <For each={locations() ?? []}>
                     {(location) => {
@@ -152,7 +126,7 @@ const BackupLocations: Component<{ computerId: string; computerName: string; sho
                                     <PaperFlex direction="column" flex={1} minWidth={0}>
                                         <PaperText preset="label" truncate>{backupLocationLabel(location, props.computerName)}</PaperText>
                                         <PaperText preset="hint" truncate>{location.detail}</PaperText>
-                                        <PaperText preset={usage.error() ? "error" : "hint"}>{usageText(usage)}</PaperText>
+                                        <PaperText preset="hint">{usageText(usage)}</PaperText>
                                     </PaperFlex>
                                     <Show when={location.kind === "gdrive"}>
                                         <PaperButton
@@ -167,7 +141,7 @@ const BackupLocations: Component<{ computerId: string; computerName: string; sho
                                         <PaperButton variant="text" onClick={() => void cancelReconnect()}>Cancel</PaperButton>
                                     </Show>
                                     <Show when={location.removable && reconnecting() !== location.id}>
-                                        <PaperButton variant="text" onClick={() => { setRemoveError(""); setRemoving(location); }}>Remove</PaperButton>
+                                        <PaperButton variant="text" onClick={() => setRemoving(location)}>Remove</PaperButton>
                                     </Show>
                                 </PaperFlex>
                             </PaperCard>
@@ -200,9 +174,6 @@ const BackupLocations: Component<{ computerId: string; computerName: string; sho
                     <PaperText preset="text">
                         Remove <strong>{removing()?.label}</strong>? Panels using it stop making backups until you choose another location. Backups already there are not deleted.
                     </PaperText>
-                    <Show when={removeError()}>
-                        <PaperText preset="error">{removeError()}</PaperText>
-                    </Show>
                 </PaperFlex>
             </PaperModal>
         </PaperFlex>

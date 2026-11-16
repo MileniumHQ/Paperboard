@@ -1,7 +1,6 @@
-import { type Component, Show, createEffect, createSignal, on } from "solid-js";
-import { PaperButton, PaperInput, PaperModal, PaperText } from "@mileniumhq/paperui";
+import { type Component, createEffect, createSignal, on } from "solid-js";
+import { createAction, PaperButton, PaperInput, PaperModal } from "@mileniumhq/paperui";
 import { computersApi, type ComputerInfo } from "../../lib/shell";
-import { errorMessage } from "@mileniumhq/paperapi";
 
 // matches COMPUTER_NAME_MAX in main's ConnectionPool, which has the last word
 const NAME_MAX = 64;
@@ -16,8 +15,8 @@ export interface RenameComputerModalProps {
 // and never renames the machine itself.
 const RenameComputerModal: Component<RenameComputerModalProps> = (props) => {
     const [name, setName] = createSignal("");
-    const [saving, setSaving] = createSignal(false);
-    const [error, setError] = createSignal<string | null>(null);
+    const action = createAction();
+    const saving = action.busy;
 
     // each opening starts from the computer's current name; a change pushed
     // while the dialog is open (a status, a reconnect) leaves the typing alone
@@ -27,14 +26,15 @@ const RenameComputerModal: Component<RenameComputerModalProps> = (props) => {
             (id) => {
                 if (!id) return;
                 setName(props.computer?.name ?? "");
-                setError(null);
             },
         ),
     );
 
     const trimmed = () => name().trim();
+    // what is wrong with the name as typed, said under its field
+    const problem = () => (trimmed().length > NAME_MAX ? `A computer name can be at most ${NAME_MAX} characters.` : undefined);
     const canSave = () =>
-        !saving() && trimmed().length > 0 && trimmed() !== props.computer?.name;
+        !saving() && trimmed().length > 0 && !problem() && trimmed() !== props.computer?.name;
 
     const close = () => {
         if (!saving()) props.onClose();
@@ -43,18 +43,12 @@ const RenameComputerModal: Component<RenameComputerModalProps> = (props) => {
     const save = async () => {
         const computer = props.computer;
         if (!computer || !canSave()) return;
-        setSaving(true);
-        setError(null);
-        try {
+        await action.run("Couldn't rename this computer", async () => {
             if (!(await computersApi.rename(computer.id, trimmed()))) {
                 throw new Error("Paperboard doesn't know this computer anymore.");
             }
             props.onClose();
-        } catch (err) {
-            setError(`Couldn't rename this computer: ${errorMessage(err)}`);
-        } finally {
-            setSaving(false);
-        }
+        });
     };
 
     return (
@@ -79,7 +73,7 @@ const RenameComputerModal: Component<RenameComputerModalProps> = (props) => {
                 label="Name"
                 placeholder="Name"
                 icon="computer"
-                maxLength={NAME_MAX}
+                error={problem()}
                 autofocus
                 value={name()}
                 disabled={saving()}
@@ -91,9 +85,6 @@ const RenameComputerModal: Component<RenameComputerModalProps> = (props) => {
                     }
                 }}
             />
-            <Show when={error()}>
-                <PaperText preset="error">{error()}</PaperText>
-            </Show>
         </PaperModal>
     );
 };

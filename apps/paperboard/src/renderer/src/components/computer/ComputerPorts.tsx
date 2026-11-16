@@ -1,6 +1,6 @@
-import { type Component, createEffect, createSignal, For, on, Show } from "solid-js";
-import { PaperButton, PaperCard, PaperFlex, PaperSectionHeader, PaperSettingItem, PaperSettingList, PaperText, PaperToggle, createRead, createSavedValue } from "@mileniumhq/paperui";
-import { portSettingsApi, type PortPolicy, type PortProtocol, errorMessage } from "@mileniumhq/paperapi";
+import { type Component, createEffect, For, on, Show } from "solid-js";
+import { PaperButton, PaperEmptyState, PaperFlex, PaperSectionHeader, PaperSettingItem, PaperSettingList, PaperText, PaperToggle, createRead, createSavedValue, showError } from "@mileniumhq/paperui";
+import { portSettingsApi, type PortPolicy, type PortProtocol } from "@mileniumhq/paperapi";
 
 const PROTOCOL_NAMES: Record<PortProtocol, string> = { tcp: "TCP", udp: "UDP", "tcp+udp": "TCP and UDP" };
 
@@ -12,21 +12,19 @@ const ComputerPorts: Component<{ computerId: string; shown: boolean }> = (props)
             const state = await portSettingsApi.all(props.computerId);
             return { claims: [...state.claims].sort((a, b) => a.port - b.port), policy: state.policy };
         },
-        { message: (err) => `Ports could not be loaded: ${errorMessage(err)}` },
+        { failure: { title: "Couldn't load ports", retry: true } },
     );
     const policy = createSavedValue<PortPolicy>(() => ports.value()?.policy ?? "next-free", async (next) => {
         await portSettingsApi.setPolicy(next, props.computerId);
     });
-    const [saveError, setSaveError] = createSignal("");
     // the page stays mounted while hidden: the ports panels took meanwhile are read as it comes back into view
     createEffect(on(() => props.shown, (shown) => {
         if (shown) void ports.reload();
     }, { defer: true }));
 
     const setRefuse = (refuse: boolean) => {
-        setSaveError("");
         return policy.set(refuse ? "refuse" : "next-free").catch((err) => {
-            setSaveError(`The setting was not saved: ${errorMessage(err)}`);
+            showError("The setting was not saved", err);
         });
     };
 
@@ -36,12 +34,9 @@ const ComputerPorts: Component<{ computerId: string; shown: boolean }> = (props)
 
             <PaperFlex direction="column" gap="full" fullWidth>
                 <Show when={ports.error()}>
-                    <PaperCard accent="danger" padding="inset">
-                        <PaperFlex direction="row" gap="full" align="center" justify="space-between">
-                            <PaperText preset="error">{ports.error()}</PaperText>
-                            <PaperButton onClick={() => void ports.reload()}>Try Again</PaperButton>
-                        </PaperFlex>
-                    </PaperCard>
+                    <PaperEmptyState icon="error" title="Couldn't load">
+                        <PaperButton disabled={ports.loading()} onClick={() => void ports.reload()}>Try again</PaperButton>
+                    </PaperEmptyState>
                 </Show>
                 <Show when={ports.value()?.claims}>
                     {(list) => (
@@ -54,9 +49,6 @@ const ComputerPorts: Component<{ computerId: string; shown: boolean }> = (props)
                                     <PaperToggle checked={policy.value() === "refuse"} onChange={setRefuse} />
                                 </PaperSettingItem>
                             </PaperSettingList>
-                            <Show when={saveError()}>
-                                <PaperText preset="error" inset>{saveError()}</PaperText>
-                            </Show>
                             <Show
                                 when={list().length > 0}
                                 fallback={<PaperText preset="hint" inset>No panel holds a port on this computer.</PaperText>}

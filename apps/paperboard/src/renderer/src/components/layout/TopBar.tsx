@@ -1,5 +1,5 @@
 import { type Component, createSignal, onMount, onCleanup, Show } from "solid-js";
-import { PaperText, PaperButton, PaperIcon, PaperModal, getVarCss } from "@mileniumhq/paperui";
+import { PaperText, PaperButton, PaperIcon, getVarCss, showError } from "@mileniumhq/paperui";
 import { shellApi, logToMain, isBrowserShell } from "../../lib/shell";
 import { versionLabel as formatVersionLabel } from "../../lib/versionLabel";
 import { isShellTab } from "../../lib/shellTabs";
@@ -26,13 +26,7 @@ const TopBar: Component<{
     const [captionReserve, setCaptionReserve] = createSignal(0);
     const [labelInset, setLabelInset] = createSignal(DEFAULT_LEFT_RESERVE);
     const [versionLabel, setVersionLabel] = createSignal<string | null>(null);
-    // why the last folder didn't open; it stays in the modal as it fades out
-    const [folderError, setFolderError] = createSignal("");
-    const [folderErrorOpen, setFolderErrorOpen] = createSignal(false);
-    const showFolderError = (message: string) => {
-        setFolderError(message);
-        setFolderErrorOpen(true);
-    };
+    const showFolderError = (message: string) => showError("Folder not opened", message);
 
     onMount(() => {
         // Window Controls Overlay: exact caption-button geometry so the
@@ -124,17 +118,6 @@ const TopBar: Component<{
                     </Show>
                 </div>
             </header>
-            <PaperModal
-                open={folderErrorOpen()}
-                onClose={() => setFolderErrorOpen(false)}
-                title="Folder not opened"
-                size="small"
-                footer={<>
-                    <PaperButton onClick={() => setFolderErrorOpen(false)}>Close</PaperButton>
-                </>}
-            >
-                <PaperText preset="error" role="alert" breakWord>{folderError()}</PaperText>
-            </PaperModal>
         </>
     );
 };

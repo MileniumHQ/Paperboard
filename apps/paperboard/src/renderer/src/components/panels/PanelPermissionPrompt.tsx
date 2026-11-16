@@ -55,19 +55,36 @@ const PanelPermissionPrompt: Component<{ panelName: (computerId: string, panelId
         onCleanup(() => offs.forEach((off) => off()));
     });
 
+    // a question leaves the queue once, by its id: an answer that lands after
+    // the dialog was closed must not take the next question with it
+    const settle = (askId: string) => setQueue((list) => list.filter((q) => q.kind === "system" || (q.kind === "ask" ? q.ask.askId : q.pick.askId) !== askId));
+
     // one answer per question: a dialog closed while its answer is on the
     // way (Escape after Allow) must not send a second one. One that didn't
-    // go through keeps the question open, to answer again.
+    // go through keeps the question open, to answer again, or to close.
     const answer = async (askId: string, value: string | null) => {
         if (busy()) return;
         setBusy(true);
         try {
             await panelPermissionsApi.answer(askId, value);
-            next();
+            settle(askId);
         } catch (err) {
             showError("Your answer didn't go through", err);
         } finally {
             setBusy(false);
+        }
+    };
+
+    // Closing is never held up by an answer: the question goes at once, and
+    // main is told it went unanswered (nothing is remembered, and the panel
+    // is refused this time). If that doesn't go through, a toast says so.
+    const close = async (askId: string) => {
+        settle(askId);
+        if (busy()) return;
+        try {
+            await panelPermissionsApi.answer(askId, null);
+        } catch (err) {
+            showError("Couldn't tell Paperboard you closed the question", err);
         }
     };
 
@@ -111,7 +128,7 @@ const PanelPermissionPrompt: Component<{ panelName: (computerId: string, panelId
                 open={asking() !== null}
                 size="small"
                 title={`Let ${name(ask())} use your ${permissionsText(ask()?.permissions ?? [])}?`}
-                onClose={() => void answer(ask()!.askId, null)}
+                onClose={() => void close(ask()!.askId)}
                 footer={
                     <>
                         <PaperButton variant="text" disabled={busy()} onClick={() => void answer(ask()!.askId, "denied")}>
@@ -130,10 +147,10 @@ const PanelPermissionPrompt: Component<{ panelName: (computerId: string, panelId
                 open={picking() !== null}
                 size="large"
                 title={`Share with ${name(pick())}`}
-                onClose={() => void answer(pick()!.askId, null)}
+                onClose={() => void close(pick()!.askId)}
                 footer={
                     <>
-                        <PaperButton variant="text" disabled={busy()} onClick={() => void answer(pick()!.askId, null)}>
+                        <PaperButton variant="text" onClick={() => void close(pick()!.askId)}>
                             Cancel
                         </PaperButton>
                     </>

@@ -128,7 +128,7 @@ test("an S3 server that refuses the connection is named in words, in view of the
     await clickText(page, "[role=dialog] button", "Add Bucket");
 
     const said = "Couldn't reach 127.0.0.1:1. Is the server running?";
-    await page.waitFor(`document.querySelector("[role=dialog] [role=alert]")?.textContent === ${JSON.stringify(said)}`, "the refusal, in words");
+    await page.waitFor(`[...document.querySelectorAll("[role=dialog] [role=alert]")].some((a) => a.textContent.includes("Couldn't add the backup location") && a.textContent.includes(${JSON.stringify(said)}))`, "the refusal, in words, in a toast in the dialog");
     // seen as it is: what is drawn at its middle is the error itself, not the form scrolled over it
     expect(await page.evaluate(`(() => {
         const alert = document.querySelector("[role=dialog] [role=alert]");
@@ -164,10 +164,10 @@ test("a failed forget shows why, the dialog opens clean the next time, and forge
     await clickText(page, "[role=dialog] button", "Cancel");
     await page.waitFor(`!document.querySelector("[role=dialog]")`, "the dialog to close");
 
-    // opened again: a fresh question, not the last answer
+    // opened again: a fresh question, not the last answer (the failure's toast, until it is closed, is the page's)
     await clickText(page, "button", "Forget Computer");
     await page.waitFor(`document.querySelector("[role=dialog]")?.innerText.includes("forget Garage")`, "the Forget Computer dialog again");
-    expect(await page.evaluate(`document.querySelector("[role=dialog]").innerText.includes("read-only")`)).toBe(false);
+    expect(await page.evaluate(`[...document.querySelector("[role=dialog]").children].filter((el) => !el.querySelector("[data-paper-toasts]")).some((el) => el.innerText.includes("read-only"))`)).toBe(false);
     await clickText(page, "[role=dialog] button", "Cancel");
     await page.waitFor(`!document.querySelector("[role=dialog]")`, "the dialog to close");
 
@@ -196,7 +196,7 @@ test("forgetting a computer that can't be reached warns that it wasn't told, and
     await page.click("[data-context-item='Forget Computer']");
     await page.waitFor(`document.querySelector("[role=dialog]")?.innerText.includes("forget Shed")`, "the Forget Computer dialog for Shed");
     await clickText(page, "[role=dialog] button", "Forget Computer");
-    await page.waitFor(`document.querySelector("[role=dialog] [role=alert]")?.innerText.includes("Shed wasn't told")`, "the warning that Shed wasn't told");
+    await page.waitFor(`[...document.querySelectorAll("[role=dialog] [role=alert]")].some((a) => a.innerText.includes("Shed wasn't told"))`, "the warning that Shed wasn't told");
     expect(await page.evaluate(`!!document.querySelector(${JSON.stringify(SHED)})`)).toBe(true);
 
     await clickText(page, "[role=dialog] button", "Forget Anyway");

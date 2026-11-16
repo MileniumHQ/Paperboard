@@ -1,5 +1,5 @@
 import { type Component, createEffect, createSignal, For, on, Show } from "solid-js";
-import { createLatest, PaperButton, PaperCheckbox, PaperFlex, PaperInput, PaperModal, PaperSelectMenu, PaperSelectMenuItem, PaperText } from "@mileniumhq/paperui";
+import { createLatest, PaperButton, PaperCheckbox, PaperFlex, PaperInput, PaperModal, PaperSelectMenu, PaperSelectMenuItem, PaperText, dismissToast, showError } from "@mileniumhq/paperui";
 import { isBrowserShell } from "../../lib/shell";
 import { BACKUP_PROVIDERS, LocationLogo, type BackupProvider } from "./providers";
 import { uniqueLocationLabel } from "./locationLabel";
@@ -21,7 +21,12 @@ const AddLocationModal: Component<{
     const [values, setValues] = createSignal<Record<string, string>>({});
     const [toggles, setToggles] = createSignal<Record<string, boolean>>({});
     const [busy, setBusy] = createSignal(false);
-    const [error, setError] = createSignal("");
+    // the toast of the last refusal, closed once the form is new or goes through
+    let refusal: string | null = null;
+    const clearRefusal = () => {
+        if (refusal) dismissToast(refusal);
+        refusal = null;
+    };
 
     const provider = () => BACKUP_PROVIDERS.find((p) => p.kind === kind()) ?? BACKUP_PROVIDERS[0];
     const blocked = () => Boolean(provider().needsDesktopApp && isBrowserShell());
@@ -30,7 +35,7 @@ const AddLocationModal: Component<{
         setKind(next);
         setValues({});
         setToggles({});
-        setError("");
+        clearRefusal();
     };
 
     // a fresh form each time the window opens; resetting on close would
@@ -49,14 +54,14 @@ const AddLocationModal: Component<{
         setBusy(false);
         cancel().then(
             () => props.onClose(),
-            (err) => setError(`The sign-in could not be canceled: ${errorMessage(err)}`),
+            (err) => showError("The sign-in could not be canceled", err),
         );
     };
 
     const submit = async () => {
         const current = attempt();
         setBusy(true);
-        setError("");
+        clearRefusal();
         try {
             const chosen = provider();
             const named = chosen.defaultLabel ? { label: uniqueLocationLabel(chosen.defaultLabel, props.takenLabels), ...values() } : values();
@@ -66,7 +71,7 @@ const AddLocationModal: Component<{
             close();
             props.onAdded();
         } catch (err) {
-            if (current()) setError(systemErrorWords(errorMessage(err)));
+            if (current()) refusal = showError("Couldn't add the backup location", systemErrorWords(errorMessage(err)));
         } finally {
             if (current()) setBusy(false);
         }
@@ -80,12 +85,6 @@ const AddLocationModal: Component<{
             size="small"
             footer={
                 <>
-                    {/* in the footer, so a refusal is seen wherever the form is scrolled */}
-                    <Show when={error()}>
-                        <PaperFlex flex={1} minWidth={0}>
-                            <PaperText preset="error" role="alert" breakWord>{error()}</PaperText>
-                        </PaperFlex>
-                    </Show>
                     <PaperButton variant="text" disabled={busy() && !provider().cancel} onClick={close}>Cancel</PaperButton>
                     <PaperButton disabled={busy() || blocked()} onClick={() => void submit()}>
                         {busy() ? provider().busyLabel : provider().submitLabel}

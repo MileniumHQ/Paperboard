@@ -6,8 +6,9 @@ import {
     PaperButton,
     PaperText,
     showToast,
+    createAction,
 } from "@mileniumhq/paperui";
-import { panelsApi, type PanelItem, errorMessage } from "@mileniumhq/paperapi";
+import { panelsApi, type PanelItem } from "@mileniumhq/paperapi";
 import { logToMain } from "../../lib/shell";
 
 export interface UninstallTarget {
@@ -26,16 +27,15 @@ export interface UninstallPanelModalProps {
 // Confirmation dialog for uninstalling a panel. Data is kept unless the
 // person ticks the box, and each opening starts with it unticked.
 const UninstallPanelModal: Component<UninstallPanelModalProps> = (props) => {
-    const [busy, setBusy] = createSignal(false);
+    const action = createAction();
+    const busy = action.busy;
     const [deleteData, setDeleteData] = createSignal(false);
-    const [error, setError] = createSignal<string | null>(null);
 
     createEffect(
         on(
             () => props.target,
             () => {
                 setDeleteData(false);
-                setError(null);
             },
         ),
     );
@@ -47,21 +47,19 @@ const UninstallPanelModal: Component<UninstallPanelModalProps> = (props) => {
     const confirm = async () => {
         const target = props.target;
         if (!target || busy()) return;
-        setBusy(true);
-        setError(null);
-        try {
-            const { packagesWarning } = await panelsApi.uninstall(target.panel.id, target.compId, { deleteData: deleteData() });
-            await props.onUninstalled(target);
-            if (packagesWarning) {
-                showToast({ variant: "warning", title: `${target.panel.name} is uninstalled`, message: packagesWarning, duration: null });
+        await action.run(`Couldn't uninstall ${target.panel.name}`, async () => {
+            try {
+                const { packagesWarning } = await panelsApi.uninstall(target.panel.id, target.compId, { deleteData: deleteData() });
+                await props.onUninstalled(target);
+                if (packagesWarning) {
+                    showToast({ variant: "warning", title: `${target.panel.name} is uninstalled`, message: packagesWarning, duration: null });
+                }
+                props.onClose();
+            } catch (err) {
+                logToMain("error", "Failed to uninstall panel:", err);
+                throw err;
             }
-            props.onClose();
-        } catch (err) {
-            logToMain("error", "Failed to uninstall panel:", err);
-            setError(`Couldn't uninstall ${target.panel.name}: ${errorMessage(err)}`);
-        } finally {
-            setBusy(false);
-        }
+        });
     };
 
     return (
@@ -100,9 +98,6 @@ const UninstallPanelModal: Component<UninstallPanelModalProps> = (props) => {
                             label="Also delete this panel's data and saved credentials"
                             description="Configuration, files and vault entries are removed. This cannot be undone."
                         />
-                        <Show when={error()}>
-                            <PaperText preset="error">{error()}</PaperText>
-                        </Show>
                     </PaperFlex>
                 )}
             </Show>

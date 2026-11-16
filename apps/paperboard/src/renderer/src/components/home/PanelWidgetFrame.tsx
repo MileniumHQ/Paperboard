@@ -147,7 +147,7 @@ const PanelWidgetFrame: Component<PanelWidgetFrameProps> = (props) => {
             />
             <Show when={failure()}>
                 <div class={styles.tileStatus} role="alert">
-                    <PaperText preset="error">{failure()}</PaperText>
+                    <PaperText preset="hint">{failure()}</PaperText>
                     <PaperButton size="tiny" variant="text" onClick={start}>Reload widget</PaperButton>
                 </div>
             </Show>

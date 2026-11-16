@@ -1,5 +1,5 @@
 import { type Component, Show } from "solid-js";
-import { PaperFlex, PaperText, PaperButton, PaperIcon } from "@mileniumhq/paperui";
+import { PaperFlex, PaperText, PaperButton, PaperIcon, createFailureToast } from "@mileniumhq/paperui";
 import styles from "./ConnectionLostOverlay.module.css";
 import type { ComputerInfo } from "../../lib/shell";
 import { createReachCheck } from "../../lib/reachCheck";
@@ -17,6 +17,9 @@ export const ConnectionLostOverlay: Component<ConnectionLostOverlayProps> = (
     const handleReconnect = async () => {
         if (!reach.checking() && (await reach.check(props.computer))) props.onReconnectSuccess();
     };
+
+    // why the last Attempt Reconnect found nothing, said apart from the view
+    createFailureToast(reach.error, { title: "Couldn't reach this computer" });
 
     return (
         <PaperFlex
@@ -40,7 +43,7 @@ export const ConnectionLostOverlay: Component<ConnectionLostOverlayProps> = (
                     keeps retrying on its own.
                 </PaperText>
                 <Show when={props.computer.status?.error}>
-                    <PaperText preset="error" class={styles.message}>
+                    <PaperText preset="hint" class={styles.message}>
                         {props.computer.status?.error}
                     </PaperText>
                 </Show>
@@ -53,11 +56,6 @@ export const ConnectionLostOverlay: Component<ConnectionLostOverlayProps> = (
                     <PaperIcon>restart_alt</PaperIcon>
                     {reach.checking() ? "Reconnecting..." : "Attempt Reconnect"}
                 </PaperButton>
-                <Show when={reach.error()}>
-                    <PaperText preset="error">
-                        Last error: {reach.error()}
-                    </PaperText>
-                </Show>
             </PaperFlex>
         </PaperFlex>
     );

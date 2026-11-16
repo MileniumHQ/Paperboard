@@ -68,6 +68,8 @@ export const ComputerSetupWizard: Component<ComputerSetupWizardProps> = (
     // unknown host); losing it turned every failure into "check the address"
     const probeDetail = () => probe.error() ?? probe.value()?.error ?? "";
     // no address was reached, so the port is left out of the message
+    const unreachableWords = () =>
+        `Can't reach ${host().trim()}${probeInvalid() ? "" : `:${port().trim() || DAEMON_PORT}`}${probeDetail() ? `. ${probeDetail()}` : ""}`;
     const probeInvalid = () => !probe.error() && probe.value()?.invalidAddress === true;
     // a computer that answers names itself, unless a name was typed
     createEffect(on(probe.value, (res) => {
@@ -299,6 +301,7 @@ export const ComputerSetupWizard: Component<ComputerSetupWizardProps> = (
                                 label="Computer address"
                                 icon="language"
                                 value={host()}
+                                error={probeUnreachable() ? unreachableWords() : undefined}
                                 onInput={(e) =>
                                     handleIpInput(e.currentTarget.value)
                                 }
@@ -314,18 +317,6 @@ export const ComputerSetupWizard: Component<ComputerSetupWizardProps> = (
                                 }
                             />
 
-                            <Show when={probeUnreachable()}>
-                                <PaperText preset="error" breakWord>
-                                    Can't reach {host().trim()}
-                                    <Show when={!probeInvalid()}>
-                                        :{port().trim() || DAEMON_PORT}
-                                    </Show>
-                                    <Show when={probeDetail()}>
-                                        <br />
-                                        {probeDetail()}
-                                    </Show>
-                                </PaperText>
-                            </Show>
                         </PaperFlex>
                     </PaperFlex>
                 </PaperFlex>
@@ -359,13 +350,8 @@ export const ComputerSetupWizard: Component<ComputerSetupWizardProps> = (
                                 value={code()}
                                 onInput={(e) => handleCodeInput(e.currentTarget)}
                                 disabled={isPairing()}
+                                error={pairError() || undefined}
                             />
-
-                            <Show when={pairError()}>
-                                <PaperText preset="error" breakWord>
-                                    {pairError()}
-                                </PaperText>
-                            </Show>
                         </PaperFlex>
                     </PaperFlex>
                 </PaperFlex>
