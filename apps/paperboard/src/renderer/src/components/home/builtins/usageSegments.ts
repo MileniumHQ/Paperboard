@@ -11,6 +11,8 @@ export interface Segment {
     label: string;
     /** share of the donut, 0-1 */
     fraction: number;
+    /** the reading as reported: bytes, or percent of the CPU */
+    value: number;
     /** the reading as people say it: "1.2 GB", "14%" */
     detail: string;
     color: string;
@@ -30,15 +32,35 @@ export interface UsageChart {
      */
     legend: Segment[];
     free: Segment;
+    /** a reading as people say it */
+    format: (value: number) => string;
 }
 
 /**
- * What a legend with room for `rows` names: the owners both cards pick, each
- * card listing them largest first by its own reading, then what's free.
+ * The ring and the legend for a legend with room for `rows`: the owners
+ * both cards pick, each card listing them largest first by its own reading,
+ * then what's free. When there are more owners than rows, the last row
+ * before Free is everything the legend can't name, and the ring draws them
+ * as that one slice: every slice in the ring is a row in the legend.
  */
-export function legendRows(chart: UsageChart, rows: number): Segment[] {
-    const named = chart.legend.slice(0, Math.max(0, rows - 1));
-    return [...named.sort((a, b) => b.fraction - a.fraction), chart.free];
+export function fitChart(chart: UsageChart, rows: number): { ring: Segment[]; legend: Segment[] } {
+    const room = Math.max(0, rows - 1);
+    if (chart.legend.length <= room) {
+        const named = [...chart.legend].sort((a, b) => b.fraction - a.fraction);
+        return { ring: chart.segments, legend: [...named, chart.free] };
+    }
+    if (room === 0) return { ring: [rest(chart, chart.segments)], legend: [chart.free] };
+    const named = chart.legend.filter((s) => s.key !== "other").slice(0, room - 1);
+    const kept = new Set(named.map((s) => s.key));
+    const others = rest(chart, chart.segments.filter((s) => !kept.has(s.key)));
+    const shown = [...named, others].sort((a, b) => b.fraction - a.fraction);
+    return { ring: shown, legend: [...shown, chart.free] };
+}
+
+// the owners a legend can't name, as one slice
+function rest(chart: UsageChart, segments: Segment[]): Segment {
+    const value = segments.reduce((sum, s) => sum + s.value, 0);
+    return { key: "rest", label: "Others", value, fraction: segments.reduce((sum, s) => sum + s.fraction, 0), detail: chart.format(value), color: OTHER_COLOR };
 }
 
 /** Panels beyond this many share one "Other panels" segment. */
@@ -100,7 +122,7 @@ function segmentsOf(report: UsageReport, metric: UsageMetric, panelName: (id: st
     const panels = report.groups.filter((g) => g.kind === "panel");
     const colorOf = new Map([...panels].sort((a, b) => a.id.localeCompare(b.id)).map((g, i) => [g.id, PANEL_COLORS[i % PANEL_COLORS.length]]));
     const ranked = [...panels].sort((a, b) => amount(b) - amount(a));
-    const raw: Array<Omit<Segment, "fraction"> & { value: number }> = ranked
+    const raw: Array<Omit<Segment, "fraction">> = ranked
         .slice(0, MAX_PANEL_SEGMENTS)
         .map((g) => ({ key: g.id, label: panelName(g.id), value: amount(g), detail: detail(amount(g)), color: colorOf.get(g.id) as string, ...cpuOf(g.cpuPercent) }));
     const rest = ranked.slice(MAX_PANEL_SEGMENTS);
@@ -121,12 +143,13 @@ function segmentsOf(report: UsageReport, metric: UsageMetric, panelName: (id: st
     const room = 1 - freeFraction;
     const scale = sum / total > room && sum > 0 ? (room * total) / sum : 1;
     const segments = raw
-        .map(({ value, ...s }) => ({ ...s, fraction: (value * scale) / total }))
+        .map((s) => ({ ...s, fraction: (s.value * scale) / total }))
         .filter((s) => s.fraction > 0)
         .sort((a, b) => b.fraction - a.fraction);
     return {
         used: room,
         segments,
-        free: { key: "free", label: "Free", fraction: freeFraction, detail: detail(freeValue), color: FREE_COLOR },
+        free: { key: "free", label: "Free", value: freeValue, fraction: freeFraction, detail: detail(freeValue), color: FREE_COLOR },
+        format: detail,
     };
 }

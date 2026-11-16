@@ -4,7 +4,7 @@ import type { BuiltinWidgetProps } from "./types";
 import { oneCellCaption, retryTile, widgetTitle } from "./systemFigures";
 import { USAGE_HISTORY_SAMPLES, useUsage } from "./usageStore";
 import { formatBytes } from "../../../lib/formatBytes";
-import { formatPercent, legendRows, type Segment, usageChart, usedFraction, type UsageMetric } from "./usageSegments";
+import { fitChart, formatPercent, type Segment, usageChart, usedFraction, type UsageMetric } from "./usageSegments";
 import styles from "./Builtins.module.css";
 
 // the legend has room for one figure per row; the ring's tooltip adds CPU
@@ -25,12 +25,17 @@ const UsageDonut: Component<BuiltinWidgetProps & { metric: UsageMetric }> = (pro
         const state = usage.state();
         return state.kind === "ready" ? usageChart(state.report, props.metric, props.panelName) : null;
     });
-    const slices = () => (chart()?.segments ?? []).map((segment) => toChart(segment));
-    // the legend names as many of the largest users as its box has rows
-    // for, then "Free"; the rest are in the ring and the chart's name. CPU
-    // and Memory pick them alike, so the two cards name the same owners. A
-    // box with room for one row shows "Free" alone, never half of two.
     const [rows, setRows] = createSignal(3);
+    // the ring and the legend name the same slices
+    const fitted = createMemo(() => {
+        const c = chart();
+        return c ? fitChart(c, rows()) : null;
+    });
+    const slices = () => (fitted()?.ring ?? []).map((segment) => toChart(segment));
+    // the legend names as many of the largest users as its box has rows
+    // for, then "Free"; the rest are one "Others" row and slice.
+    // CPU and Memory pick them alike, so the two cards name the same owners.
+    // A box with room for one row shows "Free" alone, never half of two.
     const fitLegend = (box: HTMLDivElement) => {
         const observer = new ResizeObserver(() => {
             // layout heights, both: Home may draw the tile scaled
@@ -40,10 +45,7 @@ const UsageDonut: Component<BuiltinWidgetProps & { metric: UsageMetric }> = (pro
         observer.observe(box);
         onCleanup(() => observer.disconnect());
     };
-    const legend = () => {
-        const c = chart();
-        return c ? legendRows(c, rows()).map((segment) => toChart(segment, false)) : [];
-    };
+    const legend = () => (fitted()?.legend ?? []).map((segment) => toChart(segment, false));
     // how the share in use has moved while the widget was watched
     const trend = () =>
         usage.history().map((report) => usedFraction(report, props.metric)).filter((used): used is number => used !== null);
