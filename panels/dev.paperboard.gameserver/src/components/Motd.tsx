@@ -229,6 +229,15 @@ export function MotdEditor(props: {
             pending = null;
             if (root) renderDoc(root, doc, props.dialect.defaultColor);
             setLoaded(true);
+            // the message is in: the caret goes to its end, to type at once. A
+            // frame on, after the dialog's own focus (PaperModal hands focus to
+            // the dialog a frame after it opens), so a message read within that
+            // frame doesn't lose what is typed to the dialog
+            requestAnimationFrame(() => {
+                if (!current() || !props.open || !root) return;
+                root.focus({ preventScroll: true });
+                select(doc.length);
+            });
         } catch (err) {
             if (current()) setLoadError(errorMessage(err));
         }

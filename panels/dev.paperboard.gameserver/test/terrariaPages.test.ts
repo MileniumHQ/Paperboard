@@ -90,6 +90,17 @@ const text = (value: string) => `document.body.textContent.includes(${JSON.strin
 /** the row of list `list` for `value` */
 const row = (list: string, value: string) => `document.querySelector('input[name=${list}][value=${JSON.stringify(value)}]')`;
 
+/** resolves once `element` holds the focus: a focus moves nothing in the DOM, so waitFor's mutations don't see it */
+function focused(page: Page, element: string, what: string): Promise<void> {
+    return page.evaluate(`new Promise((resolve, reject) => {
+        const done = () => document.activeElement === ${element};
+        if (done()) return resolve(true);
+        const timer = setTimeout(() => { document.removeEventListener("focusin", check); reject(new Error(${JSON.stringify(`Timed out waiting for ${what}`)})); }, 20000);
+        function check() { if (done()) { clearTimeout(timer); document.removeEventListener("focusin", check); resolve(true); } }
+        document.addEventListener("focusin", check);
+    })`).then(() => undefined);
+}
+
 async function openTab(page: Page, tab: string): Promise<void> {
     await page.waitFor(`document.querySelector('input[name=serverMenu][value="${tab}"]')`, "the server menu");
     await page.click(`input[name=serverMenu][value="${tab}"]`);
@@ -115,7 +126,9 @@ describe("Terraria's Overview", () => {
             expect(JSON.parse(fs.readFileSync(path.join(path.dirname(path.join(folder("s-ter"), "install", vanilla.directory, entrypoint(process.platform))), "started-with.json"), "utf8")).password).toBe("hunter2");
 
             await page.evaluate(`document.querySelector('button[aria-label="Edit message of the day"]').click()`);
+            // loaded, the editor takes the caret, after the dialog's own focus: what is typed lands in it
             await page.waitFor(`${DIALOG}?.querySelector("[role=textbox][contenteditable=true]")`, "the message editor, loaded");
+            await focused(page, `${DIALOG}.querySelector("[role=textbox]")`, "the message editor's caret");
             await page.type(`[role=dialog] [role=textbox]`, "Welcome to the island");
             await page.evaluate(`${button("Save", DIALOG)}.click()`);
             await page.waitFor(`!document.querySelector("[role=dialog] [role=textbox]") && ${text("Welcome to the island")}`, "the saved message on the Overview");
