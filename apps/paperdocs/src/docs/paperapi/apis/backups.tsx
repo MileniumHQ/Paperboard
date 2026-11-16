@@ -172,8 +172,9 @@ onCleanup(backupApi.onProgress(PANEL_ID, (change) => setProgress(change.progress
     if (why === null) void backupApi.status(PANEL_ID).then((now) => setProgress(now.progress));
 }));
 
-createFailureToast(lost, { title: "Can't follow backups" });
-
+<Show when={lost()}>
+    {(why) => <PaperError title="Can't follow backups" error={\`\${why()}. Paperboard keeps trying.\`} />}
+</Show>
 <PaperButton disabled={progress() !== null}>
     {progress() ? backupProgressText(progress()!) : "Back Up Now"}
 </PaperButton>`}
@@ -182,7 +183,7 @@ createFailureToast(lost, { title: "Can't follow backups" });
                 <li>A new step arrives at once. Byte counts arrive at most every 250 ms.</li>
                 <li>While <PaperCode>servicePaused</PaperCode> is true, the panel's service is stopped. Paperboard covers the panel page with the step and a progress bar, and reloads the page afterward if it lost its service.</li>
                 <li>A routine backup reports progress too, so a page opened in the middle of one can read <PaperCode>status().progress</PaperCode> and listen for the rest.</li>
-                <li>Progress arrives over the page's connection to the computer. When it can't connect, or drops, <PaperCode>onLost</PaperCode> hears why and Paperboard keeps trying; it hears <PaperCode>null</PaperCode> once progress can be heard again. Show it while it lasts, and read the status again when it ends: a step or an end sent meanwhile is not sent again.</li>
+                <li>Progress arrives over the page's connection to the computer. When it can't connect, or drops, <PaperCode>onLost</PaperCode> hears why and Paperboard keeps trying; it hears <PaperCode>null</PaperCode> once progress can be heard again. While it lasts, say so in place with a <PaperLink href="/docs/paperui/papererror/">PaperError</PaperLink>, beside what it would update. When it ends, read the status again: a step or an end sent meanwhile is not sent again.</li>
             </PaperTextList>
 
             <PaperText preset="subheader" as="h2" id="routine-backups">Routine backups</PaperText>

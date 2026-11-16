@@ -39,11 +39,11 @@ export default function App() {
     );
 }`;
 
-const FORECAST_PAGE = `import { createSignal, For, Show } from "solid-js";
+const FORECAST_PAGE = `import { createSignal, For, Match, Show, Switch } from "solid-js";
 import {
-    createFailureToast,
     PaperButton,
     PaperEmptyState,
+    PaperError,
     PaperFlex,
     PaperGrid,
     PaperInput,
@@ -72,58 +72,60 @@ export default function ForecastPage(props: { openSettings: () => void }) {
 
     const unit = () => (weather().settings.units === "metric" ? "°C" : "°F");
 
-    // what the service couldn't do, in toasts while it stands
-    createFailureToast(() => weather().loadError, { title: "Couldn't read the settings" });
-    createFailureToast(
-        () => Object.entries(weather().failures).map(([name, message]) => \`\${name}: \${message}\`).join(" "),
-        { title: "Couldn't check the weather" },
-    );
+    // every city whose last check failed, one to a line
+    const failed = () => Object.entries(weather().failures).map(([name, message]) => \`\${name}: \${message}\`).join("\\n");
 
     return (
         <PaperPage>
             <PaperPageHeader icon="partly_cloudy_day" title="Forecast" subtitle="Checked every 15 minutes" />
-            <Show
-                when={weather().hasKey}
-                fallback={
+            <Switch>
+                <Match when={weather().loadError}>
+                    {(why) => <PaperError fill title="Couldn't read the settings" error={why()} />}
+                </Match>
+                <Match when={!weather().hasKey}>
                     <PaperEmptyState icon="key" title="No API key yet" description="Weather needs an OpenWeather API key to check the weather.">
                         <PaperButton variant="primary" onClick={() => props.openSettings()}>
                             Add API key
                         </PaperButton>
                     </PaperEmptyState>
-                }
-            >
-                <PaperFlex direction="row" gap="half" align="center">
-                    <PaperInput
-                        label="City"
-                        value={city()}
-                        onInput={(e) => setCity(e.currentTarget.value)}
-                        onKeyDown={(e) => {
-                            if (e.key === "Enter") void follow();
-                        }}
-                    />
-                    <PaperButton disabled={busy()} onClick={() => void follow()}>
-                        Follow
-                    </PaperButton>
-                </PaperFlex>
-                <PaperGrid min="field">
-                    <For each={weather().settings.cities}>
-                        {(name) => (
-                            <Show
-                                when={weather().forecasts[name]}
-                                fallback={<PaperStatTile icon="cloud_off" label={name} value="No reading" tone="danger" />}
-                            >
-                                {(forecast) => (
-                                    <PaperStatTile
-                                        icon="thermostat"
-                                        label={name}
-                                        value={\`\${Math.round(forecast().temperature)}\${unit()}\`}
-                                    />
-                                )}
-                            </Show>
-                        )}
-                    </For>
-                </PaperGrid>
-            </Show>
+                </Match>
+                <Match when={true}>
+                    <Show when={failed()}>
+                        {(why) => <PaperError title="Couldn't check the weather" error={why()} />}
+                    </Show>
+                    <PaperFlex direction="row" gap="half" align="center">
+                        <PaperInput
+                            label="City"
+                            value={city()}
+                            onInput={(e) => setCity(e.currentTarget.value)}
+                            onKeyDown={(e) => {
+                                if (e.key === "Enter") void follow();
+                            }}
+                        />
+                        <PaperButton disabled={busy()} onClick={() => void follow()}>
+                            Follow
+                        </PaperButton>
+                    </PaperFlex>
+                    <PaperGrid min="field">
+                        <For each={weather().settings.cities}>
+                            {(name) => (
+                                <Show
+                                    when={weather().forecasts[name]}
+                                    fallback={<PaperStatTile icon="cloud_off" label={name} value="No reading" tone="danger" />}
+                                >
+                                    {(forecast) => (
+                                        <PaperStatTile
+                                            icon="thermostat"
+                                            label={name}
+                                            value={\`\${Math.round(forecast().temperature)}\${unit()}\`}
+                                        />
+                                    )}
+                                </Show>
+                            )}
+                        </For>
+                    </PaperGrid>
+                </Match>
+            </Switch>
         </PaperPage>
     );
 }`;
@@ -208,8 +210,8 @@ export default function UiGuideDoc() {
                     <tr><td>A row of fields and a button</td><td><PaperLink href="/docs/paperui/paperflex/">PaperFlex</PaperLink> with <PaperCode>direction="row"</PaperCode></td><td><PaperCode>align="center"</PaperCode> lines the button up with the field.</td></tr>
                     <tr><td>Text input</td><td><PaperLink href="/docs/paperui/paperinput/">PaperInput</PaperLink></td><td>The <PaperCode>label</PaperCode> names the field. The sample also follows the city on Enter.</td></tr>
                     <tr><td>One number per thing</td><td><PaperLink href="/docs/paperui/paperstattile/">PaperStatTile</PaperLink> in a <PaperLink href="/docs/paperui/papergrid/">PaperGrid</PaperLink></td><td>The grid fits as many tiles in a row as the width allows.</td></tr>
-                    <tr><td>A press that failed</td><td><PaperLink href="/docs/paperui/papertoast/#show-error">showError</PaperLink></td><td>One line in the <PaperCode>catch</PaperCode> shows the reason, and it stays until it is closed. See <PaperLink href="/docs/developers/errors/">Show every failure</PaperLink>.</td></tr>
-                    <tr><td>A failure that stays, from the state</td><td><PaperLink href="/docs/paperui/papertoast/#create-failure-toast">createFailureToast</PaperLink></td><td>Shows in every window until the next check fixes it, and closes then.</td></tr>
+                    <tr><td>A press that failed</td><td><PaperLink href="/docs/paperui/papertoast/#show-error">showError</PaperLink></td><td>One line in the <PaperCode>catch</PaperCode> shows the reason in a toast, which goes by itself. See <PaperLink href="/docs/developers/errors/">Show every failure</PaperLink>.</td></tr>
+                    <tr><td>A failure that stays, from the state</td><td><PaperLink href="/docs/paperui/papererror/">PaperError</PaperLink></td><td>Above the readings while a check is failing, in every window, and gone once the next check works. Settings that can't be read fill the page with it instead.</td></tr>
                 </tbody>
             </PaperTable>
             <PaperText preset="body" as="p">

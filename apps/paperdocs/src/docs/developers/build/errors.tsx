@@ -1,5 +1,7 @@
 import {
+    PaperCard,
     PaperCode,
+    PaperError,
     PaperFlex,
     PaperLink,
     PaperTable,
@@ -93,10 +95,15 @@ const REFRESH_CITY = `async function refreshCity(ctx: Ctx, city: string): Promis
     }
 }`;
 
-const PAGE_FAILURES = `createFailureToast(
-    () => Object.entries(weather().failures).map(([name, message]) => \`\${name}: \${message}\`).join(" "),
-    { title: "Couldn't check the weather" },
-);`;
+const PAGE_FAILURES = `import { Show } from "solid-js";
+import { PaperError } from "@mileniumhq/paperui";
+
+// every city whose last check failed, one to a line
+const failed = () => Object.entries(weather().failures).map(([name, message]) => \`\${name}: \${message}\`).join("\\n");
+
+<Show when={failed()}>
+    {(why) => <PaperError title="Couldn't check the weather" error={why()} />}
+</Show>`;
 
 const ON_INIT = `async onInit(ctx: Ctx) {
     try {
@@ -114,7 +121,12 @@ const ON_INIT = `async onInit(ctx: Ctx) {
     setInterval(() => void refreshAll(ctx), REFRESH_EVERY_MS);
 },`;
 
-const PAGE_LOAD_ERROR = `createFailureToast(() => weather().loadError, { title: "Couldn't read the settings" });`;
+const PAGE_LOAD_ERROR = `<Switch>
+    <Match when={weather().loadError}>
+        {(why) => <PaperError fill title="Couldn't read the settings" error={why()} />}
+    </Match>
+    <Match when={true}>{/* the page */}</Match>
+</Switch>`;
 
 export default function ErrorsGuideDoc() {
     return (
@@ -135,7 +147,7 @@ export default function ErrorsGuideDoc() {
             <PaperTextList>
                 <li>Never catch a failure and carry on as if it worked. A button that does nothing, with no way to know why, is the worst thing a panel can do.</li>
                 <li>Show the reason, not only that something failed. <PaperCode>OpenWeather refused Oslo: city not found</PaperCode> tells the person what to change. <PaperCode>Something went wrong</PaperCode> doesn't.</li>
-                <li>Show it where it will be seen: a toast for a button press, the city's tile for its last check, the widget for the widget. A message in the log alone is a failure nobody sees.</li>
+                <li>Show it where it will be seen: a toast for a button press, the page itself for a failure that stays, the city's tile for its last check, the widget for the widget. A message in the log alone is a failure nobody sees.</li>
                 <li>Never show a placeholder in place of something missing. A city with no reading says <PaperCode>No reading</PaperCode> and why, never <PaperCode>0°C</PaperCode>.</li>
             </PaperTextList>
 
@@ -177,13 +189,22 @@ $ bunx paperapi call dev.example.weather followCity '{"town":"Oslo"}'
             <PaperCode block language="tsx">{PAGE_CALL}</PaperCode>
             <PaperTextList>
                 <li>The title says what didn't happen, as "Couldn't …", and the toast says the error's message as the reason.</li>
-                <li>A screen reader reads a failure toast out, and it stays 10 seconds, held while the person points at it. A failure that stays true is said in place instead, with <PaperLink href="/docs/paperui/papererror/">PaperError</PaperLink>.</li>
+                <li>A screen reader reads a failure toast out. It goes by itself after 10 seconds, held while the person points at it, so it only ever says what just happened.</li>
                 <li>Give it <PaperCode>retry</PaperCode> when trying again is what the person would do next. The page keeps its own way to try again too.</li>
                 <li><PaperCode>finally</PaperCode> turns the button back on whether the call worked or not.</li>
             </PaperTextList>
             <PaperText preset="body" as="p">
-                A failure that stays true until something changes, such as the background failures and settings below, is a toast too, from the state: <PaperLink href="/docs/paperui/papertoast/#create-failure-toast">createFailureToast</PaperLink> shows it while it stands, in every window, and closes it once it is fixed.
-                Never an error quote: <PaperCode>{'<PaperQuote variant="danger">'}</PaperCode> is deprecated, and the code check flags it.
+                A failure that stays true until something changes, such as the background failures and settings below, is never a toast: a toast goes, and the failure would stay with nothing saying so.
+                It is a <PaperLink href="/docs/paperui/papererror/">PaperError</PaperLink> on the page, where the thing that failed would be, shown from the state while it stands, in every window, and gone once it is fixed:
+            </PaperText>
+            <PaperCard data-docs-demo surface="front">
+                <PaperError
+                    title="Couldn't check the weather"
+                    error={"Oslo: OpenWeather refused Oslo: Invalid API key. Please see https://openweathermap.org/faq#error401 for more info.\nBergen: OpenWeather refused Bergen: Invalid API key. Please see https://openweathermap.org/faq#error401 for more info."}
+                />
+            </PaperCard>
+            <PaperText preset="body" as="p">
+                Never an error quote or a red line of text, such as <PaperCode>{'<PaperQuote variant="danger">'}</PaperCode>: the code check flags both.
             </PaperText>
 
             <PaperText preset="subheader" as="h2" id="in-the-background">Failures in the background</PaperText>
@@ -193,8 +214,10 @@ $ bunx paperapi call dev.example.weather followCity '{"town":"Oslo"}'
             <PaperCode block language="tsx">{REFRESH_CITY}</PaperCode>
             <PaperCode block language="tsx">{PAGE_FAILURES}</PaperCode>
             <PaperText preset="body" as="p">
-                The next check that works removes the city's entry from <PaperCode>failures</PaperCode>, and the toast takes it out, closing once no city is failing.
+                The PaperError sits at the top of the Forecast page, so the readings Weather already has stay on screen under it. Its first city is the reason, and the others fold under Details.
+                The next check that works removes the city's entry from <PaperCode>failures</PaperCode>, and its line goes, and the PaperError with the last one.
                 Keep the reason until then: a failure that disappears before anyone looks is a failure nobody sees.
+                It has no Try again: the service checks again every 15 minutes by itself. Give a PaperError an <PaperCode>action</PaperCode> when the page can do something about it, such as a read it repeats.
             </PaperText>
             <PaperText preset="body" as="p">
                 A failure with no place on the page, or that matters while the panel isn't open, goes to <PaperLink href="/docs/paperapi/problems/">problemsApi</PaperLink> instead.
@@ -208,6 +231,9 @@ $ bunx paperapi call dev.example.weather followCity '{"town":"Oslo"}'
                 Catch what <PaperCode>onInit</PaperCode> can't do, put the reason in the state, and return:
             </PaperText>
             <PaperCode block language="tsx">{ON_INIT}</PaperCode>
+            <PaperText preset="body" as="p">
+                Without its settings the page has nothing true to show, not even "No API key yet". It shows the failure in its place, with <PaperCode>fill</PaperCode>, and nothing else:
+            </PaperText>
             <PaperCode block language="tsx">{PAGE_LOAD_ERROR}</PaperCode>
 
             <PaperText preset="subheader" as="h2" id="where-to-show">Where each failure goes</PaperText>
@@ -220,9 +246,9 @@ $ bunx paperapi call dev.example.weather followCity '{"town":"Oslo"}'
                 </thead>
                 <tbody>
                     <tr><td>A button, form, menu item or anything else the person pressed</td><td><PaperLink href="/docs/paperui/papertoast/#show-error">showError</PaperLink> in its <PaperCode>catch</PaperCode>.</td></tr>
-                    <tr><td>Something that stays wrong, such as settings that can't be read</td><td><PaperLink href="/docs/paperui/papertoast/#create-failure-toast">createFailureToast</PaperLink>, from the state, or <PaperLink href="/docs/paperui/state/#create-read">createRead</PaperLink>'s <PaperCode>failure</PaperCode> for a read.</td></tr>
+                    <tr><td>Something that stays wrong, such as settings that can't be read or a read that failed</td><td>A <PaperLink href="/docs/paperui/papererror/">PaperError</PaperLink> where it would show, from the state or <PaperLink href="/docs/paperui/state/#create-read">createRead</PaperLink>'s <PaperCode>error()</PaperCode>, above what the view still has.</td></tr>
                     <tr><td>A view with nothing to show because it couldn't load</td><td>A <PaperLink href="/docs/paperui/papererror/#fill">PaperError</PaperLink> filling the view, with why and Try again.</td></tr>
-                    <tr><td>A field the person typed wrong</td><td>The field itself: <PaperLink href="/docs/paperui/paperinput/">PaperInput</PaperLink>'s <PaperCode>invalid</PaperCode>, with the reason under it.</td></tr>
+                    <tr><td>A field the person typed wrong</td><td>The field itself: <PaperLink href="/docs/paperui/paperinput/#validation">PaperInput</PaperLink>'s <PaperCode>error</PaperCode>, which says the reason under it.</td></tr>
                     <tr><td>Something the panel needs and doesn't have yet, such as an API key</td><td><PaperLink href="/docs/paperui/paperemptystate/">PaperEmptyState</PaperLink> with the button that fixes it.</td></tr>
                     <tr><td>One item in a list or grid</td><td>The item's own error state, such as <PaperCode>tone="danger"</PaperCode> on a <PaperLink href="/docs/paperui/paperstattile/">PaperStatTile</PaperLink>, and the reason below.</td></tr>
                     <tr><td>A Home widget</td><td><PaperCode>PaperWidgetMessage</PaperCode> with <PaperCode>tone="danger"</PaperCode> and the reason as its hint. See <PaperLink href="/docs/developers/widgets/#failures">Add a Home widget</PaperLink>.</td></tr>
@@ -242,7 +268,7 @@ $ bunx paperapi call dev.example.weather followCity '{"town":"Oslo"}'
             <PaperTextList>
                 <li>Run every block and call with input it must refuse, with <PaperCode>bunx paperapi call</PaperCode>, and read the message as the person would.</li>
                 <li>Leave <PaperCode>bunx paperapi monitor --panel &lt;panel-id&gt;</PaperCode> running and press every button. A call marked <PaperCode>✗</PaperCode> must show a toast too.</li>
-                <li>Stop the network or remove the API key and look at every page and widget. Each says what is wrong.</li>
+                <li>Stop the network or remove the API key and look at every page and widget. Each says what is wrong, and keeps saying it while it stays wrong.</li>
             </PaperTextList>
 
             <PaperText preset="body" as="p">
