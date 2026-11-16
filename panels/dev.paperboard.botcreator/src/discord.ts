@@ -61,15 +61,6 @@ export function discordCdnBase(env: Record<string, string | undefined> = process
     return api ? `${new URL(api).origin}/cdn` : "https://cdn.discordapp.com";
 }
 
-/**
- * The origins a bot's fetches (fetchPublic) may reach on this computer: the
- * Discord BOTCREATOR_DISCORD_API names, which is a test's on loopback. None
- * for Discord itself, whose servers are public.
- */
-export function discordOrigins(env: Record<string, string | undefined> = process.env): string[] {
-    const api = discordApiBase(env);
-    return api ? [new URL(api).origin] : [];
-}
 
 /** A REST client for `token` alone, with no gateway login and no sweep timers to outlive its requests. */
 export async function tokenRest(token: string): Promise<REST> {

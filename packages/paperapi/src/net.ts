@@ -152,13 +152,6 @@ export interface PublicFetchOptions {
     maxRedirects?: number;
     /** the request's Accept header (default any type) */
     accept?: string;
-    /**
-     * Origins (such as "http://127.0.0.1:8080") the caller already trusts,
-     * reached without the public-address rule: a server the person set up
-     * themselves, or a test's loopback one. A redirect out of one is checked
-     * like any other address. Never put an origin from untrusted input here.
-     */
-    trustedOrigins?: string[];
     /** how a name is resolved (default the system's resolver) */
     lookup?: (host: string) => Promise<{ address: string }[]>;
     /** only https addresses, the first and every redirect; an http one fails as invalid-url */
@@ -200,6 +193,18 @@ export interface PublicFetchResponse {
     body: Uint8Array;
 }
 
+/**
+ * Where a test names its own servers (on loopback, or a stand-in name for
+ * it), which fetchPublic then reaches without the public-address rule: their
+ * origins, comma-separated ("http://127.0.0.1:8080"). A test sets it in its
+ * own process, or for the daemon whose services it runs. No caller can pass
+ * one, and no shipped code names it: a panel always fetches under the rule.
+ */
+export const TEST_TRUSTED_ORIGINS_ENV = "PAPERAPI_TEST_TRUSTED_ORIGINS";
+
+const testTrustedOrigins = (): Set<string> =>
+    new Set((process.env[TEST_TRUSTED_ORIGINS_ENV] ?? "").split(",").map((o) => o.trim()).filter(Boolean).map((o) => new URL(o).origin));
+
 const DEFAULT_TIMEOUT_MS = 15_000;
 const DEFAULT_REDIRECTS = 3;
 const MAX_URL = 4096;
@@ -215,7 +220,7 @@ export async function fetchPublic(raw: unknown, options: PublicFetchOptions): Pr
     if (!Number.isSafeInteger(maxBytes) || maxBytes < 0) throw new Error(`fetchPublic needs maxBytes as a whole number of bytes, got ${String(maxBytes)}`);
     const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
     const maxRedirects = options.maxRedirects ?? DEFAULT_REDIRECTS;
-    const trusted = new Set((options.trustedOrigins ?? []).map((o) => new URL(o).origin));
+    const trusted = testTrustedOrigins();
     const lookup = options.lookup ?? ((h: string) => dns.lookup(h, { all: true, verbatim: true }));
     const dial = options.dial ?? get;
     const httpsOnly = options.requireHttps === true;
@@ -373,8 +378,6 @@ export interface PictureFetchOptions {
 export interface PictureRequest {
     /** the source, as a failure names it: "Couldn't load the picture from <from>: …" */
     from: string;
-    /** origins reached without the public-address rule, as fetchPublic's trustedOrigins; never one from untrusted input */
-    trustedOrigins?: string[];
 }
 
 /** The picture at an address as a data: address, for a page to show. Throws why it couldn't be fetched, or isn't a picture. */
@@ -432,7 +435,6 @@ export function createPictureFetch(options: PictureFetchOptions): PictureFetch {
                 timeoutMs: options.timeoutMs,
                 maxRedirects: options.maxRedirects,
                 accept: "image/*",
-                trustedOrigins: request.trustedOrigins,
             });
         } catch (err) {
             throw new Error(`Couldn't load the picture from ${request.from}: ${errorMessage(err)}`);

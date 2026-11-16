@@ -2,7 +2,7 @@
 // their own avatar, so a page never loads one itself: the service fetches it
 // from Discord's CDN, and only from there, and hands the page the bytes.
 import { createPictureFetch } from "@mileniumhq/paperapi/net";
-import { discordCdnBase, discordOrigins } from "./discord";
+import { discordCdnBase } from "./discord";
 
 /** the size Discord is asked for: the panel never draws a picture bigger */
 const PICTURE_SIZE = "128";
@@ -27,5 +27,5 @@ function cdnAddress(raw: unknown): URL {
 
 /** A Discord avatar or server icon as a data: address, for a page to show. */
 export async function discordPicture(raw: unknown): Promise<string> {
-    return pictures(cdnAddress(raw), { from: "Discord's CDN", trustedOrigins: discordOrigins() });
+    return pictures(cdnAddress(raw), { from: "Discord's CDN" });
 }

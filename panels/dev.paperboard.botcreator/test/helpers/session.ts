@@ -4,6 +4,7 @@
 // pointed at the loopback Discord through BOTCREATOR_DISCORD_API.
 import { afterAll, beforeAll } from "bun:test";
 import { BotSession } from "../../src/session";
+import { TEST_TRUSTED_ORIGINS_ENV } from "@mileniumhq/paperapi/net";
 import { startFakeDiscord, type FakeDiscord } from "./discord";
 
 const WAIT_MS = 20_000;
@@ -13,16 +14,21 @@ const sessions: BotSession[] = [];
 /** A loopback Discord for this file, and the service's environment pointed at it. */
 export function useFakeDiscord(): () => FakeDiscord {
     let discord: FakeDiscord | null = null;
-    let previous: string | undefined;
+    const previous: Record<string, string | undefined> = {};
+    const names = ["BOTCREATOR_DISCORD_API", TEST_TRUSTED_ORIGINS_ENV];
     beforeAll(() => {
         discord = startFakeDiscord();
-        previous = process.env.BOTCREATOR_DISCORD_API;
+        for (const name of names) previous[name] = process.env[name];
         process.env.BOTCREATOR_DISCORD_API = discord.api;
+        // its files and pictures are fetched as public ones would be
+        process.env[TEST_TRUSTED_ORIGINS_ENV] = new URL(discord.api).origin;
     });
     afterAll(async () => {
         for (const session of sessions.splice(0)) await session.stop();
-        if (previous === undefined) delete process.env.BOTCREATOR_DISCORD_API;
-        else process.env.BOTCREATOR_DISCORD_API = previous;
+        for (const name of names) {
+            if (previous[name] === undefined) delete process.env[name];
+            else process.env[name] = previous[name];
+        }
         discord?.stop();
     });
     return () => {

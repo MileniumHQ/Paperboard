@@ -6,7 +6,8 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { secretsApi, serviceClient } from "@mileniumhq/paperapi";
+import { secretsApi, serviceClient, type ServiceClient } from "@mileniumhq/paperapi";
+import { TEST_TRUSTED_ORIGINS_ENV } from "@mileniumhq/paperapi/net";
 import { botCreatorContract } from "../../src/contract";
 import { PANEL_ID, tokenName, type StoredBot } from "../../src/bots";
 import { testDaemon } from "./daemon";
@@ -65,6 +66,8 @@ export async function startService(options: { discordApi: string; entry?: string
         PAPERCRANE_PANEL_TOKEN: await daemon.panelToken(PANEL_ID),
         PAPERCRANE_PORT: String(daemon.port),
         BOTCREATOR_DISCORD_API: options.discordApi,
+        // the loopback Discord's files and pictures are fetched as public ones would be
+        [TEST_TRUSTED_ORIGINS_ENV]: new URL(options.discordApi).origin,
     };
     delete env.PAPERCRANE_TOKEN;
     const child: ChildProcess = spawn(process.execPath, [options.entry ?? SERVICE_ENTRY], { env, stdio: ["ignore", "pipe", "pipe", "ipc"] });
@@ -101,4 +104,9 @@ export async function startService(options: { discordApi: string; entry?: string
 }
 
 /** The service's own calls, as the panel's page makes them: through its contract. */
-export const call = serviceClient(botCreatorContract).calls;
+// made at the first call, once the test's daemon is up: a client reads the
+// service's state from the moment it is made
+let client: ServiceClient<typeof botCreatorContract> | null = null;
+export const call = new Proxy({} as ServiceClient<typeof botCreatorContract>["calls"], {
+    get: (_calls, name) => (client ??= serviceClient(botCreatorContract)).calls[name as keyof ServiceClient<typeof botCreatorContract>["calls"]],
+});

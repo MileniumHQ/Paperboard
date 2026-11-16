@@ -7,7 +7,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { startTestDaemon, type TestDaemon } from "./helpers/crane";
 import { openPage, servePanel } from "./helpers/browser";
-import { loopbackServer } from "./helpers/http";
+import { loopbackServer, trustLoopback } from "./helpers/http";
 import { writeTree } from "./helpers/tmp";
 import { PANEL_ID } from "../src/servers";
 import { TF2 } from "../src/games/tf2";
@@ -25,7 +25,10 @@ describe("the service's pictures", () => {
         if (url.pathname === "/unnamed") return new Response(PNG, { headers: { "content-type": "application/octet-stream" } });
         return png();
     });
+    trustLoopback(host);
     const listed = [new URL(host.url).host];
+    // a server on this computer the test doesn't stand in for a public host with
+    const inside = loopbackServer(() => png());
 
     test("a listed host's picture comes back as a data: address of what its bytes are", async () => {
         expect(await servedPicture(`${host.url}/icon.png`, listed, "Test")).toBe(`data:image/png;base64,${PNG.toString("base64")}`);
@@ -37,7 +40,8 @@ describe("the service's pictures", () => {
         await expect(servedPicture(`${host.url}/huge.png`, listed, "Test")).rejects.toThrow("is over 8 MB");
         await expect(servedPicture("https://elsewhere.example/icon.png", listed, "Test")).rejects.toThrow("Test keeps its pictures on");
         // any public host is no address on this computer or its network
-        await expect(servedPicture(`${host.url}/other.png`, null, "Test")).rejects.toThrow("is a private or local address");
+        await expect(servedPicture(`${inside.url}/other.png`, null, "Test")).rejects.toThrow("is a private or local address");
+        await expect(servedPicture(`${inside.url}/other.png`, [new URL(inside.url).host], "Test")).rejects.toThrow("is a private or local address");
         await expect(servedPicture("file:///etc/passwd", null, "Test")).rejects.toThrow("not file:");
     });
 });
@@ -58,6 +62,8 @@ describe("a page shows remote pictures", () => {
         const wikiPage = fs.readFileSync(path.join(import.meta.dir, "fixtures", "tfwiki-list-of-maps.html"), "utf8");
         const wiki = loopbackServer((_req, url) => (url.pathname === "/wiki/List_of_maps" ? new Response(wikiPage, { headers: { "content-type": "text/html" } }) : png()));
         const steam = loopbackServer(() => png());
+        trustLoopback(wiki);
+        trustLoopback(steam);
         Object.assign(TF2, { mapPictures: { name: "Official Team Fortress Wiki", page: `${wiki.url}/wiki/List_of_maps` } });
         PICTURE_HOSTS["steam-workshop"]!.push(new URL(steam.url).host);
 

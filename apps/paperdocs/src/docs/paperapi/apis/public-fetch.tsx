@@ -47,8 +47,6 @@ interface PublicFetchOptions {
     maxRedirects?: number;
     /** the request's Accept header (default "*/*") */
     accept?: string;
-    /** origins the caller already trusts, reached without the public-address rule */
-    trustedOrigins?: string[];
     /** how a name is resolved (default the system's resolver) */
     lookup?: (host: string) => Promise<{ address: string }[]>;
     /** only https addresses, the first and every redirect */
@@ -102,8 +100,8 @@ class PublicFetchError extends Error {
                     A test passes its own to see which address each hop dialed without reaching the internet, or to reach a server whose certificate it made. Every rule above still applies to what it answers.
                 </li>
                 <li>
-                    <PaperCode>trustedOrigins</PaperCode> is for a server the person set up themselves, or a test's server on loopback.
-                    A redirect out of a trusted origin is checked like any other address. Never put an origin from untrusted input there.
+                    No caller can let an address past the rule. A test reaches its own servers on loopback by naming their origins, comma-separated, in the environment variable <PaperCode>PAPERAPI_TEST_TRUSTED_ORIGINS</PaperCode> (<PaperCode>TEST_TRUSTED_ORIGINS_ENV</PaperCode>), in its own process or for the daemon whose services it runs.
+                    A redirect out of one is checked like any other address. Shipped code never sets it.
                 </li>
             </PaperTextList>
 
@@ -143,7 +141,7 @@ interface PictureFetchOptions {
 }
 
 /** the picture at url as a data: address; from names the source in a failure */
-type PictureFetch = (url: URL, request: { from: string; trustedOrigins?: string[] }) => Promise<string>;`}
+type PictureFetch = (url: URL, request: { from: string }) => Promise<string>;`}
             </PaperCode>
             <PaperText preset="body" as="p">
                 A page never loads a picture someone else chose, such as an avatar, an add-on's icon or a map's thumbnail. The service fetches it with the function <PaperCode>createPictureFetch</PaperCode> returns and hands the page a <PaperCode>data:</PaperCode> address.

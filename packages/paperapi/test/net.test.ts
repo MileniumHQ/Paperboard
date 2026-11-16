@@ -1,12 +1,13 @@
 // fetchPublic against real servers on loopback. Loopback is what the rule
 // refuses, so a test reaches its own servers only by naming their origins in
-// trustedOrigins; every other address goes through the rule as it would in a
-// panel. No outside network: names are resolved by a stand-in lookup.
+// PAPERAPI_TEST_TRUSTED_ORIGINS; every other address goes through the rule as
+// it would in a panel. No outside network: names are resolved by a stand-in
+// lookup.
 import { afterAll, describe, expect, test } from "bun:test";
 import http from "node:http";
 import type { AddressInfo } from "node:net";
 import os from "node:os";
-import { createPictureFetch, fetchPublic, publicAddressRefusal, PublicFetchError, type PublicFetchAnswer, type PublicFetchDial } from "../src/net";
+import { createPictureFetch, fetchPublic, publicAddressRefusal, PublicFetchError, TEST_TRUSTED_ORIGINS_ENV, type PublicFetchAnswer, type PublicFetchDial } from "../src/net";
 
 const hits: string[] = [];
 const servers: http.Server[] = [];
@@ -46,7 +47,8 @@ const filesPort = await serve("files", (path): Answer => {
     return { status: 404, body: "Not found" };
 });
 const FILES = `http://127.0.0.1:${filesPort}`;
-const trusted = { maxBytes: 32, trustedOrigins: [FILES] };
+const NAMED = `http://files.example:${filesPort}`;
+const trusted = { maxBytes: 32 };
 const lookup = (address: string) => async () => [{ address }];
 
 async function refusal(work: Promise<unknown>): Promise<{ code: string; message: string }> {
@@ -120,6 +122,10 @@ describe("fetchPublic", () => {
             message: "intranet.example is on this computer or its local network (127.0.0.1)",
         });
         expect(await refusal(fetchPublic("http://router.example/", { maxBytes: 32, lookup: lookup("192.168.1.1") }))).toMatchObject({ code: "refused" });
+        // no caller can trust an address past the rule: only a test's own setting does
+        const inside = `http://127.0.0.1:${insidePort}`;
+        expect(await refusal(fetchPublic(`${inside}/`, { maxBytes: 32, trustedOrigins: [inside] } as Parameters<typeof fetchPublic>[1]))).toMatchObject({ code: "refused" });
+        await expect(createPictureFetch({ maxBytes: 32 })(new URL(`${inside}/cat.png`), { from: "Test", trustedOrigins: [inside] } as { from: string })).rejects.toThrow("is a private or local address");
         expect(hits).toEqual([]);
     });
 
@@ -132,10 +138,9 @@ describe("fetchPublic", () => {
     test("the address checked is the one dialed, resolved once per hop, and the request names the host", async () => {
         hits.length = 0;
         let lookups = 0;
-        const named = `http://files.example:${filesPort}`;
+        const named = NAMED;
         const res = await fetchPublic(`${named}/cat.png`, {
             maxBytes: 32,
-            trustedOrigins: [named],
             lookup: async () => {
                 lookups++;
                 return [{ address: "127.0.0.1" }];
@@ -228,7 +233,9 @@ const picturesPort = await serve("pictures", (path): Answer => {
     return { headers: { "content-type": "image/png" }, body: PNG };
 });
 const PICTURES = `http://127.0.0.1:${picturesPort}`;
-const from = { from: "Test", trustedOrigins: [PICTURES] };
+// the test's own servers; the one standing for this computer's private service is not among them
+process.env[TEST_TRUSTED_ORIGINS_ENV] = [FILES, NAMED, PICTURES].join(",");
+const from = { from: "Test" };
 
 describe("createPictureFetch", () => {
     const asks = (path: string) => hits.filter((hit) => hit.startsWith(`pictures ${path} `)).length;
@@ -246,7 +253,7 @@ describe("createPictureFetch", () => {
     test("what isn't a picture is refused with why, and a failure isn't kept", async () => {
         const pictures = createPictureFetch({ maxBytes: 64 });
         await expect(pictures(new URL(`${PICTURES}/page.png`), from)).rejects.toThrow("Test sent text/html where a picture should be, and it isn't one");
-        await expect(pictures(new URL(`${PICTURES}/big.png`), { from: "Test", trustedOrigins: [] })).rejects.toThrow("Couldn't load the picture from Test:");
+        await expect(pictures(new URL(`http://127.0.0.1:${insidePort}/big.png`), from)).rejects.toThrow("Couldn't load the picture from Test: 127.0.0.1");
         await expect(pictures(new URL(`${PICTURES}/later.png`), from)).rejects.toThrow("Couldn't load the picture from Test:");
         missing = false;
         expect(await pictures(new URL(`${PICTURES}/later.png`), from)).toMatch(/^data:image\/png;base64,/);

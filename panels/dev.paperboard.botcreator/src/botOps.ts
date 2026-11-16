@@ -8,7 +8,7 @@ import type {
     GuildMember,
     Message,
 } from "discord.js";
-import { discordOrigins, loadDiscord } from "./discord";
+import { loadDiscord } from "./discord";
 import { MessageOps, parseMoment, permissionNames, resolveGuild, resolveMember } from "./discordOps";
 import { fetchPublic, type PublicFetchResponse } from "@mileniumhq/paperapi/net";
 import { buildPoll } from "./payloads";
@@ -116,7 +116,7 @@ export async function sendFile(bot: () => Client, inputs: { channel: string; url
     const channel = await sendableChannel(bot(), inputs.channel);
     let file: PublicFetchResponse;
     try {
-        file = await fetchPublic(url.href, { maxBytes: uploadLimit(channel), trustedOrigins: discordOrigins() });
+        file = await fetchPublic(url.href, { maxBytes: uploadLimit(channel) });
     } catch (err) {
         throw new Error(`Couldn't get the file to send: ${errorMessage(err)}`);
     }

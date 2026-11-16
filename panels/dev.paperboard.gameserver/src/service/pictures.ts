@@ -38,8 +38,7 @@ export function servedPicture(raw: unknown, hosts: readonly string[] | null, fro
     }
     if (url.protocol !== "https:" && url.protocol !== "http:") return Promise.reject(new Error(`Pictures are fetched over the web, not ${url.protocol}`));
     if (hosts && !hosts.includes(url.host)) return Promise.reject(new Error(`${from} keeps its pictures on ${hosts.join(" and ")}, not ${url.host}`));
-    const trusted = hosts !== null && url.hostname === "127.0.0.1";
-    return pictures(url, { from, trustedOrigins: trusted ? [url.origin] : [] });
+    return pictures(url, { from });
 }
 
 /** The panel's picture call: `url` from `from`, one of PICTURE_HOSTS' sources. */
