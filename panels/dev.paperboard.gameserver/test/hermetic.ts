@@ -18,11 +18,21 @@ const alive = (pid: number): boolean => {
 const RUN_PREFIX = "gameserver-unit-";
 const systemTemp = os.tmpdir();
 // A run that was killed never reached its cleanup: what it left is removed
-// by the next run, once the process that owned it is gone.
+// by the next run, once the process that owned it is gone, and so are the
+// daemon, supervisors and stand-ins still running from it (a test daemon
+// outlives a killed run: it was never told to stop).
 for (const name of fs.readdirSync(systemTemp).filter((n) => n.startsWith(RUN_PREFIX))) {
     const stale = path.join(systemTemp, name);
     const owner = Number(fs.existsSync(path.join(stale, "owner.pid")) ? fs.readFileSync(path.join(stale, "owner.pid"), "utf8") : NaN);
-    if (Number.isInteger(owner) && !alive(owner)) fs.rmSync(stale, { recursive: true, force: true });
+    if (!Number.isInteger(owner) || alive(owner)) continue;
+    const pids = runningFrom(stale);
+    for (const pid of pids) if (alive(pid)) process.kill(pid, "SIGKILL");
+    const deadline = Date.now() + 10_000;
+    while (pids.some(alive)) {
+        if (Date.now() > deadline) throw new Error(`processes ${pids.filter(alive).join(", ")} left running from ${stale} did not end`);
+        Bun.sleepSync(50); // quiet: a deadline-bound poll for the processes to end
+    }
+    fs.rmSync(stale, { recursive: true, force: true });
 }
 // Everything a test file makes in the temp dir lands in this one folder, and
 // so does what the daemon, the stand-ins and Chrome it starts make there: the
@@ -63,11 +73,22 @@ async function endSupervisors(): Promise<void> {
     }
 }
 
-// Windows: the processes still running an executable from `dir`, whether
-// or not a record names them (a supervisor whose workload ended drops its
-// record before it exits). Elsewhere a running program can be deleted.
+// The processes still running an executable from `dir`, whether or not a
+// record names them (a supervisor whose workload ended drops its record
+// before it exits).
 function runningFrom(dir: string): number[] {
-    if (process.platform !== "win32") return [];
+    if (process.platform !== "win32") {
+        const out = Bun.spawnSync(["ps", "-A", "-o", "pid=,args="], { stdout: "pipe", stderr: "pipe" });
+        if (out.exitCode !== 0) throw new Error(`listing the processes run from ${dir} failed: ${out.stderr.toString()}`);
+        const roots = [...new Set([dir, fs.realpathSync.native(dir)])].map((root) => root + path.sep);
+        return out.stdout
+            .toString()
+            .split("\n")
+            .map((line) => /^\s*(\d+)\s+(.*)$/.exec(line))
+            .filter((match): match is RegExpExecArray => match !== null && roots.some((root) => match[2].startsWith(root)))
+            .map((match) => Number(match[1]))
+            .filter((pid) => pid !== process.pid);
+    }
     // the OS names executables by long path; the temp dir may be a short
     // 8.3 one (RUNNER~1)
     dir = fs.realpathSync.native(dir);
