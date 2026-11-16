@@ -76,7 +76,11 @@ describe("saved commands in the panel", () => {
             served.stop();
         }
     });
-    test("saved commands that can't be read show Couldn't load in the modal, and a toast says why", async () => {
+    // the modal's error in place of the list, saying why: never a toast, which would go while the file stays unread
+    const failure = `${dialog}?.querySelector("[data-paper-error][role=region][aria-label=\\"Couldn't read the saved commands\\"]")`;
+    const tryAgain = `[...(${failure}?.querySelectorAll("button") ?? [])].find((b) => b.innerText.includes("Try again"))`;
+
+    test("saved commands that can't be read say why in the modal, in place of the list, and no toast", async () => {
         await panelFiles({ "tabs.json": TABS, "saved-commands.json": '{"version": 1, "commands": [' });
         await startService();
         const served = await servePanel();
@@ -85,12 +89,13 @@ describe("saved commands in the panel", () => {
             await page.waitFor(`document.querySelectorAll(".xterm").length === 1`, "the shell");
             await page.click('button[aria-label="Saved commands"]');
             await page.clickText("[role=menuitem]", "Manage saved commands");
-            await page.waitFor(`${dialog}?.innerText.includes("Couldn't load")`, "the modal to say it couldn't load");
-            await page.waitFor(toastShows("Couldn't read the saved commands", "Saved commands could not be read"), "the toast saying why");
+            await page.waitFor(`Boolean(${failure}?.innerText.includes("Saved commands could not be read"))`, "the modal's error saying why");
+            expect(await page.evaluate<boolean>(`Boolean(${tryAgain})`)).toBe(true);
             expect(await page.evaluate<boolean>(`${dialog}.innerText.includes("No saved commands")`)).toBe(false);
-            // the toast goes with the modal
+            expect(await page.evaluate<boolean>(toastShows("Couldn't read the saved commands", ""))).toBe(false);
+            // the error is the modal's: it goes with it
             await page.press("Escape");
-            await page.waitFor(`!${dialog} && !(${toastShows("Couldn't read the saved commands", "")})`, "the modal and its toast to close");
+            await page.waitFor(`!${dialog} && !document.querySelector("[data-paper-error]")`, "the modal and its error to close");
             expect(page.exceptions).toEqual([]);
         } finally {
             await page.close();
@@ -98,25 +103,25 @@ describe("saved commands in the panel", () => {
         }
     });
 
-    test("Try again on Couldn't load reads them again: still damaged, a toast says why and it stays; mended, the list comes", async () => {
+    test("Try again reads them again: still damaged, the error stays and says why; mended, the list comes", async () => {
         const dir = await panelFiles({ "tabs.json": TABS, "saved-commands.json": '{"version": 1, "commands": [' });
         await startService();
         const served = await servePanel();
         const page = await browser.open(served.url);
-        const tryAgain = `[...${dialog}.querySelectorAll("button")].find((b) => b.innerText.includes("Try again"))`;
         try {
             await page.waitFor(`document.querySelectorAll(".xterm").length === 1`, "the shell");
             await page.click('button[aria-label="Saved commands"]');
             await page.clickText("[role=menuitem]", "Manage saved commands");
-            await page.waitFor(`Boolean(${dialog} && ${tryAgain})`, "Try again on the modal's Couldn't load");
-            await page.clickText("[role=dialog] button", "Try again");
-            await page.waitFor(toastShows("Couldn't read the saved commands", "Saved commands could not be read"), "the toast saying it still can't");
-            expect(await page.evaluate<boolean>(`Boolean(${tryAgain})`), "Try again went away with the list still unread").toBe(true);
+            await page.waitFor(`Boolean(${tryAgain})`, "Try again on the modal's error");
+            // still damaged: the read again is refused, and the error says so with Try again ready once more
+            await page.evaluate(`${tryAgain}.click()`);
+            await page.waitFor(`Boolean(${tryAgain}) && !${tryAgain}.disabled && ${failure}.innerText.includes("Saved commands could not be read")`, "the error still saying why");
+            expect(await page.evaluate<boolean>(toastShows("Couldn't read the saved commands", ""))).toBe(false);
 
             fs.writeFileSync(path.join(dir, "saved-commands.json"), JSON.stringify({ version: 1, commands: [{ id: "cmd_a", label: "Build", command: "make" }], lastRuns: {}, running: [] }));
-            await page.clickText("[role=dialog] button", "Try again");
+            await page.evaluate(`${tryAgain}.click()`);
             await page.waitFor(rowShowing("Build", "make"), "the list read again");
-            expect(await page.evaluate<boolean>(`${dialog}.innerText.includes("Couldn't load")`)).toBe(false);
+            expect(await page.evaluate<boolean>(`Boolean(${failure})`)).toBe(false);
             expect(page.exceptions).toEqual([]);
         } finally {
             await page.close();
