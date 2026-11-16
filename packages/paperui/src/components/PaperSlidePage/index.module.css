@@ -93,6 +93,11 @@
     color: var(--paper-text-faint);
 }
 
+/* a page inside another page is named in the outer page's bar */
+.page .page > .bar {
+    display: none;
+}
+
 /* the shell holding this panel draws its pages' bars, with their titles as
    crumbs, so a page in the frame shows none of its own */
 .page > .bar:where(:global([data-paper-host-bars]) *) {

@@ -1,4 +1,4 @@
-import { type JSX, For, Show, children, createEffect, on, onCleanup } from "solid-js";
+import { type JSX, For, Show, children, createEffect, createSignal, on, onCleanup } from "solid-js";
 import { PaperSlidePageTitleContext, useSlidePageTitle } from "../../contexts/slidePage";
 import { PaperButton } from "../PaperButton";
 import { PaperIcon } from "../PaperIcon";
@@ -9,6 +9,28 @@ import { createPageCrumb } from "../../utils/pageCrumbs";
 import { resolveBackground } from "../../utils/theme";
 import type { PaperBackgroundSurface } from "../../types";
 import styles from "./index.module.css";
+
+// Every phone-layout page in the document. Which one holds which is the
+// DOM's to say, not Solid's: an app may build a page's content once and move
+// it between layouts, outside the page's own component tree.
+interface PageEntry {
+    el: () => HTMLElement | undefined;
+    open: () => boolean;
+    titles: () => string[];
+    back: () => void;
+    onPointerDown: (e: PointerEvent) => void;
+}
+const [pages, setPages] = createSignal<readonly PageEntry[]>([]);
+
+/** the open pages inside `outer`'s element that show (every page between them is open too), outermost first */
+function openInside(outer: PageEntry): PageEntry[] {
+    const root = outer.el();
+    if (!root) return [];
+    const inside = pages().filter((p) => p !== outer && root.contains(p.el() ?? null));
+    return inside
+        .filter((p) => p.open() && inside.every((q) => q.open() || q === p || !q.el()!.contains(p.el()!)))
+        .sort((a, b) => (a.el()!.compareDocumentPosition(b.el()!) & Node.DOCUMENT_POSITION_PRECEDING ? 1 : -1));
+}
 
 export interface PaperSlidePageProps {
     /** false: the wide layout; the page draws nothing of its own */
@@ -65,6 +87,11 @@ export interface PaperSlidePageProps {
  * Disabled (the wide layout) its boxes are display: contents and the
  * children lay out as if it weren't there. The children are never
  * re-parented either way, so nothing inside remounts or reloads.
+ *
+ * A page inside another page (a panel's tab page in an app's page, a split's
+ * detail in that tab) draws no bar of its own: the outermost page's bar names
+ * it after its own title, "Server › Players › Sam", and that bar's Back and
+ * drag go back from the innermost open page first.
  */
 export function PaperSlidePage(props: PaperSlidePageProps) {
     const icon = children(() => props.icon);
@@ -84,6 +111,31 @@ export function PaperSlidePage(props: PaperSlidePageProps) {
         el: () => pageRef,
         active: () => props.enabled && props.open,
     });
+    const self: PageEntry = {
+        el: () => pageRef,
+        open: () => props.open,
+        titles: () => [props.title, ...(props.crumbs ?? [])],
+        back: () => props.onBack(),
+        onPointerDown: swipe.onPointerDown,
+    };
+    createEffect(
+        on(
+            () => props.enabled,
+            (enabled) => {
+                if (!enabled) return;
+                setPages((list) => [...list, self]);
+                onCleanup(() => setPages((list) => list.filter((p) => p !== self)));
+            },
+        ),
+    );
+    // the pages this one's bar names after its own title; a page inside
+    // another draws no bar (CSS), so its list goes unread
+    const inner = () => (props.enabled ? openInside(self) : []);
+    const innermost = () => inner().at(-1);
+    const trail = () => [...(props.crumbs ?? []), ...inner().flatMap((page) => page.titles())];
+    // the bar and the left edge go back from the innermost open page
+    const back = () => (innermost()?.back ?? props.onBack)();
+    const dragBack = (e: PointerEvent) => (innermost()?.onPointerDown ?? swipe.onPointerDown)(e);
 
     // Switching layouts moves the page to where it already is: a closed page
     // turning into the phone layout must be off-screen at once, not slide out
@@ -141,12 +193,13 @@ export function PaperSlidePage(props: PaperSlidePageProps) {
             }}
             style={{ transform: transform(), background: props.enabled ? resolveBackground(props.background) : undefined }}
             role={props.enabled ? "region" : undefined}
-            aria-label={props.enabled ? [props.title, ...(props.crumbs ?? [])].join(", ") : undefined}
+            aria-label={props.enabled ? [props.title, ...trail()].join(", ") : undefined}
             inert={props.enabled && !props.open}
         >
             <Show when={props.enabled}>
-                <header class={styles.bar} onPointerDown={swipe.onPointerDown}>
-                    <PaperButton icon variant="text" aria-label="Back" onClick={() => props.onBack()}>
+                {/* a finger on the bar drags the page it goes back from (dragBack), not the page under it */}
+                <header class={styles.bar} onPointerDown={dragBack} data-paper-no-swipe-back={innermost() ? "" : undefined}>
+                    <PaperButton icon variant="text" aria-label="Back" onClick={back}>
                         <PaperIcon>arrow_back</PaperIcon>
                     </PaperButton>
                     <Show when={icon()}>
@@ -158,16 +211,16 @@ export function PaperSlidePage(props: PaperSlidePageProps) {
                         <PaperText class={styles.title} size={props.position === "fixed" ? 2 : 3} weight={700}>
                             {props.title}
                         </PaperText>
-                        <For each={props.crumbs ?? []}>
+                        <For each={trail()}>
                             {(crumb, index) => (
                                 <>
                                     <PaperIcon class={styles.separator} aria-hidden="true">chevron_right</PaperIcon>
                                     <PaperText
                                         class={styles.crumb}
-                                        classList={{ [styles.current]: index() === (props.crumbs?.length ?? 0) - 1 }}
+                                        classList={{ [styles.current]: index() === trail().length - 1 }}
                                         size={2}
-                                        weight={index() === (props.crumbs?.length ?? 0) - 1 ? 700 : 600}
-                                        color={index() === (props.crumbs?.length ?? 0) - 1 ? undefined : "text-subtle"}
+                                        weight={index() === trail().length - 1 ? 700 : 600}
+                                        color={index() === trail().length - 1 ? undefined : "text-subtle"}
                                     >
                                         {crumb}
                                     </PaperText>
@@ -193,7 +246,7 @@ export function PaperSlidePage(props: PaperSlidePageProps) {
                 </PaperSlidePageTitleContext.Provider>
                 <Show when={props.enabled}>
                     {/* above content that would otherwise take the touch (an iframe) */}
-                    <div class={styles.edge} onPointerDown={swipe.onPointerDown} aria-hidden="true" />
+                    <div class={styles.edge} onPointerDown={dragBack} aria-hidden="true" />
                 </Show>
             </div>
         </div>

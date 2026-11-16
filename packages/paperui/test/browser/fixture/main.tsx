@@ -581,6 +581,51 @@ const scenarios: Record<string, () => JSX.Element> = {
         ));
     },
 
+    // a phone-width panel whose entry is a master-detail split: two pages,
+    // one inside the other, as Game Server's player roster is
+    nestedPages() {
+        const [page, setPage] = createSignal("players");
+        const [open, setOpen] = createSignal<string | undefined>();
+        const t = (window.t = { serverBacks: 0 });
+        return shell(() => {
+            // as Game Server: on a phone the server is an app-level page
+            const compact = createPaperCompact();
+            return (
+            <PaperSlidePage enabled={compact()} open position="fixed" title="My Server" onBack={() => t.serverBacks++}>
+            <PaperPanel>
+                <PaperMenu name="nav" value={page()} onValueChange={(v) => setPage(String(v))}>
+                    <PaperMenuItem value="players" icon="group">
+                        Players
+                    </PaperMenuItem>
+                    <PaperMenuItem value="settings" icon="settings">
+                        Settings
+                    </PaperMenuItem>
+                </PaperMenu>
+                <PaperInterfaceGroup value={page()}>
+                    <PaperInterfaceItem value="players" variant="fill">
+                        <PaperSplit
+                            detailActive={open() !== undefined}
+                            detailTitle={open()}
+                            onDetailClose={() => setOpen(undefined)}
+                            side={
+                                <PaperList name="players" value={open()} onValueChange={(v) => setOpen(String(v))}>
+                                    <For each={["Alex", "Sam", "Kai"]}>{(name) => <PaperListItem value={name}>{name}</PaperListItem>}</For>
+                                </PaperList>
+                            }
+                        >
+                            <p id="detail">{open() ?? "nobody"}</p>
+                        </PaperSplit>
+                    </PaperInterfaceItem>
+                    <PaperInterfaceItem value="settings">
+                        <p id="settings-page">Settings page</p>
+                    </PaperInterfaceItem>
+                </PaperInterfaceGroup>
+            </PaperPanel>
+            </PaperSlidePage>
+            );
+        });
+    },
+
     slidePage() {
         const [open, setOpen] = createSignal(true);
         const t = (window.t = { backs: 0, open: () => setOpen(true), isOpen: () => open() });

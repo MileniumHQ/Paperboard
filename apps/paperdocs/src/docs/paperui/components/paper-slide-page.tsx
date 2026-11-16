@@ -161,6 +161,13 @@ export function Drilldown(props: { phone: boolean }) {
                 <li>A <PaperLink href="/docs/paperui/paperpageheader/">PaperPageHeader</PaperLink> inside the page whose title is the page's own leaves the title to the bar.</li>
             </PaperTextList>
 
+            <PaperText preset="subheader" as="h3" id="nested-pages">Pages inside pages</PaperText>
+            <PaperTextList>
+                <li>A page whose element sits inside another enabled page draws no bar of its own. The outermost page's bar names it after its own title, so an app's page holding a PaperPanel tab that opens a <PaperLink href="/docs/paperui/papersplit/">PaperSplit</PaperLink> detail reads "My Server › Players › Sam" in one bar.</li>
+                <li>That bar's Back button, and a drag from the bar or the left edge, go back from the innermost open page first. A page under a closed page is not named.</li>
+                <li>Nesting follows the DOM, not where the content was created, so content built once and moved into a page counts too.</li>
+            </PaperTextList>
+
             <PaperText preset="subheader" as="h2" id="examples">Examples</PaperText>
             <PaperText preset="subheader" as="h3" id="more-menu">A page with its own menu</PaperText>
             <PaperText preset="body" as="p">
