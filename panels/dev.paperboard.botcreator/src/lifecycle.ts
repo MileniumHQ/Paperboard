@@ -1,6 +1,6 @@
 // A bot's life in the service: added from a token, started, turned on and
 // off, given a new token, and deleted with everything it had.
-import { secretsApi, errorMessage } from "@mileniumhq/paperapi";
+import { secretsApi, errorMessage, problemsApi } from "@mileniumhq/paperapi";
 import { extractApplicationIdFromToken } from "./types";
 import { MAX_BOTS, PANEL_ID, isBotId, tokenName, type BotSummary, type DeleteBotResult } from "./bots";
 import { adding, bots, logFailure, publish, requireReadable, summary, type BotEntry } from "./registry";
@@ -214,6 +214,8 @@ export async function deleteBot(entry: BotEntry, anyway = false): Promise<Delete
         publish();
         throw new Error(`Couldn't ${step}: ${errorMessage(err)}`);
     }
+    // what went wrong with it goes with it (reportBotProblem keys them by its id)
+    problemsApi.clear(PANEL_ID, { prefix: `${id}:` });
     publish();
     botsChanged();
     firePanelEvent("bot-deleted", { name: entry.stored.name });

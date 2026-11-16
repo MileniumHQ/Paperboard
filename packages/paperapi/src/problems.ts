@@ -12,7 +12,10 @@ import { clipProblemReport, PROBLEMS_EVENT, problemKey, readProblemReport, type 
 
 export { PROBLEMS_PER_PANEL, type PanelProblem, type ProblemReport } from "./problemShape";
 
-type Op = { action: "problems:report"; params: RpcParams<"problems:report"> } | { action: "problems:clear"; params: RpcParams<"problems:clear"> };
+type Op =
+    | { action: "problems:report"; params: RpcParams<"problems:report"> }
+    | { action: "problems:clear"; params: RpcParams<"problems:clear"> }
+    | { action: "problems:clear-prefix"; params: RpcParams<"problems:clear-prefix"> };
 type ProblemsChange = EventPayload<typeof PROBLEMS_EVENT>;
 
 // how long a report that could not reach the daemon waits before it tries
@@ -55,7 +58,9 @@ class Delivery {
             const [slot, op] = this.waiting.entries().next().value!;
             try {
                 const transport = getTransport(this.scope);
-                await (op.action === "problems:report" ? transport.call(op.action, op.params) : transport.call(op.action, op.params));
+                if (op.action === "problems:report") await transport.call(op.action, op.params);
+                else if (op.action === "problems:clear") await transport.call(op.action, op.params);
+                else await transport.call(op.action, op.params);
                 this.failures = 0;
             } catch (err) {
                 if (!REFUSALS.has(errorCode(err) ?? "")) {
@@ -85,6 +90,8 @@ function delivery(scope: string | undefined): Delivery {
 
 const slotOf = (panelId: string, key: string) => `${panelId}\u0000${key}`;
 const isPanels = (panelId: string) => (slot: string) => slot.startsWith(`${panelId}\u0000`);
+// a clear by prefix waits in a slot of its own, apart from the keys'
+const prefixSlotOf = (panelId: string, prefix: string) => slotOf(panelId, `\u0000${prefix}`);
 
 /**
  * Follows problems as they change: `heard` takes each change, `list` reads
@@ -143,11 +150,23 @@ export const problemsApi = {
         delivery(scope).put(slotOf(owner, key), { action: "problems:report", params: { panelId: owner, ...checked, key } });
     },
 
-    /** Takes away the problem with this key once it is fixed; without a key, all the panel's problems. Returns at once, like report. */
-    clear: (panelId: string, key?: string, scope?: string): void => {
+    /**
+     * Takes away the problem with this key once it is fixed; with
+     * `{ prefix }`, every problem whose key starts with it (a deleted bot's
+     * `${id}:` keys); without a key, all the panel's problems. Returns at
+     * once, like report.
+     */
+    clear: (panelId: string, key?: string | { prefix: string }, scope?: string): void => {
         const owner = requirePanelId(panelId);
         if (key === undefined) {
             delivery(scope).put(slotOf(owner, "*all"), { action: "problems:clear", params: { panelId: owner } }, isPanels(owner));
+            return;
+        }
+        if (typeof key === "object" && key !== null) {
+            const prefix = problemKey(key.prefix);
+            // what waits about a key under the prefix is cleared with it
+            const under = (slot: string) => slot.startsWith(slotOf(owner, prefix)) || slot.startsWith(prefixSlotOf(owner, prefix));
+            delivery(scope).put(prefixSlotOf(owner, prefix), { action: "problems:clear-prefix", params: { panelId: owner, prefix } }, under);
             return;
         }
         const checked = problemKey(key);

@@ -41,6 +41,17 @@ export class PanelProblems {
         this.changed(panelId);
     }
 
+    /** every problem whose key starts with `prefix`: an owner the panel deleted takes its problems with it */
+    clearPrefix(panelId: string, prefix: string): void {
+        const problems = this.byPanel.get(panelId);
+        if (!problems) return;
+        const gone = [...problems.keys()].filter((key) => key.startsWith(prefix));
+        if (gone.length === 0) return;
+        for (const key of gone) problems.delete(key);
+        if (problems.size === 0) this.byPanel.delete(panelId);
+        this.changed(panelId);
+    }
+
     onChange(listener: (panelId: string, problems: PanelProblem[]) => void): () => void {
         this.listeners.add(listener);
         return () => this.listeners.delete(listener);

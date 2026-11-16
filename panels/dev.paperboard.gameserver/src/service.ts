@@ -25,7 +25,7 @@ import * as nodeFs from "node:fs/promises";
 import { Server } from "./service/server";
 import { announceChanges, bindBlocks, fireBackupEnded, fireTrigger, mergeBlocks, serverOperation, sharedBlocks, sharedTypes } from "./service/blocks";
 import { SERVER_EVENTS, serverType, serversBlocks, type ServersBlocksHost } from "./service/serversBlocks";
-import { errorMessage } from "@mileniumhq/paperapi";
+import { errorMessage, problemsApi } from "@mileniumhq/paperapi";
 import { appendCapped, type GameServerState } from "./service/types";
 import { SERVERS_CALLS, gameServerContract, type CallName, type ServerSummary } from "./service/contract";
 import { pictureCall } from "./service/pictures";
@@ -390,6 +390,8 @@ function removeServer(id: unknown): Promise<void> {
             await nodeFs.rm(await historyFile(server.id), { force: true });
             entries.delete(server.id);
             rootContext.keyed.server.delete(server.id);
+            // what went wrong with it goes with it (report keys them by its id)
+            problemsApi.clear(PANEL_ID, { prefix: `${server.id}:` });
             publish();
         } catch (err) {
             server.removing = false;

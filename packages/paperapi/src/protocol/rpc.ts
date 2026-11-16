@@ -376,6 +376,8 @@ export const RPC = {
         result: ack,
     },
     "problems:clear": { params: object({ panelId: panelId(), key: shape.optional(typed<unknown>()) }), result: ack },
+    // every problem whose key starts with the prefix: an owner (a bot, a server) that is deleted takes its problems with it
+    "problems:clear-prefix": { params: object({ panelId: panelId(), prefix: shape.optional(typed<unknown>()) }), result: ack },
     "problems:list": { params: object({ panelId: panelId() }), result: object({ problems: list(typed<PanelProblem>()) }) },
     "problems:every": { params: nothing, result: object({ panels: shape.record(list(typed<PanelProblem>())) }), host: true },
 

@@ -4,13 +4,13 @@
 import { afterAll, afterEach, beforeAll, describe, expect, setDefaultTimeout, test } from "bun:test";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { secretsApi } from "@mileniumhq/paperapi";
+import { problemsApi, secretsApi } from "@mileniumhq/paperapi";
 import { LEGACY_TOKEN_NAME, tokenName, type BotsServiceState } from "../src/bots";
 import { GLOBAL_SCOPE } from "../src/types";
 import { testDaemon } from "./helpers/daemon";
-import { guild, startFakeDiscord, type FakeDiscord } from "./helpers/discord";
+import { guild, slashCommand, startFakeDiscord, type FakeDiscord } from "./helpers/discord";
 import { call, PANEL_ID, savedBots, startService, stopServices, storedBot } from "./helpers/service";
-import { stateWhere } from "./helpers/wait";
+import { problemsWhere, stateWhere } from "./helpers/wait";
 
 // each wait below has its own bound; a test as a whole may take longer than bun's 5 s default
 setDefaultTimeout(60_000);
@@ -144,6 +144,28 @@ describe("deleting a bot", () => {
             [`/applications/${fake.appId}/commands`, []],
             [guildCommands, []],
         ].sort());
+    });
+
+    test("a deleted bot's problems go with it, and another bot's stay", async () => {
+        const home = guild("Home");
+        const doomed = discord.addBot({ username: "Doomed", guilds: [home] });
+        const kept = discord.addBot({ username: "Kept", guilds: [home] });
+        await savedBots([
+            { stored: storedBot("b-doomed", doomed.appId, { name: "Doomed" }), token: doomed.token },
+            { stored: storedBot("b-kept", kept.appId, { name: "Kept" }), token: kept.token },
+        ]);
+        await startService({ discordApi: discord.api });
+        await stateWhere<BotsServiceState>(PANEL_ID, (s) => s.bots.length === 2 && s.bots.every((b) => b.connected), "both bots to connect");
+        // a command Discord still has but the bot doesn't is each bot's problem
+        discord.dispatch(doomed, "INTERACTION_CREATE", slashCommand(doomed, { guild: home, name: "ghost" }));
+        discord.dispatch(kept, "INTERACTION_CREATE", slashCommand(kept, { guild: home, name: "ghost" }));
+        await problemsWhere(PANEL_ID, (problems) => ["Doomed", "Kept"].every((name) => problems.some((p) => p.title === name)), "both bots' problems");
+
+        expect(await call.deleteBot({ bot: "b-doomed" })).toEqual({ deleted: "b-doomed" });
+        const left = await problemsWhere(PANEL_ID, (problems) => !problems.some((p) => p.title === "Doomed"), "the deleted bot's problem to go");
+        // what other tests' bots left is theirs
+        expect(left.map((p) => p.title).filter((title) => ["Doomed", "Kept"].includes(title))).toEqual(["Kept"]);
+        problemsApi.clear(PANEL_ID);
     });
 
     test("a bot that is off has its commands cleared with its token alone, never logging in", async () => {

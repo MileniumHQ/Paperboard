@@ -81,4 +81,16 @@ describe("a panel's problems", () => {
 		await host.ok("problems:clear", { panelId: PANEL, key: "a" });
 		expect(await listed()).toEqual([]);
 	});
+
+	test("clearing by prefix takes away every problem of one owner, and only its", async () => {
+		await call("report", { key: "bot1:login", title: "Bot 1", message: "token refused" });
+		await call("report", { key: "bot1:sync", title: "Bot 1", message: "commands refused" });
+		await call("report", { key: "bot2:login", title: "Bot 2", message: "token refused" });
+		await until("the three reports", (p) => p.length === 3);
+		await call("clear", { key: { prefix: "bot1:" } });
+		const left = await until("bot 1's problems to go", (p) => p.length === 1);
+		expect(left.map((p) => p.key)).toEqual(["bot2:login"]);
+		await call("clear");
+		await until("clearing them all", (p) => p.length === 0);
+	});
 });

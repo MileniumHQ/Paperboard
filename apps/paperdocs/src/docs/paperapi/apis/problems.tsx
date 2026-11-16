@@ -33,14 +33,19 @@ async function refreshCity(city: string): Promise<void> {
         // minute is one problem, not sixty
         problemsApi.report(PANEL_ID, { key: \`refresh:\${city}\`, title: \`\${city} wasn't refreshed\`, message: errorMessage(err) });
     }
+}
+
+function removeCity(city: string): void {
+    // every problem about the city goes with it
+    problemsApi.clear(PANEL_ID, { prefix: \`refresh:\${city}\` });
 }`}
             </PaperCode>
 
             <PaperText preset="subheader" as="h2" id="api">API</PaperText>
             <PaperCode block language="tsx">
 {`problemsApi.report(panelId: string, problem: { title: string; message: string; key?: string }, scope?: string): void;
-/** without a key, all the panel's problems */
-problemsApi.clear(panelId: string, key?: string, scope?: string): void;
+/** with { prefix }, every problem whose key starts with it; without a key, all the panel's problems */
+problemsApi.clear(panelId: string, key?: string | { prefix: string }, scope?: string): void;
 /** the one reported longest ago first */
 problemsApi.list(panelId: string, scope?: string): Promise<PanelProblem[]>;
 /** the whole list now and on each change; returns the unsubscribe */
@@ -74,7 +79,9 @@ interface PanelProblem {
             <PaperText preset="subheader" as="h2" id="delivery">Delivery</PaperText>
             <PaperTextList>
                 <li><PaperCode>report</PaperCode> and <PaperCode>clear</PaperCode> return at once and arrive in the order they were made. One that can't reach the Paperboard Server is sent again, half a second later and doubling up to 30 seconds, until it arrives; each try that fails is logged as <PaperCode>[paperapi] A problem could not reach the Paperboard Server</PaperCode>.</li>
-                <li>While they wait, a newer report or clear of the same key takes the place of the older one, and a clear of all the panel's problems takes the place of all of them.</li>
+                <li>While they wait, a newer report or clear of the same key takes the place of the older one, a clear by prefix takes the place of everything waiting about a key under it, and a clear of all the panel's problems takes the place of all of them.</li>
+                <li>Key a panel's problems by what they are about, such as <PaperCode>{"${bot.id}:login"}</PaperCode>, so deleting that thing clears them all with <PaperCode>{"clear(panelId, { prefix: `${bot.id}:` })"}</PaperCode>.</li>
+                <li>Every change is pushed: the sidebar and each <PaperCode>watch</PaperCode> hear it as it happens, and read the whole list again only after a reconnect. A new problem shows as the panel's badge in the sidebar, never as a toast.</li>
                 <li>Problems live in the Paperboard Server's memory. They outlive a restart of the service, but not of the server, whose services start again and report what is still wrong. Uninstalling the panel removes them.</li>
                 <li>The person dismissing a problem removes it for everyone. Report it again if it happens again.</li>
             </PaperTextList>

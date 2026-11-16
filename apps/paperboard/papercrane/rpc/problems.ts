@@ -40,6 +40,10 @@ export const problemsRpc = rpcModule({
         problemsFor(ctx.engine).clear(problemsOf(panelId, action, ctx), key === undefined ? undefined : checked(() => problemKey(key)));
         return { success: true };
     },
+    "problems:clear-prefix": ({ panelId, prefix }, ctx, action) => {
+        problemsFor(ctx.engine).clearPrefix(problemsOf(panelId, action, ctx), checked(() => problemKey(prefix)));
+        return { success: true };
+    },
     "problems:list": ({ panelId }, ctx, action) => ({ problems: problemsFor(ctx.engine).list(problemsOf(panelId, action, ctx)) }),
     "problems:every": (_, ctx) => ({ panels: problemsFor(ctx.engine).every() }),
 }, "Problem operation failed");

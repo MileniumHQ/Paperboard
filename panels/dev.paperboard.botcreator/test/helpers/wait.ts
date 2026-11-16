@@ -46,6 +46,17 @@ export function problemWhere(panelId: string, accept: (problem: PanelProblem) =>
     return within(what, found, ms).finally(() => off());
 }
 
+/** The panel's problems, as the daemon holds them, once `accept` takes the whole list: now, or after a change. */
+export function problemsWhere(panelId: string, accept: (problems: PanelProblem[]) => boolean, what: string, ms = 20_000): Promise<PanelProblem[]> {
+    let off = () => {};
+    const found = new Promise<PanelProblem[]>((resolve, reject) => {
+        off = problemsApi.watch(panelId, (problems) => {
+            if (accept(problems)) resolve(problems);
+        }, reject);
+    });
+    return within(what, found, ms).finally(() => off());
+}
+
 /** Resolves once the daemon has taken every subscription made so far: an event fired after it is heard. */
 export const subscribed = (): Promise<void> => getTransport().subscriptionsSettled();
 
