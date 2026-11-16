@@ -381,6 +381,9 @@ export const RPC = {
     "problems:list": { params: object({ panelId: panelId() }), result: object({ problems: list(typed<PanelProblem>()) }) },
     "problems:every": { params: nothing, result: object({ panels: shape.record(list(typed<PanelProblem>())) }), host: true },
 
+    // a panel's page says, on its own connection, that it is open; it counts until that connection closes
+    "pages:open": { params: object({ panelId: panelId() }), result: ack },
+
     // Blocks: panels register types, commands, values and events, each named "kind.id"
     "blocks:register": {
         params: object({ panelId: panelId(), entry: entry(), schema: blockSchema() }),

@@ -7,6 +7,7 @@ import { waitForContentPainted } from "./paintReady";
 import { mountRequestedWidget, parseWidgetInitialize } from "./widget";
 import { frameComputerName, setFrameSession } from "./frameSession";
 import { errorMessage } from "./errors";
+import { announcePage } from "./pages";
 
 // A document load is not readiness. The shell challenges this generation;
 // only an authenticated connection, and service hydration when the panel
@@ -36,6 +37,8 @@ if (typeof window !== "undefined" && window.parent !== window) {
             // the shell reveals a painted panel instead of a shifting one.
             await waitForContentPainted();
             window.parent.postMessage({ type: "paperboard:ready", generation, panelId }, "*");
+            // a page, not a widget, counts toward the pages its service hears are open
+            if (event.data.widget === undefined) announcePage(panelId);
         } catch (err) {
             console.error("[paperapi] panel initialization failed:", err);
             window.parent.postMessage({ type: "paperboard:failed", generation, message: errorMessage(err) }, "*");

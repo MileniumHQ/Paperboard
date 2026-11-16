@@ -21,4 +21,5 @@ export default definePanelService({
     contract: blocksContract,
     calls: runtime.calls,
     onInit: (ctx) => runtime.init(ctx.setState),
+    onPagesChanged: (_ctx, open) => runtime.pagesChanged(open),
 });

@@ -17,6 +17,7 @@ import { secretsRpc } from "./rpc/secrets";
 import { backupServiceFor, backupsRpc } from "./rpc/backups";
 import { portsRpc } from "./rpc/ports";
 import { problemsFor, problemsRpc } from "./rpc/problems";
+import { pagesRpc } from "./rpc/pages";
 import { PROTOCOL_VERSION, ErrorCode } from "./protocol";
 import { panelId as panelIdShape, readParams, readValue } from "@mileniumhq/paperapi/protocol";
 import { rpcErrorCode } from "./rpc/errors";
@@ -81,7 +82,7 @@ const MAX_CONNECTIONS = 4096;
 // every action PaperAPI's protocol/rpc.ts declares, past the auth gate
 const dispatch = rpcDispatcher([
     terminalRpc, processRpc, filesRpc, packagesRpc, panelsRpc, actionsRpc, blocksRpc,
-    systemRpc, secretsRpc, backupsRpc, portsRpc, problemsRpc,
+    systemRpc, secretsRpc, backupsRpc, portsRpc, problemsRpc, pagesRpc,
 ]);
 const MAX_IN_FLIGHT_PER_SOCKET = 1024;
 

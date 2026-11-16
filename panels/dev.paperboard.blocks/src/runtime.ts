@@ -284,5 +284,11 @@ export function createRuntime({ storage, blocks, handle }: RuntimeDeps) {
         console.log(`[${PANEL_ID}] ${store.list().length} project(s), ${flows} flow(s) switched on.`);
     }
 
-    return { calls, init };
+    /** With no page open, no editor shows a draft any more: they go, as leaving one does. */
+    async function pagesChanged(open: number): Promise<void> {
+        if (open > 0 || (await read) !== null) return;
+        if ((await store.dropDrafts()) > 0) publishProjects();
+    }
+
+    return { calls, init, pagesChanged };
 }

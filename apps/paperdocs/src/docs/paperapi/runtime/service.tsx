@@ -166,6 +166,12 @@ type ContractContext<C, TState = Record<string, any>> = ServiceContext<State, Ev
                         <td>No default</td>
                         <td>Called when that update ends, with <PaperCode>{"{ processes, ok, error? }"}</PaperCode>: start the processes again. After an update of your panel it runs in the new release's service. <PaperCode>ok</PaperCode> is false when the update failed and the previous release is still in place; start them all the same.</td>
                     </tr>
+                    <tr>
+                        <td><PaperCode>onPagesChanged</PaperCode></td>
+                        <td><PaperCode>(ctx, open: number) =&gt; void | Promise&lt;void&gt;</PaperCode></td>
+                        <td>No default</td>
+                        <td>Hears how many of the panel's pages are open, on every computer showing them: once when the service is ready, then each time one opens or closes. A widget is not a page. Use it to let go of what only an open page needs, such as a draft no page shows any more.</td>
+                    </tr>
                 </tbody>
             </PaperTable>
 
@@ -328,6 +334,7 @@ const calls = {
                 <li>The daemon waits at most 5 minutes for either hook, then fails with <PaperCode>Service &lt;id&gt; did not get ready for the backup within 300 s</PaperCode>. The hooks run only while the service is ready; a stopped or failed service is not asked.</li>
                 <li>Paperboard never stops your processes for an update on its own. While they run, the update waits in the top bar's list until someone chooses Stop and update, or they stop.</li>
                 <li>A <PaperCode>beforeUpdate</PaperCode> that throws refuses the update with <PaperCode>&lt;panel id&gt; could not stop its processes for the update: &lt;message&gt;</PaperCode>. The daemon waits at most 2 minutes for it. An error <PaperCode>afterUpdate</PaperCode> throws is reported as the panel's problem, <PaperCode>Finishing up after an update failed</PaperCode>, with its message.</li>
+                <li>Each page counts from the moment it is ready until its connection closes, so a page that loses its connection counts again when it is back. An error <PaperCode>onPagesChanged</PaperCode> throws is reported as the panel's problem, <PaperCode>The panel's service couldn't follow its pages opening and closing</PaperCode>, with its message.</li>
                 <li>A state sync that fails is logged as <PaperCode>{"[Service:<id>] Failed to sync state, trying again in <n> ms:"}</PaperCode>. The patch is kept and sent again, merged under any newer one, starting half a second later and doubling up to 30 seconds, until it arrives.</li>
             </PaperTextList>
 

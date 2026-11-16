@@ -163,6 +163,14 @@ export interface DefinePanelServiceOptions<
      */
     beforeUpdate?: (ctx: ContextOf<TState, C>, options: { processes: string[] }) => void | Promise<void>;
     /**
+     * Hears how many of the panel's pages are open, on every computer
+     * showing them (a widget is not a page): once when the service is
+     * ready, then each time one opens or closes. Use it to let go of what
+     * only an open page needs, such as a draft no page shows any more. A
+     * failure is the panel's problem.
+     */
+    onPagesChanged?: (ctx: ContextOf<TState, C>, open: number) => void | Promise<void>;
+    /**
      * Hears an update that beforeUpdate stopped processes for end, with
      * those processes: start them again. After a panel update it is the new
      * release's service that hears it. ok is false when the update failed
@@ -185,6 +193,10 @@ const BACKUP_ENDED: Shape<BackupEnded> = shape.either(
     shape.object({ sourceId: shape.optional(shape.text()), ok: shape.oneOf(true), backup: typed<BackupRecord>() }),
     shape.object({ sourceId: shape.optional(shape.text()), ok: shape.oneOf(false), error: shape.text() }),
 );
+const PAGES_OPEN: Shape<number> = shape.read((value) => {
+    if (!Number.isSafeInteger(value) || (value as number) < 0) throw new Error("a count of pages, a whole number from 0");
+    return value as number;
+});
 const UPDATE_ENDED: Shape<UpdateEnded> = shape.object({ processes: shape.list(shape.text()), ok: shape.boolean(), error: shape.optional(shape.text()) });
 type AnyOptions = DefinePanelServiceOptions<any, Record<string, ServiceCall<any>>, any>;
 
@@ -573,7 +585,7 @@ function answerTheDaemon(panelId: string, options: AnyOptions, ctx: ServiceConte
         });
     };
 
-    const { beforeBackup, beforeRestore, afterBackup, afterRestore, beforeUpdate, afterUpdate } = options;
+    const { beforeBackup, beforeRestore, afterBackup, afterRestore, beforeUpdate, afterUpdate, onPagesChanged } = options;
     const sourceOf = (m: Record<string, unknown>) => ({ sourceId: typeof m.sourceId === "string" ? m.sourceId : undefined });
     if (beforeBackup) answer("paperboard:before-backup", (m) => beforeBackup(ctx, sourceOf(m)));
     if (beforeRestore) answer("paperboard:before-restore", (m) => beforeRestore(ctx, sourceOf(m)));
@@ -585,6 +597,13 @@ function answerTheDaemon(panelId: string, options: AnyOptions, ctx: ServiceConte
     if (afterUpdate) hear("paperboard:after-update", "an update", (m) => afterUpdate(ctx, readValue(UPDATE_ENDED, m.ended, "ended")));
     if (afterBackup) hear("paperboard:after-backup", "a backup", (m) => afterBackup(ctx, readValue(BACKUP_ENDED, m.ended, "ended")));
     if (afterRestore) hear("paperboard:after-restore", "a restore", (m) => afterRestore(ctx, readValue(BACKUP_ENDED, m.ended, "ended")));
+    if (onPagesChanged) {
+        process.on("message", (message: unknown) => {
+            if (!isRecord(message) || message.type !== "paperboard:pages") return;
+            void (async () => onPagesChanged(ctx, readValue(PAGES_OPEN, message.open, "open")))().catch((err) =>
+                problemsApi.report(panelId, { key: "paperapi:pages", title: "The panel's service couldn't follow its pages opening and closing", message: errorMessage(err) }));
+        });
+    }
 
     process.send({
         type: "paperboard:service-ready",
@@ -595,5 +614,6 @@ function answerTheDaemon(panelId: string, options: AnyOptions, ctx: ServiceConte
         afterRestore: Boolean(afterRestore),
         beforeUpdate: Boolean(beforeUpdate),
         afterUpdate: Boolean(afterUpdate),
+        pagesChanged: Boolean(onPagesChanged),
     });
 }

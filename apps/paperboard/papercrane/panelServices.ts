@@ -36,10 +36,17 @@ interface RunningService {
     /** ... and that it stops its own processes for an update, and starts them after */
     beforeUpdate?: boolean;
     afterUpdate?: boolean;
+    /** ... and that it hears how many of its panel's pages are open */
+    pagesChanged?: boolean;
     /** the one backup, restore or update it is getting ready for now */
     backupPrepare?: { requestId: string; settle: (error: Error | null) => void };
     /** the end of what it wrote to stderr: why it exited, when it says */
     stderrTail: string;
+}
+
+/** The connection a page says it is open on: it counts until it closes. */
+export interface PageConnection {
+    once(event: "close", listener: () => void): unknown;
 }
 
 const STDERR_TAIL_BYTES = 2000;
@@ -101,6 +108,8 @@ export class PanelServicesManager {
     // why each panel's service last failed or exited unasked, until it is
     // ready again: the panel list carries it, so the shell can say why
     private failures = new Map<string, string>();
+    // each panel's open pages: the connection each says it is open on, until it closes
+    private pages = new Map<string, Set<PageConnection>>();
     constructor(private baseDir = getPaperboardDir()) {}
 
     /** Hears every service state change from now on; returns the unsubscribe. */
@@ -209,9 +218,12 @@ export class PanelServicesManager {
             entry.afterRestore = message.afterRestore === true;
             entry.beforeUpdate = message.beforeUpdate === true;
             entry.afterUpdate = message.afterUpdate === true;
+            entry.pagesChanged = message.pagesChanged === true;
             entry.state = "ready";
             this.announce(id, { state: "ready", ...(child.pid !== undefined ? { pid: child.pid } : {}) });
             resolveReady();
+            // what it hears first is how many pages are open now
+            this.tellPages(id);
         });
         child.stdout?.on("data", (chunk: Buffer) => logger.info(`[service:${id}] ${chunk.toString("utf8").slice(0, 65536)}`));
         child.stderr?.on("data", (chunk: Buffer) => {
@@ -321,6 +333,36 @@ export class PanelServicesManager {
         if (!entry || entry.stopped || entry.state !== "ready" || !(operation === "backup" ? entry.afterBackup : entry.afterRestore)) return;
         entry.process.send({ type: `paperboard:after-${operation}`, ended }, (err) => {
             if (err) logger.error(`[services] ${id} was not told its ${operation} ended`, err);
+        });
+    }
+    /**
+     * One of the panel's pages is open, on `connection` (its page's own),
+     * until that closes: a ready service that hears it (onPagesChanged) is
+     * told how many are open each time the count changes.
+     */
+    public pageOpened(id: string, connection: PageConnection): void {
+        const panelId = requirePanelId(id);
+        let open = this.pages.get(panelId);
+        if (!open) this.pages.set(panelId, (open = new Set()));
+        if (open.has(connection)) return;
+        open.add(connection);
+        connection.once("close", () => {
+            const still = this.pages.get(panelId);
+            if (!still?.delete(connection)) return;
+            if (still.size === 0) this.pages.delete(panelId);
+            this.tellPages(panelId);
+        });
+        this.tellPages(panelId);
+    }
+    /** How many of the panel's pages are open. */
+    public pagesOpen(id: string): number {
+        return this.pages.get(requirePanelId(id))?.size ?? 0;
+    }
+    private tellPages(id: string): void {
+        const entry = this.services.get(id);
+        if (!entry || entry.stopped || entry.state !== "ready" || !entry.pagesChanged) return;
+        entry.process.send({ type: "paperboard:pages", open: this.pagesOpen(id) }, (err) => {
+            if (err) logger.error(`[services] ${id} was not told how many of its pages are open`, err);
         });
     }
     /** Starts the panel's service and waits until it is ready; false when the panel declares none. */

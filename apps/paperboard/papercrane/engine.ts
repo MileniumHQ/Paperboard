@@ -8,7 +8,7 @@ import { resolveSecureTargetPath, openResolvedFile } from "./pathContainment";
 import { ProgressCallback, streamToFileWithProgress } from "./download";
 import { getPaperboardDir } from "./paths";
 import { extractArchive } from "./engineArchives";
-import { panelServices, PanelServicesManager } from "./panelServices";
+import { panelServices, PanelServicesManager, type PageConnection } from "./panelServices";
 import { CredentialStore } from "./credentials";
 import { logger } from "./logger";
 import { resolveRegistryUrl } from "./util";
@@ -464,5 +464,9 @@ export class PaperCraneEngine {
      * data ended; see PanelServicesManager.tellBackupEnded */
     public tellServiceBackupEnded(panelId: string, operation: "backup" | "restore", ended: BackupEnded): void {
         this.services.tellBackupEnded(requirePanelId(panelId), operation, ended);
+    }
+    /** one of the panel's pages is open on `connection` until it closes; see PanelServicesManager.pageOpened */
+    public pageOpened(panelId: string, connection: PageConnection): void {
+        this.services.pageOpened(panelId, connection);
     }
 }

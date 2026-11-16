@@ -307,6 +307,15 @@ export class ProjectStore {
         });
     }
 
+    /** Lets go of every draft: none is written, so nothing is taken back. How many went. */
+    dropDrafts(): Promise<number> {
+        return this.serial(async () => {
+            const drafts = [...this.projects.values()].filter((p) => p.draft);
+            for (const draft of drafts) this.projects.delete(draft.meta.id);
+            return drafts.length;
+        });
+    }
+
     private summary(p: Project): ProjectSummary {
         return { ...p.meta, draft: p.draft, loadError: p.loadError, flowCount: p.loadError ? 0 : flowCount(p.flows) };
     }
@@ -324,8 +333,9 @@ export class ProjectStore {
 
     /**
      * The projects kept: a draft is only its editor's until it has a block. A
-     * draft whose window closed lives on here unseen, so it takes no name and
-     * no place, and nothing is written of it.
+     * draft whose window closed lives on here unseen while another window is
+     * open (until none is: dropDrafts), so it takes no name and no place, and
+     * nothing is written of it.
      */
     private kept(): Project[] {
         return [...this.projects.values()].filter((p) => !p.draft);

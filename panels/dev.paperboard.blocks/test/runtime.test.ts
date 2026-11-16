@@ -90,7 +90,7 @@ function setup(options: { storage?: ProjectStorage; handle?: (handle: BlocksHand
         for (const listener of listeners.get(key) ?? []) listener(payload);
     };
     const said = (project: string) => state.log.filter((l) => l.project === project).map((l) => `${l.level}: ${l.message}`);
-    return { ready, call, make, subscribers, fire, said, fired, changed, registry, waiting, state: () => state };
+    return { ready, call, make, subscribers, fire, said, fired, changed, registry, waiting, state: () => state, pagesChanged: runtime.pagesChanged };
 }
 
 const JOINED_KEY = `${GAME} /event.joined`;
@@ -218,6 +218,20 @@ describe("the service's runtime", () => {
         expect(s.state().projectsError).toBe("the disk is gone");
         await expect(s.call.createProject({ name: "x" })).rejects.toThrow("The projects couldn't be read: the disk is gone");
         await expect(s.call.loadFlows({ project: "p-x" })).rejects.toThrow("The projects couldn't be read");
+    });
+});
+
+describe("the drafts", () => {
+    test("go once no page is open, and a kept project stays", async () => {
+        const s = setup();
+        await s.ready;
+        const kept = await s.make("Server tools", flows(onRun(say("hi"))));
+        const draft = (await s.call.createProject({})).id;
+        await s.pagesChanged(1);
+        expect(s.state().projects.map((p) => p.id).sort()).toEqual([kept, draft].sort());
+        await s.pagesChanged(0);
+        expect(s.state().projects.map((p) => p.id)).toEqual([kept]);
+        await expect(s.call.loadFlows({ project: draft })).rejects.toThrow("There's no project");
     });
 });
 
