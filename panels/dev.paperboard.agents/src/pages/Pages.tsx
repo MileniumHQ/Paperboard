@@ -8,9 +8,6 @@ import type { PageInfo } from "../contract";
 import type { Launcher } from "./launcher";
 import Picture from "./Picture";
 
-// a button inside a list item answers for itself, and doesn't choose the item
-const own = (e: PointerEvent) => e.stopPropagation();
-
 export default function Pages(props: { pages: Launcher; name: string; onOpened: () => void }) {
     const { busy, error: openError, run } = createAction();
     const [deleteError, setDeleteError] = createSignal<ActionFailure | null>(null);
@@ -105,10 +102,10 @@ export default function Pages(props: { pages: Launcher; name: string; onOpened: 
                                         description={a.description || `~/Pages/${a.name}`}
                                         actions={
                                             <PaperFlex direction="row" align="center" gap="onefourth">
-                                                <PaperButton size="small" variant="text" disabled={busy()} onPointerDown={own} onClick={() => void open(a.name)}>
+                                                <PaperButton size="small" variant="text" disabled={busy()} onClick={() => void open(a.name)}>
                                                     Open <PaperIcon>open_in_new</PaperIcon>
                                                 </PaperButton>
-                                                <PaperButton icon size="small" variant="text" disabled={busy()} aria-label={`Delete “${a.title}”`} title="Delete" onPointerDown={own} onClick={() => askDelete(a)}>
+                                                <PaperButton icon size="small" variant="text" disabled={busy()} aria-label={`Delete “${a.title}”`} title="Delete" onClick={() => askDelete(a)}>
                                                     <PaperIcon>delete</PaperIcon>
                                                 </PaperButton>
                                             </PaperFlex>

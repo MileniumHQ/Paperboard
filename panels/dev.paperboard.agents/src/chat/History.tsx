@@ -118,7 +118,6 @@ export default function History(props: { agent: Agent; open: boolean; onClose: (
                                                     disabled={busy()}
                                                     aria-label={`Delete “${c.title}”`}
                                                     title="Delete"
-                                                    onPointerDown={(e) => e.stopPropagation()}
                                                     onClick={() => askDelete(c)}
                                                 >
                                                     <PaperIcon>delete</PaperIcon>

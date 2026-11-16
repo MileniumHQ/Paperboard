@@ -65,9 +65,6 @@ export default function Tools(props: { agent: Agent }) {
     );
 }
 
-// a control inside a list item answers for itself, and doesn't choose the item
-const own = (e: Event) => e.stopPropagation();
-
 const NEW = "new";
 const ACTIONS = "actions";
 const rowOf = (server: string) => `server:${server}`;
@@ -189,9 +186,7 @@ function List(props: { tools: ToolsClient; name: string }) {
                         disabled={busy() || locked()}
                         description={`${props.name} can look up what your other panels can do, like start a game server, and run it`}
                         actions={
-                            <PaperFlex onPointerDown={own} onClick={own}>
-                                <PaperToggle aria-label="Let it use your other panels" checked={actions.value()} disabled={locked()} onChange={setActions} />
-                            </PaperFlex>
+                            <PaperToggle aria-label="Let it use your other panels" checked={actions.value()} disabled={locked()} onChange={setActions} />
                         }
                     >
                         Let it use your other panels
@@ -273,17 +268,17 @@ function ServerRow(props: {
             actions={
                 <PaperFlex direction="row" align="center" gap="onefourth">
                     <Show when={props.state.kind === "needs-sign-in"}>
-                        <PaperButton size="small" variant="primary" disabled={props.busy} onPointerDown={own} onClick={(e) => (own(e), props.onSignIn())}>
+                        <PaperButton size="small" variant="primary" disabled={props.busy} onClick={() => props.onSignIn()}>
                             <PaperIcon>login</PaperIcon> Sign in
                         </PaperButton>
                     </Show>
                     <Show when={props.state.kind === "needs-secrets"}>
-                        <PaperButton size="small" variant="primary" disabled={props.busy} onPointerDown={own} onClick={(e) => (own(e), props.onEdit())}>
+                        <PaperButton size="small" variant="primary" disabled={props.busy} onClick={() => props.onEdit()}>
                             <PaperIcon>key</PaperIcon> Add secret
                         </PaperButton>
                     </Show>
                     <Show when={props.state.kind === "signing-in"}>
-                        <PaperButton size="small" variant="primary" disabled={props.busy} onPointerDown={own} onClick={(e) => (own(e), props.onShowSignIn())}>
+                        <PaperButton size="small" variant="primary" disabled={props.busy} onClick={() => props.onShowSignIn()}>
                             <PaperIcon>login</PaperIcon> Continue
                         </PaperButton>
                     </Show>
@@ -296,20 +291,18 @@ function ServerRow(props: {
                                 disabled={props.busy}
                                 aria-label={`${title()} ${s().name}`}
                                 title={title()}
-                                onPointerDown={own}
-                                onClick={(e) => (own(e), props.onRestart(title() === "Restart" ? "Server not restarted" : "Server not started"))}
+                               
+                                onClick={() => props.onRestart(title() === "Restart" ? "Server not restarted" : "Server not started")}
                             >
                                 <PaperIcon>{title() === "Start now" ? "play_arrow" : "refresh"}</PaperIcon>
                             </PaperButton>
                         )}
                     </Show>
-                    <PaperButton icon size="small" variant="text" disabled={props.busy} aria-label={`Remove ${s().name}`} title="Remove" onPointerDown={own} onClick={(e) => (own(e), props.onRemove())}>
+                    <PaperButton icon size="small" variant="text" disabled={props.busy} aria-label={`Remove ${s().name}`} title="Remove" onClick={() => props.onRemove()}>
                         <PaperIcon>delete</PaperIcon>
                     </PaperButton>
                     {/* last: every row's switch is on the list's right edge, under the one for the other panels */}
-                    <PaperFlex onPointerDown={own} onClick={own}>
-                        <PaperToggle aria-label={`${s().name} on`} checked={props.enabled} disabled={props.locked} onChange={props.onSwitch} />
-                    </PaperFlex>
+                    <PaperToggle aria-label={`${s().name} on`} checked={props.enabled} disabled={props.locked} onChange={props.onSwitch} />
                 </PaperFlex>
             }
         >

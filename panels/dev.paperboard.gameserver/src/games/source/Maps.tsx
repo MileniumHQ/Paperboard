@@ -211,9 +211,9 @@ export default function SourceMaps(props: { spec: SourceGameSpec; active: boolea
                                                 actions={
                                                     <Show when={current().custom && editable()}>
                                                         <PaperFlex direction="row" gap="onefourth" align="center">
-                                                            <PaperButton size="tiny" icon aria-label={`Move ${names().title} up`} disabled={working() || index() === 0} onPointerDown={(e) => e.stopPropagation()} onClick={() => move(name, -1)}>arrow_upward</PaperButton>
-                                                            <PaperButton size="tiny" icon aria-label={`Move ${names().title} down`} disabled={working() || index() === current().maps.length - 1} onPointerDown={(e) => e.stopPropagation()} onClick={() => move(name, 1)}>arrow_downward</PaperButton>
-                                                            <PaperButton size="tiny" icon aria-label={`Remove ${names().title}`} disabled={working()} onPointerDown={(e) => e.stopPropagation()} onClick={() => remove(name)}>close</PaperButton>
+                                                            <PaperButton size="tiny" icon aria-label={`Move ${names().title} up`} disabled={working() || index() === 0} onClick={() => move(name, -1)}>arrow_upward</PaperButton>
+                                                            <PaperButton size="tiny" icon aria-label={`Move ${names().title} down`} disabled={working() || index() === current().maps.length - 1} onClick={() => move(name, 1)}>arrow_downward</PaperButton>
+                                                            <PaperButton size="tiny" icon aria-label={`Remove ${names().title}`} disabled={working()} onClick={() => remove(name)}>close</PaperButton>
                                                         </PaperFlex>
                                                     </Show>
                                                 }
@@ -235,7 +235,7 @@ export default function SourceMaps(props: { spec: SourceGameSpec; active: boolea
                                                 value={map.id}
                                                 icon={<PictureAvatar from="steam-workshop" size="large" shape="square" url={map.previewImageUrl} alt={map.title} fallbackIcon="map" />}
                                                 description={current().workshopHeld[map.id] ?? "On this server"}
-                                                actions={<PaperButton variant="text" disabled={working() || !!current().workshopHeld[map.id]} onPointerDown={(e) => e.stopPropagation()} onClick={() => { setError(null); setRemovingWorkshop(map); }}>Remove</PaperButton>}
+                                                actions={<PaperButton variant="text" disabled={working() || !!current().workshopHeld[map.id]} onClick={() => { setError(null); setRemovingWorkshop(map); }}>Remove</PaperButton>}
                                             >
                                                 {map.title}
                                             </PaperListItem>
