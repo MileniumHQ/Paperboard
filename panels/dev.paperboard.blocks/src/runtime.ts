@@ -207,9 +207,10 @@ export function createRuntime({ storage, blocks, handle }: RuntimeDeps) {
         return hats.length;
     }
 
-    // settled once the projects are read: with null, or with why they couldn't be
+    // settled once the projects are read: with null, or with why they couldn't be;
+    // a read again after a failure takes its place
     let settle!: (failure: string | null) => void;
-    const read = new Promise<string | null>((resolve) => (settle = resolve));
+    let read = new Promise<string | null>((resolve) => (settle = resolve));
 
     /** A call the panel's own page makes: it waits for the projects to be read, and says so if they couldn't be. */
     const call = <I, O>(run: (input: I) => O | Promise<O>) => async (input: I): Promise<O> => {
@@ -246,23 +247,40 @@ export function createRuntime({ storage, blocks, handle }: RuntimeDeps) {
                 if (!store.has(project)) stop(project);
             }
         }),
+        readProjects: async () => {
+            if ((await read) === null) return;
+            read = open();
+            const failure = await read;
+            if (failure) throw new Error(failure);
+            await addBlocks();
+        },
     } satisfies CallHandlers<typeof blocksContract>;
 
-    /** Reads the projects, starts listening, and adds the Projects blocks; every failure ends up in the state. */
-    async function init(state: SetState): Promise<void> {
-        setState = state;
+    /** Reads the projects and starts listening; why they couldn't be read is in the state, and returned. */
+    async function open(): Promise<string | null> {
         try {
             await store.open();
         } catch (err) {
             // nothing runs and nothing is written while the projects can't be read
             setState({ projectsError: errorMessage(err), loaded: true });
             console.error(`[${PANEL_ID}] the projects couldn't be read:`, err);
-            settle(errorMessage(err));
-            return;
+            return errorMessage(err);
         }
-        setState({ projects: store.list(), loaded: true });
+        setState({ projects: store.list(), projectsError: null, loaded: true });
         listen();
-        settle(null);
+        return null;
+    }
+
+    /** Reads the projects, starts listening, and adds the Projects blocks; every failure ends up in the state. */
+    async function init(state: SetState): Promise<void> {
+        setState = state;
+        const failure = await open();
+        settle(failure);
+        if (failure === null) await addBlocks();
+    }
+
+    /** Adds the Projects blocks, once the projects are read. */
+    async function addBlocks(): Promise<void> {
         try {
             await announcer.register(
                 blocksPanelBlocks({

@@ -29,6 +29,7 @@ import { join, resolve } from "node:path";
 import { launchChrome, type Chrome, type Page } from "../../../scripts/testing/chrome";
 import { BUILTIN, registryBlockType } from "../src/lib/names";
 import { PANEL_ID, type SavedFlows } from "../src/panel";
+import { PROJECTS_FILE, PROJECTS_VERSION } from "../src/lib/projects";
 import { FIXTURE_PANEL, FIXTURE_PANEL_NAME, LATE_PANEL, LATE_PANEL_NAME, REFUSED_PROJECT, REGISTRY_AWAY, SERVICED, SERVICED_PROJECT } from "./fixtures/world";
 import { startBlocksService, startDaemon, startOtherPanel, type BlocksService, type OtherPanel, type Seed, type TestDaemon } from "./helpers/crane";
 
@@ -81,6 +82,8 @@ const PAGES = {
     },
     /** the whole panel, from no projects at all (test/fixtures/projectsFixture.tsx) */
     projects: { page: "test/fixtures/projectsFixture.html", seed: async () => ({ projects: [] }), fixturePanel: false, window: false },
+    /** the whole panel, over projects the service couldn't read as it started (test/fixtures/unreadableFixture.tsx) */
+    unreadable: { page: "test/fixtures/unreadableFixture.html", seed: async () => ({ projects: [], unreadable: true }), fixturePanel: false, window: false },
 } satisfies Record<string, Setup>;
 export type FixtureName = keyof typeof PAGES;
 
@@ -209,6 +212,11 @@ function asking(daemon: TestDaemon, service: BlocksService, others: { fixture: O
             others.late ??= await startOtherPanel(daemon, LATE_PANEL, LATE_PANEL_NAME, "late");
             return null;
         }
+        if (to === "projects" && request.do === "mend") {
+            // the project list is readable again, and holds no projects
+            writeFileSync(join(service.storage, PROJECTS_FILE), JSON.stringify({ version: PROJECTS_VERSION, projects: [] }));
+            return null;
+        }
         if (to === "registry") {
             service.refuse(request.away ? { match: (f) => f.action === "blocks:emit" && String(f.params?.entry).startsWith("value."), error: REGISTRY_AWAY } : null);
             return null;
@@ -224,6 +232,9 @@ async function runPage(chrome: Chrome, dist: string, setup: Setup): Promise<Fixt
     let service: BlocksService | null = null;
     let server: ReturnType<typeof Bun.serve> | undefined;
     let tab: Page | undefined;
+    // the page's scripts run before its tab is handed back: what it asks of the tab waits for it
+    let tabOpened!: (page: Page) => void;
+    const tabReady = new Promise<Page>((resolve) => (tabOpened = resolve));
     let timer: ReturnType<typeof setTimeout> | undefined;
     try {
         daemon = await startDaemon();
@@ -254,7 +265,7 @@ async function runPage(chrome: Chrome, dist: string, setup: Setup): Promise<Fixt
                 }
                 if (request.method === "POST" && url.pathname === "/input") {
                     const { calls } = (await request.json()) as { calls: { method: string; params: Record<string, unknown> }[] };
-                    if (!tab) throw new Error("The page is not open");
+                    const tab = await tabReady;
                     for (const call of calls) {
                         if (!call.method.startsWith("Input.")) throw new Error(`a fixture sends only Input calls, not ${call.method}`);
                         await tab.send(call.method, call.params);
@@ -264,14 +275,14 @@ async function runPage(chrome: Chrome, dist: string, setup: Setup): Promise<Fixt
                 if (request.method === "POST" && url.pathname === "/viewport") {
                     // the window resized to a size, or back to its own with none
                     const size = (await request.json()) as { width: number; height: number } | null;
-                    if (!tab) throw new Error("The page is not open");
+                    const tab = await tabReady;
                     if (size) await tab.resize(size.width, size.height);
                     else await tab.send("Emulation.clearDeviceMetricsOverride");
                     return new Response("ok");
                 }
                 if (request.method === "POST" && url.pathname === "/screenshot") {
                     const { name, width, height } = (await request.json()) as { name: string; width: number; height: number };
-                    if (!tab) throw new Error("The page is not open");
+                    const tab = await tabReady;
                     if (!shots) return new Response("ok");
                     if (!/^[a-z0-9-]+$/.test(name)) throw new Error(`"${name}" is not a screenshot name`);
                     await tab.resize(width, height);
@@ -290,6 +301,7 @@ async function runPage(chrome: Chrome, dist: string, setup: Setup): Promise<Fixt
             error: (err) => new Response(String(err), { status: 500 }),
         });
         tab = await chrome.open(`http://127.0.0.1:${server.port}/`);
+        tabOpened(tab);
         const opened = tab;
         const outcome = await Promise.race([
             reported,

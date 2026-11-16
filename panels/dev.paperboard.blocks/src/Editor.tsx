@@ -19,7 +19,9 @@ import {
     PaperSeparator,
     PaperText,
     PaperToggle,
+    createAction,
     createFailureToast,
+    showError,
     showToast,
 } from "@mileniumhq/paperui";
 import { BUILTIN_BLOCKS, builtinPlaceholder } from "./lib/blockDefs";
@@ -35,8 +37,6 @@ import { createCanvas, type Canvas } from "./lib/canvas";
 import "./lib/undrawnFields";
 import { parseEntry, parseRegistryBlockType } from "./lib/names";
 import { Console } from "./Console";
-import { oneAtATime } from "./lib/oneAtATime";
-import { createFailures } from "./lib/failures";
 import { service, serviceState, type Notice } from "./bridge";
 import type { PanelState, ProjectSummary } from "./panel";
 import { AUTO_START, switchFailed, type ProjectsState } from "./projects/state";
@@ -45,7 +45,7 @@ import { createFileActions } from "./FileActions";
 import { BlocklyDialogs } from "./BlocklyDialogs";
 import { LibraryHeader, LibraryRail } from "./Library";
 import { createLibraryModel } from "./libraryModel";
-import { createEditorFlows, define, NOT_SAVED } from "./editorFlows";
+import { createEditorFlows, define } from "./editorFlows";
 import styles from "./Editor.module.css";
 
 const RUN_FAILED = "Couldn't run the flows";
@@ -72,10 +72,8 @@ export default function Editor(props: {
     // the newest log line already pointed at on the canvas
     let shownLogId = 0;
 
-    // what fails is a toast, which closes once the same thing has worked since
-    const { fail, worked } = createFailures();
     const notify = (notice: Notice) =>
-        notice.kind === "failed" ? fail(notice.title)(notice.text) : void showToast({ variant: "success", title: notice.title, message: notice.text });
+        void (notice.kind === "failed" ? showError(notice.title, notice.text) : showToast({ variant: "success", title: notice.title, message: notice.text }));
     // the bridge's state as the projects store keeps it (reconciled by id): a log line adds one row
     // to the console rather than handing it a whole new list of rows
     const running = () => props.projects.state().running[props.projectId] ?? 0;
@@ -87,7 +85,6 @@ export default function Editor(props: {
         workspace: () => workspace,
         onRegistry: library.setRegistry,
         onNotice: notify,
-        onSaved: () => worked(NOT_SAVED),
         // the log lines from before the flows were shown are on the blocks they name
         onLoaded: () => showErrors(props.projects.state()),
     });
@@ -112,14 +109,14 @@ export default function Editor(props: {
             if (!heading) throw new Error(`The Library has no section "${section}"`);
             list.scrollbar.setY(heading.getElement().getBoundingRectangle().top * list.scale);
         } catch (err) {
-            fail("Couldn't jump to that section")(err);
+            showError("Couldn't jump to that section", err);
         }
     }
 
     onMount(() => {
         registerChoicesField({
             fetch: (s) => ("typeRef" in s ? blocksApi.typeChoices(s.typeRef, s.project ? { project: s.project } : {}) : blocksApi.choices(s.panelId, s.entry, s.input)),
-            report: (text) => fail("Couldn't load the choices")(text),
+            report: (text) => showError("Couldn't load the choices", text),
         });
         // a type's values are listed in the project of the block they're in, when it's one of the type's own panel's
         setChoicesProject((holder, typeRef) => {
@@ -150,7 +147,7 @@ export default function Editor(props: {
                 trash: trashTile,
                 onTrash: setTrash,
                 resultsTrayClass: styles.resultsTray!,
-                onThemeFailed: fail("The blocks couldn't follow the theme"),
+                onThemeFailed: (err) => showError("The blocks couldn't follow the theme", err),
                 onChange: (event) => {
                     if (event.type === Blockly.Events.VAR_CREATE || event.type === Blockly.Events.VAR_DELETE || event.type === Blockly.Events.VAR_RENAME) {
                         library.variablesChanged();
@@ -163,11 +160,11 @@ export default function Editor(props: {
             });
             workspace = canvas.workspace;
             offRegistry = blocksApi.onRegistryChange(flows.registryChanged);
-            flows.load().catch(fail(LOAD_FAILED));
+            flows.load().catch((err) => showError(LOAD_FAILED, err));
             setReady(true);
         };
         // Blockly measures text as it draws, so it waits for the font
-        loadBlockFonts().then(start, fail("The blocks couldn't be drawn"));
+        loadBlockFonts().then(start, (err) => showError("The blocks couldn't be drawn", err));
 
         onCleanup(() => {
             closed = true;
@@ -226,23 +223,23 @@ export default function Editor(props: {
         workspace.scrollCenter();
     };
 
+    // a failure is a toast, which closes once the same thing goes through
+    const runs = createAction();
     const run = () => {
         for (const block of workspace?.getAllBlocks(false) ?? []) block.setWarningText(null, "run");
         // Run starts what is saved, so the latest edits go first
-        flows
-            .saveNow()
-            .then(() => service.runFlows({ project: props.projectId }))
-            .then(() => worked(RUN_FAILED), fail(RUN_FAILED));
+        void runs.run(RUN_FAILED, async () => {
+            await flows.saveNow();
+            await service.runFlows({ project: props.projectId });
+        });
     };
 
-    // the project changes the menus make, each reporting what failed
-    const changes = oneAtATime();
+    // the project changes the menus make, one at a time
+    const changes = createAction();
     const working = changes.busy;
-    const change = (failed: string, work: () => Promise<void>) =>
-        changes.run(async () => {
-            await work();
-            worked(failed);
-        }, fail(failed));
+    const change = async (failed: string, work: () => Promise<void>) => {
+        if (!working()) await changes.run(failed, work);
+    };
     // the latest edits are saved before the canvas goes, before a copy is made
     // of what was saved, and before anything new is made, so a save that fails
     // leaves nothing made behind
@@ -276,8 +273,8 @@ export default function Editor(props: {
             props.onHome();
         });
     // the switch flips on its own, never waiting on another change; it moves once the service says so
-    const setEnabled = (enabled: boolean) =>
-        props.projects.setEnabled(props.projectId, enabled).then(() => worked(switchFailed(true), switchFailed(false)), fail(switchFailed(enabled)));
+    const switching = createAction();
+    const setEnabled = (enabled: boolean) => switching.run(switchFailed(enabled), () => props.projects.setEnabled(props.projectId, enabled));
     const [renaming, setRenaming] = createSignal(false);
     const [deleting, setDeleting] = createSignal(false);
 
@@ -325,7 +322,7 @@ export default function Editor(props: {
                         <ProjectNameField
                             name={props.project().name}
                             onRename={(name) => props.projects.rename(props.projectId, name)}
-                            onFailed={fail("Couldn't rename the project")}
+                            onFailed={(err) => showError("Couldn't rename the project", err)}
                         />
                         <PaperMenuBar aria-label={props.project().name}>
                             <PaperMenuBarMenu label="Project" size="tiny">
@@ -379,7 +376,7 @@ export default function Editor(props: {
                                     variant="danger"
                                     icon
                                     disabled={running() === 0}
-                                    onClick={() => service.stopFlows({ project: props.projectId }).catch(fail("Couldn't stop the flows"))}
+                                    onClick={() => service.stopFlows({ project: props.projectId }).catch((err) => showError("Couldn't stop the flows", err))}
                                     title={running() === 1 ? "Stop the flow running now" : `Stop the ${running()} flows running now`}
                                     aria-label="Stop"
                                 >
@@ -497,7 +494,7 @@ export default function Editor(props: {
                     </div>
                     <Show when={log().length > 0}>
                         <div class={styles.dock}>
-                            <Console entries={log()} onClear={() => service.clearLog({ project: props.projectId }).catch(fail("Couldn't clear the log"))} />
+                            <Console entries={log()} onClear={() => service.clearLog({ project: props.projectId }).catch((err) => showError("Couldn't clear the log", err))} />
                         </div>
                     </Show>
                 </div>

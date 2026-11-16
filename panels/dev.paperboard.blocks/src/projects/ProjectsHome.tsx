@@ -18,36 +18,34 @@ import {
     PaperSeparator,
     PaperText,
     PaperToggle,
+    createAction,
     createFailureToast,
     useContextMenuState,
 } from "@mileniumhq/paperui";
 import CanvasPreview from "./CanvasPreview";
 import { DeleteProjectModal, RenameProjectModal } from "./ProjectDialogs";
 import { AUTO_START, editedText, switchFailed, type ProjectsState } from "./state";
-import { oneAtATime } from "../lib/oneAtATime";
-import { createFailures } from "../lib/failures";
 import type { ProjectSummary } from "../panel";
 
 
 export default function ProjectsHome(props: { projects: ProjectsState; onOpen: (project: ProjectSummary) => void }) {
-    // what fails is a toast, which closes once the same thing has worked since
-    const { fail, worked } = createFailures();
-    const changes = oneAtATime();
+    // what fails is a toast, which closes once the same thing goes through; one change at a time
+    const changes = createAction();
     const working = changes.busy;
-    const change = (failed: string, work: () => Promise<void>) =>
-        changes.run(async () => {
-            await work();
-            worked(failed);
-        }, fail(failed));
+    const change = async (failed: string, work: () => Promise<void>) => {
+        if (!working()) await changes.run(failed, work);
+    };
 
     const create = () => change("Couldn't make a project", async () => props.onOpen(await props.projects.create()));
     const duplicate = (id: string) => change("Couldn't copy the project", async () => { await props.projects.duplicate(id); });
     // a switch flips on its own, never waiting on another change, and moves once the service says so
-    // once a switch moves, what an earlier one that didn't said goes
-    const setEnabled = (id: string, enabled: boolean) =>
-        props.projects.setEnabled(id, enabled).then(() => worked(switchFailed(true), switchFailed(false)), fail(switchFailed(enabled)));
+    const switching = createAction();
+    const setEnabled = (id: string, enabled: boolean) => switching.run(switchFailed(enabled), () => props.projects.setEnabled(id, enabled));
     // what the service can't do stands until it says it is over
-    createFailureToast(() => props.projects.state().projectsError, { title: "Couldn't read the projects" });
+    // the service reads its projects as it starts; after that failed, only when asked again.
+    // The toast goes while it reads again and comes back with why, if that failed too
+    const reading = createAction({ toast: false });
+    createFailureToast(() => (reading.busy() ? null : (reading.error()?.message ?? props.projects.state().projectsError)), { title: "Couldn't read the projects" });
     createFailureToast(() => props.projects.state().blocksError, { title: "Flows can't drive projects" });
 
     const menu = useContextMenuState("below-right");
@@ -95,7 +93,16 @@ export default function ProjectsHome(props: { projects: ProjectsState; onOpen: (
                         when={props.projects.kept().length > 0}
                         fallback={
                             // unreadable is not empty: the toast says why
-                            <Show when={!props.projects.state().projectsError} fallback={<PaperEmptyState icon="error" title="Couldn't load" />}>
+                            <Show
+                                when={!props.projects.state().projectsError}
+                                fallback={
+                                    <PaperEmptyState icon="error" title="Couldn't load">
+                                        <PaperButton disabled={reading.busy()} onClick={() => void reading.run("Couldn't read the projects", props.projects.readAgain)}>
+                                            Try again
+                                        </PaperButton>
+                                    </PaperEmptyState>
+                                }
+                            >
                                 <PaperEmptyState icon="extension" title="No projects yet" description="A project holds flows built from blocks, which run when something happens in any panel, or when you click Run.">
                                     {newProject()}
                                 </PaperEmptyState>

@@ -40,6 +40,8 @@ export function createProjects() {
         },
         duplicate: (project: string) => service.duplicateProject({ project }),
         remove: (project: string) => service.deleteProject({ project }),
+        /** asks the service to read its projects again, after they couldn't be read */
+        readAgain: () => service.readProjects(),
         /** a new project left without a block is not kept; the service checks it still is a draft */
         discardDraft: (project: string) => service.deleteProject({ project, onlyDraft: true }),
     };

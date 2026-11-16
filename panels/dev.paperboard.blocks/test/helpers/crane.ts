@@ -138,6 +138,8 @@ async function startProcess(d: TestDaemon, panelId: string, args: string[], what
 export interface Seed {
     projects: ProjectMeta[];
     flows?: Record<string, SavedFlows>;
+    /** the project list is no JSON, so the service can't read its projects as it starts */
+    unreadable?: boolean;
 }
 
 /** What the relay refuses: the frames the service sends that `match` takes, answered with `error`. */
@@ -221,6 +223,7 @@ export async function startBlocksService(d: TestDaemon, seed: Seed): Promise<Blo
         fs.writeFileSync(file, JSON.stringify(value));
     };
     write(PROJECTS_FILE, { version: PROJECTS_VERSION, projects: seed.projects });
+    if (seed.unreadable) fs.writeFileSync(path.join(storage, PROJECTS_FILE), "{ not json");
     for (const [id, flows] of Object.entries(seed.flows ?? {})) write(projectFlowsPath(id), flows);
     const line = relay(d.port);
     const service = await startProcess(d, PANEL_ID, [SERVICE_ENTRY], "the Blocks service", line.port);

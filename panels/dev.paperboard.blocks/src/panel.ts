@@ -112,5 +112,7 @@ export const blocksContract = defineContract(PANEL_ID, {
         duplicateProject: { input: inProject, output: projectSummary },
         /** `onlyDraft`: a project kept by now stays, as leaving an empty new one asks */
         deleteProject: { input: shape.object({ project: shape.text(), onlyDraft: shape.optional(shape.boolean()) }), output: shape.object({ deleted: shape.boolean() }) },
+        /** reads the projects again after they couldn't be read; rejects with why when they still can't */
+        readProjects: { output: shape.nothing() },
     },
 });

@@ -5,7 +5,7 @@
 // older registry answer never lands over a newer one.
 import { createSignal } from "solid-js";
 import * as Blockly from "blockly";
-import { createLatest } from "@mileniumhq/paperui";
+import { createLatest, dismissToast, showError } from "@mileniumhq/paperui";
 import { blocksApi, panelsApi, type BlockInfo, type BlockProjectInfo, type PanelItem, errorMessage } from "@mileniumhq/paperapi";
 import { BUILTIN_BLOCKS, choicesSources, registryDefinitions, type Definitions } from "./lib/blockDefs";
 import { refreshChoices } from "./lib/choicesField";
@@ -71,8 +71,6 @@ export function createEditorFlows(options: {
     /** what the registry offers now, each time the blocks are defined again */
     onRegistry: (registry: Registry) => void;
     onNotice: (notice: Notice) => void;
-    /** a save went through */
-    onSaved: () => void;
     /** the flows are on the canvas */
     onLoaded: () => void;
 }) {
@@ -217,7 +215,7 @@ export function createEditorFlows(options: {
                 // quiet: the earlier save's failure was shown by its own handler; this only orders the next one
                 .catch(() => undefined)
                 .then(() => service.saveFlows({ project: options.project(), flows, preview }))
-                .then(options.onSaved, (err: unknown) => {
+                .then(saved, (err: unknown) => {
                     stored = null;
                     throw err;
                 });
@@ -227,7 +225,13 @@ export function createEditorFlows(options: {
     }
 
     // a save that failed is a toast, which stays once the editor has closed
-    const notSaved = fail(NOT_SAVED);
+    // and goes once a save goes through
+    let notSavedToast: string | undefined;
+    const notSaved = (err: unknown) => void (notSavedToast = showError(NOT_SAVED, err));
+    function saved(): void {
+        if (notSavedToast) dismissToast(notSavedToast);
+        notSavedToast = undefined;
+    }
     /** Saves what isn't saved yet, as the editor or the page goes: the canvas is read as it is, even before Blockly tells of its last change. */
     const saveLeaving = () => void saveNow().catch(notSaved);
     window.addEventListener("pagehide", saveLeaving);
