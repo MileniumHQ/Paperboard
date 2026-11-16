@@ -22,3 +22,6 @@ export const REFUSED_PROJECT = "p-refused";
 export const REFUSAL = `There's no project "${REFUSED_PROJECT}"; it may have been deleted`;
 /** what the relay answers the service's announcements with while the registry is away */
 export const REGISTRY_AWAY = "the registry is away";
+
+/** a panel no daemon has: a daemon request for it is refused for real (a panel may act only for itself) */
+export const ABSENT_PANEL = "dev.paperboard.absent";

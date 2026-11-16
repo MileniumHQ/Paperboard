@@ -3,7 +3,7 @@ import {
     createAction,
     createRead,
     PaperButton,
-    PaperEmptyState,
+    PaperError,
     PaperFlex,
     PaperLoader,
     PaperModal,
@@ -132,7 +132,7 @@ export function createFileActions(props: {
     const listing = createRead(async () => {
         const [status, list] = await Promise.all([backupApi.status(PANEL_ID), backupApi.list(PANEL_ID)]);
         return { status, list };
-    }, { source: loadOpen, failure: { title: "Couldn't list the backups" } });
+    }, { source: loadOpen });
     const backups = () => listing.value()?.list ?? null;
     const selected = () => {
         const list = backups() ?? [];
@@ -202,13 +202,9 @@ export function createFileActions(props: {
             footer={
                 <>
                     <PaperButton variant="text" disabled={restoring()} onClick={() => setLoadOpen(false)}>Cancel</PaperButton>
-                    <Show when={listFailure() && !backups()} fallback={
-                        <PaperButton variant="danger" disabled={restoring() || !selected()} onClick={() => void restore()}>
-                            {restoring() ? "Loading..." : "Load backup"}
-                        </PaperButton>
-                    }>
-                        <PaperButton onClick={loadBackups}>Try again</PaperButton>
-                    </Show>
+                    <PaperButton variant="danger" disabled={restoring() || !selected()} onClick={() => void restore()}>
+                        {restoring() ? "Loading..." : "Load backup"}
+                    </PaperButton>
                 </>
             }
         >
@@ -217,8 +213,8 @@ export function createFileActions(props: {
                 <Show
                     when={backups()}
                     fallback={
-                        <Show when={!listFailure()} fallback={<PaperEmptyState icon="error" title="Couldn't load" />}>
-                            <PaperLoader loaderStatus="indeterminate" size="small" label="Loading backups" />
+                        <Show when={listFailure()} fallback={<PaperLoader loaderStatus="indeterminate" size="small" label="Loading backups" />}>
+                            {(err) => <PaperError title="Couldn't list the backups" error={err()} action={{ label: "Try again", onClick: loadBackups }} />}
                         </Show>
                     }
                 >

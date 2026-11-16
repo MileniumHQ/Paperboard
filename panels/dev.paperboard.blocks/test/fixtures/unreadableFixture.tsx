@@ -1,8 +1,8 @@
 // The whole panel in a real browser over the real service, which couldn't
-// read its projects as it started (test/browserFixture.ts): Home says it
-// couldn't load, the toast says why, and Try again asks the service to read
-// them again. Still unreadable, the toast comes back; readable, the projects
-// show and the toast goes.
+// read its projects as it started (test/browserFixture.ts): Home says why
+// in place of the list, never in a toast, and its Try again asks the service
+// to read them again. Still unreadable, it stays and says why; readable, the
+// projects show and it goes.
 import { render } from "solid-js/web";
 import { PaperProvider } from "@mileniumhq/paperui";
 import App from "../../src/App";
@@ -30,8 +30,12 @@ function byText(selector: string, text: string): HTMLElement | undefined {
     return all.find((el) => !all.some((other) => other !== el && el.contains(other)));
 }
 
-const toast = () => [...document.querySelectorAll<HTMLElement>('[data-paper-toasts] [role="alert"]')].find((el) => el.textContent?.includes("Couldn't read the projects"));
-const tryAgain = () => byText("button", "Try again");
+const toast = () => [...document.querySelectorAll<HTMLElement>("[data-paper-toasts] [role]")].find((el) => el.textContent?.includes("Couldn't read the projects"));
+// Home's error, in place of the list
+const failure = () => document.querySelector<HTMLElement>('[data-paper-error][role="region"][aria-label="Couldn\'t read the projects"]');
+/** what the error says under its title: why */
+const reason = () => failure()?.querySelector("[data-paper-error] > div > :nth-child(2)")?.textContent ?? "";
+const tryAgain = () => [...(failure()?.querySelectorAll<HTMLButtonElement>("button") ?? [])].find((b) => b.textContent?.trim() === "Try again");
 
 /** What the page shows now, at desktop and phone width in both themes, when the harness keeps screenshots. */
 async function shoot(name: string): Promise<void> {
@@ -55,24 +59,26 @@ async function run(): Promise<Record<string, unknown>> {
         ),
         document.getElementById("app")!,
     );
-    await until("Home's Couldn't load", () => byText("*", "Couldn't load"));
-    const said = (await until("the toast saying why", toast)).textContent ?? "";
+    const said = (await until("Home's error with Try again", () => tryAgain() && failure())).textContent ?? "";
     const offered = Boolean(tryAgain());
+    const why = reason();
+    const toasted = Boolean(toast());
     await shoot("unreadable-home");
 
-    // still unreadable: the toast goes while it reads, and comes back
-    (await until("the toast's Close", () => toast()?.querySelector<HTMLElement>('button[aria-label="Close"]'))).click();
-    await until("the toast to close", () => !toast());
+    // still unreadable: the read again is refused, and the error stays with why, Try again ready once more
     (await until("Try again", tryAgain)).click();
-    const again = (await until("the toast back with why", toast)).textContent ?? "";
+    await until("Try again to wait on its read", () => tryAgain()?.disabled);
+    const again = (await until("the error still saying why", () => tryAgain() && !tryAgain()!.disabled && failure())).textContent ?? "";
+    const toastedAgain = Boolean(toast());
+    const whyAgain = reason();
 
-    // readable now: the projects show, and the toast goes
+    // readable now: the projects show, and the error goes
     await ask("projects", { do: "mend" });
-    (await until("Try again", () => tryAgain() && !(tryAgain() as HTMLButtonElement).disabled && tryAgain())).click();
+    (await until("Try again", () => tryAgain() && !tryAgain()!.disabled && tryAgain())).click();
     await until("the empty projects list", () => byText("*", "No projects yet"));
-    await until("the toast to go", () => !toast());
+    const gone = !failure();
     const canMake = !(byText("button", "New project") as HTMLButtonElement | undefined)?.disabled;
-    return { said, offered, again, canMake, uncaught: [...errors] };
+    return { said, why, offered, toasted, again, whyAgain, toastedAgain, gone, canMake, uncaught: [...errors] };
 }
 
 run()

@@ -16,7 +16,6 @@ export function createProjects() {
     // alone), and joins a read still out, being newer than it
     const read = createRead(() => serviceState.refresh().then((full) => structuredClone(full)), {
         follow: (land) => serviceState.subscribe((_state, patch) => land((prev) => prev && { ...prev, ...structuredClone(patch) })),
-        failure: { title: "Couldn't load the projects" },
     });
     const state = () => read.value() ?? initial;
 
@@ -24,8 +23,10 @@ export function createProjects() {
         state,
         /** the service answered and has read its projects */
         ready: () => Boolean(read.value()?.loaded),
-        // Try again shows the read going out
-        loadError: () => (read.loading() ? null : read.error()),
+        /** why the last read of the list failed, until one goes through */
+        loadError: read.error,
+        /** a read of the list is out: Try again waits on it */
+        loading: read.loading,
         load: read.reload,
         /** the projects Home shows: a draft is only seen in its editor */
         kept: () => state().projects.filter((p) => !p.draft),

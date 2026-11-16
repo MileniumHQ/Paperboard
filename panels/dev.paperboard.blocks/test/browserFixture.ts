@@ -10,7 +10,8 @@
 // Paperboard does and keeps what it says of its unsaved work. Before the
 // page's own scripts, the page is given its crane credentials and a hold on
 // its socket (WIRE below): the calls it sent, a call refused for real by
-// sending it for a project the service doesn't have, a listing's answer held
+// sending it for a project the service doesn't have, a daemon request
+// refused for real by asking it for a panel that isn't there, a listing's answer held
 // until released. What lies outside the page (another panel, another window,
 // the service logging, the registry going away) the page asks the test for
 // at /ask (fixtures/wire.ts).
@@ -30,7 +31,7 @@ import { launchChrome, type Chrome, type Page } from "../../../scripts/testing/c
 import { BUILTIN, registryBlockType } from "../src/lib/names";
 import { PANEL_ID, type SavedFlows } from "../src/panel";
 import { PROJECTS_FILE, PROJECTS_VERSION } from "../src/lib/projects";
-import { FIXTURE_PANEL, FIXTURE_PANEL_NAME, LATE_PANEL, LATE_PANEL_NAME, REFUSED_PROJECT, REGISTRY_AWAY, SERVICED, SERVICED_PROJECT } from "./fixtures/world";
+import { ABSENT_PANEL, FIXTURE_PANEL, FIXTURE_PANEL_NAME, LATE_PANEL, LATE_PANEL_NAME, REFUSED_PROJECT, REGISTRY_AWAY, SERVICED, SERVICED_PROJECT } from "./fixtures/world";
 import { startBlocksService, startDaemon, startOtherPanel, type BlocksService, type OtherPanel, type Seed, type TestDaemon } from "./helpers/crane";
 
 const panelDir = resolve(import.meta.dir, "..");
@@ -84,6 +85,8 @@ const PAGES = {
     projects: { page: "test/fixtures/projectsFixture.html", seed: async () => ({ projects: [] }), fixturePanel: false, window: false },
     /** the whole panel, over projects the service couldn't read as it started (test/fixtures/unreadableFixture.tsx) */
     unreadable: { page: "test/fixtures/unreadableFixture.html", seed: async () => ({ projects: [], unreadable: true }), fixturePanel: false, window: false },
+    /** the editor's Load backup window, over backups kept on this computer (test/fixtures/backupsFixture.tsx) */
+    backups: { page: "test/fixtures/backupsFixture.html", seed: async () => ({ projects: [SERVICED], backupsHere: true }), fixturePanel: false, window: false },
 } satisfies Record<string, Setup>;
 export type FixtureName = keyof typeof PAGES;
 
@@ -99,6 +102,7 @@ export interface FixtureResults {
 const WIRE = `(() => {
     const calls = [];
     const refused = new Set();
+    const refusedActions = new Set();
     let holding = 0;
     const heldIds = new Set();
     const heldAnswers = [];
@@ -115,6 +119,10 @@ const WIRE = `(() => {
                 frame.params.request.inputs.input = { ...input, project: ${JSON.stringify(REFUSED_PROJECT)} };
                 data = JSON.stringify(frame);
             }
+        }
+        if (frame && refusedActions.has(frame.action) && frame.params?.panelId === ${JSON.stringify(PANEL_ID)}) {
+            frame.params.panelId = ${JSON.stringify(ABSENT_PANEL)};
+            data = JSON.stringify(frame);
         }
         if (frame?.action === "blocks:list" && holding > 0) {
             holding--;
@@ -134,6 +142,7 @@ const WIRE = `(() => {
     window.__wire = {
         calls,
         refuse: (name, on) => (on ? refused.add(name) : refused.delete(name)),
+        refuseAction: (action, on) => (on ? refusedActions.add(action) : refusedActions.delete(action)),
         holdNextList: () => void holding++,
         held: () => heldAnswers.length,
         release: () => { for (const deliver of heldAnswers.splice(0)) deliver(); },

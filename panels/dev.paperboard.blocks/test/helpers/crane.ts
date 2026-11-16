@@ -140,6 +140,8 @@ export interface Seed {
     flows?: Record<string, SavedFlows>;
     /** the project list is no JSON, so the service can't read its projects as it starts */
     unreadable?: boolean;
+    /** Blocks' backups go to this computer's own location, so Load backup lists them at once */
+    backupsHere?: boolean;
 }
 
 /** What the relay refuses: the frames the service sends that `match` takes, answered with `error`. */
@@ -225,6 +227,11 @@ export async function startBlocksService(d: TestDaemon, seed: Seed): Promise<Blo
     write(PROJECTS_FILE, { version: PROJECTS_VERSION, projects: seed.projects });
     if (seed.unreadable) fs.writeFileSync(path.join(storage, PROJECTS_FILE), "{ not json");
     for (const [id, flows] of Object.entries(seed.flows ?? {})) write(projectFlowsPath(id), flows);
+    if (seed.backupsHere) {
+        // the daemon's own list of backup locations: this computer's, for Blocks
+        fs.mkdirSync(path.join(d.dataDir, "backups"), { recursive: true });
+        fs.writeFileSync(path.join(d.dataDir, "backups", "destinations.json"), JSON.stringify({ version: 1, destinations: [], panels: { [PANEL_ID]: "local" } }));
+    }
     const line = relay(d.port);
     const service = await startProcess(d, PANEL_ID, [SERVICE_ENTRY], "the Blocks service", line.port);
     return {

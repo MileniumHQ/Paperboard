@@ -1,7 +1,7 @@
 // A fixture page's hold on what is around it (test/browserFixture.ts sets
 // it up): the calls the page sent its service, as they left on the socket;
 // calls refused for real, by sending them for a project the service doesn't
-// have; a registry listing held on its way back; the test, doing what
+// have; daemon requests refused for real, by asking for a panel that isn't there; a registry listing held on its way back; the test, doing what
 // another panel or window does; and the shell the page is framed in.
 
 /** a call of the panel's contract the page made, and its input as it was sent */
@@ -13,6 +13,7 @@ export interface SentCall {
 interface Wire {
     calls: SentCall[];
     refuse(name: string, refused: boolean): void;
+    refuseAction(action: string, refused: boolean): void;
     holdNextList(): void;
     held(): number;
     release(): void;
@@ -24,6 +25,8 @@ const wire = (): Wire => (window as unknown as { __wire: Wire }).__wire;
 export const calls = (): SentCall[] => wire().calls;
 /** from now on the page's call `name` is refused by the service, or again goes as it is */
 export const refuse = (name: string, refused: boolean): void => wire().refuse(name, refused);
+/** from now on the page's daemon request `action` (such as "backup:list") is refused by the daemon, or again goes as it is */
+export const refuseAction = (action: string, refused: boolean): void => wire().refuseAction(action, refused);
 /** the answer to the page's next registry listing waits on the page until release() */
 export const holdNextList = (): void => wire().holdNextList();
 /** how many held answers have arrived */

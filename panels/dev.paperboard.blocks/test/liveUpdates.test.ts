@@ -150,6 +150,8 @@ describe("the editor", () => {
         async () => {
             const { loadFailure } = await panelFixture();
             expect(loadFailure.failed.text).toContain(REFUSAL);
+            expect(loadFailure.failed.covers).toBe(true);
+            expect(loadFailure.failed.toasted, "a toast said the flows that stay unloaded").toBe(false);
             expect(loadFailure.failed.readOnly).toBe(true);
             expect(loadFailure.failed.retryOnCanvas).toBe(true);
             expect(loadFailure.failed.library).toBe(false);
@@ -167,6 +169,7 @@ describe("the home screen", () => {
             expect(home.failed).toContain(REFUSAL);
             expect(home.stayed).toBe(home.before);
             expect(home.banner).toContain("the registry is away");
+            expect(home.bannerToasted, "a toast said the service's standing trouble").toBe(false);
             expect(home.after.moved).not.toBe(home.before);
             expect(home.after.switchFailure).toBeNull();
             expect(home.after.banner).toBeNull();

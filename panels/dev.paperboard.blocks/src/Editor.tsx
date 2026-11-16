@@ -1,8 +1,9 @@
 // The Blocks editor for one project: a top bar with its name, menus, its
 // switch, Stop and Run, then the Library (a rail of categories, and the
 // chosen one's blocks in Blockly's flyout) and the canvas, with a dock under
-// it for the run log. What fails is a toast. Edits save as you make them; the
-// service runs the flows.
+// it for the run log. A one-off failure is a toast; flows that can't load
+// say why over the canvas. Edits save as you make them; the service runs
+// the flows.
 import { createEffect, createMemo, createSignal, on, onCleanup, onMount, Show } from "solid-js";
 import * as Blockly from "blockly";
 import { blocksApi, setUnsavedChanges } from "@mileniumhq/paperapi";
@@ -10,7 +11,7 @@ import {
     PaperButton,
     PaperContextMenuItem,
     PaperEffect,
-    PaperEmptyState,
+    PaperError,
     PaperFlex,
     PaperIcon,
     PaperMenuBar,
@@ -20,7 +21,6 @@ import {
     PaperText,
     PaperToggle,
     createAction,
-    createFailureToast,
     showError,
     showToast,
 } from "@mileniumhq/paperui";
@@ -88,7 +88,12 @@ export default function Editor(props: {
         // the log lines from before the flows were shown are on the blocks they name
         onLoaded: () => showErrors(props.projects.state()),
     });
-    createFailureToast(flows.loadError, { title: LOAD_FAILED });
+    // Try again waits on the load it started; a load that fails says why over the canvas
+    const [loadingAgain, setLoadingAgain] = createSignal(false);
+    const loadAgain = () => {
+        setLoadingAgain(true);
+        void flows.load().finally(() => setLoadingAgain(false));
+    };
 
     function showErrors(next: PanelState): void {
         if (!workspace) return;
@@ -433,13 +438,18 @@ export default function Editor(props: {
                 <div class={styles.main}>
                     <div class={styles.stage}>
                         <div ref={host} class={styles.canvas} />
-                        {/* the canvas holds none of the flows: it says so over them, and the toast says why */}
+                        {/* the canvas holds none of the flows: it says why over them, until they load */}
                         <Show when={flows.loadError()}>
-                            <div class={styles.cover}>
-                                <PaperEmptyState icon="error" title="Couldn't load" description="Nothing here can be changed until the flows load.">
-                                    <PaperButton onClick={() => void flows.load()}>Try again</PaperButton>
-                                </PaperEmptyState>
-                            </div>
+                            {(why) => (
+                                <div class={styles.cover}>
+                                    <PaperError
+                                        fill
+                                        title={LOAD_FAILED}
+                                        error={why()}
+                                        action={{ label: "Try again", disabled: loadingAgain(), onClick: loadAgain }}
+                                    />
+                                </div>
+                            )}
                         </Show>
                         <Show when={!flows.loadError()}>
                             <Show

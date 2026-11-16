@@ -413,15 +413,18 @@ async function loadFailureChecks() {
     const card = await until("the project's card", () => byText("*", "Renamed by hand"));
     refuse("loadFlows", true);
     card.click();
-    const alert = await until("the load failure's toast", () => alertSaying("Couldn't load your flows"));
-    // the canvas says it couldn't load, over where the flows would be, with its own Try again
-    const cover = await until("the canvas's Couldn't load", () => byText("*", "Couldn't load")?.closest<HTMLElement>("[class*=cover]"));
+    // the canvas says why it couldn't load, over where the flows would be, with its own Try again
+    const error = await until("the canvas's error", () => errorTitled("Couldn't load your flows"));
+    const cover = error.closest<HTMLElement>("[class*=cover]")!;
     await settle();
     // the app switches theme meanwhile: Blockly draws its list again, which stays hidden
     document.documentElement.setAttribute("data-theme", "dark");
     await settle();
     const failed = {
-        text: alert.textContent ?? "",
+        text: error.textContent ?? "",
+        covers: Boolean(cover),
+        // a standing failure is said in place, never in a toast that goes while it stays
+        toasted: Boolean(alertSaying("Couldn't load your flows")),
         readOnly: canvas()!.isReadOnly(),
         retryOnCanvas: Boolean(byText("button", "Try again", cover)),
         library: Boolean(byText("[role=radio], button, label", "Logic")) || getComputedStyle(canvas()!.getFlyout()!.getWorkspace().getParentSvg()).display !== "none",
@@ -435,7 +438,7 @@ async function loadFailureChecks() {
     document.documentElement.removeAttribute("data-theme");
     refuse("loadFlows", false);
     byText("button", "Try again", cover)!.click();
-    await until("the failure and its toast to go", () => !cover.isConnected && !alert.isConnected);
+    await until("the failure to go", () => !cover.isConnected && !errorTitled("Couldn't load your flows"));
     await settle();
     return { failed, retried: { readOnly: canvas()!.isReadOnly(), library: Boolean(byText("[role=radio], button, label", "Logic")) } };
 }
@@ -529,6 +532,8 @@ async function openChecks() {
     return { saves: saves() - before };
 }
 
+/** the PaperError in place titled `title` */
+const errorTitled = (title: string) => document.querySelector<HTMLElement>(`[data-paper-error][aria-label="${title.replace(/"/g, '\\"')}"]`);
 /** the failure toast saying `text` */
 const alertSaying = (text: string) => [...document.querySelectorAll<HTMLElement>('[data-paper-toasts] [role="alert"]')].find((el) => el.textContent?.includes(text));
 /** the window resized to `width` by `height`, or back to its own size with none */
@@ -633,7 +638,8 @@ async function homeChecks() {
     // the registry goes away as another window makes a project: the service can't tell the other panels
     await ask("registry", { away: true });
     await madeElsewhere("Made while the registry was away");
-    const banner = (await until("the service's banner", () => alert("Flows can't drive projects")))!.textContent ?? "";
+    const banner = (await until("the service's banner", () => errorTitled("Flows can't drive projects")))!.textContent ?? "";
+    const bannerToasted = Boolean(alert("Flows can't drive projects"));
     await shoot("home-failed");
 
     // the registry is back: the switch that moves next tells the other panels, and the banner goes
@@ -641,17 +647,17 @@ async function homeChecks() {
     refuse("updateProject", false);
     await clickAt(toggle);
     await until("the switch to move", () => toggle.getAttribute("aria-checked") !== before);
-    await until("the service's banner to go", () => !alert("Flows can't drive projects"));
+    await until("the service's banner to go", () => !errorTitled("Flows can't drive projects"));
     await settle();
     const after = {
         moved: toggle.getAttribute("aria-checked"),
         switchFailure: alert("Couldn't turn the flows")?.textContent ?? null,
-        banner: alert("Flows can't drive projects")?.textContent ?? null,
+        banner: errorTitled("Flows can't drive projects")?.textContent ?? null,
     };
     await shoot("home-recovered");
     // the card's switch by its words: it flips, and the project doesn't open
     const byLabel = await flipByLabel(toggle);
-    return { before, failed, stayed, banner, after, byLabel, stayedHome: Boolean(byText("button", "New project")) };
+    return { before, failed, stayed, banner, bannerToasted, after, byLabel, stayedHome: Boolean(byText("button", "New project")) };
 }
 
 async function run(): Promise<Record<string, unknown>> {

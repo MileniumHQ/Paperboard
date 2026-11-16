@@ -8,6 +8,7 @@ import {
     PaperContextMenuItem,
     PaperEffect,
     PaperEmptyState,
+    PaperError,
     PaperFlex,
     PaperIcon,
     PaperLoader,
@@ -19,7 +20,6 @@ import {
     PaperText,
     PaperToggle,
     createAction,
-    createFailureToast,
     useContextMenuState,
 } from "@mileniumhq/paperui";
 import CanvasPreview from "./CanvasPreview";
@@ -41,12 +41,22 @@ export default function ProjectsHome(props: { projects: ProjectsState; onOpen: (
     // a switch flips on its own, never waiting on another change, and moves once the service says so
     const switching = createAction();
     const setEnabled = (id: string, enabled: boolean) => switching.run(switchFailed(enabled), () => props.projects.setEnabled(id, enabled));
-    // what the service can't do stands until it says it is over
-    // the service reads its projects as it starts; after that failed, only when asked again.
-    // The toast goes while it reads again and comes back with why, if that failed too
+    // what the service can't do stands, said in place, until it says it is over.
+    // The service reads its projects as it starts; after that failed, only when asked again,
+    // and a read again that is refused says why in the same place
     const reading = createAction({ toast: false });
-    createFailureToast(() => (reading.busy() ? null : (reading.error()?.message ?? props.projects.state().projectsError)), { title: "Couldn't read the projects" });
-    createFailureToast(() => props.projects.state().blocksError, { title: "Flows can't drive projects" });
+    // the service's word is what stands: a refused read again only says it newer
+    const unreadable = () => props.projects.state().projectsError && (reading.error()?.message ?? props.projects.state().projectsError);
+    const readAgain = () => void reading.run("Couldn't read the projects", props.projects.readAgain);
+    const unreadableError = (fill: boolean) => (
+        <PaperError
+            fill={fill}
+            title="Couldn't read the projects"
+            error={unreadable()}
+            action={{ label: "Try again", disabled: reading.busy(), onClick: readAgain }}
+        />
+    );
+    const loadAgain = () => void props.projects.load();
 
     const menu = useContextMenuState("below-right");
     const [menuFor, setMenuFor] = createSignal<ProjectSummary | null>(null);
@@ -79,30 +89,40 @@ export default function ProjectsHome(props: { projects: ProjectsState; onOpen: (
                     {/* an empty page offers this in its empty state instead */}
                     <Show when={props.projects.kept().length > 0}>{newProject()}</Show>
                 </PaperPageHeader>
+                <Show when={props.projects.state().blocksError}>
+                    {(why) => <PaperError title="Flows can't drive projects" error={why()} />}
+                </Show>
+                {/* a list already on screen stays, under why it couldn't be read again */}
+                <Show when={props.projects.ready() && props.projects.loadError()}>
+                    {(err) => (
+                        <PaperError
+                            title="Couldn't load the projects"
+                            error={err()}
+                            action={{ label: "Try again", disabled: props.projects.loading(), onClick: loadAgain }}
+                        />
+                    )}
+                </Show>
+                <Show when={props.projects.kept().length > 0 && unreadable()}>{unreadableError(false)}</Show>
                 <Show
                     when={props.projects.ready()}
                     fallback={
                         <Show when={props.projects.loadError()} fallback={<PaperLoader loaderStatus="indeterminate" label="Loading projects" />}>
-                            <PaperEmptyState icon="error" title="Couldn't load">
-                                <PaperButton onClick={() => void props.projects.load()}>Try again</PaperButton>
-                            </PaperEmptyState>
+                            {(err) => (
+                                <PaperError
+                                    fill
+                                    title="Couldn't load the projects"
+                                    error={err()}
+                                    action={{ label: "Try again", disabled: props.projects.loading(), onClick: loadAgain }}
+                                />
+                            )}
                         </Show>
                     }
                 >
                     <Show
                         when={props.projects.kept().length > 0}
                         fallback={
-                            // unreadable is not empty: the toast says why
-                            <Show
-                                when={!props.projects.state().projectsError}
-                                fallback={
-                                    <PaperEmptyState icon="error" title="Couldn't load">
-                                        <PaperButton disabled={reading.busy()} onClick={() => void reading.run("Couldn't read the projects", props.projects.readAgain)}>
-                                            Try again
-                                        </PaperButton>
-                                    </PaperEmptyState>
-                                }
-                            >
+                            // unreadable is not empty: it says why, in place of the list
+                            <Show when={!unreadable()} fallback={unreadableError(true)}>
                                 <PaperEmptyState icon="extension" title="No projects yet" description="A project holds flows built from blocks, which run when something happens in any panel, or when you click Run.">
                                     {newProject()}
                                 </PaperEmptyState>
