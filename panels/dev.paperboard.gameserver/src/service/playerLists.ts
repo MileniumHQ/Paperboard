@@ -28,6 +28,8 @@ import {
     type BedrockNaming,
 } from "../core/bedrock";
 import { PANEL_ID } from "./types";
+import { waitForLine } from "../games/minecraft/saving";
+import { sendServerCommand } from "./lifecycle";
 
 export type PlayerFlag = "op" | "whitelist";
 
@@ -72,13 +74,14 @@ async function readList(ctx: Server, path: string): Promise<ListEntry[]> {
 }
 
 /**
- * Whether banned-players.json has a player of this name, or null while the
- * server is writing it: it rewrites the file in place, so a read during the
- * write finds it empty or cut short.
+ * Whether one of the server's lists has a player of this name, or null while
+ * the server is writing it: it rewrites the file in place, so a read during
+ * the write finds it empty or cut short.
  */
-export async function isBanned(ctx: Server, name: string): Promise<boolean | null> {
-    const content = await ctx.files.read(LIST_FILES.banned, PANEL_ID);
-    // none written yet: nobody is banned
+export async function isListed(ctx: Server, list: keyof typeof LIST_FILES, name: string): Promise<boolean | null> {
+    const file = LIST_FILES[list];
+    const content = await ctx.files.read(file, PANEL_ID);
+    // none written yet: nobody is on it
     if (content === null) return false;
     let parsed: unknown;
     let whole = true;
@@ -89,10 +92,57 @@ export async function isBanned(ctx: Server, name: string): Promise<boolean | nul
         whole = false;
     }
     if (!whole) return null;
-    if (!Array.isArray(parsed)) throw new Error(`${LIST_FILES.banned} is not a list of players`);
+    if (!Array.isArray(parsed)) throw new Error(`${file} is not a list of players`);
     const wanted = name.toLowerCase();
     return parsed.some((entry) => !!entry && typeof entry === "object" && typeof entry.name === "string" && entry.name.toLowerCase() === wanted);
 }
+
+// A running server writes its list as it takes a change (op, whitelist, ban),
+// then says so: "Made Steve a server operator", "Banned Steve: reason". A
+// refusal is a line of its own, which the call fails with. A plugin may say
+// it in words of its own, so the list it wrote is the record: watched while
+// the line is awaited, and read once more when none came. A kick or a kill
+// has no list: only its line says it happened.
+const ANSWER_MS = 15_000;
+const LIST_POLL_MS = 250;
+const REFUSED = /Nothing changed|That player does not exist|Unknown player|No player was found|No entity was found|That player cannot be found|Could not |Player is (already|not) whitelisted/i;
+
+/** a list `command` changes: `name` is to be on it, or off it */
+export interface ListChange { list: keyof typeof LIST_FILES; name: string; on: boolean }
+const LIST_NAMES: Record<keyof typeof LIST_FILES, string> = { whitelist: "the whitelist", op: "the operator list", banned: "the ban list" };
+
+/** Sends a console command and resolves once the server has taken it; fails with its refusal, or with no answer and no change to the list. */
+export async function answeredCommand(ctx: Server, command: string, done: RegExp, what: string, change?: ListChange): Promise<void> {
+    const recorded = async () => !!change && (await isListed(ctx, change.list, change.name)) === change.on;
+    // a list that already shows it can only be refused, and the refusal says why
+    const watchList = !!change && !(await recorded());
+    const answer = waitForLine(ctx, (line) => done.test(line) || REFUSED.test(line), ANSWER_MS, what);
+    // however the call ends, nothing waits on the line after it
+    try {
+        await sendServerCommand(ctx, command);
+        let answered = false;
+        const said = answer.done.finally(() => (answered = true));
+        while (watchList && !answered) {
+            if (await recorded()) return;
+            // quiet: said's failure is read below, where it is awaited
+            await Promise.race([said.catch(() => undefined), new Promise((resolve) => setTimeout(resolve, LIST_POLL_MS))]);
+        }
+        let line: string;
+        try {
+            line = await said;
+        } catch (err) {
+            if (!change) throw err;
+            if (await recorded()) return;
+            throw new Error(`${errorMessage(err)}, and ${LIST_NAMES[change.list]} ${change.on ? "does not have" : "still has"} ${change.name}`);
+        }
+        if (!done.test(line)) throw new Error(`The server refused: ${line.replace(/^(?:\[[^\]]*\]\s*)+:?\s*(?:System chat:\s*)?/, "")}`);
+    } finally {
+        answer.cancel();
+    }
+}
+
+/** a player's name in a pattern of the server's answer */
+export const nameInAnswer = (name: string) => name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 function entryUuid(entry: ListEntry): string | null {
     return typeof entry.uuid === "string" && UUID_RE.test(entry.uuid.toLowerCase())
@@ -322,6 +372,17 @@ export function playerFlagCommand(flag: PlayerFlag, name: string, on: boolean): 
         : `whitelist ${on ? "add" : "remove"} ${name}`;
 }
 
+/** Ops or whitelists a Java player on a running server, or takes it back; resolves once the server has, fails with its refusal. */
+async function flagThroughConsole(ctx: Server, flag: PlayerFlag, name: string, on: boolean): Promise<void> {
+    const who = nameInAnswer(name);
+    // "Made Steve a server operator", "Added Steve to the whitelist"; 1.12 says "Opped Steve" and "De-opped Steve"
+    const done = flag === "op"
+        ? new RegExp(on ? `\\b(Made ${who} a server operator|Opped ${who})\\b` : `\\b(Made ${who} no longer a server operator|De-opped ${who})\\b`, "i")
+        : new RegExp(`\\b${on ? `Added ${who} to` : `Removed ${who} from`} the whitelist\\b`, "i");
+    const what = flag === "op" ? `that ${name} ${on ? "is" : "is no longer"} an operator` : `that ${name} is ${on ? "on" : "off"} the whitelist`;
+    await answeredCommand(ctx, playerFlagCommand(flag, name, on), done, what, { list: flag, name, on });
+}
+
 // Floodgate reads its argument as one quoted-or-bare word
 function floodgateArgument(gamertag: string): string {
     return gamertag.includes(" ") ? `"${gamertag}"` : gamertag;
@@ -370,14 +431,13 @@ async function bedrockFlagCommand(
 
 /**
  * Ops or whitelists a player, or takes it away. Through the console while
- * the server runs (`send` is the console); in the file while it is stopped.
+ * the server runs, done once the server has; in the file while it is stopped.
  * Between the two (stopping, restarting) the server may rewrite the file
  * over the edit, so it waits. `naming` is Floodgate's, null without it: a
  * name with its prefix is a Bedrock player then.
  */
 export async function setPlayerFlag(
     ctx: Server,
-    send: (command: string) => Promise<void>,
     naming: BedrockNaming | null,
     flag: PlayerFlag,
     rawName: unknown,
@@ -398,7 +458,8 @@ export async function setPlayerFlag(
     }
     const status = ctx.state.serverStatus;
     if (status === "online" || status === "starting") {
-        await send(gamertag && naming ? await bedrockFlagCommand(ctx, flag, name, gamertag, naming, on, uuid) : playerFlagCommand(flag, name, on));
+        if (gamertag && naming) await sendServerCommand(ctx, await bedrockFlagCommand(ctx, flag, name, gamertag, naming, on, uuid));
+        else await flagThroughConsole(ctx, flag, name, on);
         return;
     }
     if (status !== "offline") {

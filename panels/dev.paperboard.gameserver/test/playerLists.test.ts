@@ -5,7 +5,8 @@ import { startTestDaemon, type TestDaemon } from "./helpers/crane";
 import { minecraftServer, type McServer } from "./helpers/minecraft";
 import { loopbackServer, routeHost, type LoopbackServer } from "./helpers/http";
 import { currentPlayerNames, setPlayerFlag } from "../src/service/playerLists";
-import { sendServerCommand, startServerInstance, stopServerInstance } from "../src/service/lifecycle";
+import { startServerInstance, stopServerInstance } from "../src/service/lifecycle";
+import { punishPlayer } from "../src/games/minecraft/calls";
 
 const XUID = "2535428504476914";
 let daemon: TestDaemon;
@@ -27,6 +28,7 @@ afterAll(async () => {
 });
 
 const NAMING = { prefix: ".", replaceSpaces: true };
+const STEVE = "8667ba71-b85a-4004-af54-457a9734eed7";
 // new UUID(0, xuid), as Floodgate builds a Bedrock player's uuid
 const FLOODGATE_UUID = (() => {
     const hex = BigInt(XUID).toString(16).padStart(16, "0");
@@ -36,7 +38,7 @@ const FLOODGATE_UUID = (() => {
 const read = (mc: McServer, file: string) => fs.readFileSync(path.join(mc.dir, file), "utf8");
 const exists = (mc: McServer, file: string) => fs.existsSync(path.join(mc.dir, file));
 const flag = (mc: McServer, which: "op" | "whitelist", name: string, on = true, naming: typeof NAMING | null = null) =>
-    setPlayerFlag(mc.server, (cmd) => sendServerCommand(mc.server, cmd), naming, which, name, on);
+    setPlayerFlag(mc.server, naming, which, name, on);
 
 async function running(mc: McServer): Promise<void> {
     await startServerInstance(mc.server);
@@ -87,15 +89,19 @@ describe("op and whitelist edits", () => {
         expect(read(mc, "whitelist.json")).toBe("[{\"name\": \"Steve\",");
     });
 
-    test("a running server gets console commands and its files are left to it", async () => {
-        const mc = minecraftServer({ files: { "server.properties": "online-mode=false\n" } });
+    test("a running server takes them through its console, done once it has, and a change it refuses fails with its words", async () => {
+        const mc = minecraftServer({ files: { "server.properties": "online-mode=true\n", "usercache.json": JSON.stringify([{ name: "Steve", uuid: STEVE, expiresOn: "2030-01-01 00:00:00 +0000" }]) } });
         await running(mc);
         await flag(mc, "op", "Steve");
-        await flag(mc, "whitelist", "Steve", false);
-        await mc.received("whitelist remove Steve");
-        expect(mc.commands().filter((c) => c !== "list")).toEqual(["op Steve", "whitelist remove Steve"]);
-        expect(exists(mc, "ops.json")).toBe(false);
-        expect(exists(mc, "whitelist.json")).toBe(false);
+        // the server wrote it, as it writes its own lists
+        expect(JSON.parse(read(mc, "ops.json"))).toEqual([{ uuid: STEVE, name: "Steve", level: 4, bypassesPlayerLimit: false }]);
+        await expect(flag(mc, "whitelist", "Steve", false)).rejects.toThrow("The server refused: Player is not whitelisted");
+        // an online-mode server finds no account by that name
+        await expect(flag(mc, "whitelist", "Nobody")).rejects.toThrow("The server refused: That player does not exist");
+        // Steve is not on it, so there is nobody to kick
+        await expect(punishPlayer(mc.server, "kick", "Steve")).rejects.toThrow("The server refused: No player was found");
+        expect(mc.commands().filter((c) => c !== "list")).toEqual(["op Steve", "whitelist remove Steve", "whitelist add Nobody", "kick Steve"]);
+        expect(JSON.parse(read(mc, "whitelist.json"))).toEqual([]);
         await stop(mc);
     });
 

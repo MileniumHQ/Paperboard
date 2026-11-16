@@ -65,7 +65,7 @@ describe("console and property injection", () => {
     });
 
     test("player names, kick and ban reasons and chat must be one line, and the server receives none that are not", async () => {
-        const mc: McServer = minecraftServer();
+        const mc: McServer = minecraftServer({ files: { "fake-server.json": JSON.stringify({ players: ["Steve"] }) } });
         await startServerInstance(mc.server);
         await mc.server.waitFor((s) => s.serverStatus === "online", "the server to come online");
         const ctx = mc.server;

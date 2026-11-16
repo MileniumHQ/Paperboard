@@ -31,7 +31,7 @@ export type PlayerFlagField = "op" | "whitelisted";
 
 export function createPlayers() {
     const server = useServer();
-    const { calls, onlinePlayerNames, seenPlayerNames, serverStatus } = server;
+    const { calls, onlinePlayerNames, seenPlayerNames } = server;
     const [players, setPlayers] = createSignal<PlayerInfo[]>([]);
     // banned players by lowercased name, with the reason the ban list gives
     const [bannedNames, setBannedNames] = createSignal<Map<string, string | null>>(new Map());
@@ -232,11 +232,11 @@ export function createPlayers() {
         const failure = field === "op" ? (value ? "made an operator" : "removed as an operator") : value ? "whitelisted" : "removed from the whitelist";
         const player = find(playerName);
         if (!(await callPlayerAction(actionId, playerName, failure, () => calls[actionId]({ player: playerName, uuid: player?.uuid })))) return false;
-        markFlag(playerName, player?.uuid, field, value);
-        // a stopped server's files were edited in place: read them back.
-        // A running one writes them a moment after the command, so the
-        // switch shows what it will write
-        if (serverStatus() === "offline") await loadRoster();
+        // the service answers once the list is written, by the server or itself: read it back.
+        // Floodgate writes a Bedrock player's whitelist a moment later, so the switch keeps
+        // what it will write; a player taken off every list has left the roster
+        await loadRoster();
+        if (value || find(playerName)) markFlag(playerName, player?.uuid, field, value);
         return true;
     };
 
@@ -255,16 +255,12 @@ export function createPlayers() {
      */
     const whitelistName = async (name: string): Promise<void> => {
         await calls.whitelistPlayer({ player: name });
-        if (serverStatus() === "offline") {
-            // the file now holds the account's own casing
-            await loadRoster();
-            const added = players().find((p) => p.name.toLowerCase() === name.toLowerCase());
-            setOpenName(added ? nameOf(added) : name);
-            return;
-        }
+        // the list now holds the account's own casing; Floodgate writes a Bedrock player's a moment later
+        await loadRoster();
+        const added = players().find((p) => p.name.toLowerCase() === name.toLowerCase());
         batch(() => {
-            markFlag(name, undefined, "whitelisted", true);
-            setOpenName(name);
+            if (!added) markFlag(name, undefined, "whitelisted", true);
+            setOpenName(added ? nameOf(added) : name);
         });
     };
 

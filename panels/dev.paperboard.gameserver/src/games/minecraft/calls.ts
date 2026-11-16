@@ -1,9 +1,7 @@
 import type { Server } from "../../service/server";
 import { minecraftSoftware } from "./index";
 import { sharedCalls, type ServerCalls } from "../../service/calls";
-import { errorMessage } from "../../service/api";
 import { sendServerCommand } from "../../service/lifecycle";
-import { waitForLine } from "./saving";
 import {
     queryOnlinePlayers,
     queryPlayerStats,
@@ -30,7 +28,7 @@ import { listMapRegions, renderMapTile } from "../../service/map";
 import { discardWorldTransfer, exportWorld, importWorld } from "../../service/worldTransfer";
 import type { MapDimension } from "../../core/map";
 import { listPlayerStats } from "../../service/playerStats";
-import { currentPlayerNames, isBanned, listRoster, setPlayerFlag, type PlayerFlag } from "../../service/playerLists";
+import { answeredCommand, currentPlayerNames, listRoster, nameInAnswer, setPlayerFlag, type PlayerFlag } from "../../service/playerLists";
 import { getHeadDataUrl } from "../../service/skins";
 import { queryGamerules, setGamerule } from "../../service/gamerules";
 import { readGameOptions, writeGameOptions } from "./gameOptions";
@@ -72,64 +70,32 @@ const bedrockNaming = (ctx: Server) =>
 
 // What the calls and the blocks of a Minecraft server both run.
 
-// The server writes banned-players.json as it takes a ban or a pardon, then
-// says so: "Banned Steve: reason" and "Unbanned Steve" (1.12 adds "player").
-// A refusal is a line of its own, which the call fails with. A plugin may
-// say it in words of its own, so the list it wrote is the record: watched
-// while the line is awaited, and read once more when none came. The server
-// rewrites the list in place, so a read during its write is no answer yet.
-const BAN_ANSWER_MS = 15_000;
-const BAN_LIST_POLL_MS = 250;
-const BAN_REFUSED = /Nothing changed|That player does not exist|Unknown player|No player was found|Could not (un)?ban/i;
-
+// "Banned Steve: reason" and "Unbanned Steve" (1.12 adds "player")
 async function banCommand(ctx: Server, verb: "ban" | "pardon", name: string, command: string): Promise<void> {
-    const done = new RegExp(`\\b${verb === "ban" ? "Banned" : "Unbanned"} (player )?${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i");
-    const recorded = async () => (await isBanned(ctx, name)) === (verb === "ban");
-    // a list that already shows it can only be refused, and the refusal says why
-    const watchList = !(await recorded());
-    const answer = waitForLine(ctx, (line) => done.test(line) || BAN_REFUSED.test(line), BAN_ANSWER_MS, verb === "ban" ? `the ban of ${name}` : `the pardon of ${name}`);
-    // however the call ends, nothing waits on the line after it
-    try {
-        await sendServerCommand(ctx, command);
-        let answered = false;
-        const said = answer.done.finally(() => (answered = true));
-        while (watchList && !answered) {
-            if (await recorded()) return;
-            // quiet: said's failure is read below, where it is awaited
-            await Promise.race([said.catch(() => undefined), new Promise((resolve) => setTimeout(resolve, BAN_LIST_POLL_MS))]);
-        }
-        let line: string;
-        try {
-            line = await said;
-        } catch (err) {
-            if (await recorded()) return;
-            throw new Error(`${errorMessage(err)}, and the ban list ${verb === "ban" ? "does not have" : "still has"} ${name}`);
-        }
-        if (!done.test(line)) throw new Error(`The server refused: ${line.replace(/^\[[^\]]*\]\s*(\[[^\]]*\]:?\s*)?/, "")}`);
-    } finally {
-        answer.cancel();
-    }
+    const done = new RegExp(`\\b${verb === "ban" ? "Banned" : "Unbanned"} (player )?${nameInAnswer(name)}\\b`, "i");
+    await answeredCommand(ctx, command, done, verb === "ban" ? `the ban of ${name}` : `the pardon of ${name}`, { list: "banned", name, on: verb === "ban" });
 }
 
-/** Kicks or bans a player, with the reason they see when one is given; a ban resolves once the server has recorded it. */
+/** Kicks or bans a player, with the reason they see when one is given, once the server has; a ban once it has recorded it. */
 export async function punishPlayer(ctx: Server, verb: "kick" | "ban", player: unknown, reason?: unknown): Promise<void> {
     const name = assertPlayerName(player);
     const why = reason ? assertSingleLine(String(reason).trim(), `${verb} reason`) : "";
     const command = why ? `${verb} ${name} ${why}` : `${verb} ${name}`;
     if (verb === "ban") await banCommand(ctx, "ban", name, command);
-    else await sendServerCommand(ctx, command);
+    // "Kicked Steve: reason"; 1.12 says "Kicked Steve from the game"
+    else await answeredCommand(ctx, command, new RegExp(`\\bKicked ${nameInAnswer(name)}\\b`, "i"), `the kick of ${name}`);
 }
 
-/** Pardons or kills a player; a pardon resolves once the server has recorded it. */
+/** Pardons or kills a player, once the server has; a pardon once it has recorded it. */
 export async function playerCommand(ctx: Server, verb: "pardon" | "kill", player: unknown): Promise<void> {
     const name = assertPlayerName(player);
     if (verb === "pardon") await banCommand(ctx, "pardon", name, `pardon ${name}`);
-    else await sendServerCommand(ctx, `kill ${name}`);
+    else await answeredCommand(ctx, `kill ${name}`, new RegExp(`\\bKilled ${nameInAnswer(name)}\\b`, "i"), `the kill of ${name}`);
 }
 
 /** Makes a player an operator or whitelisted, or takes it back; edits the lists' files while offline. */
 export async function flagPlayer(ctx: Server, flag: PlayerFlag, player: unknown, on: boolean, uuid?: string): Promise<void> {
-    await setPlayerFlag(ctx, (cmd) => sendServerCommand(ctx, cmd), await bedrockNaming(ctx), flag, player, on, uuid);
+    await setPlayerFlag(ctx, await bedrockNaming(ctx), flag, player, on, uuid);
 }
 
 /** Makes a world the one the server starts with; a new name is made on the next start. */

@@ -70,14 +70,14 @@ describe("ports", () => {
             expect(property(mc, "server-port")).toBe(String(moved));
             expect((await readGameOptions(mc.server))["server-port"]).toBe(held.port);
             // and saves it again with its settings mid-run
-            await sendServerCommand(mc.server, "whitelist off");
-            await mc.server.waitFor((s) => s.serverEntries.some((e) => String(e.content).includes("Whitelist is now turned off")), "the server to save its settings");
+            await sendServerCommand(mc.server, "whitelist on");
+            await mc.server.waitFor((s) => s.serverEntries.some((e) => String(e.content).includes("Whitelist is now turned on")), "the server to save its settings");
             expect(property(mc, "server-port")).toBe(String(moved));
             await stop();
             expect(mc.server.state.portMoves).toEqual([]);
             // the user's choice is back, beside every other key, once the stop has settled the server's files
             expect((await readGameOptions(mc.server))["server-port"]).toBe(held.port);
-            expect([property(mc, "server-port"), property(mc, "motd"), property(mc, "max-players"), property(mc, "white-list")]).toEqual([String(held.port), "\\u00A7aHi", "7", "false"]);
+            expect([property(mc, "server-port"), property(mc, "motd"), property(mc, "max-players"), property(mc, "white-list")]).toEqual([String(held.port), "\\u00A7aHi", "7", "true"]);
 
             // still taken: the next start asks for the chosen port again, and moves again
             expect(await run("the server to come online on a moved port again")).toBeGreaterThan(held.port);

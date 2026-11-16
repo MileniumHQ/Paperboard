@@ -3,7 +3,8 @@
 // server that refuses says why on the tab instead of looking banned, also
 // on a phone, where the player's page covers the roster. A ban plugin that
 // words its answer its own way is judged by the list it wrote, which is
-// read again while the server is still writing it. A head that
+// read again while the server is still writing it. An operator or whitelist
+// change is the same: done once the server wrote it, refused in its words. A head that
 // could not be looked up says why on the head, and in words on the player's page.
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import * as fs from "node:fs";
@@ -52,7 +53,7 @@ const inspectorShows = (name: string, isBanned: boolean) =>
     `[...document.querySelectorAll("*")].some((el) => el.children.length === 0 && el.textContent === ${JSON.stringify(name)}) && !!${button(isBanned ? "Pardon" : "Ban")}`;
 
 describe("the Players tab's bans", () => {
-    test("show what the server recorded, and a refused ban says why", async () => {
+    test("show what the server recorded, and a ban, operator or whitelist change it refuses says why", async () => {
         const config = path.join(daemon.dataDir, "configs", `${PANEL_ID}.json`);
         fs.mkdirSync(path.dirname(config), { recursive: true });
         fs.writeFileSync(config, JSON.stringify({ version: 2, serversDirectory: SERVERS, servers: [{ id: "s-mc", name: "Survival", game: "minecraft", directory: `${SERVERS}/s-mc`, createdAt: 0, settings: { configured: true, software: "paper", version: "1.21.1" } }] }));
@@ -60,8 +61,8 @@ describe("the Players tab's bans", () => {
         writeTree(dir, {
             "server.jar": "jar",
             "eula.txt": "eula=true\n",
-            // offline mode: no names are looked up from Mojang
-            "server.properties": "online-mode=false\n",
+            // online mode: the server finds a name only in its usercache (Mojang is not reachable from it), so Ghost has no account
+            "server.properties": "online-mode=true\n",
             "whitelist.json": JSON.stringify([{ uuid: STEVE, name: "Steve" }, { uuid: GHOST, name: "Ghost" }]),
             "usercache.json": JSON.stringify([{ name: "Steve", uuid: STEVE, expiresOn: "2030-01-01 00:00:00 +0000" }]),
             // a slow write of the ban list: it is cut short while the service waits on it
@@ -72,7 +73,9 @@ describe("the Players tab's bans", () => {
         await gameServerService.ready;
         const served = await servePanel(daemon);
         const exited = new Promise<void>((resolve) => processApi.onExit("s-mc-mc-server", () => resolve()));
-        const banned = () => (JSON.parse(fs.readFileSync(path.join(dir, "banned-players.json"), "utf8")) as { name: string }[]).map((entry) => entry.name);
+        const names = (list: string) => (JSON.parse(fs.readFileSync(path.join(dir, list), "utf8")) as { name: string }[]).map((entry) => entry.name);
+        const banned = () => names("banned-players.json");
+        const ops = () => names("ops.json");
         await serverCalls("s-mc").startServer();
         const page = await openPage(`${served.url}/?server=s-mc`);
         try {
@@ -130,6 +133,22 @@ describe("the Players tab's bans", () => {
             await page.waitFor(inspectorShows("Steve", false), "Steve shown pardoned");
             expect(banned()).toEqual([]);
             expect(await page.evaluate<boolean>(`document.body.innerText.includes("was not pardoned")`)).toBe(false);
+
+            // the server makes him an operator: the switch is the list it wrote
+            const operator = `[...document.querySelectorAll("[role=switch]")].find((el) => !el.closest("[inert]") && el.closest("li, [class*=PaperSettingItem]")?.innerText.includes("Operator"))`;
+            await page.evaluate(`${operator}.click()`);
+            await page.settled();
+            expect(ops()).toEqual(["Steve"]);
+            expect(await page.evaluate<string>(`${operator}.getAttribute("aria-checked")`)).toBe("true");
+
+            // a name the server finds no account for is refused in the dialog, and nobody is shown whitelisted
+            await page.evaluate(`${button("Whitelist")}.click()`);
+            await page.waitFor(`!!document.querySelector("[role=dialog] input")`, "the whitelist dialog");
+            await page.type("[role=dialog] input", "Nobody");
+            await page.evaluate(`${button("Add", true)}.click()`);
+            await page.waitFor(`document.querySelector("[role=dialog]")?.innerText.includes("That player does not exist")`, "the server's refusal in the dialog");
+            await page.settled();
+            expect(await page.evaluate<boolean>(`!!document.querySelector('input[name=playersList][value="Nobody"]')`)).toBe(false);
             expect(page.exceptions).toEqual([]);
         } finally {
             await page.close();

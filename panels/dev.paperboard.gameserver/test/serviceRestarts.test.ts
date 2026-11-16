@@ -96,7 +96,7 @@ describe("servers through restarts", () => {
         expect(after.onlinePlayers.sort()).toEqual(["alice", "bob"]);
         // its uptime carries on from its start, not from the service's
         expect(after.onlineSince).toBe(before.onlineSince);
-        expect(after.serverEntries.map((e) => e.content)).toContain("[12:00:00] [Server thread/INFO]: [Server] before the restart");
+        expect(after.serverEntries.map((e) => e.content)).toContain("[12:00:00] [Server thread/INFO]: [Not Secure] [Server] before the restart");
         // the same process: adopted, not started again
         expect(runs("s-a")).toEqual([pid!]);
         expect(alive(pid!)).toBe(true);
