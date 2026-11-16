@@ -5,8 +5,8 @@
 //
 // The screenshots are from discord.py's documentation (MIT); see
 // assets/portal/CREDITS.md.
-import { Show, type JSX } from "solid-js";
-import { PaperButton, PaperFlex, PaperIcon, PaperQuote, PaperText, PaperWizard, PaperWizardStep } from "@mileniumhq/paperui";
+import type { JSX } from "solid-js";
+import { PaperButton, PaperFlex, PaperIcon, PaperText, PaperWizard, PaperWizardStep } from "@mileniumhq/paperui";
 import createApplication from "../assets/portal/1-create-application.webp";
 import botTab from "../assets/portal/2-bot-tab.webp";
 import resetToken from "../assets/portal/3-reset-token.webp";
@@ -83,12 +83,7 @@ export default function SetupGuide(props: {
                                 <PaperText preset="title" as="h2">Paste the token</PaperText>
                                 <PaperText preset="body">It's kept in Paperboard's vault, not in the bot's files.</PaperText>
                             </PaperFlex>
-                            <TokenField value={token()} onInput={setToken} appId={appId()} />
-                            <Show when={error()}>
-                                {(text) => (
-                                    <PaperQuote variant="danger" icon="error" title="Bot not added" role="alert">{text()}</PaperQuote>
-                                )}
-                            </Show>
+                            <TokenField value={token()} onInput={setToken} appId={appId()} error={error()} />
                         </PaperFlex>
                     </PaperWizardStep>
                 </PaperWizard>
