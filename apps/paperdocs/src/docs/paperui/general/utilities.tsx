@@ -182,24 +182,14 @@ formatByteProgress(48_234_496, 196_083_712);      // "46 / 187 MB"`}
                 </tbody>
             </PaperTable>
             <PaperCode block language="tsx">
-{`import { createSignal, Show } from "solid-js";
-import { copyText, PaperButton, PaperText } from "@mileniumhq/paperui";
+{`import { copyText, PaperButton, showError } from "@mileniumhq/paperui";
 
 export function CopyAddress(props: { address: string }) {
-    const [failed, setFailed] = createSignal(false);
-
     const copy = async () => {
-        setFailed(!(await copyText(props.address)));
+        if (!(await copyText(props.address))) showError("Couldn't copy the address", "The clipboard refused it.");
     };
 
-    return (
-        <>
-            <PaperButton onClick={() => void copy()}>Copy address</PaperButton>
-            <Show when={failed()}>
-                <PaperText preset="error">The address could not be copied.</PaperText>
-            </Show>
-        </>
-    );
+    return <PaperButton onClick={() => void copy()}>Copy address</PaperButton>;
 }`}
             </PaperCode>
 

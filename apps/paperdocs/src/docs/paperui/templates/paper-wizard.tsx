@@ -316,28 +316,25 @@ import type { WizardContextType } from "@mileniumhq/paperui";`}
             <PaperCode block language="tsx">
 {`import { createSignal, Show } from "solid-js";
 import {
+    createAction,
     PaperButton,
     PaperFlex,
     PaperInput,
     PaperModal,
-    PaperText,
     PaperWizard,
     PaperWizardStep,
 } from "@mileniumhq/paperui";
 
 export function CreateProject(props: { onCreate: (name: string) => Promise<void> }) {
     const [open, setOpen] = createSignal(false);
-    const [failure, setFailure] = createSignal("");
+    // a failure is a toast, shown in the dialog above its buttons, which stays open to try again
+    const creating = createAction();
 
-    const finish = async (data: Record<string, any>) => {
-        setFailure("");
-        try {
+    const finish = (data: Record<string, any>) =>
+        creating.run("Couldn't create the project", async () => {
             await props.onCreate(String(data.name));
             setOpen(false);
-        } catch (err) {
-            setFailure(err instanceof Error ? err.message : String(err));
-        }
-    };
+        });
 
     return (
         <>
@@ -348,9 +345,6 @@ export function CreateProject(props: { onCreate: (name: string) => Promise<void>
                         <PaperWizardStep index={0}>
                             <PaperFlex padding="double" gap="full">
                                 <PaperInput name="name" label="Name" fullWidth required />
-                                <Show when={failure()}>
-                                    <PaperText preset="error">{failure()}</PaperText>
-                                </Show>
                             </PaperFlex>
                         </PaperWizardStep>
                     </PaperWizard>

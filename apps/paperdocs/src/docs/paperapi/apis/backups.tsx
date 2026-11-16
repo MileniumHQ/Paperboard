@@ -172,9 +172,7 @@ onCleanup(backupApi.onProgress(PANEL_ID, (change) => setProgress(change.progress
     if (why === null) void backupApi.status(PANEL_ID).then((now) => setProgress(now.progress));
 }));
 
-<Show when={lost()}>
-    <PaperText preset="error" role="alert">Can't follow backups: {lost()}</PaperText>
-</Show>
+createFailureToast(lost, { title: "Can't follow backups" });
 
 <PaperButton disabled={progress() !== null}>
     {progress() ? backupProgressText(progress()!) : "Back Up Now"}

@@ -202,7 +202,7 @@ export function Example() {
                     <tr>
                         <td><PaperCode>error</PaperCode></td>
                         <td>2 (14 px), 400, danger color</td>
-                        <td>A failure shown next to what failed.</td>
+                        <td>Deprecated: a failure is a <PaperLink href="/docs/paperui/papertoast/">toast</PaperLink>, and a field's is <PaperLink href="/docs/paperui/paperinput/">PaperInput</PaperLink>'s <PaperCode>error</PaperCode>. The code check flags it, and <PaperCode>color="danger"</PaperCode> too.</td>
                     </tr>
                     <tr>
                         <td><PaperCode>caption</PaperCode></td>
@@ -228,7 +228,6 @@ export function Example() {
                     <PaperText preset="label" as="p">Label</PaperText>
                     <PaperText preset="text" as="p">Text</PaperText>
                     <PaperText preset="hint" as="p">Hint</PaperText>
-                    <PaperText preset="error" as="p">Error</PaperText>
                     <PaperText preset="section" as="p">Section</PaperText>
                     <PaperText preset="caption" as="p">Caption</PaperText>
                 </PaperFlex>
@@ -240,7 +239,6 @@ export function Example() {
     <PaperText preset="label" as="p">Label</PaperText>
     <PaperText preset="text" as="p">Text</PaperText>
     <PaperText preset="hint" as="p">Hint</PaperText>
-    <PaperText preset="error" as="p">Error</PaperText>
     <PaperText preset="section" as="p">Section</PaperText>
     <PaperText preset="caption" as="p">Caption</PaperText>
 </PaperFlex>`}
@@ -270,21 +268,8 @@ export function Example() {
 
             <PaperText preset="subheader" as="h3" id="failure-beside">A failure beside its field</PaperText>
             <PaperText preset="body" as="p">
-                Use the <PaperCode>error</PaperCode> preset for a short message next to what failed.
-                Use <PaperLink href="/docs/paperui/paperquote/">PaperQuote</PaperLink> for a message that has a title or needs dismissing.
+                Never as red text of your own. A field's failure is <PaperLink href="/docs/paperui/paperinput/#validation">PaperInput</PaperLink>'s <PaperCode>error</PaperCode>, said under the field, and any other failure is a <PaperLink href="/docs/paperui/papertoast/">toast</PaperLink>.
             </PaperText>
-            <PaperCode block language="tsx">
-{`import { Show } from "solid-js";
-import { PaperText } from "@mileniumhq/paperui";
-
-export function FieldError(props: { message: string | undefined }) {
-    return (
-        <Show when={props.message}>
-            <PaperText preset="error" as="p" role="alert">{props.message}</PaperText>
-        </Show>
-    );
-}`}
-            </PaperCode>
 
             <PaperText preset="subheader" as="h3" id="neighbors">Choosing a neighbor</PaperText>
             <PaperTextList>

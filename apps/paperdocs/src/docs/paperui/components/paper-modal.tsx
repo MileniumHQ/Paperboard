@@ -208,37 +208,29 @@ export function Example() {
             <PaperText preset="subheader" as="h3" id="header">Header rules</PaperText>
             <PaperTextList>
                 <li>The header renders when <PaperCode>noHeader</PaperCode> is off and there is a <PaperCode>title</PaperCode> or an <PaperCode>onClose</PaperCode>. A modal with neither has no header.</li>
-                <li>A failure that happens inside the modal belongs in its body, as a <PaperCode>PaperQuote</PaperCode> beside the control that failed. Keep the modal open so the user can retry.</li>
+                <li>A failure that happens inside the modal is a <PaperLink href="/docs/paperui/papertoast/">toast</PaperLink>, and a field's is that field's <PaperCode>error</PaperCode>. Keep the modal open so the user can retry.</li>
+                <li>While a modal is the top one, toasts show inside it, between its content and its footer, so they never cover its buttons. They take room of their own, and the content scrolls to make it. When it closes they go back to the page.</li>
             </PaperTextList>
 
             <PaperText preset="subheader" as="h2" id="examples">Examples</PaperText>
             <PaperText preset="subheader" as="h3" id="confirm">Confirm a destructive action</PaperText>
             <PaperText preset="body" as="p">
-                Run the action in a handler, say a failure in a toast, which shows over the modal, and close only on success.
+                Run the action with <PaperLink href="/docs/paperui/state/#create-action">createAction</PaperLink>, which says a failure in a toast inside the modal, above its buttons, and close only on success.
                 The gameserver panel confirms deleting a backup this way.
             </PaperText>
             <PaperCode block language="tsx">
-{`import { createSignal } from "solid-js";
-import { PaperButton, PaperModal, PaperText, showError } from "@mileniumhq/paperui";
+{`import { createAction, PaperButton, PaperModal, PaperText } from "@mileniumhq/paperui";
 
 export function DeleteConfirm(props: {
     open: boolean;
     onClose: () => void;
     remove: () => Promise<void>;
 }) {
-    const [busy, setBusy] = createSignal(false);
+    const deleting = createAction();
+    const busy = deleting.busy;
 
     async function confirm() {
-        setBusy(true);
-        try {
-            await props.remove();
-        } catch (err) {
-            showError("Couldn't delete the backup", err);
-            return;
-        } finally {
-            setBusy(false);
-        }
-        props.onClose();
+        if (await deleting.run("Couldn't delete the backup", props.remove)) props.onClose();
     }
 
     return (
@@ -294,7 +286,7 @@ export function Installing(props: { open: boolean; failed: boolean; onDismiss: (
 
             <PaperText preset="subheader" as="h3" id="neighbors">Choosing a neighbor</PaperText>
             <PaperTextList>
-                <li>A message about something that failed or needs attention in the page is <PaperLink href="/docs/paperui/paperquote/">PaperQuote</PaperLink>.</li>
+                <li>Something that failed is a <PaperLink href="/docs/paperui/papertoast/">toast</PaperLink>. A note that needs attention in the page is <PaperLink href="/docs/paperui/paperquote/">PaperQuote</PaperLink>.</li>
                 <li>A short list of actions at a point is <PaperLink href="/docs/paperui/papercontextmenu/">PaperContextMenu</PaperLink>.</li>
                 <li>A file shown over the page, such as an image, a video, or a text file, is <PaperLink href="/docs/paperui/paperpreview/">PaperPreview</PaperLink>.</li>
             </PaperTextList>

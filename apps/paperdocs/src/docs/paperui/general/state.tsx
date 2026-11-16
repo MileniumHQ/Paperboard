@@ -136,44 +136,41 @@ const openServer = (id: string) => {
 
             <PaperText preset="subheader" as="h2" id="create-action">createAction</PaperText>
             <PaperCode block language="tsx">
-{`createAction(options?: { message?: (err: unknown) => string }): Action;
+{`createAction(options?: { message?: (err: unknown) => string; toast?: boolean }): Action;
 
 interface Action {
     busy: Accessor<boolean>;
     error: Accessor<ActionFailure | null>;
     setError: (failure: ActionFailure | null) => void;
-    run(title: string, fn: () => Promise<unknown>, setFailure?: (failure: ActionFailure | null) => void): Promise<boolean>;
+    run(title: string, fn: () => Promise<unknown>): Promise<boolean>;
 }
 
 interface ActionFailure {
-    /** the action that didn't happen, such as "Server not removed" */
+    /** the action that didn't happen, such as "Couldn't remove the server" */
     title: string;
     /** the failure's own words */
     message: string;
 }`}
             </PaperCode>
             <PaperText preset="body" as="p">
-                An action a button starts. Make one per action, so each shows its own error next to its own button.
+                An action a button starts: busy while it runs, and a <PaperLink href="/docs/paperui/papertoast/">toast</PaperLink> when it didn't happen. Make one per action.
             </PaperText>
             <PaperCode block language="tsx">
-{`import { createAction, PaperButton, PaperText } from "@mileniumhq/paperui";
+{`import { createAction, PaperButton } from "@mileniumhq/paperui";
 
 const remove = createAction();
 
-<PaperButton disabled={remove.busy()} onClick={() => remove.run("Server not removed", () => service.calls.remove({ id }))}>
+<PaperButton disabled={remove.busy()} onClick={() => remove.run("Couldn't remove the server", () => service.calls.remove({ id }))}>
     Remove
-</PaperButton>
-<Show when={remove.error()}>
-    {(failure) => <PaperText color="danger">{failure().title}: {failure().message}</PaperText>}
-</Show>`}
+</PaperButton>`}
             </PaperCode>
             <PaperTextList>
                 <li><PaperCode>busy</PaperCode> is true while any run is going.</li>
-                <li>A run clears the last error as it starts. A failure becomes the title and the error's own message.</li>
-                <li>Pass <PaperCode>message</PaperCode> when a failure's own words aren't what the view shows, such as a system code like <PaperCode>EACCES</PaperCode> said as a sentence about the file. Give one formatter to every action of a panel.</li>
-                <li>Under a field, show only <PaperCode>error()?.message</PaperCode>: the field says what the action was.</li>
+                <li>A failure is a danger toast titled <PaperCode>title</PaperCode>, saying why (see <PaperLink href="/docs/paperui/papertoast/#show-error">showError</PaperLink>). It closes once a run of the same title goes through, so a save that works after one that didn't leaves no word that it failed. A run of another title leaves it standing.</li>
+                <li><PaperCode>error</PaperCode> holds the last run's failure, as its title and its own words, until the next run starts.</li>
+                <li>Pass <PaperCode>message</PaperCode> when a failure's own words aren't what the person should read, such as a system code like <PaperCode>EACCES</PaperCode> said as a sentence about the file. Give one formatter to every action of a panel.</li>
+                <li>Pass <PaperCode>toast: false</PaperCode> for a view that says the failure in place from <PaperCode>error</PaperCode>: a field's <PaperLink href="/docs/paperui/paperinput/#validation">error</PaperLink>, or a widget's own message.</li>
                 <li><PaperCode>run</PaperCode> resolves <PaperCode>true</PaperCode> when <PaperCode>fn</PaperCode> went through and <PaperCode>false</PaperCode> when it failed. It never rejects.</li>
-                <li>Pass <PaperCode>setFailure</PaperCode> to show a run's failure somewhere else, such as inside a confirmation that stays open. The action's own <PaperCode>error</PaperCode> is left alone.</li>
             </PaperTextList>
 
             <PaperText preset="subheader" as="h2" id="create-saved-value">createSavedValue</PaperText>

@@ -160,7 +160,7 @@ paper?.setTheme("dark"); // ThemeMode => void`}
             </PaperText>
             <PaperTextList>
                 <li>The console still gets the error. The provider doesn't prevent the event's default.</li>
-                <li>The same message is one toast while it shows, so a failure thrown on every pointer move doesn't fill the corner. Once that toast is closed, the next time it's thrown it shows again.</li>
+                <li>The same message is one toast while it shows, so a failure thrown on every pointer move doesn't fill the window. Once that toast is closed, the next time it's thrown it shows again.</li>
                 <li>An <PaperCode>error</PaperCode> event that carries no error isn't shown. The browser sends its own notes that way, such as a ResizeObserver loop that ran over.</li>
                 <li>A failure the panel catches and shows itself, in a toast or in place, never reaches the provider, so it isn't said twice. The provider is the last resort: catch what can fail and give it a title that says what didn't work.</li>
                 <li>A provider inside another, or a second one in the same document, adds no second listener.</li>

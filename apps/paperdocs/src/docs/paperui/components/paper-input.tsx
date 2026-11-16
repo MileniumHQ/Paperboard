@@ -115,10 +115,16 @@ export function Example() {
                         <td>Fills the container. Without it a single-line field is as wide as its content. A multiline field always fills the container.</td>
                     </tr>
                     <tr>
+                        <td><PaperCode>error</PaperCode></td>
+                        <td><PaperCode>string</PaperCode></td>
+                        <td>No default</td>
+                        <td>What is wrong with the value, said under the field. It draws the error styling, sets <PaperCode>aria-invalid</PaperCode>, and adds the message to the field's <PaperCode>aria-describedby</PaperCode>, after any of your own.</td>
+                    </tr>
+                    <tr>
                         <td><PaperCode>invalid</PaperCode></td>
                         <td><PaperCode>boolean</PaperCode></td>
                         <td>No default</td>
-                        <td>Forces the error styling and <PaperCode>aria-invalid</PaperCode> on or off. When set, <PaperCode>validate</PaperCode> is not consulted.</td>
+                        <td>Forces the error styling and <PaperCode>aria-invalid</PaperCode> on or off, with no words. When set, <PaperCode>validate</PaperCode> is not consulted. A field with something to say uses <PaperCode>error</PaperCode>.</td>
                     </tr>
                     <tr>
                         <td><PaperCode>validate</PaperCode></td>
@@ -179,9 +185,10 @@ export function Example() {
 
             <PaperText preset="subheader" as="h2" id="behavior">Behavior</PaperText>
             <PaperTextList>
-                <li>The wrapper <PaperCode>div</PaperCode> carries <PaperCode>data-invalid</PaperCode> and <PaperCode>data-disabled</PaperCode> ("true" or "false") for styling and tests.</li>
+                <li>The outer <PaperCode>div</PaperCode> holds the field and its error under it. It takes <PaperCode>class</PaperCode>, so a class that widens it widens the field, and it carries <PaperCode>data-invalid</PaperCode> and <PaperCode>data-disabled</PaperCode> ("true" or "false") for styling and tests.</li>
+                <li>An <PaperCode>error</PaperCode> wraps within the field's width. The field keeps its element and focus as the error comes and goes.</li>
                 <li>A field with no <PaperCode>label</PaperCode> has no accessible name of its own. Give it an <PaperCode>aria-label</PaperCode> or an <PaperCode>id</PaperCode> that a <PaperCode>label</PaperCode> element points at.</li>
-                <li>Validation is visual. A field that fails <PaperCode>validate</PaperCode> still submits and still fires its events, so check the value again before you act on it, and tell the user what is wrong.</li>
+                <li>Validation is visual. A field that fails <PaperCode>validate</PaperCode> still submits and still fires its events, so check the value again before you act on it, and say what is wrong with <PaperCode>error</PaperCode>.</li>
                 <li>The browser's own constraints, such as <PaperCode>required</PaperCode> and <PaperCode>pattern</PaperCode>, also draw the error styling when they fail.</li>
                 <li>In a <PaperLink href="/docs/paperui/papersettinglist/">PaperSettingList</PaperLink>, a named field without <PaperCode>value</PaperCode> takes its value from the list's record.</li>
             </PaperTextList>
@@ -223,20 +230,21 @@ export function Example() {
 
             <PaperText preset="subheader" as="h3" id="validation">Validation</PaperText>
             <PaperText preset="body" as="p">
-                Use <PaperCode>invalid</PaperCode> when you already hold the verdict, and <PaperCode>validate</PaperCode> for a rule on the text itself.
-                Show the reason in text next to the field.
+                Say what is wrong with <PaperCode>error</PaperCode>: a rule the text breaks, or the reason a save of this field was refused.
+                Never write the reason as red text of your own next to the field.
+                <PaperCode>validate</PaperCode> marks a rule on the text with no words, and <PaperCode>invalid</PaperCode> a verdict you already hold.
             </PaperText>
             <PaperCard data-docs-demo padding="double" surface="front">
                 <PaperFlex direction="column" gap="full">
-                    <PaperInput label="Port" defaultValue="80000" validate={(value) => Number(value) <= 65535} fullWidth />
-                    <PaperInput label="Name" defaultValue="Text" invalid fullWidth />
+                    <PaperInput label="Port" defaultValue="80000" error="Ports go up to 65535." fullWidth />
+                    <PaperInput label="Name" defaultValue="Survival" error="Another world is called Survival." fullWidth />
                 </PaperFlex>
             </PaperCard>
             <PaperCode block language="tsx">
-{`<PaperFlex direction="column" gap="full">
-    <PaperInput label="Port" defaultValue="80000" validate={(value) => Number(value) <= 65535} fullWidth />
-    <PaperInput label="Name" defaultValue="Text" invalid fullWidth />
-</PaperFlex>`}
+{`const [port, setPort] = createSignal("80000");
+const portError = () => (Number(port()) > 65535 ? "Ports go up to 65535." : undefined);
+
+<PaperInput label="Port" value={port()} onInput={(e) => setPort(e.currentTarget.value)} error={portError()} fullWidth />`}
             </PaperCode>
 
             <PaperText preset="subheader" as="h3" id="multiline">Multiline</PaperText>
