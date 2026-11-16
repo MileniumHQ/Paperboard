@@ -1,8 +1,7 @@
-import { createEffect, createSignal, For, on, onCleanup, onMount, Show, type Component } from "solid-js";
-import { PaperButton, PaperFlex, PaperGrid, PaperMediaCard, PaperModal, PaperQuote, PaperText } from "@mileniumhq/paperui";
+import { createEffect, createSignal, For, on, onCleanup, onMount, type Component } from "solid-js";
+import { PaperButton, PaperFlex, PaperGrid, PaperMediaCard, PaperModal, PaperText, showError } from "@mileniumhq/paperui";
 import { panelPermissionsApi } from "../../lib/shell";
-import type { PanelPermission, PermissionAsk, PermissionFailure, ScreenPick, SystemBlock } from "../../../../shared/panelPermissions";
-import { errorMessage } from "@mileniumhq/paperapi";
+import type { PanelPermission, PermissionAsk, ScreenPick, SystemBlock } from "../../../../shared/panelPermissions";
 
 const NOUNS: Record<PanelPermission, string> = {
     microphone: "microphone",
@@ -27,39 +26,38 @@ const SYSTEM_SECTIONS: Record<PanelPermission, string> = {
     screen: "Screen & System Audio Recording",
 };
 
-type Question =
-    | { kind: "ask"; ask: PermissionAsk }
-    | { kind: "pick"; pick: ScreenPick }
-    | { kind: "system"; block: SystemBlock }
-    | { kind: "failed"; failure: PermissionFailure };
+type Question = { kind: "ask"; ask: PermissionAsk } | { kind: "pick"; pick: ScreenPick } | { kind: "system"; block: SystemBlock };
 
 // What panels ask of you: whether one may use your microphone, camera or
 // screen (asked once per panel, the answer kept), what screen to share, and
-// when the system itself blocks Paperboard or Paperboard couldn't decide.
-// One question at a time, in order.
+// when the system itself blocks Paperboard. One question at a time, in
+// order. A permission Paperboard couldn't decide is refused, and a toast
+// says why.
 const PanelPermissionPrompt: Component<{ panelName: (computerId: string, panelId: string) => string }> = (props) => {
     const [queue, setQueue] = createSignal<Question[]>([]);
-    const [error, setError] = createSignal<string | null>(null);
     const [busy, setBusy] = createSignal(false);
     const current = () => queue()[0] ?? null;
     const push = (q: Question) => setQueue((list) => [...list, q]);
-    const next = () => {
-        setError(null);
-        setQueue((list) => list.slice(1));
-    };
+    const next = () => setQueue((list) => list.slice(1));
 
     onMount(() => {
         const offs = [
             panelPermissionsApi.onAsk((ask) => push({ kind: "ask", ask })),
             panelPermissionsApi.onScreenPick((pick) => push({ kind: "pick", pick })),
             panelPermissionsApi.onSystemBlock((block) => push({ kind: "system", block })),
-            panelPermissionsApi.onFailure((failure) => push({ kind: "failed", failure })),
+            panelPermissionsApi.onFailure((failure) =>
+                showError(
+                    `${name(failure)} can't use your ${permissionsText(failure.permissions)}`,
+                    `Paperboard couldn't decide, so it said no: ${failure.message}`,
+                ),
+            ),
         ];
         onCleanup(() => offs.forEach((off) => off()));
     });
 
     // one answer per question: a dialog closed while its answer is on the
-    // way (Escape after Allow) must not send a second one
+    // way (Escape after Allow) must not send a second one. One that didn't
+    // go through keeps the question open, to answer again.
     const answer = async (askId: string, value: string | null) => {
         if (busy()) return;
         setBusy(true);
@@ -67,7 +65,7 @@ const PanelPermissionPrompt: Component<{ panelName: (computerId: string, panelId
             await panelPermissionsApi.answer(askId, value);
             next();
         } catch (err) {
-            setError(errorMessage(err));
+            showError("Your answer didn't go through", err);
         } finally {
             setBusy(false);
         }
@@ -78,19 +76,9 @@ const PanelPermissionPrompt: Component<{ panelName: (computerId: string, panelId
             await panelPermissionsApi.openSystemSettings(permission);
             next();
         } catch (err) {
-            setError(errorMessage(err));
+            showError("Couldn't open the system settings", err);
         }
     };
-
-    const failure = () => (
-        <Show when={error()}>
-            {(message) => (
-                <PaperQuote variant="danger" icon="error" title="Your answer didn't go through" role="alert">
-                    <PaperText preset="text" breakWord>{message()}</PaperText>
-                </PaperQuote>
-            )}
-        </Show>
-    );
 
     const name = (q: { computerId: string; panelId: string } | null) => (q ? props.panelName(q.computerId, q.panelId) : "");
 
@@ -110,16 +98,10 @@ const PanelPermissionPrompt: Component<{ panelName: (computerId: string, panelId
     };
     const [ask, setAsk] = createSignal<PermissionAsk | null>(null);
     const [pick, setPick] = createSignal<ScreenPick | null>(null);
-    const failing = () => {
-        const q = current();
-        return q?.kind === "failed" ? q.failure : null;
-    };
     const [block, setBlock] = createSignal<SystemBlock | null>(null);
-    const [failed, setFailed] = createSignal<PermissionFailure | null>(null);
     createEffect(on(asking, (q) => q && setAsk(q)));
     createEffect(on(picking, (q) => q && setPick(q)));
     createEffect(on(blocked, (q) => q && setBlock(q)));
-    createEffect(on(failing, (q) => q && setFailed(q)));
     const system = () => SYSTEM_PATHS[block()?.platform ?? "darwin"];
     const blockedNoun = () => NOUNS[block()?.permission ?? "microphone"];
 
@@ -141,10 +123,7 @@ const PanelPermissionPrompt: Component<{ panelName: (computerId: string, panelId
                     </>
                 }
             >
-                <PaperFlex direction="column" gap="half">
-                    <PaperText preset="text">Paperboard remembers your answer for {name(ask())}. You can change it in App Settings.</PaperText>
-                    {failure()}
-                </PaperFlex>
+                <PaperText preset="text">Paperboard remembers your answer for {name(ask())}. You can change it in App Settings.</PaperText>
             </PaperModal>
 
             <PaperModal
@@ -162,7 +141,6 @@ const PanelPermissionPrompt: Component<{ panelName: (computerId: string, panelId
             >
                 <PaperFlex direction="column" gap="full">
                     <PaperText preset="text">Choose a screen or window. {name(pick())} sees it until it stops sharing.</PaperText>
-                    {failure()}
                     <PaperGrid>
                         <For each={pick()?.sources ?? []}>
                             {(source) => (
@@ -194,29 +172,10 @@ const PanelPermissionPrompt: Component<{ panelName: (computerId: string, panelId
                     </>
                 }
             >
-                <PaperFlex direction="column" gap="half">
-                    <PaperText preset="text">
-                        {name(block())} asked for your {blockedNoun()}, but {system().name} isn't letting Paperboard use it. Turn on Paperboard in{" "}
-                        {system().settings(SYSTEM_SECTIONS[block()?.permission ?? "microphone"])}, then try again.
-                    </PaperText>
-                    {failure()}
-                </PaperFlex>
-            </PaperModal>
-
-            <PaperModal
-                open={failing() !== null}
-                size="small"
-                title={`${name(failed())} can't use your ${permissionsText(failed()?.permissions ?? [])}`}
-                onClose={next}
-                footer={
-                    <PaperButton variant="text" onClick={next}>
-                        Close
-                    </PaperButton>
-                }
-            >
-                <PaperQuote variant="danger" icon="error" title="Paperboard couldn't decide, so it said no" role="alert">
-                    <PaperText preset="text" breakWord>{failed()?.message}</PaperText>
-                </PaperQuote>
+                <PaperText preset="text">
+                    {name(block())} asked for your {blockedNoun()}, but {system().name} isn't letting Paperboard use it. Turn on Paperboard in{" "}
+                    {system().settings(SYSTEM_SECTIONS[block()?.permission ?? "microphone"])}, then try again.
+                </PaperText>
             </PaperModal>
         </>
     );

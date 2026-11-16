@@ -1,5 +1,5 @@
 import { type Component, createEffect, createMemo, createSignal, on, onCleanup, Show } from "solid-js";
-import { PaperProvider, PaperFlex, PaperModal, PaperSlidePage, showToast } from "@mileniumhq/paperui";
+import { PaperProvider, PaperFlex, PaperModal, PaperSlidePage, showError } from "@mileniumhq/paperui";
 import { isBrowserShell, quitApi } from "./lib/shell";
 import { unsavedPanels } from "./lib/unsavedPanels";
 import AppSettings from "./components/settings/AppSettings";
@@ -27,7 +27,6 @@ import { usePanels } from "./hooks/usePanels";
 import { usePanelRestarts } from "./hooks/usePanelRestarts";
 import { useShellNavigation } from "./hooks/useShellNavigation";
 import { useStartUp } from "./hooks/useStartUp";
-import { errorMessage } from "@mileniumhq/paperapi";
 
 const App: Component = () => {
     const appUpdate = useAppUpdate();
@@ -42,7 +41,7 @@ const App: Component = () => {
     const panelName = (compId: string, panelId: string) =>
         panelsByComputer()[compId]?.find((p) => p.id === panelId)?.name || panelId;
     const settings = useAppSettings();
-    const { appSettings, graphics, handleAppSettingsChange, settingsFailure, retryLoadAppSettings, dismissSettingsFailure } = settings;
+    const { appSettings, graphics, handleAppSettingsChange, loadFailed, retryLoadAppSettings } = settings;
     const selection = useComputerSelection({
         computers: computerState,
         panels: panelState,
@@ -58,12 +57,12 @@ const App: Component = () => {
         const holdsUnsaved = createMemo(() => unsavedPanels().size > 0);
         createEffect(on(holdsUnsaved, (unsaved) => {
             quitApi.setUnsaved(unsaved).catch((err) =>
-                showToast({ variant: "danger", title: "Quitting won't ask about unsaved changes", message: errorMessage(err) }));
+                showError("Quitting won't ask about unsaved changes", err));
         }));
         onCleanup(quitApi.onAsk(async ({ askId }) => {
             const quit = await nav.mayClosePanels([...unsavedPanels()]);
             await quitApi.answer(askId, quit).catch((err) =>
-                showToast({ variant: "danger", title: "Paperboard couldn't quit", message: errorMessage(err) }));
+                showError("Paperboard couldn't quit", err));
         }));
     }
 
@@ -180,10 +179,9 @@ const App: Component = () => {
                                     panelName={(panelId) => Object.values(panelsByComputer()).flat().find((p) => p.id === panelId)?.name || panelId}
                                     onChange={handleAppSettingsChange}
                                     computers={listedComputers()}
-                                    failure={settingsFailure()}
+                                    loadFailed={loadFailed()}
                                     gpu={graphics().gpu}
-                                    onRetryLoad={() => void retryLoadAppSettings()}
-                                    onDismissFailure={dismissSettingsFailure}
+                                    onRetryLoad={retryLoadAppSettings}
                                 />
                             </PaperFlex>
                         }
@@ -233,10 +231,9 @@ const App: Component = () => {
                             settings={appSettings()}
                             onChange={handleAppSettingsChange}
                             computers={listedComputers()}
-                            failure={settingsFailure()}
+                            loadFailed={loadFailed()}
                             gpu={graphics().gpu}
-                            onRetryLoad={() => void retryLoadAppSettings()}
-                            onDismissFailure={dismissSettingsFailure}
+                            onRetryLoad={retryLoadAppSettings}
                         />
                     </PaperFlex>
                 </PaperSlidePage>

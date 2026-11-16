@@ -5,7 +5,7 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { API_DEMO, bootShell, WIDGET_DEMO, type DevPanel, type Shell } from "./support/shell";
+import { API_DEMO, bootShell, WIDGET_DEMO, type DevPanel, type Shell, toastShown } from "./support/shell";
 
 // an editor whose note is unsaved until Save, and asks before it goes
 const NOTES: DevPanel = {
@@ -111,8 +111,8 @@ test("restarting a panel with an unsaved note asks the panel first: Stay keeps t
     expect(page.exceptions).toEqual([]);
 });
 
-// Inventory: Core contracts — an installed panel that can't load says why where the panels are listed.
-test("a panel whose manifest is broken is listed with why it can't load", async () => {
+// Inventory: Core contracts — an installed panel that can't load says why while its computer is open.
+test("a panel whose manifest is broken says why it can't load", async () => {
     const { page } = shell;
     const broken = path.join(shell.dataDir, "panels", "dev.example.broken");
     fs.mkdirSync(broken, { recursive: true });
@@ -121,8 +121,8 @@ test("a panel whose manifest is broken is listed with why it can't load", async 
     await page.click("[role=radio][aria-label='Home']");
     await page.click("[role=radio][aria-label='This Computer (127.0.0.1)']");
     await page.waitFor(
-        `[...document.querySelectorAll("[role=alert]")].some((a) => a.offsetParent !== null && a.innerText.includes("Panel can't load") && a.innerText.includes("dev.example.broken"))`,
-        "the broken panel, with why, in the panel list",
+        toastShown("Couldn't load panels on This Computer", "dev.example.broken: "),
+        "the broken panel, with why, in a toast",
     );
     expect(page.exceptions).toEqual([]);
 });

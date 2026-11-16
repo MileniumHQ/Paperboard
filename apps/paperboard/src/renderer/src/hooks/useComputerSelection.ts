@@ -26,7 +26,7 @@ export function useComputerSelection(options: ComputerSelectionOptions) {
     /** an older selection still probing is dropped */
     const supersedeSelection = selection.cancel;
 
-    // why a computer couldn't be made the active one, shown in its panel list
+    // why a computer couldn't be made the active one: a toast, and its panel list says "Couldn't load"
     const [switchError, setSwitchError] = createSignal<Record<string, string>>({});
     // makes the computer the one main talks to and Paperboard reopens, then
     // lists its panels

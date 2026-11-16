@@ -42,7 +42,7 @@ const rejection = (p: Promise<unknown>) => p.then(() => { throw new Error("it re
 
 // Failures reach the caller instead of being swallowed.
 describe("failures reach the caller", () => {
-    test("App Settings shows a settings file that won't load, and a save that fails keeps the switch where it was", async () => {
+    test("a settings file that won't load is a toast and Couldn't load, and a save that fails keeps the switch where it was", async () => {
         const dataDir = tempDataDir("settings-load");
         const settingsFile = path.join(dataDir, "local", "app-settings.json");
         fs.writeFileSync(settingsFile, "{ not json");
@@ -52,20 +52,15 @@ describe("failures reach the caller", () => {
         fs.writeFileSync(autostart, "[Desktop Entry]\n");
         const electron = await launchElectron({ appDir: app.dir, dataDir, args: ["--skip-update"] });
         await shellReady(electron);
-        const alerts = `[...document.querySelectorAll('[role=alert]')].map((a) => a.innerText)`;
+        const toasts = `[...document.querySelectorAll('[aria-label=Notifications] [role=alert]')].map((a) => a.innerText)`;
         // said at start, before anyone opens App Settings
-        await electron.evalIn(SHELL, domCondition(`document.body.innerText.includes("Settings not loaded")`));
+        const loadToast = await electron.evalIn(SHELL, domCondition(`${toasts}.find((t) => t.includes("Couldn't load your settings"))`));
+        expect(loadToast).toContain("Paperboard is showing the defaults, and changes aren't saved: ");
+        expect(loadToast).toMatch(/JSON/);
+        // the defaults aren't the user's settings: App Settings shows none of them, so none can be saved over the file
         await electron.evalIn(SHELL, `document.querySelector('[role=radio][aria-label="Settings"]').click()`);
-        const loadAlert = await electron.evalIn(SHELL, domCondition(`${alerts}.find((t) => t.includes("These are the defaults"))`));
-        expect(loadAlert).toContain("Settings not loaded");
-        expect(loadAlert).toContain("These are the defaults, not your settings: ");
-        expect(loadAlert).toMatch(/JSON/);
-        // a change would save the defaults over the user's settings: it's refused, out loud
-        const blur = `document.querySelector('[role=switch]:has(input[name=disableBlur])')`;
-        const before = await electron.evalIn(SHELL, `${blur}.getAttribute("aria-checked")`);
-        await electron.evalIn(SHELL, `${blur}.click()`);
-        await electron.evalIn(SHELL, domCondition(`document.body.innerText.includes("Change not saved")`));
-        expect(await electron.evalIn(SHELL, `${blur}.getAttribute("aria-checked")`)).toBe(before);
+        await electron.evalIn(SHELL, domCondition(`document.body.innerText.includes("Couldn't load") && [...document.querySelectorAll("button")].some((b) => b.innerText === "Try again")`));
+        expect(await electron.evalIn(SHELL, `!!document.querySelector('[role=switch]:has(input[name=disableBlur])')`)).toBe(false);
         expect(await electron.quit()).toEqual({ code: 0, signal: null });
         expect(fs.readFileSync(settingsFile, "utf8")).toBe("{ not json");
         expect(fs.existsSync(autostart)).toBe(true);
@@ -82,9 +77,8 @@ describe("failures reach the caller", () => {
         fs.chmodSync(path.join(saveDir, "local"), 0o555);
         try {
             await second.evalIn(SHELL, `${toggle}.click()`);
-            const saveAlert = await second.evalIn(SHELL, domCondition(`[...document.querySelectorAll('[role=alert]')].map((a) => a.innerText).find((t) => t.includes("Settings not saved"))`));
-            expect(saveAlert).toContain("Your change was not kept: ");
-            expect(saveAlert).toMatch(/EACCES|permission denied/i);
+            const saveToast = await second.evalIn(SHELL, domCondition(`[...document.querySelectorAll('[aria-label=Notifications] [role=alert]')].map((a) => a.innerText).find((t) => t.includes("Couldn't save your settings"))`));
+            expect(saveToast).toMatch(/EACCES|permission denied/i);
             expect(await second.evalIn(SHELL, `${toggle}.getAttribute("aria-checked")`)).toBe("false");
         } finally {
             fs.chmodSync(path.join(saveDir, "local"), 0o755);
@@ -108,8 +102,8 @@ describe("failures reach the caller", () => {
         await electron.evalInFrame(frame, domCondition(`document.getElementById("note")`));
         const refused = await electron.evalInFrame(frame, `navigator.mediaDevices.getUserMedia({ audio: true }).then(() => "allowed", (err) => err.name)`);
         expect(refused).toBe("NotAllowedError");
-        const dialog = await electron.evalIn(SHELL, domCondition(`[...document.querySelectorAll("[role=dialog]")].map((d) => d.innerText).find((t) => t.includes("can't use your microphone"))`));
-        expect(dialog).toContain("aren't valid JSON");
+        const toast = await electron.evalIn(SHELL, domCondition(`[...document.querySelectorAll("[aria-label=Notifications] [role=alert]")].map((d) => d.innerText).find((t) => t.includes("can't use your microphone"))`));
+        expect(toast).toContain("aren't valid JSON");
         expect(fs.readFileSync(path.join(dataDir, "local", "panel-permissions.json"), "utf8")).toBe("{ not json");
         expect(await electron.quit()).toEqual({ code: 0, signal: null });
     }, WAIT_MS * 3);

@@ -6,7 +6,7 @@
 // which finds nothing and can fail) and the system work main does after a
 // settings save. A test can hold a probe of an address, to answer it after a
 // newer one, and count the probes; make the next forget fail; hold or fail the saves of panel permissions, which it
-// keeps in the store main keeps them in; push what main pushes on its own
+// keeps in the store main keeps them in, and fail the next list of them; push what main pushes on its own
 // (the update queue's states, a permission it couldn't decide),
 // making the next Stop and update fail; and break discovery's socket. A
 // Google Drive sign-in is main's own, its browser a tab the person closed.
@@ -68,6 +68,7 @@ const permissionSaves: { answer: PermissionAnswer; run: () => void }[] = [];
 const permissionSaveWaiters: (() => void)[] = [];
 let holdPermissionSaves = false;
 let failPermissionSave: string | null = null;
+let failPermissionList: string | null = null;
 // a Google Drive sign-in runs as main runs it; the browser it opens is
 // counted and never comes back, and nothing past it is reachable
 let googleSignIns = 0;
@@ -107,7 +108,12 @@ const calls: CallHandlers<ShellCall, unknown> = {
         releases.push(keys);
         for (const wake of releaseWaiters.splice(0)) wake();
     },
-    "panel-permissions-list": () => permissions.list(),
+    "panel-permissions-list": () => {
+        const refused = failPermissionList;
+        failPermissionList = null;
+        if (refused) throw new Error(refused);
+        return permissions.list();
+    },
     "panel-permission-set": ({ panelId, permission, answer }) =>
         new Promise<void>((resolve, reject) => {
             const run = () => {
@@ -179,6 +185,7 @@ type Command =
     | { cmd: "fail-remove"; message: string }
     | { cmd: "set-permission"; panelId: string; permission: PanelPermission; answer: PermissionAnswer }
     | { cmd: "permission"; panelId: string; permission: PanelPermission }
+    | { cmd: "fail-permission-list"; message: string }
     | { cmd: "hold-permission-saves" }
     | { cmd: "held-permission-save" }
     | { cmd: "release-permission-save"; fail?: string }
@@ -220,6 +227,9 @@ async function run(command: Command): Promise<unknown> {
             return true;
         case "permission":
             return permissions.list().find((e) => e.panelId === command.panelId && e.permission === command.permission)?.answer ?? null;
+        case "fail-permission-list":
+            failPermissionList = command.message;
+            return true;
         case "hold-permission-saves":
             holdPermissionSaves = true;
             return true;

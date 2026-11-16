@@ -1,25 +1,21 @@
 import { createSignal, createEffect, on, onCleanup } from "solid-js";
 import { config, errorMessage, SerialQueue } from "@mileniumhq/paperapi";
-import { showToast } from "@mileniumhq/paperui";
+import { createFailureToast, showError } from "@mileniumhq/paperui";
 import { logToMain, notifyAppSettingsChanged, shellApi } from "../lib/shell";
 import { withAppSettingsDefaults } from "../../../shared/appSettingsDefaults";
 import { effectiveLook, type Graphics } from "../../../shared/graphics";
 import { APP_SETTINGS_DEFAULTS, APP_SETTINGS_ID, type AppSettingsData } from "../lib/appSettings";
 
-export interface SettingsFailure {
-    /** which way it failed: settings that didn't load leave the defaults
-     * showing; saved settings the system wouldn't apply are "apply" */
-    kind: "load" | "save" | "apply";
-    message: string;
-}
+const APPLY_FAILED = "Couldn't apply Run on startup";
 
 // App-wide settings: load, mirror reduced motion and blur onto the document, persist
-// before notifying main. A load or save that fails stays as a failure for
-// App Settings to show, until it's retried or dismissed.
+// before notifying main. Settings that didn't load stand as a toast, with
+// Try again, until a load works; a save or an apply that fails is a toast.
 export function useAppSettings() {
     const [appSettings, setAppSettings] =
         createSignal<AppSettingsData>(APP_SETTINGS_DEFAULTS);
-    const [settingsFailure, setSettingsFailure] = createSignal<SettingsFailure | null>(null);
+    // why the stored settings couldn't be read: the defaults show, and nothing saves
+    const [loadError, setLoadError] = createSignal<string | null>(null);
     // assumed drawn on a GPU until main says otherwise, a moment after start
     const [graphics, setGraphics] = createSignal<Graphics>({ gpu: true });
     const look = () => effectiveLook(appSettings(), graphics());
@@ -28,11 +24,7 @@ export function useAppSettings() {
     // said once, on its own: a settings failure later must not hide it
     shellApi.getGraphics().then(setGraphics, (err) => {
         logToMain("error", "Couldn't tell whether Paperboard is drawn on a GPU:", err);
-        showToast({
-            variant: "danger",
-            title: "Graphics card not checked",
-            message: `Animations and blur stay on unless you turn them off, even if this computer has no graphics card: ${errorMessage(err)}`,
-        });
+        showError("Graphics card not checked", `Animations and blur stay on unless you turn them off, even if this computer has no graphics card: ${errorMessage(err)}`);
     });
 
     // Mirrors the motion preference onto the document for PaperUI tokens
@@ -65,6 +57,7 @@ export function useAppSettings() {
                 APP_SETTINGS_ID,
             );
             unread = false;
+            setLoadError(null);
             if (asked !== changes) return true;
             // nothing saved yet is the defaults, also when a first change didn't save
             setAppSettings(stored ? withAppSettingsDefaults(APP_SETTINGS_DEFAULTS, stored) : APP_SETTINGS_DEFAULTS);
@@ -72,15 +65,16 @@ export function useAppSettings() {
         } catch (err) {
             logToMain("error", "Failed to load app settings; showing the defaults:", err);
             unread = true;
-            setSettingsFailure({ kind: "load", message: errorMessage(err) });
+            setLoadError(errorMessage(err));
             return false;
         }
     };
 
-    const retryLoadAppSettings = async () => {
-        setSettingsFailure(null);
-        await loadAppSettings();
-    };
+    const retryLoadAppSettings = () => void loadAppSettings();
+    createFailureToast(() => loadError() && `Paperboard is showing the defaults, and changes aren't saved: ${loadError()}`, {
+        title: "Couldn't load your settings",
+        action: { label: "Try again", onClick: retryLoadAppSettings },
+    });
 
     // A change shows at once, and the next change is built on it: settings
     // that only changed once the save came back would hand a second change,
@@ -89,11 +83,10 @@ export function useAppSettings() {
     const saves = new SerialQueue();
     const handleAppSettingsChange = (next: AppSettingsData): Promise<void> => {
         if (unread) {
-            showToast({
-                variant: "danger",
-                title: "Change not saved",
-                message: "Your settings didn't load, and saving now would replace them with the defaults. Fix or remove app-settings.json, then retry loading.",
-            });
+            showError(
+                "Couldn't save the change",
+                "Your settings didn't load, and saving now would replace them with the defaults. Fix or remove app-settings.json, then load them again from App Settings.",
+            );
             return Promise.resolve();
         }
         changes++;
@@ -114,31 +107,27 @@ export function useAppSettings() {
             // a newer change is already waiting and carries this one in it:
             // its save tries again, and clears this failure if it lands
             if (superseded()) {
-                setSettingsFailure({ kind: "save", message: errorMessage(err) });
+                showError("Couldn't save your settings", err);
                 return;
             }
             // Nothing newer: the UI falls back to the persisted truth, and
             // the save's failure is what to show, even if the re-read fails too
-            if (await loadAppSettings()) setSettingsFailure({ kind: "save", message: errorMessage(err) });
-            else setSettingsFailure({ kind: "save", message: `${errorMessage(err)}. The saved settings couldn't be read back either.` });
+            if (await loadAppSettings()) showError("Couldn't save your settings", err);
+            else showError("Couldn't save your settings", `${errorMessage(err)}. The saved settings couldn't be read back either.`);
             return;
         }
-        if (settingsFailure()?.kind === "save") setSettingsFailure(null);
         await applyAppSettings();
     };
 
     /** main applies the saved settings to the system (start-up does too);
-     * resolves to why it couldn't, which App Settings shows, or null */
-    const applyAppSettings = async (): Promise<string | null> => {
+     * a toast says why it couldn't */
+    const applyAppSettings = async (): Promise<void> => {
         try {
             const refused = await notifyAppSettingsChanged();
-            if (refused) setSettingsFailure({ kind: "apply", message: refused });
-            else if (settingsFailure()?.kind === "apply") setSettingsFailure(null);
-            return refused;
+            if (refused) showError(APPLY_FAILED, refused);
         } catch (err) {
             logToMain("error", "Failed to apply app settings:", err);
-            setSettingsFailure({ kind: "apply", message: errorMessage(err) });
-            return errorMessage(err);
+            showError(APPLY_FAILED, err);
         }
     };
 
@@ -148,8 +137,7 @@ export function useAppSettings() {
         loadAppSettings,
         applyAppSettings,
         handleAppSettingsChange,
-        settingsFailure,
+        loadFailed: () => loadError() !== null,
         retryLoadAppSettings,
-        dismissSettingsFailure: () => setSettingsFailure(null),
     };
 }

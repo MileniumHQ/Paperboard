@@ -6,20 +6,19 @@ import {
     PaperSelectMenuItem,
     PaperToggle,
     PaperEffect,
-    PaperFlex,
     PaperButton,
     PaperIcon,
     PaperMarkdown,
     PaperModal,
     PaperPage,
     PaperPageHeader,
-    PaperQuote,
+    PaperEmptyState,
     PaperSectionHeader,
+    showError,
     showToast,
 } from "@mileniumhq/paperui";
 import { isBrowserShell, shellIpc, signOutOfBrowser } from "../../lib/shell";
 import { checkForUpdates } from "../../hooks/useAppUpdate";
-import type { SettingsFailure } from "../../hooks/useAppSettings";
 import { START_ON_HOME, startTarget } from "../../lib/startOn";
 import type { AppSettingsData } from "../../lib/appSettings";
 import type { UpdateCheckOutcome } from "../../../../shared/updateQueue";
@@ -30,7 +29,6 @@ import PanelPermissionSettings from "./PanelPermissionSettings";
 import paperboardLicenseText from "../../../../../LICENSE?raw";
 import mitLicenseText from "@mileniumhq/paperui/LICENSE?raw";
 import { effectiveLook } from "../../../../shared/graphics";
-import { errorMessage } from "@mileniumhq/paperapi";
 
 /** a computer Paperboard can open on */
 export interface StartComputer {
@@ -98,7 +96,7 @@ const QUIT_NOTE = "Stops the panels on this computer, unless its server daemon r
 const quitApp = () => shellIpc().send("quit-app");
 const SIGN_OUT_NOTE = "Signs this browser out. Open Paperboard in the browser from Paperboard to come back.";
 const signOut = () =>
-    signOutOfBrowser().catch((err) => showToast({ variant: "danger", title: "Couldn't sign out", message: errorMessage(err) }));
+    signOutOfBrowser().catch((err) => showError("Couldn't sign out", err));
 
 export default function AppSettings(props: {
     settings: AppSettingsData;
@@ -109,12 +107,11 @@ export default function AppSettings(props: {
     panelName?: (panelId: string) => string;
     /** the phone layout: a page of its own, with only what applies on a phone */
     compact?: boolean;
-    /** a load or save that didn't go through */
-    failure?: SettingsFailure | null;
+    /** the stored settings couldn't be read: they show "Couldn't load", and a toast says why */
+    loadFailed?: boolean;
     /** false where there's no GPU: animations and blur are off until the user chooses */
     gpu: boolean;
     onRetryLoad?: () => void;
-    onDismissFailure?: () => void;
 }) {
     // the license stays in the modal after it closes, so it fades out whole
     const [license, setLicense] = createSignal<LicenseKind>("paperboard");
@@ -135,7 +132,7 @@ export default function AppSettings(props: {
             },
             (err) => {
                 setUpdateCheck(null);
-                showToast({ variant: "danger", title: "Couldn't check for updates", message: errorMessage(err) });
+                showError("Couldn't check for updates", err);
             },
         );
     };
@@ -170,62 +167,49 @@ export default function AppSettings(props: {
                     subtitle={isBrowserShell() ? "Appearance, startup, and licenses." : "Appearance, startup, updates, and licenses."}
                 />
             </Show>
-            <Show when={props.failure}>
-                {(failure) => (
-                    <PaperQuote
-                        variant="danger"
-                        icon="warning"
-                        title={{ load: "Settings not loaded", save: "Settings not saved", apply: "Run on startup not applied" }[failure().kind]}
-                        role="alert"
-                        onDismiss={props.onDismissFailure}
-                    >
-                        <PaperFlex direction="column" gap="half" align="flex-start">
-                            {{
-                                load: `These are the defaults, not your settings: ${failure().message}`,
-                                save: `Your change was not kept: ${failure().message}`,
-                                apply: failure().message,
-                            }[failure().kind]}
-                            <Show when={failure().kind === "load" && props.onRetryLoad}>
-                                <PaperButton size="tiny" onClick={() => props.onRetryLoad?.()}>Retry loading</PaperButton>
-                            </Show>
-                        </PaperFlex>
-                    </PaperQuote>
-                )}
-            </Show>
-
             <PaperSettingList autoHeight value={settingsValue()} onValueChange={handleChange}>
-                <PaperSettingItem title="Appearance" description="Match the operating system appearance or force light or dark.">
-                    <PaperSelectMenu name="darkMode" value={props.settings.darkMode} fullWidth={!props.compact}>
-                        <PaperSelectMenuItem value="system" icon="contrast">System</PaperSelectMenuItem>
-                        <PaperSelectMenuItem value="light" icon="light_mode">Light</PaperSelectMenuItem>
-                        <PaperSelectMenuItem value="dark" icon="dark_mode">Dark</PaperSelectMenuItem>
-                    </PaperSelectMenu>
-                </PaperSettingItem>
-
-                <PaperSettingItem
-                    title="Disable animations"
-                    description={look().animationsByDefault ? NO_GPU : "Turns off animations and transitions."}
+                {/* settings that didn't load are the defaults, not yours: none shows until they load */}
+                <Show
+                    when={!props.loadFailed}
+                    fallback={
+                        <PaperEmptyState icon="error" title="Couldn't load">
+                            <PaperButton onClick={() => props.onRetryLoad?.()}>Try again</PaperButton>
+                        </PaperEmptyState>
+                    }
                 >
-                    <PaperToggle name="disableAnimations" checked={look().disableAnimations} />
-                </PaperSettingItem>
-
-                <PaperSettingItem
-                    title="Disable blur"
-                    description={look().blurByDefault ? NO_GPU : "Turns off the blur behind dialogs and overlays."}
-                >
-                    <PaperToggle name="disableBlur" checked={look().disableBlur} />
-                </PaperSettingItem>
-
-                <PaperSettingItem title="Start on" description={startOnMissing() ? START_ON_MISSING : START_ON_NOTE}>
-                    <PaperSelectMenu name="startOn" value={props.settings.startOn} fullWidth={!props.compact}>
-                        <StartOnItems computers={props.computers} startOn={props.settings.startOn} />
-                    </PaperSelectMenu>
-                </PaperSettingItem>
-
-                <Show when={!props.compact}>
-                    <PaperSettingItem title="Run on startup" description="Launch Paperboard automatically when you log in.">
-                        <PaperToggle name="runOnStartup" checked={props.settings.runOnStartup} />
+                    <PaperSettingItem title="Appearance" description="Match the operating system appearance or force light or dark.">
+                        <PaperSelectMenu name="darkMode" value={props.settings.darkMode} fullWidth={!props.compact}>
+                            <PaperSelectMenuItem value="system" icon="contrast">System</PaperSelectMenuItem>
+                            <PaperSelectMenuItem value="light" icon="light_mode">Light</PaperSelectMenuItem>
+                            <PaperSelectMenuItem value="dark" icon="dark_mode">Dark</PaperSelectMenuItem>
+                        </PaperSelectMenu>
                     </PaperSettingItem>
+
+                    <PaperSettingItem
+                        title="Disable animations"
+                        description={look().animationsByDefault ? NO_GPU : "Turns off animations and transitions."}
+                    >
+                        <PaperToggle name="disableAnimations" checked={look().disableAnimations} />
+                    </PaperSettingItem>
+
+                    <PaperSettingItem
+                        title="Disable blur"
+                        description={look().blurByDefault ? NO_GPU : "Turns off the blur behind dialogs and overlays."}
+                    >
+                        <PaperToggle name="disableBlur" checked={look().disableBlur} />
+                    </PaperSettingItem>
+
+                    <PaperSettingItem title="Start on" description={startOnMissing() ? START_ON_MISSING : START_ON_NOTE}>
+                        <PaperSelectMenu name="startOn" value={props.settings.startOn} fullWidth={!props.compact}>
+                            <StartOnItems computers={props.computers} startOn={props.settings.startOn} />
+                        </PaperSelectMenu>
+                    </PaperSettingItem>
+
+                    <Show when={!props.compact}>
+                        <PaperSettingItem title="Run on startup" description="Launch Paperboard automatically when you log in.">
+                            <PaperToggle name="runOnStartup" checked={props.settings.runOnStartup} />
+                        </PaperSettingItem>
+                    </Show>
                 </Show>
 
                 {/* browser mode runs no updates */}

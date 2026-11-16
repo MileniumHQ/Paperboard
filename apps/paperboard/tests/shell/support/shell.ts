@@ -55,6 +55,11 @@ export async function clickText(page: Page, tag: string, text: string): Promise<
     await page.click("[data-click-target]");
 }
 
+/** An expression for page.waitFor: whether a failure toast shows whose text includes every one of `texts`. */
+export function toastShown(...texts: string[]): string {
+    return `[...document.querySelectorAll("[aria-label=Notifications] [role=alert]")].some((t) => ${JSON.stringify(texts)}.every((x) => t.innerText.includes(x)))`;
+}
+
 /** the selector of the field fieldShown(label) found */
 export function fieldOf(label: string): string {
     return `[data-field=${JSON.stringify(label)}]`;

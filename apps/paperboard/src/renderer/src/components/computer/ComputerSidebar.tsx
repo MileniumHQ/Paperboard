@@ -1,5 +1,5 @@
 import { type Component, For, Show } from "solid-js";
-import { PaperButton, PaperFlex, PaperList, PaperListItem, PaperQuote, getVarCss } from "@mileniumhq/paperui";
+import { createFailureToast, PaperButton, PaperEmptyState, PaperFlex, PaperList, PaperListItem, getVarCss } from "@mileniumhq/paperui";
 import { problemsApi, type InvalidPanel, type PanelItem } from "@mileniumhq/paperapi";
 import type { ComputerInfo } from "../../lib/shell";
 import { followPanelProblems } from "../../lib/panelProblems";
@@ -33,8 +33,10 @@ export interface ComputerSidebarProps {
 }
 
 // The active computer's column beside the rail: its header (info, library)
-// and its installed panels, with what couldn't be listed or switched to and
-// what went wrong with each panel.
+// and its installed panels, and what went wrong with each panel. A switch
+// or a list that failed, and a panel that can't load, are toasts while the
+// column is the active one; a column with no panels to show for it says
+// "Couldn't load" with Try again.
 // Every computer keeps its column, hidden while another is active, so a
 // switch back finds its list as it was left.
 const ComputerSidebar: Component<ComputerSidebarProps> = (props) => (
@@ -54,6 +56,23 @@ const ComputerSidebar: Component<ComputerSidebarProps> = (props) => (
                 const panels = () => props.panelsByComputer[comp.id] || [];
                 const updating = (panel: PanelItem) => props.updatingPanels.has(`${comp.id}::${panel.id}`);
                 const problems = followPanelProblems(comp.id, () => comp.name, () => props.panelsLoadError[comp.id] === "");
+                const active = () => props.activeComputerId === comp.id;
+                const switchFailed = () => props.switchError[comp.id];
+                const listFailed = () => !switchFailed() && props.panelsLoadError[comp.id];
+                const retry = () => (switchFailed() ? props.onRetrySwitch(comp.id) : props.onRetryPanels(comp.id));
+                createFailureToast(() => active() && switchFailed(), {
+                    title: `Couldn't switch to ${comp.name}`,
+                    action: { label: "Try again", onClick: retry },
+                });
+                createFailureToast(() => active() && listFailed(), {
+                    title: `Couldn't list ${comp.name}'s panels`,
+                    action: { label: "Try again", onClick: retry },
+                });
+                // installed panels the computer refuses, each with why
+                createFailureToast(
+                    () => active() && (props.invalidPanelsByComputer[comp.id] ?? []).map((broken) => `${broken.id}: ${broken.error}`).join(" "),
+                    { title: `Couldn't load panels on ${comp.name}` },
+                );
                 return (
                     <PaperFlex
                         direction="column"
@@ -107,38 +126,10 @@ const ComputerSidebar: Component<ComputerSidebarProps> = (props) => (
                                     </PaperListItem>
                                 )}
                             </For>
-                            <For each={props.invalidPanelsByComputer[comp.id] ?? []}>
-                                {(broken) => (
-                                    <PaperFlex direction="column" padding="half">
-                                        <PaperQuote variant="danger" icon="error" title="Panel can't load" role="alert">
-                                            {`${broken.id}: ${broken.error}`}
-                                        </PaperQuote>
-                                    </PaperFlex>
-                                )}
-                            </For>
-                            <Show when={props.switchError[comp.id]}>
-                                <PaperFlex direction="column" padding="half">
-                                    <PaperQuote variant="danger" icon="warning" title="Computer not switched" role="alert">
-                                        <PaperFlex direction="column" gap="half" align="flex-start">
-                                            {props.switchError[comp.id]}
-                                            <PaperButton size="tiny" onClick={() => props.onRetrySwitch(comp.id)}>
-                                                Retry
-                                            </PaperButton>
-                                        </PaperFlex>
-                                    </PaperQuote>
-                                </PaperFlex>
-                            </Show>
-                            <Show when={!props.switchError[comp.id] && props.panelsLoadError[comp.id] && panels().length === 0}>
-                                <PaperFlex direction="column" padding="half">
-                                    <PaperQuote variant="danger" icon="warning" title="Panels not loaded" role="alert">
-                                        <PaperFlex direction="column" gap="half" align="flex-start">
-                                            {props.panelsLoadError[comp.id]}
-                                            <PaperButton size="tiny" onClick={() => props.onRetryPanels(comp.id)}>
-                                                Retry
-                                            </PaperButton>
-                                        </PaperFlex>
-                                    </PaperQuote>
-                                </PaperFlex>
+                            <Show when={panels().length === 0 && (switchFailed() || listFailed())}>
+                                <PaperEmptyState icon="error" title="Couldn't load">
+                                    <PaperButton onClick={retry}>Try again</PaperButton>
+                                </PaperEmptyState>
                             </Show>
                         </PaperList>
                     </PaperFlex>

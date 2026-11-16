@@ -1,5 +1,5 @@
 import { onCleanup, onMount } from "solid-js";
-import { showToast } from "@mileniumhq/paperui";
+import { showError, showToast } from "@mileniumhq/paperui";
 import { logToMain, shellApi } from "../lib/shell";
 import { setMobileMode } from "../lib/mobileMode";
 import { startTarget } from "../lib/startOn";
@@ -29,11 +29,7 @@ export function useStartUp(options: StartUpOptions) {
             logToMain("error", "Couldn't read the launch options; the layout is the desktop one until restart:", err);
             // panels follow the shell: the desktop's behavior too
             setMobileMode(false);
-            showToast({
-                variant: "danger",
-                title: "Couldn't read how Paperboard was started",
-                message: `The desktop layout shows until Paperboard restarts. ${errorMessage(err)}`,
-            });
+            showError("Couldn't read how Paperboard was started", `The desktop layout shows until Paperboard restarts. ${errorMessage(err)}`);
         }
     });
 
@@ -49,19 +45,10 @@ export function useStartUp(options: StartUpOptions) {
         // Data fetches are scoped per computer
         await options.panels.refreshPanelsForComputer(activeComputerId());
 
-        // App Settings says why; until then nothing would say they're not yours
-        if (!(await settingsLoaded)) {
-            showToast({
-                variant: "danger",
-                title: "Settings not loaded",
-                message: "Paperboard is showing the defaults, not your settings, and changes aren't saved. App Settings says why.",
-            });
-        } else {
-            // the system may have changed since the last start (Run on
-            // startup points at this copy of Paperboard, or macOS asks again)
-            const refused = await applyAppSettings();
-            if (refused) showToast({ variant: "danger", title: "Run on startup not applied", message: refused });
-        }
+        // settings that didn't load say so in their own toast; loaded, the
+        // system may have changed since the last start (Run on startup
+        // points at this copy of Paperboard, or macOS asks again)
+        if (await settingsLoaded) await applyAppSettings();
 
         // Launch lands on Home or the computer App Settings starts on, never
         // on a panel: opening the last-used panel on boot made a misbehaving
