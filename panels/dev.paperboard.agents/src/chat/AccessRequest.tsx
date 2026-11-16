@@ -2,6 +2,7 @@ import { For, Match, Switch } from "solid-js";
 import { PaperButton, PaperCard, PaperCollapsible, PaperFlex, PaperIcon, PaperText, createAction } from "@mileniumhq/paperui";
 import type { AccessEntry, AccessItem } from "../contract";
 import type { Agent } from "../lib/agent";
+import { toastFailure } from "../lib/toastFailure";
 import RequestEnd from "./RequestEnd";
 
 /** what a folder or command lets the agent do, in the user's words */
@@ -22,9 +23,9 @@ function countText(items: AccessItem[]): string {
 /** The agent asking for folders and commands on the user's own computer: once, for good, or not at all. */
 export default function AccessRequest(props: { agent: Agent; entry: AccessEntry; name: string }) {
     const e = () => props.entry;
-    const { busy, error, run } = createAction();
+    const { busy, run } = createAction();
 
-    const answer = (how: "once" | "always" | "decline") => void run("Answer not sent", () => props.agent.calls.answerAccess({ id: e().id, how }));
+    const answer = (how: "once" | "always" | "decline") => void run("Couldn't send your answer", () => props.agent.calls.answerAccess({ id: e().id, how }), toastFailure);
 
     return (
         <PaperFlex direction="row">
@@ -87,7 +88,7 @@ export default function AccessRequest(props: { agent: Agent; entry: AccessEntry;
                         </PaperFlex>
                     </Match>
                 </Switch>
-                <RequestEnd entry={e()} name={props.name} error={error()} />
+                <RequestEnd entry={e()} name={props.name} />
             </PaperCard>
         </PaperFlex>
     );

@@ -3,54 +3,41 @@
 // for good after saying so.
 
 import { For, Match, Show, Switch, createEffect, createSignal, on } from "solid-js";
-import { PaperButton, PaperEmptyState, PaperFlex, PaperIcon, PaperList, PaperListItem, PaperLoader, PaperModal, PaperQuote, PaperText, type ActionFailure, createAction, createRead } from "@mileniumhq/paperui";
+import { PaperButton, PaperEmptyState, PaperFlex, PaperIcon, PaperList, PaperListItem, PaperLoader, PaperModal, PaperText, createAction, createRead } from "@mileniumhq/paperui";
 import { CURRENT_CONVERSATION as CURRENT, type PastConversation } from "../contract";
 import type { Agent } from "../lib/agent";
+import { toastFailure } from "../lib/toastFailure";
 const when = (at: number) => new Date(at).toLocaleString([], { dateStyle: "medium", timeStyle: "short" });
 
 export default function History(props: { agent: Agent; open: boolean; onClose: () => void }) {
     // read afresh each time it opens: the agent may have started or reopened one meanwhile
-    const history = createRead(() => props.agent.calls.conversations(), { source: () => props.open });
+    const history = createRead(() => props.agent.calls.conversations(), { source: () => props.open, failure: { title: "Couldn't load the conversations" } });
     const list = history.value;
-    const { busy, error: openError, setError: setOpenError, run } = createAction();
-    const [deleteError, setDeleteError] = createSignal<ActionFailure | null>(null);
+    // a refusal is a toast over the dialog, which stays open
+    const { busy, run } = createAction();
     const [deleting, setDeleting] = createSignal<PastConversation | null>(null);
     // the current one is marked; one being opened is, until it's open or wasn't
     const [chosen, setChosen] = createSignal(CURRENT);
     const all = () => (list() ? [...(list()!.current ? [list()!.current!] : []), ...list()!.past] : []);
-    // each opening starts with nothing refused
-    createEffect(
-        on(
-            () => props.open,
-            (open) => {
-                if (!open) return;
-                setOpenError(null);
-                setChosen(CURRENT);
-            },
-        ),
-    );
+    // each opening starts on the current one
+    createEffect(on(() => props.open, (open) => open && setChosen(CURRENT)));
 
     const reopen = async (c: PastConversation) => {
         setChosen(c.id);
-        if (await run("Conversation not opened", () => props.agent.calls.openConversation({ id: c.id }))) props.onClose();
+        if (await run("Couldn't open the conversation", () => props.agent.calls.openConversation({ id: c.id }), toastFailure)) props.onClose();
         setChosen(CURRENT);
-    };
-
-    const askDelete = (c: PastConversation) => {
-        setDeleteError(null);
-        setDeleting(c);
     };
 
     const remove = () => {
         const c = deleting()!;
         return run(
-            "Conversation not deleted",
+            "Couldn't delete the conversation",
             async () => {
                 await props.agent.calls.deleteConversation({ id: c.id });
                 setDeleting(null);
                 history.set((l) => l && { ...l, past: l.past.filter((x) => x.id !== c.id) });
             },
-            setDeleteError,
+            toastFailure,
         );
     };
 
@@ -69,14 +56,12 @@ export default function History(props: { agent: Agent; open: boolean; onClose: (
                             <PaperLoader loaderStatus="indeterminate" label="Reading the history" />
                         </PaperFlex>
                     </Match>
-                    <Match when={history.error()}>
-                        {(why) => (
-                            <PaperFlex padding="double">
-                                <PaperEmptyState icon="error" title="The history can't be read" description={why()}>
-                                    <PaperButton onClick={() => void history.reload()}>Try again</PaperButton>
-                                </PaperEmptyState>
-                            </PaperFlex>
-                        )}
+                    <Match when={!list()}>
+                        <PaperFlex padding="double">
+                            <PaperEmptyState icon="error" title="Couldn't load">
+                                <PaperButton onClick={() => void history.reload()}>Try again</PaperButton>
+                            </PaperEmptyState>
+                        </PaperFlex>
                     </Match>
                     <Match when={all().length === 0}>
                         <PaperFlex padding="double">
@@ -84,15 +69,6 @@ export default function History(props: { agent: Agent; open: boolean; onClose: (
                         </PaperFlex>
                     </Match>
                     <Match when={true}>
-                        <Show when={openError()}>
-                            {(shown) => (
-                                <PaperFlex padding="full">
-                                    <PaperQuote variant="danger" icon="error" title={shown().title} role="alert">
-                                        {shown().message}
-                                    </PaperQuote>
-                                </PaperFlex>
-                            )}
-                        </Show>
                         <PaperList
                             name="agents-history"
                             value={chosen()}
@@ -118,7 +94,7 @@ export default function History(props: { agent: Agent; open: boolean; onClose: (
                                                     disabled={busy()}
                                                     aria-label={`Delete “${c.title}”`}
                                                     title="Delete"
-                                                    onClick={() => askDelete(c)}
+                                                    onClick={() => setDeleting(c)}
                                                 >
                                                     <PaperIcon>delete</PaperIcon>
                                                 </PaperButton>
@@ -151,13 +127,6 @@ export default function History(props: { agent: Agent; open: boolean; onClose: (
             >
                 <PaperFlex gap="full">
                     <PaperText preset="text">“{deleting()?.title}” is deleted for good. What the agent remembers from it stays in its memory.</PaperText>
-                    <Show when={deleteError()}>
-                        {(shown) => (
-                            <PaperQuote variant="danger" icon="error" title={shown().title} role="alert">
-                                {shown().message}
-                            </PaperQuote>
-                        )}
-                    </Show>
                 </PaperFlex>
             </PaperModal>
         </>

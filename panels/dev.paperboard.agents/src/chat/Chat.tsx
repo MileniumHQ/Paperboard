@@ -1,7 +1,6 @@
 import { For, Show, createComputed, createEffect, createMemo, createSignal, on, onCleanup, onMount, type JSX } from "solid-js";
-import { PAPER_PANEL_COMPACT_WIDTH, PaperButton, PaperContextMenu, PaperContextMenuItem, PaperEmptyState, PaperFlex, PaperIcon, copyText, haptic, PaperMarkdown, useContextMenuState, PaperPresence, PaperProgress, PaperQuote, PaperText, type MarkdownImage, type MarkdownLink, type ActionFailure } from "@mileniumhq/paperui";
+import { PAPER_PANEL_COMPACT_WIDTH, PaperButton, PaperCard, PaperContextMenu, PaperContextMenuItem, PaperEmptyState, PaperFlex, PaperIcon, copyText, haptic, PaperMarkdown, useContextMenuState, PaperPresence, PaperProgress, PaperText, showError, type MarkdownImage, type MarkdownLink } from "@mileniumhq/paperui";
 import { createStore, reconcile } from "solid-js/store";
-import { errorMessage } from "@mileniumhq/paperapi";
 import { Face } from "../face/Face";
 import { skinFor } from "../face/skins";
 import type { FaceController } from "../face/controller";
@@ -80,16 +79,14 @@ export default function Chat(props: { agent: Agent; face: FaceController; pages:
     const [replyTo, setReplyTo] = createSignal<Said | null>(null);
     const [draft, setDraft] = createSignal("");
     const tray = createTray(props.agent);
-    const [notice, setNotice] = createSignal<ActionFailure | null>(null);
     const [historyOpen, setHistoryOpen] = createSignal(false);
     const [startingNew, setStartingNew] = createSignal(false);
     const canStartNew = () => !startingNew() && props.agent.entries.length > 0;
     const startNew = () => {
-        setNotice(null);
         setStartingNew(true);
         props.agent.calls
             .newConversation()
-            .catch((e) => setNotice({ title: "Conversation not started", message: errorMessage(e) }))
+            .catch((e) => showError("Couldn't start a new conversation", e))
             .finally(() => setStartingNew(false));
     };
     // the header's buttons fold into one menu when the chat is narrow: a phone, or a page open beside it
@@ -111,10 +108,9 @@ export default function Chat(props: { agent: Agent; face: FaceController; pages:
         menu.openAtMouse(e);
     };
     const copy = (text: string) => {
-        setNotice(null);
         copyText(text).then(
-            (ok) => !ok && setNotice({ title: "Message not copied", message: "The clipboard refused it." }),
-            (e) => setNotice({ title: "Message not copied", message: errorMessage(e) }),
+            (ok) => !ok && showError("Couldn't copy the message", "The clipboard refused it."),
+            (e) => showError("Couldn't copy the message", e),
         );
     };
     const byId = (id: string) => props.agent.entries.find((e): e is Said => e.id === id && (e.kind === "user" || e.kind === "agent"));
@@ -348,10 +344,9 @@ export default function Chat(props: { agent: Agent; face: FaceController; pages:
                                         </PaperText>
                                     </PaperFlex>
                                 </Show>
+                                {/* a turn that failed is part of the conversation: its card stays with it, as the requests' do */}
                                 <Show when={row.side === "note"}>
-                                    <PaperQuote variant="danger" icon="error" title={(row.entry as Extract<ChatEntry, { kind: "error" }>).title} role="alert">
-                                        {(row.entry as Extract<ChatEntry, { kind: "error" }>).text}
-                                    </PaperQuote>
+                                    <FailedTurn entry={row.entry as Extract<ChatEntry, { kind: "error" }>} />
                                 </Show>
                                 <Show when={row.side === "card"}>
                                     <SignIn
@@ -408,15 +403,6 @@ export default function Chat(props: { agent: Agent; face: FaceController; pages:
                 </div>
             </div>
 
-            <Show when={notice()}>
-                {(shown) => (
-                    <PaperFlex paddingX="double">
-                        <PaperQuote variant="danger" icon="error" title={shown().title} role="alert" onDismiss={() => setNotice(null)}>
-                            {shown().message}
-                        </PaperQuote>
-                    </PaperFlex>
-                )}
-            </Show>
 
             <Composer
                 agent={props.agent}
@@ -467,6 +453,29 @@ export default function Chat(props: { agent: Agent; face: FaceController; pages:
 
 const SIDES: Partial<Record<ChatEntry["kind"], Row["side"]>> = { user: "me", agent: "them", "sign-in": "card", access: "access", prompt: "prompt", "tool-server": "tool-server", "tool-sign-in": "tool-sign-in", app: "app" };
 const sideOf = (e: ChatEntry): Row["side"] => SIDES[e.kind] ?? "note";
+
+/** A turn that failed, as the chat keeps it: a card like the agent's requests, with what went wrong. */
+function FailedTurn(props: { entry: Extract<ChatEntry, { kind: "error" }> }) {
+    return (
+        <PaperFlex direction="row">
+            <PaperCard fullWidth={false} shrink maxWidth="panel-small" padding="full" role="region" aria-label={props.entry.title ?? props.entry.text} data-message={props.entry.id} data-card-error>
+                <PaperFlex direction="row" align="start" gap="half">
+                    <PaperIcon>error</PaperIcon>
+                    <PaperFlex gap="onefourth" minWidth={0}>
+                        <Show when={props.entry.title}>
+                            <PaperText preset="label" color="danger">
+                                {props.entry.title}
+                            </PaperText>
+                        </Show>
+                        <PaperText preset="hint" breakWord>
+                            {props.entry.text}
+                        </PaperText>
+                    </PaperFlex>
+                </PaperFlex>
+            </PaperCard>
+        </PaperFlex>
+    );
+}
 
 function Bubble(props: {
     row: Row;

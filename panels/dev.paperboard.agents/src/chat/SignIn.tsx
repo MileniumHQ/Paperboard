@@ -1,7 +1,8 @@
 import { For, Match, Show, Switch, createSignal } from "solid-js";
-import { PaperButton, PaperCard, PaperFlex, PaperIcon, PaperInput, PaperLoader, PaperQuote, PaperText, createAction, createRead } from "@mileniumhq/paperui";
+import { PaperButton, PaperCard, PaperFlex, PaperIcon, PaperInput, PaperLoader, PaperText, createAction, createRead } from "@mileniumhq/paperui";
 import { LIMITS, type SignInEntry } from "../contract";
 import type { Agent } from "../lib/agent";
+import { toastFailure } from "../lib/toastFailure";
 import RequestEnd from "./RequestEnd";
 import styles from "./SignIn.module.css";
 
@@ -22,9 +23,10 @@ export default function SignIn(props: { agent: Agent; entry: SignInEntry; name: 
     const kept = props.draft.image;
     const shot = createRead((id: string) => props.agent.calls.signInShot({ id }).then((r) => (props.draft.image = r.image)), {
         source: () => (e().status === "waiting" && !kept ? e().id : undefined),
+        failure: { title: "Couldn't load the page's picture" },
     });
     const image = () => shot.value() ?? kept;
-    const { busy, error, run } = createAction();
+    const { busy, run } = createAction();
 
     const setValue = (i: number, v: string) => {
         const next = values().slice();
@@ -34,7 +36,7 @@ export default function SignIn(props: { agent: Agent; entry: SignInEntry; name: 
     };
 
     const answer = async (send: () => Promise<unknown>) => {
-        await run("Answer not sent", send);
+        await run("Couldn't send your answer", send, toastFailure);
         // whatever happened, the values go: the request is used once
         setValues(e().fields.map(() => ""));
         props.onDone();
@@ -61,15 +63,11 @@ export default function SignIn(props: { agent: Agent; entry: SignInEntry; name: 
                             when={image()}
                             fallback={
                                 <Show when={shot.error()} fallback={<PaperLoader loaderStatus="indeterminate" label="Loading the page's picture" />}>
-                                    <PaperFlex gap="half">
-                                        <PaperQuote variant="danger" icon="error" title="Picture not loaded" role="alert">
-                                            {shot.error()}
-                                        </PaperQuote>
-                                        <PaperFlex direction="row">
-                                            <PaperButton size="small" onClick={() => void shot.reload()}>
-                                                Try again
-                                            </PaperButton>
-                                        </PaperFlex>
+                                    <PaperFlex direction="row" align="center" gap="half" wrap>
+                                        <PaperText preset="hint">Couldn't load the page's picture.</PaperText>
+                                        <PaperButton size="small" disabled={shot.loading()} onClick={() => void shot.reload()}>
+                                            Try again
+                                        </PaperButton>
                                     </PaperFlex>
                                 </Show>
                             }
@@ -125,7 +123,7 @@ export default function SignIn(props: { agent: Agent; entry: SignInEntry; name: 
                         </PaperFlex>
                     </Match>
                 </Switch>
-                <RequestEnd entry={e()} name={props.name} failed="Not signed in" error={error()} />
+                <RequestEnd entry={e()} name={props.name} failed="Not signed in" />
             </PaperCard>
         </PaperFlex>
     );

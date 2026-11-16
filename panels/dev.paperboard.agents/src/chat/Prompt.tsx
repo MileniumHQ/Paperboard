@@ -2,6 +2,7 @@ import { For, Match, Show, Switch, createEffect, createSignal, on } from "solid-
 import { PaperButton, PaperCard, PaperFlex, PaperIcon, PaperInput, PaperLoader, PaperText, createAction } from "@mileniumhq/paperui";
 import { LIMITS, type PromptEntry } from "../contract";
 import type { Agent } from "../lib/agent";
+import { toastFailure } from "../lib/toastFailure";
 import RequestEnd from "./RequestEnd";
 import type { SignInDraft } from "./SignIn";
 
@@ -19,7 +20,7 @@ function serversText(entry: PromptEntry): string {
 export default function Prompt(props: { agent: Agent; entry: PromptEntry; name: string; draft: SignInDraft; onDone: () => void }) {
     const e = () => props.entry;
     const [values, setValues] = createSignal<string[]>(props.draft.values.length ? props.draft.values : e().fields.map(() => ""));
-    const { busy, error, run } = createAction();
+    const { busy, run } = createAction();
     const secrets = () => e().fields.some((f) => f.secret);
 
     const setValue = (i: number, v: string) => {
@@ -29,7 +30,7 @@ export default function Prompt(props: { agent: Agent; entry: PromptEntry; name: 
         props.draft.values = next;
     };
 
-    const answer = (send: () => Promise<unknown>) => void run("Answer not sent", send);
+    const answer = (send: () => Promise<unknown>) => void run("Couldn't send your answer", send, toastFailure);
     // however it ended (sent, declined, lapsed, failed), what was typed goes with it
     createEffect(
         on(
@@ -106,7 +107,7 @@ export default function Prompt(props: { agent: Agent; entry: PromptEntry; name: 
                         </PaperFlex>
                     </Match>
                 </Switch>
-                <RequestEnd entry={e()} name={props.name} failed="Not sent" error={error()} />
+                <RequestEnd entry={e()} name={props.name} failed="Not sent" />
             </PaperCard>
         </PaperFlex>
     );

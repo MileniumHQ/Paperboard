@@ -2,15 +2,16 @@ import { For, Match, Switch } from "solid-js";
 import { PaperButton, PaperCard, PaperFlex, PaperIcon, PaperText, createAction } from "@mileniumhq/paperui";
 import type { ToolServerEntry } from "../contract";
 import type { Agent } from "../lib/agent";
+import { toastFailure } from "../lib/toastFailure";
 import RequestEnd from "./RequestEnd";
 
 /** The agent asking to run a program on the user's computer as one of its tool servers. Nothing runs until it's allowed. */
 export default function ToolServerRequest(props: { agent: Agent; entry: ToolServerEntry; name: string }) {
     const e = () => props.entry;
-    const { busy, error, run } = createAction();
+    const { busy, run } = createAction();
     const title = () => (e().change ? `${props.name} wants to change what ${e().server} runs` : `${props.name} wants to run ${e().server} on your computer`);
 
-    const answer = (allow: boolean) => void run("Answer not sent", () => props.agent.calls.answerToolServer({ id: e().id, allow }));
+    const answer = (allow: boolean) => void run("Couldn't send your answer", () => props.agent.calls.answerToolServer({ id: e().id, allow }), toastFailure);
 
     return (
         <PaperFlex direction="row">
@@ -57,7 +58,7 @@ export default function ToolServerRequest(props: { agent: Agent; entry: ToolServ
                         </PaperFlex>
                     </Match>
                 </Switch>
-                <RequestEnd entry={e()} name={props.name} failed="Not added" error={error()} />
+                <RequestEnd entry={e()} name={props.name} failed="Not added" />
             </PaperCard>
         </PaperFlex>
     );

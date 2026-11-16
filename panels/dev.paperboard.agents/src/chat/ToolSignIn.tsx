@@ -1,9 +1,10 @@
-import { Match, Show, Switch } from "solid-js";
-import { PaperButton, PaperCard, PaperFlex, PaperIcon, PaperLoader, PaperQuote, PaperText, createAction } from "@mileniumhq/paperui";
+import { Match, Switch } from "solid-js";
+import { PaperButton, PaperCard, PaperFlex, PaperIcon, PaperLoader, PaperText, createAction } from "@mileniumhq/paperui";
 import type { ToolSignInEntry } from "../contract";
 import { createTools } from "../tools/api";
 import SignInSteps from "../tools/SignInSteps";
 import { hostOf, stateOf, stateText } from "../tools/status";
+import { toastFailure } from "../lib/toastFailure";
 
 /** The agent asking the user to sign in to one of its tool servers. How it's going is read live, so an old card says how it is now. */
 export default function ToolSignIn(props: { entry: ToolSignInEntry; name: string }) {
@@ -19,7 +20,8 @@ export default function ToolSignIn(props: { entry: ToolSignInEntry; name: string
         const s = state();
         return s?.kind === "failed" ? s.error : null;
     };
-    const { busy, error, run: act } = createAction();
+    const { busy, run } = createAction();
+    const act = (title: string, fn: () => Promise<unknown>) => run(title, fn, toastFailure);
 
     return (
         <PaperFlex direction="row">
@@ -35,10 +37,14 @@ export default function ToolSignIn(props: { entry: ToolSignInEntry; name: string
                 </PaperFlex>
 
                 <Switch>
+                    {/* the toast says why, once for every card */}
                     <Match when={tools.load() === "failed"}>
-                        <PaperQuote variant="danger" icon="error" title="Tools can't be read" role="alert">
-                            {tools.loadError()}
-                        </PaperQuote>
+                        <PaperFlex direction="row" align="center" gap="half" wrap>
+                            <PaperText preset="hint">Couldn't check the sign-in.</PaperText>
+                            <PaperButton size="small" onClick={() => void tools.refresh()}>
+                                Try again
+                            </PaperButton>
+                        </PaperFlex>
                     </Match>
                     <Match when={!tools.view()}>
                         <PaperLoader loaderStatus="indeterminate" label="Reading the tools" />
@@ -51,7 +57,7 @@ export default function ToolSignIn(props: { entry: ToolSignInEntry; name: string
                     </Match>
                     <Match when={state()?.kind === "needs-sign-in"}>
                         <PaperFlex direction="row">
-                            <PaperButton variant="primary" disabled={busy()} onClick={() => void act("Sign-in not started", () => tools.signIn(e().server))}>
+                            <PaperButton variant="primary" disabled={busy()} onClick={() => void act(`Couldn't start signing in to ${e().server}`, () => tools.signIn(e().server))}>
                                 <PaperIcon>login</PaperIcon> Sign in
                             </PaperButton>
                         </PaperFlex>
@@ -65,11 +71,15 @@ export default function ToolSignIn(props: { entry: ToolSignInEntry; name: string
                     <Match when={failed()}>
                         {(why) => (
                             <PaperFlex gap="half">
-                                <PaperQuote variant="danger" icon="error" title={`${e().server} didn't start`} role="alert">
-                                    {why()}
-                                </PaperQuote>
+                                {/* how the card's ask ended: its own line, like the others */}
+                                <PaperFlex direction="row" align="start" gap="half" data-card-error>
+                                    <PaperIcon>error</PaperIcon>
+                                    <PaperText preset="hint" color="danger" breakWord>
+                                        {e().server} didn't start: {why()}
+                                    </PaperText>
+                                </PaperFlex>
                                 <PaperFlex direction="row">
-                                    <PaperButton disabled={busy()} onClick={() => void act("Server not started", () => tools.restart(e().server))}>
+                                    <PaperButton disabled={busy()} onClick={() => void act(`Couldn't start ${e().server}`, () => tools.restart(e().server))}>
                                         <PaperIcon>refresh</PaperIcon> Try again
                                     </PaperButton>
                                 </PaperFlex>
@@ -78,13 +88,6 @@ export default function ToolSignIn(props: { entry: ToolSignInEntry; name: string
                     </Match>
                     <Match when={state()}>{(s) => <PaperText preset="hint">{stateText(s())}</PaperText>}</Match>
                 </Switch>
-                <Show when={error()}>
-                    {(shown) => (
-                        <PaperQuote variant="danger" icon="error" title={shown().title} role="alert">
-                            {shown().message}
-                        </PaperQuote>
-                    )}
-                </Show>
             </PaperCard>
         </PaperFlex>
     );

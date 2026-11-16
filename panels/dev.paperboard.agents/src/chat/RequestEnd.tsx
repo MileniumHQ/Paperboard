@@ -1,11 +1,12 @@
 import { Show } from "solid-js";
-import { PaperQuote, PaperText, type ActionFailure } from "@mileniumhq/paperui";
+import { PaperFlex, PaperIcon, PaperText } from "@mileniumhq/paperui";
 
 /**
- * How every request card in the chat ends, whatever it asked: refused, lapsed, failed at the service
- * (told under the card's own `failed` title), and an answer that never reached the service.
+ * How every request card in the chat ends, whatever it asked: refused, lapsed, or failed at the service
+ * (told under the card's own `failed` title). It's the card's record in the conversation, so a failure is
+ * the card's own line, like its other endings, not an alert.
  */
-export default function RequestEnd(props: { entry: { status: string; error?: string }; name: string; failed?: string; error: ActionFailure | null }) {
+export default function RequestEnd(props: { entry: { status: string; error?: string }; name: string; failed?: string }) {
     return (
         <>
             <Show when={props.entry.status === "declined"}>
@@ -16,16 +17,12 @@ export default function RequestEnd(props: { entry: { status: string; error?: str
             </Show>
             <Show when={props.entry.status === "failed" && props.failed}>
                 {(title) => (
-                    <PaperQuote variant="danger" icon="error" title={title()} role="alert">
-                        {props.entry.error}. {props.name} was told and can ask again.
-                    </PaperQuote>
-                )}
-            </Show>
-            <Show when={props.error}>
-                {(shown) => (
-                    <PaperQuote variant="danger" icon="error" title={shown().title} role="alert">
-                        {shown().message}
-                    </PaperQuote>
+                    <PaperFlex direction="row" align="start" gap="half" data-card-error>
+                        <PaperIcon>error</PaperIcon>
+                        <PaperText preset="hint" color="danger" breakWord>
+                            {title()}: {props.entry.error}. {props.name} was told and can ask again.
+                        </PaperText>
+                    </PaperFlex>
                 )}
             </Show>
         </>

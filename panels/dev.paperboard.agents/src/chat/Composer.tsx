@@ -4,8 +4,7 @@
 // (the model, the computer) lives in the menu and settings.
 
 import { For, Show, createEffect, createSignal, on, onCleanup } from "solid-js";
-import { PaperButton, PaperEffect, PaperIcon, PaperQuote, haptic, type ActionFailure } from "@mileniumhq/paperui";
-import { errorMessage } from "@mileniumhq/paperapi";
+import { PaperButton, PaperEffect, PaperIcon, haptic, showError } from "@mileniumhq/paperui";
 import { LIMITS, type ChatEntry } from "../contract";
 import type { Agent } from "../lib/agent";
 import type { Tray } from "./tray";
@@ -25,7 +24,6 @@ export default function Composer(props: {
 }) {
     const name = () => props.agent.name();
 
-    const [error, setError] = createSignal<ActionFailure | null>(null);
     const [dragging, setDragging] = createSignal(false);
     let field!: HTMLTextAreaElement;
     let sizer!: HTMLTextAreaElement;
@@ -36,7 +34,7 @@ export default function Composer(props: {
     const attach = (files: File[]) => {
         if (!files.length) return;
         const refused = tray().add(files);
-        setError(refused ? { title: "Not every file added", message: refused } : null);
+        if (refused) showError("Couldn't add every file", refused);
     };
 
     // One message leaves at a time: a second press (a double tap, Ctrl+Enter held) while one is on its way sends nothing.
@@ -48,7 +46,6 @@ export default function Composer(props: {
         const draft = props.draft;
         const reply = props.replyTo;
         const sent = tray().sendable();
-        setError(null);
         // felt as the message leaves, not once the service has it
         haptic("send");
         props.onSend();
@@ -58,7 +55,7 @@ export default function Composer(props: {
             for (const c of sent) tray().remove(c.key);
             if (props.replyTo === reply) props.onCancelReply();
         } catch (e) {
-            setError({ title: "Message not sent", message: errorMessage(e) });
+            showError("Couldn't send the message", e, { retry: () => void send() });
         } finally {
             sending = false;
         }
@@ -212,13 +209,6 @@ export default function Composer(props: {
                 </PaperEffect>
             </div>
 
-            <Show when={error()}>
-                {(shown) => (
-                    <PaperQuote variant="danger" icon="error" title={shown().title} role="alert" onDismiss={() => setError(null)}>
-                        {shown().message}
-                    </PaperQuote>
-                )}
-            </Show>
         </div>
     );
 }

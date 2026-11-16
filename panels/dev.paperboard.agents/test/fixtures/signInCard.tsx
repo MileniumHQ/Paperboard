@@ -1,6 +1,6 @@
 // The chat's sign-in card in a real browser, over a stand-in agent that
 // holds each answer until the fixture lets it through or refuses it: a
-// sign-in pressed twice is sent once, and refused, it says why and the
+// sign-in pressed twice is sent once, and refused, a toast says why and the
 // typed password is gone from the page.
 //
 // Not over the real service: a waiting sign-in is made only by the agent's
@@ -39,6 +39,8 @@ const agent = {
 
 const card = () => document.querySelector<HTMLElement>('[data-message="s1"]')!;
 const button = (text: string) => [...card().querySelectorAll<HTMLButtonElement>("button")].find((b) => b.innerText.trim() === text)!;
+// a refused answer is a toast; the card keeps no alert of its own
+const toast = () => document.querySelector<HTMLElement>("[data-paper-toasts] [role=alert]")?.innerText ?? null;
 const alertIn = () => card().querySelector<HTMLElement>("[role=alert]")?.innerText ?? null;
 /** types into a field as a keyboard does: the value changes, then the field says so */
 function fill(name: string, text: string): void {
@@ -66,8 +68,8 @@ async function run(): Promise<Record<string, unknown>> {
     button("Sign in").click();
     const sends = asked.length;
     refuse(new Error("The browser window closed"));
-    await until("the sign-in's refusal", () => alertIn());
-    return { sends, values: asked[0]?.values, refusal: alertIn(), holdsPassword: holds(PASSWORD), uncaught: [...errors] };
+    await until("the sign-in's refusal", () => toast());
+    return { sends, values: asked[0]?.values, refusal: toast(), inCard: alertIn(), holdsPassword: holds(PASSWORD), uncaught: [...errors] };
 }
 
 report(run);

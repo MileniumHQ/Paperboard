@@ -3,7 +3,8 @@
 // with ask_user and for access with request_access, and the cards are
 // answered as a person would. Each answer is sent once however often it's
 // pressed, a typed key is gone from the page once the card is answered, and
-// an answer that didn't go through says why on its card. The page's socket
+// an answer that didn't go through says why in a toast (it isn't the card's
+// record: the request is still waiting). The page's socket
 // (test/support/wire.ts) holds an answer on its way, and lets one go to a
 // request that isn't waiting, so the real service refuses it.
 import { afterAll, beforeAll, describe, expect, setDefaultTimeout, test } from "bun:test";
@@ -33,6 +34,7 @@ const card = (name: string) => `document.querySelector(${JSON.stringify(`[role=r
 
 const button = (inCard: string, text: string) => `[...${card(inCard)}.querySelectorAll("button")].find((b) => b.innerText.trim() === ${JSON.stringify(text)})`;
 const alertIn = (inCard: string) => `(${card(inCard)}.querySelector("[role=alert]")?.innerText ?? null)`;
+const TOAST = `(document.querySelector("[data-paper-toasts] [role=alert]")?.innerText ?? null)`;
 /** types into a card's field as a keyboard does: the value changes, then the field says so */
 const fill = (inCard: string, name: string, text: string) => `(() => {
     const input = ${card(inCard)}.querySelector('input[name="${name}"]');
@@ -61,8 +63,9 @@ describe("a request card in the chat", () => {
         expect(error, "the fixture threw").toBe("");
         expect(checks.sends, "the sign-in was sent more than once").toBe(1);
         expect(checks.values).toEqual(["ada@example.com", "correct horse battery staple"]);
-        expect(checks.refusal).toContain("Answer not sent");
+        expect(checks.refusal).toContain("Couldn't send your answer");
         expect(checks.refusal).toContain("The browser window closed");
+        expect(checks.inCard, "the refusal is an alert on the card").toBeNull();
         expect(checks.holdsPassword, "the password is still on the page").toBe(false);
         expect(checks.uncaught).toEqual([]);
     });
@@ -90,14 +93,17 @@ describe("a request card in the chat", () => {
         expect(((await sent(page, "answerAccess")) as { how: string }[])[0]!.how).toBe("always");
         // it reaches the service for a request that isn't waiting: the service refuses it
         await releaseCall(page, "answerAccess", { id: "0000000000000000" });
-        await page.waitFor(alertIn(ACCESS), "the access answer's refusal");
-        const refusal = await page.evaluate<string>(alertIn(ACCESS));
-        expect(refusal).toContain("Answer not sent");
+        await page.waitFor(TOAST, "the access answer's refusal");
+        const refusal = await page.evaluate<string>(TOAST);
+        expect(refusal).toContain("Couldn't send your answer");
         expect(refusal).toContain("That request isn't waiting anymore.");
+        expect(await page.evaluate(alertIn(ACCESS)), "the refusal is an alert on the card").toBeNull();
+        await page.click('[data-paper-toasts] [aria-label="Close"]');
+        await page.waitFor(`${TOAST} === null`, "the refusal's toast to close");
         await holdCalls(page, "answerAccess", false);
         await page.evaluate(`${button(ACCESS, "Decline")}.click()`);
         await page.waitFor(`${card(ACCESS)}.innerText.includes("You said no.")`, "the access request to say no");
-        expect(await page.evaluate(alertIn(ACCESS)), "the old refusal is still shown").toBeNull();
+        expect(await page.evaluate(`${alertIn(ACCESS)} ?? ${TOAST}`), "the old refusal is still shown").toBeNull();
         expect(await page.evaluate(`[...${card(ACCESS)}.querySelectorAll("button")].filter((b) => /allow|decline/i.test(b.innerText)).length`), "the answer buttons are still shown").toBe(0);
         expect(page.exceptions).toEqual([]);
     });
