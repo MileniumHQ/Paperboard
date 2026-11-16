@@ -1,6 +1,6 @@
 import { minecraftSoftware } from "../games/minecraft/index";
 import { Show } from "solid-js";
-import { PaperButton, PaperFlex, PaperPageHeader, PaperQuote, createRead } from "@mileniumhq/paperui";
+import { PaperButton, PaperEmptyState, PaperPageHeader, PaperQuote, createRead } from "@mileniumhq/paperui";
 import ConfigSettings from "./ConfigSettings";
 import { useServer } from "../lib/server";
 import { SOFTWARE_NAMES } from "../lib/software";
@@ -14,10 +14,12 @@ export default function Loader(props: { active: boolean }) {
     // read whenever the tab opens or the software changes: the files
     // appear on the server's first start and differ per software. A
     // setting read again unchanged keeps its row
-    const read = createRead(() => calls.readLoaderSettings(), { source: () => props.active && serverSoftware(), message: errorMessage });
+    const read = createRead(() => calls.readLoaderSettings(), {
+        source: () => props.active && serverSoftware(),
+        message: errorMessage,
+        failure: { title: "Couldn't load the loader settings" },
+    });
     const settings = read.value;
-    // a read again hides the last failure
-    const loadError = () => (read.loading() ? "" : (read.error() ?? ""));
     const load = read.reload;
 
     const name = () => SOFTWARE_NAMES[minecraftSoftware(serverSoftware())];
@@ -25,13 +27,10 @@ export default function Loader(props: { active: boolean }) {
     return (
         <>
             <PaperPageHeader icon="settings_applications" title="Loader" />
-            <Show when={loadError()}>
-                <PaperQuote variant="danger" icon="warning" title="Could not read the loader settings">
-                    <PaperFlex direction="column" gap="half">
-                        <span>{loadError()}</span>
-                        <PaperButton onClick={() => void load()}>Try again</PaperButton>
-                    </PaperFlex>
-                </PaperQuote>
+            <Show when={!settings() && !read.loading() && read.error()}>
+                <PaperEmptyState icon="error" title="Couldn't load">
+                    <PaperButton disabled={read.loading()} onClick={() => void load()}>Try again</PaperButton>
+                </PaperEmptyState>
             </Show>
             <Show when={settings()}>
                 {(view) => (

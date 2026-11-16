@@ -1,7 +1,8 @@
-import { createSignal, Show } from "solid-js";
+import { Show } from "solid-js";
 import {
     PaperButton,
     PaperCopyButton,
+    PaperEmptyState,
     PaperFlex,
     PaperPageHeader,
     PaperQuote,
@@ -10,6 +11,7 @@ import {
     PaperText,
     PaperToggle,
     createRead,
+    showError,
 } from "@mileniumhq/paperui";
 import ConfigSettings from "./ConfigSettings";
 import { errorMessage } from "../lib/failure";
@@ -29,19 +31,17 @@ export default function Crossplay(props: { active: boolean }) {
     const read = createRead(() => calls.readCrossplay(), {
         source: () => props.active && crossplayPlatform(serverSoftware()) !== null && serverSoftware(),
         message: errorMessage,
+        failure: { title: "Couldn't load crossplay" },
     });
     const view = read.value;
-    // a read again hides the last failure
-    const loadError = () => (read.loading() ? "" : (read.error() ?? ""));
     const load = read.reload;
-    const [error, setError] = createSignal("");
 
     const enabled = () => Boolean(view()?.geyser && view()?.floodgate);
 
     // Turning crossplay on downloads Geyser and Floodgate, which takes a
     // while; the switch shows where it is going at once, and a second press
     // waits for the first to finish instead of racing it
-    const saves = createSaves({ failed: (err) => setError(errorMessage(err)), changed: () => setError("") });
+    const saves = createSaves({ failed: (err) => showError("Couldn't change crossplay", errorMessage(err)) });
     const crossplay = saves.setting("crossplay", enabled, async (on) => {
         const current = view();
         if (!current) throw new Error("Crossplay has not been read yet");
@@ -73,13 +73,10 @@ export default function Crossplay(props: { active: boolean }) {
     return (
         <>
             <PaperPageHeader icon="devices" title="Crossplay" />
-            <Show when={loadError()}>
-                <PaperQuote variant="danger" icon="warning" title="Could not read crossplay">
-                    <PaperFlex direction="column" gap="half">
-                        <span>{loadError()}</span>
-                        <PaperButton onClick={() => void load()}>Try again</PaperButton>
-                    </PaperFlex>
-                </PaperQuote>
+            <Show when={!view() && !read.loading() && read.error()}>
+                <PaperEmptyState icon="error" title="Couldn't load">
+                    <PaperButton disabled={read.loading()} onClick={() => void load()}>Try again</PaperButton>
+                </PaperEmptyState>
             </Show>
             <Show when={view()}>
                 <PaperSettingList autoHeight>
@@ -87,11 +84,6 @@ export default function Crossplay(props: { active: boolean }) {
                         <PaperToggle checked={crossplay.value()} onChange={crossplay.set} />
                     </PaperSettingItem>
                 </PaperSettingList>
-                <Show when={error()}>
-                    <PaperQuote variant="danger" icon="warning" title="Crossplay did not change" onDismiss={() => setError("")}>
-                        {error()}
-                    </PaperQuote>
-                </Show>
                 <Show when={half()}>
                     {(note) => (
                         <PaperQuote variant="warning" icon="info" title="Half installed">

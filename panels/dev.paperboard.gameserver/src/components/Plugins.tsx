@@ -9,7 +9,9 @@ import {
     PaperQuote,
     PaperText,
     type PaperFileReveal,
+    createFailureToast,
     createLatest,
+    showError,
 } from "@mileniumhq/paperui";
 import { useServer } from "../lib/server";
 import { errorMessage } from "../lib/failure";
@@ -38,12 +40,16 @@ function DependencyPreview(props: InstallExtrasProps) {
     const [preview, setPreview] = createSignal<InstallPreview | null>(null);
     const [loading, setLoading] = createSignal(false);
     const [optional, setOptional] = createSignal<string[]>([]);
+    // why the plan couldn't be resolved: Install waits until it is
     const [error, setError] = createSignal("");
+    createFailureToast(error, { title: "Couldn't resolve its dependencies" });
+    // Try again asks once more for the same version
+    const [attempt, setAttempt] = createSignal(0);
 
     // a quick reselection must not show an older answer
     const latest = createLatest();
     createEffect(
-        on([() => props.version?.id, optional], ([versionId, checked]) => {
+        on([() => props.version?.id, optional, attempt], ([versionId, checked]) => {
             setPreview(null);
             setError("");
             props.report({ ready: false, payload: checked });
@@ -79,20 +85,20 @@ function DependencyPreview(props: InstallExtrasProps) {
                 </PaperText>
             </Show>
             <Show when={error()}>
-                <PaperQuote variant="danger" icon="warning" title="Couldn't resolve its dependencies">
-                    {error()}
-                </PaperQuote>
+                <PaperFlex>
+                    <PaperButton onClick={() => setAttempt((n) => n + 1)}>Try again</PaperButton>
+                </PaperFlex>
             </Show>
             <Show when={!loading() && preview()}>
                 {(plan) => (
                     <>
                         <Show when={!plan().mainFile}>
-                            <PaperQuote variant="danger" icon="warning" title="Nothing to install">
+                            <PaperQuote variant="warning" icon="warning" title="Nothing to install">
                                 This version has no file Paperboard can verify, so it is not installed.
                             </PaperQuote>
                         </Show>
                         <Show when={plan().failures.length > 0}>
-                            <PaperQuote variant="danger" icon="warning" title="Can't install this version">
+                            <PaperQuote variant="warning" icon="warning" title="Can't install this version">
                                 {plan().failures.join(" ")}
                             </PaperQuote>
                         </Show>
@@ -178,18 +184,14 @@ export default function Plugins(props: {
     const unit = () => kind.noun;
 
     const [updating, setUpdating] = createSignal(false);
-    const [updateError, setUpdateError] = createSignal("");
     const [failures, setFailures] = createSignal<PluginUpdateCheck[] | null>(null);
     const [uninstallingFailure, setUninstallingFailure] = createSignal<string | null>(null);
-    // said in the result's dialog, where the Uninstall was pressed
-    const [uninstallError, setUninstallError] = createSignal("");
     // what an update that left nothing to report did
     const [updated, setUpdated] = createSignal<{ title: string; message: string } | null>(null);
 
     const runUpdateCheck = async () => {
         if (updating()) return;
         setUpdating(true);
-        setUpdateError("");
         setUpdated(null);
         try {
             const checks = await checkPluginUpdates(server);
@@ -206,7 +208,6 @@ export default function Plugins(props: {
             }
             await browser.reload();
             if (failed.length > 0) {
-                setUninstallError("");
                 setFailures(failed);
             } else {
                 const count = available.length;
@@ -215,7 +216,7 @@ export default function Plugins(props: {
                 else setUpdated({ title: "Updated", message: `${count} ${count === 1 ? unit() : `${unit()}s`} updated.` });
             }
         } catch (err) {
-            setUpdateError(errorMessage(err));
+            showError(`Couldn't update the ${unit()}s`, errorMessage(err));
         } finally {
             setUpdating(false);
         }
@@ -223,14 +224,14 @@ export default function Plugins(props: {
 
     const uninstallFailure = async (filename: string) => {
         setUninstallingFailure(filename);
-        setUninstallError("");
         try {
             // service-owned: trash-first delete, never a bare fileApi.delete
             await server.calls.deletePlugin({ filename });
             setFailures((prev) => (prev ?? []).filter((f) => f.filename !== filename));
             await browser.reload();
         } catch (err) {
-            setUninstallError(errorMessage(err));
+            // the result's dialog stays open: the toast shows over it
+            showError(`Couldn't uninstall the ${unit()}`, errorMessage(err));
         } finally {
             setUninstallingFailure(null);
         }
@@ -264,20 +265,15 @@ export default function Plugins(props: {
     // made per opened add-on, so a message about one never shows on the next
     const configure: DetailExtras = (entry, close) => {
         const [configuring, setConfiguring] = createSignal(false);
-        const [error, setError] = createSignal("");
         const open = async () => {
-            setError("");
             setConfiguring(true);
             try {
                 const location = await server.calls.locateAddonConfig({ filename: entry.id });
-                if (!location.reveal) {
-                    setError(location.message ?? "Paperboard could not find where this keeps its settings.");
-                    return;
-                }
+                if (!location.reveal) throw new Error(location.message ?? "Paperboard could not find where this keeps its settings.");
                 close();
                 props.onConfigure?.(location.reveal);
             } catch (err) {
-                setError(errorMessage(err));
+                showError("Couldn't open its settings", errorMessage(err));
             } finally {
                 setConfiguring(false);
             }
@@ -289,13 +285,7 @@ export default function Plugins(props: {
                     Configure
                 </PaperButton>
             ),
-            notice: (
-                <Show when={error()}>
-                    <PaperQuote variant="warning" icon="settings" title="Couldn't open its settings">
-                        {error()}
-                    </PaperQuote>
-                </Show>
-            ),
+            notice: null,
         };
     };
 
@@ -313,20 +303,13 @@ export default function Plugins(props: {
                 </PaperEffect>
             }
             notices={
-                <>
-                    <Show when={updateError()}>
-                        <PaperQuote variant="danger" icon="warning" title={`${unit()[0]!.toUpperCase()}${unit().slice(1)}s not updated`}>
-                            {updateError()}
+                <Show when={updated()}>
+                    {(done) => (
+                        <PaperQuote variant="success" icon="check_circle" title={done().title} onDismiss={() => setUpdated(null)}>
+                            {done().message}
                         </PaperQuote>
-                    </Show>
-                    <Show when={updated()}>
-                        {(done) => (
-                            <PaperQuote variant="success" icon="check_circle" title={done().title} onDismiss={() => setUpdated(null)}>
-                                {done().message}
-                            </PaperQuote>
-                        )}
-                    </Show>
-                </>
+                    )}
+                </Show>
             }
         >
             <PaperModal
@@ -346,11 +329,6 @@ export default function Plugins(props: {
                 }
             >
                 <PaperFlex direction="column" gap="full">
-                    <Show when={uninstallError()}>
-                        <PaperQuote variant="danger" icon="warning" title="Not uninstalled" onDismiss={() => setUninstallError("")}>
-                            {uninstallError()}
-                        </PaperQuote>
-                    </Show>
                     <Show when={incompatible().length > 0}>
                         <PaperFlex direction="column" gap="half">
                             <PaperText preset="heading">No compatible build</PaperText>

@@ -16,6 +16,7 @@ import {
     PaperToggle,
     sameData,
     createRead,
+    showError,
 } from "@mileniumhq/paperui";
 import type { GameFeatures, GameOption, GameTab } from "../games";
 import { useServer } from "../lib/server";
@@ -197,11 +198,10 @@ export default function GameOptions(props: {
     whileRunning: GameFeatures["optionsWhileRunning"];
 }) {
     const { calls, serverStatus } = useServer();
-    const options = createRead(() => calls.readGameOptions(), { message: errorMessage });
+    const options = createRead(() => calls.readGameOptions(), { message: errorMessage, failure: { title: "Couldn't load the options" } });
     const values = options.value;
     // a read again shows the loader, not the last failure
-    const loadError = () => (options.loading() ? "" : (options.error() ?? ""));
-    const [saveError, setSaveError] = createSignal("");
+    const loadFailed = () => !options.loading() && options.error() !== null;
     const [search, setSearch] = createSignal("");
     const listed = createMemo(() => props.fields.filter((field) => !field.scope && (field.tab ?? "options") === props.tab.id));
     // the game describes its options again as its state changes, in new
@@ -244,7 +244,7 @@ export default function GameOptions(props: {
         return `${list} ${names.length === 1 ? "applies" : "apply"} now. Other changes apply the next time the server starts.`;
     };
 
-    const saves = createSaves({ failed: (err) => setSaveError(errorMessage(err)), changed: () => setSaveError("") });
+    const saves = createSaves({ failed: (err) => showError("Couldn't save the options", errorMessage(err)) });
 
     /** one option's row: its control saves through the tab's saves */
     const OptionRow = (row: { id: string }) => {
@@ -305,24 +305,13 @@ export default function GameOptions(props: {
                     </PaperQuote>
                 </Show>
             </Show>
-            <Show when={loadError()}>
-                <PaperQuote variant="danger" icon="warning" title="Couldn't read the options">
-                    <PaperFlex direction="column" gap="half">
-                        <PaperText>{loadError()}</PaperText>
-                        <PaperButton size="tiny" onClick={() => void options.reload()}>Try again</PaperButton>
-                    </PaperFlex>
-                </PaperQuote>
-            </Show>
-            <Show when={saveError()}>
-                <PaperQuote variant="danger" icon="warning" title="Options not saved" onDismiss={() => setSaveError("")}>
-                    {saveError()}
-                </PaperQuote>
-            </Show>
             <Show
                 when={values()}
                 fallback={
-                    <Show when={!loadError()}>
-                        <PaperText size={2} color="text-subtle">Loading settings…</PaperText>
+                    <Show when={loadFailed()} fallback={<PaperText size={2} color="text-subtle">Loading settings…</PaperText>}>
+                        <PaperEmptyState icon="error" title="Couldn't load">
+                            <PaperButton disabled={options.loading()} onClick={() => void options.reload()}>Try again</PaperButton>
+                        </PaperEmptyState>
                     </Show>
                 }
             >

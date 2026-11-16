@@ -1,12 +1,14 @@
 import { createEffect, createSignal, For, onCleanup, Show, on } from "solid-js";
 import {
     PaperButton,
+    PaperEmptyState,
     PaperFlex,
     PaperModal,
-    PaperQuote,
     PaperSwatch,
     createAction,
+    createFailureToast,
     createLatest,
+    showError,
 } from "@mileniumhq/paperui";
 import {
     applyCode,
@@ -154,7 +156,9 @@ export function MotdEditor(props: {
     save: (raw: string) => Promise<void>;
 }) {
     const [loaded, setLoaded] = createSignal(false);
+    // a message that can't be read can't be edited: the body says so until it is read
     const [loadError, setLoadError] = createSignal("");
+    createFailureToast(loadError, { title: `Couldn't load ${props.source}` });
     const saving = createAction({ message: errorMessage });
     const [active, setActive] = createSignal<MotdStyle>(plainStyle());
 
@@ -218,7 +222,6 @@ export function MotdEditor(props: {
     const load = async () => {
         setLoaded(false);
         setLoadError("");
-        saving.setError(null);
         const current = latest();
         try {
             const answer = await props.load();
@@ -325,10 +328,14 @@ export function MotdEditor(props: {
     };
 
     const save = async () => {
-        await saving.run("Couldn't save", async () => {
-            await props.save(props.dialect.serialize(doc));
-            props.onClose();
-        });
+        await saving.run(
+            "Couldn't save the message",
+            async () => {
+                await props.save(props.dialect.serialize(doc));
+                props.onClose();
+            },
+            (failure) => failure && showError(failure.title, failure.message),
+        );
     };
 
     // toolbar buttons keep the editor's selection instead of taking focus
@@ -352,14 +359,9 @@ export function MotdEditor(props: {
             <Show
                 when={!loadError()}
                 fallback={
-                    <PaperQuote variant="danger" icon="warning" title={`Couldn't read ${props.source}`}>
-                        <PaperFlex direction="column" gap="half">
-                            <span>{loadError()} The message can't be edited until it can be read.</span>
-                            <PaperFlex direction="row">
-                                <PaperButton onClick={() => void load()}>Retry</PaperButton>
-                            </PaperFlex>
-                        </PaperFlex>
-                    </PaperQuote>
+                    <PaperEmptyState icon="error" title="Couldn't load">
+                        <PaperButton onClick={() => void load()}>Try again</PaperButton>
+                    </PaperEmptyState>
                 }
             >
                 <PaperFlex direction="column" gap="half" fullWidth>
@@ -421,14 +423,6 @@ export function MotdEditor(props: {
                         onCompositionEnd={onCompositionEnd}
                         class={[styles.listBox, styles.editor].join(" ")}
                     />
-
-                    <Show when={saving.error()}>
-                        {(failure) => (
-                            <PaperQuote variant="danger" icon="warning" title={failure().title}>
-                                {failure().message}
-                            </PaperQuote>
-                        )}
-                    </Show>
                 </PaperFlex>
             </Show>
         </PaperModal>

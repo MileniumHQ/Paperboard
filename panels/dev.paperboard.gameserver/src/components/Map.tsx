@@ -1,6 +1,7 @@
 import { batch, createEffect, createSignal, For, onCleanup, onMount, Show, on, type Accessor } from "solid-js";
 import {
     PaperButton,
+    PaperEmptyState,
     PaperFlex,
     PaperIcon,
     PaperInput,
@@ -8,12 +9,15 @@ import {
     PaperSelectMenu,
     PaperSelectMenuItem,
     PaperText,
+    createFailureToast,
+    dismissToast,
+    showError,
 } from "@mileniumhq/paperui";
 import { listMapRegions, type MapDimensionRegions, type MapRegionsResult } from "../lib/map";
 import { DIMENSION_LABELS, REGION_BLOCKS, type MapDimension } from "../core/map";
 import { useServer } from "../lib/server";
 import styles from "./Map.module.css";
-import { errorMessage, type Outcome } from "../lib/failure";
+import { errorMessage } from "../lib/failure";
 import { createHeads, createTileStore, tileKey, type PictureReport } from "./map/tiles";
 import { paintMap } from "./map/paint";
 import { attachGestures, clampScale } from "./map/gestures";
@@ -44,9 +48,7 @@ export default function MapView() {
     const [info, setInfo] = createSignal<MapRegionsResult | null>(null);
     // why the region files could not be listed, until a listing goes through
     const [regionsError, setRegionsError] = createSignal<string | null>(null);
-    // the last tile, head, position or drawing failure: it stays until what
-    // failed goes through, or it is dismissed
-    const [failure, setFailure] = createSignal<(Outcome & { key: string }) | null>(null);
+    createFailureToast(regionsError, { title: "Couldn't read the world's region files" });
     const [dimension, setDimension] = createSignal<MapDimension>("overworld");
     const [grabbing, setGrabbing] = createSignal(false);
     const [scale, setScale] = createSignal(1);
@@ -64,13 +66,22 @@ export default function MapView() {
     let wrapper: HTMLDivElement | undefined;
     let centeredView = false;
 
+    // a tile, head, position or drawing failure stays until everything it
+    // names goes through, or it is closed: tiles that fail alike share one toast
+    const failures = new Map<string, string>();
     const report: PictureReport = {
         drawn: () => setRevision((v) => v + 1),
-        failed: (key, title, message) => setFailure({ key, title, message }),
+        failed: (key, title, message) => failures.set(key, showError(title, message)),
         succeeded: (key) => {
-            if (failure()?.key === key) setFailure(null);
+            const id = failures.get(key);
+            if (id === undefined) return;
+            failures.delete(key);
+            if (![...failures.values()].includes(id)) dismissToast(id);
         },
     };
+    onCleanup(() => {
+        for (const id of failures.values()) dismissToast(id);
+    });
     const store = createTileStore(calls, report);
     const head = createHeads(calls, report);
 
@@ -114,7 +125,7 @@ export default function MapView() {
             paintMap(canvas, { ...sizeOf(), scale: scale(), offsetX: offsetX(), offsetY: offsetY(), dimension: dimension() }, store.tiles, playerPositions(), head);
             report.succeeded("draw");
         } catch (err) {
-            report.failed("draw", "The map didn't draw", errorMessage(err));
+            report.failed("draw", "Couldn't draw the map", errorMessage(err));
         }
     };
 
@@ -207,7 +218,7 @@ export default function MapView() {
     const askPositions = () =>
         calls.queryPlayerPositions().then(
             () => report.succeeded("positions"),
-            (err) => report.failed("positions", "Player positions not read", errorMessage(err)),
+            (err) => report.failed("positions", "Couldn't read the player positions", errorMessage(err)),
         );
 
     onMount(() => {
@@ -354,28 +365,20 @@ export default function MapView() {
                 </div>
             </div>
 
-            <Show when={regionsError() || failure() || unexplored()}>
+            <Show when={unexplored()}>
                 <PaperFlex class={styles.bottomLeft} direction="column" gap="half">
-                    <Show when={unexplored()}>
-                        <PaperQuote variant="primary" icon="explore" title="Only the land around spawn so far" onDismiss={() => setExplained(true)}>
-                            Nobody has played on this world yet, so the server has saved only the area where players start. The map fills in as players explore, each time the server saves the world.
-                        </PaperQuote>
-                    </Show>
-                    <Show when={regionsError()}>
-                        {(message) => (
-                            <PaperQuote variant="danger" icon="warning" title="Couldn't read the world's region files">
-                                {message()}
-                            </PaperQuote>
-                        )}
-                    </Show>
-                    <Show when={failure()}>
-                        {(failed) => (
-                            <PaperQuote variant="danger" icon="warning" title={failed().title} onDismiss={() => setFailure(null)}>
-                                {failed().message}
-                            </PaperQuote>
-                        )}
-                    </Show>
+                    <PaperQuote variant="primary" icon="explore" title="Only the land around spawn so far" onDismiss={() => setExplained(true)}>
+                        Nobody has played on this world yet, so the server has saved only the area where players start. The map fills in as players explore, each time the server saves the world.
+                    </PaperQuote>
                 </PaperFlex>
+            </Show>
+
+            <Show when={!info() && regionsError()}>
+                <div class={styles.empty}>
+                    <PaperEmptyState icon="error" title="Couldn't load">
+                        <PaperButton onClick={() => void loadRegions()}>Try again</PaperButton>
+                    </PaperEmptyState>
+                </div>
             </Show>
 
             <Show

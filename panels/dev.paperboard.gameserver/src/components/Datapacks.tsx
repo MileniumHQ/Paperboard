@@ -1,5 +1,5 @@
 import { createSignal, Show } from "solid-js";
-import { PaperButton, PaperEffect, PaperIcon, PaperQuote, PaperText } from "@mileniumhq/paperui";
+import { PaperButton, PaperEffect, PaperIcon, PaperQuote, PaperText, showError } from "@mileniumhq/paperui";
 import { useServer } from "../lib/server";
 import { errorMessage } from "../lib/failure";
 import { datapacksKind } from "../lib/addons/datapacks";
@@ -15,15 +15,15 @@ export default function Datapacks(props: { active: boolean }) {
     const world = () => browser.listing()?.meta;
 
     const [reloading, setReloading] = createSignal(false);
-    const [reloadMessage, setReloadMessage] = createSignal<{ ok: boolean; text: string } | null>(null);
+    const [reloadSent, setReloadSent] = createSignal(false);
     const reload = async () => {
         setReloading(true);
-        setReloadMessage(null);
+        setReloadSent(false);
         try {
             await calls.runCommand({ command: "reload" });
-            setReloadMessage({ ok: true, text: "Reload sent. The console shows whether every datapack loaded." });
+            setReloadSent(true);
         } catch (err) {
-            setReloadMessage({ ok: false, text: errorMessage(err) });
+            showError("Couldn't reload the datapacks", errorMessage(err));
         } finally {
             setReloading(false);
         }
@@ -44,16 +44,10 @@ export default function Datapacks(props: { active: boolean }) {
             }
             notices={
                 <>
-                    <Show when={reloadMessage()}>
-                        {(note) => (
-                            <PaperQuote
-                                variant={note().ok ? undefined : "danger"}
-                                icon={note().ok ? "info" : "warning"}
-                                title={note().ok ? "Reloading" : "Could not reload"}
-                            >
-                                {note().text}
-                            </PaperQuote>
-                        )}
+                    <Show when={reloadSent()}>
+                        <PaperQuote icon="info" title="Reloading">
+                            Reload sent. The console shows whether every datapack loaded.
+                        </PaperQuote>
                     </Show>
                     <Show when={world()}>
                         {(view) => (

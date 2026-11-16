@@ -10,7 +10,7 @@ import {
     PaperSettingList,
     PaperText,
     PaperToggle,
-    showToast,
+    showError,
 } from "@mileniumhq/paperui";
 import { versionSupports, type CapabilityName } from "../lib/versionProfile";
 import { useServer } from "../lib/server";
@@ -21,6 +21,7 @@ import { resourcePackKind, type PackSettings } from "../lib/addons/resourcepack"
 import { isResourcePackId, promptToProperty } from "../core/resourcepack";
 import AddonBrowser from "./addons/AddonBrowser";
 import { createAddonBrowser } from "./addons/state";
+import { describeWithProblem } from "./PropertyFieldControl";
 
 const SAVE_DEBOUNCE_MS = 400;
 
@@ -47,11 +48,9 @@ export default function ResourcePack(props: { active: boolean }) {
     const supports = (capability: CapabilityName) => versionSupports(server.serverVersion(), capability);
     const browser = createAddonBrowser({ kind: resourcePackKind(server), active: () => props.active });
     const [settings, setSettings] = createSignal<PackSettings | null>(null);
-    const [saveError, setSaveError] = createSignal("");
 
     const [customUrl, setCustomUrl] = createSignal("");
     const [hashing, setHashing] = createSignal(false);
-    const [customError, setCustomError] = createSignal("");
 
     let saveTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -71,23 +70,20 @@ export default function ResourcePack(props: { active: boolean }) {
     const useCustomUrl = async () => {
         if (hashing()) return;
         setHashing(true);
-        setCustomError("");
         try {
             await server.calls.selectResourcePack({ url: customUrl() });
             setCustomUrl("");
             await browser.reload();
         } catch (err) {
-            setCustomError(errorMessage(err));
+            showError("Couldn't use this resource pack", errorMessage(err));
         } finally {
             setHashing(false);
         }
     };
 
     // every write of server.properties takes its turn, so one never undoes another
-    const saves = createSaves({
-        failed: (err) => setSaveError(errorMessage(err)),
-        changed: () => setSaveError(""),
-    });
+    const saveFailed = (err: unknown) => showError("Couldn't save the resource pack settings", errorMessage(err));
+    const saves = createSaves({ failed: saveFailed });
 
     // the prompt and the pack id, once typing pauses
     const persist = () => {
@@ -100,17 +96,11 @@ export default function ResourcePack(props: { active: boolean }) {
                     ...(supports("resourcePackId") ? { "resource-pack-id": next.id.trim().toLowerCase() } : {}),
                 }),
             )
-            .catch((err) => {
-                // a save the tab sent as it closed has nowhere on the tab to say so
-                if (left) showToast({ variant: "danger", title: "Resource pack settings not saved", message: errorMessage(err) });
-                else setSaveError(errorMessage(err));
-            });
+            .catch(saveFailed);
     };
 
     // an edit still waiting for typing to pause is saved, not dropped, when the tab goes
-    let left = false;
     onCleanup(() => {
-        left = true;
         if (!saveTimer) return;
         clearTimeout(saveTimer);
         saveTimer = null;
@@ -122,12 +112,8 @@ export default function ResourcePack(props: { active: boolean }) {
         setSettings(next);
         if (saveTimer) clearTimeout(saveTimer);
         saveTimer = null;
-        const problem = draftError(next);
-        if (problem) {
-            setSaveError(problem);
-            return;
-        }
-        setSaveError("");
+        // the field says why a draft isn't saved
+        if (draftError(next)) return;
         saveTimer = setTimeout(() => {
             saveTimer = null;
             persist();
@@ -147,11 +133,6 @@ export default function ResourcePack(props: { active: boolean }) {
                     <PaperQuote variant="warning" icon="info" title="Applies after a restart">
                         Players get the pack when they join. A change here reaches them the next time the server starts.
                     </PaperQuote>
-                    <Show when={saveError()}>
-                        <PaperQuote variant="danger" icon="warning" title="Settings not saved">
-                            {saveError()}
-                        </PaperQuote>
-                    </Show>
                 </>
             }
             extras={
@@ -174,7 +155,7 @@ export default function ResourcePack(props: { active: boolean }) {
                                     <Show when={supports("resourcePackPrompt")}>
                                         <PaperSettingItem
                                             title="Prompt"
-                                            description="The message players see when asked to accept the pack. Leave empty for the default."
+                                            description={describeWithProblem("The message players see when asked to accept the pack. Leave empty for the default.", promptProblem(values().prompt))}
                                         >
                                             <PaperFlex width="field-wide">
                                                 <PaperInput
@@ -190,7 +171,7 @@ export default function ResourcePack(props: { active: boolean }) {
                                     <Show when={supports("resourcePackId")}>
                                         <PaperSettingItem
                                             title="Pack ID"
-                                            description="A UUID clients use to tell this pack from others. Leave empty to let the game choose."
+                                            description={describeWithProblem("A UUID clients use to tell this pack from others. Leave empty to let the game choose.", idProblem(values().id))}
                                         >
                                             <PaperFlex width="field-wide">
                                                 <PaperInput
@@ -226,11 +207,6 @@ export default function ResourcePack(props: { active: boolean }) {
                             <PaperText size={2} color="text-subtle">
                                 The link must be a direct download of a .zip.
                             </PaperText>
-                            <Show when={customError()}>
-                                <PaperQuote variant="danger" icon="warning" title="Resource pack not set">
-                                    {customError()}
-                                </PaperQuote>
-                            </Show>
                             <PaperFlex>
                                 <PaperButton variant="success" disabled={hashing() || !customUrl().trim()} onClick={() => void useCustomUrl()}>
                                     <PaperIcon aria-hidden="true">{hashing() ? "hourglass_top" : "check"}</PaperIcon>

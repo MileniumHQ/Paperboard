@@ -6,6 +6,7 @@ import {
     PaperButton,
     PaperCard,
     PaperEffect,
+    PaperEmptyState,
     PaperFlex,
     PaperIcon,
     PaperInput,
@@ -17,6 +18,7 @@ import {
     PaperSettingList,
     PaperText,
     createRead,
+    showError,
 } from "@mileniumhq/paperui";
 import { errorMessage, type Outcome } from "../lib/failure";
 
@@ -106,12 +108,16 @@ export default function WorldsPage<W extends WorldEntry>(props: { list: () => Pr
     const { serverStatus } = useServer();
     // starting and stopping change the active world's files: each is read again.
     // A failed listing keeps the last-known worlds, each world the row it is
-    const listing = createRead(() => props.list(), { source: serverStatus, key: "name", message: errorMessage });
+    const listing = createRead(() => props.list(), {
+        source: serverStatus,
+        key: "name",
+        message: errorMessage,
+        failure: { title: "Couldn't load the worlds" },
+    });
     const worlds = () => listing.value() ?? null;
-    const listError = () => listing.error() ?? "";
+    const listFailed = () => !listing.loading() && listing.error() !== null;
     const [selected, setSelected] = createSignal<string | null>(null);
     const [mutating, setMutating] = createSignal(false);
-    const [failure, setFailure] = createSignal<Outcome | null>(null);
     const [deleteOpen, setDeleteOpen] = createSignal(false);
     const online = () => serverStatus() !== "offline";
     const taken = () => props.game.takenNames(worlds() ?? []);
@@ -121,23 +127,21 @@ export default function WorldsPage<W extends WorldEntry>(props: { list: () => Pr
     };
     const nameValid = (name: string) => props.game.namePattern.test(name.trim()) && !isTaken(name);
 
-    const fail = (title: string, err: unknown) => {
-        setFailure({ title, message: errorMessage(err) });
-    };
+    const fail = (title: string, err: unknown) => showError(title, errorMessage(err));
     /** runs a change to the worlds, then lists them again; false when it failed */
     const run = async (title: string, work: () => Promise<unknown>) => {
         setMutating(true);
-        setFailure(null);
+        let done = false;
         try {
             await work();
             await listing.reload();
-            return true;
+            done = true;
         } catch (err) {
-            setFailure({ title, message: errorMessage(err) });
-            return false;
+            fail(title, err);
         } finally {
             setMutating(false);
         }
+        return done;
     };
 
     const detail = () => worlds()?.find((w) => w.name === selected()) ?? null;
@@ -147,22 +151,21 @@ export default function WorldsPage<W extends WorldEntry>(props: { list: () => Pr
     createEffect(on(detail, (world) => { if (world) setShown(() => world); }));
 
     const switchTo = async (world: W) => {
-        if (await run("World not switched", () => props.game.switchTo(world))) setSelected(null);
+        if (await run("Couldn't switch the world", () => props.game.switchTo(world))) setSelected(null);
     };
     const confirmDelete = async () => {
         const world = detail();
         setDeleteOpen(false);
-        if (world && (await run("World not deleted", () => props.game.remove(world)))) setSelected(null);
+        if (world && (await run("Couldn't delete the world", () => props.game.remove(world)))) setSelected(null);
     };
 
     const [downloading, setDownloading] = createSignal(false);
     const download = async (world: W) => {
         setDownloading(true);
-        setFailure(null);
         try {
-            await props.game.download(world, setFailure);
+            await props.game.download(world, (outcome) => showError(outcome.title, outcome.message));
         } catch (err) {
-            fail("World not downloaded", err);
+            fail("Couldn't download the world", err);
         } finally {
             setDownloading(false);
         }
@@ -173,9 +176,7 @@ export default function WorldsPage<W extends WorldEntry>(props: { list: () => Pr
     const [createOpen, setCreateOpen] = createSignal(false);
     const [createReady, setCreateReady] = createSignal(false);
     const [newName, setNewName] = createSignal("");
-    const [createError, setCreateError] = createSignal("");
     const openCreate = async () => {
-        setCreateError("");
         setCreateReady(false);
         setNewName(props.game.create.defaultName(taken()));
         setCreateOpen(true);
@@ -183,20 +184,19 @@ export default function WorldsPage<W extends WorldEntry>(props: { list: () => Pr
             await props.game.create.load();
             setCreateReady(true);
         } catch (err) {
-            setCreateError(errorMessage(err));
+            fail("Couldn't load the new world's settings", err);
         }
     };
     const canCreate = () => createReady() && worlds() !== null && nameValid(newName()) && !mutating();
     const submitCreate = async () => {
         if (!canCreate()) return;
         setMutating(true);
-        setCreateError("");
         try {
             await props.game.create.submit(newName().trim());
             setCreateOpen(false);
             await listing.reload();
         } catch (err) {
-            setCreateError(errorMessage(err));
+            fail("Couldn't create the world", err);
         } finally {
             setMutating(false);
         }
@@ -208,14 +208,13 @@ export default function WorldsPage<W extends WorldEntry>(props: { list: () => Pr
     const [uploadName, setUploadName] = createSignal("");
     const [uploading, setUploading] = createSignal(false);
     const chooseUpload = async () => {
-        setFailure(null);
         try {
             const chosen = await props.game.upload.choose(taken());
             if (!chosen) return;
             setUploadName(chosen.name);
             setUpload(chosen);
         } catch (err) {
-            fail("World not uploaded", err);
+            fail("Couldn't upload the world", err);
         }
     };
     const cancelUpload = async () => {
@@ -225,7 +224,7 @@ export default function WorldsPage<W extends WorldEntry>(props: { list: () => Pr
         try {
             await props.game.upload.discard(current.file);
         } catch (err) {
-            fail("Cleanup incomplete", new Error(`The uploaded world could not be removed: ${errorMessage(err)}`));
+            fail("Couldn't remove the uploaded world", err);
         }
     };
     const submitUpload = async () => {
@@ -239,7 +238,7 @@ export default function WorldsPage<W extends WorldEntry>(props: { list: () => Pr
         } catch (err) {
             // the service removed the upload; choosing again starts over
             setUpload(null);
-            fail("World not added", err);
+            fail("Couldn't add the world", err);
         } finally {
             setUploading(false);
         }
@@ -271,20 +270,16 @@ export default function WorldsPage<W extends WorldEntry>(props: { list: () => Pr
                     Stop the server to switch, create, or delete worlds.
                 </PaperQuote>
             </Show>
-            <Show when={failure()}>
-                {(shownFailure) => (
-                    <PaperQuote variant="danger" icon="warning" title={shownFailure().title} onDismiss={() => setFailure(null)}>
-                        {shownFailure().message}
-                    </PaperQuote>
-                )}
-            </Show>
-            <Show when={listError()}>
-                <PaperQuote variant="danger" icon="warning" title="Couldn't list the worlds">
-                    {listError()}
-                </PaperQuote>
-            </Show>
-
-            <Show when={worlds() !== null} fallback={emptyCard(listError() ? "Couldn't load worlds." : "Loading worlds...")}>
+            <Show
+                when={worlds() !== null}
+                fallback={
+                    <Show when={listFailed()} fallback={emptyCard("Loading worlds...")}>
+                        <PaperEmptyState icon="error" title="Couldn't load">
+                            <PaperButton disabled={listing.loading()} onClick={() => void listing.reload()}>Try again</PaperButton>
+                        </PaperEmptyState>
+                    </Show>
+                }
+            >
                 <Show when={(worlds() ?? []).length > 0} fallback={emptyCard("No worlds yet. Create one, or start the server to generate one.")}>
                     <PaperList name={props.game.listName} value="" onValueChange={(name) => setSelected(String(name))} buttons fullWidth>
                         <For each={worlds() ?? []}>
@@ -414,19 +409,16 @@ export default function WorldsPage<W extends WorldEntry>(props: { list: () => Pr
                             label="World name"
                             value={newName()}
                             invalid={nameProblem(newName()) !== ""}
-                            onInput={(e) => { setNewName(e.currentTarget.value); setCreateError(""); }}
+                            onInput={(e) => setNewName(e.currentTarget.value)}
                         />
                         <Show when={nameProblem(newName())}>
                             {(problem) => <PaperText size={2} color="danger">{problem()}</PaperText>}
                         </Show>
-                        <Show when={worlds() === null && !listError()}>
+                        <Show when={worlds() === null && !listFailed()}>
                             <PaperText size={2} color="text-subtle">Checking existing worlds...</PaperText>
                         </Show>
                         <Show when={props.game.create.note}>
                             <PaperText size={2} color="text-subtle">{props.game.create.note}</PaperText>
-                        </Show>
-                        <Show when={createError()}>
-                            <PaperQuote variant="danger" icon="warning" title="World not created">{createError()}</PaperQuote>
                         </Show>
                     </PaperFlex>
                     <PaperSettingList autoHeight>{untrack(() => props.game.create.fields())}</PaperSettingList>

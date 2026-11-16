@@ -1,7 +1,7 @@
 import { createSignal, For, onCleanup, Show, untrack } from "solid-js";
 import { errorMessage } from "../lib/failure";
 import { createSaves } from "../lib/saves";
-import { PaperFlex, PaperQuote, PaperSettingList, PaperText, showToast } from "@mileniumhq/paperui";
+import { createFailureToast, PaperFlex, PaperSettingList, PaperText, showError } from "@mileniumhq/paperui";
 import { FieldItem } from "./PropertyFieldControl";
 import type { LoaderGroupView, LoaderSettingView } from "../service/loaderSettings";
 import type { PropertyField } from "../lib/properties";
@@ -19,21 +19,14 @@ export default function ConfigSettings(props: {
     /** one list with no file names: for a tab where the files are an implementation detail */
     plain?: boolean;
 }) {
-    const [saveError, setSaveError] = createSignal("");
     let left = false;
     onCleanup(() => (left = true));
     const saves = createSaves({
         failed: (err) => {
-            const message = errorMessage(err);
-            // a save sent as the tab closed has nowhere on the tab to say so
-            if (left) {
-                showToast({ variant: "danger", title: "Setting not saved", message });
-                return;
-            }
-            setSaveError(message);
-            void props.reload();
+            showError("Couldn't save the setting", errorMessage(err));
+            // a tab still open shows the files as they are now
+            if (!left) void props.reload();
         },
-        changed: () => setSaveError(""),
     });
 
     const asField = (setting: LoaderSettingView): PropertyField => ({
@@ -93,21 +86,14 @@ export default function ConfigSettings(props: {
         );
     };
 
-    const fileError = (group: LoaderGroupView) => (
-        <Show when={group.error}>
-            <PaperQuote variant="danger" icon="warning" title={`Could not read ${group.path}`}>
-                {group.error}
-            </PaperQuote>
-        </Show>
-    );
+    // a file that can't be read stands until the files are read again
+    const fileError = (group: LoaderGroupView) => {
+        createFailureToast(() => group.error, { title: `Couldn't load ${group.path}` });
+        return null;
+    };
 
     return (
         <>
-            <Show when={saveError()}>
-                <PaperQuote variant="danger" icon="warning" title="Not saved" onDismiss={() => setSaveError("")}>
-                    {saveError()}
-                </PaperQuote>
-            </Show>
             <Show
                 when={!props.plain}
                 fallback={

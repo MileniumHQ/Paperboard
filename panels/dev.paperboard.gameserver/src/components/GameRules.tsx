@@ -11,6 +11,7 @@ import {
     PaperSettingList,
     PaperText,
     PaperToggle,
+    showError,
 } from "@mileniumhq/paperui";
 import { gamerulesFor, type GameruleEntry } from "../core/gamerules";
 import { humanizeIdentifier } from "../core/format";
@@ -51,8 +52,6 @@ function RuleControl(props: { valueType: string; rule: SavedSetting<string> }) {
 export default function GameRules() {
     const { calls, gamerules, serverStatus, serverVersion } = useServer();
     const [search, setSearch] = createSignal("");
-    const [syncError, setSyncError] = createSignal("");
-    const [ruleError, setRuleError] = createSignal<{ title: string; message: string } | null>(null);
 
     const isOnline = () => serverStatus() === "online";
     const available = createMemo(() => gamerulesFor(serverVersion()));
@@ -66,13 +65,14 @@ export default function GameRules() {
     // version's list is asked again
     createEffect(
         on([isOnline, available], ([online]) => {
-            setSyncError("");
             if (!online) return;
             let current = true;
             onCleanup(() => (current = false));
             calls
                 .queryGamerules()
-                .catch((err) => current && setSyncError(errorMessage(err)));
+                .catch((err) => {
+                    if (current) showError("Couldn't read the game rules from the server", errorMessage(err));
+                });
         }),
     );
 
@@ -80,8 +80,7 @@ export default function GameRules() {
     // offline edits persist and re-apply at next start, and a failure to
     // persist one comes back here to be shown
     const saves = createSaves({
-        failed: (err, name) => setRuleError({ title: `${humanizeIdentifier(name)} not changed`, message: errorMessage(err) }),
-        changed: () => setRuleError(null),
+        failed: (err, name) => showError(`Couldn't change ${humanizeIdentifier(name)}`, errorMessage(err)),
     });
     const ruleSetting = (rule: GameruleEntry) =>
         saves.setting(
@@ -121,18 +120,6 @@ export default function GameRules() {
                 <PaperQuote variant="warning" icon="info" title="Server offline">
                     Edits are saved and applied the next time the server starts. Values load live once it is online.
                 </PaperQuote>
-            </Show>
-            <Show when={syncError()}>
-                <PaperQuote variant="danger" icon="warning" title="Game rules not read from the server" onDismiss={() => setSyncError("")}>
-                    {syncError()}
-                </PaperQuote>
-            </Show>
-            <Show when={ruleError()}>
-                {(error) => (
-                    <PaperQuote variant="danger" icon="warning" title={error().title} onDismiss={() => setRuleError(null)}>
-                        {error().message}
-                    </PaperQuote>
-                )}
             </Show>
             <PaperSettingList autoHeight>
                 <For each={visibleGamerules()}>

@@ -82,3 +82,8 @@
     text-align: center;
     pointer-events: none;
 }
+
+/* what it says can be pressed: Try again over a map that couldn't load */
+.empty button {
+    pointer-events: auto;
+}

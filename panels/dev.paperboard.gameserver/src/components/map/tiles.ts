@@ -86,12 +86,12 @@ export function createTileStore(calls: ServerCalls, report: PictureReport) {
                     report.drawn();
                 };
                 image.onerror = () =>
-                    report.failed(key, "A map tile didn't render", `The picture the service painted of region ${rx}, ${rz} could not be read.`);
+                    report.failed(key, "Couldn't draw a map tile", `The picture the service painted of region ${rx}, ${rz} could not be read.`);
                 image.src = dataUrl;
             })
             .catch((err) => {
                 settle();
-                report.failed(key, "A map tile didn't render", errorMessage(err));
+                report.failed(key, "Couldn't draw a map tile", errorMessage(err));
             });
     };
 
@@ -124,7 +124,7 @@ export function createHeads(calls: ServerCalls, report: PictureReport) {
         if (existing) return existing.complete && existing.naturalWidth > 0 ? existing : null;
         // the slot is taken at once, so a redraw does not start a second lookup
         images.set(key, new Image());
-        const failed = (message: string) => report.failed(`head:${key}`, `${name}'s head didn't load`, message);
+        const failed = (message: string) => report.failed(`head:${key}`, `Couldn't load ${name}'s head`, message);
         loadHead({ name })
             .then((dataUrl) => {
                 if (!dataUrl) return;

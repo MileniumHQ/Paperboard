@@ -1,9 +1,8 @@
-import { createSignal, For, Show } from "solid-js";
+import { For, Show } from "solid-js";
 import {
     PaperButton,
-    PaperFlex,
+    PaperEmptyState,
     PaperPageHeader,
-    PaperQuote,
     PaperSelectMenu,
     PaperSelectMenuItem,
     PaperSettingItem,
@@ -11,6 +10,7 @@ import {
     PaperText,
     PaperToggle,
     createRead,
+    showError,
 } from "@mileniumhq/paperui";
 import { errorMessage } from "../lib/failure";
 import { createSaves } from "../lib/saves";
@@ -24,13 +24,12 @@ const hourLabel = (hour: string) => new Date(2000, 0, 1, Number(hour.slice(0, 2)
 /** What the server does on its own, for every game: restart after a crash and once a day. */
 export default function Automation() {
     const { calls } = useServer();
-    const read = createRead(() => calls.readAutomation(), { message: errorMessage });
+    const read = createRead(() => calls.readAutomation(), { message: errorMessage, failure: { title: "Couldn't load the automation settings" } });
     const view = read.value;
     // a read again shows the loader, not the last failure
-    const loadError = () => (read.loading() ? "" : (read.error() ?? ""));
-    const [saveError, setSaveError] = createSignal("");
+    const loadFailed = () => !read.loading() && read.error() !== null;
 
-    const saves = createSaves({ failed: (err) => setSaveError(errorMessage(err)), changed: () => setSaveError("") });
+    const saves = createSaves({ failed: (err) => showError("Couldn't save the automation settings", errorMessage(err)) });
     // each switch and menu saves its own field; the answer is the whole view
     const field = <K extends "restartAfterCrash" | "dailyRestart" | "autoUpdate">(key: K) =>
         saves.setting<AutomationView[K]>(key, () => view()![key], async (value) => {
@@ -40,24 +39,13 @@ export default function Automation() {
     return (
         <>
             <PaperPageHeader icon="schedule" title="Automation" />
-            <Show when={loadError()}>
-                <PaperQuote variant="danger" icon="warning" title="Couldn't read the automation settings">
-                    <PaperFlex direction="column" gap="half">
-                        <PaperText>{loadError()}</PaperText>
-                        <PaperButton size="tiny" onClick={() => void read.reload()}>Try again</PaperButton>
-                    </PaperFlex>
-                </PaperQuote>
-            </Show>
-            <Show when={saveError()}>
-                <PaperQuote variant="danger" icon="warning" title="Automation not saved" onDismiss={() => setSaveError("")}>
-                    {saveError()}
-                </PaperQuote>
-            </Show>
             <Show
                 when={view()}
                 fallback={
-                    <Show when={!loadError()}>
-                        <PaperText size={2} color="text-subtle">Loading settings…</PaperText>
+                    <Show when={loadFailed()} fallback={<PaperText size={2} color="text-subtle">Loading settings…</PaperText>}>
+                        <PaperEmptyState icon="error" title="Couldn't load">
+                            <PaperButton disabled={read.loading()} onClick={() => void read.reload()}>Try again</PaperButton>
+                        </PaperEmptyState>
                     </Show>
                 }
             >
