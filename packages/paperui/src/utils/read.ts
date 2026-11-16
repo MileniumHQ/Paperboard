@@ -37,6 +37,9 @@ export interface ReadOptions<T, S> {
     /** A failure's words, as the view shows them (default its own message). */
     message?: (err: unknown) => string;
     /**
+     * @deprecated A failed read stands until a read goes through, so it is
+     * said in place: `<Show when={read.error()}>{(err) => <PaperError title="…" error={err()} action={{ label: "Try again", onClick: () => void read.reload() }} />}</Show>`.
+     *
      * Says a failed read as a danger toast (see createFailureToast): its
      * title is what failed, its message the failure's words. It closes
      * while a read is out and comes back if that one fails too. `retry`

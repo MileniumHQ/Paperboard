@@ -32,7 +32,7 @@ interface ReadOptions<T, S> {
     follow?: (land: (change: ReadChange<T>) => void) => () => void;
     /** a failure's words, as the view shows them (default its own message) */
     message?: (err: unknown) => string;
-    /** says a failed read as a danger toast; retry gives it a Try again button */
+    /** deprecated: a failed read is a PaperError in place */
     failure?: { title: string; retry?: boolean };
 }
 
@@ -58,21 +58,26 @@ type ReadChange<T> = T | undefined | ((prev: T | undefined) => T | undefined);`}
                 Data a view reads from its service: the last answer, whether a read is out, and why the newest one failed. Late answers lose without a token to check: only the newest read lands, and nothing lands once the component is gone.
             </PaperText>
             <PaperCode block language="tsx">
-{`import { createRead, PaperButton, PaperEmptyState, PaperLoader } from "@mileniumhq/paperui";
+{`import { createRead, PaperError, PaperLoader } from "@mileniumhq/paperui";
 
 const worlds = createRead(() => service.calls.listWorlds(), {
     source: () => state().worldsRevision,
-    failure: { title: "Couldn't load the worlds" },
 });
+const tryAgain = () => ({ label: "Try again", disabled: worlds.loading(), onClick: () => void worlds.reload() });
 
 <Switch>
     <Match when={worlds.value()}>
-        {(list) => <For each={list()}>{(world) => <WorldRow world={world} />}</For>}
+        {(list) => (
+            <>
+                <Show when={worlds.error()}>
+                    {(err) => <PaperError title="Couldn't load the newest worlds" error={err()} action={tryAgain()} />}
+                </Show>
+                <For each={list()}>{(world) => <WorldRow world={world} />}</For>
+            </>
+        )}
     </Match>
     <Match when={worlds.error()}>
-        <PaperEmptyState icon="error" title="Couldn't load">
-            <PaperButton disabled={worlds.loading()} onClick={() => void worlds.reload()}>Try again</PaperButton>
-        </PaperEmptyState>
+        {(err) => <PaperError fill title="Couldn't load the worlds" error={err()} action={tryAgain()} />}
     </Match>
     <Match when={true}>
         <PaperLoader loaderStatus="indeterminate" label="Reading worlds" />
@@ -83,8 +88,8 @@ const worlds = createRead(() => service.calls.listWorlds(), {
                 <li>Without <PaperCode>source</PaperCode> it reads once, at once. With one, it reads each time the source changes, and the fetcher gets its value. While the source is <PaperCode>false</PaperCode>, <PaperCode>null</PaperCode> or <PaperCode>undefined</PaperCode> nothing is read, and a read still out is dropped. A dialog that reads each time it opens passes <PaperCode>{"source: () => props.open"}</PaperCode>.</li>
                 <li>An answer is reconciled into what was there, so every row of a list keeps its identity and only what changed in it redraws. Items are matched by <PaperCode>key</PaperCode>, and items without it by position.</li>
                 <li>A failure keeps the value that was there, and <PaperCode>error()</PaperCode> says why until the next answer lands.</li>
-                <li>With <PaperCode>failure</PaperCode>, a failed read is a danger toast (see <PaperLink href="/docs/paperui/papertoast/#create-failure-toast">createFailureToast</PaperLink>): the title is what failed and the message is <PaperCode>error()</PaperCode>, so the view formats nothing. It closes while a read is out and comes back if that one fails too; a toast the person closed stays closed while the same failure stands. <PaperCode>retry: true</PaperCode> adds Try again, repeating the view's own.</li>
-                <li>Old data stays on screen and the toast says the reload failed. With no data, the view shows <PaperLink href="/docs/paperui/paperemptystate/#couldnt-load">"Couldn't load"</PaperLink> with its own Try again, never a blank body.</li>
+                <li>A failed read stands until a read goes through, so it is said in place with <PaperLink href="/docs/paperui/papererror/">PaperError</PaperLink>, never a toast. With no data, the error fills the view, never a blank body. Old data stays on screen, and an inline PaperError above it says the reload failed. Its Try again calls <PaperCode>reload</PaperCode>.</li>
+                <li>The <PaperCode>failure</PaperCode> option is deprecated. It still says a failed read as a danger toast (see <PaperLink href="/docs/paperui/papertoast/#create-failure-toast">createFailureToast</PaperLink>) while panels move to PaperError, but a toast goes by itself and the failure doesn't.</li>
                 <li><PaperCode>loading()</PaperCode> is true while a read is out, the first one and every reload. A view that keeps its rows on screen during a reload shows the loader only while <PaperCode>value()</PaperCode> is undefined.</li>
                 <li>A push (through <PaperCode>follow</PaperCode>) and a <PaperCode>set</PaperCode> are changes newer than any read still out. A whole value lands like an answer and drops that read: the list a remove answered with, or the state a service pushed. <PaperCode>set(undefined)</PaperCode> forgets the value, as before the first read: a view whose data went away.</li>
                 <li>A function changes the part it knows, such as a row taken out after it went, or a progress line pushed while the list is read. It applies at once, and again to the answer of the read still out, so that answer can't bring back what it changed.</li>

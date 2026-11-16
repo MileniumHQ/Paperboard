@@ -159,6 +159,15 @@ describe("the house rules flag each break, honour a reasoned quiet marker, and p
         }
     });
 
+    test("a toast that never goes (every toast goes by itself), and the near misses", () => {
+        expect(rules(`showToast({ title: "Saved", duration: null });\nconst options = { variant: "warning", title: "Can't follow backups", duration: null };\n`)).toEqual([
+            "1:static-toast",
+            "2:static-toast",
+        ]);
+        // a time of its own is fine, and so is a null duration that is no toast's
+        expect(rules(`showToast({ title: "Saved", duration: 20000 });\nconst fade = { duration: null, easing: "linear" };\n`)).toEqual([]);
+    });
+
     test("--solid-only leaves the house rules out", () => {
         expect(checkSource("a.test.ts", `void run().catch(() => ${EMPTY});\nawait Bun.sleep(5);\n`, { solidOnly: true })).toEqual([]);
     });

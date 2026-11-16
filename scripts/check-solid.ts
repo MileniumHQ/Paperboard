@@ -94,18 +94,22 @@
 //    add a real public need to its package.json "exports". The files that
 //    still cross, outside the parts already moved, are KNOWN_CROSSINGS below;
 //    one that no longer crosses is a hit too, so the list only shrinks.
-//  error-quote (failures are toasts, PaperToast's docs)
+//  error-quote (PaperError's and PaperToast's docs)
 //    A <PaperQuote> whose `variant` is, or can be, the string "danger", or a
 //    red line of text: a <PaperText> with `preset="error"` or
 //    `color="danger"` written as a string (a color picked by a condition is
-//    not one). A failure is said with a toast (createFailureToast, createRead's
-//    `failure`), a field's with the field's error, and a view that could not
-//    load with PaperEmptyState's "Couldn't load". The files that still have
+//    not one). A failure that stands (a view that won't load, a setup that
+//    failed) is said in place with PaperError, a one-off one (an action or a
+//    save) with showError's toast, and a field's with the field's error. The files that still have
 //    them are scripts/errorQuotes.json, each with how many, until the
 //    migration takes them out: a file over its count is a hit, and so is one
 //    under it or an entry for a file that is gone, so the list only shrinks.
 //    The deprecated panels (dev.paperboard.ai, dev.paperboard.actions) are
 //    left out, as nobody changes them.
+//  static-toast (PaperToast's docs: every toast goes by itself)
+//    An object literal with `duration: null` handed to showToast, or one
+//    that has a `title` too (toast options built ahead). A failure that
+//    must stay is said in place with PaperError.
 //  test-sleep ("Tests are CI": deterministic, no sleeps tuned to timing)
 //    `Bun.sleep`/`Bun.sleepSync`, `await sleep(…)`, and `setTimeout` handed
 //    the resolve of the `new Promise` it is in (a fixed wait). A promise
@@ -621,7 +625,17 @@ function isErrorQuote(n: TS.Node): n is TS.JsxOpeningElement | TS.JsxSelfClosing
     return danger;
 }
 
-const ERROR_QUOTE_WHY = `a failure is a toast, not an error quote or a red line of text (PaperToast's docs): createFailureToast or createRead's \`failure\` for a standing one, showError or createAction for an action's, PaperInput's \`error\` for a field's, PaperEmptyState's "Couldn't load" for a view with nothing to show`;
+const ERROR_QUOTE_WHY = `a failure is no error quote or red line of text (PaperError's docs): one that stands (a view that won't load, a setup that failed) is a PaperError where it happens, a one-off one (an action, a save) is showError's toast or createAction's, and a field's is PaperInput's \`error\``;
+
+/** Is this `duration: null` in toast options: an argument of showToast, or an object with a `title` too? */
+function isStaticToast(n: TS.Node): n is TS.PropertyAssignment {
+    if (!ts.isPropertyAssignment(n) || n.name.getText() !== "duration" || unwrap(n.initializer).kind !== ts.SyntaxKind.NullKeyword) return false;
+    const options = n.parent;
+    if (!ts.isObjectLiteralExpression(options)) return false;
+    const call = options.parent;
+    if (ts.isCallExpression(call) && ts.isIdentifier(call.expression) && call.expression.text === "showToast") return true;
+    return options.properties.some((p) => p.name?.getText() === "title");
+}
 
 function checkErrorQuotes(sf: TS.SourceFile, file: string, hit: (node: TS.Node, rule: string, message: string) => void, options: Options): void {
     const path = relative(ROOT, resolve(file));
@@ -720,6 +734,13 @@ function checkHouseRules(sf: TS.SourceFile, file: string, hit: (node: TS.Node, r
             /^sleep(Sync)?$/.test(n.expression.name.text)
         )
             report(n, "test-sleep", `a fixed Bun.${n.expression.name.text} makes the test timing-tuned (AGENTS.md "Tests are CI": deterministic); wait for the observable outcome instead, or mark it with \`// quiet: <reason>\``);
+        // static-toast: a toast that would never go
+        if (isStaticToast(n))
+            report(
+                n,
+                "static-toast",
+                `every toast goes by itself (PaperToast's docs), so \`duration: null\` is not allowed; a failure that stands is said where it happens with PaperError, and a toast that needs longer takes a longer duration`,
+            );
         // for-fresh-rows
         if ((ts.isJsxElement(n) && tagName(n) === "For") || (ts.isJsxSelfClosingElement(n) && n.tagName.getText(sf) === "For")) {
             const attrs = ts.isJsxElement(n) ? n.openingElement.attributes : n.attributes;

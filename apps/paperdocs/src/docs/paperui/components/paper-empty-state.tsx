@@ -16,7 +16,7 @@ export default function PaperEmptyStateDoc() {
             <PaperText preset="header" as="h1">PaperEmptyState</PaperText>
             <PaperText preset="body" as="p">
                 PaperEmptyState is the centered block a panel shows when there is nothing to list: an icon, a title, a description, and optional actions.
-                Use it for an empty list, a stopped server, a view that couldn't load, or a search with no results.
+                Use it for an empty list, a stopped server, or a search with no results. A view that couldn't load is a <PaperLink href="/docs/paperui/papererror/">PaperError</PaperLink>.
                 It tells the user why the space is empty and what to do next.
             </PaperText>
 
@@ -129,36 +129,12 @@ export function Projects(props: { projects: string[]; create: () => void }) {
 
             <PaperText preset="subheader" as="h3" id="couldnt-load">Couldn't load</PaperText>
             <PaperText preset="body" as="p">
-                A view that failed to load and has nothing to show never leaves its body blank: it shows a neutral "Couldn't load" with Try again.
-                The reason is said once, in the toast that <PaperLink href="/docs/paperui/state/#create-read">createRead</PaperLink>'s <PaperCode>failure</PaperCode> shows, so the empty state doesn't repeat it.
-                A view that still has its old data keeps it on screen, and only the toast says the reload failed.
+                A view that couldn't load isn't empty: it failed. Fill it with a <PaperLink href="/docs/paperui/papererror/#fill">PaperError</PaperLink>, which says what failed and why, with Try again.
             </PaperText>
-            <PaperCard data-docs-demo surface="front">
-                <PaperEmptyState icon="error" title="Couldn't load">
-                    <PaperButton>Try again</PaperButton>
-                </PaperEmptyState>
-            </PaperCard>
-            <PaperCode block language="tsx">
-{`import { createRead, PaperButton, PaperEmptyState, PaperLoader } from "@mileniumhq/paperui";
-
-const logs = createRead(() => service.calls.readLogs(), { failure: { title: "Couldn't load the logs" } });
-
-<Switch>
-    <Match when={logs.value()}>{(lines) => <LogLines lines={lines()} />}</Match>
-    <Match when={logs.error()}>
-        <PaperEmptyState icon="error" title="Couldn't load">
-            <PaperButton disabled={logs.loading()} onClick={() => void logs.reload()}>Try again</PaperButton>
-        </PaperEmptyState>
-    </Match>
-    <Match when={true}>
-        <PaperLoader loaderStatus="indeterminate" label="Reading logs" />
-    </Match>
-</Switch>`}
-            </PaperCode>
 
             <PaperText preset="subheader" as="h3" id="choosing">Choosing a neighbor</PaperText>
             <PaperText preset="body" as="p">
-                Use <PaperLink href="/docs/paperui/paperquote/">PaperQuote</PaperLink> for a note that sits beside content, such as a warning above a form, and PaperEmptyState when there is no content to put it beside. A failure is neither: it is a <PaperLink href="/docs/paperui/papertoast/">toast</PaperLink>.
+                Use <PaperLink href="/docs/paperui/paperquote/">PaperQuote</PaperLink> for a note that sits beside content, such as a warning above a form, and PaperEmptyState when there is no content to put it beside. A failure is neither: it is a <PaperLink href="/docs/paperui/papererror/">PaperError</PaperLink> where it stands, or a <PaperLink href="/docs/paperui/papertoast/">toast</PaperLink> for a one-off one.
                 Pass a PaperEmptyState as the <PaperCode>empty</PaperCode> prop of <PaperLink href="/docs/paperui/paperconsole/">PaperConsole</PaperLink> for a quiet log.
             </PaperText>
         </PaperFlex>

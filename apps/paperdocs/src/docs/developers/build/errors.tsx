@@ -177,7 +177,7 @@ $ bunx paperapi call dev.example.weather followCity '{"town":"Oslo"}'
             <PaperCode block language="tsx">{PAGE_CALL}</PaperCode>
             <PaperTextList>
                 <li>The title says what didn't happen, as "Couldn't …", and the toast says the error's message as the reason.</li>
-                <li>A failure toast stays until it is closed and a screen reader reads it out, so the failure is never missed.</li>
+                <li>A screen reader reads a failure toast out, and it stays 10 seconds, held while the person points at it. A failure that stays true is said in place instead, with <PaperLink href="/docs/paperui/papererror/">PaperError</PaperLink>.</li>
                 <li>Give it <PaperCode>retry</PaperCode> when trying again is what the person would do next. The page keeps its own way to try again too.</li>
                 <li><PaperCode>finally</PaperCode> turns the button back on whether the call worked or not.</li>
             </PaperTextList>
@@ -221,7 +221,7 @@ $ bunx paperapi call dev.example.weather followCity '{"town":"Oslo"}'
                 <tbody>
                     <tr><td>A button, form, menu item or anything else the person pressed</td><td><PaperLink href="/docs/paperui/papertoast/#show-error">showError</PaperLink> in its <PaperCode>catch</PaperCode>.</td></tr>
                     <tr><td>Something that stays wrong, such as settings that can't be read</td><td><PaperLink href="/docs/paperui/papertoast/#create-failure-toast">createFailureToast</PaperLink>, from the state, or <PaperLink href="/docs/paperui/state/#create-read">createRead</PaperLink>'s <PaperCode>failure</PaperCode> for a read.</td></tr>
-                    <tr><td>A view with nothing to show because it couldn't load</td><td><PaperLink href="/docs/paperui/paperemptystate/#couldnt-load">"Couldn't load"</PaperLink> with Try again, and the toast says why.</td></tr>
+                    <tr><td>A view with nothing to show because it couldn't load</td><td>A <PaperLink href="/docs/paperui/papererror/#fill">PaperError</PaperLink> filling the view, with why and Try again.</td></tr>
                     <tr><td>A field the person typed wrong</td><td>The field itself: <PaperLink href="/docs/paperui/paperinput/">PaperInput</PaperLink>'s <PaperCode>invalid</PaperCode>, with the reason under it.</td></tr>
                     <tr><td>Something the panel needs and doesn't have yet, such as an API key</td><td><PaperLink href="/docs/paperui/paperemptystate/">PaperEmptyState</PaperLink> with the button that fixes it.</td></tr>
                     <tr><td>One item in a list or grid</td><td>The item's own error state, such as <PaperCode>tone="danger"</PaperCode> on a <PaperLink href="/docs/paperui/paperstattile/">PaperStatTile</PaperLink>, and the reason below.</td></tr>

@@ -19,8 +19,8 @@ export default function PaperQuoteDoc() {
             <PaperText preset="header" as="h1">PaperQuote</PaperText>
             <PaperText preset="body" as="p">
                 PaperQuote is a callout box with an optional icon and title, for a message that sits in the page: a warning, a tip, or a note.
-                A failure is never a quote: it is a <PaperLink href="/docs/paperui/papertoast/#failures">toast</PaperLink>, from <PaperCode>showError</PaperCode>, <PaperCode>createFailureToast</PaperCode> or createRead's <PaperCode>failure</PaperCode>.
-                When a region has no content yet, or couldn't load, use <PaperLink href="/docs/paperui/paperemptystate/">PaperEmptyState</PaperLink> instead.
+                A failure is never a quote. One that stands, such as a view that won't load, is a <PaperLink href="/docs/paperui/papererror/">PaperError</PaperLink> where it happens; a one-off one, such as a save, is a <PaperLink href="/docs/paperui/papertoast/#failures">toast</PaperLink> from <PaperCode>showError</PaperCode>.
+                When a region has no content yet, use <PaperLink href="/docs/paperui/paperemptystate/">PaperEmptyState</PaperLink> instead.
             </PaperText>
 
             <PaperText preset="subheader" as="h2" id="usage">Usage</PaperText>
@@ -74,7 +74,7 @@ export function Example() {
                         <td><PaperCode>variant</PaperCode></td>
                         <td><PaperCode>PaperQuoteVariant</PaperCode></td>
                         <td><PaperCode>"monochrome"</PaperCode></td>
-                        <td><PaperCode>"monochrome"</PaperCode> or a role: <PaperCode>"primary"</PaperCode>, <PaperCode>"brand"</PaperCode>, <PaperCode>"success"</PaperCode>, <PaperCode>"danger"</PaperCode>, <PaperCode>"warning"</PaperCode>, <PaperCode>"attention"</PaperCode>, <PaperCode>"extra-1"</PaperCode>, <PaperCode>"extra-2"</PaperCode>, or <PaperCode>"extra-3"</PaperCode>. A role tints the quote in its color. <PaperCode>"danger"</PaperCode> is deprecated: a failure is a <PaperLink href="/docs/paperui/papertoast/#failures">toast</PaperLink>, and the code check flags a danger quote.</td>
+                        <td><PaperCode>"monochrome"</PaperCode> or a role: <PaperCode>"primary"</PaperCode>, <PaperCode>"brand"</PaperCode>, <PaperCode>"success"</PaperCode>, <PaperCode>"danger"</PaperCode>, <PaperCode>"warning"</PaperCode>, <PaperCode>"attention"</PaperCode>, <PaperCode>"extra-1"</PaperCode>, <PaperCode>"extra-2"</PaperCode>, or <PaperCode>"extra-3"</PaperCode>. A role tints the quote in its color. <PaperCode>"danger"</PaperCode> is deprecated: a failure is a <PaperLink href="/docs/paperui/papererror/">PaperError</PaperLink> or a <PaperLink href="/docs/paperui/papertoast/#failures">toast</PaperLink>, and the code check flags a danger quote.</td>
                     </tr>
                     <tr>
                         <td><PaperCode>icon</PaperCode></td>
