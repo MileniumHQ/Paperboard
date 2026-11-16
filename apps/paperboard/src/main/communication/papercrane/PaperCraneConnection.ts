@@ -333,7 +333,8 @@ export class PaperCraneConnection extends EventEmitter {
         if (!isLocal && !cert && !this.trustOnFirstUse) failBeforeSocket(new Error(this.missingCertMessage()), false);
 
         let localSocket: WebSocket | undefined;
-        if (isLocal && !token) {
+        // this computer's own daemon; pairing another one on loopback dials its port
+        if (isLocal && !token && !this.trustOnFirstUse) {
             // a daemon that didn't start may start on the next try
             try { localSocket = await this.localDaemonSocket(gen); }
             catch (err) { failBeforeSocket(err, true); }

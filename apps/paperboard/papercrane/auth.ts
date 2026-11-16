@@ -379,7 +379,7 @@ export class PaperCraneAuth extends EventEmitter {
         if (lockStatus.locked) {
             return {
                 success: false,
-                error: `Pairing locked. Please wait ${lockStatus.remainingSeconds}s before retrying.`,
+                error: `Pairing is locked after a wrong code. Try again in ${lockStatus.remainingSeconds} seconds.`,
                 remainingSeconds: lockStatus.remainingSeconds,
             };
         }
@@ -408,7 +408,7 @@ export class PaperCraneAuth extends EventEmitter {
             failed.lockedUntil = this.now() + lockoutMs;
             return {
                 success: false,
-                error: `Invalid pairing code. Pairing is locked for ${Math.round(lockoutMs / 1000)} seconds.`,
+                error: `That code didn't match. Try again in ${Math.round(lockoutMs / 1000)} seconds.`,
                 remainingSeconds: Math.round(lockoutMs / 1000),
             };
         }

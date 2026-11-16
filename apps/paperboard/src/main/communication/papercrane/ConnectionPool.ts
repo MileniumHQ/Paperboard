@@ -10,7 +10,7 @@ import {
 import { getLocalDir } from "../../../../papercrane/paths";
 import { logger } from "../../../../papercrane/logger";
 import { pinnedRequest } from "../../../../papercrane/pinnedTls";
-import { bareHost, bracketHost, checkProbeTarget } from "./probeTarget";
+import { bareHost, bracketHost, checkProbeTarget, isLoopback } from "./probeTarget";
 import { PaperCraneClient } from "./PaperCraneClient";
 import { errorMessage } from "@mileniumhq/paperapi/errors";
 import type { ComputerInfo } from "../../../shared/shellContract";
@@ -46,6 +46,10 @@ export function classifyProbeError(err: any): string {
     }
     if (code === "EHOSTUNREACH" || code === "ENETUNREACH") {
         return "Network unreachable. Is this device on the same network?";
+    }
+    // a plain (unencrypted) server where the daemon's TLS was expected, or the reverse
+    if (code === "EPROTO" || /SSL|TLS|WRONG_VERSION_NUMBER/.test(msg)) {
+        return "Something answered on that port, but not the way the Paperboard server daemon does. Check the port number";
     }
     return msg || "Unreachable";
 }
@@ -238,8 +242,11 @@ export class ConnectionPool extends EventEmitter {
         if ("error" in checked) return checked;
         try {
             // reachability only: no credential crosses this request, so the
-            // not-yet-pinned certificate is not checked here
-            const res = await pinnedRequest(`https://${bracketHost(host)}:${checked.port}/health`, null, { timeoutMs: 2000 });
+            // not-yet-pinned certificate is not checked here. A daemon on
+            // loopback serves plain HTTP, as the client dials it
+            const res = isLoopback(host)
+                ? await fetch(`http://${host}:${checked.port}/health`, { signal: AbortSignal.timeout(2000) })
+                : await pinnedRequest(`https://${bracketHost(host)}:${checked.port}/health`, null, { timeoutMs: 2000 });
             if (res.ok) {
                 // /health carries liveness + version only; hostname arrives
                 // over the authenticated pair/verify handshake instead
@@ -278,8 +285,9 @@ export class ConnectionPool extends EventEmitter {
             if (!pairRes.success || !pairRes.token) {
                 throw new Error("Pairing rejected: invalid code or daemon refused");
             }
+            // a daemon on loopback is dialed in plaintext, so it has no certificate to pin
             const cert = tempClient.getCert();
-            if (!cert) throw new Error("Pairing failed: the computer presented no certificate");
+            if (!cert && !isLoopback(host)) throw new Error("Pairing failed: the computer presented no certificate");
 
             // explicit identity: millisecond timestamps collide; a random
             // suffix keeps two paired-in-a-blink computers distinct

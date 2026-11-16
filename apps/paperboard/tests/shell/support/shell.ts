@@ -55,6 +55,27 @@ export async function clickText(page: Page, tag: string, text: string): Promise<
     await page.click("[data-click-target]");
 }
 
+/** the selector of the field fieldShown(label) found */
+export function fieldOf(label: string): string {
+    return `[data-field=${JSON.stringify(label)}]`;
+}
+
+/**
+ * An expression for page.waitFor: whether a field labelled `label` is shown
+ * (the newest dialog's, when several), which it marks for fieldOf(label).
+ * A mark already right is left alone: a change would wake the wait again.
+ */
+export function fieldShown(label: string): string {
+    return `(() => {
+        const name = ${JSON.stringify(label)};
+        const input = [...document.querySelectorAll("label")].filter((l) => l.textContent.trim() === name).pop()?.control;
+        for (const el of document.querySelectorAll("[data-field]")) if (el.dataset.field === name && el !== input) delete el.dataset.field;
+        if (!input) return false;
+        if (input.dataset.field !== name) input.dataset.field = name;
+        return true;
+    })()`;
+}
+
 export interface Shell {
     page: Page;
     dataDir: string;
@@ -66,7 +87,19 @@ export interface Shell {
      * It listens on 127.0.0.2, so Paperboard dials it as another computer (TLS, pinned certificate),
      * not as this one; Linux routes all of 127/8 to loopback, which is where this suite runs. */
     pairComputer(name: string): Promise<{ id: string; daemon: Crane; answer: Record<string, unknown> }>;
+    /** a second daemon listening on `host`, with pairing opened by `papercrane pair` as a person opens it:
+     * its code, and what pair printed (which says the address to type) */
+    openPairing(host: string): Promise<Pairing>;
     close(): Promise<void>;
+}
+
+export interface Pairing {
+    daemon: Crane;
+    code: string;
+    /** everything `papercrane pair` printed so far */
+    said(): string;
+    /** pair's exit code, once a computer paired (or pairing ended) */
+    done: Promise<number | null>;
 }
 
 async function buildRenderer(outDir: string): Promise<void> {
@@ -204,16 +237,20 @@ export async function bootShell(options: BootOptions = {}): Promise<Shell> {
         }
 
         let pairings = 0;
-        const pairComputer = async (name: string) => {
+        const openPairing = async (listenOn: string): Promise<Pairing> => {
             const otherDir = path.join(root, `computer-${++pairings}`);
             fs.mkdirSync(otherDir);
-            const other = await startCrane(binary, otherDir, "127.0.0.2");
+            const other = await startCrane(binary, otherDir, listenOn);
             reaper.track();
             stops.push(() => other.stop());
             // `papercrane pair` opens pairing and prints the code, then waits for the pairing
             const pairing = spawn(binary, ["pair", "--data-dir", otherDir], { env: hermeticEnv(otherDir), stdio: ["ignore", "pipe", "pipe"] });
             reaper.track();
-            const paired = new Promise<number | null>((resolve) => pairing.once("exit", resolve));
+            const done = new Promise<number | null>((resolve) => pairing.once("exit", resolve));
+            stops.push(async () => {
+                if (pairing.exitCode === null && pairing.signalCode === null) pairing.kill();
+                await done;
+            });
             let said = "";
             const code = await new Promise<string>((resolve, reject) => {
                 const timer = setTimeout(() => reject(new Error(`papercrane pair printed no code:\n${said}`)), WAIT_MS);
@@ -228,6 +265,10 @@ export async function bootShell(options: BootOptions = {}): Promise<Shell> {
                 pairing.stdout!.on("data", read);
                 pairing.stderr!.on("data", read);
             });
+            return { daemon: other, code, said: () => said, done };
+        };
+        const pairComputer = async (name: string) => {
+            const { daemon: other, code, said, done } = await openPairing("127.0.0.2");
             const args = JSON.stringify({ args: { host: "127.0.0.2", port: other.port, code, name } });
             const reply = await page.evaluate<{ ok: boolean; result?: Record<string, unknown>; error?: string }>(
                 `fetch("/_shell/invoke/computer-pair", { method: "POST", headers: { "Content-Type": "application/json" }, body: ${JSON.stringify(args)} }).then((r) => r.json())`,
@@ -236,12 +277,12 @@ export async function bootShell(options: BootOptions = {}): Promise<Shell> {
             const answer = reply.result;
             if (typeof answer.id !== "string") throw new Error(`Pairing ${name} answered no computer id: ${JSON.stringify(answer)}`);
             const id = answer.id;
-            if ((await paired) !== 0) throw new Error(`papercrane pair did not see the pairing:\n${said}`);
+            if ((await done) !== 0) throw new Error(`papercrane pair did not see the pairing:\n${said()}`);
             await page.waitFor(`document.querySelector("[role=radio][aria-label='${name} (127.0.0.2)']")`, `${name} in the rail`);
             return { id, daemon: other, answer };
         };
 
-        return { page, dataDir, daemon, host, pairComputer, close };
+        return { page, dataDir, daemon, host, pairComputer, openPairing, close };
     } catch (err) {
         try {
             await close();

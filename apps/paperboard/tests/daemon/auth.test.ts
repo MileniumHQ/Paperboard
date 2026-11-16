@@ -174,10 +174,10 @@ describe("pairing is opt-in and penalised per peer", () => {
 		const code = daemon.instance.auth.startPairing();
 		const wrong = code === "111111" ? "222222" : "111111";
 		const attacker = await Rpc.open(daemon.url, { localAddress: "127.0.0.2" });
-		expect((await attacker.fail("auth:pair", { code: wrong })).error).toContain("locked for 5 seconds");
+		expect((await attacker.fail("auth:pair", { code: wrong })).error).toContain("Try again in 5 seconds");
 		// the right code from the locked address is refused while it is locked
 		const retry = await Rpc.open(daemon.url, { localAddress: "127.0.0.2" });
-		expect((await retry.fail("auth:pair", { code, peerAddress: "127.0.0.9" })).error).toContain("Pairing locked");
+		expect((await retry.fail("auth:pair", { code, peerAddress: "127.0.0.9" })).error).toContain("Pairing is locked");
 		// another address is not blocked
 		const user = await Rpc.open(daemon.url, { localAddress: "127.0.0.3" });
 		expect((await user.ok("auth:pair", { code })).token).toMatch(/^pc_/);
@@ -198,9 +198,9 @@ describe("pairing is opt-in and penalised per peer", () => {
 		expect(fail("10.0.0.1").remainingSeconds).toBe(30);
 
 		fail("2001:db8:1:2::1");
-		expect(auth.pair(code, "x", "2001:db8:1:2:ffff::9").error).toContain("Pairing locked");
+		expect(auth.pair(code, "x", "2001:db8:1:2:ffff::9").error).toContain("Pairing is locked");
 		fail("::ffff:192.0.2.7");
-		expect(auth.pair(code, "x", "192.0.2.7").error).toContain("Pairing locked");
+		expect(auth.pair(code, "x", "192.0.2.7").error).toContain("Pairing is locked");
 		expect(auth.isLocked("192.0.2.8").locked).toBe(false);
 
 		// spread misses over many addresses until the session budget runs out

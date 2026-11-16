@@ -105,6 +105,7 @@ export default function TroubleshootingDoc() {
                 <li><PaperCode>Host not found.</PaperCode> The name does not resolve. Type the computer's IP address instead.</li>
                 <li><PaperCode>Network unreachable.</PaperCode> This computer has no route to that address. Check that both are on the same network, or connected through your VPN.</li>
                 <li><PaperCode>Something other than the Paperboard server daemon answered on that port.</PaperCode> Another program uses that port on the computer. Check the port number, or move the other program to a different port.</li>
+                <li><PaperCode>Something answered on that port, but not the way the Paperboard server daemon does.</PaperCode> A program that isn't the daemon, or a tunnel to the wrong port, answered there. Check the port number.</li>
                 <li><PaperCode>That isn't a valid address.</PaperCode> What you typed is not an IP address or a computer name. Check it for spaces and stray characters.</li>
                 <li><PaperCode>That isn't a valid port.</PaperCode> The port must be a whole number from 1 to 65535. The default is 45464.</li>
             </PaperTextList>
@@ -115,9 +116,9 @@ export default function TroubleshootingDoc() {
                 Select <b>Custom IP</b> and type the address that <PaperCode>papercrane pair</PaperCode> prints.
             </PaperText>
 
-            <PaperText preset="title" as="h3" id="invalid-code">Invalid pairing code. Pairing is locked for 5 seconds</PaperText>
+            <PaperText preset="title" as="h3" id="invalid-code">That code didn't match. Try again in 5 seconds</PaperText>
             <PaperText preset="body" as="p">
-                The code was wrong. Wait the number of seconds shown, then type the code the daemon shows now.
+                The code was wrong. Wait the number of seconds shown, then type the code the daemon shows now. Until then, Paperboard says <PaperCode>Pairing is locked after a wrong code.</PaperCode>
                 After the third wrong code, the wait is 30 seconds.
             </PaperText>
 

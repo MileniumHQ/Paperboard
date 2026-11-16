@@ -97,7 +97,16 @@ export const ComputerSetupWizard: Component<ComputerSetupWizardProps> = (
         if (targetHost.trim().length >= 3) probeTimeout = setTimeout(() => probeTarget({ host: targetHost, port: targetPort }), 400);
     };
 
+    // an address typed with its port ("192.168.1.50:45464", "[::1]:45464"),
+    // as `papercrane pair` prints it, fills both fields
     const handleIpInput = (val: string) => {
+        const withPort = /^\s*(\[[^\]]*\]|[^:\s]+):(\d{1,5})\s*$/.exec(val);
+        if (withPort) {
+            setHost(withPort[1]!);
+            setPort(withPort[2]!);
+            probeTyped(withPort[1]!, withPort[2]!);
+            return;
+        }
         setHost(val);
         probeTyped(val, port());
     };
@@ -105,6 +114,15 @@ export const ComputerSetupWizard: Component<ComputerSetupWizardProps> = (
     const handlePortInput = (val: string) => {
         setPort(val);
         probeTyped(host(), val);
+    };
+
+    // the code as the daemon prints it: two groups of three digits
+    const handleCodeInput = (field: HTMLInputElement) => {
+        const digits = field.value.replace(/\D/g, "").slice(0, 6);
+        const grouped = digits.length > 3 ? `${digits.slice(0, 3)} ${digits.slice(3)}` : digits;
+        // a key that changes nothing (a letter) is taken back out of the field too
+        field.value = grouped;
+        setCode(grouped);
     };
 
     const canProceedFromStep2 = () => {
@@ -279,7 +297,6 @@ export const ComputerSetupWizard: Component<ComputerSetupWizardProps> = (
                             <PaperInput
                                 fullWidth
                                 label="Computer address"
-                                placeholder="192.168.1.50"
                                 icon="language"
                                 value={host()}
                                 onInput={(e) =>
@@ -290,7 +307,6 @@ export const ComputerSetupWizard: Component<ComputerSetupWizardProps> = (
                             <PaperInput
                                 fullWidth
                                 label="Server port"
-                                placeholder={String(DAEMON_PORT)}
                                 icon="numbers"
                                 value={port()}
                                 onInput={(e) =>
@@ -299,7 +315,7 @@ export const ComputerSetupWizard: Component<ComputerSetupWizardProps> = (
                             />
 
                             <Show when={probeUnreachable()}>
-                                <PaperText preset="error">
+                                <PaperText preset="error" breakWord>
                                     Can't reach {host().trim()}
                                     <Show when={!probeInvalid()}>
                                         :{port().trim() || DAEMON_PORT}
@@ -338,15 +354,14 @@ export const ComputerSetupWizard: Component<ComputerSetupWizardProps> = (
                             <PaperInput
                                 fullWidth
                                 label="Pairing code"
-                                placeholder="123 456"
                                 icon="lock"
                                 value={code()}
-                                onInput={(e) => setCode(e.currentTarget.value)}
+                                onInput={(e) => handleCodeInput(e.currentTarget)}
                                 disabled={isPairing()}
                             />
 
                             <Show when={pairError()}>
-                                <PaperText preset="error">
+                                <PaperText preset="error" breakWord>
                                     {pairError()}
                                 </PaperText>
                             </Show>

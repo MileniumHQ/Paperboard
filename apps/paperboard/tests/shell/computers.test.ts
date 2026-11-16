@@ -2,7 +2,7 @@
 // list keeps, and how often a dialog checks a computer. Everything waits on
 // what the page does, never on a delay.
 import { afterAll, beforeAll, expect, test } from "bun:test";
-import { bootShell, clickText, type Shell } from "./support/shell";
+import { bootShell, clickText, fieldOf, fieldShown, type Shell } from "./support/shell";
 
 let shell: Shell;
 let workshop: Awaited<ReturnType<Shell["pairComputer"]>>;
@@ -102,14 +102,15 @@ test("Add Computer: a check of an earlier address that answers late does not ena
     await page.click(`[role=button][aria-label='Add Computer'], button[aria-label='Add Computer']`);
     await clickText(page, "label", "Custom IP");
     await clickText(page, "button", "Next");
-    await page.waitFor(`document.querySelector("input[placeholder='192.168.1.50']")`, "the address step");
-    await page.evaluate(`document.querySelector("input[placeholder='45464']").select()`);
-    await page.type("input[placeholder='45464']", String(workshop.daemon.port));
+    await page.waitFor(fieldShown("Computer address"), "the address step");
+    await page.waitFor(fieldShown("Server port"), "the port field");
+    await page.evaluate(`document.querySelector(${JSON.stringify(fieldOf("Server port"))}).select()`);
+    await page.type(fieldOf("Server port"), String(workshop.daemon.port));
     // Workshop is up there: its check would find it
-    await page.type("input[placeholder='192.168.1.50']", "127.0.0.2");
+    await page.type(fieldOf("Computer address"), "127.0.0.2");
     await until("asked", "127.0.0.2");
-    await page.evaluate(`document.querySelector("input[placeholder='192.168.1.50']").select()`);
-    await page.type("input[placeholder='192.168.1.50']", "127.0.0.3");
+    await page.evaluate(`document.querySelector(${JSON.stringify(fieldOf("Computer address"))}).select()`);
+    await page.type(fieldOf("Computer address"), "127.0.0.3");
     await until("asked", "127.0.0.3");
 
     await shell.host({ cmd: "release-probe", host: "127.0.0.2" });
@@ -119,7 +120,7 @@ test("Add Computer: a check of an earlier address that answers late does not ena
     await shell.host({ cmd: "release-probe", host: "127.0.0.3" });
     await until("answered", "127.0.0.3");
     await page.evaluate(`document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }))`);
-    await page.waitFor(`!document.querySelector("input[placeholder='192.168.1.50']")`, "Add Computer to close");
+    await page.waitFor(`!${fieldShown("Computer address")}`, "Add Computer to close");
     expect(page.exceptions).toEqual([]);
 });
 
@@ -136,18 +137,19 @@ test("Add Computer: a pairing answered without the computer says so", async () =
     await page.click(`[role=button][aria-label='Add Computer'], button[aria-label='Add Computer']`);
     await clickText(page, "label", "Custom IP");
     await clickText(page, "button", "Next");
-    await page.waitFor(`document.querySelector("input[placeholder='192.168.1.50']")`, "the address step");
-    await page.evaluate(`document.querySelector("input[placeholder='45464']").select()`);
-    await page.type("input[placeholder='45464']", String(workshop.daemon.port));
-    await page.type("input[placeholder='192.168.1.50']", "127.0.0.2");
+    await page.waitFor(fieldShown("Computer address"), "the address step");
+    await page.waitFor(fieldShown("Server port"), "the port field");
+    await page.evaluate(`document.querySelector(${JSON.stringify(fieldOf("Server port"))}).select()`);
+    await page.type(fieldOf("Server port"), String(workshop.daemon.port));
+    await page.type(fieldOf("Computer address"), "127.0.0.2");
     await page.waitFor(`![...document.querySelectorAll("button")].filter((b) => b.textContent.includes("Next")).pop().disabled`, "the address to be reachable");
     await clickText(page, "button", "Next");
-    await page.waitFor(`document.querySelector("input[placeholder='123 456']")`, "the pairing step");
-    await page.type("input[placeholder='123 456']", "123456");
+    await page.waitFor(fieldShown("Pairing code"), "the pairing step");
+    await page.type(fieldOf("Pairing code"), "123456");
     await clickText(page, "button", "Add Computer");
     await page.waitFor(`document.body.innerText.includes("The computer answered the pairing without saying who it is.")`, "the pairing's failure");
     await page.evaluate(`document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }))`);
-    await page.waitFor(`!document.querySelector("input[placeholder='123 456']")`, "Add Computer to close");
+    await page.waitFor(`!${fieldShown("Pairing code")}`, "Add Computer to close");
     expect(page.exceptions).toEqual([]);
 });
 
