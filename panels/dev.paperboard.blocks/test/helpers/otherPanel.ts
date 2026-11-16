@@ -16,6 +16,10 @@ import { blocksContract } from "../../src/panel";
 import { LATE_NOT_SET_UP } from "../fixtures/world";
 
 const role = process.argv[2];
+// as a real panel service does (paperapi's definePanelService), it ends when
+// the process that started it is gone: a test file that never stopped it, or
+// a run that was killed, leaves nothing running
+process.once("disconnect", () => process.exit(0));
 const panelId = process.env.PAPERBOARD_PANEL_ID!;
 const lines: string[] = [];
 
