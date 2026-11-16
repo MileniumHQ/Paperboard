@@ -224,8 +224,10 @@ export function PaperWizard(props: ParentProps<PaperWizardProps>) {
                     <div>
                         <Show when={!local.hideBack && !backHiddenCurrent() && !isFirstStep()}>
                             <PaperEffect colorless disabled={!optionsShown()}>
+                                {/* the way back is quieter than the way on: one primary button per step */}
                                 <PaperButton
                                     type="button"
+                                    variant="text"
                                     onClick={prevStep}
                                     disabled={!optionsShown()}
                                 >
@@ -292,10 +294,12 @@ export function PaperWizardStep(props: ParentProps<PaperWizardStepProps>) {
         "canProceed",
         "hideBack",
         "onStepActive",
+        "ref",
         "class",
         "classList",
         "children",
     ]);
+    let stepEl: HTMLDivElement | undefined;
 
     createEffect(
         on(
@@ -316,6 +320,17 @@ export function PaperWizardStep(props: ParentProps<PaperWizardStepProps>) {
         }),
     );
 
+    // a field marked autofocus takes the keyboard each time its step comes
+    // forward, as a dialog's does: the step mounts again each time, and a
+    // browser honors autofocus only once per page
+    createEffect(
+        on(isActive, (active) => {
+            if (!active) return;
+            const frame = requestAnimationFrame(() => stepEl?.querySelector<HTMLElement>("[autofocus]")?.focus({ preventScroll: true }));
+            onCleanup(() => cancelAnimationFrame(frame));
+        }),
+    );
+
     // the current step's settings follow its props for as long as it is current
     createEffect(
         on([isActive, () => local.hideBack, () => local.canProceed], ([active, hideBack, canProceed]) => {
@@ -332,7 +347,16 @@ export function PaperWizardStep(props: ParentProps<PaperWizardStepProps>) {
     // step change crossfades instead of passing through an empty frame
     return (
         <PaperPresence when={isActive()} appear enterClass={styles.stepEnter} exitClass={styles.stepExit}>
-            <div {...rest} class={className()} classList={local.classList} inert={!isActive()}>
+            <div
+                {...rest}
+                ref={(el) => {
+                    stepEl = el;
+                    if (typeof local.ref === "function") (local.ref as (el: HTMLDivElement) => void)(el);
+                }}
+                class={className()}
+                classList={local.classList}
+                inert={!isActive()}
+            >
                 {local.children}
             </div>
         </PaperPresence>

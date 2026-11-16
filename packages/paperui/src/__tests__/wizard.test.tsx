@@ -2,6 +2,7 @@ import { describe, expect, test } from "vitest";
 import { fireEvent, render, screen } from "@solidjs/testing-library";
 import { createEffect, createSignal, on, Show } from "solid-js";
 import { PaperCheckbox, PaperInput, PaperToggle, PaperWizard, PaperWizardStep, useWizard } from "../index";
+import buttonStyles from "../components/PaperButton/index.module.css";
 
 /** lets queued enters, exits and their microtask ends run */
 // quiet: yields one task so queued work lands; no duration is tuned
@@ -140,5 +141,44 @@ describe("PaperWizard steps", () => {
         expect(screen.getByRole("button", { name: /Finish/ })).toBeTruthy();
         next();
         expect(completed).toHaveLength(1);
+    });
+});
+
+// Inventory: Menus and form controls — Wizard steps take the keyboard, and show one way on.
+describe("PaperWizard step arrival", () => {
+    test("a step's autofocus field has the keyboard each time the step comes forward", async () => {
+        render(() => (
+            <PaperWizard>
+                <PaperWizardStep index={0}>first</PaperWizardStep>
+                <PaperWizardStep index={1}>
+                    <PaperInput name="token" aria-label="Bot token" autofocus />
+                </PaperWizardStep>
+            </PaperWizard>
+        ));
+        const frame = () => new Promise((resolve) => requestAnimationFrame(resolve));
+        next();
+        await settle();
+        await frame();
+        expect(document.activeElement).toBe(screen.getByLabelText("Bot token"));
+
+        fireEvent.click(screen.getByRole("button", { name: /Back/ }));
+        await settle();
+        next();
+        await settle();
+        await frame();
+        expect(document.activeElement).toBe(screen.getByLabelText("Bot token"));
+    });
+
+    test("Back is a quiet button beside Next, so a step shows one primary button", async () => {
+        render(() => (
+            <PaperWizard>
+                <PaperWizardStep index={0}>first</PaperWizardStep>
+                <PaperWizardStep index={1}>second</PaperWizardStep>
+            </PaperWizard>
+        ));
+        next();
+        await settle();
+        expect(screen.getByRole("button", { name: /Back/ }).classList.contains(buttonStyles.text)).toBe(true);
+        expect(screen.getByRole("button", { name: /Finish/ }).classList.contains(buttonStyles.text)).toBe(false);
     });
 });

@@ -203,6 +203,11 @@ export function Example() {
             </PaperTable>
 
             <PaperText preset="subheader" as="h2" id="behavior">Behavior</PaperText>
+            <PaperText preset="subheader" as="h3" id="arrival">A step arriving</PaperText>
+            <PaperTextList>
+                <li>A field with <PaperCode>autofocus</PaperCode> takes the keyboard each time its step becomes the active one, as a field in a <PaperLink href="/docs/paperui/papermodal/">PaperModal</PaperLink> does on each open.</li>
+                <li>Back is a text button and Next the filled one, so each step shows one primary button.</li>
+            </PaperTextList>
             <PaperText preset="subheader" as="h3" id="data">Collecting data</PaperText>
             <PaperText preset="body" as="p">
                 Next is a submit button. Submitting reads the form with <PaperCode>FormData</PaperCode> and merges every named field into the record, replacing earlier keys of the same name, then moves on.

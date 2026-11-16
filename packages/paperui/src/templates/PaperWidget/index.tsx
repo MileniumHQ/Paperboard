@@ -29,8 +29,9 @@ const toneStyle = (tone: PaperRole | "none" | undefined): JSX.CSSProperties | un
  *
  * Nothing is cut: the detail shows whole or not at all, a stat's value
  * shrinks to fit its width, and a body too short for everything leaves out
- * stat captions and message descriptions, then stat meters, before a
- * value is made smaller to fit.
+ * stat captions and message descriptions, then makes values up to three tenths
+ * smaller to keep their meters, then leaves out stat meters, before a
+ * value is made smaller still to fit.
  */
 export interface PaperWidgetProps extends Omit<JSX.HTMLAttributes<HTMLDivElement>, "title"> {
     /** the header's title; omit only for a widget that is a face, like a clock */
@@ -129,8 +130,9 @@ export function PaperWidget(props: ParentProps<PaperWidgetProps>) {
  * Fits a widget body's content to it without cutting anything. Each stat's
  * value takes the font size that fits its width (never larger than its
  * own). While the body overflows, it leaves out captions and message
- * descriptions, then meters and the second line of a message's title,
- * and last makes the values smaller still.
+ * descriptions; then it makes the values a little smaller, if that keeps
+ * the meters; then it leaves out meters and the second line of a message's
+ * title, and last makes the values smaller still.
  */
 function fitBody(body: HTMLElement) {
     const values = Array.from(body.querySelectorAll<HTMLElement>(`.${styles.statValue}`));
@@ -141,20 +143,33 @@ function fitBody(body: HTMLElement) {
             value.style.setProperty("--paper-widget-fit", String(value.clientWidth / value.scrollWidth));
         }
     }
+    const widthFits = values.map((value) => value.style.getPropertyValue("--paper-widget-fit"));
     const overflows = () => body.scrollHeight > body.clientHeight;
+    // line boxes round to whole pixels: a few passes settle it; no value goes below `floor` of its width's fit
+    const shrinkValues = (floor: number) => {
+        for (let pass = 0; pass < 3 && values.length > 0 && overflows(); pass++) {
+            const shrink = body.clientHeight / body.scrollHeight;
+            values.forEach((value, i) => {
+                const fit = Number(value.style.getPropertyValue("--paper-widget-fit") || 1);
+                value.style.setProperty("--paper-widget-fit", String(Math.max(fit * shrink, Number(widthFits[i] || 1) * floor)));
+            });
+        }
+    };
     if (!overflows()) return;
     body.dataset.tight = "1";
     if (!overflows()) return;
-    body.dataset.tight = "2";
-    // line boxes round to whole pixels: a few passes settle it
-    for (let pass = 0; pass < 3 && values.length > 0 && overflows(); pass++) {
-        const shrink = body.clientHeight / body.scrollHeight;
-        for (const value of values) {
-            const fit = Number(value.style.getPropertyValue("--paper-widget-fit") || 1);
-            value.style.setProperty("--paper-widget-fit", String(fit * shrink));
-        }
+    // a meter is worth a value up to three tenths smaller
+    if (body.querySelector(`.${styles.statMeter}`)) {
+        shrinkValues(VALUE_SHRINK_FOR_METER);
+        if (!overflows()) return;
+        values.forEach((value, i) => (widthFits[i] ? value.style.setProperty("--paper-widget-fit", widthFits[i]) : value.style.removeProperty("--paper-widget-fit")));
     }
+    body.dataset.tight = "2";
+    shrinkValues(0);
 }
+
+/** the smallest a stat's value is made, against its width's fit, to keep its meter */
+const VALUE_SHRINK_FOR_METER = 0.7;
 
 export interface PaperWidgetStatMeter {
     value: number;
