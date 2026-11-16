@@ -55,6 +55,8 @@ function openTools() {
         load,
         loadError,
         refresh,
+        /** tools.json read again by the service; a file that still can't be read is in the view's configError */
+        readFile: () => viewOf(calls.readToolsFile()),
         save: (server: ServerSpec) => viewOf(calls.saveServer({ server })),
         remove: (name: string) => viewOf(calls.removeServer({ name })),
         restart: (name: string) => viewOf(calls.restartServer({ name })),

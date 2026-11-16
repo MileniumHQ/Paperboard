@@ -125,6 +125,19 @@ export class McpServers {
         });
     }
 
+    /**
+     * tools.json read again after it couldn't be (the person fixed or deleted it): the view, with why when it
+     * still can't be read. A file that was read is the service's to change, so it isn't read over what's running.
+     */
+    async reload(): Promise<ToolsView> {
+        if (this.configError) {
+            // while it couldn't be read, nothing in it was set up: there is no server to stop
+            await this.load();
+            this.changed();
+        }
+        return this.view();
+    }
+
     async view(): Promise<ToolsView> {
         const secrets: Record<string, string[]> = {};
         for (const full of await this.deps.vault.list()) {

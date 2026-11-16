@@ -115,7 +115,7 @@ function List(props: { tools: ToolsClient; name: string }) {
                 <Show when={view().configError}>
                     {(err) => (
                         <PaperFlex padding="full" gap="half">
-                            <PaperError title={`Couldn't read ${props.name}'s tools file`} error={err()} action={{ label: "Try again", disabled: props.tools.load() === "loading", onClick: () => void props.tools.refresh() }} />
+                            <PaperError title={`Couldn't read ${props.name}'s tools file`} error={err()} action={{ label: "Try again", disabled: busy(), onClick: () => void action.run("Couldn't read the tools file again", props.tools.readFile) }} />
                             <PaperText preset="hint">Nothing was changed. Fix or delete tools.json in the panel's config, then try again.</PaperText>
                         </PaperFlex>
                     )}

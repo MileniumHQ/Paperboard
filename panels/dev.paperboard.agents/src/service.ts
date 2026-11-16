@@ -134,6 +134,7 @@ const calls: CallHandlers<typeof agentsContract> = {
     discardPagePdf: ready((i) => app.pages.discardPdf(i.file)),
     deletePage: ready(async (i) => void (await app.pages.remove(i.name))),
     tools: ready(() => app.servers.view()),
+    readToolsFile: ready(() => app.servers.reload()),
     saveServer: ready((i) => app.servers.save(i.server)),
     removeServer: ready((i) => app.servers.remove(i.name)),
     restartServer: ready((i) => app.servers.restart(i.name)),

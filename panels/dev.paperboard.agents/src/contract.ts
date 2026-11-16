@@ -765,6 +765,8 @@ export const agentsContract = defineContract(PANEL_ID, {
         deletePage: { input: byName, output: nothing() },
         // the agent's tool servers (Tools): each change answers with the whole view
         tools: { output: toolsView },
+        /** tools.json read again, as after the person fixed it: its servers, or why it still can't be read */
+        readToolsFile: { output: toolsView },
         saveServer: { input: object({ server: serverSpec }), output: toolsView },
         removeServer: { input: byName, output: toolsView },
         restartServer: { input: byName, output: toolsView },
