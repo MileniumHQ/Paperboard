@@ -188,7 +188,25 @@ export class SavedCommands {
     }
 
     async init(): Promise<void> {
-        let running: RunningRecord[] = [];
+        await this.read().catch(() => undefined); // quiet: read() keeps why in loadError, which the view and every refused call say
+        this.publish();
+    }
+
+    /**
+     * Reads the saved list again after it couldn't be read: the error clears and the new state is announced, or the error stays
+     * and this throws why. Nothing to do once it has been read.
+     */
+    async reload(): Promise<void> {
+        if (this.loaded) return;
+        try {
+            await this.read();
+        } finally {
+            this.publish();
+        }
+    }
+
+    private async read(): Promise<void> {
+        let running: RunningRecord[];
         try {
             const doc = parseSavedCommandsDoc(await this.deps.load());
             this.commands = doc.commands;
@@ -202,9 +220,9 @@ export class SavedCommands {
             this.runs = {};
             this.loaded = false;
             this.loadError = `Saved commands could not be read: ${errorMessage(err)}`;
+            throw new Error(this.loadError);
         }
-        if (this.loaded && running.length > 0) await this.takeBack(running);
-        this.publish();
+        if (running.length > 0) await this.takeBack(running);
     }
 
     view(): SavedCommandsView {

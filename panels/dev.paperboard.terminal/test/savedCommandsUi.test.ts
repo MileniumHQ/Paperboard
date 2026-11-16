@@ -1,6 +1,8 @@
 // Saved commands as a person uses them: added, run and removed in the panel's
 // modal, run from the toolbar's menu, and run from the Home widget.
 import { afterEach, describe, expect, setDefaultTimeout, test } from "bun:test";
+import * as fs from "node:fs";
+import * as path from "node:path";
 import { clearWorkloads } from "./helpers/crane";
 import { widgetUrl } from "../../../scripts/testing/panelUi";
 import { panelBrowser, toastShows, servePanel, type Page } from "./helpers/browser";
@@ -89,6 +91,32 @@ describe("saved commands in the panel", () => {
             // the toast goes with the modal
             await page.press("Escape");
             await page.waitFor(`!${dialog} && !(${toastShows("Couldn't read the saved commands", "")})`, "the modal and its toast to close");
+            expect(page.exceptions).toEqual([]);
+        } finally {
+            await page.close();
+            served.stop();
+        }
+    });
+
+    test("Try again on Couldn't load reads them again: still damaged, a toast says why and it stays; mended, the list comes", async () => {
+        const dir = await panelFiles({ "tabs.json": TABS, "saved-commands.json": '{"version": 1, "commands": [' });
+        await startService();
+        const served = await servePanel();
+        const page = await browser.open(served.url);
+        const tryAgain = `[...${dialog}.querySelectorAll("button")].find((b) => b.innerText.includes("Try again"))`;
+        try {
+            await page.waitFor(`document.querySelectorAll(".xterm").length === 1`, "the shell");
+            await page.click('button[aria-label="Saved commands"]');
+            await page.clickText("[role=menuitem]", "Manage saved commands");
+            await page.waitFor(`Boolean(${dialog} && ${tryAgain})`, "Try again on the modal's Couldn't load");
+            await page.clickText("[role=dialog] button", "Try again");
+            await page.waitFor(toastShows("Couldn't read the saved commands", "Saved commands could not be read"), "the toast saying it still can't");
+            expect(await page.evaluate<boolean>(`Boolean(${tryAgain})`), "Try again went away with the list still unread").toBe(true);
+
+            fs.writeFileSync(path.join(dir, "saved-commands.json"), JSON.stringify({ version: 1, commands: [{ id: "cmd_a", label: "Build", command: "make" }], lastRuns: {}, running: [] }));
+            await page.clickText("[role=dialog] button", "Try again");
+            await page.waitFor(rowShowing("Build", "make"), "the list read again");
+            expect(await page.evaluate<boolean>(`${dialog}.innerText.includes("Couldn't load")`)).toBe(false);
             expect(page.exceptions).toEqual([]);
         } finally {
             await page.close();

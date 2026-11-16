@@ -133,6 +133,8 @@ export const terminalContract = defineContract(PANEL_ID, {
         /** saves a command; its id */
         saveCommand: { input: shape.object({ label: shape.text(), command: shape.text() }), output: shape.text() },
         removeSavedCommand: { input: byId, output: shape.nothing() },
+        /** reads the saved commands again after they couldn't be read; throws why when they still can't be */
+        reloadSavedCommands: { output: shape.nothing() },
         /** starts a saved command; its exit arrives through the state */
         runSavedCommand: { input: byId, output: shape.object({ startedAt: shape.number() }) },
     },

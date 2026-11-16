@@ -44,6 +44,25 @@ describe("the saved-commands file is never overwritten blindly", () => {
         });
     }
 
+    test("reading again keeps the error and says why while the file is still damaged, and recovers the list once it is mended", async () => {
+        const dir = await panelFiles({ [FILE]: "{ not json" });
+        await startService();
+        expect((await serviceState()).savedCommandsError).toContain("Saved commands could not be read");
+
+        await expect(call.reloadSavedCommands()).rejects.toThrow("Saved commands could not be read");
+        expect((await serviceState()).savedCommandsError).toContain("Saved commands could not be read");
+        expect(fs.readFileSync(path.join(dir, FILE), "utf8")).toBe("{ not json");
+
+        fs.writeFileSync(path.join(dir, FILE), JSON.stringify({ version: 1, commands: [{ id: "cmd_a", label: "Build", command: "make" }], lastRuns: {}, running: [] }));
+        await call.reloadSavedCommands();
+        const state = await stateWhere(PANEL_ID, (s: any) => s.savedCommands.length === 1 && s.savedCommandsError === "", "the list read again");
+        expect(state.savedCommands.map((c: any) => c.label)).toEqual(["Build"]);
+        // writes work again, and reading again once it is read is nothing to do
+        await call.reloadSavedCommands();
+        await call.saveCommand({ label: "Test", command: "make test" });
+        expect(savedFile(dir).commands.map((c: any) => c.label)).toEqual(["Build", "Test"]);
+    });
+
     test("adds and removes sent at once are applied one after another, each saved before it shows", async () => {
         const dir = await panelFiles();
         await startService();

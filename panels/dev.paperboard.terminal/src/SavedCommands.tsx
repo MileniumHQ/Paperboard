@@ -19,7 +19,6 @@ import {
     createAction,
     createFailureToast,
     showError,
-    type ActionFailure,
 } from "@mileniumhq/paperui";
 import { terminal } from "./client";
 import type { CommandRun, SavedCommand } from "./lib/contract";
@@ -37,8 +36,6 @@ const TONE_COLOR: Record<RunTone, PaperColor> = {
 };
 
 const START_FAILED = "Couldn't start the command";
-// an action's failure, said as a toast over the modal, which stays open
-const toast = (failure: ActionFailure | null) => failure && showError(failure.title, failure.message);
 
 /** The last lines a finished run printed, as plain text: how a failure says why. */
 function runOutput(run: CommandRun | undefined): string[] {
@@ -114,10 +111,11 @@ function SavedCommandsModal(props: {
     const [command, setCommand] = createSignal("");
     // a row's buttons never wait on another call: the service orders them,
     // and the row's run state is what says a command is already going
-    const { busy, run: runAction } = createAction();
-    const run = (title: string, fn: () => Promise<unknown>) => runAction(title, fn, toast);
+    const { busy, run } = createAction();
+    // the refusal of the read again is the standing toast's: it goes while it reads, and comes back with why if it still can't
+    const reading = createAction({ toast: false });
     // unreadable is not empty: the list says it couldn't load, and the toast says why
-    createFailureToast(() => props.open && props.loadError, { title: "Couldn't read the saved commands" });
+    createFailureToast(() => props.open && (reading.busy() ? null : (reading.error()?.message ?? props.loadError)), { title: "Couldn't read the saved commands" });
 
     const full = () => props.commands.length >= MAX_SAVED_COMMANDS;
     const canSave = () => !busy() && !props.loadError && !full() && command().trim() !== "";
@@ -141,7 +139,13 @@ function SavedCommandsModal(props: {
                     fallback={
                         <Show
                             when={!props.loadError}
-                            fallback={<PaperEmptyState icon="error" title="Couldn't load" />}
+                            fallback={
+                                <PaperEmptyState icon="error" title="Couldn't load">
+                                    <PaperButton disabled={reading.busy()} onClick={() => void reading.run("Couldn't read the saved commands", terminal.calls.reloadSavedCommands)}>
+                                        Try again
+                                    </PaperButton>
+                                </PaperEmptyState>
+                            }
                         >
                             <PaperEmptyState icon="bookmarks" title="No saved commands" description="Save one below." />
                         </Show>

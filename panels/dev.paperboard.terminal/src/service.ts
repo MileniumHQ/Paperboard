@@ -618,6 +618,7 @@ const calls: CallHandlers<typeof terminalContract> = {
     },
     saveCommand: (input) => savedCommands.add(input.label, input.command),
     removeSavedCommand: (input) => savedCommands.remove(input.id),
+    reloadSavedCommands: () => savedCommands.reload(),
     runSavedCommand: (input) => savedCommands.run(input.id),
 };
 
