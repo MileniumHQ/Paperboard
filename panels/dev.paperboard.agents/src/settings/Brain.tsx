@@ -4,8 +4,8 @@
 
 import { Match, Show, Switch, createEffect, createSignal, on, type JSX } from "solid-js";
 import { createStore } from "solid-js/store";
-import { PaperButton, PaperCopyButton, PaperFlex, PaperIcon, PaperInput, PaperLoader, PaperModal, PaperProgress, PaperQuote, PaperText, createAction, createFailureToast } from "@mileniumhq/paperui";
-import { HARNESSES, SIGN_IN_REQUIRED, type BrainState, type Harness } from "../contract";
+import { PaperButton, PaperCopyButton, PaperError, PaperFlex, PaperIcon, PaperInput, PaperLoader, PaperModal, PaperProgress, PaperQuote, PaperText, createAction } from "@mileniumhq/paperui";
+import { SIGN_IN_REQUIRED, type BrainState, type Harness } from "../contract";
 import type { Agent } from "../lib/agent";
 import { harnessName } from "../lib/brains";
 import { submitOnPaste } from "../lib/paste";
@@ -44,14 +44,11 @@ export function brainLine(harness: Harness, b: BrainState): string {
 }
 
 /**
- * The actions a person can ask of a brain. A refused one is a toast that names the brain, and so is a brain
- * that stopped with a problem, for as long as it stands.
+ * The actions a person can ask of a brain. A refused one is a toast that names the brain; a brain that
+ * stopped with a problem says so in its BrainStatus, for as long as it stands.
  */
 export function createBrainActions(agent: Agent) {
     const { run } = createAction();
-    for (const h of HARNESSES) {
-        createFailureToast(() => agent.state.brains[h].phase === "failed" && agent.state.brains[h].error, { title: `Couldn't get ${harnessName(h)} ready` });
-    }
     // how many of a brain's actions are out: its buttons take no second press until the service answers the first
     const [running, setRunning] = createStore<Partial<Record<Harness, number>>>({});
     const act = async (h: Harness, title: string, fn: () => Promise<unknown>) => {
@@ -76,7 +73,10 @@ export function createBrainActions(agent: Agent) {
 }
 export type BrainActions = ReturnType<typeof createBrainActions>;
 
-/** What's happening with a brain right now, if anything is: the download, the sign-in, or the trouble. */
+/**
+ * What's happening with a brain right now, if anything is: the download, the sign-in, or the trouble. A brain
+ * that stopped with a problem says why; its Try again is with its buttons (BrainButtons).
+ */
 export function BrainStatus(props: { agent: Agent; harness: Harness; actions: BrainActions }) {
     const b = () => props.agent.state.brains[props.harness];
     const name = () => harnessName(props.harness);
@@ -101,6 +101,9 @@ export function BrainStatus(props: { agent: Agent; harness: Harness; actions: Br
                             </PaperButton>
                         }
                     />
+                </Match>
+                <Match when={b().phase === "failed"}>
+                    <PaperError title={`Couldn't get ${name()} ready`} error={b().error} />
                 </Match>
                 <Match when={b().phase === "unsupported"}>
                     <PaperQuote variant="warning" icon="warning" title={`${name()} can't run on this computer`}>
@@ -313,12 +316,11 @@ export function SignInModal(props: { agent: Agent; harness: Harness | null; acti
                                 </PaperFlex>
                             </Match>
                             <Match when={b()!.phase === "failed"}>
-                                <PaperText preset="body">The sign-in stopped with a problem.</PaperText>
-                                <PaperFlex direction="row" gap="half">
-                                    <PaperButton variant="primary" disabled={props.actions.busy(h())} onClick={() => void props.actions.signIn(h())}>
-                                        Try again
-                                    </PaperButton>
-                                </PaperFlex>
+                                <PaperError
+                                    title={`Couldn't sign in to ${harnessName(h())}`}
+                                    error={b()!.error}
+                                    action={{ label: "Try again", disabled: props.actions.busy(h()), onClick: () => void props.actions.signIn(h()) }}
+                                />
                             </Match>
                         </Switch>
                     </PaperFlex>

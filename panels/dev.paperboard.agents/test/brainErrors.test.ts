@@ -39,6 +39,15 @@ beforeAll(async () => {
 });
 afterAll(() => panel?.close());
 
+test("a brain that stopped with a problem says why in place, under the brains, with no toast", async () => {
+    const stopped = `${BRAINS}.querySelector(${JSON.stringify(`[data-paper-error][aria-label="Couldn't get Codex ready"]`)})`;
+    await page.waitFor(stopped, "Codex's problem said in place");
+    expect(await page.evaluate<string>(`${stopped}.innerText`)).toContain(path.join(panel.storage, "gone", "codex"));
+    // it was there when the settings opened: a region, read when reached, not an alert
+    expect(await page.evaluate(`${stopped}.getAttribute("role")`)).toBe("region");
+    expect((await page.evaluate<string[]>(TOASTS)).filter((a) => a.includes("Codex")), "a problem that stands is a toast").toEqual([]);
+});
+
 test("a brain's button pressed twice before the service answers is sent once", async () => {
     // Claude Code's sign-in: its page is opened, and its code pasted and on its way
     await page.evaluate(`[...${BRAINS}.querySelectorAll("button")].find((b) => b.innerText.includes("Sign in")).click()`);

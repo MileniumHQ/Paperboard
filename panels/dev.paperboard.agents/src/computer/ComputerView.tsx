@@ -6,7 +6,7 @@
 // user's back.
 
 import { For, Match, Show, Switch, createEffect, createSignal, on, onCleanup } from "solid-js";
-import { PaperButton, PaperEmptyState, PaperFlex, PaperIcon, PaperList, PaperListItem, PaperLoader, PaperText, createAction, createPolling, createRead, showError } from "@mileniumhq/paperui";
+import { PaperButton, PaperEmptyState, PaperError, PaperFlex, PaperIcon, PaperList, PaperListItem, PaperLoader, PaperText, createAction, createPolling, createRead, showError } from "@mileniumhq/paperui";
 import type { ComputerWindow } from "../contract";
 import type { Agent } from "../lib/agent";
 import { SetupProgress } from "./Computer";
@@ -123,14 +123,10 @@ export default function ComputerView(props: { agent: Agent }) {
                     </Match>
                     <Match when={c().phase === "installing" || (c().phase === "failed" && !c().installed)}>
                         <div class={styles.setup}>
-                            <SetupProgress computer={c()} />
-                            <Show when={c().phase === "failed"}>
-                                <PaperFlex direction="row">
-                                    <PaperButton variant="primary" disabled={busy()} onClick={() => void action.run("Couldn't set up the computer", props.agent.calls.installComputer)}>
-                                        <PaperIcon>restart_alt</PaperIcon> Set up again
-                                    </PaperButton>
-                                </PaperFlex>
-                            </Show>
+                            <SetupProgress
+                                computer={c()}
+                                retry={{ label: "Set up again", disabled: busy(), onClick: () => void action.run("Couldn't set up the computer", props.agent.calls.installComputer) }}
+                            />
                         </div>
                     </Match>
                     <Match when={c().phase === "none"}>
@@ -158,18 +154,15 @@ export default function ComputerView(props: { agent: Agent }) {
                         </PaperEmptyState>
                     </Match>
                     <Match when={c().phase === "failed"}>
-                        <PaperEmptyState icon="error" title="The computer stopped" description={c().error ?? undefined}>
-                            <PaperButton variant="primary" disabled={busy()} onClick={() => void action.run("Couldn't turn on the computer", props.agent.calls.startComputer)}>
-                                Try again
-                            </PaperButton>
-                        </PaperEmptyState>
+                        <PaperError
+                            fill
+                            title="The computer stopped"
+                            error={c().error}
+                            action={{ label: "Try again", disabled: busy(), onClick: () => void action.run("Couldn't turn on the computer", props.agent.calls.startComputer) }}
+                        />
                     </Match>
                     <Match when={listed.error()}>
-                        <PaperEmptyState icon="web_asset_off" title="Couldn't see its windows" description={listed.error() ?? undefined}>
-                            <PaperButton variant="primary" onClick={() => void listed.reload()}>
-                                Try again
-                            </PaperButton>
-                        </PaperEmptyState>
+                        {(err) => <PaperError fill title="Couldn't see its windows" error={err()} action={{ label: "Try again", disabled: listed.loading(), onClick: () => void listed.reload() }} />}
                     </Match>
                     <Match when={listed.value() === undefined}>
                         <PaperFlex center>

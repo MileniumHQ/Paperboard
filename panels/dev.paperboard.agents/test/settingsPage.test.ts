@@ -79,13 +79,18 @@ describe("a pick", () => {
 describe("the models", () => {
     test("are listed again once the brain is set up, and the error that it wasn't goes", async () => {
         const page = await settingsPage({ codexOnPath: { signedIn: true, plan: MODELS } });
-        await page.waitFor(toast("Couldn't list the models"), "the models not to be listed");
-        expect(await page.evaluate(`${toast("Couldn't list the models")}.innerText`)).toContain("Codex isn't installed");
+        // the list stays unlisted until the brain is set up, so it's said in place, in the Agent section, never as a toast
+        const unlisted = `document.querySelector('[role=region][aria-label="Agent"] [data-paper-error][aria-label="Couldn\\'t list the models"]')`;
+        await page.waitFor(unlisted, "the models not to be listed");
+        expect(await page.evaluate(`${unlisted}.innerText`)).toContain("Codex isn't installed");
+        expect(await page.evaluate(`${unlisted}.getAttribute("role")`), "a failure there when the page opens is an alert").toBe("region");
+        expect(await page.evaluate(`[...${unlisted}.querySelectorAll("button")].map((b) => b.innerText.trim())`)).toEqual(["Try again"]);
+        expect(await page.evaluate(`Boolean(${toast("Couldn't list the models")})`), "a failure that stands is a toast").toBe(false);
         // Brains: run the Codex that is on this computer
         await page.waitFor(`[...document.querySelectorAll("button")].some((b) => b.innerText.trim().endsWith("Use it"))`, "Codex to be found on this computer");
         await page.evaluate(`[...document.querySelectorAll("button")].find((b) => b.innerText.trim().endsWith("Use it")).dataset.testUse = "1"`);
         await page.click(`button[data-test-use]`);
-        await page.waitFor(`document.querySelector('[role=region][aria-label="Agent"] input[name="model"]') && !${toast("Couldn't list the models")}`, "the models to be listed");
+        await page.waitFor(`document.querySelector('[role=region][aria-label="Agent"] input[name="model"]') && !${unlisted}`, "the models to be listed");
         await page.click(`[role=region][aria-label="Agent"] input[name="model"] ~ button[aria-haspopup=listbox]`);
         await page.waitFor(`[...document.querySelectorAll("[role=option]")].some((o) => o.innerText.includes("GPT X"))`, "Codex's model in the list");
         expect(page.exceptions).toEqual([]);

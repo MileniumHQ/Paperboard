@@ -5,7 +5,7 @@
 // pasted. Shown on the Tools page and on the sign-in card in the chat.
 
 import { Show, createSignal } from "solid-js";
-import { PaperButton, PaperCopyButton, PaperFlex, PaperIcon, PaperInput, PaperLoader, PaperQuote, PaperText, createAction, createFailureToast } from "@mileniumhq/paperui";
+import { PaperButton, PaperCopyButton, PaperError, PaperFlex, PaperIcon, PaperInput, PaperLoader, PaperQuote, PaperText, createAction } from "@mileniumhq/paperui";
 import { createLoopbackCatch } from "../lib/loopback";
 import { submitOnPaste } from "../lib/paste";
 import type { Tools } from "./api";
@@ -15,8 +15,6 @@ export default function SignInSteps(props: { tools: Tools; name: string }) {
     const [address, setAddress] = createSignal("");
     const { busy, run: act } = createAction();
     const run = (fn: () => Promise<unknown>) => act(`Couldn't sign in to ${props.name}`, fn);
-    // a sign-in that stopped says why for as long as it stands; Start again is here
-    createFailureToast(() => pending()?.error, { title: `Couldn't sign in to ${props.name}` });
     const forward = createLoopbackCatch(
         () => pending()?.callback ?? null,
         (url) => run(() => props.tools.finishSignIn(props.name, url)),
@@ -35,15 +33,17 @@ export default function SignInSteps(props: { tools: Tools; name: string }) {
         <Show when={pending()}>
             {(p) => (
                 <PaperFlex gap="half">
+                    {/* a sign-in that stopped says why for as long as it stands, with Start again */}
                     <Show
                         when={!p().error}
                         fallback={
                             <PaperFlex gap="half">
-                                <PaperText preset="body">The sign-in to {props.name} stopped.</PaperText>
-                                <PaperFlex direction="row" gap="half" align="center" wrap>
-                                    <PaperButton variant="primary" disabled={busy()} onClick={() => void run(() => props.tools.signIn(props.name))}>
-                                        <PaperIcon>refresh</PaperIcon> Start again
-                                    </PaperButton>
+                                <PaperError
+                                    title={`Couldn't sign in to ${props.name}`}
+                                    error={p().error}
+                                    action={{ label: "Start again", disabled: busy(), onClick: () => void run(() => props.tools.signIn(props.name)) }}
+                                />
+                                <PaperFlex direction="row">
                                     <PaperButton variant="text" disabled={busy()} onClick={() => void run(() => props.tools.cancelSignIn(props.name))}>
                                         Cancel
                                     </PaperButton>

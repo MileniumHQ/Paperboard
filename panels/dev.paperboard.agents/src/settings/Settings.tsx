@@ -5,6 +5,7 @@
 import { For, Match, Show, Switch, createEffect, createSignal, on } from "solid-js";
 import {
     PaperButton,
+    PaperError,
     PaperFlex,
     PaperIcon,
     PaperInput,
@@ -17,7 +18,6 @@ import {
     PaperSettingList,
     PaperText,
     createAction,
-    createFailureToast,
     createSavedValue,
     showError,
 } from "@mileniumhq/paperui";
@@ -50,7 +50,6 @@ function AgentSettings(props: { agent: Agent }) {
     const [name, setName] = createSignal(current().name);
     const [model, setModel] = createSignal(current().model ?? "");
     const models = createModels(props.agent, () => current().harness);
-    createFailureToast(models.error, { title: "Couldn't list the models" });
     // as the harness lists them: its current models, then its older ones
     const listed = () => loadedModels(models) ?? [];
     const unlisted = () => {
@@ -165,9 +164,14 @@ function AgentSettings(props: { agent: Agent }) {
                 </PaperSettingItem>
             </PaperSettingList>
             <Show when={models.error()}>
-                <PaperText preset="hint" inset>
-                    Type a model's id instead.
-                </PaperText>
+                {(err) => (
+                    <PaperFlex gap="half">
+                        <PaperError title="Couldn't list the models" error={err()} action={{ label: "Try again", disabled: models.loading(), onClick: () => void models.reload() }} />
+                        <PaperText preset="hint" inset>
+                            Type a model's id instead.
+                        </PaperText>
+                    </PaperFlex>
+                )}
             </Show>
         </PaperFlex>
     );
@@ -179,8 +183,8 @@ function BrainsSettings(props: { agent: Agent }) {
     const [providers, setProviders] = createSignal(false);
     // a sign-in happens in its modal; the list shows only the brains' other work and trouble
     const [signingIn, setSigningIn] = createSignal<Harness | null>(null);
-    // a brain that stopped with a problem says why in a toast, and its row has Try again
-    const busy = (h: Harness) => ["installing", "unsupported"].includes(props.agent.state.brains[h].phase) && h !== signingIn();
+    // a brain that stopped with a problem says why under the list, and its row has Try again
+    const busy = (h: Harness) => ["installing", "unsupported", "failed"].includes(props.agent.state.brains[h].phase) && h !== signingIn();
     return (
         <PaperFlex gap="full" role="region" aria-label="Brains">
             <PaperSectionHeader icon="psychology" title="Brains" role="heading" aria-level={2} />
