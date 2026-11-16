@@ -95,8 +95,10 @@
 //    still cross, outside the parts already moved, are KNOWN_CROSSINGS below;
 //    one that no longer crosses is a hit too, so the list only shrinks.
 //  error-quote (failures are toasts, PaperToast's docs)
-//    A <PaperQuote> whose `variant` is, or can be, the string "danger": a
-//    failure is said with a toast (createFailureToast, createRead's
+//    A <PaperQuote> whose `variant` is, or can be, the string "danger", or a
+//    red line of text: a <PaperText> with `preset="error"` or
+//    `color="danger"` written as a string (a color picked by a condition is
+//    not one). A failure is said with a toast (createFailureToast, createRead's
 //    `failure`), a field's with the field's error, and a view that could not
 //    load with PaperEmptyState's "Couldn't load". The files that still have
 //    them are scripts/errorQuotes.json, each with how many, until the
@@ -586,9 +588,27 @@ function errorQuotesAllowed(options: Options): Record<string, number> {
     return errorQuotesListed;
 }
 
-/** Does this JSX element say a failure in a quote: `<PaperQuote variant="danger">`, or a variant that can be "danger"? */
+/** The string an attribute is set to, written as `a="x"` or `a={"x"}`; undefined for anything worked out. */
+function literalAttribute(n: TS.JsxOpeningElement | TS.JsxSelfClosingElement, name: string): string | undefined {
+    const attr = n.attributes.properties.find((a): a is TS.JsxAttribute => ts.isJsxAttribute(a) && a.name.getText() === name);
+    const value = attr?.initializer;
+    if (!value) return undefined;
+    if (ts.isStringLiteral(value)) return value.text;
+    if (ts.isJsxExpression(value) && value.expression && ts.isStringLiteralLike(unwrap(value.expression))) return (unwrap(value.expression) as TS.StringLiteralLike).text;
+    return undefined;
+}
+
+/**
+ * Does this JSX element say a failure in place: `<PaperQuote variant="danger">`
+ * (or a variant that can be "danger"), or a red line of text,
+ * `<PaperText preset="error">` or `<PaperText color="danger">`? A color picked
+ * by a condition (a join in green, a leave in red) is no error line.
+ */
 function isErrorQuote(n: TS.Node): n is TS.JsxOpeningElement | TS.JsxSelfClosingElement {
-    if (!(ts.isJsxOpeningElement(n) || ts.isJsxSelfClosingElement(n)) || n.tagName.getText() !== "PaperQuote") return false;
+    if (!(ts.isJsxOpeningElement(n) || ts.isJsxSelfClosingElement(n))) return false;
+    const tag = n.tagName.getText();
+    if (tag === "PaperText") return literalAttribute(n, "preset") === "error" || literalAttribute(n, "color") === "danger";
+    if (tag !== "PaperQuote") return false;
     const variant = n.attributes.properties.find((a): a is TS.JsxAttribute => ts.isJsxAttribute(a) && a.name.getText() === "variant");
     const value = variant?.initializer;
     if (!value) return false;
@@ -601,7 +621,7 @@ function isErrorQuote(n: TS.Node): n is TS.JsxOpeningElement | TS.JsxSelfClosing
     return danger;
 }
 
-const ERROR_QUOTE_WHY = `a failure is a toast, not an error quote (PaperToast's docs): createFailureToast or createRead's \`failure\` for a standing one, showToast for an action's, the field's error for a field's, PaperEmptyState's "Couldn't load" for a view with nothing to show`;
+const ERROR_QUOTE_WHY = `a failure is a toast, not an error quote or a red line of text (PaperToast's docs): createFailureToast or createRead's \`failure\` for a standing one, showError or createAction for an action's, PaperInput's \`error\` for a field's, PaperEmptyState's "Couldn't load" for a view with nothing to show`;
 
 function checkErrorQuotes(sf: TS.SourceFile, file: string, hit: (node: TS.Node, rule: string, message: string) => void, options: Options): void {
     const path = relative(ROOT, resolve(file));

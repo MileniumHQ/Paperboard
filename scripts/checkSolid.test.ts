@@ -143,6 +143,9 @@ describe("the house rules flag each break, honour a reasoned quiet marker, and p
         expect(quotes(`export const C = () => <b />;\n`, listed)).toEqual(["1:error-quote"]);
         // another variant, or another component's danger, is no error quote
         expect(quotes(`export const D = () => <><PaperQuote variant="warning">Heads up</PaperQuote><PaperButton variant="danger">Delete</PaperButton></>;\n`)).toEqual([]);
+        // a red line of text says a failure in place too; a color a condition picks does not
+        expect(quotes(`export const E = () => <><PaperText preset="error">Not renamed</PaperText><PaperText size={2} color={"danger"}>Taken</PaperText></>;\n`)).toEqual(["1:error-quote", "1:error-quote"]);
+        expect(quotes(`export const F = (p: { left: boolean }) => <PaperText color={p.left ? "danger" : "success"}>Steve</PaperText>;\n`)).toEqual([]);
         // the deprecated panels keep theirs until they go
         expect(checkSource(join(root, "panels/dev.paperboard.ai/src/A.tsx"), danger, { errorQuotes: {} })).toEqual([]);
 

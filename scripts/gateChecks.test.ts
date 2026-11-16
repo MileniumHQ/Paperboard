@@ -98,3 +98,19 @@ describe("check-app-styling: hairlines are exempt, sizes are not", () => {
         expect(check(css)).toEqual({ code: 0, out: "ok: app styling\n" });
     });
 });
+
+describe("check-no-silent-catches.sh: a catch that returns with no trace", () => {
+    const CATCH = join(import.meta.dir, "../apps/paperboard/scripts/check-no-silent-catches.sh");
+    const check = (src: string) => run(tree([], { "src/a.ts": src }), ["bash", CATCH, "src"]);
+
+    test("flags a catch that returns a fallback and says nothing", () => {
+        // put together here, so the check doesn't find the shape in this file
+        const r = check(`async function a() { try { await x(); } catch (err) { ${"return"} null; } }\n`);
+        expect(r.code).toBe(1);
+        expect(r.out).toContain("value-returning catches with no log");
+    });
+
+    test("passes a catch that says the failure as a toast", () => {
+        expect(check(`async function a() { try { await x(); } catch (err) { showError("Couldn't save it", err); return; } }\n`)).toEqual({ code: 0, out: "zero silent catches\n" });
+    });
+});

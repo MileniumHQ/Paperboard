@@ -13,7 +13,8 @@
 #     readCraneCreds/normalizeEmbeds/getSystemInfo. Bodies that log (logger.,
 #     console., debugErr, logToMain), rethrow, answer over RPC/HTTP (reply,
 #     res.end, jsonResponse), emit events, update UI state (setX), deliver the
-#     error to a callback (onError, onVerifyError), or do multi-statement work
+#     error to a callback (onError, onVerifyError), say it as a toast
+#     (showError, showToast, dismissToast), or do multi-statement work
 #     never match. Probe predicates must log too (even debug) — false IS an
 #     answer, but an untraced one.
 #  3. empty promise-arrow bodies (no-paren and paren-bound error params).
@@ -49,7 +50,7 @@ if scan -U --pcre2 -n "${GLOBS[@]}" 'catch\s*(\([^)]*\))?\s*\{\s*\}|catch\s*(\([
     FAIL=1
 fi
 # shellcheck disable=SC2086
-if scan -U --pcre2 -n "${GLOBS[@]}" 'catch\s*(\([^)]*\))?\s*\{(?![^{}]*\b(logToMain|logger\.|\blog\s*\.|\blog\s*\(|console\.|debugErr|debug\s*\(|throw\b|emitTrigger|\bemit\s*\(|reply\s*\(|reject\s*\(|set[A-Z]\w*|res\.end|jsonResponse|onError|onVerifyError))[^{}]*\breturn\b\s*[^;{}]*;\s*\}' $DIRS; then
+if scan -U --pcre2 -n "${GLOBS[@]}" 'catch\s*(\([^)]*\))?\s*\{(?![^{}]*\b(logToMain|logger\.|\blog\s*\.|\blog\s*\(|console\.|debugErr|debug\s*\(|throw\b|emitTrigger|\bemit\s*\(|reply\s*\(|reject\s*\(|set[A-Z]\w*|res\.end|jsonResponse|onError|onVerifyError|show(Error|Toast)\s*\(|dismissToast\s*\())[^{}]*\breturn\b\s*[^;{}]*;\s*\}' $DIRS; then
     echo "FAIL: value-returning catches with no log found above" >&2
     FAIL=1
 fi

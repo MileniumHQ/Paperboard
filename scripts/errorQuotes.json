@@ -1,2 +1,7 @@
 {
+    "apps/origami/library/src/PanelPage.tsx": 2,
+    "panels/dev.paperboard.agents/src/chat/Chat.tsx": 1,
+    "panels/dev.paperboard.agents/src/chat/RequestEnd.tsx": 1,
+    "panels/dev.paperboard.agents/src/chat/ToolSignIn.tsx": 1,
+    "panels/dev.paperboard.gameserver/src/components/players/PlayerInspector.tsx": 1
 }
