@@ -19,6 +19,7 @@ import { forgetStrayTokens, loadBots, rememberGuideSeen, savesSettled } from "./
 import { createEntry, registerPanelBlocks } from "./blocksBridge";
 import { connectEntry, registerEntry } from "./lifecycle";
 import { blocksBots, botChoices, serviceCalls } from "./calls";
+import type { CallHandlers } from "@mileniumhq/paperapi";
 
 /**
  * Starts each bot without waiting for it. Logging in to Discord (and syncing commands after) can stall for minutes on a
@@ -31,9 +32,38 @@ function startBots<T>(entries: Iterable<T>, start: (entry: T) => Promise<void>):
     }
 }
 
+/**
+ * Reads the saved bots again after they couldn't be read, and brings up what the start would have: the bots' blocks and
+ * connections. The error clears and the state is announced, or it stays and this throws why. Nothing to do once they are read.
+ */
+let readingAgain: Promise<void> | null = null;
+function readBotsAgain(): Promise<void> {
+    readingAgain ??= (async () => {
+        if (!panel.botsError) return;
+        try {
+            await loadBots(createEntry);
+        } catch (err) {
+            panel.botsError = errorMessage(err);
+            throw err;
+        }
+        panel.botsError = null;
+        await rememberGuideSeen();
+        await forgetStrayTokens().catch(reportFailure("Tokens no bot holds couldn't be forgotten"));
+        for (const entry of bots.values()) await registerEntry(entry);
+        publish();
+        startBots(bots.values(), connectEntry);
+        console.log(`[DiscordService] Read the saved bots again: ${bots.size} bot(s); connecting them to Discord.`);
+    })().finally(() => {
+        readingAgain = null;
+    });
+    return readingAgain;
+}
+
+const calls: CallHandlers<typeof botCreatorContract> = { ...serviceCalls, readBotsAgain };
+
 export const botService = definePanelService({
     contract: botCreatorContract,
-    calls: serviceCalls,
+    calls,
     widgetChoices: {
         "bot-status": { bot: botChoices },
         "command-activity": { bot: botChoices },

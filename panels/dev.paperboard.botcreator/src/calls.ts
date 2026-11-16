@@ -58,7 +58,8 @@ function requireGuild(entry: BotEntry, guildId: string) {
  * What the panel's own page and widgets ask the service (its contract). Each takes the bot's id in its input, and
  * none of them is a block: what a person automates is in blocks/.
  */
-export const serviceCalls: CallHandlers<typeof botCreatorContract> = {
+// reading the saved bots again is the service's own, since it starts the bots (service.ts)
+export const serviceCalls: Omit<CallHandlers<typeof botCreatorContract>, "readBotsAgain"> = {
     getBotInfo: ({ bot }) => requireBot(bot).session.info(),
     getWidgetStatus: ({ bot }) => {
         const entry = widgetBot(bot);

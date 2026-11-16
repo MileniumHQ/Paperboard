@@ -56,6 +56,10 @@ const field = (label: string) =>
 /** The open dialog's button whose text includes `text`. */
 const dialogButton = (text: string) => `[...document.querySelectorAll("[role=dialog] button")].find((b) => b.innerText.includes(${JSON.stringify(text)}))`;
 
+/** What the dialog's field labelled `label` says is wrong with it, as its screen-reader description: "" when it says nothing. */
+const said = (label: string) =>
+    `(${field(label)}.getAttribute("aria-describedby") ?? "").split(" ").map((id) => document.getElementById(id)?.innerText ?? "").join(" ").trim()`;
+
 /** Replaces what the dialog's field labelled `label` holds with `text`, typed as a keyboard would. */
 async function fill(page: Page, label: string, text: string): Promise<void> {
     await page.evaluate(`(${field(label)}).select()`);
@@ -81,11 +85,14 @@ describe("the Commands tab", () => {
             await fill(page, "Description", "Check the bot");
             await page.waitFor(`${field("Command")}.getAttribute("aria-invalid") === "true"`, "the name marked wrong");
             expect(await page.evaluate<boolean>(`${dialogButton("Create")}.disabled`)).toBe(true);
+            // and says why under itself, where the field points to it
+            expect(await page.evaluate<string>(said("Command"))).toContain("Names are 1–32 lowercase characters");
 
             // a name typed as in Discord is the lowercase command
             await fill(page, "Command", "/Ping");
             await page.waitFor(`!${dialogButton("Create")}.disabled`, "Create to be pressable");
             expect(await page.evaluate<string | null>(`${field("Command")}.getAttribute("aria-invalid")`)).toBeNull();
+            expect(await page.evaluate<string>(said("Command"))).toBe("");
             await page.evaluate(`${dialogButton("Create")}.dataset.test = "create"`);
             await page.click(`[data-test="create"]`);
             await page.waitFor(`${row("ping")} !== null`, "the new /ping in the list");
@@ -99,6 +106,7 @@ describe("the Commands tab", () => {
             await fill(page, "Description", "Again");
             await page.waitFor(`${field("Command")}.getAttribute("aria-invalid") === "true"`, "the taken name marked wrong");
             expect(await page.evaluate<boolean>(`${dialogButton("Create")}.disabled`)).toBe(true);
+            expect(await page.evaluate<string>(said("Command"))).toBe("A command with this name already exists in this scope.");
             expect(page.exceptions).toEqual([]);
         } finally {
             await page.close();

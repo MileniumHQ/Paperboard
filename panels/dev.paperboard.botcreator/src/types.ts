@@ -133,6 +133,25 @@ export function isOptionOrderValid(
     );
 }
 
+/** null when valid, otherwise the sentence to show under the parameter's name. */
+export function describeOptionNameProblem(name: string, all: { name: string }[]): string | null {
+    if (!name.trim()) return "A parameter name is required.";
+    if (!isCommandNameValid(name)) {
+        return "Parameter names are 1–32 lowercase characters: letters, numbers, hyphens and underscores.";
+    }
+    if (hasDuplicateOptionName(all, name)) return "Parameter names must be unique.";
+    return null;
+}
+
+/** null when valid, otherwise the sentence to show under the parameter's description. */
+export function describeOptionDescriptionProblem(description: string): string | null {
+    if (!description.trim()) return "A parameter description is required.";
+    if (!isCommandDescriptionValid(description)) {
+        return `Descriptions are ${COMMAND_DESCRIPTION_MAX_LENGTH} characters or fewer.`;
+    }
+    return null;
+}
+
 /** null when valid, otherwise the sentence to show the user. */
 export function describeCommandOptionProblem(
     option: { name: string; description: string; type: string; required: boolean },
@@ -142,17 +161,8 @@ export function describeCommandOptionProblem(
     if (!isCommandOptionType(option.type)) {
         return "Pick a parameter type.";
     }
-    if (!option.name.trim()) return "A parameter name is required.";
-    if (!isCommandNameValid(option.name)) {
-        return "Parameter names are 1–32 lowercase characters: letters, numbers, hyphens and underscores.";
-    }
-    if (hasDuplicateOptionName(all, option.name)) {
-        return "Parameter names must be unique.";
-    }
-    if (!option.description.trim()) return "A parameter description is required.";
-    if (!isCommandDescriptionValid(option.description)) {
-        return `Descriptions are ${COMMAND_DESCRIPTION_MAX_LENGTH} characters or fewer.`;
-    }
+    const problem = describeOptionNameProblem(option.name, all) ?? describeOptionDescriptionProblem(option.description);
+    if (problem) return problem;
     if (!isOptionOrderValid(all, index)) {
         return "Required parameters must come before optional ones.";
     }
@@ -191,20 +201,30 @@ export function findCommandForInteraction(
     );
 }
 
+/** null when valid, otherwise the sentence to show under the command's name. */
+export function describeCommandNameProblem(name: string): string | null {
+    if (!normalizeCommandName(name)) return "A command name is required.";
+    if (!isCommandNameValid(name)) {
+        return "Names are 1–32 lowercase characters: letters, numbers, hyphens and underscores.";
+    }
+    return null;
+}
+
+/** null when valid, otherwise the sentence to show under the command's description. */
+export function describeCommandDescriptionProblem(description: string): string | null {
+    if (!description.trim()) return "A description is required.";
+    if (!isCommandDescriptionValid(description)) {
+        return `Descriptions are ${COMMAND_DESCRIPTION_MAX_LENGTH} characters or fewer.`;
+    }
+    return null;
+}
+
 /** null when valid, otherwise the sentence to show the user. */
 export function describeCommandProblem(input: {
     name: string;
     description: string;
 }): string | null {
-    if (!normalizeCommandName(input.name)) return "A command name is required.";
-    if (!isCommandNameValid(input.name)) {
-        return "Names are 1–32 lowercase characters: letters, numbers, hyphens and underscores.";
-    }
-    if (!input.description.trim()) return "A description is required.";
-    if (!isCommandDescriptionValid(input.description)) {
-        return `Descriptions are ${COMMAND_DESCRIPTION_MAX_LENGTH} characters or fewer.`;
-    }
-    return null;
+    return describeCommandNameProblem(input.name) ?? describeCommandDescriptionProblem(input.description);
 }
 
 function readStoredOptions(raw: unknown): SlashCommandOption[] {

@@ -55,13 +55,12 @@ describe("the setup guide", () => {
             await page.waitFor(`document.body.innerText.includes(${JSON.stringify(appId)})`, "the application the token names");
             await pressButton(page, "Add bot");
             // the refusal is the token's: said under the field, which is marked wrong
-            await page.waitFor(`document.querySelector("[role=alert]")?.innerText.includes("An invalid token was provided")`, "the refusal");
-            expect(await page.evaluate<boolean>(`document.querySelector('input[type="password"]').getAttribute("aria-invalid") === "true"`)).toBe(true);
-            // the only callout is the refusal: the token's application is named, never marked good
+            const TOKEN = `document.querySelector('input[type="password"]')`;
+            await page.waitFor(`document.getElementById(${TOKEN}.getAttribute("aria-describedby"))?.innerText.includes("An invalid token was provided")`, "the refusal under the token");
+            expect(await page.evaluate<boolean>(`${TOKEN}.getAttribute("aria-invalid") === "true"`)).toBe(true);
+            // the only callout is the refusal, as the field's own words: the token's application is named, never marked good
             expect(await page.evaluate<number>(`document.querySelectorAll("[class*=PaperQuote]").length`)).toBe(0);
-            expect(await page.evaluate<string[]>(`[...document.querySelectorAll("[role=alert]")].map((q) => q.innerText)`)).toEqual([
-                expect.stringContaining("An invalid token was provided"),
-            ]);
+            expect(await page.evaluate<number>(`document.querySelectorAll("[role=alert]").length`)).toBe(0);
             expect(await page.evaluate<string>("document.body.innerText")).toContain(`Application ID: ${appId}`);
             if (process.env.BOT_SHOTS) fs.writeFileSync(`${process.env.BOT_SHOTS}/refused.png`, await page.screenshot());
             expect(page.exceptions).toEqual([]);

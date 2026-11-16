@@ -222,7 +222,8 @@ describe("a bot's page", () => {
             await page.waitFor(`document.querySelector("[role=dialog] input[type=password]") !== null`, "the Replace token dialog");
             const [app, stamp] = fake.token.split(".");
             await page.type("[role=dialog] input[type=password]", `${app}.${stamp}.${"y".repeat(27)}`, true);
-            await page.waitFor(`document.querySelector("[role=dialog] [role=alert]")?.innerText.includes("Discord refused the new token")`, "the refusal in the dialog");
+            // said under the token, which the field points to
+            await page.waitFor(`(() => { const f = document.querySelector("[role=dialog] input[type=password]"); return Boolean(f.getAttribute("aria-describedby") && document.getElementById(f.getAttribute("aria-describedby"))?.innerText.includes("Discord refused the new token")); })()`, "the refusal under the token");
             const state = await stateWhere<BotsServiceState>(PANEL_ID, (s) => s.bots.length === 1, "the bot");
             expect(state.bots[0]).toMatchObject({ connected: true, lastError: null });
             expect(page.exceptions).toEqual([]);

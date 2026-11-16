@@ -30,11 +30,12 @@ import {
     COMMAND_OPTION_TYPE_ICONS,
     COMMAND_OPTION_TYPE_LABELS,
     count,
+    describeCommandDescriptionProblem,
+    describeCommandNameProblem,
     describeCommandOptionProblem,
     describeCommandProblem,
-    hasDuplicateOptionName,
-    isCommandDescriptionValid,
-    isCommandNameValid,
+    describeOptionDescriptionProblem,
+    describeOptionNameProblem,
     isOptionOrderValid,
     normalizeCommandName,
     type CommandMutationResult,
@@ -66,7 +67,7 @@ export default function Commands(props: { bot: () => BotSummary }) {
     // a field shows as wrong only once it has been used: a form that opens empty isn't a mistake
     const [touched, setTouched] = createSignal<ReadonlySet<string>>(new Set<string>());
     const touch = (field: string) => setTouched((prev) => (prev.has(field) ? prev : new Set(prev).add(field)));
-    const wrong = (field: string, bad: boolean) => bad && touched().has(field);
+    const wrong = (field: string, problem: string | null) => (touched().has(field) && problem) || undefined;
     const [name, setName] = createSignal("");
     const [description, setDescription] = createSignal("");
     const [scope, setScope] = createSignal(GLOBAL_SCOPE);
@@ -122,20 +123,15 @@ export default function Commands(props: { bot: () => BotSummary }) {
             describeCommandOptionProblem(option, options(), index),
         );
 
-    // the same predicates the service rejects with, applied to the inputs
-    // PaperInput already knows how to render as invalid
-    const optionNameInvalid = (index: number) => {
+    // the same rules the service rejects with, said under the field that breaks them
+    const nameProblem = () => describeCommandNameProblem(name()) ?? (isDuplicate() ? "A command with this name already exists in this scope." : null);
+    const optionNameProblem = (index: number) => {
         const option = options()[index];
-        if (!option) return false;
-        return (
-            !isCommandNameValid(option.name) ||
-            hasDuplicateOptionName(options(), option.name)
-        );
+        return option ? describeOptionNameProblem(option.name, options()) : null;
     };
-
-    const optionDescriptionInvalid = (index: number) => {
+    const optionDescriptionProblem = (index: number) => {
         const option = options()[index];
-        return option ? !isCommandDescriptionValid(option.description) : false;
+        return option ? describeOptionDescriptionProblem(option.description) : null;
     };
 
     const formProblem = () => {
@@ -336,7 +332,7 @@ export default function Commands(props: { bot: () => BotSummary }) {
                             // one extra char so the optional leading slash fits
                             maxLength={33}
                             value={name()}
-                            invalid={wrong("name", !isCommandNameValid(name()) || isDuplicate())}
+                            error={wrong("name", nameProblem())}
                             onBlur={() => touch("name")}
                             // "/Ping" is accepted and saved as "ping": the
                             // list shows the name as Discord has it
@@ -347,7 +343,7 @@ export default function Commands(props: { bot: () => BotSummary }) {
                             label="Description"
                             maxLength={COMMAND_DESCRIPTION_MAX_LENGTH}
                             value={description()}
-                            invalid={wrong("description", !isCommandDescriptionValid(description()))}
+                            error={wrong("description", describeCommandDescriptionProblem(description()))}
                             onBlur={() => touch("description")}
                             onInput={(e) => (touch("description"), setDescription(e.currentTarget.value))}
                         />
@@ -452,7 +448,7 @@ export default function Commands(props: { bot: () => BotSummary }) {
                                                         fullWidth
                                                         label="Parameter name"
                                                         value={option().name}
-                                                        invalid={wrong(`${option().id}:name`, optionNameInvalid(index))}
+                                                        error={wrong(`${option().id}:name`, optionNameProblem(index))}
                                                         onBlur={() => touch(`${option().id}:name`)}
                                                         onInput={(e) =>
                                                             (touch(`${option().id}:name`), updateOption(option().id, {
@@ -490,7 +486,7 @@ export default function Commands(props: { bot: () => BotSummary }) {
                                                 fullWidth
                                                 label="Parameter description"
                                                 value={option().description}
-                                                invalid={wrong(`${option().id}:description`, optionDescriptionInvalid(index))}
+                                                error={wrong(`${option().id}:description`, optionDescriptionProblem(index))}
                                                 onBlur={() => touch(`${option().id}:description`)}
                                                 onInput={(e) =>
                                                     (touch(`${option().id}:description`),
@@ -511,7 +507,7 @@ export default function Commands(props: { bot: () => BotSummary }) {
                                             />
 
                                             <Show when={orderProblem()}>
-                                                <PaperText preset="error">
+                                                <PaperText preset="hint">
                                                     Required parameters must come before
                                                     optional ones.
                                                 </PaperText>

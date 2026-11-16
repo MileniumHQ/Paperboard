@@ -191,4 +191,32 @@ describe("failures are shown, never guessed", () => {
             served.stop();
         }
     });
+
+    test("Try again on Couldn't load reads the saved bots again: still damaged, a toast says why and it stays; mended, the bots come", async () => {
+        const fake = discord.addBot({ username: "Mended" });
+        const ping = { id: "c-ping", name: "ping", description: "Pong", scope: GLOBAL_SCOPE, options: [], userInstall: false };
+        await savedBots([{ stored: storedBot("b-mended", fake.appId, { commands: [ping, { ...ping, id: "c-again" }] }), token: fake.token }]);
+        await startService({ discordApi: discord.api });
+        await stateWhere<BotsServiceState>(PANEL_ID, (s) => Boolean(s.botsError), "the refusal");
+        const served = await servePanel();
+        const page = await browser.open(served.url);
+        const tryAgain = `[...document.querySelectorAll("button")].find((b) => b.innerText.includes("Try again"))`;
+        try {
+            await page.waitFor(`Boolean(${tryAgain})`, "Try again on Couldn't load");
+            expect(await body(page)).not.toContain("Restart Paperboard");
+            await clickText(page, "button", "Try again");
+            await page.waitFor(toastShows("Couldn't read the saved bots", "/ping is saved twice"), "the toast saying it still can't");
+            expect(await page.evaluate<boolean>(`Boolean(${tryAgain})`), "Try again went away with the bots still unread").toBe(true);
+
+            const file = path.join((await testDaemon()).dataDir, "configs", `${PANEL_ID}.json`);
+            fs.writeFileSync(file, JSON.stringify({ version: 2, bots: [storedBot("b-mended", fake.appId, { commands: [ping] })] }));
+            await clickText(page, "button", "Try again");
+            await page.waitFor(`document.body.innerText.includes("Bot b-mended")`, "the bot read again");
+            expect(await body(page)).not.toContain("Couldn't load");
+            expect(page.exceptions).toEqual([]);
+        } finally {
+            await page.close();
+            served.stop();
+        }
+    });
 });

@@ -39,6 +39,8 @@ export function createBots() {
         ready,
         loadError,
         load,
+        /** the service reads the saved bots again, after it couldn't at the start; throws why when it still can't */
+        readAgain: () => calls.readBotsAgain(),
         /** oldest first, the order they were added in */
         list: () => byCreation(state.bots),
         find: (id: string): BotSummary | undefined => state.bots.find((b) => b.id === id),

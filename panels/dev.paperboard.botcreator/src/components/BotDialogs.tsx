@@ -40,15 +40,12 @@ export function TokenField(props: { value: string; onInput: (value: string) => v
                 type="password"
                 label="Bot token"
                 value={props.value}
-                invalid={problem() !== null}
+                error={problem() ?? undefined}
                 onInput={(e) => props.onInput(e.currentTarget.value)}
             />
             <Show when={props.appId && (!props.expectedAppId || props.expectedAppId === props.appId) ? props.appId : null}>
                 {/* read from the token, not checked with Discord: named, never shown as good */}
                 {(appId) => <PaperText preset="hint">Application ID: {appId()}</PaperText>}
-            </Show>
-            <Show when={problem()}>
-                {(text) => <PaperText preset="error" role="alert" breakWord>{text()}</PaperText>}
             </Show>
         </PaperFlex>
     );

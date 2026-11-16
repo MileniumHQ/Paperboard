@@ -111,7 +111,7 @@ export default function Servers(props: { bot: () => BotSummary }) {
     const [pickedChannel, setPickedChannel] = createSignal("");
     const [content, setContent] = createSignal("Hello from Paperboard!");
     const [sending, setSending] = createSignal(false);
-    // what is missing for a message to be sent: said under the message field
+    // what is wrong with the message to send: said under the message field
     const [missing, setMissing] = createSignal("");
     const [sentTo, setSentTo] = createSignal("");
 
@@ -187,7 +187,7 @@ export default function Servers(props: { bot: () => BotSummary }) {
         setSentTo("");
         const channel = textChannels().find((c) => c.id === channelId());
         if (!channel) {
-            setMissing("Pick a channel first.");
+            showError("Couldn't send the message", "Pick a channel first.");
             return;
         }
         if (!content().trim()) {
@@ -441,15 +441,17 @@ export default function Servers(props: { bot: () => BotSummary }) {
                                             )}
                                         </For>
                                     </PaperSelectMenu>
-                                    <PaperFlex direction="row" gap="half" align="center">
+                                    <PaperFlex direction="row" gap="half" align="start">
                                         <PaperFlex flex minWidth={0}>
                                             <PaperInput
                                                 fullWidth
                                                 placeholder="Message"
                                                 value={content()}
-                                                onInput={(e) =>
-                                                    setContent(e.currentTarget.value)
-                                                }
+                                                error={missing() || undefined}
+                                                onInput={(e) => {
+                                                    setMissing("");
+                                                    setContent(e.currentTarget.value);
+                                                }}
                                                 onKeyDown={(e) => {
                                                     if (e.key === "Enter") void sendTest();
                                                 }}
@@ -463,9 +465,6 @@ export default function Servers(props: { bot: () => BotSummary }) {
                                             {sending() ? "Sending…" : "Send"}
                                         </PaperButton>
                                     </PaperFlex>
-                                    <Show when={missing()}>
-                                        <PaperText preset="error" role="alert">{missing()}</PaperText>
-                                    </Show>
                                     <Show when={sentTo()}>
                                         <PaperQuote variant="success" icon="check_circle" title="Message sent">
                                             Posted to {sentTo()}.

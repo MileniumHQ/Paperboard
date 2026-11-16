@@ -59,6 +59,36 @@ describe("the server explorer", () => {
             served.stop();
         }
     });
+
+    test("Send with nothing written says so under the message field, and typing takes it away", async () => {
+        const home = guild("Home");
+        const fake = discord.addBot({ username: "Quiet", guilds: [home] });
+        await savedBots([{ stored: storedBot("b-quiet", fake.appId, { name: "Quiet" }), token: fake.token }]);
+        await startService({ discordApi: discord.api });
+        await stateWhere<BotsServiceState>(PANEL_ID, (s) => Boolean(s.bots.find((b) => b.id === "b-quiet")?.connected), "Quiet to connect");
+        const served = await servePanel();
+        const page = await browser.open(served.url);
+        const MESSAGE = `document.querySelector('input[placeholder="Message"]')`;
+        const said = `document.getElementById(${MESSAGE}.getAttribute("aria-describedby") ?? "")?.innerText ?? ""`;
+        try {
+            await page.waitFor(`document.body.innerText.includes("Quiet")`, "the bot list");
+            await clickText(page, "[class*=card], [class*=Card]", "Quiet");
+            await page.click(`input[name=botMenu][value="servers"]`);
+            await clickText(page, "[class*=card], [class*=Card]", "Home");
+            await page.waitFor(`${MESSAGE} !== null`, "the message field");
+            await page.evaluate(`${MESSAGE}.select()`);
+            await page.send("Input.insertText", { text: " " });
+            await clickText(page, "button", "Send");
+            await page.waitFor(`${said}.includes("Write a message first.")`, "the field to say what is missing");
+            expect(await page.evaluate<string | null>(`${MESSAGE}.getAttribute("aria-invalid")`)).toBe("true");
+            await page.send("Input.insertText", { text: "hi" });
+            await page.waitFor(`${said} === ""`, "the words to go as it is typed");
+            expect(page.exceptions).toEqual([]);
+        } finally {
+            await page.close();
+            served.stop();
+        }
+    });
 });
 
 // What a server holds reads as rows, the same as every list in Paperboard,

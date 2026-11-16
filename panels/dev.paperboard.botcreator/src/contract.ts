@@ -219,6 +219,8 @@ export const botCreatorContract = defineContract(PANEL_ID, {
         deleteBot: { input: shape.object({ bot: shape.text(), anyway: shape.optional(shape.boolean()) }), output: deleteBotResult },
         /** the setup guide was finished or skipped: it never shows again */
         markSetupGuideSeen: { output: shape.nothing() },
+        /** reads the saved bots again after they couldn't be read at the start; throws why when they still can't be */
+        readBotsAgain: { output: shape.nothing() },
         /** gateway, cache and memory health */
         getHealth: { input: ofBot, output: health },
         /** channels and roles, for the server explorer */
