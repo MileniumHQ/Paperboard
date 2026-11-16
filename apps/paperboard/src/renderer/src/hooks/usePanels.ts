@@ -12,6 +12,8 @@ import { unsavedPanels } from "../lib/unsavedPanels";
 // empty area with no frame), nor one whose page holds unsaved work.
 export const MAX_OPENED_PANELS = 50;
 
+const byName = (panels: PanelItem[]) => [...panels].sort((a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id));
+
 // panel state per computer
 export function usePanels() {
     // Reconciled by panel id, like the computers: a refresh lists every
@@ -95,7 +97,8 @@ export function usePanels() {
             const { panels, invalid } = await panelsApi.listInstalled(compId);
             if (latestRequest[compId] !== request) return;
             batch(() => {
-                setPanelStore(compId, reconcile(panels, { key: "id" }));
+                // by name, the same on every computer: a computer lists its panels in whatever order its disk keeps them
+                setPanelStore(compId, reconcile(byName(panels), { key: "id" }));
                 setInvalidStore(compId, reconcile(invalid, { key: "id" }));
                 setPanelsLoadError((prev) => (prev[compId] === "" ? prev : { ...prev, [compId]: "" }));
             });
