@@ -4,7 +4,6 @@ import type { ToolSignInEntry } from "../contract";
 import { createTools } from "../tools/api";
 import SignInSteps from "../tools/SignInSteps";
 import { hostOf, stateOf, stateText } from "../tools/status";
-import { toastFailure } from "../lib/toastFailure";
 
 /** The agent asking the user to sign in to one of its tool servers. How it's going is read live, so an old card says how it is now. */
 export default function ToolSignIn(props: { entry: ToolSignInEntry; name: string }) {
@@ -21,7 +20,6 @@ export default function ToolSignIn(props: { entry: ToolSignInEntry; name: string
         return s?.kind === "failed" ? s.error : null;
     };
     const { busy, run } = createAction();
-    const act = (title: string, fn: () => Promise<unknown>) => run(title, fn, toastFailure);
 
     return (
         <PaperFlex direction="row">
@@ -57,7 +55,7 @@ export default function ToolSignIn(props: { entry: ToolSignInEntry; name: string
                     </Match>
                     <Match when={state()?.kind === "needs-sign-in"}>
                         <PaperFlex direction="row">
-                            <PaperButton variant="primary" disabled={busy()} onClick={() => void act(`Couldn't start signing in to ${e().server}`, () => tools.signIn(e().server))}>
+                            <PaperButton variant="primary" disabled={busy()} onClick={() => void run(`Couldn't start signing in to ${e().server}`, () => tools.signIn(e().server))}>
                                 <PaperIcon>login</PaperIcon> Sign in
                             </PaperButton>
                         </PaperFlex>
@@ -79,7 +77,7 @@ export default function ToolSignIn(props: { entry: ToolSignInEntry; name: string
                                     </PaperText>
                                 </PaperFlex>
                                 <PaperFlex direction="row">
-                                    <PaperButton disabled={busy()} onClick={() => void act(`Couldn't start ${e().server}`, () => tools.restart(e().server))}>
+                                    <PaperButton disabled={busy()} onClick={() => void run(`Couldn't start ${e().server}`, () => tools.restart(e().server))}>
                                         <PaperIcon>refresh</PaperIcon> Try again
                                     </PaperButton>
                                 </PaperFlex>

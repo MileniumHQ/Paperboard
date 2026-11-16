@@ -2,7 +2,6 @@ import { For, Match, Switch } from "solid-js";
 import { PaperButton, PaperCard, PaperCollapsible, PaperFlex, PaperIcon, PaperText, createAction } from "@mileniumhq/paperui";
 import type { AccessEntry, AccessItem } from "../contract";
 import type { Agent } from "../lib/agent";
-import { toastFailure } from "../lib/toastFailure";
 import RequestEnd from "./RequestEnd";
 
 /** what a folder or command lets the agent do, in the user's words */
@@ -25,7 +24,7 @@ export default function AccessRequest(props: { agent: Agent; entry: AccessEntry;
     const e = () => props.entry;
     const { busy, run } = createAction();
 
-    const answer = (how: "once" | "always" | "decline") => void run("Couldn't send your answer", () => props.agent.calls.answerAccess({ id: e().id, how }), toastFailure);
+    const answer = (how: "once" | "always" | "decline") => void run("Couldn't send your answer", () => props.agent.calls.answerAccess({ id: e().id, how }));
 
     return (
         <PaperFlex direction="row">

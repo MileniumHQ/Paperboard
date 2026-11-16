@@ -2,7 +2,6 @@ import { For, Match, Show, Switch, createSignal } from "solid-js";
 import { PaperButton, PaperCard, PaperFlex, PaperIcon, PaperInput, PaperLoader, PaperText, createAction, createRead } from "@mileniumhq/paperui";
 import { LIMITS, type SignInEntry } from "../contract";
 import type { Agent } from "../lib/agent";
-import { toastFailure } from "../lib/toastFailure";
 import RequestEnd from "./RequestEnd";
 import styles from "./SignIn.module.css";
 
@@ -36,7 +35,7 @@ export default function SignIn(props: { agent: Agent; entry: SignInEntry; name: 
     };
 
     const answer = async (send: () => Promise<unknown>) => {
-        await run("Couldn't send your answer", send, toastFailure);
+        await run("Couldn't send your answer", send);
         // whatever happened, the values go: the request is used once
         setValues(e().fields.map(() => ""));
         props.onDone();

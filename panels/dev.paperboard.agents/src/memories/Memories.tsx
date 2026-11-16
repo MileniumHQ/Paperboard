@@ -23,7 +23,6 @@ import {
 import type { MemoryList } from "../contract";
 import type { Agent } from "../lib/agent";
 import { holdPage } from "../lib/pageHold";
-import { toastFailure } from "../lib/toastFailure";
 
 export default function Memories(props: { agent: Agent }) {
     const name = () => props.agent.name();
@@ -106,7 +105,7 @@ function Note(props: { agent: Agent; noteKey: string; onDone: () => void }) {
     const { busy: forgetting, run } = createAction();
 
     const forget = async () => {
-        if (await run("Couldn't forget the note", () => props.agent.calls.deleteNote({ key: props.noteKey }), toastFailure)) props.onDone();
+        if (await run("Couldn't forget the note", () => props.agent.calls.deleteNote({ key: props.noteKey }))) props.onDone();
     };
 
     return (

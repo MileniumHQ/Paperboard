@@ -30,7 +30,6 @@ import {
 } from "@mileniumhq/paperui";
 import { createStore, reconcile } from "solid-js/store";
 import { errorMessage, SerialQueue } from "@mileniumhq/paperapi";
-import { toastFailure } from "../lib/toastFailure";
 import type { Agent } from "../lib/agent";
 import { holdPage } from "../lib/pageHold";
 import { TOOL_LIMITS, type ServerSpec } from "../toolsContract";
@@ -80,7 +79,6 @@ function List(props: { tools: ToolsClient; name: string }) {
     // a refusal is a toast; a refused removal's shows over the confirmation, which stays open
     const action = createAction();
     const busy = action.busy;
-    const act = (title: string, fn: () => Promise<unknown>) => action.run(title, fn, toastFailure);
     createFailureToast(() => view().configError, { title: `Couldn't read ${props.name}'s tools file` });
     // the server whose sign-in is shown, while it's under way
     const [signingIn, setSigningIn] = createSignal<string | null>(null);
@@ -94,7 +92,7 @@ function List(props: { tools: ToolsClient; name: string }) {
     );
 
     const signIn = (s: ServerSpec) =>
-        act(`Couldn't start signing in to ${s.name}`, async () => {
+        action.run(`Couldn't start signing in to ${s.name}`, async () => {
             await props.tools.signIn(s.name);
             setSigningIn(s.name);
         });
@@ -105,7 +103,7 @@ function List(props: { tools: ToolsClient; name: string }) {
     const actions = createSavedValue(() => view().config.actions, async (on: boolean) => void (await props.tools.setActions(on)), { queue: saves.run });
     const setActions = (on: boolean) => switched("Couldn't change the panels' access", actions.set(on));
     const remove = (s: ServerSpec) =>
-        act(`Couldn't remove ${s.name}`, async () => {
+        action.run(`Couldn't remove ${s.name}`, async () => {
             await props.tools.remove(s.name);
             setRemoving(null);
         });
@@ -146,7 +144,7 @@ function List(props: { tools: ToolsClient; name: string }) {
                                     onSignIn={() => void signIn(server)}
                                     onShowSignIn={() => setSigningIn(server.name)}
                                     onEdit={() => setForm(formFromSpec(server))}
-                                    onRestart={(title) => void act(title, () => props.tools.restart(server.name))}
+                                    onRestart={(title) => void action.run(title, () => props.tools.restart(server.name))}
                                     onSwitch={(on) => switched(on ? `Couldn't switch on ${server.name}` : `Couldn't switch off ${server.name}`, enabled.set(on))}
                                     onRemove={() => setRemoving(server)}
                                 />
@@ -289,8 +287,9 @@ function ServerRow(props: {
 function Editor(props: { tools: ToolsClient; name: string; open: boolean; initial: Form; onClose: () => void }) {
     const [f, setF] = createSignal<Form>(props.initial);
     const [busy, setBusy] = createSignal(false);
-    // the field a refusal was about, marked until the form changes
-    const [wrong, setWrong] = createSignal<string | null>(null);
+    // the field a refusal was about, and what it said, shown under the field until the form changes
+    const [wrong, setWrong] = createSignal<{ field: string; message: string } | null>(null);
+    const wrongOf = (field: string) => (wrong()?.field === field ? wrong()!.message : undefined);
     createEffect(on(f, () => setWrong(null), { defer: true }));
     // another server (or a new one) to edit: the editor starts from it
     createEffect(on(() => props.initial, (initial) => setF(initial), { defer: true }));
@@ -314,13 +313,12 @@ function Editor(props: { tools: ToolsClient; name: string; open: boolean; initia
         if (cur.transport === "http" ? !cur.url.trim() : !cur.command.trim()) return field(cur.transport === "http" ? "url" : "command");
         return null;
     };
-    /** says a refusal in a toast over the editor, which stays open, and marks and moves to the field it is about */
+    /** says a refusal under the field it is about, and moves there; the editor stays open. One about nothing the form shows is a toast */
     const refused = (title: string, err: unknown, to: boolean) => {
-        showError(title, err);
         setBusy(false);
         const at = to ? invalid() : null;
-        if (!at) return;
-        setWrong(at.getAttribute("name"));
+        if (!at) return void showError(title, err);
+        setWrong({ field: at.getAttribute("name")!, message: errorMessage(err) });
         queueMicrotask(() => at.focus());
     };
 
@@ -379,6 +377,7 @@ function Editor(props: { tools: ToolsClient; name: string; open: boolean; initia
             >
                 <PaperFlex gap="full">
                     <PaperInput
+                        fullWidth
                         name="name"
                         label="Name"
                         placeholder="github"
@@ -386,7 +385,7 @@ function Editor(props: { tools: ToolsClient; name: string; open: boolean; initia
                         maxLength={TOOL_LIMITS.name}
                         disabled={f().editing}
                         autofocus={!f().editing}
-                        invalid={wrong() === "name" || undefined}
+                        error={wrongOf("name")}
                         onInput={(e) => set("name", e.currentTarget.value)}
                     />
                     <PaperFlex gap="half">
@@ -408,7 +407,7 @@ function Editor(props: { tools: ToolsClient; name: string; open: boolean; initia
                         </PaperSelectMenu>
                     </PaperFlex>
                     <Show when={!http()}>
-                        <PaperInput name="command" label="Program" placeholder="npx" invalid={wrong() === "command" || undefined} value={f().command} maxLength={TOOL_LIMITS.command} onInput={(e) => set("command", e.currentTarget.value)} />
+                        <PaperInput fullWidth name="command" label="Program" placeholder="npx" error={wrongOf("command")} value={f().command} maxLength={TOOL_LIMITS.command} onInput={(e) => set("command", e.currentTarget.value)} />
                         <PaperInput
                             name="args"
                             label="Arguments, one per line"
@@ -420,7 +419,7 @@ function Editor(props: { tools: ToolsClient; name: string; open: boolean; initia
                         />
                     </Show>
                     <Show when={http()}>
-                        <PaperInput name="url" label="Address" placeholder="https://example.com/mcp" invalid={wrong() === "url" || undefined} value={f().url} maxLength={TOOL_LIMITS.url} onInput={(e) => set("url", e.currentTarget.value)} />
+                        <PaperInput fullWidth name="url" label="Address" placeholder="https://example.com/mcp" error={wrongOf("url")} value={f().url} maxLength={TOOL_LIMITS.url} onInput={(e) => set("url", e.currentTarget.value)} />
                     </Show>
 
                     <PaperFlex gap="half">
@@ -436,7 +435,7 @@ function Editor(props: { tools: ToolsClient; name: string; open: boolean; initia
                             {(row) => (
                                 <PaperFlex direction="row" align="end" gap="half" role="group" aria-label={row.name || valuesLabel()}>
                                     <PaperFlex flex minWidth={0}>
-                                        <PaperInput name={`row-name-${row.key}`} label="Name" invalid={wrong() === `row-name-${row.key}` || undefined} value={row.name} maxLength={TOOL_LIMITS.envName} onInput={(e) => setRow(row.key, { name: e.currentTarget.value })} />
+                                        <PaperInput name={`row-name-${row.key}`} label="Name" error={wrongOf(`row-name-${row.key}`)} value={row.name} maxLength={TOOL_LIMITS.envName} onInput={(e) => setRow(row.key, { name: e.currentTarget.value })} />
                                     </PaperFlex>
                                     <PaperSelectMenu name={`kind-${row.key}`} aria-label="Kind" value={row.kind} onValueChange={(v) => setRow(row.key, { kind: v as Row["kind"], value: "", typed: "" })}>
                                         <PaperSelectMenuItem value="value">Value</PaperSelectMenuItem>

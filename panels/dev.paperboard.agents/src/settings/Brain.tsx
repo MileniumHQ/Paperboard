@@ -10,7 +10,6 @@ import type { Agent } from "../lib/agent";
 import { harnessName } from "../lib/brains";
 import { submitOnPaste } from "../lib/paste";
 import { createLoopbackCatch } from "../lib/loopback";
-import { toastFailure } from "../lib/toastFailure";
 
 /** Who a brain is signed in as. An email is who; anything else (ChatGPT, a provider's name) is how. */
 export function signedInLine(b: BrainState): string {
@@ -58,7 +57,7 @@ export function createBrainActions(agent: Agent) {
     const act = async (h: Harness, title: string, fn: () => Promise<unknown>) => {
         setRunning(h, (n) => (n ?? 0) + 1);
         try {
-            return await run(title, fn, toastFailure);
+            return await run(title, fn);
         } finally {
             setRunning(h, (n) => n! - 1);
         }

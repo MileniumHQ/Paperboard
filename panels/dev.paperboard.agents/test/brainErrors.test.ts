@@ -71,7 +71,8 @@ test("a refusal for one brain names that brain only, and doesn't undo the other 
     expect(toasts.find((a) => a.includes("Couldn't install Codex"))).toContain("Codex isn't on this computer");
     expect(toasts.filter((a) => a.includes("Codex isn't on this computer")), "Codex's refusal is said other than once, about Codex").toHaveLength(1);
     expect(await page.evaluate(alertsIn(BRAINS)), "the refusal is an alert in the settings").toEqual([]);
-    expect(await page.evaluate(alertsIn(CLAUDE)), "the refusal is an alert in Claude Code's sign-in").toEqual([]);
+    // the sign-in dialog is on top, so the toast is shown in it; the dialog has no alert of its own
+    expect(await page.evaluate(`[...(${CLAUDE}?.querySelectorAll("[role=alert]") ?? [])].filter((a) => !a.closest("[data-paper-toasts]")).map((a) => a.innerText)`), "the refusal is an alert in Claude Code's sign-in").toEqual([]);
 
     // then the service takes the code: Claude Code finishes signing in, with no field to paste in again
     await releaseCall(page, "brainCode");

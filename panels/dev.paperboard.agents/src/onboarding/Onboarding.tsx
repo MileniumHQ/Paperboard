@@ -163,12 +163,9 @@ function Scenes(props: {
     wizard.setCurrentStep(Math.min(props.keptStep, STEP.computer));
     const name = () => props.name().trim();
     const machine = () => props.agent.state.computer;
-    // "Not yet" saves on Finish, which the toast sits over: its Try again finishes too. Setting up saves first, and its step keeps a Try again.
-    createFailureToast(() => props.computer() === "later" && props.saveError(), {
-        title: "Couldn't save the settings",
-        action: { label: "Try again", onClick: () => void props.save().then((saved) => saved && props.onDone()) },
-    });
-    createFailureToast(() => props.computer() === "setup" && props.saveError(), { title: "Couldn't start the setup", action: { label: "Try again", onClick: () => void props.save() } });
+    // a refused save says why; Finish (for "Not yet") and the setup step each have their own Try again
+    createFailureToast(() => props.computer() === "later" && props.saveError(), { title: "Couldn't save the settings" });
+    createFailureToast(() => props.computer() === "setup" && props.saveError(), { title: "Couldn't start the setup" });
 
     // what the scene shows besides the speech, once the speech is done
     const [revealed, setRevealed] = createSignal(false);

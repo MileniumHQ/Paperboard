@@ -5,7 +5,6 @@ import { Show } from "solid-js";
 import { PaperButton, PaperCard, PaperFlex, PaperIcon, PaperText, createAction } from "@mileniumhq/paperui";
 import type { PageEntry } from "../contract";
 import type { Launcher } from "./launcher";
-import { toastFailure } from "../lib/toastFailure";
 import Picture from "./Picture";
 import styles from "./PageCard.module.css";
 
@@ -13,7 +12,7 @@ export default function PageCard(props: { entry: PageEntry; pages: Launcher }) {
     const e = () => props.entry;
     const there = () => props.pages.exists(e().app);
     const { busy, run } = createAction();
-    const open = () => void run("Couldn't open the page", () => props.pages.open(e().app), toastFailure);
+    const open = () => void run("Couldn't open the page", () => props.pages.open(e().app));
 
     return (
         <PaperFlex direction="row">

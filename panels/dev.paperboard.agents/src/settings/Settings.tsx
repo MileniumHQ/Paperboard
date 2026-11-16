@@ -27,7 +27,6 @@ import type { Agent } from "../lib/agent";
 import { SEARCH_MODELS_FROM, createModels, harnessName, loadedModels } from "../lib/brains";
 import { BrainButtons, BrainStatus, SignInModal, brainLine, createBrainActions } from "./Brain";
 import Providers from "./Providers";
-import { toastFailure } from "../lib/toastFailure";
 
 export default function Settings(props: { agent: Agent }) {
     return (
@@ -213,11 +212,10 @@ function ComputerSettings(props: { agent: Agent }) {
     const name = () => props.agent.state.settings!.name;
     const action = createAction();
     const busy = action.busy;
-    const act = (title: string, fn: () => Promise<unknown>) => action.run(title, fn, toastFailure);
     const [confirming, setConfirming] = createSignal(false);
     // a refused erase is a toast over the confirmation, which stays open
     const erase = () =>
-        act("Couldn't erase the computer", async () => {
+        action.run("Couldn't erase the computer", async () => {
             await props.agent.calls.installComputer();
             setConfirming(false);
         });
@@ -245,7 +243,7 @@ function ComputerSettings(props: { agent: Agent }) {
                 <Match when={!c().installed && c().phase !== "installing"}>
                     <PaperSettingList autoHeight>
                         <PaperSettingItem title={`${name()}'s own computer`} description="A web browser of its own it uses for its work, about 400 MB of storage. It reaches the internet, never your files or your network.">
-                            <PaperButton variant="primary" disabled={busy()} onClick={() => void act("Couldn't set up the computer", props.agent.calls.installComputer)}>
+                            <PaperButton variant="primary" disabled={busy()} onClick={() => void action.run("Couldn't set up the computer", props.agent.calls.installComputer)}>
                                 <PaperIcon>computer</PaperIcon> Set up
                             </PaperButton>
                         </PaperSettingItem>
@@ -256,12 +254,12 @@ function ComputerSettings(props: { agent: Agent }) {
                         <PaperSettingItem title="Status" description={c().phase === "failed" ? (c().error ?? undefined) : `${status()}.`}>
                             <Switch>
                                 <Match when={c().phase === "ready"}>
-                                    <PaperButton disabled={busy()} onClick={() => void act("Couldn't turn off the computer", props.agent.calls.stopComputer)}>
+                                    <PaperButton disabled={busy()} onClick={() => void action.run("Couldn't turn off the computer", props.agent.calls.stopComputer)}>
                                         <PaperIcon>power_settings_new</PaperIcon> Turn off
                                     </PaperButton>
                                 </Match>
                                 <Match when={c().phase === "stopped" || c().phase === "failed"}>
-                                    <PaperButton disabled={busy()} onClick={() => void act("Couldn't turn on the computer", props.agent.calls.startComputer)}>
+                                    <PaperButton disabled={busy()} onClick={() => void action.run("Couldn't turn on the computer", props.agent.calls.startComputer)}>
                                         <PaperIcon>power_settings_new</PaperIcon> {c().phase === "failed" ? "Try again" : "Turn on"}
                                     </PaperButton>
                                 </Match>
@@ -411,7 +409,6 @@ function StartOver(props: { agent: Agent; open: boolean; onClose: () => void }) 
                                     await props.agent.calls.startOver();
                                     props.onClose();
                                 },
-                                toastFailure,
                             )
                         }
                     >

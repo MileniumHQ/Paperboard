@@ -6,7 +6,6 @@ import { For, Match, Show, Switch, createEffect, createSignal, on } from "solid-
 import { PaperButton, PaperEmptyState, PaperFlex, PaperIcon, PaperList, PaperListItem, PaperLoader, PaperModal, PaperText, createAction, createRead } from "@mileniumhq/paperui";
 import { CURRENT_CONVERSATION as CURRENT, type PastConversation } from "../contract";
 import type { Agent } from "../lib/agent";
-import { toastFailure } from "../lib/toastFailure";
 const when = (at: number) => new Date(at).toLocaleString([], { dateStyle: "medium", timeStyle: "short" });
 
 export default function History(props: { agent: Agent; open: boolean; onClose: () => void }) {
@@ -24,7 +23,7 @@ export default function History(props: { agent: Agent; open: boolean; onClose: (
 
     const reopen = async (c: PastConversation) => {
         setChosen(c.id);
-        if (await run("Couldn't open the conversation", () => props.agent.calls.openConversation({ id: c.id }), toastFailure)) props.onClose();
+        if (await run("Couldn't open the conversation", () => props.agent.calls.openConversation({ id: c.id }))) props.onClose();
         setChosen(CURRENT);
     };
 
@@ -37,7 +36,6 @@ export default function History(props: { agent: Agent; open: boolean; onClose: (
                 setDeleting(null);
                 history.set((l) => l && { ...l, past: l.past.filter((x) => x.id !== c.id) });
             },
-            toastFailure,
         );
     };
 

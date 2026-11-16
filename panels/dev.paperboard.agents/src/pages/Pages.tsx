@@ -6,7 +6,6 @@ import { For, Match, Show, Switch, createSignal } from "solid-js";
 import { PaperButton, PaperEmptyState, PaperFlex, PaperIcon, PaperList, PaperListItem, PaperLoader, PaperModal, PaperText, createAction } from "@mileniumhq/paperui";
 import type { PageInfo } from "../contract";
 import type { Launcher } from "./launcher";
-import { toastFailure } from "../lib/toastFailure";
 import Picture from "./Picture";
 
 export default function Pages(props: { pages: Launcher; name: string; onOpened: () => void }) {
@@ -17,7 +16,7 @@ export default function Pages(props: { pages: Launcher; name: string; onOpened: 
 
     const open = async (name: string) => {
         setChosen(name);
-        if (await run("Couldn't open the page", () => props.pages.open(name), toastFailure)) props.onOpened();
+        if (await run("Couldn't open the page", () => props.pages.open(name))) props.onOpened();
         setChosen(null);
     };
 
@@ -29,7 +28,6 @@ export default function Pages(props: { pages: Launcher; name: string; onOpened: 
                 await props.pages.remove(deleting()!.name);
                 setDeleting(null);
             },
-            toastFailure,
         );
 
     return (

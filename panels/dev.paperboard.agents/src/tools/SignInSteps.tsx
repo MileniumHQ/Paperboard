@@ -8,14 +8,13 @@ import { Show, createSignal } from "solid-js";
 import { PaperButton, PaperCopyButton, PaperFlex, PaperIcon, PaperInput, PaperLoader, PaperQuote, PaperText, createAction, createFailureToast } from "@mileniumhq/paperui";
 import { createLoopbackCatch } from "../lib/loopback";
 import { submitOnPaste } from "../lib/paste";
-import { toastFailure } from "../lib/toastFailure";
 import type { Tools } from "./api";
 
 export default function SignInSteps(props: { tools: Tools; name: string }) {
     const pending = () => props.tools.view()?.signIns[props.name] ?? null;
     const [address, setAddress] = createSignal("");
     const { busy, run: act } = createAction();
-    const run = (fn: () => Promise<unknown>) => act(`Couldn't sign in to ${props.name}`, fn, toastFailure);
+    const run = (fn: () => Promise<unknown>) => act(`Couldn't sign in to ${props.name}`, fn);
     // a sign-in that stopped says why for as long as it stands; Start again is here
     createFailureToast(() => pending()?.error, { title: `Couldn't sign in to ${props.name}` });
     const forward = createLoopbackCatch(

@@ -7,7 +7,6 @@ import { For, Match, Show, Switch, createEffect, createSignal, on } from "solid-
 import { createPolling, PaperButton, PaperCopyButton, PaperFlex, PaperInput, PaperLink, PaperLoader, PaperModal, PaperEmptyState, PaperSectionHeader, PaperSelectMenu, PaperSelectMenuItem, PaperText, createAction, createRead, showError } from "@mileniumhq/paperui";
 import type { ProviderAttempt, ProviderField, ProviderInfo, ProviderMethod } from "../contract";
 import type { Agent } from "../lib/agent";
-import { toastFailure } from "../lib/toastFailure";
 
 const POLL_MS = 2_000;
 
@@ -22,7 +21,6 @@ export default function Providers(props: { agent: Agent; open: boolean; onClose:
     // a refusal is a toast over the dialog, which stays open to try again
     const action = createAction();
     const busy = action.busy;
-    const act = (title: string, fn: () => Promise<unknown>) => action.run(title, fn, toastFailure);
     const [selected, setSelected] = createSignal<string>();
     const [key, setKey] = createSignal("");
     const [answers, setAnswers] = createSignal<Record<string, string>>({});
@@ -52,7 +50,7 @@ export default function Providers(props: { agent: Agent; open: boolean; onClose:
     };
 
     const connectKey = (p: ProviderInfo, m: ProviderMethod) =>
-        act(`Couldn't connect ${p.name}`, async () => {
+        action.run(`Couldn't connect ${p.name}`, async () => {
             await props.agent.calls.connectKey({ provider: p.id, key: key(), answer: answersFor(m) });
             // the key is used once: it doesn't stay in the field
             setKey("");
@@ -60,7 +58,7 @@ export default function Providers(props: { agent: Agent; open: boolean; onClose:
         });
 
     const begin = (p: ProviderInfo, m: ProviderMethod) =>
-        act(`Couldn't connect ${p.name}`, async () => {
+        action.run(`Couldn't connect ${p.name}`, async () => {
             setAttempt({ provider: p.id, info: await props.agent.calls.beginProvider({ provider: p.id, method: m.id!, answer: answersFor(m) }) });
         });
 
@@ -93,7 +91,10 @@ export default function Providers(props: { agent: Agent; open: boolean; onClose:
         const a = attempt();
         setAttempt(null);
         setCode("");
-        return !a || (await act("Couldn't stop signing in", () => props.agent.calls.cancelProvider({ provider: a.provider, attempt: a.info.id })));
+        // run even with nothing to stop: a refusal still on show is of a sign-in that is gone, and a run that goes through takes it away
+        return action.run("Couldn't stop signing in", async () => {
+            if (a) await props.agent.calls.cancelProvider({ provider: a.provider, attempt: a.info.id });
+        });
     };
     // a sign-in under way is stopped first: one OpenCode won't stop keeps the modal open to say so
     const close = async () => {
@@ -136,7 +137,7 @@ export default function Providers(props: { agent: Agent; open: boolean; onClose:
                                                 <PaperButton
                                                     variant="text"
                                                     disabled={busy()}
-                                                    onClick={() => void act(`Couldn't disconnect ${p().name}`, async () => (await props.agent.calls.disconnectProvider({ credential: c.id }), await refetch()))}
+                                                    onClick={() => void action.run(`Couldn't disconnect ${p().name}`, async () => (await props.agent.calls.disconnectProvider({ credential: c.id }), await refetch()))}
                                                 >
                                                     Disconnect
                                                 </PaperButton>

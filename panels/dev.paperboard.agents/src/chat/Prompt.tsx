@@ -2,7 +2,6 @@ import { For, Match, Show, Switch, createEffect, createSignal, on } from "solid-
 import { PaperButton, PaperCard, PaperFlex, PaperIcon, PaperInput, PaperLoader, PaperText, createAction } from "@mileniumhq/paperui";
 import { LIMITS, type PromptEntry } from "../contract";
 import type { Agent } from "../lib/agent";
-import { toastFailure } from "../lib/toastFailure";
 import RequestEnd from "./RequestEnd";
 import type { SignInDraft } from "./SignIn";
 
@@ -30,7 +29,7 @@ export default function Prompt(props: { agent: Agent; entry: PromptEntry; name: 
         props.draft.values = next;
     };
 
-    const answer = (send: () => Promise<unknown>) => void run("Couldn't send your answer", send, toastFailure);
+    const answer = (send: () => Promise<unknown>) => void run("Couldn't send your answer", send);
     // however it ended (sent, declined, lapsed, failed), what was typed goes with it
     createEffect(
         on(
