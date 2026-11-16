@@ -24,9 +24,26 @@
     overflow-y: auto;
 }
 
-/* a panel's problem count: the badge is the whole control, with no
- * button padding around it, so the row keeps its height and the panel's
- * name keeps its room (doubled to outweigh the tiny button's padding) */
+/* a panel's icon, which carries its problem count on its corner */
+.panelIcon {
+    position: relative;
+    display: inline-flex;
+}
+
+/* a panel's problem count, on its icon's corner as an app's badge, so the
+ * row keeps its height and the panel's name its whole width. The badge is
+ * the whole control, with no button padding around it (doubled to outweigh
+ * the tiny button's padding), on the list's own surface so the icon never
+ * shows through its tint */
 .problems.problems {
+    position: absolute;
+    right: calc(var(--paper-uigap-onefourth) * -1);
+    bottom: calc(var(--paper-uigap-onefourth) * -1);
     padding: 0;
+    background: var(--paper-surface);
+    border-radius: var(--paper-border-radius-half);
+}
+
+.problems.problems > * {
+    margin: 0;
 }

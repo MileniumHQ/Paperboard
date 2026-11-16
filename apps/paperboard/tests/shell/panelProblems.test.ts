@@ -39,6 +39,13 @@ test("a service's problems show on its row, can be dismissed, and go once the pa
     await page.click("[role=radio][aria-label='This Computer (127.0.0.1)']");
     await page.waitFor(badge("2 problems"), "the row to count both problems");
 
+    // in the narrowest window the badge takes none of the name's room
+    await page.resize(860, 560);
+    expect(await page.evaluate(`(() => {
+        const name = [...${row}.querySelectorAll("*")].find((el) => el.children.length === 0 && el.textContent.trim() === "Weather Station");
+        return name.scrollWidth > name.clientWidth;
+    })()`)).toBe(false);
+
     await page.click(`label[data-value='${ID}'] button[aria-label='Weather Station: 2 problems']`);
     await page.waitFor(`${listed}.length === 2`, "the problems listed");
     const shown = await page.evaluate<string[]>(listed);

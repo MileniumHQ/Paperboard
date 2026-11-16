@@ -42,7 +42,7 @@ const PanelProblems: Component<{
                     setOpen(!open());
                 }}
             >
-                <PaperBadge variant="danger" icon="error">{count()}</PaperBadge>
+                <PaperBadge variant="danger">{count()}</PaperBadge>
             </PaperButton>
             <PaperPopover open={open()} anchor={button} onClose={() => setOpen(false)} title={props.panelName}>
                 <For each={props.problems}>

@@ -87,13 +87,15 @@ const ComputerSidebar: Component<ComputerSidebarProps> = (props) => (
                                         disabled={updating(panel)}
                                         title={updating(panel) ? `${panel.name} is updating` : undefined}
                                         onClick={props.onActivateTab}
-                                        icon={<PanelIcon computerId={comp.id} panel={panel} />}
-                                        actions={
-                                            <PanelProblems
-                                                panelName={panel.name}
-                                                problems={problems(panel.id)}
-                                                onDismiss={(key) => problemsApi.clear(panel.id, key, comp.id)}
-                                            />
+                                        icon={
+                                            <span class={styles.panelIcon}>
+                                                <PanelIcon computerId={comp.id} panel={panel} />
+                                                <PanelProblems
+                                                    panelName={panel.name}
+                                                    problems={problems(panel.id)}
+                                                    onDismiss={(key) => problemsApi.clear(panel.id, key, comp.id)}
+                                                />
+                                            </span>
                                         }
                                         onContextMenu={(e: MouseEvent) => {
                                             e.preventDefault();
