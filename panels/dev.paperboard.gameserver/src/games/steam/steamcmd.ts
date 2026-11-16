@@ -231,31 +231,61 @@ function parseVdfBlock(text: string): Map<string, VdfNode> {
     return block();
 }
 
-/**
- * The newest build of an app on a branch, from what `+app_info_print`
- * printed: the block named for the app (SteamCMD's own log lines surround
- * it), and in it depots, branches, the branch, buildid. Throws when the
- * output holds none.
- */
-export function parseLatestBuild(lines: readonly string[], appId: number, branch = PUBLIC_BRANCH): string {
+/** The block `+app_info_print` printed for the app; SteamCMD's own log lines surround it. */
+function appInfo(lines: readonly string[], appId: number): Map<string, VdfNode> {
     const clean = lines.map(l => l.replace(ANSI, ""));
     const start = clean.findIndex((l, i) => l.trim() === `"${appId}"` && clean[i + 1]?.trim() === "{");
     if (start < 0) throw new Error(`SteamCMD printed no information for app ${appId}`);
-    const info = parseVdfBlock(clean.slice(start + 1).join("\n"));
-    const child = (node: VdfNode | undefined, key: string) => (node instanceof Map ? node.get(key) : undefined);
-    const id = child(child(child(info.get("depots"), "branches"), branch), "buildid");
+    return parseVdfBlock(clean.slice(start + 1).join("\n"));
+}
+const child = (node: VdfNode | undefined, key: string) => (node instanceof Map ? node.get(key) : undefined);
+
+/**
+ * The newest build of an app on a branch, from what `+app_info_print`
+ * printed: in the app's block, depots, branches, the branch, buildid.
+ * Throws when the output holds none.
+ */
+export function parseLatestBuild(lines: readonly string[], appId: number, branch = PUBLIC_BRANCH): string {
+    const id = child(child(child(appInfo(lines, appId).get("depots"), "branches"), branch), "buildid");
     if (typeof id !== "string" || !/^\d+$/.test(id)) throw new Error(`Steam lists no ${branch} build for app ${appId}`);
     return id;
 }
 
+/** Steam's name for this computer's system in a depot's oslist. */
+const STEAM_OS: Partial<Record<NodeJS.Platform, string>> = { linux: "linux", win32: "windows", darwin: "macos" };
+
 /**
- * The newest build of a Steam app on a branch (the public one unless named),
- * asked of Steam anonymously. It waits for any install in progress:
- * SteamCMD's state is not shareable.
+ * The bytes an install of the branch takes on `platform`, from what
+ * `+app_info_print` printed: every depot of the app's own for that system
+ * (none of another app's, another system's, another language's or a
+ * low-violence cut), each at its manifest for the branch. It is the total
+ * SteamCMD counts its download toward. Throws when the output lists none.
  */
-export function latestBuild(appId: number, options: { runner?: Runner; workspace?: string; branch?: string } = {}): Promise<string> {
-    if (!Number.isInteger(appId) || appId <= 0) throw new Error(`Not a Steam app id: ${appId}`);
-    const branch = branchName(options.branch);
+export function parseAppSize(lines: readonly string[], appId: number, branch = PUBLIC_BRANCH, platform: NodeJS.Platform = process.platform): number {
+    const os = STEAM_OS[platform];
+    if (!os) throw new Error(`Steam has no dedicated servers for ${platform}`);
+    const depots = appInfo(lines, appId).get("depots");
+    let total = 0;
+    let found = false;
+    if (depots instanceof Map) {
+        for (const depot of depots.values()) {
+            const config = child(depot, "config");
+            const oslist = child(config, "oslist");
+            if (typeof oslist === "string" && oslist && !oslist.split(",").includes(os)) continue;
+            const language = child(config, "language");
+            if ((typeof language === "string" && language) || child(config, "lowviolence") === "1") continue;
+            const size = child(child(child(depot, "manifests"), branch), "size");
+            if (typeof size !== "string" || !/^\d+$/.test(size)) continue;
+            total += Number(size);
+            found = true;
+        }
+    }
+    if (!found) throw new Error(`Steam lists no ${branch} files of app ${appId} for ${os}`);
+    return total;
+}
+
+/** Runs `+app_info_print` for the app and reads what it printed; throws `what` with SteamCMD's last lines when it can't. */
+function readAppInfo<T>(appId: number, options: { runner?: Runner; workspace?: string }, what: string, read: (lines: readonly string[]) => T): Promise<T> {
     return serialized(async () => {
         const { command, home } = await prepare(options.workspace);
         if (!options.runner) await stopLeftoverInstaller(processApi, undefined, undefined, STEAMCMD_PROC_ID);
@@ -273,12 +303,30 @@ export function latestBuild(appId: number, options: { runner?: Runner; workspace
         });
         try {
             if (result.exitCode !== 0) throw new Error(`SteamCMD exited with ${result.exitCode}`);
-            return parseLatestBuild(lines, appId, branch);
+            return read(lines);
         } catch (err) {
             const tail = result.tail.map(l => l.replace(ANSI, "")).slice(-8).join("\n");
-            throw new Error(`Could not read the newest build of app ${appId}: ${(err as Error).message}${tail ? `\n${tail}` : ""}`);
+            throw new Error(`${what}: ${(err as Error).message}${tail ? `\n${tail}` : ""}`);
         }
     });
+}
+
+/**
+ * The newest build of a Steam app on a branch (the public one unless named),
+ * asked of Steam anonymously. It waits for any install in progress:
+ * SteamCMD's state is not shareable.
+ */
+export function latestBuild(appId: number, options: { runner?: Runner; workspace?: string; branch?: string } = {}): Promise<string> {
+    if (!Number.isInteger(appId) || appId <= 0) throw new Error(`Not a Steam app id: ${appId}`);
+    const branch = branchName(options.branch);
+    return readAppInfo(appId, options, `Could not read the newest build of app ${appId}`, (lines) => parseLatestBuild(lines, appId, branch));
+}
+
+/** How many bytes an install of a Steam app on a branch takes on this computer, asked of Steam as latestBuild is. */
+export function appSize(appId: number, options: { runner?: Runner; workspace?: string; branch?: string } = {}): Promise<number> {
+    if (!Number.isInteger(appId) || appId <= 0) throw new Error(`Not a Steam app id: ${appId}`);
+    const branch = branchName(options.branch);
+    return readAppInfo(appId, options, `Could not read the download size of app ${appId}`, (lines) => parseAppSize(lines, appId, branch));
 }
 
 /**

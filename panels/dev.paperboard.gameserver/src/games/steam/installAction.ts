@@ -1,5 +1,5 @@
 import type { Server } from "../../service/server";
-import { installApp, installedBuild, latestBuild } from "./steamcmd";
+import { appSize, installApp, installedBuild, latestBuild } from "./steamcmd";
 import { assertHost, exclusive, hostSupportHere, type BusyFlag } from "../serviceKit";
 import type { ServerCalls } from "../../service/calls";
 import type { GameDefinition } from "../types";
@@ -82,7 +82,7 @@ export function steamInstall(ctx: Server, spec: SteamInstallSpec): () => Promise
     }).finally(() => { running = null; });
 }
 
-/** The Updates tab's three calls for a game downloaded from Steam. */
+/** The calls for a game downloaded from Steam: setup's and the Updates tab's. */
 export function steamInstallCalls(spec: SteamInstallSpec, install: () => Promise<void>): ServerCalls {
     return {
         steamInfo: async (ctx) => {
@@ -95,6 +95,7 @@ export function steamInstallCalls(spec: SteamInstallSpec, install: () => Promise
                 downloaded: typeof saved.build === "string",
             };
         },
+        steamSize: () => appSize(spec.appId, { branch: spec.branch }),
         steamLatest: () => steamUpdateStatus(spec),
         steamInstall: async () => { await install(); return true; },
     };

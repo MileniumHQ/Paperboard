@@ -149,6 +149,7 @@ export function mapMode(spec: Pick<SourceGameSpec, "mapModes">, map: string): st
 /** The calls every Source game answers, by what each is for. */
 export const SOURCE_CALLS = {
     info: "steamInfo",
+    size: "steamSize",
     latest: "steamLatest",
     install: "steamInstall",
     players: "sourcePlayers",
@@ -185,7 +186,7 @@ export interface SourceMetrics {
 export function describedCalls(spec: SourceGameSpec): CallName[] {
     const ids = SOURCE_CALLS;
     return [
-        ids.info, ids.latest, ids.install, ids.players, ids.metrics, ids.kick, ids.ban, ids.unban, ids.changeMap, ids.maps,
+        ids.info, ids.size, ids.latest, ids.install, ids.players, ids.metrics, ids.kick, ids.ban, ids.unban, ids.changeMap, ids.maps,
         ...(spec.mapPictures ? [ids.mapPictures] : []),
         ...(spec.mapPictures || spec.installPictures ? [ids.mapPicture] : []),
         ...(rotatesMaps(spec) ? [ids.mapCycle, ids.mapCycleSet, ids.play] : []),

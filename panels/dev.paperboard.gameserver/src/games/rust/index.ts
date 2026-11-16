@@ -53,7 +53,7 @@ export const rust: GameDefinition = {
             // Rust reads no console input; commands go over its WebSocket remote console
             control: { kind: "rcon" }, widgets: ["status", "console"],
             packages: [{ id: "steamcmd", purpose: "Downloads and updates the Rust dedicated server from Steam" }],
-            calls: ["startServer", "stopServer", "restartServer", "runCommand", "loadConfig", "sayChat", "saveWorld", "listServerFiles", "readServerFile", "writeServerFile", "listLogFiles", "readLogFile", "readGameOptions", "writeGameOptions", "steamInstall", "steamInfo", "steamLatest", "rustMetrics", "rustPlayers", "rustKick", "rustBan", "rustUnban", "rustMap", "rustMapPicture", "rustMapDraw", "rustWipe", ...AUTOMATION_CALLS],
+            calls: ["startServer", "stopServer", "restartServer", "runCommand", "loadConfig", "sayChat", "saveWorld", "listServerFiles", "readServerFile", "writeServerFile", "listLogFiles", "readLogFile", "readGameOptions", "writeGameOptions", "steamInstall", "steamInfo", "steamSize", "steamLatest", "rustMetrics", "rustPlayers", "rustKick", "rustBan", "rustUnban", "rustMap", "rustMapPicture", "rustMapDraw", "rustWipe", ...AUTOMATION_CALLS],
             tabs: [
                 { id: "overview", label: "Overview", icon: "dashboard", owner: "game", variant: "fill", compactVariant: "page" },
                 { id: "chat", label: "Chat", icon: "chat", group: "Play", owner: "game", variant: "fill" },

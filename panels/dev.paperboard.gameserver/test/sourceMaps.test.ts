@@ -11,7 +11,7 @@ import { startTestDaemon, type TestDaemon } from "./helpers/crane";
 import { openPage, servePanel } from "./helpers/browser";
 import { loopbackServer, routeHost } from "./helpers/http";
 import { serverCalls } from "./helpers/serverCall";
-import { fakeSteamcmd } from "./helpers/steamcmd";
+import { fakeSteamcmd, STEAM_FIXTURES } from "./helpers/steamcmd";
 import { writeTree } from "./helpers/tmp";
 import { PANEL_ID } from "../src/servers";
 import { TF2 } from "../src/games/tf2";
@@ -39,6 +39,7 @@ const ITEMS = [workshopItem(UPWARD, "Upward Remix", ["Payload"]), workshopItem("
 const META = { attribution: "Data from the Steam Workshop", source: "https://steamcommunity.com/workshop/", legal: "Valve's legal notice", disclaimer: "Not endorsed by Valve" };
 
 let ready: Promise<void> | null = null;
+let steam: ReturnType<typeof fakeSteamcmd>;
 async function setUp() {
     ready ??= (async () => {
         const modscan = loopbackServer((_req, url) => {
@@ -50,7 +51,8 @@ async function setUp() {
             return Response.json({ error: { message: "not found" } }, { status: 404 });
         });
         routeHost("panels.ariapis.com", modscan);
-        fakeSteamcmd({
+        steam = fakeSteamcmd({
+            appInfo: { [TF2.appId]: path.join(STEAM_FIXTURES, "tf2-app-info.txt") },
             install: { [TF2.appId]: { build: "19000001", mode: "ok", files: { "tf/maps/pl_upward.bsp": "", "tf/maps/pl_goldrush.bsp": "", "tf/maps/ctf_2fort.bsp": "", "tf/cfg/mapcycle.txt": "ctf_2fort\n" } } },
         });
         const server = (id: string, name: string, settings: Record<string, unknown>) => ({ id, name, game: TF2.id, directory: `${SERVERS}/${id}`, createdAt: 0, settings });
@@ -186,11 +188,24 @@ describe("a Source game's Maps tab", () => {
 });
 
 describe("a Source game's setup", () => {
-    test("downloads the game, asks how it plays and where it starts, and opens the server set up with that rotation", async () => {
+    test("says how big the download is and waits to be asked, downloads the game, asks how it plays and where it starts, and opens the server set up with that rotation", async () => {
         const served = await setUp();
         const page = await openPage(`${served.url}/?server=s-new`);
+        const downloads = () => steam.runs().filter((args) => args.includes("+app_update"));
         try {
-            await page.waitFor(`document.body.innerText.includes("Downloaded Team Fortress 2 from Steam") && ${button("Next")} && !${button("Next")}.disabled`, "the download done");
+            // the Linux server's own depots at the public branch: 14.2 GB, and nothing downloads until it is said
+            const ask = `[...document.querySelectorAll("[role=dialog]")].find((d) => d.innerText.includes("Download Team Fortress 2?"))`;
+            await page.waitFor(ask, "the download's question");
+            expect(await page.evaluate<string>(`${ask}.innerText`)).toContain("Team Fortress 2's server is a 14.2 GB download from Steam");
+            expect(downloads()).toEqual([]);
+            await page.evaluate(`${dialogButton("Cancel")}.click()`);
+            await page.waitFor(`!(${ask}) && ${button("Download")}`, "the download left for later");
+            expect(await page.evaluate<string>(`document.body.innerText`)).toContain("Its server is 14.2 GB from Steam.");
+            expect(downloads()).toEqual([]);
+            await page.evaluate(`${button("Download")}.click()`);
+            await page.waitFor(`${dialogButton("Download 14.2 GB")}`, "the question again");
+            await page.evaluate(`${dialogButton("Download 14.2 GB")}.click()`);
+            await page.waitFor(`document.body.innerText.includes("Downloaded Team Fortress 2") && ${button("Next")} && !${button("Next")}.disabled`, "the download done");
             // finished steps read as done, not as still under way
             const steps = await page.evaluate<string>(`document.body.innerText`);
             expect(steps).toContain("Checked the downloaded files");

@@ -79,7 +79,7 @@ export const palworld: GameDefinition = {
             // Palworld reads no console input; Paperboard reaches it over its REST API
             control: { kind: "broadcast" }, widgets: ["status"],
             packages: [{ id: "steamcmd", purpose: "Downloads and updates the Palworld dedicated server from Steam" }, VISUAL_CPP_X64.package],
-            calls: ["startServer", "stopServer", "restartServer", "loadConfig", "sayChat", "saveWorld", "listServerFiles", "readServerFile", "writeServerFile", "listLogFiles", "readLogFile", "readGameOptions", "writeGameOptions", "steamInstall", "steamInfo", "steamLatest", "palworldMetrics", "palworldPlayers", "palworldKick", "palworldBan", "palworldUnban", ...AUTOMATION_CALLS],
+            calls: ["startServer", "stopServer", "restartServer", "loadConfig", "sayChat", "saveWorld", "listServerFiles", "readServerFile", "writeServerFile", "listLogFiles", "readLogFile", "readGameOptions", "writeGameOptions", "steamInstall", "steamInfo", "steamSize", "steamLatest", "palworldMetrics", "palworldPlayers", "palworldKick", "palworldBan", "palworldUnban", ...AUTOMATION_CALLS],
             tabs: [
                 { id: "overview", label: "Overview", icon: "dashboard", owner: "game", variant: "fill", compactVariant: "page" },
                 { id: "chat", label: "Chat", icon: "chat", group: "Play", owner: "game", variant: "fill" },

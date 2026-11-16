@@ -472,7 +472,7 @@ const serverCalls: Omit<Handlers, ServersCallName> = {
     queryPlayerPositions: game("queryPlayerPositions"), listRoster: game("listRoster"), currentPlayerNames: game("currentPlayerNames"), readBedrockNaming: game("readBedrockNaming"),
     listPlayerStats: game("listPlayerStats"), queryGamerules: game("queryGamerules"), setGamerule: game("setGamerule"),
     // Steam games'
-    steamInfo: game("steamInfo"), steamLatest: game("steamLatest"), steamInstall: game("steamInstall"),
+    steamInfo: game("steamInfo"), steamSize: game("steamSize"), steamLatest: game("steamLatest"), steamInstall: game("steamInstall"),
     // Source games'
     sourceMetrics: game("sourceMetrics"), sourcePlayers: game("sourcePlayers"), sourceKick: game("sourceKick"), sourceBan: game("sourceBan"), sourceUnban: game("sourceUnban"),
     sourceChangeMap: game("sourceChangeMap"), sourceMaps: game("sourceMaps"), sourceMapPictures: game("sourceMapPictures"), sourceMapPicture: game("sourceMapPicture"),

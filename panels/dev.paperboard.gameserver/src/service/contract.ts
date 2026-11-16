@@ -501,6 +501,8 @@ const minecraftCalls = {
 /** The Updates tab of a game downloaded from Steam. */
 const steamCalls = {
     steamInfo: { output: shape.object({ host: hostSupport, build: shape.nullable(text), version: shape.nullable(text), downloaded: shape.boolean() }) },
+    /** the bytes the server's download from Steam takes here; asks Steam, which can take a while */
+    steamSize: { output: shape.number(), timeoutMs: null },
     /** asks Steam, which can take a while */
     steamLatest: { output: shape.object({ installed: shape.nullable(text), latest: shape.text(), updateAvailable: shape.boolean() }), timeoutMs: null },
     /** SteamCMD downloads for minutes; progress arrives through state */
