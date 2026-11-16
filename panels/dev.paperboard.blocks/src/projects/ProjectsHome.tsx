@@ -17,12 +17,13 @@ import {
     PaperPageHeader,
     PaperQuote,
     PaperSeparator,
+    PaperText,
     PaperToggle,
     useContextMenuState,
 } from "@mileniumhq/paperui";
 import CanvasPreview from "./CanvasPreview";
 import { DeleteProjectModal, RenameProjectModal } from "./ProjectDialogs";
-import { editedText, switchFailed, type ProjectsState } from "./state";
+import { AUTO_START, editedText, switchFailed, type ProjectsState } from "./state";
 import { oneAtATime } from "../lib/oneAtATime";
 import type { ProjectSummary } from "../panel";
 import { closedUnsaved, NOT_SAVED, setClosedUnsaved } from "../editorFlows";
@@ -138,13 +139,18 @@ export default function ProjectsHome(props: { projects: ProjectsState; onOpen: (
                                         }
                                         onClick={() => props.onOpen(project)}
                                         footerLeft={
-                                            <PaperToggle
-                                                checked={project.enabled}
-                                                disabled={Boolean(project.loadError)}
-                                                aria-label={`${project.name}: flows start on their events`}
-                                                title={project.enabled ? "Flows on" : "Flows off"}
-                                                onChange={(enabled) => setEnabled(project.id, enabled)}
-                                            />
+                                            <label>
+                                                <PaperFlex direction="row" align="center" gap="half">
+                                                    <PaperToggle
+                                                        checked={project.enabled}
+                                                        disabled={Boolean(project.loadError)}
+                                                        aria-label={`${project.name}: ${AUTO_START}`}
+                                                        title={project.enabled ? "Flows start on their events" : "Flows don't start on their events"}
+                                                        onChange={(enabled) => setEnabled(project.id, enabled)}
+                                                    />
+                                                    <PaperText preset="hint">{AUTO_START}</PaperText>
+                                                </PaperFlex>
+                                            </label>
                                         }
                                         footerRight={
                                             <PaperButton

@@ -36,7 +36,7 @@ import { Console } from "./Console";
 import { oneAtATime } from "./lib/oneAtATime";
 import { service, serviceState, type Notice } from "./bridge";
 import type { PanelState, ProjectSummary } from "./panel";
-import { switchFailed, type ProjectsState } from "./projects/state";
+import { AUTO_START, switchFailed, type ProjectsState } from "./projects/state";
 import { DeleteProjectModal, ProjectNameField, RenameProjectModal } from "./projects/ProjectDialogs";
 import { createFileActions } from "./FileActions";
 import { BlocklyDialogs } from "./BlocklyDialogs";
@@ -357,12 +357,17 @@ export default function Editor(props: {
                         </PaperMenuBar>
                     </PaperFlex>
                     <PaperFlex direction="row" align="center" justify="flex-end" gap="full" paddingX="half" fullWidth>
-                        <PaperToggle
-                            checked={props.project().enabled}
-                            aria-label="Flows start on their events"
-                            title="When off, this project's flows don't start on their events"
-                            onChange={setEnabled}
-                        />
+                        <label>
+                            <PaperFlex direction="row" align="center" gap="half">
+                                <PaperToggle
+                                    checked={props.project().enabled}
+                                    aria-label={AUTO_START}
+                                    title="When off, this project's flows don't start on their events"
+                                    onChange={setEnabled}
+                                />
+                                <PaperText preset="hint">{AUTO_START}</PaperText>
+                            </PaperFlex>
+                        </label>
                         <PaperFlex direction="row" align="center" gap="half">
                             <PaperEffect variant="danger">
                                 <PaperButton

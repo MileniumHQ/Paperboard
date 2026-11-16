@@ -5,6 +5,8 @@
 // refuses for real (fixtures/wire.ts). The log's rows are in console.test.ts.
 import { describe, expect, test } from "bun:test";
 import { LATE_NOT_SET_UP, REFUSAL } from "./fixtures/world";
+// the switches' words (src/projects/state.ts, which runs only in a page)
+const AUTO_START = "Auto-start";
 import { panelFixture } from "./helpers/panelFixture";
 const TIMEOUT = 180_000;
 
@@ -71,6 +73,8 @@ describe("the editor", () => {
             expect(toggle.animated).toBe(true);
             expect(toggle.refused).toContain(REFUSAL);
             expect(toggle.noticeAfterRetry).toBeNull();
+            // its words beside it say what it does, and flip it too
+            expect(toggle.byLabel).toEqual({ label: AUTO_START, states: ["false", "true", "false"] });
         },
         TIMEOUT,
     );
@@ -166,6 +170,10 @@ describe("the home screen", () => {
             expect(home.after.moved).not.toBe(home.before);
             expect(home.after.switchFailure).toBeNull();
             expect(home.after.banner).toBeNull();
+            // the card's switch has its words beside it, which flip it without opening the project
+            expect(home.byLabel.label).toBe(AUTO_START);
+            expect(home.byLabel.states).toEqual([home.after.moved, home.before, home.after.moved]);
+            expect(home.stayedHome).toBe(true);
         },
         TIMEOUT,
     );

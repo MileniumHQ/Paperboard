@@ -15,6 +15,7 @@ import { PaperProvider } from "@mileniumhq/paperui";
 import App from "../../src/App";
 import type { LogEntry } from "../../src/panel";
 import { NOT_SAVED } from "../../src/editorFlows";
+import { AUTO_START } from "../../src/projects/state";
 import { serviceState } from "../../src/bridge";
 import { ask, askLeave, calls, held, holdNextList, holdsUnsaved, refuse, release } from "./wire";
 import { LATE_PANEL, LATE_PANEL_NAME } from "./world";
@@ -322,9 +323,24 @@ async function createVariableChecks() {
     };
 }
 
+/** The switch's own words beside it, pressed twice: what the switch showed after each press. */
+async function flipByLabel(toggle: HTMLElement): Promise<{ label: string; states: (string | null)[] }> {
+    const label = toggle.closest("label");
+    const words = label && byText("*", AUTO_START, label);
+    if (!words || words.contains(toggle)) throw new Error(`the switch has no words of its own beside it: ${toggle.parentElement?.outerHTML.slice(0, 300)}`);
+    const states = [toggle.getAttribute("aria-checked")];
+    for (const _ of [1, 2]) {
+        await clickAt(words);
+        await until("the switch to move by its words", () => toggle.getAttribute("aria-checked") !== states.at(-1));
+        await settle();
+        states.push(toggle.getAttribute("aria-checked"));
+    }
+    return { label: words.textContent ?? "", states };
+}
+
 /** The editor's switch moves, with its thump, once the service has switched the flows. */
 async function toggleChecks() {
-    const toggle = await until("the editor's switch", () => document.querySelector<HTMLElement>('[role="switch"][aria-label="Flows start on their events"]'));
+    const toggle = await until("the editor's switch", () => document.querySelector<HTMLElement>(`[role="switch"][aria-label="${AUTO_START}"]`));
     let animated = false;
     const watch = new MutationObserver(() => (animated ||= /animating/.test(toggle.className)));
     watch.observe(toggle, { attributes: true, attributeFilter: ["class"] });
@@ -348,7 +364,7 @@ async function toggleChecks() {
     await clickAt(toggle);
     await until("the switch to move again", () => toggle.getAttribute("aria-checked") !== before);
     await settle();
-    return { ...moved, refused, noticeAfterRetry };
+    return { ...moved, refused, noticeAfterRetry, byLabel: await flipByLabel(toggle) };
 }
 
 /**
@@ -596,7 +612,7 @@ async function shoot(name: string, phone = false): Promise<void> {
 async function homeChecks() {
     await home();
     const name = "Renamed by hand";
-    const toggle = await until("the card's switch", () => document.querySelector<HTMLElement>(`[role="switch"][aria-label="${name}: flows start on their events"]`));
+    const toggle = await until("the card's switch", () => document.querySelector<HTMLElement>(`[role="switch"][aria-label="${name}: ${AUTO_START}"]`));
     const alert = (text: string) => [...document.querySelectorAll<HTMLElement>('[role="alert"]')].find((el) => el.textContent?.includes(text));
     const before = toggle.getAttribute("aria-checked");
     refuse("updateProject", true);
@@ -623,7 +639,9 @@ async function homeChecks() {
         banner: alert("Flows can't drive projects")?.textContent ?? null,
     };
     await shoot("home-recovered");
-    return { before, failed, stayed, banner, after };
+    // the card's switch by its words: it flips, and the project doesn't open
+    const byLabel = await flipByLabel(toggle);
+    return { before, failed, stayed, banner, after, byLabel, stayedHome: Boolean(byText("button", "New project")) };
 }
 
 async function run(): Promise<Record<string, unknown>> {

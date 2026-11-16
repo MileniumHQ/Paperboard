@@ -44,6 +44,9 @@ export function createProjects() {
     };
 }
 
+/** A project's switch, shown beside it: on, its flows start on their events. */
+export const AUTO_START = "Auto-start";
+
 /** What a project's switch that didn't move says, by where it was going. */
 export const switchFailed = (enabled: boolean) => (enabled ? "Flows not turned on" : "Flows not turned off");
 
