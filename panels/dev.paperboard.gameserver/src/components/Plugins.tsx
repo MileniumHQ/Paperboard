@@ -369,7 +369,7 @@ export default function Plugins(props: {
                                         <PaperText size={3} weight={600} breakWord>
                                             {failure.title}
                                         </PaperText>
-                                        <PaperText preset="error" breakWord>
+                                        <PaperText preset="body" color="text-subtle" breakWord>
                                             {failure.error ?? "The update failed without saying why."}
                                         </PaperText>
                                     </PaperFlex>

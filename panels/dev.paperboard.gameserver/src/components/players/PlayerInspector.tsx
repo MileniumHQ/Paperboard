@@ -99,6 +99,7 @@ export default function PlayerInspector(props: {
     };
     // why the head could not be looked up, in words: a phone shows no tooltip
     const [headFailure, setHeadFailure] = createSignal<string | null>(null);
+    createFailureToast(headFailure, { title: "Couldn't look up the head" });
     const healthMeter = () => {
         const value = health();
         return value === undefined ? undefined : { value, max: 20, variant: "danger" as const };
@@ -174,9 +175,6 @@ export default function PlayerInspector(props: {
                                 </PaperText>
                                 <PaperCopyButton text={props.player!.uuid!} />
                             </PaperFlex>
-                        </Show>
-                        <Show when={headFailure()}>
-                            {(reason) => <PaperText size={1} color="danger">{reason()}</PaperText>}
                         </Show>
                     </PaperFlex>
                 </PaperFlex>

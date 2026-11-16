@@ -1,5 +1,5 @@
 import { createMemo, createSignal, For, Show } from "solid-js";
-import { createAction, createRead, PaperButton, PaperCenteredInterface, PaperEmptyState, PaperFlex, PaperIcon, PaperMediaCard, PaperMediaCardGroup, PaperText, PaperWizardStep, showError } from "@mileniumhq/paperui";
+import { createAction, createRead, PaperButton, PaperCenteredInterface, PaperEmptyState, PaperFlex, PaperIcon, PaperMediaCard, PaperMediaCardGroup, PaperText, PaperWizardStep } from "@mileniumhq/paperui";
 import { errorMessage } from "../../lib/failure";
 import SteamSetup from "../steam/SteamSetup";
 import { type SourceGameSpec } from "./index";
@@ -69,7 +69,7 @@ export default function SourceSetup(props: { spec: SourceGameSpec; onComplete():
     const save = () => saving.run("Couldn't finish setup", () => {
         const choice: Choice = { mode: mode() as string | null, map: map() };
         return calls.sourcePlay(choice);
-    }, (failure) => failure && showError(failure.title, failure.message));
+    });
 
     return (
         <SteamSetup

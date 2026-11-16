@@ -1,4 +1,4 @@
-import { createEffect, createSignal, For, on, Show, type JSX } from "solid-js";
+import { createSignal, For, type JSX } from "solid-js";
 import {
     PaperFlex,
     PaperInput,
@@ -6,29 +6,11 @@ import {
     PaperSelectMenu,
     PaperSelectMenuItem,
     PaperSettingItem,
-    PaperText,
     PaperToggle,
 } from "@mileniumhq/paperui";
 import { hasKnownMcVersion } from "../lib/capabilities";
 import { useServer } from "../lib/server";
 import type { PropertyField } from "../lib/properties";
-
-/**
- * A setting row's description, followed while the typed value can't be used
- * by why not, in the colour of an error.
- */
-export function describeWithProblem(description: JSX.Element, problem: string): JSX.Element {
-    if (!description && !problem) return undefined;
-    return (
-        <>
-            {description}
-            <Show when={problem}>
-                {description ? " " : ""}
-                <PaperText preset="error">{problem}</PaperText>
-            </Show>
-        </>
-    );
-}
 
 /** What a number field takes, as the sentence shown while a typed value doesn't fit it. */
 function numberRange(field: PropertyField): string {
@@ -39,17 +21,16 @@ function numberRange(field: PropertyField): string {
     return `Must be ${kind}.`;
 }
 
-/** A field's setting row: its title, its description and, while the typed value can't be used, why not. */
+/** A field's setting row: its title and its description; the field says why a typed value can't be used. */
 export function FieldItem(props: {
     field: PropertyField;
     description?: JSX.Element;
     value: () => string;
     onUpdate: (value: string) => void;
 }) {
-    const [problem, setProblem] = createSignal("");
     return (
-        <PaperSettingItem title={props.field.title} description={describeWithProblem(props.description ?? props.field.description, problem())}>
-            <FieldControl field={props.field} value={props.value} onUpdate={props.onUpdate} onProblem={setProblem} />
+        <PaperSettingItem title={props.field.title} description={props.description ?? props.field.description}>
+            <FieldControl field={props.field} value={props.value} onUpdate={props.onUpdate} />
         </PaperSettingItem>
     );
 }
@@ -59,8 +40,6 @@ export function FieldControl(props: {
     field: PropertyField;
     value: () => string;
     onUpdate: (value: string) => void;
-    /** why the typed value can't be used, or "" once it can */
-    onProblem?: (problem: string) => void;
 }) {
     const field = props.field;
     const { serverVersion } = useServer();
@@ -107,7 +86,6 @@ export function FieldControl(props: {
                 if (field.max !== undefined && num > field.max) return true;
                 return false;
             };
-            createEffect(on(() => (invalid() ? numberRange(field) : ""), (problem) => props.onProblem?.(problem)));
             return (
                 <PaperFlex width="field">
                     <PaperInput
@@ -117,7 +95,7 @@ export function FieldControl(props: {
                         max={field.max}
                         step={field.step}
                         value={shown()}
-                        invalid={invalid()}
+                        error={invalid() ? numberRange(field) : undefined}
                         disabled={!knownVersion()}
                         onInput={(e) => {
                             setDraft(e.currentTarget.value);

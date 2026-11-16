@@ -8,7 +8,6 @@ import {
     createAction,
     createFailureToast,
     createLatest,
-    showError,
 } from "@mileniumhq/paperui";
 import {
     applyCode,
@@ -334,7 +333,6 @@ export function MotdEditor(props: {
                 await props.save(props.dialect.serialize(doc));
                 props.onClose();
             },
-            (failure) => failure && showError(failure.title, failure.message),
         );
     };
 

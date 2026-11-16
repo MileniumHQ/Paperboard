@@ -70,7 +70,6 @@ export default function ServerOverview(props: {
     onMount(() => void loadServerConfig());
 
     const saving = createAction({ message: errorMessage });
-    createFailureToast(() => saving.error()?.message, { title: "Couldn't save the world" });
     // resolves once the game confirms it wrote its world to disk
     const save = () => saving.run("Couldn't save the world", () => calls.saveWorld());
     const control = () => props.control?.kind ?? "stdin";

@@ -1,4 +1,4 @@
-import { createEffect, createMemo, createSignal, on, For, Show, untrack } from "solid-js";
+import { createMemo, createSignal, For, Show, untrack } from "solid-js";
 import {
     PaperButton,
     PaperCard,
@@ -23,14 +23,13 @@ import { useServer } from "../lib/server";
 import { errorMessage } from "../lib/failure";
 import { createSaves } from "../lib/saves";
 import { fitsNumber, numberRule } from "../games/options";
-import { describeWithProblem } from "./PropertyFieldControl";
 
 /**
  * One option's control. Toggles and menus report a change at once; text,
  * number and password fields keep what is typed as a draft and report it
  * when they lose focus or Enter is pressed, so a half-typed value is never
- * saved. A number out of the option's range is not reported: `onProblem`
- * hears why, and the field keeps it until it is corrected.
+ * saved. A number out of the option's range is not reported: the field says
+ * why, and keeps it until it is corrected.
  */
 export function GameOptionControl(props: {
     field: GameOption;
@@ -39,8 +38,6 @@ export function GameOptionControl(props: {
     secretStored?: boolean;
     disabled?: boolean;
     onChange: (value: unknown) => void;
-    /** why the typed value can't be saved, or "" once it can */
-    onProblem?: (problem: string) => void;
 }) {
     // an option's kind is what it is; the rest follows the option as it is described again
     const field = <K extends GameOption["kind"]>(_kind: K) => props.field as Extract<GameOption, { kind: K }>;
@@ -57,7 +54,6 @@ export function GameOptionControl(props: {
             const [draft, setDraft] = createSignal<string | null>(null);
             const shown = () => draft() ?? String(props.value ?? "");
             const valid = (raw: string) => raw.trim() !== "" && fitsNumber(field("number"), Number(raw));
-            createEffect(on(() => (valid(shown()) ? "" : `${numberRule(field("number"))}.`), (problem) => props.onProblem?.(problem)));
             return (
                 // every number field is as wide as a menu, whatever its range
                 <PaperFlex width="field">
@@ -68,7 +64,7 @@ export function GameOptionControl(props: {
                         max={field("number").max}
                         step={field("number").step ?? 1}
                         value={shown()}
-                        invalid={!valid(shown())}
+                        error={valid(shown()) ? undefined : `${numberRule(field("number"))}.`}
                         disabled={props.disabled}
                         onInput={(e) => setDraft(e.currentTarget.value)}
                         onKeyDown={commitOnEnter}
@@ -165,16 +161,14 @@ export function GameOptionItem(props: {
     disabled?: boolean;
     onChange: (value: unknown) => void;
 }) {
-    const [problem, setProblem] = createSignal("");
     return (
-        <PaperSettingItem title={props.field.label} description={describeWithProblem(props.field.description, problem())}>
+        <PaperSettingItem title={props.field.label} description={props.field.description}>
             <GameOptionControl
                 field={props.field}
                 value={props.value}
                 secretStored={props.secretStored}
                 disabled={props.disabled}
                 onChange={props.onChange}
-                onProblem={setProblem}
             />
         </PaperSettingItem>
     );

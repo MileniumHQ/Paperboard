@@ -2,7 +2,7 @@
 // and a kick or ban with its reason. Each sends through what it is given and
 // shows the refusal.
 import { createEffect, createSignal, on, Show } from "solid-js";
-import { createAction, PaperButton, PaperFlex, PaperInput, PaperModal, PaperSelector, PaperSelectorItem, PaperText } from "@mileniumhq/paperui";
+import { createAction, PaperButton, PaperFlex, PaperInput, PaperModal, PaperSelector, PaperSelectorItem, PaperText, showError } from "@mileniumhq/paperui";
 import { JAVA_NAME_PATTERN, PLAYER_NAME_PATTERN } from "../../core/players";
 import { bedrockPlayerName, type BedrockNaming } from "../../core/bedrock";
 import { errorMessage } from "../../lib/failure";
@@ -53,7 +53,7 @@ export function WhitelistDialog(props: {
         try {
             await props.onAdd(name);
         } catch (err) {
-            setError(errorMessage(err));
+            showError("Couldn't add to the whitelist", errorMessage(err));
             return;
         }
         props.onClose();
@@ -97,7 +97,7 @@ export function WhitelistDialog(props: {
                         autofocus
                         icon="person"
                         label={edition() === "bedrock" ? "Gamertag" : "Username"}
-                        invalid={!!error()}
+                        error={error() || undefined}
                         value={typed()}
                         onInput={(e) => {
                             setTyped(e.currentTarget.value);
@@ -108,20 +108,11 @@ export function WhitelistDialog(props: {
                             if (e.key === "Enter" && !props.disabled) void add();
                         }}
                     />
-                    <Show
-                        when={error()}
-                        fallback={
-                            <PaperText size={2} color="text-subtle">
-                                {edition() === "bedrock"
-                                    ? "Works once they have joined any Geyser server."
-                                    : "They don't need to have joined before."}
-                            </PaperText>
-                        }
-                    >
-                        <PaperText size={2} color="danger">
-                            {error()}
-                        </PaperText>
-                    </Show>
+                    <PaperText size={2} color="text-subtle">
+                        {edition() === "bedrock"
+                            ? "Works once they have joined any Geyser server."
+                            : "They don't need to have joined before."}
+                    </PaperText>
                 </PaperFlex>
             </PaperFlex>
         </PaperModal>
@@ -203,13 +194,6 @@ export function ReasonActionDialog(props: {
                         if (e.key === "Enter") void submit();
                     }}
                 />
-                <Show when={send.error()}>
-                    {(failure) => (
-                        <PaperText size={2} color="danger">
-                            {failure().message}
-                        </PaperText>
-                    )}
-                </Show>
             </PaperFlex>
         </PaperModal>
     );

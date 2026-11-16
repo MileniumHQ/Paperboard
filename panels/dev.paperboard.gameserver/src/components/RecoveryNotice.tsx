@@ -1,6 +1,6 @@
 import { Show } from "solid-js";
 import { useServer } from "../lib/server";
-import { createAction, PaperButton, PaperFlex, PaperQuote, showError } from "@mileniumhq/paperui";
+import { createAction, PaperButton, PaperFlex, PaperQuote } from "@mileniumhq/paperui";
 import { errorMessage } from "../lib/failure";
 
 // A server that could not be set up, or an interrupted install or modpack
@@ -25,7 +25,7 @@ export default function RecoveryNotice() {
                         <span>{shown().blocks}</span>
                         <PaperFlex direction="row">
                             <PaperButton
-                                onClick={() => void retry.run(shown().failed, () => shown().call(), (failure) => failure && showError(failure.title, failure.message))}
+                                onClick={() => void retry.run(shown().failed, () => shown().call())}
                                 disabled={retry.busy()}
                             >
                                 {retry.busy() ? "Retrying…" : shown().action}

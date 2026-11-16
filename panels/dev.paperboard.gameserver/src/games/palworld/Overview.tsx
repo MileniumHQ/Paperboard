@@ -1,5 +1,5 @@
 import { createSignal, Show } from "solid-js";
-import { createAction, createFailureToast, PaperAvatar, PaperButton, PaperInput, PaperModal, PaperQuote, PaperText, showError } from "@mileniumhq/paperui";
+import { createAction, createFailureToast, PaperAvatar, PaperButton, PaperInput, PaperModal, PaperQuote, PaperText } from "@mileniumhq/paperui";
 import ServerOverview, { EditableDetail } from "../../components/ServerOverview";
 import { useServer } from "../../lib/server";
 import { errorMessage } from "../../lib/failure";
@@ -22,7 +22,7 @@ export default function PalworldOverview() {
         await calls.writeGameOptions({ patch: { [DESCRIPTION]: draft().trim() } });
         setPending(serverStatus() !== "offline");
         setOpen(false);
-    }, (failure) => failure && showError(failure.title, failure.message));
+    });
 
     const metrics = createMetrics(calls.palworldMetrics);
     createFailureToast(metrics.error, { title: "Couldn't read the server's health" });

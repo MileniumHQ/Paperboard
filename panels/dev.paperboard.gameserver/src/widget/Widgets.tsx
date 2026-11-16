@@ -124,7 +124,7 @@ export function StatusWidget(props: Props) {
     askForCap(server);
     const size = useSize(props.widget);
     const tall = () => size().h > 1;
-    const power = createAction({ message: errorMessage });
+    const power = createAction({ message: errorMessage, toast: false });
     const run = (verb: string, action: (calls: ServiceCalls<typeof gameServerContract>) => Promise<unknown>) => void power.run(`Couldn't ${verb} the server`, () => server.call(action));
 
     return (

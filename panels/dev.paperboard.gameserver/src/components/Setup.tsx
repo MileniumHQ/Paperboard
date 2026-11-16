@@ -255,7 +255,7 @@ export default function Setup(props: SetupProps) {
             // marks onboarding done, through the service so panel state is live
             await updatePanelConfig({ configured: true });
             props.onComplete?.();
-        }, (failure) => failure && showError(failure.title, `${failure.message} Try Finish Setup again.`));
+        });
     };
 
     return (

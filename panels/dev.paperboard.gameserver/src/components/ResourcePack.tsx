@@ -21,7 +21,6 @@ import { resourcePackKind, type PackSettings } from "../lib/addons/resourcepack"
 import { isResourcePackId, promptToProperty } from "../core/resourcepack";
 import AddonBrowser from "./addons/AddonBrowser";
 import { createAddonBrowser } from "./addons/state";
-import { describeWithProblem } from "./PropertyFieldControl";
 
 const SAVE_DEBOUNCE_MS = 400;
 
@@ -155,14 +154,14 @@ export default function ResourcePack(props: { active: boolean }) {
                                     <Show when={supports("resourcePackPrompt")}>
                                         <PaperSettingItem
                                             title="Prompt"
-                                            description={describeWithProblem("The message players see when asked to accept the pack. Leave empty for the default.", promptProblem(values().prompt))}
+                                            description="The message players see when asked to accept the pack. Leave empty for the default."
                                         >
                                             <PaperFlex width="field-wide">
                                                 <PaperInput
                                                     fullWidth
                                                     placeholder="Text"
                                                     value={values().prompt}
-                                                    invalid={promptProblem(values().prompt) !== ""}
+                                                    error={promptProblem(values().prompt) || undefined}
                                                     onInput={(e) => change({ prompt: e.currentTarget.value })}
                                                 />
                                             </PaperFlex>
@@ -171,14 +170,14 @@ export default function ResourcePack(props: { active: boolean }) {
                                     <Show when={supports("resourcePackId")}>
                                         <PaperSettingItem
                                             title="Pack ID"
-                                            description={describeWithProblem("A UUID clients use to tell this pack from others. Leave empty to let the game choose.", idProblem(values().id))}
+                                            description="A UUID clients use to tell this pack from others. Leave empty to let the game choose."
                                         >
                                             <PaperFlex width="field-wide">
                                                 <PaperInput
                                                     fullWidth
                                                     placeholder="UUID"
                                                     value={values().id}
-                                                    invalid={idProblem(values().id) !== ""}
+                                                    error={idProblem(values().id) || undefined}
                                                     onInput={(e) => change({ id: e.currentTarget.value })}
                                                 />
                                             </PaperFlex>

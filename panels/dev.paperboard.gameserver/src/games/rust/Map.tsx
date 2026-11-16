@@ -1,5 +1,5 @@
 import { createEffect, createSignal, on, Show } from "solid-js";
-import { PaperButton, PaperCard, PaperEmptyState, PaperFlex, PaperIcon, PaperLoader, PaperModal, PaperPageHeader, PaperQuote, PaperSettingItem, PaperSettingList, PaperTable, PaperText, PaperToggle, createAction, createFailureToast, createRead, showError } from "@mileniumhq/paperui";
+import { PaperButton, PaperCard, PaperEmptyState, PaperFlex, PaperIcon, PaperLoader, PaperModal, PaperPageHeader, PaperQuote, PaperSettingItem, PaperSettingList, PaperTable, PaperText, PaperToggle, createAction, createFailureToast, createRead } from "@mileniumhq/paperui";
 import { useServer } from "../../lib/server";
 import { errorMessage } from "../../lib/failure";
 import type { RustMapView } from "./index";
@@ -57,7 +57,7 @@ export default function RustMap(props: { active: boolean }) {
         map.set({ view: await calls.rustWipe({ blueprints: blueprints() }), picture: null });
         setWiped({ trashed });
         setOpen(false);
-    }, (failure) => failure && showError(failure.title, failure.message));
+    });
 
     return (
         <>

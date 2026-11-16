@@ -1,5 +1,5 @@
 import { createMemo, createSignal, Show } from "solid-js";
-import { createAction, createFailureToast, createRead, PaperAvatar, PaperButton, PaperEmptyState, PaperModal, PaperText, showError } from "@mileniumhq/paperui";
+import { createAction, createFailureToast, createRead, PaperAvatar, PaperButton, PaperEmptyState, PaperModal, PaperText } from "@mileniumhq/paperui";
 import ServerOverview, { EditableDetail } from "../../components/ServerOverview";
 import { useServer } from "../../lib/server";
 import { errorMessage } from "../../lib/failure";
@@ -52,7 +52,7 @@ export default function SourceOverview(props: { spec: SourceGameSpec; game: Game
         changing.run("Couldn't change the map", async () => {
             await calls.sourceChangeMap({ map: choice() });
             setOpen(false);
-        }, (failure) => failure && showError(failure.title, failure.message));
+        });
     const label = (name: string) => mapMode(props.spec, name);
     /** the map as people name it: its Workshop title or real name, the file name beside it, and what it plays as */
     const detail = () => {

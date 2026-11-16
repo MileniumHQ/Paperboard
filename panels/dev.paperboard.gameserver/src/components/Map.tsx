@@ -340,7 +340,7 @@ export default function MapView() {
                             placeholder="X"
                             size={9}
                             value={coordX()}
-                            invalid={coordX().trim() !== "" && coordinate(coordX()) === null}
+                            error={coordX().trim() !== "" && coordinate(coordX()) === null ? "Numbers only" : undefined}
                             onInput={(e) => setCoordX(e.currentTarget.value)}
                             onKeyDown={(e) => {
                                 if (e.key === "Enter") goToCoords();
@@ -352,7 +352,7 @@ export default function MapView() {
                             placeholder="Z"
                             size={9}
                             value={coordZ()}
-                            invalid={coordZ().trim() !== "" && coordinate(coordZ()) === null}
+                            error={coordZ().trim() !== "" && coordinate(coordZ()) === null ? "Numbers only" : undefined}
                             onInput={(e) => setCoordZ(e.currentTarget.value)}
                             onKeyDown={(e) => {
                                 if (e.key === "Enter") goToCoords();

@@ -12,6 +12,7 @@ import {
     PaperText,
     usePaperPanel,
     type MarkdownImage,
+    createFailureToast,
     createRead,
 } from "@mileniumhq/paperui";
 import type { AddonKind, AddonProject, AddonTarget, InstalledAddon } from "../../lib/addons/kind";
@@ -28,21 +29,16 @@ const truncate = (text: string, max: number) => (text.length > max ? `${text.sli
 /**
  * An image in a project's page, fetched by the service from wherever its
  * author put it; its alt text stands in while it loads, and for an address
- * that isn't on the web. One that fails says why where it would be.
+ * that isn't on the web. One that fails is a toast; its alt text stays.
  */
 function BodyPicture(props: { image: MarkdownImage }) {
     const address = () => (/^https?:\/\//i.test(props.image.src) ? props.image.src : null);
     const picture = createServedPicture(() => "web", address);
+    createFailureToast(picture.error, { title: "Couldn't load a picture in the description" });
     return (
         <Show
             when={picture.src()}
-            fallback={
-                <Show when={picture.error()} fallback={<PaperText as="span" color="text-subtle">{props.image.alt}</PaperText>}>
-                    <PaperText as="span" size={1} color="danger">
-                        {props.image.alt ? `${props.image.alt}: ` : ""}The picture couldn't be loaded: {picture.error()}
-                    </PaperText>
-                </Show>
-            }
+            fallback={<PaperText as="span" color="text-subtle">{props.image.alt}</PaperText>}
         >
             <img src={picture.src()} alt={props.image.alt} title={props.image.title ?? undefined} />
         </Show>

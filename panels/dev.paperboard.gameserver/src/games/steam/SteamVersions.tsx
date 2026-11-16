@@ -14,7 +14,7 @@ import {
 import InstallNotices from "../../components/InstallNotices";
 import InstallProgressModal from "../../components/InstallProgressModal";
 import { useServer } from "../../lib/server";
-import { errorMessage, splitFailure } from "../../lib/failure";
+import { errorMessage } from "../../lib/failure";
 import { createSteamInstall, type SteamInstallInfo, type SteamUpdateStatus } from "./installRows";
 
 /**
@@ -26,13 +26,11 @@ export default function SteamVersions(props: { name: string }) {
     const { calls, serverStatus } = useServer();
     const [installOpen, setInstallOpen] = createSignal(false);
     const install = createSteamInstall();
-    // a failure's first line: a toast has no room for what SteamCMD printed after it
-    const summary = (err: unknown) => splitFailure(errorMessage(err)).summary;
-    const read = createRead((): Promise<SteamInstallInfo> => calls.steamInfo(), { message: summary, failure: { title: `Couldn't read the ${props.name} install` } });
+    const read = createRead((): Promise<SteamInstallInfo> => calls.steamInfo(), { message: errorMessage, failure: { title: `Couldn't read the ${props.name} install` } });
     const info = read.value;
     const loadFailed = () => !read.loading() && !!read.error();
     // a check waits behind a download in progress, and asks Steam over the network
-    const latest = createRead((): Promise<SteamUpdateStatus> => calls.steamLatest(), { message: summary, failure: { title: `Couldn't check ${props.name} for updates` } });
+    const latest = createRead((): Promise<SteamUpdateStatus> => calls.steamLatest(), { message: errorMessage, failure: { title: `Couldn't check ${props.name} for updates` } });
     const checking = latest.loading;
     // a failed check knows nothing of the newest build
     const status = () => (latest.error() ? undefined : latest.value());

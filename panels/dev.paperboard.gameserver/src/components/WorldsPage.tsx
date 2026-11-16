@@ -378,13 +378,10 @@ export default function WorldsPage<W extends WorldEntry>(props: { list: () => Pr
                         fullWidth
                         label={props.game.upload.label}
                         value={uploadName()}
-                        invalid={nameProblem(uploadName()) !== ""}
+                        error={nameProblem(uploadName()) || undefined}
                         onInput={(e) => setUploadName(e.currentTarget.value)}
                         onKeyDown={(e) => { if (e.key === "Enter") void submitUpload(); }}
                     />
-                    <Show when={nameProblem(uploadName())}>
-                        {(problem) => <PaperText size={2} color="danger">{problem()}</PaperText>}
-                    </Show>
                 </PaperFlex>
             </PaperModal>
 
@@ -408,12 +405,9 @@ export default function WorldsPage<W extends WorldEntry>(props: { list: () => Pr
                             fullWidth
                             label="World name"
                             value={newName()}
-                            invalid={nameProblem(newName()) !== ""}
+                            error={nameProblem(newName()) || undefined}
                             onInput={(e) => setNewName(e.currentTarget.value)}
                         />
-                        <Show when={nameProblem(newName())}>
-                            {(problem) => <PaperText size={2} color="danger">{problem()}</PaperText>}
-                        </Show>
                         <Show when={worlds() === null && !listFailed()}>
                             <PaperText size={2} color="text-subtle">Checking existing worlds...</PaperText>
                         </Show>
