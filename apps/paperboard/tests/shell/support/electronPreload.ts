@@ -1,9 +1,10 @@
 // What the shell gets from Electron, for the tests of its Electron-only
-// paths. The preload's bridge (window.paperboardShell) is stood in for by the same calls carried
-// over the shell host's HTTP bridge, the boundary the browser shell crosses
-// too; and a panel:// address, which Electron's protocol handler serves, is
-// loaded from the host's panel folder of the same panel, which serves the
-// same files.
+// paths. The preload's bridge (window.paperboardShell) is stood in for by
+// the same calls carried over the shell host's HTTP bridge, the boundary the
+// browser shell crosses too; a refusal comes back in the words
+// ipcRenderer.invoke wraps main's in. A panel:// address, which Electron's
+// protocol handler serves, is loaded from the host's panel folder of the
+// same panel, which serves the same files.
 export const ELECTRON_PRELOAD = `(() => {
     if (window.top !== window) return;
     const listeners = new Map();
@@ -20,7 +21,8 @@ export const ELECTRON_PRELOAD = `(() => {
     window.paperboardShell = {
         async invoke(channel, args) {
             const body = await (await post("invoke", channel, args)).json();
-            if (!body.ok) throw new Error(body.error || channel + " failed");
+            // a refusal as ipcRenderer.invoke rejects with main's: wrapped in Electron's words
+            if (!body.ok) throw new Error("Error invoking remote method '" + channel + "': Error: " + (body.error || channel + " failed"));
             return body.result;
         },
         send(channel, args) {

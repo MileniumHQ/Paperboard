@@ -29,9 +29,26 @@ export interface ShellIpc {
     on<K extends ShellPush>(channel: K, listener: (payload: PushPayload<K>) => void): () => void;
 }
 
+// Electron hands main's refusal of a call over as "Error invoking remote
+// method '<channel>': Error: <why>"; the shell says only why
+const ELECTRON_REFUSAL = /^Error invoking remote method '[^']*': (?:\w*Error: )?/;
+
+function refusal(err: unknown): unknown {
+    if (!(err instanceof Error) || !ELECTRON_REFUSAL.test(err.message)) return err;
+    return new Error(err.message.replace(ELECTRON_REFUSAL, ""), { cause: err });
+}
+
 function typed(wire: ShellWire): ShellIpc {
     return {
-        invoke: async (channel, ...args) => readShellAnswer(channel, await wire.invoke(channel, args[0])),
+        invoke: async (channel, ...args) => {
+            let answer: unknown;
+            try {
+                answer = await wire.invoke(channel, args[0]);
+            } catch (err) {
+                throw refusal(err);
+            }
+            return readShellAnswer(channel, answer);
+        },
         send: (channel, ...args) => wire.send(channel, args[0]),
         on: (channel, listener) =>
             wire.on(channel, (payload) => {

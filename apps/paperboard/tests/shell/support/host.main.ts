@@ -142,7 +142,8 @@ const calls: CallHandlers<ShellCall, unknown> = {
     "panel-loopback-redirect-cancel": notHere("panel-loopback-redirect-cancel"),
     "panel-permission-answer": notHere("panel-permission-answer"),
     "open-system-privacy": notHere("open-system-privacy"),
-    "panels-unsaved": notHere("panels-unsaved"),
+    // a window says whether its panels hold unsaved work; no quit asks here
+    "panels-unsaved": () => undefined,
     "quit-answer": notHere("quit-answer"),
 };
 
