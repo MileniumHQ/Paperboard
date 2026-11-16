@@ -9,6 +9,7 @@ import { join } from "node:path";
 import { startDaemon, type Daemon, type PanelProcess } from "./helpers/daemon";
 
 const FRAME_SCRIPT = join(import.meta.dir, "helpers", "panelFrame.ts");
+const PARENT_SCRIPT = join(import.meta.dir, "helpers", "serviceParent.ts");
 
 setDefaultTimeout(60_000);
 
@@ -87,6 +88,39 @@ test("a service whose start fails ends with the reason, so the daemon hears it a
     const code = await new Promise<number | null>((resolve) => child.once("exit", (exitCode) => resolve(exitCode)));
     expect(code).toBe(1);
     expect(stderr).toContain("the config file is unreadable");
+});
+
+test("a service whose daemon dies ends too, so a restarted daemon never runs a second copy", async () => {
+    const parent = spawn(process.execPath, [PARENT_SCRIPT], { env: daemon.serviceEnv("dev.test.orphan", "service"), stdio: ["ignore", "pipe", "inherit"] });
+    const exited = new Promise<void>((resolve) => parent.once("exit", () => resolve()));
+    const pid = await new Promise<number>((resolve, reject) => {
+        let out = "";
+        parent.stdout!.on("data", (chunk: Buffer) => {
+            out += chunk.toString();
+            const match = /SERVICE (\d+)/.exec(out);
+            if (match) resolve(Number(match[1]));
+        });
+        void exited.then(() => reject(new Error(`the stand-in daemon exited before its service was ready:\n${out}`)));
+    });
+    const alive = () => {
+        try {
+            process.kill(pid, 0);
+            return true;
+        } catch {
+            return false; // quiet: no such process is the answer
+        }
+    };
+    parent.kill("SIGKILL");
+    await exited;
+    const deadline = Date.now() + 10_000;
+    try {
+        while (alive()) {
+            if (Date.now() > deadline) throw new Error(`service ${pid} kept running after its daemon was killed`);
+            await new Promise((resolve) => setTimeout(resolve, 25)); // quiet: a deadline-bound poll for the process to end
+        }
+    } finally {
+        if (alive()) process.kill(pid, "SIGKILL");
+    }
 });
 
 // the shell's readiness challenge, answered by the panel's page in its frame

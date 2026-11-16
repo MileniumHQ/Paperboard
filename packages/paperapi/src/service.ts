@@ -204,6 +204,7 @@ export function definePanelService<
         throw new Error(`[Service:${options.id}] its contract is ${contract.panelId}'s`);
     }
     const panelId = contract?.panelId || options.id || getPanelId();
+    endWithTheDaemon(panelId);
     // identity is threaded as a parameter everywhere; writing it back to
     // process.env gives two services in one process the same name
     let currentState = structuredClone(contract?.state?.initial ?? options.state ?? {}) as State;
@@ -533,6 +534,21 @@ function registerLegacyActions(panelId: string, options: AnyOptions, ctx: Servic
 // A spawned service hears the daemon over its process channel: requests it
 // answers (the daemon waits for each answer) and notices it only hears.
 // Then it tells the daemon it is ready, and which hooks it has.
+let endsWithTheDaemon = false;
+// A service the daemon spawned holds its process channel. A daemon that
+// crashed or was killed never sends the SIGTERM it stops services with, so
+// the channel closing is that stop: without it the service would run on,
+// and the restarted daemon would start a second copy beside it. It ends as
+// SIGTERM ends it, so the panel's own shutdown (a queued save) still runs.
+function endWithTheDaemon(panelId: string): void {
+    if (endsWithTheDaemon || typeof process === "undefined" || typeof process.send !== "function") return;
+    endsWithTheDaemon = true;
+    process.once("disconnect", () => {
+        console.error(`[Service:${panelId}] the daemon that started this service is gone, so it stops`);
+        process.kill(process.pid, "SIGTERM");
+    });
+}
+
 function answerTheDaemon(panelId: string, options: AnyOptions, ctx: ServiceContext<any>): void {
     if (typeof process === "undefined" || typeof process.send !== "function") return;
     const answer = (type: string, run: (message: Record<string, unknown>) => unknown) => {

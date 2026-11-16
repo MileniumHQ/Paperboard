@@ -29,6 +29,8 @@ export interface Daemon {
     panelToken(panelId: string): string;
     // spawns one the way the daemon does, with its process channel open
     spawnService(panelId: string, scenario: string): ChildProcess;
+    // the environment the daemon boots a service with
+    serviceEnv(panelId: string, scenario: string): Record<string, string | undefined>;
     stop(): Promise<void>;
 }
 
@@ -92,6 +94,7 @@ export async function startDaemon(): Promise<Daemon> {
             children.add(child);
             return child;
         },
+        serviceEnv,
         stop: async () => {
             for (const child of children) if (child.exitCode === null && child.signalCode === null) child.kill();
             await new Promise<void>((resolve) => {
