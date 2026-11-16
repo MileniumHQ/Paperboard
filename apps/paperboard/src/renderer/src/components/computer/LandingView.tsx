@@ -4,6 +4,8 @@ import type { ComputerInfo } from "../../lib/shell";
 
 export interface LandingViewProps {
     computer?: ComputerInfo;
+    /** how many panels the computer has, once listed */
+    panelCount?: number;
 }
 
 // The splash shown on launch (and whenever a tab is closed back to the
@@ -15,7 +17,11 @@ const LandingView: Component<LandingViewProps> = (props) => {
             <PaperEmptyState
                 icon="computer"
                 title={props.computer?.name || "This Computer"}
-                description="Choose a panel from the sidebar, or find more in the Panel Library."
+                description={
+                    props.panelCount === 0
+                        ? "No panels yet. Find some in the Panel Library."
+                        : "Choose a panel from the sidebar, or find more in the Panel Library."
+                }
             />
         </PaperFlex>
     );

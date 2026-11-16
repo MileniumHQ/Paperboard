@@ -11,7 +11,6 @@ import googleDriveLogo from "../../assets/providers/google-drive.svg";
 export interface ProviderField {
     key: string;
     label: string;
-    placeholder?: string;
     secret?: boolean;
 }
 
@@ -79,11 +78,11 @@ export const BACKUP_PROVIDERS: readonly BackupProvider[] = [
         name: "S3 bucket",
         description: "Save backups to Amazon S3, R2, B2 or your own MinIO",
         fields: [
-            { key: "label", label: "Name", placeholder: "Offsite bucket" },
-            { key: "endpoint", label: "Server address", placeholder: "https://s3.us-east-1.amazonaws.com" },
-            { key: "region", label: "Region", placeholder: "us-east-1" },
-            { key: "bucket", label: "Bucket name", placeholder: "my-backups" },
-            { key: "prefix", label: "Folder (optional)", placeholder: "paperboard" },
+            { key: "label", label: "Name" },
+            { key: "endpoint", label: "Server address" },
+            { key: "region", label: "Region" },
+            { key: "bucket", label: "Bucket name" },
+            { key: "prefix", label: "Folder (optional)" },
             { key: "accessKeyId", label: "Access key ID" },
             { key: "secretAccessKey", label: "Secret access key", secret: true },
         ],

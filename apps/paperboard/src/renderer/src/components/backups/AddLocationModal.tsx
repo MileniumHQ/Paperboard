@@ -114,7 +114,6 @@ const AddLocationModal: Component<{
                         <PaperInput
                             fullWidth
                             label={field.label}
-                            placeholder={field.placeholder}
                             type={field.secret ? "password" : "text"}
                             autocomplete="off"
                             disabled={busy()}
