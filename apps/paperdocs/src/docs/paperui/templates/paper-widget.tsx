@@ -172,7 +172,7 @@ export function Widget() {
             <PaperText preset="subheader" as="h3" id="rows-props">PaperWidgetRows</PaperText>
             <PaperText preset="body" as="p">
                 A list of rows, each a status dot, a label, and a detail. It extends <PaperCode>JSX.HTMLAttributes&lt;HTMLUListElement&gt;</PaperCode> without <PaperCode>children</PaperCode>.
-                Rows that do not fit the tile are left out whole, never cut in half.
+                Rows that do not fit the tile are left out whole, never cut in half, and a last line says how many are left out, such as <PaperCode>+2 more</PaperCode>.
             </PaperText>
             <PaperTable>
                 <thead>

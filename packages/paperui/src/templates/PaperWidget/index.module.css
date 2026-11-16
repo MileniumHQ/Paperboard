@@ -245,8 +245,9 @@
     flex: 1 1 0;
 }
 
-/* ── rows ── a row that doesn't fit wraps into a clipped second column,
-   so the list shows whole rows only */
+/* ── rows ── rows that don't fit are hidden whole (PaperWidgetRows counts
+   them); until then, a row that doesn't fit wraps into a clipped second
+   column, so the list shows whole rows only */
 
 .rows {
     flex: 1;
@@ -269,6 +270,19 @@
 .row {
     width: 100%;
     flex-shrink: 0;
+}
+
+/* a row left out for want of room, and the line saying how many are */
+.rows > [hidden] {
+    display: none;
+}
+
+/* one line of the list's type tall, which PaperWidgetRows leaves room for */
+.more {
+    width: 100%;
+    flex-shrink: 0;
+    line-height: 1;
+    color: var(--paper-text-subtle);
 }
 
 .rowInner {

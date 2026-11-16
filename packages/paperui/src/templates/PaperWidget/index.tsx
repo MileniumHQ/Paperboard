@@ -1,5 +1,5 @@
 import styles from "./index.module.css";
-import { For, Show, children, createMemo, onCleanup, onMount, splitProps, type JSX, type ParentProps } from "solid-js";
+import { For, Show, children, createEffect, createMemo, createSignal, on, onCleanup, onMount, splitProps, type JSX, type ParentProps } from "solid-js";
 import { PaperIcon } from "../../components/PaperIcon";
 import { PaperProgress } from "../../components/PaperProgress";
 import type { PaperRole } from "../../types";
@@ -225,9 +225,9 @@ export interface PaperWidgetRowsProps extends Omit<JSX.HTMLAttributes<HTMLUListE
 
 /**
  * A list of rows: dot, label, detail. Rows that don't fit the tile are
- * left out whole, never cut in half. A row is its id: a new rows array
- * (a poll's) keeps the element of every id it still has and updates what
- * it shows.
+ * left out whole, never cut in half, and a last line says how many are
+ * left out ("+2 more"). A row is its id: a new rows array (a poll's) keeps
+ * the element of every id it still has and updates what it shows.
  */
 export function PaperWidgetRows(props: PaperWidgetRowsProps) {
     const [local, rest] = splitProps(props, ["rows", "class"]);
@@ -240,8 +240,38 @@ export function PaperWidgetRows(props: PaperWidgetRowsProps) {
         return rows;
     });
     const ids = createMemo(() => [...byId().keys()]);
+    // how many rows are left out for want of room; the rows stay mounted
+    const [leftOut, setLeftOut] = createSignal(0);
+    let list: HTMLUListElement | undefined;
+    // as many whole rows as fit, and under them the line saying how many
+    // don't: one line of the list's own type tall (.more)
+    const fit = () => {
+        if (!list) return;
+        const rows = Array.from(list.children).filter((el): el is HTMLElement => el instanceof HTMLElement && !el.classList.contains(styles.more!));
+        for (const row of rows) row.hidden = false;
+        const room = list.clientHeight;
+        const heights = rows.map((row) => row.offsetHeight);
+        if (heights.reduce((sum, h) => sum + h, 0) <= room) return setLeftOut(0);
+        let used = parseFloat(getComputedStyle(list).fontSize);
+        let shown = 0;
+        while (shown < rows.length && used + heights[shown]! <= room) used += heights[shown++]!;
+        rows.forEach((row, i) => (row.hidden = i >= shown));
+        setLeftOut(rows.length - shown);
+    };
+    onMount(() => {
+        if (!list || typeof ResizeObserver === "undefined") return;
+        const resized = new ResizeObserver(fit);
+        resized.observe(list);
+        document.fonts?.addEventListener("loadingdone", fit);
+        onCleanup(() => {
+            resized.disconnect();
+            document.fonts?.removeEventListener("loadingdone", fit);
+        });
+    });
+    // effects run once the rows are in the page
+    createEffect(on(ids, fit, { defer: true }));
     return (
-        <ul {...rest} class={cx(styles.rows, local.class)}>
+        <ul {...rest} ref={list} class={cx(styles.rows, local.class)}>
             <For each={ids()}>
                 {(id) => {
                     // a removed id's row is disposed right after this update;
@@ -271,6 +301,9 @@ export function PaperWidgetRows(props: PaperWidgetRowsProps) {
                     );
                 }}
             </For>
+            <Show when={leftOut() > 0}>
+                <li class={styles.more}>+{leftOut()} more</li>
+            </Show>
         </ul>
     );
 }
