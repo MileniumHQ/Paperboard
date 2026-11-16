@@ -2,7 +2,6 @@
 // component and no CSS: a read or an action helper shows a failure from
 // here, and code a test runs outside a browser can too. PaperToastRegion
 // (components/PaperToast) draws them.
-import { createEffect, createMemo, getOwner, on, onCleanup, untrack, type Accessor } from "solid-js";
 import { createStore } from "solid-js/store";
 import { errorMessage } from "./errorMessage";
 
@@ -176,76 +175,4 @@ function clearTimer(id: string): void {
     const timer = timers.get(id)?.timer;
     if (timer) clearTimeout(timer);
     timers.delete(id);
-}
-
-/** @deprecated with createFailureToast: use PaperError. */
-export interface FailureToastOptions {
-    /** What failed, as a toast's title: "Couldn't load the worlds". */
-    title: string;
-    /**
-     * A button that repeats one the view shows itself, such as Try again.
-     * Never the only way to it: a closed toast takes its button away.
-     */
-    action?: PaperToastAction;
-}
-
-let nextFailure = 0;
-
-/**
- * @deprecated A failure that stands is said where it happens, with
- * PaperError: `<Show when={failure()}>{(err) => <PaperError title="…" error={err()} />}</Show>`.
- * A toast goes by itself, so it can't hold a failure that stays.
- *
- * A standing failure, said as a danger toast: while `failure` gives
- * something (an Error, a string, whatever was caught) the toast shows it in
- * words (its first line, and the rest under Details), the newest in place, and it closes when it clears to `null`,
- * `undefined`, `false` or "". A toast the person closed stays closed until
- * the failure's words change, or it clears and comes back.
- *
- * Call it in a component, which owns it: the toast closes with it.
- */
-export function createFailureToast(failure: Accessor<unknown>, options: FailureToastOptions): void {
-    const key = `failure-${++nextFailure}`;
-    // the toast showing, and the words the person closed it on
-    let shown: string | null = null;
-    let closed: string | null = null;
-
-    const close = () => {
-        const id = shown;
-        shown = null;
-        if (id) dismissToast(id);
-    };
-
-    // in words, and the same words are no change
-    const reason = createMemo(() => {
-        const now = failure();
-        return now === null || now === undefined || now === false || now === "" ? null : errorMessage(now);
-    });
-
-    createEffect(
-        on(reason, (words) => {
-            if (words === null) {
-                closed = null;
-                close();
-                return;
-            }
-            if (words === closed) return;
-            closed = null;
-            shown = showToast({ key, variant: "danger", title: options.title, ...failureWords(words), action: options.action });
-        }),
-    );
-
-    // gone while the failure stands: the person closed it (or its button)
-    createEffect(
-        on(
-            () => toasts.map((toast) => toast.id).join(" "),
-            () => {
-                if (shown === null || toasts.some((toast) => toast.id === shown)) return;
-                shown = null;
-                closed = untrack(reason);
-            },
-        ),
-    );
-
-    if (getOwner()) onCleanup(close);
 }

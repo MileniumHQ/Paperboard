@@ -32,8 +32,6 @@ interface ReadOptions<T, S> {
     follow?: (land: (change: ReadChange<T>) => void) => () => void;
     /** a failure's words, as the view shows them (default its own message) */
     message?: (err: unknown) => string;
-    /** deprecated: a failed read is a PaperError in place */
-    failure?: { title: string; retry?: boolean };
 }
 
 interface Read<T> {
@@ -89,7 +87,6 @@ const tryAgain = () => ({ label: "Try again", disabled: worlds.loading(), onClic
                 <li>An answer is reconciled into what was there, so every row of a list keeps its identity and only what changed in it redraws. Items are matched by <PaperCode>key</PaperCode>, and items without it by position.</li>
                 <li>A failure keeps the value that was there, and <PaperCode>error()</PaperCode> says why until the next answer lands.</li>
                 <li>A failed read stands until a read goes through, so it is said in place with <PaperLink href="/docs/paperui/papererror/">PaperError</PaperLink>, never a toast. With no data, the error fills the view, never a blank body. Old data stays on screen, and an inline PaperError above it says the reload failed. Its Try again calls <PaperCode>reload</PaperCode>.</li>
-                <li>The <PaperCode>failure</PaperCode> option is deprecated. It still says a failed read as a danger toast (see <PaperLink href="/docs/paperui/papertoast/#create-failure-toast">createFailureToast</PaperLink>) while panels move to PaperError, but a toast goes by itself and the failure doesn't.</li>
                 <li><PaperCode>loading()</PaperCode> is true while a read is out, the first one and every reload. A view that keeps its rows on screen during a reload shows the loader only while <PaperCode>value()</PaperCode> is undefined.</li>
                 <li>A push (through <PaperCode>follow</PaperCode>) and a <PaperCode>set</PaperCode> are changes newer than any read still out. A whole value lands like an answer and drops that read: the list a remove answered with, or the state a service pushed. <PaperCode>set(undefined)</PaperCode> forgets the value, as before the first read: a view whose data went away.</li>
                 <li>A function changes the part it knows, such as a row taken out after it went, or a progress line pushed while the list is read. It applies at once, and again to the answer of the read still out, so that answer can't bring back what it changed.</li>

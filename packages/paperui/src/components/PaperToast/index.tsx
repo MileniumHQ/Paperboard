@@ -10,11 +10,9 @@ import { cx } from "../../utils/cx";
 import { dismissToast, pauseToast, resumeToast, shownToasts, stopToastTimers, type PaperToastVariant, type ToastEntry } from "../../utils/toasts";
 
 export {
-    createFailureToast,
     dismissToast,
     showError,
     showToast,
-    type FailureToastOptions,
     type ShowErrorOptions,
     type PaperToastAction,
     type PaperToastOptions,

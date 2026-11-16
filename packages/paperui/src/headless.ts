@@ -11,11 +11,9 @@ export * from "./utils/keepUnchanged";
 export * from "./utils/savedValue";
 export * from "./utils/haptics";
 export {
-    createFailureToast,
     dismissToast,
     showError,
     showToast,
-    type FailureToastOptions,
     type ShowErrorOptions,
     type PaperToastAction,
     type PaperToastOptions,

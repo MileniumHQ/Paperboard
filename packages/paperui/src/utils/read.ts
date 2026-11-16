@@ -1,7 +1,6 @@
 import { batch, createComputed, createMemo, createSignal, getOwner, on, onCleanup, untrack, type Accessor } from "solid-js";
 import { createStore, reconcile } from "solid-js/store";
 import { errorMessage } from "./errorMessage";
-import { createFailureToast } from "./toasts";
 
 /** Nothing to read: a source that is off. */
 type Off = false | null | undefined;
@@ -36,16 +35,6 @@ export interface ReadOptions<T, S> {
     follow?: (land: (change: ReadChange<T>) => void) => () => void;
     /** A failure's words, as the view shows them (default its own message). */
     message?: (err: unknown) => string;
-    /**
-     * @deprecated A failed read stands until a read goes through, so it is
-     * said in place: `<Show when={read.error()}>{(err) => <PaperError title="…" error={err()} action={{ label: "Try again", onClick: () => void read.reload() }} />}</Show>`.
-     *
-     * Says a failed read as a danger toast (see createFailureToast): its
-     * title is what failed, its message the failure's words. It closes
-     * while a read is out and comes back if that one fails too. `retry`
-     * gives it a Try again button, repeating the view's own.
-     */
-    failure?: { title: string; retry?: boolean };
 }
 
 export interface Read<T> {
@@ -166,14 +155,6 @@ export function createRead<T, S = true>(fetcher: (source: S) => Promise<T>, opti
         const now = untrack(source);
         return off(now) ? Promise.resolve() : start(now);
     };
-
-    if (options.failure) {
-        const { title, retry } = options.failure;
-        createFailureToast(() => (loading() ? null : error()), {
-            title,
-            action: retry ? { label: "Try again", onClick: () => void reload() } : undefined,
-        });
-    }
 
     return {
         value: () => state.value as T | undefined,

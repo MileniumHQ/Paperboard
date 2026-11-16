@@ -59,23 +59,6 @@ const save = () => service.calls.saveServer(draft()).catch((err) => showError("C
                 <li>It goes after 10 seconds, like every danger toast.</li>
             </PaperTextList>
 
-            <PaperText preset="subheader" as="h2" id="create-failure-toast">createFailureToast (deprecated)</PaperText>
-            <PaperText preset="body" as="p">
-                Deprecated: a failure that stands is a <PaperLink href="/docs/paperui/papererror/">PaperError</PaperLink> in place. A toast goes by itself, so it can't hold a failure that stays. It still works while panels move off it.
-            </PaperText>
-            <PaperCode block language="tsx">
-{`createFailureToast(failure: Accessor<unknown>, options: { title: string; action?: { label: string; onClick: () => void } }): void;
-
-const [saveError, setSaveError] = createSignal<unknown>(null);
-createFailureToast(saveError, { title: "Couldn't save the settings" });`}
-            </PaperCode>
-            <PaperTextList>
-                <li>A standing failure. While <PaperCode>failure()</PaperCode> gives something (an Error, a string, whatever was caught), a danger toast shows it in words (its first line, and the rest under Details), and newer words land in the same toast. It closes when the failure clears to <PaperCode>null</PaperCode>, <PaperCode>undefined</PaperCode>, <PaperCode>false</PaperCode> or <PaperCode>""</PaperCode>.</li>
-                <li>A toast the person closed stays closed until the failure's words change, or it clears and comes back.</li>
-                <li>Call it where a component is created. The toast closes with the component.</li>
-                <li>A read's failure needs none of this: give <PaperLink href="/docs/paperui/state/#create-read">createRead</PaperLink> its <PaperCode>failure</PaperCode> option.</li>
-            </PaperTextList>
-
             <PaperText preset="subheader" as="h2" id="api">showToast</PaperText>
             <PaperText preset="body" as="p">
                 <PaperCode>showToast(options)</PaperCode> shows any toast and returns its id. <PaperCode>dismissToast(id)</PaperCode> closes it early.

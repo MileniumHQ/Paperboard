@@ -3,14 +3,13 @@
 // stylesheet, one scenario per page load: `?s=<scenario>`. A scenario puts
 // what the test needs to read or drive on `window.t`.
 import "@mileniumhq/paperui/style.css";
-import { createSignal, For, Match, Show, Switch, type JSX } from "solid-js";
+import { createSignal, For, Show, type JSX } from "solid-js";
 import { render } from "solid-js/web";
 import {
     PaperAudio,
     PaperBadge,
     PaperButton,
     PaperConsole,
-    PaperEmptyState,
     PaperError,
     PaperContextMenu,
     PaperContextMenuHeader,
@@ -39,7 +38,6 @@ import {
     PaperText,
     PaperToggle,
     createPaperCompact,
-    createRead,
     createPolling,
     showError,
     showToast,
@@ -272,41 +270,6 @@ const scenarios: Record<string, () => JSX.Element> = {
                 <span id="name-hint">Shown in the server list</span>
             </div>
         ));
-    },
-
-    failedRead() {
-        let fails = true;
-        const t = (window.t = { reads: 0, answer: () => (fails = false) });
-        return shell(() => {
-            const read = createRead(
-                async () => {
-                    t.reads++;
-                    if (fails) throw new Error("The server didn't answer: it may be offline");
-                    return ["Survival", "Creative"];
-                },
-                { failure: { title: "Couldn't load the worlds" } },
-            );
-            return (
-                <PaperPanel>
-                    <Switch>
-                        <Match when={read.value()}>
-                            {(worlds) => (
-                                <PaperList id="worlds" name="worlds" selectable={false}>
-                                    <For each={worlds()}>{(world) => <PaperListItem value={world}>{world}</PaperListItem>}</For>
-                                </PaperList>
-                            )}
-                        </Match>
-                        <Match when={read.error()}>
-                            <PaperEmptyState id="failed" icon="error" title="Couldn't load">
-                                <PaperButton disabled={read.loading()} onClick={() => void read.reload()}>
-                                    Try again
-                                </PaperButton>
-                            </PaperEmptyState>
-                        </Match>
-                    </Switch>
-                </PaperPanel>
-            );
-        });
     },
 
     listActions() {
