@@ -2,17 +2,18 @@
 // and Open, which puts it beside the chat. It is never a link.
 
 import { Show } from "solid-js";
-import { PaperButton, PaperCard, PaperFlex, PaperIcon, PaperQuote, PaperText, createAction } from "@mileniumhq/paperui";
+import { PaperButton, PaperCard, PaperFlex, PaperIcon, PaperText, createAction } from "@mileniumhq/paperui";
 import type { PageEntry } from "../contract";
 import type { Launcher } from "./launcher";
+import { toastFailure } from "../lib/toastFailure";
 import Picture from "./Picture";
 import styles from "./PageCard.module.css";
 
 export default function PageCard(props: { entry: PageEntry; pages: Launcher }) {
     const e = () => props.entry;
     const there = () => props.pages.exists(e().app);
-    const { busy, error, setError, run } = createAction();
-    const open = () => void run("Page not opened", () => props.pages.open(e().app));
+    const { busy, run } = createAction();
+    const open = () => void run("Couldn't open the page", () => props.pages.open(e().app), toastFailure);
 
     return (
         <PaperFlex direction="row">
@@ -37,27 +38,14 @@ export default function PageCard(props: { entry: PageEntry; pages: Launcher }) {
                         </PaperButton>
                     </Show>
                 </PaperFlex>
-                {/* the pages were never read: whether this one is still there isn't known, and the card says why */}
+                {/* the pages were never read: whether this one is still there isn't known (the toast says why) */}
                 <Show when={props.pages.list() === null && props.pages.listError()}>
-                    {(why) => (
-                        <>
-                            <PaperQuote variant="danger" icon="error" title="The pages can't be read" role="alert">
-                                {why()}
-                            </PaperQuote>
-                            <PaperFlex direction="row">
-                                <PaperButton size="small" onClick={() => props.pages.reload()}>
-                                    Try again
-                                </PaperButton>
-                            </PaperFlex>
-                        </>
-                    )}
-                </Show>
-                <Show when={error()}>
-                    {(shown) => (
-                        <PaperQuote variant="danger" icon="error" title={shown().title} role="alert" onDismiss={() => setError(null)}>
-                            {shown().message}
-                        </PaperQuote>
-                    )}
+                    <PaperFlex direction="row" align="center" gap="half" wrap>
+                        <PaperText preset="hint">Couldn't check that it's still there.</PaperText>
+                        <PaperButton size="small" onClick={() => props.pages.reload()}>
+                            Try again
+                        </PaperButton>
+                    </PaperFlex>
                 </Show>
             </PaperCard>
         </PaperFlex>

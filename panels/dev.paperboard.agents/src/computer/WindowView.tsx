@@ -5,7 +5,7 @@
 // takes control of the computer first (onUse), and the input follows.
 
 import { Show, createEffect, createSignal, on, onCleanup } from "solid-js";
-import { PaperButton, PaperEmptyState, PaperFlex, PaperIcon, PaperInput, PaperLoader, PaperQuote, PaperText, createPaperMobile, type ActionFailure } from "@mileniumhq/paperui";
+import { PaperButton, PaperEmptyState, PaperFlex, PaperIcon, PaperInput, PaperLoader, PaperText, createPaperMobile, showError } from "@mileniumhq/paperui";
 import { errorMessage } from "@mileniumhq/paperapi";
 import type { ComputerWindow, InputEvent, PageDialog } from "../contract";
 import type { Agent } from "../lib/agent";
@@ -31,7 +31,6 @@ export function WindowView(props: {
     const [src, setSrc] = createSignal<string | null>(null);
     const [size, setSize] = createSignal({ width: props.window.width, height: props.window.height });
     const [error, setError] = createSignal<string | null>(null);
-    const [inputError, setInputError] = createSignal<ActionFailure | null>(null);
     const [dialog, setDialog] = createSignal<PageDialog | null>(null);
     let img: HTMLImageElement | undefined;
     let hash: string | null = null;
@@ -90,7 +89,7 @@ export function WindowView(props: {
     const send = (ev: InputEvent, takes = false) => {
         if (!props.holding && !takes) return;
         if (!enqueue(pending, ev)) {
-            setInputError({ title: "Input dropped", message: "Too much input at once; some of it didn't reach the window." });
+            showError("Couldn't send all the input", "Too much input at once; some of it didn't reach the window.");
             return;
         }
         void flush();
@@ -104,12 +103,11 @@ export function WindowView(props: {
                 const batch = pending;
                 pending = [];
                 await props.agent.calls.input({ window: props.window.id, events: batch });
-                setInputError(null);
                 wake?.(); // show what it did without waiting out the nap
             }
         } catch (e) {
             pending = [];
-            setInputError({ title: "Input not sent", message: errorMessage(e) });
+            showError("Couldn't send the input", e);
         } finally {
             sending = false;
         }
@@ -150,10 +148,9 @@ export function WindowView(props: {
             await props.onUse();
             await props.agent.calls.go({ window: props.window.id, to });
             setAddress(null);
-            setInputError(null);
             wake?.();
         } catch (e) {
-            setInputError({ title: "Page not opened", message: errorMessage(e) });
+            showError("Couldn't open the page", e);
         }
     };
     const [answer, setAnswer] = createSignal("");
@@ -342,15 +339,6 @@ export function WindowView(props: {
                 onInput={(e) => !e.isComposing && readKeys()}
                 onCompositionEnd={readKeys}
             />
-            <Show when={inputError()}>
-                {(shown) => (
-                    <PaperFlex paddingX="full" paddingY="half">
-                        <PaperQuote variant="danger" icon="error" title={shown().title} role="alert" onDismiss={() => setInputError(null)}>
-                            {shown().message}
-                        </PaperQuote>
-                    </PaperFlex>
-                )}
-            </Show>
         </div>
     );
 }

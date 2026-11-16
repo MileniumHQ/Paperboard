@@ -5,16 +5,19 @@
 // pasted. Shown on the Tools page and on the sign-in card in the chat.
 
 import { Show, createSignal } from "solid-js";
-import { PaperButton, PaperCopyButton, PaperFlex, PaperIcon, PaperInput, PaperLoader, PaperQuote, PaperText, createAction } from "@mileniumhq/paperui";
+import { PaperButton, PaperCopyButton, PaperFlex, PaperIcon, PaperInput, PaperLoader, PaperQuote, PaperText, createAction, createFailureToast } from "@mileniumhq/paperui";
 import { createLoopbackCatch } from "../lib/loopback";
 import { submitOnPaste } from "../lib/paste";
+import { toastFailure } from "../lib/toastFailure";
 import type { Tools } from "./api";
 
 export default function SignInSteps(props: { tools: Tools; name: string }) {
     const pending = () => props.tools.view()?.signIns[props.name] ?? null;
     const [address, setAddress] = createSignal("");
-    const { busy, error, run: act } = createAction();
-    const run = (fn: () => Promise<unknown>) => act("Not signed in", fn);
+    const { busy, run: act } = createAction();
+    const run = (fn: () => Promise<unknown>) => act(`Couldn't sign in to ${props.name}`, fn, toastFailure);
+    // a sign-in that stopped says why for as long as it stands; Start again is here
+    createFailureToast(() => pending()?.error, { title: `Couldn't sign in to ${props.name}` });
     const forward = createLoopbackCatch(
         () => pending()?.callback ?? null,
         (url) => run(() => props.tools.finishSignIn(props.name, url)),
@@ -37,9 +40,7 @@ export default function SignInSteps(props: { tools: Tools; name: string }) {
                         when={!p().error}
                         fallback={
                             <PaperFlex gap="half">
-                                <PaperQuote variant="danger" icon="error" title="Not signed in" role="alert">
-                                    {p().error}
-                                </PaperQuote>
+                                <PaperText preset="body">The sign-in to {props.name} stopped.</PaperText>
                                 <PaperFlex direction="row" gap="half" align="center" wrap>
                                     <PaperButton variant="primary" disabled={busy()} onClick={() => void run(() => props.tools.signIn(props.name))}>
                                         <PaperIcon>refresh</PaperIcon> Start again
@@ -66,6 +67,13 @@ export default function SignInSteps(props: { tools: Tools; name: string }) {
                             fallback={<PaperLoader loaderStatus="indeterminate" label="Waiting for you to sign in" />}
                         >
                             <Show when={!busy()} fallback={<PaperLoader loaderStatus="indeterminate" label="Finishing the sign-in" />}>
+                                <Show when={forward.error()}>
+                                    {(why) => (
+                                        <PaperQuote variant="warning" icon="warning" title="Your browser can't come back here by itself">
+                                            {why()}
+                                        </PaperQuote>
+                                    )}
+                                </Show>
                                 <PaperInput
                                     fullWidth
                                     label="Address"
@@ -79,13 +87,6 @@ export default function SignInSteps(props: { tools: Tools; name: string }) {
                                 <PaperText preset="hint">If the page you end on doesn't load, copy its address and paste it here.</PaperText>
                             </Show>
                         </Show>
-                    </Show>
-                    <Show when={error()?.message ?? forward.error()}>
-                        {(why) => (
-                            <PaperQuote variant="danger" icon="error" title="Not signed in" role="alert">
-                                {why()}
-                            </PaperQuote>
-                        )}
                     </Show>
                 </PaperFlex>
             )}

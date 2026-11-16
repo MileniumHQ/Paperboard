@@ -2,7 +2,7 @@
 // from the service's state.
 
 import { Index, Show } from "solid-js";
-import { formatByteProgress, PaperFlex, PaperLoader, PaperLoaderGroup, PaperQuote, type LoaderStatus } from "@mileniumhq/paperui";
+import { formatByteProgress, PaperFlex, PaperLoader, PaperLoaderGroup, PaperQuote, createFailureToast, type LoaderStatus } from "@mileniumhq/paperui";
 import { type ComputerState, type SetupStepId, type StepStatus } from "../contract";
 
 const LABELS: Record<SetupStepId, string> = {
@@ -31,8 +31,9 @@ const rows = (c: ComputerState) =>
         percent: s.percent,
     }));
 
-/** The setup's steps as the service reports them, and its error when it stopped. */
+/** The setup's steps as the service reports them. A setup that stopped says why in a toast; a machine with no computer says so here. */
 export function SetupProgress(props: { computer: ComputerState }) {
+    createFailureToast(() => props.computer.phase === "failed" && props.computer.error, { title: "Couldn't set up the computer" });
     return (
         <PaperFlex gap="full">
             <PaperLoaderGroup>
@@ -42,13 +43,8 @@ export function SetupProgress(props: { computer: ComputerState }) {
                     {(row) => <PaperLoader percent={row().percent ?? 0} loaderStatus={loaderStatus(row())} label={row().label} subtitle={row().subtitle} />}
                 </Index>
             </PaperLoaderGroup>
-            <Show when={props.computer.phase === "failed" || props.computer.phase === "unsupported"}>
-                <PaperQuote
-                    variant="danger"
-                    icon="error"
-                    title={props.computer.phase === "unsupported" ? "No computer on this machine" : "Setup stopped"}
-                    role="alert"
-                >
+            <Show when={props.computer.phase === "unsupported"}>
+                <PaperQuote variant="warning" icon="desktop_access_disabled" title="No computer on this machine">
                     {props.computer.error}
                 </PaperQuote>
             </Show>

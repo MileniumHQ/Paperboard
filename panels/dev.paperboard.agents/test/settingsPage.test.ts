@@ -26,9 +26,8 @@ async function settingsPage(o: BootOptions): Promise<Page> {
 
 const NAME = `document.querySelector('[role=region][aria-label="Agent"] input[name="name"]')`;
 const FLOWS = `document.querySelector('[role=region][aria-label="Flows"] textarea')`;
-/** the alert in a region of the settings whose text includes `title` */
-const alertIn = (region: string, title: string) =>
-    `[...document.querySelectorAll('[role=region][aria-label="${region}"] [role=alert]')].find((a) => a.innerText.includes(${JSON.stringify(title)}))`;
+/** the failure toast whose text includes `title` */
+const toast = (title: string) => `[...document.querySelectorAll("[data-paper-toasts] [role=alert]")].find((a) => a.innerText.includes(${JSON.stringify(title)}))`;
 
 /** Puts `text` in a field and leaves it, as typing it and moving on would: one input, then the change. */
 const fill = (field: string, text: string) => `(() => {
@@ -44,12 +43,12 @@ describe("a save the service refuses", () => {
         // Codex is on the computer but not set up, so the service refuses every save
         const page = await settingsPage({ codexOnPath: { signedIn: true } });
         await page.evaluate(fill(NAME, "Grace"));
-        await page.waitFor(alertIn("Agent", "Name not saved"), "the name's refusal");
-        expect(await page.evaluate(`${alertIn("Agent", "Name not saved")}.innerText`)).toContain("Codex isn't ready");
+        await page.waitFor(toast("Couldn't save the name"), "the name's refusal");
+        expect(await page.evaluate(`${toast("Couldn't save the name")}.innerText`)).toContain("Codex isn't ready");
         expect(await page.evaluate(`${NAME}.value`)).toBe("Grace");
 
         await page.evaluate(fill(FLOWS, "Reply with just the answer."));
-        await page.waitFor(alertIn("Flows", "Instructions not saved"), "the instructions' refusal");
+        await page.waitFor(toast("Couldn't save the instructions"), "the instructions' refusal");
         expect(await page.evaluate(`${FLOWS}.value`)).toBe("Reply with just the answer.");
         await page.settled();
         // nothing was saved
@@ -70,7 +69,7 @@ describe("a pick", () => {
             return ${COMPACTION}.value;
         })()`);
         expect(shown).toBe("forget");
-        await page.waitFor(alertIn("Conversation", "Compaction not changed"), "the compaction's refusal");
+        await page.waitFor(toast("Couldn't change the compaction"), "the compaction's refusal");
         await page.waitFor(`${COMPACTION}.value === "summarize"`, "the saved compaction back");
         expect(panel!.savedSettings()).toEqual(SETTINGS);
         expect(page.exceptions).toEqual([]);
@@ -80,13 +79,13 @@ describe("a pick", () => {
 describe("the models", () => {
     test("are listed again once the brain is set up, and the error that it wasn't goes", async () => {
         const page = await settingsPage({ codexOnPath: { signedIn: true, plan: MODELS } });
-        await page.waitFor(alertIn("Agent", "Models not listed"), "the models not to be listed");
-        expect(await page.evaluate(`${alertIn("Agent", "Models not listed")}.innerText`)).toContain("Codex isn't installed");
+        await page.waitFor(toast("Couldn't list the models"), "the models not to be listed");
+        expect(await page.evaluate(`${toast("Couldn't list the models")}.innerText`)).toContain("Codex isn't installed");
         // Brains: run the Codex that is on this computer
         await page.waitFor(`[...document.querySelectorAll("button")].some((b) => b.innerText.trim().endsWith("Use it"))`, "Codex to be found on this computer");
         await page.evaluate(`[...document.querySelectorAll("button")].find((b) => b.innerText.trim().endsWith("Use it")).dataset.testUse = "1"`);
         await page.click(`button[data-test-use]`);
-        await page.waitFor(`document.querySelector('[role=region][aria-label="Agent"] input[name="model"]') && !${alertIn("Agent", "Models not listed")}`, "the models to be listed");
+        await page.waitFor(`document.querySelector('[role=region][aria-label="Agent"] input[name="model"]') && !${toast("Couldn't list the models")}`, "the models to be listed");
         await page.click(`[role=region][aria-label="Agent"] input[name="model"] ~ button[aria-haspopup=listbox]`);
         await page.waitFor(`[...document.querySelectorAll("[role=option]")].some((o) => o.innerText.includes("GPT X"))`, "Codex's model in the list");
         expect(page.exceptions).toEqual([]);

@@ -1,17 +1,18 @@
 import { For, Index, Match, Show, Switch, createEffect, createSignal, on, onCleanup, onMount, type JSX } from "solid-js";
 import {
     PaperButton,
+    PaperEmptyState,
     PaperFlex,
     PaperInput,
     PaperCard,
     PaperPresence,
-    PaperQuote,
     PaperSectionHeader,
     PaperSelector,
     PaperSelectorItem,
     PaperWizard,
     PaperText,
     PaperWizardStep,
+    createFailureToast,
     useWizard,
 } from "@mileniumhq/paperui";
 import { errorMessage } from "@mileniumhq/paperapi";
@@ -162,6 +163,12 @@ function Scenes(props: {
     wizard.setCurrentStep(Math.min(props.keptStep, STEP.computer));
     const name = () => props.name().trim();
     const machine = () => props.agent.state.computer;
+    // "Not yet" saves on Finish, which the toast sits over: its Try again finishes too. Setting up saves first, and its step keeps a Try again.
+    createFailureToast(() => props.computer() === "later" && props.saveError(), {
+        title: "Couldn't save the settings",
+        action: { label: "Try again", onClick: () => void props.save().then((saved) => saved && props.onDone()) },
+    });
+    createFailureToast(() => props.computer() === "setup" && props.saveError(), { title: "Couldn't start the setup", action: { label: "Try again", onClick: () => void props.save() } });
 
     // what the scene shows besides the speech, once the speech is done
     const [revealed, setRevealed] = createSignal(false);
@@ -193,6 +200,7 @@ function Scenes(props: {
 
     // the chosen brain's own models; a model belongs to its harness, so another brain is chosen afresh
     const models = createModels(props.agent, () => (brainReady() ? props.harness() : undefined));
+    createFailureToast(models.error, { title: "Couldn't list the models" });
     createEffect(
         on(
             props.harness,
@@ -296,6 +304,7 @@ function Scenes(props: {
     // leaving the panel part way doesn't start the meeting over; the newest
     // answer's failure is the one shown
     const [keepError, setKeepError] = createSignal<string | null>(null);
+    createFailureToast(keepError, { title: "Couldn't keep your answers so far" });
     let keeping = 0;
     createEffect(
         on(
@@ -389,7 +398,7 @@ function Scenes(props: {
                                         <PaperText preset="hint">{brainLine(h(), brain()!)}</PaperText>
                                     </Show>
                                     {/* only while there's something to show: an empty one would still take a gap */}
-                                    <Show when={brain()?.phase !== "ready" && brain()?.phase !== "installed" || actions.error(h())}>
+                                    <Show when={brain()?.phase !== "ready" && brain()?.phase !== "installed" && brain()?.phase !== "failed"}>
                                         <BrainStatus agent={props.agent} harness={h()} actions={actions} />
                                     </Show>
                                     <Show when={!["installing", "signing-in", "unsupported"].includes(brain()?.phase ?? "")}>
@@ -421,9 +430,7 @@ function Scenes(props: {
                         </For>
                     </PaperSelector>
                     <Show when={models.error()}>
-                        <PaperQuote variant="danger" icon="error" title="Models not listed" role="alert">
-                            {models.error()!.replace(/[.\s]+$/, "")}. You can pick one later in settings.
-                        </PaperQuote>
+                        <PaperText preset="hint">You can pick one later in settings.</PaperText>
                     </Show>
                 </Reveal>
             </PaperWizardStep>
@@ -450,23 +457,17 @@ function Scenes(props: {
 
             {/* always there, so the computer's step is never taken for the last one before it's answered */}
             <PaperWizardStep class={styles.step} index={STEP.last} canProceed={ready()}>
-                <Show when={props.computer() === "later" && props.saveError()}>
-                    <PaperQuote variant="danger" icon="error" title="Settings not saved" role="alert">
-                        {props.saveError()}
-                    </PaperQuote>
-                </Show>
                 <Show when={props.computer() === "setup"}>
                     <Show when={revealed()}>
                         <div class={styles.install}>
                             <PaperSectionHeader title={`Setting up ${name()}'s computer`} role="heading" aria-level={2} />
                             <Switch>
                                 <Match when={props.saveError()}>
-                                    <PaperQuote variant="danger" icon="error" title="Setup not started" role="alert">
-                                        {props.saveError()}
-                                    </PaperQuote>
-                                    <PaperButton disabled={props.saving()} onClick={() => void props.save()}>
-                                        Try again
-                                    </PaperButton>
+                                    <PaperEmptyState icon="error" title="Couldn't start">
+                                        <PaperButton disabled={props.saving()} onClick={() => void props.save()}>
+                                            Try again
+                                        </PaperButton>
+                                    </PaperEmptyState>
                                 </Match>
                                 <Match when={true}>
                                     <SetupProgress computer={machine()} />
@@ -488,11 +489,6 @@ function Scenes(props: {
                     </Show>
                 </Show>
             </PaperWizardStep>
-            <Show when={keepError()}>
-                <PaperQuote variant="danger" icon="error" title="Your answers so far aren't kept" role="alert">
-                    {keepError()}
-                </PaperQuote>
-            </Show>
             <div class={styles.below} />
             <Providers agent={props.agent} open={providers()} onClose={() => setProviders(false)} />
         </div>

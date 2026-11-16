@@ -14,15 +14,16 @@ import {
     PaperLoader,
     PaperMarkdown,
     PaperMediaCard,
-    PaperQuote,
     PaperSectionHeader,
     PaperText,
     createAction,
     createRead,
+    showError,
 } from "@mileniumhq/paperui";
 import type { MemoryList } from "../contract";
 import type { Agent } from "../lib/agent";
 import { holdPage } from "../lib/pageHold";
+import { toastFailure } from "../lib/toastFailure";
 
 export default function Memories(props: { agent: Agent }) {
     const name = () => props.agent.name();
@@ -65,14 +66,16 @@ export default function Memories(props: { agent: Agent }) {
 }
 
 function Facts(props: { agent: Agent; facts: MemoryList["facts"] }) {
-    const { error, run } = createAction();
-    // a refused forget says why; the list stays as the service has it
+    // a refused forget says why in a toast; the list stays as the service has it
     // a second press while the first is on its way is the same forget, not a refused one
     const forgetting = new Set<string>();
     const forget = (id: string) => {
         if (forgetting.has(id)) return;
         forgetting.add(id);
-        void run("Fact not forgotten", () => props.agent.calls.deleteFact({ id })).then(() => forgetting.delete(id));
+        props.agent.calls
+            .deleteFact({ id })
+            .catch((e) => showError("Couldn't forget the fact", e))
+            .finally(() => forgetting.delete(id));
     };
 
     return (
@@ -94,23 +97,16 @@ function Facts(props: { agent: Agent; facts: MemoryList["facts"] }) {
                     </PaperCard>
                 )}
             </For>
-            <Show when={error()}>
-                {(shown) => (
-                    <PaperQuote variant="danger" icon="error" title={shown().title} role="alert">
-                        {shown().message}
-                    </PaperQuote>
-                )}
-            </Show>
         </PaperFlex>
     );
 }
 
 function Note(props: { agent: Agent; noteKey: string; onDone: () => void }) {
     const note = createRead(() => props.agent.calls.readNote({ key: props.noteKey }));
-    const { busy: forgetting, error, run } = createAction();
+    const { busy: forgetting, run } = createAction();
 
     const forget = async () => {
-        if (await run("Note not forgotten", () => props.agent.calls.deleteNote({ key: props.noteKey }))) props.onDone();
+        if (await run("Couldn't forget the note", () => props.agent.calls.deleteNote({ key: props.noteKey }), toastFailure)) props.onDone();
     };
 
     return (
@@ -138,13 +134,6 @@ function Note(props: { agent: Agent; noteKey: string; onDone: () => void }) {
                             Read {n().when}
                         </PaperText>
                         <PaperMarkdown text={n().body} />
-                        <Show when={error()}>
-                            {(shown) => (
-                                <PaperQuote variant="danger" icon="error" title={shown().title} role="alert">
-                                    {shown().message}
-                                </PaperQuote>
-                            )}
-                        </Show>
                         <PaperFlex direction="row">
                             <PaperButton variant="danger" disabled={forgetting()} onClick={() => void forget()}>
                                 Forget this note

@@ -2,9 +2,8 @@
 // chat; here the user sees them, when each runs next, how the last run went,
 // and can stop any of them. The list follows the service's routines revision.
 
-import { For, Match, Show, Switch, createSignal } from "solid-js";
-import { PaperButton, PaperEmptyState, PaperFlex, PaperIcon, PaperList, PaperListItem, PaperLoader, PaperQuote, createRead } from "@mileniumhq/paperui";
-import { errorMessage } from "@mileniumhq/paperapi";
+import { For, Match, Switch } from "solid-js";
+import { PaperButton, PaperEmptyState, PaperFlex, PaperIcon, PaperList, PaperListItem, PaperLoader, createFailureToast, createRead, showError } from "@mileniumhq/paperui";
 import type { Routine } from "../contract";
 import { describeSchedule, localStamp } from "../routineText";
 import type { Agent } from "../lib/agent";
@@ -17,7 +16,6 @@ export default function Routines(props: { agent: Agent }) {
     // follows the routines revision; a re-read changes only what differs, and every row stays the row it was
     const routines = createRead(() => props.agent.calls.routines(), { source: () => props.agent.state.routines.revision });
     const list = () => routines.value() ?? null;
-    const [failed, setFailed] = createSignal<string | null>(null);
     // the page before this one stays up until the first read is in
     holdPage(routines.ready());
 
@@ -26,11 +24,10 @@ export default function Routines(props: { agent: Agent }) {
     const stop = async (r: Routine) => {
         if (stopping.has(r.id)) return;
         stopping.add(r.id);
-        setFailed(null);
         try {
             await props.agent.calls.deleteRoutine({ id: r.id });
         } catch (e) {
-            setFailed(errorMessage(e));
+            showError("Couldn't stop the routine", e);
         } finally {
             stopping.delete(r.id);
         }
@@ -57,38 +54,29 @@ export default function Routines(props: { agent: Agent }) {
             </Match>
             <Match when={true}>
                 <PaperFlex gap="half">
-                    <Show when={failed()}>
-                        <PaperQuote variant="danger" icon="error" title="Routine not stopped" role="alert">
-                            {failed()}
-                        </PaperQuote>
-                    </Show>
                     {/* like alarms: when it runs is the title, what it does wraps below it */}
                     <PaperList selectable={false} borderless fullWidth>
                         <For each={list()!}>
-                            {(r) => (
-                                <PaperListItem
-                                    value={r.id}
-                                    icon="event_repeat"
-                                    description={`${r.what}${r.next ? ` · next ${localStamp(r.next)}` : ""}${r.lastRun ? ` · last ran ${localStamp(r.lastRun)}` : ""}`}
-                                    actions={
-                                        <PaperButton icon size="small" variant="text" aria-label={`Stop: ${r.what}`} title="Stop this routine" onClick={() => void stop(r)}>
-                                            <PaperIcon>delete</PaperIcon>
-                                        </PaperButton>
-                                    }
-                                >
-                                    {capitalize(describeSchedule(r.schedule))}
-                                </PaperListItem>
-                            )}
+                            {(r) => {
+                                // a run that went wrong is a toast for as long as it's the last run, by what it was
+                                createFailureToast(() => r.lastError, { title: `Couldn't run “${r.what}”` });
+                                return (
+                                    <PaperListItem
+                                        value={r.id}
+                                        icon="event_repeat"
+                                        description={`${r.what}${r.next ? ` · next ${localStamp(r.next)}` : ""}${r.lastRun ? ` · ${r.lastError ? "last run failed" : "last ran"} ${localStamp(r.lastRun)}` : ""}`}
+                                        actions={
+                                            <PaperButton icon size="small" variant="text" aria-label={`Stop: ${r.what}`} title="Stop this routine" onClick={() => void stop(r)}>
+                                                <PaperIcon>delete</PaperIcon>
+                                            </PaperButton>
+                                        }
+                                    >
+                                        {capitalize(describeSchedule(r.schedule))}
+                                    </PaperListItem>
+                                );
+                            }}
                         </For>
                     </PaperList>
-                    {/* a run that went wrong is told under the list, by what it was */}
-                    <For each={list()!.filter((r) => r.lastError)}>
-                        {(r) => (
-                            <PaperQuote variant="danger" icon="error" title={`Last run missed: ${r.what}`}>
-                                {r.lastError}
-                            </PaperQuote>
-                        )}
-                    </For>
                 </PaperFlex>
             </Match>
         </Switch>

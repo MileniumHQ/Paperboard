@@ -24,7 +24,7 @@ afterEach(async () => {
 
 const NEXT = `document.querySelector('form button[type=submit]')`;
 const CHAT = `document.querySelector('[aria-label="Ada: computer and settings"]')`;
-const SAVE_ERROR = `[...document.querySelectorAll('[role=alert]')].find((a) => a.innerText.includes("Settings not saved"))`;
+const SAVE_ERROR = `[...document.querySelectorAll("[data-paper-toasts] [role=alert]")].find((a) => a.innerText.includes("Couldn't save the settings"))`;
 
 // the name step's field, found by its label and marked to be typed in
 const NAME = `[data-test-field="name"]`;
@@ -86,7 +86,8 @@ describe("the first meeting", () => {
         } finally {
             fs.rmSync(blocked, { recursive: true, force: true });
         }
-        await next(page, "Let's chat, again");
+        // the toast is over Finish, and its Try again finishes
+        await page.click(`[data-paper-toasts] [role=alert] button:not([aria-label="Close"])`);
         await panel.settingsSaved(SAVED);
         await page.waitFor(CHAT, "the chat");
         expect(await page.evaluate(`Boolean(${SAVE_ERROR})`)).toBe(false);

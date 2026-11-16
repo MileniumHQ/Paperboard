@@ -71,26 +71,28 @@ describe("the tool server editor", () => {
         expect(page.exceptions).toEqual([]);
     });
 
-    test("Save with no name says why where it can be seen, and puts the keyboard in Name", async () => {
+    test("Save with no name says why in a toast in view, keeps the editor open, and puts the keyboard in Name", async () => {
         const page = await toolsPage();
         // a short window: five variables push the bottom of the form out of view
         await page.resize(1000, 560);
         await newServer(page);
         for (let rows = 1; rows <= 5; rows++) await addRow(page, rows);
         await page.evaluate(`${EDITOR}.requestSubmit()`);
-        await page.waitFor(`${EDITOR}.querySelector("[role=alert]")`, "the refusal");
-        // the refusal is inside the part of the editor that shows: neither scrolled away nor below the window
-        const seen = await page.evaluate<{ alert: DOMRect; view: DOMRect }>(`(() => {
-            const alert = ${EDITOR}.querySelector("[role=alert]");
-            let view = alert.parentElement;
-            while (view && !(view.scrollHeight > view.clientHeight && /auto|scroll/.test(getComputedStyle(view).overflowY))) view = view.parentElement;
-            const box = (view ?? document.documentElement).getBoundingClientRect();
-            return { alert: alert.getBoundingClientRect().toJSON(), view: { top: Math.max(box.top, 0), bottom: Math.min(box.bottom, innerHeight) } };
-        })()`);
-        expect(seen.alert.top).toBeGreaterThanOrEqual(seen.view.top);
-        expect(seen.alert.bottom).toBeLessThanOrEqual(seen.view.bottom);
+        const TOAST = `document.querySelector("[data-paper-toasts] [role=alert]")`;
+        await page.waitFor(`${TOAST}?.innerText.includes("Couldn't save the server")`, "the refusal");
+        // the refusal is in the window, whatever the editor scrolled to, and the editor is still open to fix it
+        const seen = await page.evaluate<{ alert: DOMRect; editor: boolean; inEditor: boolean }>(`({
+            alert: ${TOAST}.getBoundingClientRect().toJSON(),
+            editor: Boolean(${EDITOR}),
+            inEditor: Boolean(${EDITOR}.querySelector("[role=alert]")),
+        })`);
+        expect(seen.alert.top).toBeGreaterThanOrEqual(0);
+        expect(seen.alert.bottom).toBeLessThanOrEqual(560);
+        expect(seen.editor, "the editor closed").toBe(true);
+        expect(seen.inEditor, "the refusal is an alert in the editor").toBe(false);
         // the editor moves to the field as it shows the refusal, before the page does anything else
         expect(await page.evaluate<boolean>(`document.activeElement === ${EDITOR}.querySelector('input[name="name"]')`)).toBe(true);
+        expect(await page.evaluate(`${EDITOR}.querySelector('input[name="name"]').getAttribute("aria-invalid")`), "the field the refusal is about isn't marked").toBe("true");
         expect(page.exceptions).toEqual([]);
     });
 

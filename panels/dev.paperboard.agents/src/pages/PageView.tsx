@@ -3,8 +3,8 @@
 // document's bar also prints it and saves it as a PDF.
 
 import { Show, createSignal } from "solid-js";
-import { fileApi, grantedComputerId, errorMessage } from "@mileniumhq/paperapi";
-import { PaperButton, PaperEmptyState, PaperFlex, PaperQuote, PaperText, type ActionFailure } from "@mileniumhq/paperui";
+import { fileApi, grantedComputerId } from "@mileniumhq/paperapi";
+import { PaperButton, PaperEmptyState, PaperFlex, PaperText, showError } from "@mileniumhq/paperui";
 import { PANEL_ID } from "../contract";
 import type { Launcher, OpenPage } from "./launcher";
 import styles from "./PageView.module.css";
@@ -17,7 +17,6 @@ export default function PageView(props: { page: OpenPage; pages: Launcher; exten
     const here = grantedComputerId() === "local";
     const isDocument = () => props.page.kind === "document";
     const [saving, setSaving] = createSignal(false);
-    const [error, setError] = createSignal<ActionFailure | null>(null);
 
     // a frame from another origin can't be printed from here: the page's own script prints it when asked
     const print = () => {
@@ -26,16 +25,15 @@ export default function PageView(props: { page: OpenPage; pages: Launcher; exten
 
     const savePdf = async () => {
         setSaving(true);
-        setError(null);
         let file: string | null = null;
         try {
             const pdf = await props.pages.savePdf(props.page.name);
             file = pdf.file;
             await fileApi.exportFile(pdf.file, PANEL_ID, { suggestedName: pdf.name, filters: PDF_FILTERS });
         } catch (e) {
-            setError({ title: "PDF not saved", message: errorMessage(e) });
+            showError("Couldn't save the PDF", e);
         } finally {
-            if (file) await props.pages.discardPdf(file).catch((e) => setError({ title: "PDF saved, but its copy wasn't removed", message: errorMessage(e) }));
+            if (file) await props.pages.discardPdf(file).catch((e) => showError("Couldn't remove the PDF's copy", e));
             setSaving(false);
         }
     };
@@ -74,15 +72,6 @@ export default function PageView(props: { page: OpenPage; pages: Launcher; exten
                     close
                 </PaperButton>
             </PaperFlex>
-            <Show when={error()}>
-                {(shown) => (
-                    <PaperFlex padding="half">
-                        <PaperQuote variant="danger" icon="error" title={shown().title} role="alert" onDismiss={() => setError(null)}>
-                            {shown().message}
-                        </PaperQuote>
-                    </PaperFlex>
-                )}
-            </Show>
             <Show
                 when={here}
                 fallback={

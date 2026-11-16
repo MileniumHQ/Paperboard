@@ -70,9 +70,9 @@ describe("the page view", () => {
         };
         const pane = `document.querySelector("iframe").closest("[class*=view]")`;
         await openPage("Report");
-        // the agent's computer isn't set up, so saving the page as a PDF fails, and says so
+        // the agent's computer isn't set up, so saving the page as a PDF fails, and a toast says so
         await view.click(`button[aria-label="Save as PDF"]`);
-        await view.waitFor(`${pane}.querySelector("[role=alert]")?.innerText.includes("PDF not saved")`, "the PDF's failure");
+        await view.waitFor(`document.querySelector("[data-paper-toasts] [role=alert]")?.innerText.includes("Couldn't save the PDF")`, "the PDF's failure");
         await view.settled();
 
         await openPage("Notes");

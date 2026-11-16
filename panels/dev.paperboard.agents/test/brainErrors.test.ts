@@ -18,6 +18,8 @@ const SETTINGS = { name: "Ada", harness: "claude-code" as const, model: null, co
 const BRAINS = `document.querySelector('[role=region][aria-label="Brains"]')`;
 const CLAUDE = `[...document.querySelectorAll('[role=dialog]')].find((d) => d.innerText.includes("Sign in to Claude"))`;
 const alertsIn = (region: string) => `[...(${region}?.querySelectorAll("[role=alert]") ?? [])].map((a) => a.innerText)`;
+// a refusal is a toast, over the settings and the sign-in alike: it names the brain it's about
+const TOASTS = `[...document.querySelectorAll("[data-paper-toasts] [role=alert]")].map((a) => a.innerText)`;
 
 let panel: BootedPanel;
 let page: Page;
@@ -62,17 +64,20 @@ test("a brain's button pressed twice before the service answers is sent once", a
     expect(await sent(page, "installBrain"), "the install was sent more than once").toEqual([{ harness: "codex" }]);
 });
 
-test("a refusal for one brain shows under that brain only, and doesn't undo the other brain's accepted code", async () => {
+test("a refusal for one brain names that brain only, and doesn't undo the other brain's accepted code", async () => {
     await releaseCall(page, "installBrain", { from: "computer" });
-    await page.waitFor(`${alertsIn(BRAINS)}.some((a) => a.includes("Codex not installed"))`, "Codex's refusal");
-    expect((await page.evaluate<string[]>(alertsIn(BRAINS))).some((a) => a.includes("Codex isn't on this computer"))).toBe(true);
-    expect(await page.evaluate(alertsIn(CLAUDE)), "Codex's refusal shows under Claude Code").toEqual([]);
+    await page.waitFor(`${TOASTS}.some((a) => a.includes("Couldn't install Codex"))`, "Codex's refusal");
+    const toasts = await page.evaluate<string[]>(TOASTS);
+    expect(toasts.find((a) => a.includes("Couldn't install Codex"))).toContain("Codex isn't on this computer");
+    expect(toasts.filter((a) => a.includes("Codex isn't on this computer")), "Codex's refusal is said other than once, about Codex").toHaveLength(1);
+    expect(await page.evaluate(alertsIn(BRAINS)), "the refusal is an alert in the settings").toEqual([]);
+    expect(await page.evaluate(alertsIn(CLAUDE)), "the refusal is an alert in Claude Code's sign-in").toEqual([]);
 
     // then the service takes the code: Claude Code finishes signing in, with no field to paste in again
     await releaseCall(page, "brainCode");
     await page.waitFor(`${CLAUDE}?.innerText.includes("Signed in")`, "Claude Code signed in");
     expect(await page.evaluate(`Boolean(${CLAUDE}.querySelector("input"))`), "the accepted code is asked for again").toBe(false);
-    expect(await page.evaluate(alertsIn(CLAUDE))).toEqual([]);
+    expect((await page.evaluate<string[]>(TOASTS)).filter((a) => a.includes("Couldn't sign in to Claude") || a.includes("didn't take the code"))).toEqual([]);
     expect(await sent(page, "installBrain")).toHaveLength(1);
     expect(page.exceptions).toEqual([]);
 });

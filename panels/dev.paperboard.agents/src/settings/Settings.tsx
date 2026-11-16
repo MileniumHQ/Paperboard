@@ -9,7 +9,6 @@ import {
     PaperIcon,
     PaperInput,
     PaperModal,
-    PaperQuote,
     PaperSelectMenu,
     PaperSectionHeader,
     PaperSelectMenuItem,
@@ -17,17 +16,18 @@ import {
     PaperSettingItem,
     PaperSettingList,
     PaperText,
-    type ActionFailure,
     createAction,
+    createFailureToast,
     createSavedValue,
+    showError,
 } from "@mileniumhq/paperui";
-import { errorMessage } from "@mileniumhq/paperapi";
 import BrainLogo from "../lib/BrainLogo";
 import { COMPACTIONS, DEFAULT_MODEL, HARNESSES, LIMITS, type Compaction, type Harness, type Settings as Saved } from "../contract";
 import type { Agent } from "../lib/agent";
 import { SEARCH_MODELS_FROM, createModels, harnessName, loadedModels } from "../lib/brains";
 import { BrainButtons, BrainStatus, SignInModal, brainLine, createBrainActions } from "./Brain";
 import Providers from "./Providers";
+import { toastFailure } from "../lib/toastFailure";
 
 export default function Settings(props: { agent: Agent }) {
     return (
@@ -50,8 +50,8 @@ function AgentSettings(props: { agent: Agent }) {
     // the name is typed, so it saves when the field is left; the rest save when picked
     const [name, setName] = createSignal(current().name);
     const [model, setModel] = createSignal(current().model ?? "");
-    const [error, setError] = createSignal<ActionFailure | null>(null);
     const models = createModels(props.agent, () => current().harness);
+    createFailureToast(models.error, { title: "Couldn't list the models" });
     // as the harness lists them: its current models, then its older ones
     const listed = () => loadedModels(models) ?? [];
     const unlisted = () => {
@@ -72,9 +72,8 @@ function AgentSettings(props: { agent: Agent }) {
     const harness = createSavedValue(() => current().harness, (h: Harness) => save({ harness: h, model: null }));
     const picked = createSavedValue(() => current().model ?? DEFAULT_MODEL, (v: string) => save({ model: v === DEFAULT_MODEL ? null : v }));
     const report = (title: string, saving: Promise<void>) => {
-        setError(null);
         saving.catch((e) => {
-            setError({ title, message: errorMessage(e) });
+            showError(title, e);
             // a name stays as typed, to be saved again; a choice goes back to what's saved
             setModel(current().model ?? "");
         });
@@ -82,11 +81,11 @@ function AgentSettings(props: { agent: Agent }) {
     const saveName = () => {
         const n = name().trim();
         if (!n) {
-            setError({ title: "Name not saved", message: "It needs a name." });
+            showError("Couldn't save the name", "It needs a name.");
             setName(current().name);
             return;
         }
-        report("Name not saved", save({ name: n }));
+        report("Couldn't save the name", save({ name: n }));
     };
     // only a brain that is installed and signed in can think; the saved one stays choosable
     const isReady = (h: Harness) => props.agent.state.brains[h].phase === "ready" || h === current().harness;
@@ -112,7 +111,7 @@ function AgentSettings(props: { agent: Agent }) {
                         aria-label="Brain"
                         value={harness.value()}
                         // a model belongs to its harness: the new brain starts on its own default
-                        onValueChange={(v) => v !== current().harness && report("Brain not changed", harness.set(v as Harness))}
+                        onValueChange={(v) => v !== current().harness && report("Couldn't change the brain", harness.set(v as Harness))}
                     >
                         <For each={HARNESSES}>
                             {(h) => (
@@ -135,7 +134,7 @@ function AgentSettings(props: { agent: Agent }) {
                                 value={model()}
                                 maxLength={LIMITS.model}
                                 onInput={(e) => setModel(e.currentTarget.value)}
-                                onChange={() => report("Model not changed", save({ model: model().trim() || null }))}
+                                onChange={() => report("Couldn't change the model", save({ model: model().trim() || null }))}
                                 onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
                             />
                         }
@@ -146,7 +145,7 @@ function AgentSettings(props: { agent: Agent }) {
                             value={picked.value()}
                             disabled={!loadedModels(models)}
                             searchable={listed().length >= SEARCH_MODELS_FROM}
-                            onValueChange={(v) => report("Model not changed", picked.set(String(v)))}
+                            onValueChange={(v) => report("Couldn't change the model", picked.set(String(v)))}
                         >
                             <PaperSelectMenuItem value={DEFAULT_MODEL} icon="tune" description={`Whatever ${harnessName(current().harness)} is set to use`}>
                                 Default
@@ -167,16 +166,9 @@ function AgentSettings(props: { agent: Agent }) {
                 </PaperSettingItem>
             </PaperSettingList>
             <Show when={models.error()}>
-                <PaperQuote variant="danger" icon="error" title="Models not listed" role="alert">
-                    {models.error()!.replace(/[.\s]+$/, "")}. Type a model's id instead.
-                </PaperQuote>
-            </Show>
-            <Show when={error()}>
-                {(shown) => (
-                    <PaperQuote variant="danger" icon="error" title={shown().title} role="alert">
-                        {shown().message}
-                    </PaperQuote>
-                )}
+                <PaperText preset="hint" inset>
+                    Type a model's id instead.
+                </PaperText>
             </Show>
         </PaperFlex>
     );
@@ -188,7 +180,8 @@ function BrainsSettings(props: { agent: Agent }) {
     const [providers, setProviders] = createSignal(false);
     // a sign-in happens in its modal; the list shows only the brains' other work and trouble
     const [signingIn, setSigningIn] = createSignal<Harness | null>(null);
-    const busy = (h: Harness) => ["installing", "failed", "unsupported"].includes(props.agent.state.brains[h].phase) && h !== signingIn();
+    // a brain that stopped with a problem says why in a toast, and its row has Try again
+    const busy = (h: Harness) => ["installing", "unsupported"].includes(props.agent.state.brains[h].phase) && h !== signingIn();
     return (
         <PaperFlex gap="full" role="region" aria-label="Brains">
             <PaperSectionHeader icon="psychology" title="Brains" role="heading" aria-level={2} />
@@ -209,14 +202,6 @@ function BrainsSettings(props: { agent: Agent }) {
                     </PaperFlex>
                 )}
             </For>
-            {/* a refusal for a brain with nothing else to show, and not in its sign-in, is told under the list */}
-            <For each={HARNESSES.filter((h) => !busy(h) && h !== signingIn() && actions.error(h))}>
-                {(h) => (
-                    <PaperQuote variant="danger" icon="error" title={actions.error(h)!.title} role="alert">
-                        {actions.error(h)!.message}
-                    </PaperQuote>
-                )}
-            </For>
             <Providers agent={props.agent} open={providers()} onClose={() => setProviders(false)} />
             <SignInModal agent={props.agent} harness={signingIn()} actions={actions} onClose={() => setSigningIn(null)} />
         </PaperFlex>
@@ -226,19 +211,16 @@ function BrainsSettings(props: { agent: Agent }) {
 function ComputerSettings(props: { agent: Agent }) {
     const c = () => props.agent.state.computer;
     const name = () => props.agent.state.settings!.name;
-    const { busy, error, run: act } = createAction();
+    const action = createAction();
+    const busy = action.busy;
+    const act = (title: string, fn: () => Promise<unknown>) => action.run(title, fn, toastFailure);
     const [confirming, setConfirming] = createSignal(false);
-    // a refused erase is told in the confirmation, which stays open over the page
-    const [eraseError, setEraseError] = createSignal<ActionFailure | null>(null);
+    // a refused erase is a toast over the confirmation, which stays open
     const erase = () =>
-        act(
-            "Computer not erased",
-            async () => {
-                await props.agent.calls.installComputer();
-                setConfirming(false);
-            },
-            setEraseError,
-        );
+        act("Couldn't erase the computer", async () => {
+            await props.agent.calls.installComputer();
+            setConfirming(false);
+        });
     const status = () =>
         ({
             none: "Not set up",
@@ -263,7 +245,7 @@ function ComputerSettings(props: { agent: Agent }) {
                 <Match when={!c().installed && c().phase !== "installing"}>
                     <PaperSettingList autoHeight>
                         <PaperSettingItem title={`${name()}'s own computer`} description="A web browser of its own it uses for its work, about 400 MB of storage. It reaches the internet, never your files or your network.">
-                            <PaperButton variant="primary" disabled={busy()} onClick={() => void act("Computer not set up", props.agent.calls.installComputer)}>
+                            <PaperButton variant="primary" disabled={busy()} onClick={() => void act("Couldn't set up the computer", props.agent.calls.installComputer)}>
                                 <PaperIcon>computer</PaperIcon> Set up
                             </PaperButton>
                         </PaperSettingItem>
@@ -274,12 +256,12 @@ function ComputerSettings(props: { agent: Agent }) {
                         <PaperSettingItem title="Status" description={c().phase === "failed" ? (c().error ?? undefined) : `${status()}.`}>
                             <Switch>
                                 <Match when={c().phase === "ready"}>
-                                    <PaperButton disabled={busy()} onClick={() => void act("Computer not turned off", props.agent.calls.stopComputer)}>
+                                    <PaperButton disabled={busy()} onClick={() => void act("Couldn't turn off the computer", props.agent.calls.stopComputer)}>
                                         <PaperIcon>power_settings_new</PaperIcon> Turn off
                                     </PaperButton>
                                 </Match>
                                 <Match when={c().phase === "stopped" || c().phase === "failed"}>
-                                    <PaperButton disabled={busy()} onClick={() => void act("Computer not turned on", props.agent.calls.startComputer)}>
+                                    <PaperButton disabled={busy()} onClick={() => void act("Couldn't turn on the computer", props.agent.calls.startComputer)}>
                                         <PaperIcon>power_settings_new</PaperIcon> {c().phase === "failed" ? "Try again" : "Turn on"}
                                     </PaperButton>
                                 </Match>
@@ -289,10 +271,7 @@ function ComputerSettings(props: { agent: Agent }) {
                             <PaperButton
                                 variant="danger"
                                 disabled={busy() || c().phase === "installing"}
-                                onClick={() => {
-                                    setEraseError(null);
-                                    setConfirming(true);
-                                }}
+                                onClick={() => setConfirming(true)}
                             >
                                 <PaperIcon>restart_alt</PaperIcon> Set up again
                             </PaperButton>
@@ -300,13 +279,6 @@ function ComputerSettings(props: { agent: Agent }) {
                     </PaperSettingList>
                 </Match>
             </Switch>
-            <Show when={error()}>
-                {(shown) => (
-                    <PaperQuote variant="danger" icon="error" title={shown().title} role="alert">
-                        {shown().message}
-                    </PaperQuote>
-                )}
-            </Show>
 
             <PaperModal
                 open={confirming()}
@@ -329,13 +301,6 @@ function ComputerSettings(props: { agent: Agent }) {
                 }
             >
                 <PaperText preset="text">Everything on it is deleted: its files, downloads and sign-ins. This can't be undone.</PaperText>
-                <Show when={eraseError()}>
-                    {(why) => (
-                        <PaperQuote variant="danger" icon="error" title={why().title} role="alert">
-                            {why().message}
-                        </PaperQuote>
-                    )}
-                </Show>
             </PaperModal>
         </PaperFlex>
     );
@@ -348,16 +313,12 @@ const COMPACTION_TEXT: Record<Compaction, { title: string; icon: string; descrip
 
 function ConversationSettings(props: { agent: Agent }) {
     const [open, setOpen] = createSignal(false);
-    const [error, setError] = createSignal<string | null>(null);
     const current = () => props.agent.state.settings!;
     const compaction = createSavedValue(
         () => current().compaction,
         (next: Compaction) => props.agent.saveSettings((cur) => (cur.compaction === next ? null : { ...cur, compaction: next })),
     );
-    const setCompaction = (next: Compaction) => {
-        setError(null);
-        compaction.set(next).catch((e) => setError(errorMessage(e)));
-    };
+    const setCompaction = (next: Compaction) => void compaction.set(next).catch((e) => showError("Couldn't change the compaction", e));
     return (
         <PaperFlex gap="full" role="region" aria-label="Conversation">
             <PaperSectionHeader icon="forum" title="Conversation" role="heading" aria-level={2} />
@@ -379,11 +340,6 @@ function ConversationSettings(props: { agent: Agent }) {
                     </PaperButton>
                 </PaperSettingItem>
             </PaperSettingList>
-            <Show when={error()}>
-                <PaperQuote variant="danger" icon="error" title="Compaction not changed" role="alert">
-                    {error()}
-                </PaperQuote>
-            </Show>
             <StartOver agent={props.agent} open={open()} onClose={() => setOpen(false)} />
         </PaperFlex>
     );
@@ -393,11 +349,9 @@ function AutomationSettings(props: { agent: Agent }) {
     const current = () => props.agent.state.settings!;
     // typed, so it saves when the field is left
     const [text, setText] = createSignal(current().automationInstructions ?? "");
-    const [error, setError] = createSignal<string | null>(null);
     createEffect(on(() => current().automationInstructions, (t) => setText(t ?? "")));
     const save = () => {
         const next = text().trim();
-        setError(null);
         props.agent
             .saveSettings((cur) => {
                 if (next === (cur.automationInstructions ?? "")) return null;
@@ -405,7 +359,7 @@ function AutomationSettings(props: { agent: Agent }) {
                 return next ? { ...rest, automationInstructions: next } : rest;
             })
             // what was typed stays in the field, to be saved again
-            .catch((e) => setError(errorMessage(e)));
+            .catch((e) => showError("Couldn't save the instructions", e));
     };
     return (
         <PaperFlex gap="full" role="region" aria-label="Flows">
@@ -428,21 +382,14 @@ function AutomationSettings(props: { agent: Agent }) {
                     />
                 </PaperSettingItem>
             </PaperSettingList>
-            <Show when={error()}>
-                <PaperQuote variant="danger" icon="error" title="Instructions not saved" role="alert">
-                    {error()}
-                </PaperQuote>
-            </Show>
         </PaperFlex>
     );
 }
 
 /** The confirmation for starting over. */
 function StartOver(props: { agent: Agent; open: boolean; onClose: () => void }) {
-    const { busy, error, setError, run } = createAction();
+    const { busy, run } = createAction();
     const name = () => props.agent.name();
-    // each time it opens, it asks afresh
-    createEffect(on(() => props.open, (open) => open && setError(null)));
     return (
         <PaperModal
             open={props.open}
@@ -458,10 +405,14 @@ function StartOver(props: { agent: Agent; open: boolean; onClose: () => void }) 
                         variant="danger"
                         disabled={busy()}
                         onClick={() =>
-                            void run("Conversation not cleared", async () => {
-                                await props.agent.calls.startOver();
-                                props.onClose();
-                            })
+                            void run(
+                                "Couldn't start over",
+                                async () => {
+                                    await props.agent.calls.startOver();
+                                    props.onClose();
+                                },
+                                toastFailure,
+                            )
                         }
                     >
                         Start over
@@ -472,13 +423,6 @@ function StartOver(props: { agent: Agent; open: boolean; onClose: () => void }) 
             <PaperText preset="text">
                 {name()} stops what it's doing and forgets your whole conversation. Its computer and what's on it stay. This can't be undone.
             </PaperText>
-            <Show when={error()}>
-                {(why) => (
-                    <PaperQuote variant="danger" icon="error" title={why().title} role="alert">
-                        {why().message}
-                    </PaperQuote>
-                )}
-            </Show>
         </PaperModal>
     );
 }

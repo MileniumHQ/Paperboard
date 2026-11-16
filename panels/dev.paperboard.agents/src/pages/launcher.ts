@@ -26,7 +26,7 @@ export function createLauncher(agent: Agent) {
         return pages;
     };
     // every change to the pages (a new one, a new picture, a deletion) bumps the revision; reconciled by name, so a re-read changes what differs and every row stays the row it was
-    const pages = createRead(read, { source: () => agent.state.pages.revision, key: "name" });
+    const pages = createRead(read, { source: () => agent.state.pages.revision, key: "name", failure: { title: "Couldn't load the pages", retry: true } });
     const list = () => pages.value() ?? null;
     const [shown, setShown] = createSignal<OpenPage | null>(null);
 

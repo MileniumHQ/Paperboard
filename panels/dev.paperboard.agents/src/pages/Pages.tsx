@@ -3,50 +3,44 @@
 // so a page the agent makes or deletes shows up live.
 
 import { For, Match, Show, Switch, createSignal } from "solid-js";
-import { PaperButton, PaperEmptyState, PaperFlex, PaperIcon, PaperList, PaperListItem, PaperLoader, PaperModal, PaperQuote, PaperText, type ActionFailure, createAction } from "@mileniumhq/paperui";
+import { PaperButton, PaperEmptyState, PaperFlex, PaperIcon, PaperList, PaperListItem, PaperLoader, PaperModal, PaperText, createAction } from "@mileniumhq/paperui";
 import type { PageInfo } from "../contract";
 import type { Launcher } from "./launcher";
+import { toastFailure } from "../lib/toastFailure";
 import Picture from "./Picture";
 
 export default function Pages(props: { pages: Launcher; name: string; onOpened: () => void }) {
-    const { busy, error: openError, run } = createAction();
-    const [deleteError, setDeleteError] = createSignal<ActionFailure | null>(null);
+    const { busy, run } = createAction();
     const [deleting, setDeleting] = createSignal<PageInfo | null>(null);
     // one being opened is marked until it's open (then it's the one shown) or wasn't
     const [chosen, setChosen] = createSignal<string | null>(null);
 
     const open = async (name: string) => {
         setChosen(name);
-        if (await run("Page not opened", () => props.pages.open(name))) props.onOpened();
+        if (await run("Couldn't open the page", () => props.pages.open(name), toastFailure)) props.onOpened();
         setChosen(null);
     };
 
-    const askDelete = (a: PageInfo) => {
-        setDeleteError(null);
-        setDeleting(a);
-    };
-
+    // a refused delete is a toast over the dialog, which stays open to try again
     const remove = () =>
         run(
-            "Page not deleted",
+            "Couldn't delete the page",
             async () => {
                 await props.pages.remove(deleting()!.name);
                 setDeleting(null);
             },
-            setDeleteError,
+            toastFailure,
         );
 
     return (
         <>
             <Switch>
                 <Match when={props.pages.list() === null && props.pages.listError()}>
-                    {(why) => (
-                        <PaperFlex padding="double">
-                            <PaperEmptyState icon="error" title="The pages can't be read" description={why()}>
-                                <PaperButton onClick={() => props.pages.reload()}>Try again</PaperButton>
-                            </PaperEmptyState>
-                        </PaperFlex>
-                    )}
+                    <PaperFlex padding="double">
+                        <PaperEmptyState icon="error" title="Couldn't load">
+                            <PaperButton onClick={() => props.pages.reload()}>Try again</PaperButton>
+                        </PaperEmptyState>
+                    </PaperFlex>
                 </Match>
                 <Match when={props.pages.list() === null}>
                     <PaperFlex padding="double">
@@ -60,30 +54,6 @@ export default function Pages(props: { pages: Launcher; name: string; onOpened: 
                 </Match>
                 <Match when={true}>
                     <PaperFlex flex minHeight={0}>
-                        {/* a read again that failed leaves the list as it was last read: it says so */}
-                        <Show when={props.pages.listError()}>
-                            {(why) => (
-                                <PaperFlex padding="full" gap="half">
-                                    <PaperQuote variant="danger" icon="error" title="The list may be out of date" role="alert">
-                                        {why()}
-                                    </PaperQuote>
-                                    <PaperFlex direction="row">
-                                        <PaperButton onClick={() => props.pages.reload()}>
-                                            <PaperIcon>refresh</PaperIcon> Try again
-                                        </PaperButton>
-                                    </PaperFlex>
-                                </PaperFlex>
-                            )}
-                        </Show>
-                        <Show when={openError()}>
-                            {(shown) => (
-                                <PaperFlex padding="full">
-                                    <PaperQuote variant="danger" icon="error" title={shown().title} role="alert">
-                                        {shown().message}
-                                    </PaperQuote>
-                                </PaperFlex>
-                            )}
-                        </Show>
                         {/* the page open beside the chat is marked */}
                         <PaperList
                             name="agents-pages"
@@ -105,7 +75,7 @@ export default function Pages(props: { pages: Launcher; name: string; onOpened: 
                                                 <PaperButton size="small" variant="text" disabled={busy()} onClick={() => void open(a.name)}>
                                                     Open <PaperIcon>open_in_new</PaperIcon>
                                                 </PaperButton>
-                                                <PaperButton icon size="small" variant="text" disabled={busy()} aria-label={`Delete “${a.title}”`} title="Delete" onClick={() => askDelete(a)}>
+                                                <PaperButton icon size="small" variant="text" disabled={busy()} aria-label={`Delete “${a.title}”`} title="Delete" onClick={() => setDeleting(a)}>
                                                     <PaperIcon>delete</PaperIcon>
                                                 </PaperButton>
                                             </PaperFlex>
@@ -139,13 +109,6 @@ export default function Pages(props: { pages: Launcher; name: string; onOpened: 
                     <PaperText preset="text">
                         “{deleting()?.title}” and its folder, ~/Pages/{deleting()?.name}, are deleted. A checkpoint from before now still has it.
                     </PaperText>
-                    <Show when={deleteError()}>
-                        {(shown) => (
-                            <PaperQuote variant="danger" icon="error" title={shown().title} role="alert">
-                                {shown().message}
-                            </PaperQuote>
-                        )}
-                    </Show>
                 </PaperFlex>
             </PaperModal>
         </>

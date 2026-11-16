@@ -48,6 +48,8 @@ const PLAN = { integrations: INTEGRATIONS, attempts: { attempt1: { status: "fail
 const MODAL = `[...document.querySelectorAll('[role=dialog]')].find((d) => d.innerText.includes("OpenCode providers"))`;
 const button = (text: string) => `[...(${MODAL}?.querySelectorAll("button") ?? [])].find((b) => b.textContent.trim() === ${JSON.stringify(text)})`;
 const shows = (text: string) => `Boolean(${MODAL}?.innerText.includes(${JSON.stringify(text)}))`;
+/** a failure toast, over the modal, that says `text` */
+const toasted = (text: string) => `[...document.querySelectorAll("[data-paper-toasts] [role=alert]")].some((a) => a.innerText.includes(${JSON.stringify(text)}))`;
 const TRIGGER = `${MODAL}?.querySelector('[aria-label="Provider"] button, button[aria-label="Provider"]')`;
 /** types into a field as a keyboard does: the value changes, then the field says so */
 const fill = (field: string, text: string) => `(() => { const el = ${field}; el.value = ${JSON.stringify(text)}; el.dispatchEvent(new InputEvent("input", { bubbles: true })); })()`;
@@ -99,7 +101,7 @@ describe("a provider's sign-in", () => {
         // the second one is asked about again after it (the next poll), so the late answer has been handled by then; or it ended
         await page.waitFor(`window.__wireApi.sent("provider-attempt").filter((a) => a.attempt === "attempt2").length > ${before} || !${shows("Sign-in 2")}`, "the second sign-in's next status question, or its end");
         expect(await page.evaluate(`${shows("Sign-in 2")} && ${shows("Waiting for you to finish signing in")}`), "the new sign-in was ended").toBe(true);
-        expect(await page.evaluate(shows("the first sign-in was refused")), "the old sign-in's error was shown").toBe(false);
+        expect(await page.evaluate(`${shows("the first sign-in was refused")} || ${toasted("the first sign-in was refused")}`), "the old sign-in's error was shown").toBe(false);
 
         // a key connected: the list is read again, and the forms on show are the same nodes
         await page.evaluate(`${button("Cancel")}.click()`);
@@ -118,7 +120,8 @@ describe("a provider's sign-in", () => {
         await page.evaluate(`${button("Sign in")}.click()`);
         await page.waitFor(shows("Waiting for you to finish signing in"), "a sign-in");
         await page.evaluate(`${MODAL}.querySelector('button[aria-label="Close modal"]').click()`);
-        await page.waitFor(shows("OpenCode is busy"), "the refusal");
+        await page.waitFor(toasted("OpenCode is busy"), "the refusal");
+        expect(await page.evaluate(toasted("Couldn't stop signing in"))).toBe(true);
         expect(await page.evaluate(`Boolean(${MODAL})`), "the modal closed over a sign-in that wasn't stopped").toBe(true);
         // asked again, with nothing left signing in, it closes; opened again, nothing refused is left on it
         await page.evaluate(`${MODAL}.querySelector('button[aria-label="Close modal"]').click()`);

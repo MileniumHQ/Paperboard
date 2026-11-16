@@ -4,10 +4,10 @@
 // A key goes from its field to OpenCode and is kept nowhere else.
 
 import { For, Match, Show, Switch, createEffect, createSignal, on } from "solid-js";
-import { createPolling, PaperButton, PaperCopyButton, PaperFlex, PaperInput, PaperLink, PaperLoader, PaperModal, PaperQuote, PaperSectionHeader, PaperSelectMenu, PaperSelectMenuItem, PaperText, createAction, createRead } from "@mileniumhq/paperui";
-import { errorMessage } from "@mileniumhq/paperapi";
+import { createPolling, PaperButton, PaperCopyButton, PaperFlex, PaperInput, PaperLink, PaperLoader, PaperModal, PaperEmptyState, PaperSectionHeader, PaperSelectMenu, PaperSelectMenuItem, PaperText, createAction, createRead, showError } from "@mileniumhq/paperui";
 import type { ProviderAttempt, ProviderField, ProviderInfo, ProviderMethod } from "../contract";
 import type { Agent } from "../lib/agent";
+import { toastFailure } from "../lib/toastFailure";
 
 const POLL_MS = 2_000;
 
@@ -17,10 +17,12 @@ const shown = (field: ProviderField, values: Record<string, string>) =>
 
 export default function Providers(props: { agent: Agent; open: boolean; onClose: () => void }) {
     // read afresh each time it opens, with nothing refused yet; a re-read (after a connect or a sign-in) changes what differs, and every row and form stays the one it was
-    const providers = createRead(() => props.agent.calls.providers(), { source: () => props.open });
+    const providers = createRead(() => props.agent.calls.providers(), { source: () => props.open, failure: { title: "Couldn't list the providers" } });
     const refetch = providers.reload;
-    const { busy, error, setError, run: act } = createAction();
-    createEffect(on(() => props.open, (open) => open && setError(null)));
+    // a refusal is a toast over the dialog, which stays open to try again
+    const action = createAction();
+    const busy = action.busy;
+    const act = (title: string, fn: () => Promise<unknown>) => action.run(title, fn, toastFailure);
     const [selected, setSelected] = createSignal<string>();
     const [key, setKey] = createSignal("");
     const [answers, setAnswers] = createSignal<Record<string, string>>({});
@@ -34,7 +36,6 @@ export default function Providers(props: { agent: Agent; open: boolean; onClose:
         on(selected, () => {
             setKey("");
             setCode("");
-            setError(null);
             setAnswers({});
         }),
     );
@@ -51,7 +52,7 @@ export default function Providers(props: { agent: Agent; open: boolean; onClose:
     };
 
     const connectKey = (p: ProviderInfo, m: ProviderMethod) =>
-        act(`${p.name} not connected`, async () => {
+        act(`Couldn't connect ${p.name}`, async () => {
             await props.agent.calls.connectKey({ provider: p.id, key: key(), answer: answersFor(m) });
             // the key is used once: it doesn't stay in the field
             setKey("");
@@ -59,7 +60,7 @@ export default function Providers(props: { agent: Agent; open: boolean; onClose:
         });
 
     const begin = (p: ProviderInfo, m: ProviderMethod) =>
-        act(`${p.name} not connected`, async () => {
+        act(`Couldn't connect ${p.name}`, async () => {
             setAttempt({ provider: p.id, info: await props.agent.calls.beginProvider({ provider: p.id, method: m.id!, answer: answersFor(m) }) });
         });
 
@@ -67,8 +68,8 @@ export default function Providers(props: { agent: Agent; open: boolean; onClose:
         setAttempt(null);
         setCode("");
         if (body.status === "complete") await refetch();
-        else if (body.status === "failed") setError({ title, message: body.message ?? "OpenCode didn't say why" });
-        else if (body.status === "expired") setError({ title, message: "The sign-in page expired. Start again." });
+        else if (body.status === "failed") showError(title, body.message ?? "OpenCode didn't say why");
+        else if (body.status === "expired") showError(title, "The sign-in page expired. Start again.");
     };
     // an answer for a sign-in that was canceled or replaced since is dropped: it would end the new one with the old one's error
     const check = async (withCode?: string) => {
@@ -77,11 +78,11 @@ export default function Providers(props: { agent: Agent; open: boolean; onClose:
         const still = () => attempt()?.info.id === a.info.id;
         try {
             const status = await props.agent.calls.providerAttempt({ provider: a.provider, attempt: a.info.id, code: withCode });
-            if (still() && status.status !== "pending") await finishAttempt(`${current()?.name ?? "Provider"} not connected`, status);
+            if (still() && status.status !== "pending") await finishAttempt(`Couldn't connect ${current()?.name ?? "the provider"}`, status);
         } catch (e) {
             if (!still()) return;
             setAttempt(null);
-            setError({ title: `${current()?.name ?? "Provider"} not connected`, message: errorMessage(e) });
+            showError(`Couldn't connect ${current()?.name ?? "the provider"}`, e);
         }
     };
     // an automatic sign-in finishes on OpenCode's side: ask until it has, one question at a time
@@ -92,7 +93,7 @@ export default function Providers(props: { agent: Agent; open: boolean; onClose:
         const a = attempt();
         setAttempt(null);
         setCode("");
-        return !a || (await act("Sign-in not stopped", () => props.agent.calls.cancelProvider({ provider: a.provider, attempt: a.info.id })));
+        return !a || (await act("Couldn't stop signing in", () => props.agent.calls.cancelProvider({ provider: a.provider, attempt: a.info.id })));
     };
     // a sign-in under way is stopped first: one OpenCode won't stop keeps the modal open to say so
     const close = async () => {
@@ -107,12 +108,9 @@ export default function Providers(props: { agent: Agent; open: boolean; onClose:
                 </PaperText>
                 <Switch>
                     <Match when={!providers.loading() && providers.error()}>
-                        <PaperQuote variant="danger" icon="error" title="Providers not listed" role="alert">
-                            {providers.error()}
-                        </PaperQuote>
-                        <PaperFlex direction="row">
-                            <PaperButton onClick={() => void refetch()}>Look again</PaperButton>
-                        </PaperFlex>
+                        <PaperEmptyState icon="error" title="Couldn't load">
+                            <PaperButton onClick={() => void refetch()}>Try again</PaperButton>
+                        </PaperEmptyState>
                     </Match>
                     <Match when={providers.value() === undefined}>
                         <PaperLoader loaderStatus="indeterminate" label="Asking OpenCode for its providers" />
@@ -138,7 +136,7 @@ export default function Providers(props: { agent: Agent; open: boolean; onClose:
                                                 <PaperButton
                                                     variant="text"
                                                     disabled={busy()}
-                                                    onClick={() => void act(`${p().name} not disconnected`, async () => (await props.agent.calls.disconnectProvider({ credential: c.id }), await refetch()))}
+                                                    onClick={() => void act(`Couldn't disconnect ${p().name}`, async () => (await props.agent.calls.disconnectProvider({ credential: c.id }), await refetch()))}
                                                 >
                                                     Disconnect
                                                 </PaperButton>
@@ -241,13 +239,6 @@ export default function Providers(props: { agent: Agent; open: boolean; onClose:
                                         )}
                                     </Show>
                                 </PaperFlex>
-                            )}
-                        </Show>
-                        <Show when={error()}>
-                            {(shownError) => (
-                                <PaperQuote variant="danger" icon="error" title={shownError().title} role="alert">
-                                    {shownError().message}
-                                </PaperQuote>
                             )}
                         </Show>
                     </Match>

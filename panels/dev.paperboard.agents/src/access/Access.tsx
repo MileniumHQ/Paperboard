@@ -2,9 +2,8 @@
 // they allowed, always or for this time, and taking any of them back. The
 // agent asks in the chat; this page follows every change as it happens.
 
-import { For, Match, Show, Switch, createSignal } from "solid-js";
-import { PaperButton, PaperEmptyState, PaperFlex, PaperIcon, PaperList, PaperListItem, PaperLoader, PaperQuote, createRead } from "@mileniumhq/paperui";
-import { errorMessage } from "@mileniumhq/paperapi";
+import { For, Match, Show, Switch } from "solid-js";
+import { PaperButton, PaperEmptyState, PaperFlex, PaperIcon, PaperList, PaperListItem, PaperLoader, createFailureToast, createRead, showError } from "@mileniumhq/paperui";
 import type { AccessGrant, AccessView } from "../contract";
 import type { Agent } from "../lib/agent";
 import { holdPage } from "../lib/pageHold";
@@ -18,31 +17,33 @@ export default function Access(props: { agent: Agent }) {
     // each grant keyed by what it is, so a change, read or pushed, touches only what changed
     const shape = (view: AccessView) => ({ error: view.error, grants: view.grants.map((grant) => ({ key: grantKey(grant), grant })) });
     // a change pushed while the first read is out is newer than it: the read doesn't replace it
-    const access = createRead(() => props.agent.calls.access().then(shape), { key: "key", follow: (land) => props.agent.events.access((next) => land(shape(next))) });
+    const access = createRead(() => props.agent.calls.access().then(shape), {
+        key: "key",
+        follow: (land) => props.agent.events.access((next) => land(shape(next))),
+        failure: { title: "Couldn't load what's allowed" },
+    });
     const view = access.value;
     const grants = () => view()?.grants ?? [];
-    const [failed, setFailed] = createSignal<string | null>(null);
+    // the grants file couldn't be read: nothing it held is allowed, and the toast says why
+    createFailureToast(() => view()?.error, { title: "Couldn't read what you allowed" });
     holdPage(access.ready());
 
-    const revoke = async (g: AccessGrant) => {
-        setFailed(null);
-        try {
-            access.set(shape(await props.agent.calls.revokeAccess({ grant: g.kind === "folder" ? { kind: "folder", path: g.path } : { kind: "command", command: g.command, anyArguments: g.anyArguments } })));
-        } catch (e) {
-            setFailed(errorMessage(e));
-        }
-    };
+    const revoke = (g: AccessGrant) =>
+        props.agent.calls
+            .revokeAccess({ grant: g.kind === "folder" ? { kind: "folder", path: g.path } : { kind: "command", command: g.command, anyArguments: g.anyArguments } })
+            .then((next) => access.set(shape(next)))
+            .catch((e) => showError(`Couldn't take back ${itemText(g).what}`, e));
 
     return (
         <Switch>
-            <Match when={access.error()}>
-                {(why) => (
-                    <PaperFlex padding="double">
-                        <PaperEmptyState icon="error" title="Access can't be read" description={why()}>
-                            <PaperButton onClick={() => void access.reload()}>Try again</PaperButton>
-                        </PaperEmptyState>
-                    </PaperFlex>
-                )}
+            <Match when={view() === undefined && access.error()}>
+                <PaperFlex padding="double">
+                    <PaperEmptyState icon="error" title="Couldn't load">
+                        <PaperButton disabled={access.loading()} onClick={() => void access.reload()}>
+                            Try again
+                        </PaperButton>
+                    </PaperEmptyState>
+                </PaperFlex>
             </Match>
             <Match when={view() === undefined}>
                 <PaperFlex padding="double">
@@ -51,20 +52,6 @@ export default function Access(props: { agent: Agent }) {
             </Match>
             <Match when={true}>
                 <PaperFlex flex minHeight={0}>
-                    <Show when={view()!.error}>
-                        <PaperFlex padding="full">
-                            <PaperQuote variant="danger" icon="error" title="What you allowed can't be read" role="alert">
-                                {view()!.error}
-                            </PaperQuote>
-                        </PaperFlex>
-                    </Show>
-                    <Show when={failed()}>
-                        <PaperFlex padding="full">
-                            <PaperQuote variant="danger" icon="error" title="Not taken back" role="alert">
-                                {failed()}
-                            </PaperQuote>
-                        </PaperFlex>
-                    </Show>
                     <Show
                         when={grants().length > 0}
                         fallback={

@@ -4,12 +4,13 @@
 
 import { Match, Show, Switch, createEffect, createSignal, on, type JSX } from "solid-js";
 import { createStore } from "solid-js/store";
-import { PaperButton, PaperCopyButton, PaperFlex, PaperIcon, PaperInput, PaperLoader, PaperModal, PaperProgress, PaperQuote, PaperText, type ActionFailure, createAction } from "@mileniumhq/paperui";
-import { SIGN_IN_REQUIRED, type BrainState, type Harness } from "../contract";
+import { PaperButton, PaperCopyButton, PaperFlex, PaperIcon, PaperInput, PaperLoader, PaperModal, PaperProgress, PaperQuote, PaperText, createAction, createFailureToast } from "@mileniumhq/paperui";
+import { HARNESSES, SIGN_IN_REQUIRED, type BrainState, type Harness } from "../contract";
 import type { Agent } from "../lib/agent";
 import { harnessName } from "../lib/brains";
 import { submitOnPaste } from "../lib/paste";
 import { createLoopbackCatch } from "../lib/loopback";
+import { toastFailure } from "../lib/toastFailure";
 
 /** Who a brain is signed in as. An email is who; anything else (ChatGPT, a provider's name) is how. */
 export function signedInLine(b: BrainState): string {
@@ -43,31 +44,35 @@ export function brainLine(harness: Harness, b: BrainState): string {
     }
 }
 
-/** The actions a person can ask of a brain; a refused one is kept to show under that brain, and only there. */
+/**
+ * The actions a person can ask of a brain. A refused one is a toast that names the brain, and so is a brain
+ * that stopped with a problem, for as long as it stands.
+ */
 export function createBrainActions(agent: Agent) {
     const { run } = createAction();
-    const [errors, setErrors] = createStore<Partial<Record<Harness, ActionFailure | null>>>({});
+    for (const h of HARNESSES) {
+        createFailureToast(() => agent.state.brains[h].phase === "failed" && agent.state.brains[h].error, { title: `Couldn't get ${harnessName(h)} ready` });
+    }
     // how many of a brain's actions are out: its buttons take no second press until the service answers the first
     const [running, setRunning] = createStore<Partial<Record<Harness, number>>>({});
     const act = async (h: Harness, title: string, fn: () => Promise<unknown>) => {
         setRunning(h, (n) => (n ?? 0) + 1);
         try {
-            return await run(title, fn, (f) => setErrors(h, f));
+            return await run(title, fn, toastFailure);
         } finally {
             setRunning(h, (n) => n! - 1);
         }
     };
     return {
-        error: (h: Harness) => errors[h] ?? null,
         busy: (h: Harness) => (running[h] ?? 0) > 0,
-        install: (h: Harness) => act(h, `${harnessName(h)} not installed`, () => agent.calls.installBrain({ harness: h })),
-        useFound: (h: Harness) => act(h, `${harnessName(h)} not used`, () => agent.calls.installBrain({ harness: h, from: "computer" })),
-        installOwn: (h: Harness) => act(h, `${harnessName(h)} not installed`, () => agent.calls.installBrain({ harness: h, from: "package" })),
-        signIn: (h: Harness) => act(h, `${harnessName(h)} not signed in`, () => agent.calls.signInBrain({ harness: h })),
-        cancel: (h: Harness) => act(h, "Sign-in not stopped", () => agent.calls.cancelBrainSignIn({ harness: h })),
-        signOut: (h: Harness) => act(h, `${harnessName(h)} not signed out`, () => agent.calls.signOutBrain({ harness: h })),
-        submitCode: (h: Harness, code: string) => act(h, "Code not accepted", () => agent.calls.brainCode({ harness: h, code })),
-        finishAt: (h: Harness, address: string) => act(h, "Sign-in not finished", () => agent.calls.brainAddress({ harness: h, address })),
+        install: (h: Harness) => act(h, `Couldn't install ${harnessName(h)}`, () => agent.calls.installBrain({ harness: h })),
+        useFound: (h: Harness) => act(h, `Couldn't use ${harnessName(h)}`, () => agent.calls.installBrain({ harness: h, from: "computer" })),
+        installOwn: (h: Harness) => act(h, `Couldn't install ${harnessName(h)}`, () => agent.calls.installBrain({ harness: h, from: "package" })),
+        signIn: (h: Harness) => act(h, `Couldn't sign in to ${harnessName(h)}`, () => agent.calls.signInBrain({ harness: h })),
+        cancel: (h: Harness) => act(h, `Couldn't stop signing in to ${harnessName(h)}`, () => agent.calls.cancelBrainSignIn({ harness: h })),
+        signOut: (h: Harness) => act(h, `Couldn't sign out of ${harnessName(h)}`, () => agent.calls.signOutBrain({ harness: h })),
+        submitCode: (h: Harness, code: string) => act(h, `${harnessName(h)} didn't take the code`, () => agent.calls.brainCode({ harness: h, code })),
+        finishAt: (h: Harness, address: string) => act(h, `Couldn't finish signing in to ${harnessName(h)}`, () => agent.calls.brainAddress({ harness: h, address })),
     };
 }
 export type BrainActions = ReturnType<typeof createBrainActions>;
@@ -98,19 +103,12 @@ export function BrainStatus(props: { agent: Agent; harness: Harness; actions: Br
                         }
                     />
                 </Match>
-                <Match when={b().phase === "failed" || b().phase === "unsupported"}>
-                    <PaperQuote variant="danger" icon="error" title={`${name()} not ready`} role="alert">
+                <Match when={b().phase === "unsupported"}>
+                    <PaperQuote variant="warning" icon="warning" title={`${name()} can't run on this computer`}>
                         {b().error}
                     </PaperQuote>
                 </Match>
             </Switch>
-            <Show when={props.actions.error(props.harness)}>
-                {(shown) => (
-                    <PaperQuote variant="danger" icon="error" title={shown().title} role="alert">
-                        {shown().message}
-                    </PaperQuote>
-                )}
-            </Show>
         </PaperFlex>
     );
 }
@@ -316,9 +314,7 @@ export function SignInModal(props: { agent: Agent; harness: Harness | null; acti
                                 </PaperFlex>
                             </Match>
                             <Match when={b()!.phase === "failed"}>
-                                <PaperQuote variant="danger" icon="error" title={`${harnessName(h())} not signed in`} role="alert">
-                                    {b()!.error}
-                                </PaperQuote>
+                                <PaperText preset="body">The sign-in stopped with a problem.</PaperText>
                                 <PaperFlex direction="row" gap="half">
                                     <PaperButton variant="primary" disabled={props.actions.busy(h())} onClick={() => void props.actions.signIn(h())}>
                                         Try again
@@ -326,13 +322,6 @@ export function SignInModal(props: { agent: Agent; harness: Harness | null; acti
                                 </PaperFlex>
                             </Match>
                         </Switch>
-                        <Show when={props.actions.error(h())}>
-                            {(shown) => (
-                                <PaperQuote variant="danger" icon="error" title={shown().title} role="alert">
-                                    {shown().message}
-                                </PaperQuote>
-                            )}
-                        </Show>
                     </PaperFlex>
                 )}
             </Show>

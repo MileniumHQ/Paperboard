@@ -6,10 +6,10 @@
 // user's back.
 
 import { For, Match, Show, Switch, createEffect, createSignal, on, onCleanup } from "solid-js";
-import { PaperButton, PaperEmptyState, PaperFlex, PaperIcon, PaperList, PaperListItem, PaperLoader, PaperQuote, PaperText, createAction, createPolling, createRead } from "@mileniumhq/paperui";
-import { errorMessage } from "@mileniumhq/paperapi";
+import { PaperButton, PaperEmptyState, PaperFlex, PaperIcon, PaperList, PaperListItem, PaperLoader, PaperText, createAction, createPolling, createRead, showError } from "@mileniumhq/paperui";
 import type { ComputerWindow } from "../contract";
 import type { Agent } from "../lib/agent";
+import { toastFailure } from "../lib/toastFailure";
 import { SetupProgress } from "./Computer";
 import { clip } from "../lib/text";
 import { WindowView } from "./WindowView";
@@ -29,7 +29,9 @@ export default function ComputerView(props: { agent: Agent }) {
     const name = () => props.agent.name();
     const ready = () => c().phase === "ready";
 
-    const { busy, error, setError, run: act } = createAction();
+    const action = createAction();
+    const busy = action.busy;
+    const act = (title: string, fn: () => Promise<unknown>) => action.run(title, fn, toastFailure);
 
     // ------------------------------------------------------------- its windows
 
@@ -46,7 +48,7 @@ export default function ComputerView(props: { agent: Agent }) {
     const shown = () => (windows().some((w) => w.id === chosen()) ? chosen() : (windows()[0]?.id ?? null));
 
     const closeWindow = (w: ComputerWindow) =>
-        void act("Window not closed", async () => {
+        void act("Couldn't close the window", async () => {
             await props.agent.calls.closeWindow({ window: w.id });
             listed.set((list) => list?.filter((x) => x.id !== w.id));
         });
@@ -62,7 +64,7 @@ export default function ComputerView(props: { agent: Agent }) {
         props.agent.calls.control({ take: false }).catch((e) => {
             // closed meanwhile: nowhere on the page is left to say it, and the service's lease frees the agent anyway
             if (disposed) console.error("[agents] computer not handed back:", e);
-            else setError({ title: "Computer not handed back", message: errorMessage(e) });
+            else showError("Couldn't hand the computer back", e);
         });
     const handBack = () => {
         clearTimeout(idle);
@@ -91,7 +93,7 @@ export default function ComputerView(props: { agent: Agent }) {
                 () =>
                     void props.agent.calls.control({ take: true }).catch((e) => {
                         setHolding(false);
-                        setError({ title: "Control lost", message: errorMessage(e) });
+                        showError("Lost control of the computer", e);
                     }),
                 RENEW_MS,
             );
@@ -115,15 +117,6 @@ export default function ComputerView(props: { agent: Agent }) {
                     </For>
                 </PaperList>
             </Show>
-            <Show when={error()}>
-                {(shown) => (
-                    <PaperFlex paddingX="full" paddingY="half">
-                        <PaperQuote variant="danger" icon="error" title={shown().title} role="alert" onDismiss={() => setError(null)}>
-                            {shown().message}
-                        </PaperQuote>
-                    </PaperFlex>
-                )}
-            </Show>
 
             <div class={styles.content}>
                 <Switch>
@@ -135,7 +128,7 @@ export default function ComputerView(props: { agent: Agent }) {
                             <SetupProgress computer={c()} />
                             <Show when={c().phase === "failed"}>
                                 <PaperFlex direction="row">
-                                    <PaperButton variant="primary" disabled={busy()} onClick={() => void act("Computer not set up", props.agent.calls.installComputer)}>
+                                    <PaperButton variant="primary" disabled={busy()} onClick={() => void act("Couldn't set up the computer", props.agent.calls.installComputer)}>
                                         <PaperIcon>restart_alt</PaperIcon> Set up again
                                     </PaperButton>
                                 </PaperFlex>
@@ -148,7 +141,7 @@ export default function ComputerView(props: { agent: Agent }) {
                                 A web browser of its own that {name()} uses for its work, about 400 MB of storage. It reaches the internet, never your files or your network.
                             </PaperText>
                             <PaperFlex direction="row">
-                                <PaperButton variant="primary" disabled={busy()} onClick={() => void act("Computer not set up", props.agent.calls.installComputer)}>
+                                <PaperButton variant="primary" disabled={busy()} onClick={() => void act("Couldn't set up the computer", props.agent.calls.installComputer)}>
                                     <PaperIcon>computer</PaperIcon> Set up {name()}'s computer
                                 </PaperButton>
                             </PaperFlex>
@@ -161,14 +154,14 @@ export default function ComputerView(props: { agent: Agent }) {
                     </Match>
                     <Match when={c().phase === "stopped"}>
                         <PaperEmptyState icon="power_settings_new" title="The computer is off" description={`${name()} turns it on when it needs it, or you can now.`}>
-                            <PaperButton variant="primary" disabled={busy()} onClick={() => void act("Computer not turned on", props.agent.calls.startComputer)}>
+                            <PaperButton variant="primary" disabled={busy()} onClick={() => void act("Couldn't turn on the computer", props.agent.calls.startComputer)}>
                                 Turn on
                             </PaperButton>
                         </PaperEmptyState>
                     </Match>
                     <Match when={c().phase === "failed"}>
                         <PaperEmptyState icon="error" title="The computer stopped" description={c().error ?? undefined}>
-                            <PaperButton variant="primary" disabled={busy()} onClick={() => void act("Computer not turned on", props.agent.calls.startComputer)}>
+                            <PaperButton variant="primary" disabled={busy()} onClick={() => void act("Couldn't turn on the computer", props.agent.calls.startComputer)}>
                                 Try again
                             </PaperButton>
                         </PaperEmptyState>
