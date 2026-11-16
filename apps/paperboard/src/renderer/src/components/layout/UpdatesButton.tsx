@@ -1,5 +1,5 @@
 import { createEffect, createMemo, createSignal, For, on, onCleanup, Show, type Component } from "solid-js";
-import { PaperButton, PaperList, PaperListItem, PaperListLabel, PaperLoader, PaperPopover, showToast } from "@mileniumhq/paperui";
+import { PaperButton, PaperList, PaperListItem, PaperListLabel, PaperLoader, PaperPopover, showError } from "@mileniumhq/paperui";
 import {
     batchPercent,
     groupHolds,
@@ -13,7 +13,6 @@ import {
 } from "../../../../shared/updateQueue";
 import { updateWhere } from "../../hooks/useUpdateQueue";
 import { formatBytes } from "../../lib/formatBytes";
-import { errorMessage } from "@mileniumhq/paperapi";
 
 // how long the finished check (or cross) stays before the button goes
 const FINISH_MS = 1800;
@@ -51,11 +50,7 @@ function HoldRow(props: { group: UpdateHoldGroup; onRelease: (keys: string[]) =>
         try {
             await props.onRelease(props.group.keys);
         } catch (err) {
-            showToast({
-                variant: "danger",
-                title: `${listOf(props.group.names)} couldn't update`,
-                message: errorMessage(err),
-            });
+            showError(`${listOf(props.group.names)} couldn't update`, err);
         } finally {
             setBusy(false);
         }

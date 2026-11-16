@@ -1,8 +1,7 @@
 import { createSignal, onMount } from "solid-js";
-import { showToast } from "@mileniumhq/paperui";
+import { showError, showToast } from "@mileniumhq/paperui";
 import { initialUpdateQueueState, type UpdateItem, type UpdateQueueState } from "../../../shared/updateQueue";
 import { isBrowserShell, shellIpc, subscribeRevisioned } from "../lib/shell";
-import { errorMessage } from "@mileniumhq/paperapi";
 
 /** where an update ran, for messages: "" on this computer */
 export function updateWhere(item: { computerName: string | null }): string {
@@ -32,11 +31,11 @@ export function useUpdateQueue() {
             seen.set(item.key, item.status);
         }
         if (next.checkError && next.checkError !== lastCheckError) {
-            showToast({ variant: "danger", title: "Couldn't check for updates", message: next.checkError });
+            showError("Couldn't check for updates", next.checkError);
         }
         lastCheckError = next.checkError;
         if (next.holdsError && next.holdsError !== lastHoldsError) {
-            showToast({ variant: "danger", title: "Couldn't read the updates waiting to install", message: next.holdsError });
+            showError("Couldn't read the updates waiting to install", next.holdsError);
         }
         lastHoldsError = next.holdsError;
     };
@@ -53,7 +52,7 @@ export function useUpdateQueue() {
                 tellFailures(next);
                 setState(next);
             },
-            (err) => showToast({ variant: "danger", title: "Couldn't read the update list", message: errorMessage(err) }),
+            (err) => showError("Couldn't read the update list", err),
         );
     });
 

@@ -1,5 +1,5 @@
 import { createSignal } from "solid-js";
-import { showToast } from "@mileniumhq/paperui";
+import { showError } from "@mileniumhq/paperui";
 import { mobileMode } from "../lib/mobileMode";
 import { shownComputers, showsWelcome } from "../lib/phoneComputers";
 import { askPanelToLeave, unsavedPanels } from "../lib/unsavedPanels";
@@ -81,7 +81,7 @@ export function useShellNavigation(options: ShellNavigationOptions) {
             if (activeComputerId() !== compId) selection.showComputer(compId);
             const answer = await askPanelToLeave(key);
             if (answer.error) {
-                showToast({ variant: "danger", title: `${options.panelName(compId, panelId)} couldn't ask about its unsaved changes`, message: answer.error });
+                showError(`${options.panelName(compId, panelId)} couldn't ask about its unsaved changes`, answer.error);
             }
             if (!answer.leave) return false;
         }

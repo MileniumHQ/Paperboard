@@ -1,7 +1,7 @@
 import { createEffect, on, onCleanup } from "solid-js";
 import { createStore, reconcile } from "solid-js/store";
-import { showToast } from "@mileniumhq/paperui";
-import { errorMessage, problemsApi, type PanelProblem } from "@mileniumhq/paperapi";
+import { showError } from "@mileniumhq/paperui";
+import { problemsApi, type PanelProblem } from "@mileniumhq/paperapi";
 import { logToMain } from "./shell";
 
 /**
@@ -17,7 +17,7 @@ export function followPanelProblems(computerId: string, computerName: () => stri
             (byPanel) => setProblems(reconcile(byPanel, { key: "key", merge: true })),
             (err) => {
                 logToMain("error", `Couldn't read the panels' problems on ${computerId}:`, err);
-                showToast({ variant: "danger", title: `Couldn't read what went wrong with ${computerName()}'s panels`, message: errorMessage(err) });
+                showError(`Couldn't read what went wrong with ${computerName()}'s panels`, err);
             },
             computerId,
         );

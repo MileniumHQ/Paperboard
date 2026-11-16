@@ -1,5 +1,5 @@
 import { createSignal, Show } from "solid-js";
-import { PaperModal, PaperFlex, PaperText, PaperButton, PaperProgress, showToast } from "@mileniumhq/paperui";
+import { PaperModal, PaperFlex, PaperText, PaperButton, PaperProgress, showError } from "@mileniumhq/paperui";
 import type { AppUpdateState } from "../../../../shared/appUpdate";
 import { shellIpc } from "../../lib/shell";
 import { checkForUpdates } from "../../hooks/useAppUpdate";
@@ -27,7 +27,7 @@ export default function AppUpdateModal(props: { state: AppUpdateState; open: boo
     const restart = () => {
         props.onClose();
         shellIpc().invoke("quit-and-install").catch((err) =>
-            showToast({ variant: "danger", title: "Paperboard couldn't restart to update", message: errorMessage(err) }));
+            showError("Paperboard couldn't restart to update", err));
     };
     return <PaperModal
         open={props.open}
@@ -44,7 +44,7 @@ export default function AppUpdateModal(props: { state: AppUpdateState; open: boo
                 <PaperButton onClick={() => {
                     props.onClose();
                     // what it finds shows here again, and the top bar lists the rest
-                    checkForUpdates().catch((err) => showToast({ variant: "danger", title: "Couldn't check for updates", message: errorMessage(err) }));
+                    checkForUpdates().catch((err) => showError("Couldn't check for updates", err));
                 }}>{packageManaged() ? "Retry check" : "Retry update"}</PaperButton>
             </Show>
             <Show when={ready()}>
