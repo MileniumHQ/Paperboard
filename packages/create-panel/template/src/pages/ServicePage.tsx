@@ -1,20 +1,27 @@
 // A page backed by the panel's service. The service owns the state; the page
 // mirrors it through its client, so a greeting given in one window (or by
 // another panel's Greet block) shows up in every window at once.
-import { createSignal, onCleanup, Show } from "solid-js";
-import { PaperButton, PaperCard, PaperEmptyState, PaperFlex, PaperIcon, PaperInput, PaperPageHeader, PaperQuote, PaperText } from "@mileniumhq/paperui";
-import { errorMessage, serviceClient } from "@mileniumhq/paperapi";
+import { createSignal, Match, onCleanup, Show, Switch } from "solid-js";
+import {
+    createRead,
+    PaperButton,
+    PaperCard,
+    PaperEmptyState,
+    PaperFlex,
+    PaperInput,
+    PaperLoader,
+    PaperPageHeader,
+    PaperText,
+    showError,
+} from "@mileniumhq/paperui";
+import { serviceClient } from "@mileniumhq/paperapi";
 import { panelContract } from "../panel";
 
 export default function ServicePage() {
     const service = serviceClient(panelContract);
     const [state, setState] = createSignal(service.state.current());
-    // unavailable is not empty: a service that has not answered is said, with a way to try again
-    const [hydration, setHydration] = createSignal<"loading" | "ready" | "failed">("loading");
-    const [hydrationError, setHydrationError] = createSignal("");
     const [name, setName] = createSignal("");
     const [greeting, setGreeting] = createSignal("");
-    const [failure, setFailure] = createSignal("");
     const [busy, setBusy] = createSignal(false);
 
     const off = service.state.subscribe((full) => setState({ ...full }));
@@ -23,30 +30,25 @@ export default function ServicePage() {
         service.state.dispose();
     });
 
-    const hydrate = async () => {
-        setHydration("loading");
-        try {
+    // unavailable is not empty: a service that has not answered is said, with a way to try again
+    const hydrated = createRead(
+        async () => {
             setState({ ...(await service.state.refresh()) });
-            setHydration("ready");
-        } catch (err) {
-            setHydrationError(errorMessage(err));
-            setHydration("failed");
-        }
-    };
-    void hydrate();
+            return true;
+        },
+        { failure: { title: "Couldn't reach the service", retry: true } },
+    );
 
     const greet = async () => {
         if (busy()) return;
         setBusy(true);
-        setFailure("");
         setGreeting("");
         try {
             // the service refuses a bad name with a reason; the new count
             // arrives through its state, not through this answer
             setGreeting(await service.calls.greet({ name: name() }));
         } catch (err) {
-            console.error("[Service] greet failed:", err);
-            setFailure(errorMessage(err));
+            showError("Couldn't greet", err);
         } finally {
             setBusy(false);
         }
@@ -55,47 +57,42 @@ export default function ServicePage() {
     return (
         <>
             <PaperPageHeader icon="sync_alt" title="Service" subtitle="Asks the panel's background service and mirrors what it keeps" />
-            <Show when={hydration() === "ready"} fallback={
-                <PaperEmptyState
-                    icon={hydration() === "failed" ? "cloud_off" : "hourglass_empty"}
-                    title={hydration() === "failed" ? "The service is not answering" : "Connecting to the service"}
-                    description={hydration() === "failed" ? hydrationError() : undefined}
-                >
-                    <Show when={hydration() === "failed"}>
-                        <PaperButton onClick={() => void hydrate()}>
-                            <PaperIcon>refresh</PaperIcon> Try again
-                        </PaperButton>
-                    </Show>
-                </PaperEmptyState>
-            }>
-                <PaperCard>
-                    <PaperFlex direction="column" padding="full" gap="full">
-                        <PaperText>Greetings given so far: {state().greetingCount}</PaperText>
-                        <PaperInput
-                            fullWidth
-                            label="Name"
-                            value={name()}
-                            onInput={(e) => setName(e.currentTarget.value)}
-                            onKeyDown={(e) => {
-                                if (e.key === "Enter") void greet();
-                            }}
-                        />
-                        <PaperFlex direction="row" gap="half" align="center">
-                            <PaperButton disabled={busy()} onClick={() => void greet()}>
-                                Greet
-                            </PaperButton>
-                            <Show when={greeting()}>
-                                <PaperText>{greeting()}</PaperText>
-                            </Show>
+            <Switch>
+                <Match when={hydrated.value()}>
+                    <PaperCard>
+                        <PaperFlex direction="column" padding="full" gap="full">
+                            <PaperText>Greetings given so far: {state().greetingCount}</PaperText>
+                            <PaperInput
+                                fullWidth
+                                label="Name"
+                                value={name()}
+                                onInput={(e) => setName(e.currentTarget.value)}
+                                onKeyDown={(e) => {
+                                    if (e.key === "Enter") void greet();
+                                }}
+                            />
+                            <PaperFlex direction="row" gap="half" align="center">
+                                <PaperButton disabled={busy()} onClick={() => void greet()}>
+                                    Greet
+                                </PaperButton>
+                                <Show when={greeting()}>
+                                    <PaperText>{greeting()}</PaperText>
+                                </Show>
+                            </PaperFlex>
                         </PaperFlex>
-                    </PaperFlex>
-                </PaperCard>
-                <Show when={failure()}>
-                    <PaperQuote variant="danger" icon="warning" title="Not greeted" role="alert" onDismiss={() => setFailure("")}>
-                        {failure()}
-                    </PaperQuote>
-                </Show>
-            </Show>
+                    </PaperCard>
+                </Match>
+                <Match when={hydrated.error()}>
+                    <PaperEmptyState icon="cloud_off" title="Couldn't load">
+                        <PaperButton disabled={hydrated.loading()} onClick={() => void hydrated.reload()}>
+                            Try again
+                        </PaperButton>
+                    </PaperEmptyState>
+                </Match>
+                <Match when={true}>
+                    <PaperLoader loaderStatus="indeterminate" label="Connecting to the service" />
+                </Match>
+            </Switch>
         </>
     );
 }
