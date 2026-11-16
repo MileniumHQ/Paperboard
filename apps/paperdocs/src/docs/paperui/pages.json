@@ -121,6 +121,10 @@
                     "name": "PaperEmptyState",
                     "file": "paper-empty-state"
                 },
+                "papererror": {
+                    "name": "PaperError",
+                    "file": "paper-error"
+                },
                 "papergrid": {
                     "name": "PaperGrid",
                     "file": "paper-grid"

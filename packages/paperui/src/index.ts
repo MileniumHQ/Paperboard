@@ -17,6 +17,7 @@ export * from "./components/PaperContextMenu";
 export * from "./components/PaperEditor";
 export * from "./components/PaperEffect";
 export * from "./components/PaperEmptyState";
+export * from "./components/PaperError";
 export * from "./components/PaperGrid";
 export * from "./components/PaperIcon";
 export * from "./components/PaperInput";

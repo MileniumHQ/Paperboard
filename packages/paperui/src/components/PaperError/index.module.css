@@ -1,0 +1,92 @@
+/* A failure in place. One red signal, the icon; the words stay calm and
+   neutral, in the type every title and description in PaperUI uses. */
+.PaperError {
+    box-sizing: border-box;
+    display: flex;
+    min-width: 0;
+    color: var(--paper-text);
+    font-family: var(--paper-font-family);
+}
+
+.icon {
+    flex-shrink: 0;
+    color: var(--paper-danger);
+}
+
+.body {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--paper-uigap-onefourth);
+}
+
+.details {
+    align-self: stretch;
+}
+
+/* what a tool printed, read whole */
+.detailsText {
+    max-height: var(--paper-size-panel-height-small);
+    overflow-x: hidden;
+    overflow-y: auto;
+    text-align: start;
+}
+
+.actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--paper-uigap-half);
+    padding-top: var(--paper-uigap-onefourth);
+}
+
+/* in line: a row in a hairline frame, in a section or above a list */
+.inline {
+    width: 100%;
+    align-items: flex-start;
+    gap: var(--paper-uigap-half);
+    padding: var(--paper-uigap-threefourths) var(--paper-uigap);
+    border: var(--paper-border-width) solid var(--paper-border);
+    border-radius: var(--paper-border-radius);
+}
+
+.inline .icon {
+    font-size: var(--paper-icon-size-small);
+    /* lines the glyph up with the title's first line */
+    padding-top: var(--paper-uigap-sixth);
+}
+
+/* filling a view with nothing else to show: centred in the space left */
+.fill {
+    flex: 1 0 auto;
+    width: 100%;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: var(--paper-uigap-half);
+    padding: var(--paper-uigap-double) var(--paper-uigap);
+    text-align: center;
+}
+
+.fill .icon {
+    font-size: var(--paper-icon-size-huge);
+}
+
+.fill .body {
+    flex: 0 1 auto;
+    width: 100%;
+    max-width: var(--paper-size-menu-max);
+    align-items: center;
+}
+
+.fill .actions {
+    justify-content: center;
+    padding-top: var(--paper-uigap-half);
+}
+
+/* Details sits under the button, in the middle like the rest; what it
+   holds still reads from the left */
+.fill .details {
+    align-self: center;
+    max-width: 100%;
+}
