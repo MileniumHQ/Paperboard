@@ -1,12 +1,13 @@
-import { Show } from "solid-js";
-import { PaperButton, PaperFlex, PaperModal, PaperQuote } from "@mileniumhq/paperui";
+import { createEffect, on } from "solid-js";
+import { PaperButton, PaperFlex, PaperModal, showError } from "@mileniumhq/paperui";
 import InstallLoaders, { type InstallLoaderItem } from "./InstallLoaders";
-import type { Outcome } from "../lib/failure";
-import FailureText from "./FailureText";
+import { splitFailure, type Outcome } from "../lib/failure";
+import FailureOutput from "./FailureOutput";
 
 /**
  * What an install in the Versions tab shows: its rows, which nothing closes
- * while it runs, and the failure with a Dismiss once it stops.
+ * while it runs, and once it fails a Dismiss. The failure's first line is a
+ * toast; what the tool printed after it stays here.
  */
 export default function InstallProgressModal(props: {
     open: boolean;
@@ -14,6 +15,14 @@ export default function InstallProgressModal(props: {
     failure?: Outcome;
     onDismiss(): void;
 }) {
+    createEffect(
+        on(
+            () => props.failure,
+            (failure) => {
+                if (failure) showError(failure.title, splitFailure(failure.message).summary);
+            },
+        ),
+    );
     return (
         <PaperModal
             open={props.open}
@@ -24,11 +33,9 @@ export default function InstallProgressModal(props: {
             footer={props.failure ? <PaperButton onClick={props.onDismiss}>Dismiss</PaperButton> : undefined}
         >
             <PaperFlex fullWidth center>
-                <PaperFlex fullWidth maxWidth="panel-small">
+                <PaperFlex direction="column" gap="half" fullWidth maxWidth="panel-small">
                     <InstallLoaders items={props.rows} />
-                    <Show when={props.failure}>
-                        {(note) => <PaperQuote variant="danger" icon="warning" title={note().title}><FailureText message={note().message} /></PaperQuote>}
-                    </Show>
+                    <FailureOutput message={props.failure?.message ?? ""} />
                 </PaperFlex>
             </PaperFlex>
         </PaperModal>

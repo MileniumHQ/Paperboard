@@ -1,13 +1,13 @@
 // What the Players tab knows and does: the roster (the server's lists plus
 // everyone with data in this world), the names players have now, who is
 // banned, which player is open, and every change to them. The tab draws it;
-// every failure lands in `feedback`.
-import { keepUnchanged, createLatest, createPolling, createRead } from "@mileniumhq/paperui";
+// every failure is a toast.
+import { keepUnchanged, createFailureToast, createLatest, createPolling, createRead, showError } from "@mileniumhq/paperui";
 import { batch, createEffect, createMemo, createSignal, on, onMount } from "solid-js";
 import { useServer } from "../../lib/server";
 import { type CallName } from "../../service/contract";
 import type { BedrockNaming } from "../../core/bedrock";
-import { errorMessage, type Outcome } from "../../lib/failure";
+import { errorMessage } from "../../lib/failure";
 import { createLeaderboard } from "./leaderboard";
 
 const LIST_POLL_MS = 15000;
@@ -41,7 +41,11 @@ export function createPlayers() {
     // asked or being asked this visit; a failed ask is asked again
     const requestedNames = new Set<string>();
     const [openName, setOpenName] = createSignal<string | undefined>();
-    const [feedback, setFeedback] = createSignal<Outcome | undefined>();
+    // why the lists or who is online couldn't be read, until they are read again
+    const [rosterError, setRosterError] = createSignal("");
+    createFailureToast(rosterError, { title: "Couldn't load the players" });
+    const [onlineError, setOnlineError] = createSignal("");
+    createFailureToast(onlineError, { title: "Couldn't read who is online" });
     // how Floodgate names Bedrock players; null without crossplay
     const [bedrock, setBedrock] = createSignal<BedrockNaming | null>(null);
 
@@ -91,7 +95,7 @@ export function createPlayers() {
             })
             .catch((err) => {
                 for (const uuid of wanted) requestedNames.delete(uuid);
-                setFeedback({ title: "Player names not updated", message: errorMessage(err) });
+                showError("Couldn't update the players' names", errorMessage(err));
             });
     };
 
@@ -106,29 +110,33 @@ export function createPlayers() {
             const roster = answer ?? [];
             const listed = withCurrentNames(roster.map(({ banned: _banned, banReason: _reason, ...player }) => player));
             batch(() => {
+                setRosterError("");
                 setPlayers(listed);
                 setBannedNames(new Map(listed.flatMap((p, i) => (roster[i].banned ? [[p.name.toLowerCase(), roster[i].banReason] as const] : []))));
             });
             refreshNames(roster.map((p) => p.uuid));
         } catch (err) {
             if (!current()) return;
-            setFeedback({ title: "Players not loaded", message: errorMessage(err) });
+            setRosterError(errorMessage(err));
         }
     };
 
     // offline stats from the world's files, by uuid; a poll that reads the
     // same numbers keeps every entry it had, and a failed read says why
     // instead of leaving the last numbers (or none) looking current
-    const stats = createRead(async () => (await calls.listPlayerStats()).filter((entry) => entry && typeof entry.uuid === "string"), { key: "uuid", message: errorMessage });
+    const stats = createRead(async () => (await calls.listPlayerStats()).filter((entry) => entry && typeof entry.uuid === "string"), {
+        key: "uuid",
+        message: errorMessage,
+        failure: { title: "Couldn't load the player stats" },
+    });
     const playerStatSummaries = createMemo(() => new Map((stats.value() ?? []).map((entry) => [entry.uuid.toLowerCase(), entry])));
-    createEffect(on(stats.error, (message) => message !== null && setFeedback({ title: "Player stats not loaded", message })));
     createPolling(() => stats.reload(), STATS_POLL_MS);
 
     // who is online arrives as state; asking can fail, and says so
     const askOnline = () =>
         calls.queryOnlinePlayers().then(
-            () => undefined,
-            (err) => void setFeedback({ title: "Online players not read", message: errorMessage(err) }),
+            () => void setOnlineError(""),
+            (err) => void setOnlineError(errorMessage(err)),
         );
     createPolling(askOnline, LIST_POLL_MS, { immediate: true });
 
@@ -137,7 +145,7 @@ export function createPlayers() {
         calls
             .readBedrockNaming()
             .then((naming) => setBedrock(naming ?? null))
-            .catch((err) => setFeedback({ title: "Bedrock names not read", message: errorMessage(err) }));
+            .catch((err) => showError("Couldn't read the Bedrock names", errorMessage(err)));
     });
 
     // players known only from their stats files get current names too
@@ -195,19 +203,18 @@ export function createPlayers() {
     /** why a banned player is banned, as the ban list says; null when it says nothing or they aren't */
     const banReason = (name: string) => bannedNames().get(name.toLowerCase()) ?? null;
 
-    // a failed change is quoted under the title naming what did not happen
+    // a failed change is a toast whose title names what did not happen: "Couldn't ban Steve"
     const callPlayerAction = async (
         actionId: CallName,
         playerName: string,
-        failure: string,
+        failure: (name: string) => string,
         run: () => Promise<unknown>,
     ): Promise<boolean> => {
         try {
             await run();
-            setFeedback(undefined);
             return true;
         } catch (err) {
-            setFeedback({ title: `${playerName} was not ${failure}`, message: errorMessage(err) });
+            showError(`Couldn't ${failure(playerName)}`, errorMessage(err));
             return false;
         }
     };
@@ -223,13 +230,16 @@ export function createPlayers() {
         );
     };
 
-    /** ops or whitelists a player, or takes it back; the error is in `feedback` */
+    /** ops or whitelists a player, or takes it back; a failure is a toast */
     const setFlag = async (playerName: string, field: PlayerFlagField, value: boolean): Promise<boolean> => {
         const actionId =
             field === "op"
                 ? value ? "opPlayer" : "deopPlayer"
                 : value ? "whitelistPlayer" : "unwhitelistPlayer";
-        const failure = field === "op" ? (value ? "made an operator" : "removed as an operator") : value ? "whitelisted" : "removed from the whitelist";
+        const failure = (name: string) =>
+            field === "op"
+                ? value ? `make ${name} an operator` : `remove ${name} as an operator`
+                : value ? `whitelist ${name}` : `remove ${name} from the whitelist`;
         const player = find(playerName);
         if (!(await callPlayerAction(actionId, playerName, failure, () => calls[actionId]({ player: playerName, uuid: player?.uuid })))) return false;
         // the service answers once the list is written, by the server or itself: read it back.
@@ -243,8 +253,8 @@ export function createPlayers() {
     /** bans or pardons; the service answers once the server has written its ban list, which is read back */
     const setBanned = async (playerName: string, banned: boolean, reason?: string): Promise<boolean> => {
         const done = banned
-            ? await callPlayerAction("banPlayer", playerName, "banned", () => calls.banPlayer({ player: playerName, reason }))
-            : await callPlayerAction("pardonPlayer", playerName, "pardoned", () => calls.pardonPlayer({ player: playerName }));
+            ? await callPlayerAction("banPlayer", playerName, (name) => `ban ${name}`, () => calls.banPlayer({ player: playerName, reason }))
+            : await callPlayerAction("pardonPlayer", playerName, (name) => `pardon ${name}`, () => calls.pardonPlayer({ player: playerName }));
         if (done) await loadRoster();
         return done;
     };
@@ -290,10 +300,9 @@ export function createPlayers() {
         try {
             await calls.deletePlayerData({ player: player.name, uuid: player.uuid });
         } catch (err) {
-            setFeedback({ title: `${player.name}'s data was not deleted`, message: errorMessage(err) });
+            showError(`Couldn't delete ${player.name}'s data`, errorMessage(err));
             return;
         }
-        setFeedback(undefined);
         forget(player.name, player.uuid);
         // a player on the whitelist, an operator or banned stays listed,
         // now without data; anyone else leaves the roster
@@ -312,15 +321,13 @@ export function createPlayers() {
         isBanned,
         banReason,
         bedrock,
-        feedback,
-        setFeedback,
         openName,
         setOpenName,
         openPlayer,
         setFlag,
         setBanned,
-        kick: (playerName: string, reason?: string) => callPlayerAction("kickPlayer", playerName, "kicked", () => calls.kickPlayer({ player: playerName, reason })),
-        kill: (playerName: string) => callPlayerAction("killPlayer", playerName, "killed", () => calls.killPlayer({ player: playerName })),
+        kick: (playerName: string, reason?: string) => callPlayerAction("kickPlayer", playerName, (name) => `kick ${name}`, () => calls.kickPlayer({ player: playerName, reason })),
+        kill: (playerName: string) => callPlayerAction("killPlayer", playerName, (name) => `kill ${name}`, () => calls.killPlayer({ player: playerName })),
         whitelistName,
         deleteOpenData,
     };

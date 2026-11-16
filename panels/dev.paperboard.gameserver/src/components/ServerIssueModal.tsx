@@ -1,12 +1,11 @@
 import { PANEL_ID } from "../service/types";
 import { type Component, createEffect, createMemo, createRoot, createSignal, For, on, Show } from "solid-js";
 import {
-    PaperFlex,
     PaperModal,
     PaperButton,
     PaperText,
     PaperIcon,
-    PaperQuote,
+    showError,
 } from "@mileniumhq/paperui";
 import type { ServerIssue, ServerIssueAction } from "../core/diagnostics";
 import { useServer, type ServerStatus } from "../lib/server";
@@ -29,7 +28,6 @@ function whenOffline(serverStatus: () => ServerStatus): Promise<boolean> {
 
 const ServerIssueModal: Component = () => {
     const { activeIssue, calls, files, serverPort, serverStatus, startServer } = useServer();
-    const [actionError, setActionError] = createSignal<{ title: string; message: string } | null>(null);
     const [repairing, setRepairing] = createSignal(false);
     // the last issue stays on the modal while it closes, so it animates out instead of vanishing
     const shownIssue = createMemo<ServerIssue | null>((prev) => activeIssue() ?? prev, null);
@@ -38,8 +36,8 @@ const ServerIssueModal: Component = () => {
     // asked for while it is still ending would do nothing
     const repair = async (action: ServerIssueAction) => {
         if (repairing()) return;
-        setActionError(null);
         setRepairing(true);
+        let repaired = false;
         try {
             switch (action.actionKey) {
                 case "killPortAndRetry":
@@ -51,20 +49,19 @@ const ServerIssueModal: Component = () => {
                     break;
             }
             await calls.clearActiveIssue();
+            repaired = true;
         } catch (err) {
-            // the issue stays open and says why
-            setActionError({ title: "Repair failed", message: errorMessage(err) });
-            return;
+            // the issue stays open, and a toast over it says why
+            showError("Couldn't repair the server", errorMessage(err));
         } finally {
             setRepairing(false);
         }
-        if (await whenOffline(serverStatus)) startServer();
+        if (repaired && (await whenOffline(serverStatus))) startServer();
     };
 
     // a dismissal the service refused leaves the issue open, saying why
     const dismiss = () => {
-        setActionError(null);
-        calls.clearActiveIssue().catch((err) => setActionError({ title: "Issue not dismissed", message: errorMessage(err) }));
+        calls.clearActiveIssue().catch((err) => showError("Couldn't dismiss the issue", errorMessage(err)));
     };
 
     return (
@@ -94,16 +91,7 @@ const ServerIssueModal: Component = () => {
                 </>
             }
         >
-            <PaperFlex direction="column" gap="half" fullWidth>
-                <PaperText preset="body">{shownIssue()?.description}</PaperText>
-                <Show when={actionError()}>
-                    {(error) => (
-                        <PaperQuote variant="danger" icon="warning" title={error().title}>
-                            {error().message}
-                        </PaperQuote>
-                    )}
-                </Show>
-            </PaperFlex>
+            <PaperText preset="body">{shownIssue()?.description}</PaperText>
         </PaperModal>
     );
 };

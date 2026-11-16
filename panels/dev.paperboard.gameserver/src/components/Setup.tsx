@@ -13,6 +13,7 @@ import {
     PaperLink,
     PaperQuote,
     createAction,
+    showError,
     useWizard,
     type LoaderStatus,
 } from "@mileniumhq/paperui";
@@ -72,7 +73,6 @@ function InstallStep(props: InstallStepProps) {
     const [declineNotice, setDeclineNotice] = createSignal("");
 
     const [error, setError] = createSignal("");
-    const [eulaError, setEulaError] = createSignal("");
     const [busy, setBusy] = createSignal(false);
     let started = false;
     let disposed = false;
@@ -130,7 +130,6 @@ function InstallStep(props: InstallStepProps) {
     const handleAgreeEula = async () => {
         if (busy()) return;
         setBusy(true);
-        setEulaError("");
         try {
             await files.write(
                 "eula.txt",
@@ -144,7 +143,7 @@ function InstallStep(props: InstallStepProps) {
             wizard?.setOptionsShown(true);
             wizard?.setCanProceed(true);
         } catch (err) {
-            setEulaError(errorMessage(err));
+            showError("Couldn't save the EULA agreement", errorMessage(err));
         } finally {
             setBusy(false);
         }
@@ -222,9 +221,6 @@ function InstallStep(props: InstallStepProps) {
                 }
             >
                 <PaperFlex direction="column" gap="half">
-                    <Show when={eulaError()}>
-                        <PaperQuote variant="danger" title="Could not save EULA agreement">{eulaError()}</PaperQuote>
-                    </Show>
                     <PaperText preset="body">
                         To run a Minecraft server, you must review and agree to Mojang's official End User License Agreement (EULA).
                     </PaperText>
@@ -254,12 +250,12 @@ export default function Setup(props: SetupProps) {
     const finishing = createAction({ message: errorMessage });
     const handleFinishSetup = async () => {
         if (finishing.busy()) return;
-        await finishing.run("Could not finish setup", async () => {
+        await finishing.run("Couldn't finish setup", async () => {
             // the install step already recorded software and version; this
             // marks onboarding done, through the service so panel state is live
             await updatePanelConfig({ configured: true });
             props.onComplete?.();
-        });
+        }, (failure) => failure && showError(failure.title, `${failure.message} Try Finish Setup again.`));
     };
 
     return (
@@ -318,9 +314,6 @@ export default function Setup(props: SetupProps) {
             </PaperWizardStep>
 
             <PaperWizardStep index={2}>
-                <Show when={finishing.error()}>
-                    {(failure) => <PaperQuote variant="danger" title={failure().title}>{failure().message} Try Finish Setup again.</PaperQuote>}
-                </Show>
                 <InstallStep software={serverSoftware()} version={serverVersion()} />
             </PaperWizardStep>
         </PaperWizard>

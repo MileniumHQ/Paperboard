@@ -9,6 +9,7 @@ import {
     PaperContextMenuItem,
     useContextMenuState,
     createRead,
+    showError,
 } from "@mileniumhq/paperui";
 import { useServer } from "../lib/server";
 import { createUptime, overviewStats } from "./overviewStats";
@@ -49,49 +50,36 @@ export default function Overview(props: {
             const on = parsed["white-list"] ?? whitelistDefault(serverVersion());
             return { world: parsed["level-name"] || "world", restriction: joinRestriction(on === "true", countJsonEntries(list), countJsonEntries(ops)) };
         },
-        { source: () => props.active && [serverStatus(), serverVersion()], message: errorMessage },
+        { source: () => props.active && [serverStatus(), serverVersion()], message: errorMessage, failure: { title: "Couldn't check the whitelist" } },
     );
     // unreadable files make no claim either way, and say so
     const restriction = (): JoinRestriction => (whitelist.error() === null ? (whitelist.value()?.restriction ?? null) : null);
-    const whitelistError = () => whitelist.error() ?? "";
     // the world the server runs: server.properties' level-name, "world" when it names none
     const world = createMemo((prev: string) => whitelist.value()?.world ?? prev, "world");
 
     // the server list icon: the avatar's edit button opens the file picker,
     // and a right click offers to change or remove it
-    const iconRead = createRead(() => calls.readServerIcon(), { message: errorMessage });
+    const iconRead = createRead(() => calls.readServerIcon(), { message: errorMessage, failure: { title: "Couldn't read the server icon" } });
     const icon = () => iconRead.value() ?? null;
-    const [iconActionError, setIconActionError] = createSignal<{ title: string; message: string } | null>(null);
-    const iconError = () => {
-        const read = iconRead.error();
-        return iconActionError() ?? (read === null ? null : { title: "Couldn't read the server icon", message: read });
-    };
-    const setIconError = (failure: { title: string; message: string } | null) => {
-        setIconActionError(failure);
-        // a dismissed read failure is let go of: the icon stays as it was read
-        if (failure === null && iconRead.error() !== null) iconRead.set(iconRead.value());
-    };
     let iconPicker!: HTMLInputElement;
 
     const changeIcon = async (file: File | undefined) => {
         if (!file) return;
-        setIconError(null);
         try {
             iconRead.set(await setServerIconFromFile(calls, file));
         } catch (err) {
-            setIconError({ title: "Server icon not changed", message: errorMessage(err) });
+            showError("Couldn't change the server icon", errorMessage(err));
         }
     };
 
     const iconMenu = useContextMenuState("mouse");
     const removeIcon = async () => {
         iconMenu.close();
-        setIconError(null);
         try {
             await calls.removeServerIcon();
             iconRead.set(null);
         } catch (err) {
-            setIconError({ title: "Server icon not removed", message: errorMessage(err) });
+            showError("Couldn't remove the server icon", errorMessage(err));
         }
     };
 
@@ -154,20 +142,6 @@ export default function Overview(props: {
             }
             software={SOFTWARE_NAMES[minecraftSoftware(serverSoftware())] || minecraftSoftware(serverSoftware())}
         >
-            <Show when={iconError()}>
-                {(error) => (
-                    <PaperQuote variant="danger" icon="warning" title={error().title} onDismiss={() => setIconError(null)}>
-                        {error().message}
-                    </PaperQuote>
-                )}
-            </Show>
-
-            <Show when={whitelistError()}>
-                <PaperQuote variant="danger" icon="warning" title="Whitelist not checked" onDismiss={() => whitelist.set(undefined)}>
-                    {whitelistError()}
-                </PaperQuote>
-            </Show>
-
             <Show when={restriction()}>
                 <PaperQuote variant="warning" icon="lock" title="Whitelist is on">
                     <PaperFlex direction="column" gap="half">

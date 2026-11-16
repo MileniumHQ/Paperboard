@@ -1,6 +1,6 @@
 import { createMemo, createSignal, For, Show } from "solid-js";
 import { useServer } from "../lib/server";
-import { PaperBadge, PaperButton, PaperFlex, PaperIcon, PaperPageHeader, PaperSelectMenu, PaperSelectMenuItem } from "@mileniumhq/paperui";
+import { PaperBadge, PaperButton, PaperFlex, PaperIcon, PaperPageHeader, PaperSelectMenu, PaperSelectMenuItem, showError } from "@mileniumhq/paperui";
 import { gamertagOf, isFloodgateUuid, type BedrockNaming } from "../core/bedrock";
 import { errorMessage } from "../lib/failure";
 import { createSaves } from "../lib/saves";
@@ -58,8 +58,7 @@ export default function Players() {
     // op and whitelist switches flip at once and save in the order pressed
     // (lib/saves); a refusal is quoted and the switch shows what is stored
     const saves = createSaves({
-        failed: (err) => roster.setFeedback({ title: "Permission not changed", message: errorMessage(err) }),
-        changed: () => roster.setFeedback(undefined),
+        failed: (err) => showError("Couldn't change the permission", errorMessage(err)),
     });
 
     // a player with no playtime in this world has not joined it, said as the other games say it
@@ -108,8 +107,6 @@ export default function Players() {
                     { label: "Whitelisted", count: whitelistedCount(), selected: showWhitelisted(), onToggle: () => setShowWhitelisted((v) => !v) },
                     { label: "OP", count: opCount(), selected: showOp(), onToggle: () => setShowOp((v) => !v) },
                 ]}
-                feedback={roster.feedback()}
-                onDismissFeedback={() => roster.setFeedback(undefined)}
                 sections={sections()}
                 icon={(player) => <PlayerHead name={player.name} uuid={player.uuid} size="medium" />}
                 description={rowText}

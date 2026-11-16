@@ -15,6 +15,7 @@ import {
     PaperStatTile,
     PaperModal,
     createAction,
+    createFailureToast,
 } from "@mileniumhq/paperui";
 import { getStatusBadge, useServer } from "../lib/server";
 import ServerIssueModal from "./ServerIssueModal";
@@ -64,15 +65,18 @@ export default function ServerOverview(props: {
     /** false for a game that keeps no world, which has no Save world */
     world?: boolean;
 }) {
-    const { calls, summary, serverActionError, serverStatus, serverEntries, onlinePlayers, localIp, serverPort, portMoves, serverVersion, loadServerConfig, startServer, stopServer, restartServer } = useServer();
+    const { calls, summary, serverStatus, serverEntries, onlinePlayers, localIp, serverPort, portMoves, serverVersion, loadServerConfig, startServer, stopServer, restartServer } = useServer();
     // loading the config also reads the server's state
     onMount(() => void loadServerConfig());
 
     const saving = createAction({ message: errorMessage });
-    const [commandError, setCommandError] = createSignal("");
+    createFailureToast(() => saving.error()?.message, { title: "Couldn't save the world" });
     // resolves once the game confirms it wrote its world to disk
-    const save = () => saving.run("World not saved", () => calls.saveWorld());
+    const save = () => saving.run("Couldn't save the world", () => calls.saveWorld());
     const control = () => props.control?.kind ?? "stdin";
+    // why the last line typed didn't go out, until the next one or the server's state changes
+    const [commandError, setCommandError] = createSignal("");
+    createFailureToast(commandError, { title: control() === "broadcast" ? "Couldn't send the message" : "Couldn't run the command" });
     const runCommand = (line: string) => {
         setCommandError("");
         const sent = control() === "broadcast" ? calls.sayChat({ message: line }) : calls.runCommand({ command: line });
@@ -174,26 +178,6 @@ export default function ServerOverview(props: {
                         </PaperQuote>
                     )}
                 </For>
-
-                <Show when={serverActionError()}>
-                    <PaperQuote variant="danger" icon="warning" title="Server action failed">
-                        {serverActionError()}
-                    </PaperQuote>
-                </Show>
-
-                <Show when={saving.error()}>
-                    {(failure) => (
-                        <PaperQuote variant="danger" icon="warning" title={failure().title} onDismiss={() => saving.setError(null)}>
-                            {failure().message}
-                        </PaperQuote>
-                    )}
-                </Show>
-
-                <Show when={commandError()}>
-                    <PaperQuote variant="danger" icon="warning" title={control() === "broadcast" ? "Message not sent" : "Command not run"} onDismiss={() => setCommandError("")}>
-                        {commandError()}
-                    </PaperQuote>
-                </Show>
 
                 {props.children}
             </PaperFlex>

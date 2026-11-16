@@ -26,14 +26,13 @@ export interface Saves {
 
 /**
  * The one way a tab saves its settings: every setting of the tab waits in
- * one line, with the tab's other work. A failed save is handed to `failed`
- * for the tab's own error quote, which `changed` clears as the next change
- * is made.
+ * one line, with the tab's other work. A failed save is handed to `failed`,
+ * which toasts it, and `changed` hears each change as it is made.
  */
 export function createSaves(report: {
-    /** saving `value` failed: the tab quotes `err` */
+    /** saving `value` failed: the tab toasts `err` */
     failed(err: unknown, key: string, value: unknown): void;
-    /** a change was made: the tab clears what the last failure left on screen */
+    /** a change was made: the tab clears a notice the last save left */
     changed?(key: string): void;
 }): Saves {
     const queue = new SerialQueue();

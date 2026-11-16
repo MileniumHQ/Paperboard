@@ -3,7 +3,7 @@ import { errorMessage } from "../lib/failure";
 
 /**
  * What every game's install shares, as setup and Versions show it: whether
- * it is running, whether it has installed, and the failure to quote. run()
+ * it is running, whether it has installed, and why it failed. run()
  * resolves true once `work` has finished; the game's own rows read the
  * signals and whatever progress its `work` reports.
  */

@@ -8,7 +8,7 @@ import {
     PaperButton,
     PaperIcon,
     PaperPageHeader,
-    PaperQuote,
+    showError,
 } from "@mileniumhq/paperui";
 import { errorMessage } from "../lib/failure";
 import { useServer, type ChatMessage } from "../lib/server";
@@ -47,7 +47,6 @@ export default function Chat(props: { avatar: (name: string) => JSX.Element }) {
     const { calls, chatMessages, loadServerConfig, serverStatus } = useServer();
     let scrollRef: HTMLDivElement | undefined;
     const [inputVal, setInputVal] = createSignal("");
-    const [sendError, setSendError] = createSignal("");
 
     onMount(() => void loadServerConfig());
 
@@ -74,7 +73,6 @@ export default function Chat(props: { avatar: (name: string) => JSX.Element }) {
         e.preventDefault();
         const text = inputVal().trim();
         if (!text) return;
-        setSendError("");
         setInputVal("");
         // what you send is what you want to see
         atEnd = true;
@@ -82,7 +80,7 @@ export default function Chat(props: { avatar: (name: string) => JSX.Element }) {
         // unless a newer one is being typed there
         calls.sayChat({ message: text }).catch((err) => {
             if (!inputVal()) setInputVal(text);
-            setSendError(errorMessage(err));
+            showError("Couldn't send the message", errorMessage(err));
         });
         setTimeout(scrollToBottom, 0);
     };
@@ -121,12 +119,6 @@ export default function Chat(props: { avatar: (name: string) => JSX.Element }) {
                     </Show>
                 </PaperFlex>
             </PaperCard>
-
-            <Show when={sendError()}>
-                <PaperQuote variant="danger" icon="warning" title="Message not sent" onDismiss={() => setSendError("")}>
-                    {sendError()}
-                </PaperQuote>
-            </Show>
 
             <form onSubmit={handleSend}>
                 <PaperFlex direction="row" gap="half" align="center" fullWidth>

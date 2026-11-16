@@ -11,6 +11,7 @@ import {
     PaperSelectorItem,
     PaperText,
     PaperCard,
+    showError,
 } from "@mileniumhq/paperui";
 import InstallProgressModal from "./InstallProgressModal";
 import { useServer } from "../lib/server";
@@ -24,8 +25,7 @@ import {
 } from "../lib/software";
 import { isServerSoftware } from "../software/catalog";
 import VersionPicker from "./VersionPicker";
-import { errorMessage, type Outcome } from "../lib/failure";
-import FailureText from "./FailureText";
+import { errorMessage } from "../lib/failure";
 
 // Versions: swap the server software for a different software/version. This is a
 // destructive boundary (world format and plugin compatibility can change),
@@ -38,17 +38,14 @@ export default function Versions(props: { onRequestPluginUpdate?: () => void }) 
         createSignal<ServerSoftwareType>("paper");
     const [installedVersion, setInstalledVersion] = createSignal("");
     const [switching, setSwitching] = createSignal(false);
-    const [error, setError] = createSignal<Outcome | null>(null);
     const [postSwitchOpen, setPostSwitchOpen] = createSignal(false);
-    // said in the dialog where Uninstall all was pressed
-    const [uninstallError, setUninstallError] = createSignal("");
     const [postSwitchCount, setPostSwitchCount] = createSignal(0);
     const [uninstallingAll, setUninstallingAll] = createSignal(false);
     const [confirmSwitchOpen, setConfirmSwitchOpen] = createSignal(false);
     // blocking install modal: no onClose, so no dismiss path exists while
-    // the switch runs. A footer Dismiss appears only on failure.
+    // the switch runs. A footer Dismiss appears only once it failed, why.
     const [installOpen, setInstallOpen] = createSignal(false);
-    const [installFailed, setInstallFailed] = createSignal(false);
+    const [installFailure, setInstallFailure] = createSignal("");
     const install = createInstallRun();
     const [postSwitchWarning, setPostSwitchWarning] = createSignal("");
 
@@ -67,7 +64,7 @@ export default function Versions(props: { onRequestPluginUpdate?: () => void }) 
                 setSelectedVersion(version);
             }
         } catch (err) {
-            setError({ title: "Couldn't read the installed version", message: errorMessage(err) });
+            showError("Couldn't read the installed version", errorMessage(err));
         }
     });
 
@@ -78,16 +75,15 @@ export default function Versions(props: { onRequestPluginUpdate?: () => void }) 
         (software() !== installedSoftware() || selectedVersion() !== installedVersion());
 
     const switchVersion = async () => {
-        setError(null);
         if (online()) {
-            setError({ title: "Server running", message: "Stop the server before switching versions." });
+            showError("Couldn't switch versions", "Stop the server before switching versions.");
             return;
         }
         if (!getRequiredJavaVersion(selectedVersion())) {
-            setError({ title: "Can't switch versions", message: `Could not determine the Java runtime for ${selectedVersion()}.` });
+            showError("Couldn't switch versions", `Could not determine the Java runtime for ${selectedVersion()}.`);
             return;
         }
-        setInstallFailed(false);
+        setInstallFailure("");
         setInstallOpen(true);
         setSwitching(true);
         try {
@@ -105,12 +101,9 @@ export default function Versions(props: { onRequestPluginUpdate?: () => void }) 
             setPostSwitchCount(previousCount);
             setPostSwitchWarning(outcome.warning ?? "");
             setInstallOpen(false);
-            setUninstallError("");
             setPostSwitchOpen(true);
         } catch (err) {
-            const message = errorMessage(err);
-            setError({ title: "Switch failed", message });
-            setInstallFailed(true);
+            setInstallFailure(errorMessage(err));
         } finally {
             setSwitching(false);
         }
@@ -118,15 +111,13 @@ export default function Versions(props: { onRequestPluginUpdate?: () => void }) 
 
     const uninstallAll = async () => {
         setUninstallingAll(true);
-        setUninstallError("");
         try {
             // trash-first removal of every jar under both plugins/ and mods/, plus the install records
             await calls.uninstallAllPlugins();
             setPostSwitchCount(0);
             setPostSwitchOpen(false);
         } catch (err) {
-            const message = errorMessage(err);
-            setUninstallError(message);
+            showError("Couldn't uninstall the add-ons", errorMessage(err));
         } finally {
             setUninstallingAll(false);
         }
@@ -137,14 +128,6 @@ export default function Versions(props: { onRequestPluginUpdate?: () => void }) 
                     <PaperPageHeader icon="deployed_code" title="Versions" />
 
                     <RecoveryNotice />
-
-                    <Show when={error()}>
-                        {(failure) => (
-                            <PaperQuote variant="danger" icon="warning" title={failure().title}>
-                                <FailureText message={failure().message} />
-                            </PaperQuote>
-                        )}
-                    </Show>
 
                     <PaperCard>
                         <PaperFlex direction="column" gap="half" padding="full">
@@ -249,10 +232,10 @@ export default function Versions(props: { onRequestPluginUpdate?: () => void }) 
             <InstallProgressModal
                 open={installOpen()}
                 rows={install.rows(software())}
-                failure={(installFailed() && error()) || undefined}
+                failure={installFailure() ? { title: "Couldn't switch versions", message: installFailure() } : undefined}
                 onDismiss={() => {
                     setInstallOpen(false);
-                    setInstallFailed(false);
+                    setInstallFailure("");
                 }}
             />
 
@@ -295,11 +278,6 @@ export default function Versions(props: { onRequestPluginUpdate?: () => void }) 
                     <Show when={postSwitchWarning()}>
                         <PaperQuote variant="warning" icon="warning" title="Cleanup incomplete">
                             {postSwitchWarning()}
-                        </PaperQuote>
-                    </Show>
-                    <Show when={uninstallError()}>
-                        <PaperQuote variant="danger" icon="warning" title="Couldn't uninstall" onDismiss={() => setUninstallError("")}>
-                            {uninstallError()}
                         </PaperQuote>
                     </Show>
                     <Show when={postSwitchCount() > 0}>

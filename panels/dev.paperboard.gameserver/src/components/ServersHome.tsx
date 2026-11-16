@@ -15,9 +15,10 @@ import {
     PaperModal,
     PaperPage,
     PaperPageHeader,
-    PaperQuote,
     PaperSeparator,
     PaperText,
+    createFailureToast,
+    showError,
     useContextMenuState,
 } from "@mileniumhq/paperui";
 import { callsFor, panelCalls } from "../lib/api";
@@ -39,22 +40,19 @@ export default function ServersHome(props: {
     // the name modal keeps its title while it fades out after Back
     const [named, setNamed] = createSignal<string>(games[0].id);
     const [busy, setBusy] = createSignal(false);
-    const [error, setError] = createSignal("");
     const menu = useContextMenuState("below-right");
     const ask = (kind: "add" | "rename" | "remove") => {
         menu.close();
         setName(kind === "rename" ? target()!.name : "");
         setGame(null);
-        setError("");
         setDialog(kind);
     };
     const choosingGame = () => dialog() === "add" && game() === null;
     const submit = async () => {
         if (busy()) return;
         setBusy(true);
-        setError("");
+        const kind = dialog();
         try {
-            const kind = dialog();
             if (kind === "add") {
                 const chosen = game();
                 if (chosen === null) throw new Error("Choose a game for the server");
@@ -70,7 +68,7 @@ export default function ServersHome(props: {
             setDialog(null);
             setBusy(false);
         } catch (err) {
-            setError(errorMessage(err));
+            showError(kind === "add" ? "Couldn't add the server" : kind === "remove" ? "Couldn't remove the server" : "Couldn't rename the server", errorMessage(err));
             setBusy(false);
         }
     };
@@ -83,6 +81,8 @@ export default function ServersHome(props: {
         </PaperEffect>
     );
 
+    createFailureToast(() => props.state.serversError, { title: "Couldn't read the servers" });
+
     return (
         <PaperFlex fullWidth fullHeight overflowY="auto">
             <PaperPage width="wide">
@@ -90,13 +90,6 @@ export default function ServersHome(props: {
                     {/* an empty page offers this in its empty state instead */}
                     <Show when={props.state.servers.length > 0}>{newServer()}</Show>
                 </PaperPageHeader>
-                <Show when={props.state.serversError}>
-                    {(error) => (
-                        <PaperQuote variant="danger" title="Servers could not be read" role="alert">
-                            {error()}
-                        </PaperQuote>
-                    )}
-                </Show>
                 <Show
                     when={props.state.servers.length}
                     fallback={
@@ -201,7 +194,6 @@ export default function ServersHome(props: {
                     games={games}
                     onPick={(id) => {
                         setName("");
-                        setError("");
                         setNamed(id);
                         setGame(id);
                     }}
@@ -242,23 +234,6 @@ export default function ServersHome(props: {
                     </>
                 }
             >
-                <Show when={error()}>
-                    {(error) => (
-                        <PaperQuote
-                            variant="danger"
-                            title={
-                                dialog() === "add"
-                                    ? "Server could not be added"
-                                    : dialog() === "remove"
-                                      ? "Server could not be removed"
-                                      : "Server could not be renamed"
-                            }
-                            role="alert"
-                        >
-                            {error()}
-                        </PaperQuote>
-                    )}
-                </Show>
                 <Show
                     when={dialog() !== "remove"}
                     fallback={

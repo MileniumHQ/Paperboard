@@ -1,6 +1,6 @@
 import { ErrorBoundary } from "solid-js";
 import { render } from "solid-js/web";
-import { PaperFlex, PaperProvider, PaperQuote } from "@mileniumhq/paperui";
+import { PaperButton, PaperEmptyState, PaperProvider, showError } from "@mileniumhq/paperui";
 import App from "./App";
 import { errorMessage } from "./lib/failure";
 
@@ -15,14 +15,13 @@ render(
         <PaperProvider fullWidth fullHeight>
             {/* a page that can't start says why, instead of standing blank */}
             <ErrorBoundary
-                fallback={(err) => {
+                fallback={(err, reset) => {
                     console.error("[gameserver] could not start:", err);
+                    showError("Couldn't start Game Server", errorMessage(err));
                     return (
-                        <PaperFlex padding="full">
-                            <PaperQuote variant="danger" icon="warning" title="Game Server could not start" role="alert">
-                                {errorMessage(err)}
-                            </PaperQuote>
-                        </PaperFlex>
+                        <PaperEmptyState icon="error" title="Couldn't load">
+                            <PaperButton onClick={reset}>Try again</PaperButton>
+                        </PaperEmptyState>
                     );
                 }}
             >

@@ -6,13 +6,11 @@ import {
     PaperList,
     PaperListItem,
     PaperListLabel,
-    PaperQuote,
     PaperSplit,
     PaperSwatch,
     PaperText,
     type PaperColor,
 } from "@mileniumhq/paperui";
-import type { Outcome } from "../lib/failure";
 
 export interface RosterFilter {
     label: string;
@@ -42,9 +40,6 @@ export default function PlayerRoster<T extends { name: string }>(props: {
     total: number;
     onSearch(query: string): void;
     filters: readonly RosterFilter[];
-    /** the last thing that went wrong with the roster, quoted above the list */
-    feedback?: Outcome;
-    onDismissFeedback?(): void;
     sections: readonly RosterSection<T>[];
     icon(player: T): JSX.Element;
     description(player: T): string;
@@ -68,13 +63,6 @@ export default function PlayerRoster<T extends { name: string }>(props: {
     // it slides where it is and the page keeps its scroll.
     const openName = createMemo(() => props.open);
     const opened = createMemo(() => ({ name: openName() }));
-    // above the list, or, collapsed, above whatever is on screen: a change
-    // pressed on the open player's page fails where it was pressed
-    const feedbackQuote = (note: Outcome) => (
-        <PaperQuote variant="danger" icon="warning" title={note.title} onDismiss={props.onDismissFeedback}>
-            {note.message}
-        </PaperQuote>
-    );
 
     return (
         <PaperFlex grow minHeight={0} fullWidth>
@@ -103,9 +91,6 @@ export default function PlayerRoster<T extends { name: string }>(props: {
                                     )}
                                 </Index>
                             </PaperFlex>
-                            <Show when={!compact() && props.feedback}>
-                                {(note) => feedbackQuote(note())}
-                            </Show>
                         </PaperFlex>
                         <Show
                             when={any()}
@@ -168,9 +153,6 @@ export default function PlayerRoster<T extends { name: string }>(props: {
             >
                 {/* the detail brings its own margin and scroll */}
                 <PaperFlex direction="column" flex={1} minHeight={0} fullHeight>
-                    <Show when={compact() && props.feedback}>
-                        {(note) => <PaperFlex padding="full" shrink={false}>{feedbackQuote(note())}</PaperFlex>}
-                    </Show>
                     <Show when={opened()} keyed>
                         {(_opened) => props.children}
                     </Show>

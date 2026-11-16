@@ -1,6 +1,6 @@
-import { Show } from "solid-js";
+import { createEffect, on, Show } from "solid-js";
 import { useServer } from "../lib/server";
-import { PaperQuote } from "@mileniumhq/paperui";
+import { PaperQuote, showError } from "@mileniumhq/paperui";
 import type { Outcome } from "../lib/failure";
 
 export interface HostSupport {
@@ -21,8 +21,8 @@ export function UnsupportedHost(props: { game: string; host: HostSupport | null 
 
 /**
  * What stands in the way of installing, above a Versions tab: a server that
- * has to be stopped first, what could not be read, and a computer the game
- * does not run on.
+ * has to be stopped first, and a computer the game does not run on. What
+ * could not be read is a toast.
  */
 export default function InstallNotices(props: {
     game: string;
@@ -32,15 +32,20 @@ export default function InstallNotices(props: {
     host: HostSupport | null;
 }) {
     const { serverStatus } = useServer();
+    createEffect(
+        on(
+            () => props.loadFailure,
+            (failure) => {
+                if (failure) showError(failure.title, failure.message);
+            },
+        ),
+    );
     return (
         <>
             <Show when={serverStatus() !== "offline"}>
                 <PaperQuote variant="warning" icon="warning" title="Server running">
                     Stop the server to {props.stopFor}.
                 </PaperQuote>
-            </Show>
-            <Show when={props.loadFailure}>
-                {(note) => <PaperQuote variant="danger" icon="warning" title={note().title}>{note().message}</PaperQuote>}
             </Show>
             <UnsupportedHost game={props.game} host={props.host} />
         </>

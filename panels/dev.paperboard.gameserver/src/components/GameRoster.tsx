@@ -8,18 +8,18 @@ import {
     PaperIcon,
     PaperModal,
     PaperPageHeader,
-    PaperQuote,
     PaperSeparator,
     PaperTable,
     PaperText,
     type PaperAvatarSize,
     keepUnchanged,
     createRead,
+    showError,
 } from "@mileniumhq/paperui";
 import PlayerRoster, { statusColor } from "./PlayerRoster";
 import { createSaves } from "../lib/saves";
 import { useServer } from "../lib/server";
-import { errorMessage, type Outcome } from "../lib/failure";
+import { errorMessage } from "../lib/failure";
 
 /** What every game's roster knows about a player. */
 export interface RosterPlayer {
@@ -34,40 +34,36 @@ export interface RosterPlayer {
  * A roster's loading and moderation: `read` asks the game for its roster,
  * again whenever who is online or the server's status changes, and the
  * newest answer is the one kept, each player matched by name. An action
- * that fails is told to the user with the player it failed for.
+ * that fails is a toast that names the player it failed for.
  */
 export function createRosterState<R>(read: () => Promise<R>) {
     const { onlinePlayerNames, serverStatus } = useServer();
     // joins, leaves and kicks change who is online, and a stopped server changes who can be moderated
-    const roster = createRead(read, { source: () => [onlinePlayerNames(), serverStatus()], key: "name", message: errorMessage });
-    const loadFailure = (): Outcome | undefined => {
-        const message = roster.error();
-        return message === null ? undefined : { title: "Players not loaded", message };
-    };
+    const roster = createRead(read, {
+        source: () => [onlinePlayerNames(), serverStatus()],
+        key: "name",
+        message: errorMessage,
+        failure: { title: "Couldn't load the players" },
+    });
     const reload = roster.reload;
-    const [actionFailure, setActionFailure] = createSignal<Outcome>();
     const [busy, setBusy] = createSignal(false);
 
-    const fail = (title: string, err: unknown) => {
-        setActionFailure({ title, message: errorMessage(err) });
-    };
+    const fail = (title: string, err: unknown) => showError(title, errorMessage(err));
     // a player's switch, such as SourceMod admin: it flips at once and saves
     // in turn with the moderation actions; a failure is titled by its setting
     const titles = new Map<string, (value: boolean) => string>();
     const saves = createSaves({
         failed: (err, key, value) => fail(titles.get(key)!(value as boolean), err),
-        changed: () => setActionFailure(undefined),
     });
 
     /**
      * Runs a moderation action, then reads the roster again; `failure` titles
-     * the quote when it fails. The controls stay busy until the roster that
+     * the toast when it fails. The controls stay busy until the roster that
      * shows the action's result has landed, so none comes back showing the
      * value from before it.
      */
     const run = async (failure: string, work: () => Promise<unknown>): Promise<boolean> => {
         setBusy(true);
-        setActionFailure(undefined);
         try {
             await saves.run(work);
         } catch (err) {
@@ -86,11 +82,15 @@ export function createRosterState<R>(read: () => Promise<R>) {
     return {
         /** the game's roster as last read; undefined until the first answer */
         roster: roster.value,
+        /** the roster was never read, and the last read failed: the page says it couldn't load */
+        failed: () => roster.value() === undefined && !roster.loading() && roster.error() !== null,
+        reloading: roster.loading,
+        reload,
         busy,
         run,
         /**
          * A switch about a player, made in the section that shows it. `key`
-         * tells it from every other, `failure` titles the quote when saving
+         * tells it from every other, `failure` titles the toast when saving
          * `value` fails, `stored` is what the roster says, and `write` saves
          * a value; the roster is read again once it lands.
          */
@@ -101,12 +101,6 @@ export function createRosterState<R>(read: () => Promise<R>) {
                 await reload();
             });
         },
-        actionFailure,
-        /** what the roster tells about the last thing that went wrong */
-        feedback: () => actionFailure() ?? loadFailure(),
-        // the roster as it is lands again, which clears why the last read failed
-        dismiss: () => { setActionFailure(undefined); roster.set(untrack(roster.value)); },
-        clearActionFailure: () => setActionFailure(undefined),
     };
 }
 export type RosterState = ReturnType<typeof createRosterState>;
@@ -217,131 +211,131 @@ export default function GameRoster<T extends RosterPlayer>(props: {
         { label: "Offline", players: visible().filter((p) => !p.online) },
     ]);
     const needsServer = () => props.moderation.needsServer !== undefined && serverStatus() !== "online";
-    const failure = (player: T, past: string) => `${player.name} was not ${past}`;
+    const failure = (player: T, verb: string) => `Couldn't ${verb} ${player.name}`;
 
     const confirmBan = async () => {
         const player = open();
-        if (player && (await props.state.run(failure(player, "banned"), () => props.moderation.ban(player)))) setBanOpen(false);
+        if (player && (await props.state.run(failure(player, "ban"), () => props.moderation.ban(player)))) setBanOpen(false);
     };
-    const showBanDialog = () => {
-        props.state.clearActionFailure();
-        setBanOpen(true);
-    };
-    const closeBanDialog = () => {
-        setBanOpen(false);
-        props.state.clearActionFailure();
-    };
+    const showBanDialog = () => setBanOpen(true);
+    const closeBanDialog = () => setBanOpen(false);
 
     return (
         <>
             <PaperPageHeader icon="group" title="Players" />
-            <PlayerRoster
-                search={search()}
-                total={players().length}
-                onSearch={setSearch}
-                filters={[
-                    { label: "Online", count: players().filter((p) => p.online).length, selected: showOnline(), onToggle: () => setShowOnline((v) => !v) },
-                    { label: "Banned", count: players().filter((p) => p.banned).length, selected: showBanned(), onToggle: () => setShowBanned((v) => !v) },
-                ]}
-                // a refused ban is told in its dialog, not twice
-                feedback={banOpen() ? undefined : props.state.feedback()}
-                onDismissFeedback={props.state.dismiss}
-                sections={sections()}
-                icon={(player) => props.avatar(player, "medium")}
-                description={(player) => (player.online ? props.playing(player) : lastSeenText(player.lastSeen))}
-                badges={(player) => (
-                    <Show when={player.banned}>
-                        <PaperBadge variant="danger">Banned</PaperBadge>
-                    </Show>
-                )}
-                status={(player) => statusColor(player.online, player.banned)}
-                open={open()?.name}
-                onOpen={openPlayerNamed}
+            <Show
+                when={!props.state.failed()}
+                fallback={
+                    <PaperEmptyState icon="error" title="Couldn't load">
+                        <PaperButton disabled={props.state.reloading()} onClick={() => void props.state.reload()}>Try again</PaperButton>
+                    </PaperEmptyState>
+                }
             >
-                <Show
-                    when={openedId()}
-                    keyed
-                    fallback={
-                        <PaperFlex fullHeight fullWidth center padding="full">
-                            <PaperEmptyState icon="group" title="Select a player" description={props.pickHint} />
-                        </PaperFlex>
-                    }
+                <PlayerRoster
+                    search={search()}
+                    total={players().length}
+                    onSearch={setSearch}
+                    filters={[
+                        { label: "Online", count: players().filter((p) => p.online).length, selected: showOnline(), onToggle: () => setShowOnline((v) => !v) },
+                        { label: "Banned", count: players().filter((p) => p.banned).length, selected: showBanned(), onToggle: () => setShowBanned((v) => !v) },
+                    ]}
+                    sections={sections()}
+                    icon={(player) => props.avatar(player, "medium")}
+                    description={(player) => (player.online ? props.playing(player) : lastSeenText(player.lastSeen))}
+                    badges={(player) => (
+                        <Show when={player.banned}>
+                            <PaperBadge variant="danger">Banned</PaperBadge>
+                        </Show>
+                    )}
+                    status={(player) => statusColor(player.online, player.banned)}
+                    open={open()?.name}
+                    onOpen={openPlayerNamed}
                 >
-                    {(_id) => {
-                        // the open player as the roster has them now
-                        const player = () => open()!;
-                        const lastSeen = () => {
-                            const at = player().lastSeen;
-                            return at ? new Date(at).toLocaleString() : "Not seen yet";
-                        };
-                        return (
-                            <PaperFlex direction="column" gap="full" padding="full" scrollable="y" fullHeight>
-                                <PaperFlex direction="row" gap="full" align="center" wrap>
-                                    {props.avatar(player(), "xlarge")}
-                                    <PaperFlex direction="column" gap="onefourth" grow minWidth={0}>
-                                        <PaperText size={7} weight={700}>{player().name}</PaperText>
-                                        <PaperFlex direction="row" gap="onefourth" align="center" wrap>
-                                            <PaperBadge variant={player().banned ? "danger" : player().online ? "success" : "monochrome"}>
-                                                {player().banned ? "Banned" : player().online ? "Online" : "Offline"}
-                                            </PaperBadge>
-                                            {untrack(() => props.badges?.(player))}
+                    <Show
+                        when={openedId()}
+                        keyed
+                        fallback={
+                            <PaperFlex fullHeight fullWidth center padding="full">
+                                <PaperEmptyState icon="group" title="Select a player" description={props.pickHint} />
+                            </PaperFlex>
+                        }
+                    >
+                        {(_id) => {
+                            // the open player as the roster has them now
+                            const player = () => open()!;
+                            const lastSeen = () => {
+                                const at = player().lastSeen;
+                                return at ? new Date(at).toLocaleString() : "Not seen yet";
+                            };
+                            return (
+                                <PaperFlex direction="column" gap="full" padding="full" scrollable="y" fullHeight>
+                                    <PaperFlex direction="row" gap="full" align="center" wrap>
+                                        {props.avatar(player(), "xlarge")}
+                                        <PaperFlex direction="column" gap="onefourth" grow minWidth={0}>
+                                            <PaperText size={7} weight={700}>{player().name}</PaperText>
+                                            <PaperFlex direction="row" gap="onefourth" align="center" wrap>
+                                                <PaperBadge variant={player().banned ? "danger" : player().online ? "success" : "monochrome"}>
+                                                    {player().banned ? "Banned" : player().online ? "Online" : "Offline"}
+                                                </PaperBadge>
+                                                {untrack(() => props.badges?.(player))}
+                                            </PaperFlex>
                                         </PaperFlex>
                                     </PaperFlex>
-                                </PaperFlex>
 
-                                <PaperSeparator />
-
-                                <PaperFlex direction="row" gap="half" wrap>
-                                    <PaperButton
-                                        disabled={props.state.busy() || serverStatus() !== "online" || !player().online}
-                                        onClick={() => void props.state.run(failure(player(), "kicked"), () => props.moderation.kick(player()))}
-                                    >
-                                        Kick
-                                    </PaperButton>
-                                    <Show when={props.moderation.canBan?.(player()) ?? true}>
-                                        <Show
-                                            when={!player().banned}
-                                            fallback={
-                                                <PaperButton
-                                                    variant="primary"
-                                                    disabled={props.state.busy() || needsServer()}
-                                                    onClick={() => void props.state.run(failure(player(), "unbanned"), () => props.moderation.unban(player()))}
-                                                >
-                                                    Unban
-                                                </PaperButton>
-                                            }
-                                        >
-                                            <PaperButton variant="danger" disabled={props.state.busy() || needsServer()} onClick={showBanDialog}>
-                                                <PaperIcon>block</PaperIcon>Ban
-                                            </PaperButton>
-                                        </Show>
-                                    </Show>
-                                </PaperFlex>
-                                <Show when={needsServer()}>
-                                    <PaperText size={2} color="text-subtle">{props.moderation.needsServer}</PaperText>
-                                </Show>
-
-                                {untrack(() => props.sections?.(player))}
-
-                                <Show when={props.hasDetails?.(player()) ?? true}>
                                     <PaperSeparator />
 
-                                    <PaperText size={2} weight={700} color="text-subtle">Details</PaperText>
-                                    <PaperTable>
-                                        <tbody>
-                                            <tr>
-                                                <th>Last seen</th>
-                                                <td>{player().online ? "Online now" : lastSeen()}</td>
-                                            </tr>
-                                            {untrack(() => props.details(player))}
-                                        </tbody>
-                                    </PaperTable>
-                                </Show>
-                            </PaperFlex>
-                        );
-                    }}
-                </Show>
-            </PlayerRoster>
+                                    <PaperFlex direction="row" gap="half" wrap>
+                                        <PaperButton
+                                            disabled={props.state.busy() || serverStatus() !== "online" || !player().online}
+                                            onClick={() => void props.state.run(failure(player(), "kick"), () => props.moderation.kick(player()))}
+                                        >
+                                            Kick
+                                        </PaperButton>
+                                        <Show when={props.moderation.canBan?.(player()) ?? true}>
+                                            <Show
+                                                when={!player().banned}
+                                                fallback={
+                                                    <PaperButton
+                                                        variant="primary"
+                                                        disabled={props.state.busy() || needsServer()}
+                                                        onClick={() => void props.state.run(failure(player(), "unban"), () => props.moderation.unban(player()))}
+                                                    >
+                                                        Unban
+                                                    </PaperButton>
+                                                }
+                                            >
+                                                <PaperButton variant="danger" disabled={props.state.busy() || needsServer()} onClick={showBanDialog}>
+                                                    <PaperIcon>block</PaperIcon>Ban
+                                                </PaperButton>
+                                            </Show>
+                                        </Show>
+                                    </PaperFlex>
+                                    <Show when={needsServer()}>
+                                        <PaperText size={2} color="text-subtle">{props.moderation.needsServer}</PaperText>
+                                    </Show>
+
+                                    {untrack(() => props.sections?.(player))}
+
+                                    <Show when={props.hasDetails?.(player()) ?? true}>
+                                        <PaperSeparator />
+
+                                        <PaperText size={2} weight={700} color="text-subtle">Details</PaperText>
+                                        <PaperTable>
+                                            <tbody>
+                                                <tr>
+                                                    <th>Last seen</th>
+                                                    <td>{player().online ? "Online now" : lastSeen()}</td>
+                                                </tr>
+                                                {untrack(() => props.details(player))}
+                                            </tbody>
+                                        </PaperTable>
+                                    </Show>
+                                </PaperFlex>
+                            );
+                        }}
+                    </Show>
+                </PlayerRoster>
+            </Show>
 
             <PaperModal
                 open={banOpen()}
@@ -358,9 +352,6 @@ export default function GameRoster<T extends RosterPlayer>(props: {
                 }
             >
                 <PaperText preset="body">{props.moderation.banNote} An online player is removed at once.</PaperText>
-                <Show when={props.state.actionFailure()}>
-                    {(note) => <PaperQuote variant="danger" icon="warning" title={note().title}>{note().message}</PaperQuote>}
-                </Show>
             </PaperModal>
         </>
     );

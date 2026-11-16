@@ -1,7 +1,8 @@
 import { onCleanup, Show, type JSX } from "solid-js";
-import { PaperButton, PaperCenteredInterface, PaperFlex, PaperQuote, useWizard } from "@mileniumhq/paperui";
+import { PaperButton, PaperCenteredInterface, PaperFlex, createFailureToast, useWizard } from "@mileniumhq/paperui";
 import InstallLoaders, { type InstallLoaderItem } from "./InstallLoaders";
-import FailureText from "./FailureText";
+import FailureOutput from "./FailureOutput";
+import { splitFailure } from "../lib/failure";
 
 /**
  * Runs a setup wizard's install: Back and Next are hidden while it runs, and
@@ -25,7 +26,11 @@ export function createWizardInstall(install: () => Promise<boolean>) {
     return { run, wizard, disposed: () => disposed };
 }
 
-/** The install step of every game's setup wizard: its rows, and a failure with Retry beside what else the user can do. */
+/**
+ * The install step of every game's setup wizard: its rows, and a failure
+ * with Retry beside what else the user can do. The failure's first line is
+ * a toast; what the tool printed after it stays here.
+ */
 export default function InstallStepView(props: {
     rows: InstallLoaderItem[];
     error: string;
@@ -35,12 +40,13 @@ export default function InstallStepView(props: {
     /** notices above the failure */
     children?: JSX.Element;
 }) {
+    createFailureToast(() => props.error && splitFailure(props.error).summary, { title: "Couldn't set up the server" });
     return (
         <PaperCenteredInterface>
             <PaperFlex direction="column" gap="full" center fullWidth>
                 {props.children}
                 <Show when={props.error}>
-                    <PaperQuote variant="danger" title="Setup failed"><FailureText message={props.error} /></PaperQuote>
+                    <FailureOutput message={props.error} />
                     <PaperFlex gap="half">
                         <PaperButton onClick={props.onRetry}>Retry setup</PaperButton>
                         {props.actions}

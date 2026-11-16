@@ -3,17 +3,19 @@ import { useServer } from "../lib/server";
 import {
     PaperButton,
     PaperCheckbox,
+    PaperEmptyState,
     PaperFlex,
     PaperInput,
     PaperList,
     PaperListItem,
     PaperQuote,
     PaperText,
+    createFailureToast,
     createLatest,
 } from "@mileniumhq/paperui";
 import type { ServerSoftwareType, VersionItem } from "../lib/software";
-import FailureText from "./FailureText";
-import { errorMessage } from "../lib/failure";
+import FailureOutput from "./FailureOutput";
+import { errorMessage, splitFailure } from "../lib/failure";
 
 // Shared Minecraft version picker: search, release-channel filters and the
 // version list. Used by onboarding (Setup) and the Versions tab so there is
@@ -30,6 +32,7 @@ export default function VersionPicker(props: {
     const [allVersions, setAllVersions] = createSignal<VersionItem[]>([]);
     const [loading, setLoading] = createSignal(true);
     const [error, setError] = createSignal("");
+    createFailureToast(() => error() && splitFailure(error()).summary, { title: "Couldn't load the versions" });
     const latest = createLatest();
 
     const [includeReleases, setIncludeReleases] = createSignal(true);
@@ -114,15 +117,6 @@ export default function VersionPicker(props: {
                 />
             </PaperFlex>
 
-            <Show when={error()}>
-                <PaperQuote variant="danger" title="Could not load versions">
-                    <PaperFlex direction="column" gap="half" align="flex-start">
-                        <FailureText message={error()} />
-                        <PaperButton onClick={() => void loadVersions()}>Retry loading versions</PaperButton>
-                    </PaperFlex>
-                </PaperQuote>
-            </Show>
-
             <PaperFlex direction="column" grow minHeight={0}>
                 <Show
                     when={!loading()}
@@ -137,13 +131,21 @@ export default function VersionPicker(props: {
                     <Show
                         when={filteredVersions().length > 0}
                         fallback={
-                            // a list that failed to load says so above, not that nothing matched
-                            <Show when={!error()}>
-                                <PaperFlex padding="full" center>
-                                    <PaperText preset="body" color="text-subtle">
-                                        No versions matching your filters.
-                                    </PaperText>
-                                </PaperFlex>
+                            // a list that failed to load says so, not that nothing matched
+                            <Show
+                                when={error()}
+                                fallback={
+                                    <PaperFlex padding="full" center>
+                                        <PaperText preset="body" color="text-subtle">
+                                            No versions matching your filters.
+                                        </PaperText>
+                                    </PaperFlex>
+                                }
+                            >
+                                <PaperEmptyState icon="error" title="Couldn't load">
+                                    <PaperButton onClick={() => void loadVersions()}>Try again</PaperButton>
+                                </PaperEmptyState>
+                                <FailureOutput message={error()} />
                             </Show>
                         }
                     >

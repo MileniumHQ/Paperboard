@@ -8,7 +8,7 @@ import {
     PaperFlex,
     PaperGrid,
     PaperIcon,
-    PaperQuote,
+    createFailureToast,
     PaperSeparator,
     PaperSettingItem,
     PaperSettingList,
@@ -61,6 +61,7 @@ export default function PlayerInspector(props: {
     const liveName = createMemo(() => (props.player && isPlayerOnline() ? name() : undefined));
     // why the game could not be asked, until an ask goes through
     const [liveError, setLiveError] = createSignal("");
+    createFailureToast(liveError, { title: "Couldn't read the live stats" });
     createEffect(
         on(liveName, (player) => {
             setLiveError("");
@@ -224,11 +225,6 @@ export default function PlayerInspector(props: {
                 <PaperText size={2} weight={700} color="text-subtle">
                     Status
                 </PaperText>
-                <Show when={liveError()}>
-                    <PaperQuote variant="danger" icon="warning" title="Live stats not read">
-                        {liveError()}
-                    </PaperQuote>
-                </Show>
                 <PaperGrid min="field">
                     <PaperStatTile
                         icon="favorite"

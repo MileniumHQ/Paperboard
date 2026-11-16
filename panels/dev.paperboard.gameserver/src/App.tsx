@@ -2,7 +2,7 @@ import GameOptions from "./components/GameOptions";
 import { createEffect, createMemo, createSignal, on, onMount, onCleanup, untrack, ErrorBoundary, For, Index, Show, type Accessor } from "solid-js";
 import { tabIds } from "./lib/tabIds";
 import {
-    PaperPanel, PaperPresence, PaperButton, PaperIcon, PaperQuote, PaperLoader, PaperFlex, PaperText,
+    PaperPanel, PaperPresence, PaperButton, PaperIcon, PaperLoader, PaperFlex, PaperText, PaperEmptyState, showError,
     PaperSlidePage, getVar,
     PaperMenu,
     PaperMenuItem,
@@ -44,7 +44,8 @@ const serverInAddress = () => new URL(window.location.href).searchParams.get("se
 
 export default function App() {
     const [servers, setServers] = createSignal<ServersState | null>(null);
-    const [failure, setFailure] = createSignal("");
+    // the page failed and stands empty: it says so, and Try again goes back to the servers
+    const [failed, setFailed] = createSignal(false);
     // The open server is this page's state, not its address: switching is a
     // change here, and the server's page is made again for the new server
     // (see serverPage). The address follows, so a reload opens the same one.
@@ -58,8 +59,9 @@ export default function App() {
         }),
     );
     const fail = (what: string, err: unknown) => {
-        console.error(`[App] ${what} failed:`, err);
-        setFailure(errorMessage(err));
+        console.error(`[App] couldn't ${what}:`, err);
+        showError(`Couldn't ${what}`, errorMessage(err));
+        setFailed(true);
     };
 
     // A tab holding work that leaving would lose (the Files editor's unsaved
@@ -72,7 +74,7 @@ export default function App() {
     };
     const leaveTab = (go: () => void) => {
         if (!leaveGuard) return go();
-        leaveGuard().then((leave) => { if (leave) go(); }, (err) => fail("leaving the tab", err));
+        leaveGuard().then((leave) => { if (leave) go(); }, (err) => fail("leave the tab", err));
     };
 
     // On a phone the server is a page that slides in over the list, and
@@ -89,7 +91,7 @@ export default function App() {
             try {
                 apply(await serversState.refresh());
             } catch (err) {
-                fail("opening the server", err);
+                fail("open the server", err);
             }
             if (!known(id)) return;
         }
@@ -112,7 +114,7 @@ export default function App() {
         try {
             return slideMs();
         } catch (err) {
-            fail("sliding the server's page", err);
+            fail("slide the server's page", err);
             throw err;
         }
     };
@@ -129,18 +131,18 @@ export default function App() {
         try {
             apply(await serversState.refresh());
             loaded = true;
-        } catch (err) { fail("loading the servers", err); }
+        } catch (err) { fail("load the servers", err); }
     };
     onMount(() => {
         const off = serversState.subscribe((full) => {
             if (!loaded) return;
-            try { apply(full); } catch (err) { fail("applying the servers' state", err); }
+            try { apply(full); } catch (err) { fail("apply the servers' state", err); }
         });
         onCleanup(off);
         void load();
     });
     const backToServers = () => {
-        setFailure("");
+        setFailed(false);
         setSelected(null);
         setShown(null);
         setPageOpen(false);
@@ -156,7 +158,7 @@ export default function App() {
         // a server left before it loaded says nothing over the next one's page
         let gone = false;
         onCleanup(() => (gone = true));
-        server.refresh().then(() => server.loadServerConfig(), (err) => { if (!gone) fail("loading the server", err); });
+        server.refresh().then(() => server.loadServerConfig(), (err) => { if (!gone) fail("load the server", err); });
         return (
             <ServerContext.Provider value={server}>
                 <Show when={server.loaded()} fallback={loading()}>
@@ -276,12 +278,13 @@ export default function App() {
                                 return <PaperInterfaceItem value={tabId} variant={(compact() && tab().compactVariant) || tab().variant} width={tab().width}>
                                     {/* a tab that can't be drawn says why, instead of standing blank */}
                                     <ErrorBoundary
-                                        fallback={(err) => {
+                                        fallback={(err, reset) => {
                                             console.error(`[App] the ${tabId} tab could not be drawn:`, err);
+                                            showError(`Couldn't open ${untrack(tab).label}`, errorMessage(err));
                                             return (
-                                                <PaperQuote variant="danger" icon="warning" title={`${untrack(tab).label} could not open`} role="alert">
-                                                    {errorMessage(err)}
-                                                </PaperQuote>
+                                                <PaperEmptyState icon="error" title="Couldn't load">
+                                                    <PaperButton onClick={reset}>Try again</PaperButton>
+                                                </PaperEmptyState>
                                             );
                                         }}
                                     >
@@ -318,7 +321,14 @@ export default function App() {
     );
 
     return (
-        <Show when={!failure()} fallback={<PaperQuote variant="danger" title="Servers could not be loaded" role="alert">{failure()}<PaperButton onClick={backToServers}>Servers</PaperButton></PaperQuote>}>
+        <Show
+            when={!failed()}
+            fallback={
+                <PaperEmptyState icon="error" title="Couldn't load">
+                    <PaperButton onClick={backToServers}>Try again</PaperButton>
+                </PaperEmptyState>
+            }
+        >
         <Show
             when={compact()}
             fallback={

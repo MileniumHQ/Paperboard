@@ -2,8 +2,8 @@
 // shows and hands it down through ServerContext; switching servers makes
 // another and drops this one with everything it owns, so nothing of one
 // server's page can reach the next.
-import { createStateSignal } from "@mileniumhq/paperui/headless";
-import { createContext, createSignal, onCleanup, useContext, type Accessor } from "solid-js";
+import { createFailureToast, createStateSignal, showError } from "@mileniumhq/paperui/headless";
+import { createContext, onCleanup, useContext, type Accessor } from "solid-js";
 import { callsFor, filesFor, portsFor, serverStates, type ServerCalls, fileApi, portApi } from "./api";
 import { errorMessage } from "./failure";
 import type { ServerSummary } from "../service";
@@ -36,11 +36,9 @@ export interface ServerPage extends Omit<Fields, "playerStats" | "playerPlaytime
     readonly playerStats: Accessor<ReadonlyMap<string, PlayerStatData>>;
     readonly playerPlaytime: Accessor<ReadonlyMap<string, number>>;
     readonly playerPositions: Accessor<ReadonlyMap<string, PlayerPosition>>;
-    /** the service reloads the server's config; one that fails is the Overview's serverActionError */
+    /** the service reloads the server's config; a failure is a toast */
     loadServerConfig(): Promise<void>;
     updatePanelConfig(patch: Record<string, unknown>): Promise<void>;
-    /** the last start, stop or restart that failed, which the Overview quotes */
-    readonly serverActionError: Accessor<string>;
     startServer(): void;
     stopServer(): void;
     restartServer(): void;
@@ -69,13 +67,16 @@ export function createServerPage(summary: Accessor<ServerSummary>): ServerPage {
             if (next) setState(next);
         }),
     );
-    const [serverActionError, setServerActionError] = createSignal("");
-    const lifecycle = (run: () => Promise<unknown>) => () => {
-        setServerActionError("");
-        run().catch((err) => setServerActionError(errorMessage(err)));
+    // a start, stop or restart that was refused says why
+    const lifecycle = (title: string, run: () => Promise<unknown>) => () => {
+        run().catch((err) => showError(title, errorMessage(err)));
     };
+    const fields = serverFields(state);
+    // what blocks the whole server is said once for its page; RecoveryNotice offers the way out
+    createFailureToast(fields.initFailure, { title: "Couldn't set up this server" });
+    createFailureToast(fields.recoveryBlock, { title: "Couldn't clean up the server folder" });
     return {
-        ...serverFields(state),
+        ...fields,
         id,
         summary,
         calls,
@@ -89,17 +90,16 @@ export function createServerPage(summary: Accessor<ServerSummary>): ServerPage {
                 await calls.loadConfig();
                 await read();
             } catch (err) {
-                setServerActionError(errorMessage(err));
+                showError("Couldn't load the server's settings", errorMessage(err));
             }
         },
         updatePanelConfig: async (patch) => {
             await calls.updatePanelConfig({ patch });
             await read();
         },
-        serverActionError,
-        startServer: lifecycle(() => calls.startServer()),
-        stopServer: lifecycle(() => calls.stopServer()),
-        restartServer: lifecycle(() => calls.restartServer()),
+        startServer: lifecycle("Couldn't start the server", () => calls.startServer()),
+        stopServer: lifecycle("Couldn't stop the server", () => calls.stopServer()),
+        restartServer: lifecycle("Couldn't restart the server", () => calls.restartServer()),
     };
 }
 

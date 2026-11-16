@@ -1,6 +1,7 @@
 import { createSignal, For, Show } from "solid-js";
 import {
     PaperButton,
+    PaperEmptyState,
     PaperFlex,
     PaperIcon,
     PaperModal,
@@ -13,7 +14,9 @@ import {
     PaperSettingList,
     PaperText,
     PaperToggle,
+    createFailureToast,
     createRead,
+    showError,
 } from "@mileniumhq/paperui";
 import {
     backupApi,
@@ -74,20 +77,17 @@ export default function Backups(props: { active: boolean; whileRunning: "quiesce
                         if (why === null) void read.reload();
                     },
                 ),
-            message: (err) => `Backups could not be loaded: ${errorMessage(err)}`,
+            message: errorMessage,
+            failure: { title: "Couldn't load the backups" },
         },
     );
+    createFailureToast(lost, { title: "Couldn't follow the backup's progress" });
     const status = () => read.value()?.status ?? null;
     const backups = () => read.value()?.backups ?? null;
     const progress = () => status()?.progress ?? null;
     // a read again shows the loader, not the last failure
-    const loadError = () => {
-        const why = lost();
-        if (why) return `Backup progress can't be heard: ${why}`;
-        return read.loading() ? "" : (read.error() ?? "");
-    };
+    const loadFailed = () => !read.loading() && read.error() !== null;
     const load = read.reload;
-    const [error, setError] = createSignal<Outcome | null>(null);
     const [notice, setNotice] = createSignal<Outcome | null>(null);
     const [busy, setBusy] = createSignal<"create" | "location" | null>(null);
 
@@ -95,23 +95,19 @@ export default function Backups(props: { active: boolean; whileRunning: "quiesce
     // it; a backup made now and a new location take their turn with its
     // saves, so two location pickers never open at once
     const saves = createSaves({
-        failed: (err) => setError({ title: "Schedule not saved", message: errorMessage(err) }),
-        changed: () => {
-            setError(null);
-            setNotice(null);
-        },
+        failed: (err) => showError("Couldn't save the backup schedule", errorMessage(err)),
+        changed: () => setNotice(null),
     });
 
     const act = async (kind: "create" | "location", failTitle: string, work: () => Promise<Outcome | null>) => {
         if (busy()) return;
         setBusy(kind);
-        setError(null);
         setNotice(null);
         try {
             const done = await saves.run(work);
             if (done) setNotice(done);
         } catch (err) {
-            setError({ title: failTitle, message: errorMessage(err) });
+            showError(failTitle, errorMessage(err));
         } finally {
             // what the work changed is on screen before its button is back
             await load();
@@ -125,7 +121,7 @@ export default function Backups(props: { active: boolean; whileRunning: "quiesce
         return (await backupsApi.chooseLocation()).status === "chosen";
     };
 
-    const changeLocation = () => act("location", "Location not changed", async () => {
+    const changeLocation = () => act("location", "Couldn't change the location", async () => {
         const result = await backupsApi.chooseLocation();
         return result.status === "chosen"
             ? { title: "Location changed", message: `Backups now go to ${result.location.label}.` }
@@ -133,7 +129,7 @@ export default function Backups(props: { active: boolean; whileRunning: "quiesce
     });
 
     // "Backing up" once a backup runs: a first one waits on the location picker before it
-    const backUpNow = () => act(status()?.location ? "create" : "location", "Backup failed", async () => {
+    const backUpNow = () => act(status()?.location ? "create" : "location", "Couldn't back up the server", async () => {
         if (!(await ensureLocation())) return null;
         setBusy("create");
         const record = await backupsApi.create();
@@ -164,11 +160,9 @@ export default function Backups(props: { active: boolean; whileRunning: "quiesce
     const [confirming, setConfirming] = createSignal<{ kind: "restore" | "delete"; record: BackupRecord } | null>(null);
     const [confirmOpen, setConfirmOpen] = createSignal(false);
     const [confirmBusy, setConfirmBusy] = createSignal(false);
-    const [confirmError, setConfirmError] = createSignal("");
 
     const ask = (kind: "restore" | "delete", record: BackupRecord) => {
         setConfirming({ kind, record });
-        setConfirmError("");
         setConfirmOpen(true);
     };
 
@@ -176,18 +170,19 @@ export default function Backups(props: { active: boolean; whileRunning: "quiesce
         const target = confirming();
         if (!target || confirmBusy()) return;
         setConfirmBusy(true);
-        setConfirmError("");
+        // a refusal is a toast over the dialog, which stays open
+        let done = false;
         try {
             if (target.kind === "restore") await backupsApi.restore(target.record.id);
             else await backupsApi.delete(target.record.id);
+            done = true;
         } catch (err) {
-            setConfirmError(`${target.kind === "restore" ? "The backup was not restored" : "The backup was not deleted"}: ${errorMessage(err)}`);
-            return;
+            showError(target.kind === "restore" ? "Couldn't restore the backup" : "Couldn't delete the backup", errorMessage(err));
         } finally {
             setConfirmBusy(false);
         }
+        if (!done) return;
         setConfirmOpen(false);
-        setError(null);
         setNotice(
             target.kind === "restore"
                 ? { title: "Restored", message: `Restored the backup from ${dateText(target.record.createdAt)}.` }
@@ -212,19 +207,6 @@ export default function Backups(props: { active: boolean; whileRunning: "quiesce
                 </PaperButton>
             </PaperPageHeader>
 
-            <Show when={loadError()}>
-                <PaperQuote variant="danger" icon="warning" title="Backups unavailable">
-                    <PaperFlex direction="column" gap="half">
-                        <PaperText>{loadError()}</PaperText>
-                        <PaperButton size="tiny" onClick={() => void load()}>Try again</PaperButton>
-                    </PaperFlex>
-                </PaperQuote>
-            </Show>
-            <Show when={error()}>
-                {(failure) => (
-                    <PaperQuote variant="danger" icon="warning" title={failure().title}>{failure().message}</PaperQuote>
-                )}
-            </Show>
             <Show when={notice()}>
                 {(done) => (
                     <PaperQuote variant="success" icon="check" title={done().title}>{done().message}</PaperQuote>
@@ -300,7 +282,19 @@ export default function Backups(props: { active: boolean; whileRunning: "quiesce
 
             <PaperFlex direction="column" gap="half" fullWidth>
                 <PaperSectionHeader icon="history" title="Saved Backups" count={backups()?.length || undefined} />
-                <Show when={backups()} fallback={<Show when={!loadError()}><PaperFlex paddingX="full"><PaperText size={2} color="text-subtle">Loading backups…</PaperText></PaperFlex></Show>}>
+                <Show
+                    when={backups()}
+                    fallback={
+                        <Show
+                            when={loadFailed()}
+                            fallback={<PaperFlex paddingX="full"><PaperText size={2} color="text-subtle">Loading backups…</PaperText></PaperFlex>}
+                        >
+                            <PaperEmptyState icon="error" title="Couldn't load">
+                                <PaperButton disabled={read.loading()} onClick={() => void load()}>Try again</PaperButton>
+                            </PaperEmptyState>
+                        </Show>
+                    }
+                >
                     {(list) => (
                         <Show
                             when={list().length > 0}
@@ -355,9 +349,6 @@ export default function Backups(props: { active: boolean; whileRunning: "quiesce
                             ? `It is deleted from ${status()?.location?.label ?? "its location"}.`
                             : `The server stops, and its whole folder (worlds, settings, plugins and mods) is replaced with this backup${confirming() ? `, made ${dateText(confirming()!.record.createdAt)}` : ""}. Anything since then is lost. A running server starts again on it.`}
                     </PaperText>
-                    <Show when={confirmError()}>
-                        <PaperText size={2} color="danger">{confirmError()}</PaperText>
-                    </Show>
                 </PaperFlex>
             </PaperModal>
         </>
