@@ -8,7 +8,8 @@ import * as net from "node:net";
 import * as path from "node:path";
 import { portSettingsApi, processApi } from "@mileniumhq/paperapi";
 import { startTestDaemon, type TestDaemon } from "./helpers/crane";
-import { openPage, servePanel, waitForWidget, widgetUrl, WIDGET_DOC, WIDGET_TEXT, type Page } from "./helpers/browser";
+import { waitForWidget, widgetUrl, WIDGET_DOC, WIDGET_TEXT } from "../../../scripts/testing/panelUi";
+import { openPage, servePanel, type Page } from "./helpers/browser";
 import { freePort } from "./helpers/palworld";
 import { placeStandIn } from "./helpers/standIn";
 import { writeTree } from "./helpers/tmp";
@@ -219,7 +220,7 @@ describe("a running server's Overview at the narrowest window", () => {
         const served = await setUp(await freePort());
         const { exited } = await startSurvival();
         const page = await openPage(`${served.url}/?server=${MC}`);
-        const widget = await openPage(widgetUrl(served.url, "status", MC, { w: 2, h: 1 }));
+        const widget = await openPage(widgetUrl(served.url, "status", { server: MC }, { w: 2, h: 1 }));
         let stopped = false;
         try {
             await page.waitFor(`${button("Stop")} && ${text("2 / 20")}`, "the running server with two players");

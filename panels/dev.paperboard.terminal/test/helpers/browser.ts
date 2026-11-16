@@ -6,80 +6,22 @@
 // (scripts/testing/chrome.ts). Its calls reach the panel service through the
 // test daemon.
 import { afterAll } from "bun:test";
-import { spawnSync } from "node:child_process";
-import * as fs from "node:fs";
-import * as os from "node:os";
 import * as path from "node:path";
 import { getTransport } from "@mileniumhq/paperapi";
 import { launchChrome, type Chrome, type Page as ChromePage } from "../../../../scripts/testing/chrome";
+import { servePanelUi } from "../../../../scripts/testing/panelUi";
 import { testDaemon } from "./crane";
 import { PANEL_ID } from "./service";
 
 const PANEL = path.resolve(import.meta.dir, "../..");
 const ALLOWED = Symbol.for("paperboard.terminal.test.ports");
 const allowedPorts: Set<number> = ((globalThis as any)[ALLOWED] ??= new Set<number>());
-let built: string | null = null;
-/** the panel's UI as `bun run build` makes it, built once per test process */
-function panelUi(): string {
-    if (built) return built;
-    const out = fs.mkdtempSync(path.join(os.tmpdir(), "terminal-ui-"));
-    (globalThis as any)[Symbol.for("paperboard.terminal.test.teardown")].push(() => fs.rmSync(out, { recursive: true, force: true }));
-    const build = spawnSync(process.execPath, ["x", "vite", "build", "--outDir", out, "--emptyOutDir", "--logLevel", "error"], { cwd: PANEL, encoding: "utf8" });
-    if (build.status !== 0 || !fs.existsSync(path.join(out, "index.html"))) {
-        throw new Error(`Building the panel UI failed (exit ${build.status}):\n${build.stdout}\n${build.stderr}`);
-    }
-    built = out;
-    return out;
-}
 
-// Home's side of a widget frame, as the shell does it: the widget page in a
-// frame the size of a 2x1 tile, asked to show the Pinned command widget for
-// the command in this page's ?command=, and what it said back
-const WIDGET_HOST = `<!doctype html><html><head><meta charset="utf-8"></head><body style="margin:0">
-<iframe id="widget" src="/widget.html" style="width:320px;height:150px;border:0"></iframe>
-<script>
-const frame = document.getElementById("widget");
-window.widgetSaid = [];
-// a wait in this page wakes on this page's changes: each change in the frame is one here too
-let changes = 0;
-const changed = () => (document.body.dataset.changes = String(++changes));
-addEventListener("message", (e) => {
-    if (e.source !== frame.contentWindow) return;
-    window.widgetSaid.push(e.data?.type);
-    changed();
-});
-frame.addEventListener("load", () => {
-    new MutationObserver(changed).observe(frame.contentDocument, { subtree: true, childList: true, attributes: true, characterData: true });
-    frame.contentWindow.postMessage({
-        type: "paperboard:initialize",
-        generation: "g1",
-        widget: { id: "pinned-command", instanceId: "w1", size: { w: 2, h: 1 }, visible: true, options: { command: new URLSearchParams(location.search).get("command") } },
-    }, "*");
-});
-</script></body></html>`;
-
-/** serves the built UI with a panel credential the test daemon issued; /widget-host.html?command=… shows the Home widget */
+/** serves the built UI, in desktop mode, with a panel credential the test daemon issued; widgetUrl() (scripts/testing/panelUi.ts) addresses a Home widget under it */
 export async function servePanel(): Promise<{ url: string; stop: () => void }> {
     const daemon = await testDaemon();
-    const dist = panelUi();
     const granted = await getTransport().call("auth:panel-token", { panelId: PANEL_ID });
-    const creds = JSON.stringify({ port: daemon.port, token: granted.token, scoped: true, computerId: "local", panelId: PANEL_ID }).replace(/</g, "\\u003c");
-    const server = Bun.serve({
-        port: 0,
-        hostname: "127.0.0.1",
-        async fetch(req) {
-            const pathname = new URL(req.url).pathname;
-            if (pathname === "/widget-host.html") return new Response(WIDGET_HOST, { headers: { "content-type": "text/html; charset=utf-8" } });
-            const file = path.join(dist, pathname === "/" ? "index.html" : pathname);
-            if (!file.startsWith(dist) || !fs.existsSync(file) || fs.statSync(file).isDirectory()) return new Response("Not found", { status: 404 });
-            if (file.endsWith(".html")) {
-                const html = fs.readFileSync(file, "utf8").replace(/<head[^>]*>/i, (m) => `${m}<script>window.__PAPERBOARD_CRANE=${creds};document.documentElement.setAttribute("data-paper-mobile","false");</script>`);
-                return new Response(html, { headers: { "content-type": "text/html; charset=utf-8" } });
-            }
-            return new Response(Bun.file(file));
-        },
-    });
-    return { url: `http://127.0.0.1:${server.port}`, stop: () => server.stop(true) };
+    return servePanelUi({ panelDir: PANEL, panelId: PANEL_ID, port: daemon.port, token: granted.token, mobile: false });
 }
 
 export interface Page extends ChromePage {

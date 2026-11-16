@@ -6,7 +6,8 @@ import * as path from "node:path";
 import { backupApi, backupLocationsApi } from "@mileniumhq/paperapi";
 import { startTestDaemon, type TestDaemon } from "./helpers/crane";
 import { installPanel, restartService } from "./helpers/installedPanel";
-import { openPage, panelHostUrl, PANEL_DOC, servePanel } from "./helpers/browser";
+import { panelHostUrl, PANEL_DOC } from "../../../scripts/testing/panelUi";
+import { openPage, servePanel } from "./helpers/browser";
 import { writeTree } from "./helpers/tmp";
 import { PANEL_ID } from "../src/servers";
 
@@ -78,7 +79,7 @@ describe("the Backups tab", () => {
     }, 90_000);
     test("Back Up Now with no location says it is backing up only once the chooser is answered", async () => {
         const served = await servePanel(daemon);
-        const page = await openPage(panelHostUrl(served.url, "s-new"));
+        const page = await openPage(panelHostUrl(served.url, { server: "s-new" }));
         const inFrame = (expression: string) => `((document) => ${expression})(${PANEL_DOC})`;
         const backUpNow = `[...document.querySelectorAll("button")].find((b) => b.innerText.includes("Back Up Now") && !b.disabled)`;
         try {

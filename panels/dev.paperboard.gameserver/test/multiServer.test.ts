@@ -7,7 +7,8 @@ import * as path from "node:path";
 import { processApi } from "@mileniumhq/paperapi";
 import { serverCalls } from "./helpers/serverCall";
 import { startTestDaemon, type TestDaemon } from "./helpers/crane";
-import { openPage, servePanel, waitForWidget, widgetUrl, WIDGET_DOC, WIDGET_TEXT, type Page } from "./helpers/browser";
+import { waitForWidget, widgetUrl, WIDGET_DOC, WIDGET_TEXT } from "../../../scripts/testing/panelUi";
+import { openPage, servePanel, type Page } from "./helpers/browser";
 import { installFakeJava } from "./helpers/fakeJava";
 import { servicesState } from "./helpers/installedPanel";
 import { freePort } from "./helpers/palworld";
@@ -145,8 +146,8 @@ describe("two servers of different games", () => {
 describe("Home's widgets", () => {
     test("each status widget shows its own game's server, and its button starts that server alone", async () => {
         const served = await setUp();
-        const mc = await openPage(widgetUrl(served.url, "status", "s-mc"));
-        const ter = await openPage(widgetUrl(served.url, "status", "s-ter"));
+        const mc = await openPage(widgetUrl(served.url, "status", { server: "s-mc" }));
+        const ter = await openPage(widgetUrl(served.url, "status", { server: "s-ter" }));
         let terraria: Awaited<ReturnType<typeof running>> | null = null;
         try {
             await waitForWidget(mc, `${WIDGET_TEXT}.includes("Paper 1.21.1") && ${WIDGET_TEXT}.includes("Offline")`, "Survival's status");
@@ -171,8 +172,8 @@ describe("Home's widgets", () => {
 
     test("the players widget lists who is on its server, and a game without one says it has no such widget", async () => {
         const served = await setUp();
-        const mc = await openPage(widgetUrl(served.url, "players", "s-mc"));
-        const ter = await openPage(widgetUrl(served.url, "players", "s-ter"));
+        const mc = await openPage(widgetUrl(served.url, "players", { server: "s-mc" }));
+        const ter = await openPage(widgetUrl(served.url, "players", { server: "s-ter" }));
         let minecraft: Awaited<ReturnType<typeof running>> | null = null;
         try {
             await waitForWidget(mc, `${WIDGET_TEXT}.includes("The server is offline")`, "Survival's players, offline");

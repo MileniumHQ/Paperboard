@@ -2,6 +2,7 @@
 // modal, run from the toolbar's menu, and run from the Home widget.
 import { afterEach, describe, expect, setDefaultTimeout, test } from "bun:test";
 import { clearWorkloads } from "./helpers/crane";
+import { widgetUrl } from "../../../scripts/testing/panelUi";
 import { panelBrowser, toastShows, servePanel, type Page } from "./helpers/browser";
 import { call, panelFiles, startService, stopServices } from "./helpers/service";
 
@@ -136,7 +137,7 @@ describe("the Pinned command widget", () => {
         await startService();
         const id = await call.saveCommand({ label: "Build", command: "exit 3" });
         const served = await servePanel();
-        const page = await browser.open(`${served.url}/widget-host.html?command=${id}`);
+        const page = await browser.open(widgetUrl(served.url, "pinned-command", { command: id }, { w: 2, h: 1 }));
         try {
             await page.waitFor(`window.widgetSaid.includes("paperboard:ready")`, "the widget to be ready");
             await page.waitFor(shows("Not run yet"), "the command's tile");
@@ -156,7 +157,7 @@ describe("the Pinned command widget", () => {
         await panelFiles({ "tabs.json": TABS, "saved-commands.json": '{"version": 1, "commands": [' });
         await startService();
         const served = await servePanel();
-        const page = await browser.open(`${served.url}/widget-host.html?command=anything`);
+        const page = await browser.open(widgetUrl(served.url, "pinned-command", { command: "anything" }, { w: 2, h: 1 }));
         try {
             await page.waitFor(shows("Saved commands unreadable"), "the unreadable file to be said");
             expect(await page.evaluate<boolean>(shows("Command removed"))).toBe(false);

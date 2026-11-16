@@ -5,6 +5,7 @@
 import { afterAll, afterEach, beforeAll, describe, expect, setDefaultTimeout, test } from "bun:test";
 import { secretsApi } from "@mileniumhq/paperapi";
 import { tokenName, type BotsServiceState } from "../src/bots";
+import { widgetUrl } from "../../../scripts/testing/panelUi";
 import { panelBrowser, servePanel, type Page } from "./helpers/browser";
 import { guild, startFakeDiscord, type FakeDiscord } from "./helpers/discord";
 import { call, PANEL_ID, savedBots, startService, stopServices, storedBot } from "./helpers/service";
@@ -53,7 +54,7 @@ function readAnswered(page: Page, call: string): Promise<void> {
     return sent.then((id) => page.received((frame) => JSON.parse(frame).id === id, `the answer to ${call}`));
 }
 
-const widget = (url: string, id: string, w: number, h: number, bot: string) => `${url}/widget-host.html?id=${id}&w=${w}&h=${h}&bot=${bot}`;
+const widget = (url: string, id: string, w: number, h: number, bot: string) => widgetUrl(url, id, { bot }, { w, h });
 
 describe("the Bot status widget", () => {
     test("a bot that's off connects from the 2x1 tile, and keeps its button while nothing changes", async () => {
