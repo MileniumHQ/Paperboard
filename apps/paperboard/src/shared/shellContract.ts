@@ -99,6 +99,15 @@ const updateKeys: Shape<string[]> = {
     },
 };
 
+/** A backup location as people see it: where it is, never its keys or sign-in. */
+const backupLocation = shape.object({
+    id: shape.text(),
+    kind: shape.oneOf("local", "s3", "gdrive"),
+    label: shape.text(),
+    detail: shape.text(),
+    removable: shape.boolean(),
+});
+
 // a panel's save or open dialog: the shell names the computer and the
 // frame's panel; the rest is the panel's own, which the transfer's parser
 // (fileTransfer.ts) checks and answers with an invalid-request
@@ -120,7 +129,9 @@ interface CallDefinition {
 }
 
 export const SHELL_CALLS = {
-    // throws until the local daemon is verified: why it isn't, once known
+    // throws until the local daemon is verified: why it isn't, once known.
+    // token is a secret the renderer needs: the shell is a PaperAPI host and
+    // dials this computer's daemon itself, on loopback, with this token
     "crane-credentials": { args: none, answer: shape.object({ port: shape.number(), token: shape.text(), computerId: shape.text() }), browser: true },
     "computers-list": { args: none, answer: computerList, browser: true },
     "computer-probe": { args: shape.object({ host: filled(), port }), answer: probeResult, browser: true },
@@ -174,13 +185,14 @@ export const SHELL_CALLS = {
     "panel-loopback-redirect": { args: shape.object({ requestId: filled(128), redirectUri: shape.json() }), answer: panelLoopbackRedirectResult },
     "panel-loopback-redirect-cancel": { args: shape.object({ requestId: filled(128) }), answer: none },
     // a new Google Drive location with its label, or an existing one signed
-    // in again: the location the computer keeps
+    // in again: the location the computer keeps. The sign-in's refresh
+    // token goes to that computer's daemon and never comes back
     "backup-gdrive-connect": {
         args: shape.either(
             shape.object({ computerId: words(128), label: words(60) }),
             shape.object({ computerId: words(128), locationId: words(64) }),
         ),
-        answer: shape.json(),
+        answer: backupLocation,
     },
     "backup-gdrive-cancel": { args: none, answer: none },
     // a PermissionAnswer for an ask, a source id (or null) for a screen pick

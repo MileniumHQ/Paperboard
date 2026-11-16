@@ -13,6 +13,8 @@ const failureCode = shape.oneOf("invalid-request", "unavailable", "in-use", "bus
 export type LoopbackRedirectFailureCode = Infer<typeof failureCode>;
 
 export const panelLoopbackRedirectResult = shape.either(
+    // url is a secret the panel needs: the redirect carries its sign-in's
+    // code, which only the panel frame that asked is handed
     shape.object({ status: shape.oneOf("caught"), url: shape.text() }),
     shape.object({ status: shape.oneOf("local") }),
     shape.object({ status: shape.oneOf("failed"), code: failureCode, message: shape.text() }),
