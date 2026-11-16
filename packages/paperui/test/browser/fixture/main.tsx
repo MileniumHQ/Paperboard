@@ -3,13 +3,14 @@
 // stylesheet, one scenario per page load: `?s=<scenario>`. A scenario puts
 // what the test needs to read or drive on `window.t`.
 import "@mileniumhq/paperui/style.css";
-import { createSignal, For, Show, type JSX } from "solid-js";
+import { createSignal, For, Match, Show, Switch, type JSX } from "solid-js";
 import { render } from "solid-js/web";
 import {
     PaperAudio,
     PaperBadge,
     PaperButton,
     PaperConsole,
+    PaperEmptyState,
     PaperContextMenu,
     PaperContextMenuHeader,
     PaperContextMenuItem,
@@ -35,7 +36,9 @@ import {
     PaperSlidePage,
     PaperSplit,
     PaperToggle,
+    createFailureToast,
     createPaperCompact,
+    createRead,
     createPolling,
     setHapticPlayer,
     useContextMenuState,
@@ -138,6 +141,105 @@ const scenarios: Record<string, () => JSX.Element> = {
                             </PaperListItem>
                         )}
                     </For>
+                </PaperList>
+            </div>
+        ));
+    },
+
+    toastModal() {
+        const [open, setOpen] = createSignal(true);
+        const [failure, setFailure] = createSignal<string | null>(null);
+        window.t = { isOpen: () => open(), fail: setFailure, presses: 0 };
+        return shell(() => {
+            createFailureToast(failure, { title: "Couldn't rename the world" });
+            return (
+                <div style={{ padding: "24px" }}>
+                    <button id="under" onClick={() => window.t.presses++}>
+                        Under the scrim
+                    </button>
+                    <PaperModal
+                        open={open()}
+                        onClose={() => setOpen(false)}
+                        title="Rename the world"
+                        size="small"
+                        footer={<PaperButton id="save">Save</PaperButton>}
+                    >
+                        <PaperInput id="name" label="Name" value="Survival" />
+                    </PaperModal>
+                </div>
+            );
+        });
+    },
+
+    failedRead() {
+        let fails = true;
+        const t = (window.t = { reads: 0, answer: () => (fails = false) });
+        return shell(() => {
+            const read = createRead(
+                async () => {
+                    t.reads++;
+                    if (fails) throw new Error("The server didn't answer: it may be offline");
+                    return ["Survival", "Creative"];
+                },
+                { failure: { title: "Couldn't load the worlds" } },
+            );
+            return (
+                <PaperPanel>
+                    <Switch>
+                        <Match when={read.value()}>
+                            {(worlds) => (
+                                <PaperList id="worlds" name="worlds" selectable={false}>
+                                    <For each={worlds()}>{(world) => <PaperListItem value={world}>{world}</PaperListItem>}</For>
+                                </PaperList>
+                            )}
+                        </Match>
+                        <Match when={read.error()}>
+                            <PaperEmptyState id="failed" icon="error" title="Couldn't load">
+                                <PaperButton disabled={read.loading()} onClick={() => void read.reload()}>
+                                    Try again
+                                </PaperButton>
+                            </PaperEmptyState>
+                        </Match>
+                    </Switch>
+                </PaperPanel>
+            );
+        });
+    },
+
+    listActions() {
+        const [value, setValue] = createSignal("alpha");
+        const [on, setOn] = createSignal(false);
+        const [width, setWidth] = createSignal(360);
+        const t = (window.t = { value, on, setWidth, rowClicks: 0, reorders: 0, deletes: 0 });
+        return shell(() => (
+            <div style={{ padding: "24px", width: `${width()}px` }}>
+                <PaperList name="list" fullWidth value={value()} onValueChange={(v) => setValue(String(v))} reorderable onReorder={() => t.reorders++}>
+                    <PaperListItem value="alpha" data-item="alpha">
+                        Alpha
+                    </PaperListItem>
+                    <PaperListItem
+                        value="beta"
+                        data-item="beta"
+                        description="Two files"
+                        onClick={() => t.rowClicks++}
+                        actions={
+                            <>
+                                <span id="note">3 MB</span>
+                                <PaperButton id="delete" size="small" variant="text" onClick={() => t.deletes++}>
+                                    Delete
+                                </PaperButton>
+                                <PaperToggle id="switch" aria-label="On" checked={on()} onChange={setOn} />
+                            </>
+                        }
+                    >
+                        Beta
+                    </PaperListItem>
+                    <PaperListItem value="long" data-item="long" wrapTitle>
+                        Why does the server stop every night at three even though nothing is scheduled then?
+                    </PaperListItem>
+                    <PaperListItem value="cut" data-item="cut">
+                        Why does the server stop every night at three even though nothing is scheduled then?
+                    </PaperListItem>
                 </PaperList>
             </div>
         ));

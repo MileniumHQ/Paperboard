@@ -273,6 +273,19 @@ export function PaperListLabel(props: ParentProps<PaperListLabelProps>) {
     );
 }
 
+// A press in an item's actions is theirs: it doesn't start a drag, reach the
+// item's own handlers, or choose the item. A click on a control in them is
+// that control's; one that falls between them would be the item's label's,
+// so it is cancelled.
+const ACTIVATES = "button, a[href], input, select, textarea, label, summary";
+const stopPress = (e: Event) => e.stopPropagation();
+const keepClick = (e: MouseEvent) => {
+    e.stopPropagation();
+    const target = e.target instanceof Element ? e.target : null;
+    const control = target?.closest(ACTIVATES);
+    if (!control || !(e.currentTarget as Element).contains(control)) e.preventDefault();
+};
+
 export interface PaperListItemProps extends Omit<
     JSX.HTMLAttributes<HTMLLabelElement>,
     "onClose"
@@ -288,10 +301,12 @@ export interface PaperListItemProps extends Omit<
     /** how far the loader has come, 0 to 100 */
     percent?: number;
     /**
-     * Trailing controls (for example a menu button). They render after the
-     * item text and are responsible for stopping their own events.
+     * Trailing controls (for example a menu button), after the item text. A
+     * press in them is theirs: it never chooses the item or starts a drag.
      */
     actions?: JSX.Element;
+    /** The title wraps onto more lines instead of ending in an ellipsis. */
+    wrapTitle?: boolean;
     disabled?: boolean;
     closeable?: boolean;
     onBeforeClose?: (
@@ -309,6 +324,7 @@ export function PaperListItem(props: ParentProps<PaperListItemProps>) {
         "loaderStatus",
         "percent",
         "actions",
+        "wrapTitle",
         "disabled",
         "closeable",
         "onBeforeClose",
@@ -351,6 +367,7 @@ export function PaperListItem(props: ParentProps<PaperListItemProps>) {
             listCtx?.isDropping() ? styles.dropping : "",
             listCtx?.hasActiveDrag() && !isDragging() ? styles.isSibling : "",
             local.disabled ? styles.disabled : "",
+            local.wrapTitle ? styles.wrapTitle : "",
             local.class,
         );
 
@@ -467,7 +484,9 @@ export function PaperListItem(props: ParentProps<PaperListItemProps>) {
             </div>
 
             <Show when={actions()}>
-                <span class={styles.itemActions}>{actions()}</span>
+                <span class={styles.itemActions} onPointerDown={stopPress} onClick={keepClick}>
+                    {actions()}
+                </span>
             </Show>
         </Dynamic>
     );

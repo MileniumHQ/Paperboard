@@ -4,7 +4,7 @@
 // as nothing here prevents the event's default. A failure that repeats (a
 // throw on every pointer move) is one toast while it shows. A failure the
 // page caught and shows in place never gets here, so it isn't said twice.
-import { showToast } from "../components/PaperToast";
+import { showToast } from "./toasts";
 
 const TITLE = "Something went wrong";
 

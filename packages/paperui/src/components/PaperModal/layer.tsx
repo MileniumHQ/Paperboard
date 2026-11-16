@@ -82,6 +82,19 @@ function opener(): HTMLElement | null {
 const FOCUSABLE =
     'button:not(:disabled), [href], input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex="-1"])';
 
+/** What Tab can reach in `root`, in document order. */
+function focusablesIn(root: HTMLElement): HTMLElement[] {
+    return [...root.querySelectorAll<HTMLElement>(FOCUSABLE)].filter(
+        (el) =>
+            !el.matches(":disabled") &&
+            !el.hidden &&
+            !el.closest('[hidden], [inert], [aria-hidden="true"]') &&
+            el.getAttribute("aria-disabled") !== "true" &&
+            getComputedStyle(el).display !== "none" &&
+            getComputedStyle(el).visibility !== "hidden",
+    );
+}
+
 /**
  * Draws its content while the modal is open and keeps the last drawing
  * through the exit animation. A caller that clears what the modal shows as
@@ -176,33 +189,26 @@ export function ModalLayer(props: ModalLayerProps) {
             }
 
             if (e.key === "Tab" && dialog) {
-                const focusables = [...dialog.querySelectorAll<HTMLElement>(FOCUSABLE)].filter(
-                    (el) =>
-                        !el.matches(":disabled") &&
-                        !el.hidden &&
-                        !el.closest('[hidden], [inert], [aria-hidden="true"]') &&
-                        el.getAttribute("aria-disabled") !== "true" &&
-                        getComputedStyle(el).display !== "none" &&
-                        getComputedStyle(el).visibility !== "hidden",
-                );
-                if (focusables.length === 0) {
+                // the toasts take turns too: a failure said while the dialog
+                // is open is read and closed from the keyboard, then focus
+                // comes back in, never to the page under the scrim
+                const toasts = document.querySelector<HTMLElement>("[data-paper-toasts]");
+                const inDialog = focusablesIn(dialog);
+                const inToasts = toasts ? focusablesIn(toasts) : [];
+                const cycle = [...inDialog, ...inToasts];
+                const active = document.activeElement;
+                const move = (to: HTMLElement | undefined) => {
                     e.preventDefault();
-                    dialog.focus({ preventScroll: true });
-                    return;
-                }
-
-                const firstEl = focusables[0];
-                const lastEl = focusables[focusables.length - 1];
-
+                    (to ?? dialog)?.focus({ preventScroll: true });
+                };
+                if (cycle.length === 0) return move(dialog);
+                const inside = active instanceof Node && (dialog.contains(active) || !!toasts?.contains(active));
+                if (!inside) return move(e.shiftKey ? cycle.at(-1) : cycle[0]);
                 if (e.shiftKey) {
-                    if (document.activeElement === firstEl || document.activeElement === dialog) {
-                        e.preventDefault();
-                        lastEl.focus();
-                    }
-                } else if (document.activeElement === lastEl) {
-                    e.preventDefault();
-                    firstEl.focus();
-                }
+                    if (active === cycle[0] || active === dialog) move(cycle.at(-1));
+                    else if (active === inToasts[0]) move(inDialog.at(-1));
+                } else if (active === cycle.at(-1)) move(cycle[0]);
+                else if (active === inDialog.at(-1) && inToasts.length > 0) move(inToasts[0]);
             }
         };
 

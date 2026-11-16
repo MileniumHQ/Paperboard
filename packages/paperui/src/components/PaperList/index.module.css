@@ -151,6 +151,12 @@
     white-space: nowrap;
 }
 
+/* wrapTitle: a title that has to be read whole (a question, a path) wraps */
+.wrapTitle .listTitle > span {
+    white-space: normal;
+    overflow-wrap: anywhere;
+}
+
 .PaperListItem :global([class*="PaperButton"]) {
     margin-left: auto;
     flex-shrink: 0;
