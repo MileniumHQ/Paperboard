@@ -29,6 +29,8 @@ export type ServerView = Pick<
     | "activeIssue"
     | "maxPlayers"
 > & {
+    /** the server's name, which titles its status */
+    name: string;
     supportsPlayers: boolean;
     softwareLabel: string;
     /** the game draws its players' heads (get-player-skin), else a plain figure */
@@ -59,6 +61,7 @@ function serverView(server: ServerSummary, snapshot: GameServerState, widgetId: 
     const features = game.describe(options);
     if (widgetId && !features.widgets.includes(widgetId)) throw new Error(`${game.name} does not support the ${widgetId} widget`);
     return {
+        name: server.name,
         serverStatus: snapshot.serverStatus,
         serverSoftware: snapshot.serverSoftware,
         serverVersion: snapshot.serverVersion,

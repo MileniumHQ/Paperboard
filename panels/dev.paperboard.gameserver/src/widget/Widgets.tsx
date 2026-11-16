@@ -37,12 +37,11 @@ function statusTone(status: Status): PaperRole | undefined {
 }
 
 /** a dot and a word: how every widget says what the server is doing */
-function StatusWord(props: { status: Status; suffix?: string }) {
+function StatusWord(props: { status: Status }) {
     return (
         <span class={styles.state}>
             <PaperWidgetDot tone={statusTone(props.status) ?? "none"} />
             {getStatusBadge(props.status).label}
-            {props.suffix}
         </span>
     );
 }
@@ -117,6 +116,7 @@ function askForCap(server: WidgetServer) {
 
 // ── Server status (2x1, 2x2) ────────────────────────────────────────────
 
+// before the service answers, the widget doesn't know the server's name yet
 const SERVER_TITLE = "Server";
 
 export function StatusWidget(props: Props) {
@@ -134,6 +134,11 @@ export function StatusWidget(props: Props) {
                 const installed = () => s().serverVersion !== "";
                 const online = () => status() === "online";
                 const busy = () => power.busy() || status() === "stopping" || status() === "restarting";
+                // stopping disconnects whoever is playing, so with anyone on it asks
+                // first, in the tile, until the server's state moves on
+                const [askStop, setAskStop] = createSignal(false);
+                createEffect(on(status, () => setAskStop(false), { defer: true }));
+                const stop = () => run("stop", (calls) => calls.stopServer());
                 const address = () => `${s().localIp}:${s().serverPort}`;
                 const players = () => !s().supportsPlayers ? { ...playerCount(0, null), short: "Unavailable", long: "Player count unavailable", online: "—" } : playerCount(s().onlinePlayers.length, s().maxPlayers);
                 // what the one button does now; a server with nothing installed
@@ -141,8 +146,8 @@ export function StatusWidget(props: Props) {
                 const control = () =>
                     status() === "offline"
                         ? { label: "Start server", short: "Start", icon: "play_arrow", variant: "success" as const, act: () => run("start", (calls) => calls.startServer()) }
-                        : { label: "Stop server", short: "Stop", icon: "stop", variant: "danger" as const, act: () => run("stop", (calls) => calls.stopServer()) };
-                const canControl = () => installed() || status() !== "offline";
+                        : { label: "Stop server", short: "Stop", icon: "stop", variant: "danger" as const, act: () => (s().onlinePlayers.length > 0 ? setAskStop(true) : stop()) };
+                const canControl = () => (installed() || status() !== "offline") && !askStop();
                 const button = (small: boolean) => (
                     <PaperButton
                         size={small ? "small" : "tiny"}
@@ -160,11 +165,11 @@ export function StatusWidget(props: Props) {
                 const caption = () => {
                     if (!online()) return address();
                     if (tall()) return address();
-                    return <StatusWord status={status()} suffix=" · players" />;
+                    return players().noun;
                 };
                 return (
                     <PaperWidget
-                        title={SERVER_TITLE}
+                        title={s().name}
                         // a 2x1 header holds the version and the button; the icon would cut the title
                         icon={tall() ? "dns" : undefined}
                         detail={installed() ? s().softwareLabel : "Not set up"}
@@ -191,6 +196,20 @@ export function StatusWidget(props: Props) {
                                 />
                             }
                         >
+                            <Match when={askStop()}>
+                                <PaperWidgetMessage
+                                    tone="warning"
+                                    title={`Stop ${s().name}?`}
+                                    description={`${players().online} ${s().onlinePlayers.length === 1 ? "player is" : "players are"} online, and stopping disconnects them.`}
+                                >
+                                    <PaperButton size="tiny" variant="text" onClick={() => setAskStop(false)}>
+                                        Cancel
+                                    </PaperButton>
+                                    <PaperButton size="tiny" variant="danger" onClick={() => { setAskStop(false); stop(); }}>
+                                        Stop
+                                    </PaperButton>
+                                </PaperWidgetMessage>
+                            </Match>
                             <Match when={power.error()}>
                                 {(failed) => (
                                     <PaperWidgetMessage

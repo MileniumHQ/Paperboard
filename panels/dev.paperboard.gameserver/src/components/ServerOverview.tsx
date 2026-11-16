@@ -1,4 +1,4 @@
-import { createSignal, For, Index, onMount, Show, type JSX } from "solid-js";
+import { createEffect, createSignal, For, Index, on, onMount, Show, type JSX } from "solid-js";
 import {
     PaperFlex,
     PaperText,
@@ -13,6 +13,7 @@ import {
     PaperGrid,
     PaperQuote,
     PaperStatTile,
+    PaperModal,
     createAction,
 } from "@mileniumhq/paperui";
 import { getStatusBadge, useServer } from "../lib/server";
@@ -43,7 +44,8 @@ export function EditableDetail(props: { edit: string; onEdit(): void; children: 
  *
  * The console takes what height is left, and never less than a height of
  * its own: a short window or a phone has too little left under the rest,
- * so there the Overview scrolls as a whole.
+ * so there the rest scrolls above it, and the console and its command line
+ * stay in view.
  */
 export default function ServerOverview(props: {
     avatar: JSX.Element;
@@ -62,7 +64,7 @@ export default function ServerOverview(props: {
     /** false for a game that keeps no world, which has no Save world */
     world?: boolean;
 }) {
-    const { calls, serverActionError, serverStatus, serverEntries, localIp, serverPort, portMoves, serverVersion, loadServerConfig, startServer, stopServer, restartServer } = useServer();
+    const { calls, summary, serverActionError, serverStatus, serverEntries, onlinePlayers, localIp, serverPort, portMoves, serverVersion, loadServerConfig, startServer, stopServer, restartServer } = useServer();
     // loading the config also reads the server's state
     onMount(() => void loadServerConfig());
 
@@ -77,119 +79,131 @@ export default function ServerOverview(props: {
         sent.catch((err) => setCommandError(errorMessage(err)));
     };
 
+    // stopping disconnects whoever is playing, so with anyone on it asks first
+    const [askStop, setAskStop] = createSignal(false);
+    const playing = () => onlinePlayers().length;
+    const stop = () => (playing() > 0 ? setAskStop(true) : stopServer());
+    // a command refused for the server's state, and the question of stopping
+    // it, say nothing once that state is gone
+    createEffect(on(serverStatus, () => {
+        setCommandError("");
+        setAskStop(false);
+    }, { defer: true }));
     const badge = () => getStatusBadge(serverStatus());
     const address = () => `${localIp()}:${joinPort({ serverPort: serverPort(), portMoves: portMoves() })}`;
 
     return (
-        <PaperFlex direction="column" gap="full" grow minHeight={0} fullWidth overflowY="auto">
-            <PaperCard shrink={false} padding="full">
-                <PaperFlex direction="row" gap="threefourths" align="center">
-                    {props.avatar}
-                    <PaperFlex direction="column" gap="onefourth" minWidth={0}>
-                        <PaperFlex direction="row" gap="half" align="center" wrap>
-                            <PaperText size={4} weight={700}>{address()}</PaperText>
-                            <PaperCopyButton text={address()} title="Copy address" />
+        <PaperFlex direction="column" gap="full" grow minHeight={0} fullWidth>
+            <PaperFlex direction="column" gap="full" minHeight={0} fullWidth overflowY="auto">
+                <PaperCard shrink={false} padding="full">
+                    <PaperFlex direction="row" gap="threefourths" align="center">
+                        {props.avatar}
+                        <PaperFlex direction="column" gap="onefourth" minWidth={0}>
+                            <PaperFlex direction="row" gap="half" align="center" wrap>
+                                <PaperText size={4} weight={700}>{address()}</PaperText>
+                                <PaperCopyButton text={address()} title="Copy address" />
+                            </PaperFlex>
+                            {props.detail}
                         </PaperFlex>
-                        {props.detail}
                     </PaperFlex>
-                </PaperFlex>
-            </PaperCard>
+                </PaperCard>
 
-            {/* both groups wrap, so a phone's controls and badges stack instead of leaving the screen */}
-            <PaperFlex justify="space-between" direction="row" align="center" gap="half" wrap shrink={false}>
-                <PaperFlex gap="half" direction="row" align="center" wrap>
-                    <Show when={serverStatus() === "offline"}>
-                        <PaperEffect>
-                            <PaperButton onClick={startServer}>
-                                <PaperIcon>power</PaperIcon>
-                                Start
-                            </PaperButton>
-                        </PaperEffect>
-                    </Show>
-                    <Show when={serverStatus() !== "offline"}>
-                        <PaperButton variant="danger" onClick={stopServer} disabled={serverStatus() === "stopping"}>
-                            <PaperIcon>stop</PaperIcon>
-                            Stop
-                        </PaperButton>
-                    </Show>
-                    <Show when={serverStatus() === "online"}>
-                        <PaperButton variant="warning" onClick={restartServer}>
-                            <PaperIcon>restart_alt</PaperIcon>
-                            Restart
-                        </PaperButton>
-                        <Show when={props.world !== false}>
-                            <PaperButton onClick={() => void save()} disabled={saving.busy()}>
-                                <PaperIcon>save</PaperIcon>
-                                {saving.busy() ? "Saving..." : "Save world"}
+                {/* both groups wrap, so a phone's controls and badges stack instead of leaving the screen */}
+                <PaperFlex justify="space-between" direction="row" align="center" gap="half" wrap shrink={false}>
+                    <PaperFlex gap="half" direction="row" align="center" wrap>
+                        <Show when={serverStatus() === "offline"}>
+                            <PaperEffect>
+                                <PaperButton onClick={startServer}>
+                                    <PaperIcon>power</PaperIcon>
+                                    Start
+                                </PaperButton>
+                            </PaperEffect>
+                        </Show>
+                        <Show when={serverStatus() !== "offline"}>
+                            <PaperButton variant="danger" onClick={stop} disabled={serverStatus() === "stopping"}>
+                                <PaperIcon>stop</PaperIcon>
+                                Stop
                             </PaperButton>
                         </Show>
-                        {props.actions}
-                    </Show>
+                        <Show when={serverStatus() === "online"}>
+                            <PaperButton variant="warning" onClick={restartServer}>
+                                <PaperIcon>restart_alt</PaperIcon>
+                                Restart
+                            </PaperButton>
+                            <Show when={props.world !== false}>
+                                <PaperButton onClick={() => void save()} disabled={saving.busy()}>
+                                    <PaperIcon>save</PaperIcon>
+                                    {saving.busy() ? "Saving..." : "Save world"}
+                                </PaperButton>
+                            </Show>
+                            {props.actions}
+                        </Show>
+                    </PaperFlex>
+                    <PaperFlex direction="row" align="center" gap="onefourth" wrap>
+                        <PaperBadge variant={badge().variant}>{badge().label}</PaperBadge>
+                        <PaperBadge>{serverVersion()}</PaperBadge>
+                        <PaperBadge>{props.software}</PaperBadge>
+                    </PaperFlex>
                 </PaperFlex>
-                <PaperFlex direction="row" align="center" gap="onefourth" wrap>
-                    <PaperBadge variant={badge().variant}>{badge().label}</PaperBadge>
-                    <PaperBadge>{serverVersion()}</PaperBadge>
-                    <PaperBadge>{props.software}</PaperBadge>
-                </PaperFlex>
+
+                <Show when={serverStatus() === "online" && props.stats}>
+                    {(stats) => (
+                        // two pairs: side by side when all four fit, else one over the other, never three and one
+                        <PaperGrid fit min="card-min">
+                            <Index each={[stats().slice(0, 2), stats().slice(2)]}>
+                                {(pair) => (
+                                    <PaperGrid columns={2}>
+                                        {/* by position: the uptime's tick makes four new readouts every second, and each tile stays */}
+                                        <Index each={pair()}>
+                                            {(stat) => <PaperStatTile icon={stat().icon} label={stat().label} value={stat().value} tone={stat().tone} />}
+                                        </Index>
+                                    </PaperGrid>
+                                )}
+                            </Index>
+                        </PaperGrid>
+                    )}
+                </Show>
+
+                <RecoveryNotice />
+
+                {/* a taken port moved for this run alone: friends must join on the new one */}
+                <For each={portMoves()}>
+                    {(move) => (
+                        <PaperQuote variant="warning" icon="swap_horiz" title={`${move.primary ? "Port" : `${move.label} port`} ${move.from} was taken, so this run uses ${move.to}`}>
+                            {move.primary ? `Players join on ${move.to} until the server stops.` : `It uses ${move.to} until the server stops.`} The next start asks for {move.from} again.
+                        </PaperQuote>
+                    )}
+                </For>
+
+                <Show when={serverActionError()}>
+                    <PaperQuote variant="danger" icon="warning" title="Server action failed">
+                        {serverActionError()}
+                    </PaperQuote>
+                </Show>
+
+                <Show when={saving.error()}>
+                    {(failure) => (
+                        <PaperQuote variant="danger" icon="warning" title={failure().title} onDismiss={() => saving.setError(null)}>
+                            {failure().message}
+                        </PaperQuote>
+                    )}
+                </Show>
+
+                <Show when={commandError()}>
+                    <PaperQuote variant="danger" icon="warning" title={control() === "broadcast" ? "Message not sent" : "Command not run"} onDismiss={() => setCommandError("")}>
+                        {commandError()}
+                    </PaperQuote>
+                </Show>
+
+                {props.children}
             </PaperFlex>
 
-            <Show when={serverStatus() === "online" && props.stats}>
-                {(stats) => (
-                    // two pairs: side by side when all four fit, else one over the other, never three and one
-                    <PaperGrid fit min="card-min">
-                        <Index each={[stats().slice(0, 2), stats().slice(2)]}>
-                            {(pair) => (
-                                <PaperGrid columns={2}>
-                                    {/* by position: the uptime's tick makes four new readouts every second, and each tile stays */}
-                                    <Index each={pair()}>
-                                        {(stat) => <PaperStatTile icon={stat().icon} label={stat().label} value={stat().value} tone={stat().tone} />}
-                                    </Index>
-                                </PaperGrid>
-                            )}
-                        </Index>
-                    </PaperGrid>
-                )}
-            </Show>
-
-            <RecoveryNotice />
-
-            {/* a taken port moved for this run alone: friends must join on the new one */}
-            <For each={portMoves()}>
-                {(move) => (
-                    <PaperQuote variant="warning" icon="swap_horiz" title={`${move.primary ? "Port" : `${move.label} port`} ${move.from} was taken, so this run uses ${move.to}`}>
-                        {move.primary ? `Players join on ${move.to} until the server stops.` : `It uses ${move.to} until the server stops.`} The next start asks for {move.from} again.
-                    </PaperQuote>
-                )}
-            </For>
-
-            <Show when={serverActionError()}>
-                <PaperQuote variant="danger" icon="warning" title="Server action failed">
-                    {serverActionError()}
-                </PaperQuote>
-            </Show>
-
-            <Show when={saving.error()}>
-                {(failure) => (
-                    <PaperQuote variant="danger" icon="warning" title={failure().title} onDismiss={() => saving.setError(null)}>
-                        {failure().message}
-                    </PaperQuote>
-                )}
-            </Show>
-
-            <Show when={commandError()}>
-                <PaperQuote variant="danger" icon="warning" title={control() === "broadcast" ? "Message not sent" : "Command not run"} onDismiss={() => setCommandError("")}>
-                    {commandError()}
-                </PaperQuote>
-            </Show>
-
-            {props.children}
-
-            <PaperCard grow minHeight="field-wide" padding="full">
+            <PaperCard flex minHeight="field-wide" padding="full">
                 <PaperConsole
                     entries={serverEntries()}
                     onCommand={runCommand}
                     showInput={control() !== "none"}
-                    placeholder={control() === "broadcast" ? "Message everyone on the server..." : "Enter command..."}
+                    placeholder={control() === "broadcast" ? "Message" : "Command"}
                     prompt={control() === "broadcast" ? "campaign" : "chevron_right"}
                     empty={
                         <PaperEmptyState
@@ -200,6 +214,23 @@ export default function ServerOverview(props: {
                     }
                 />
             </PaperCard>
+
+            <PaperModal
+                open={askStop()}
+                title={`Stop ${summary().name}?`}
+                size="small"
+                onClose={() => setAskStop(false)}
+                footer={
+                    <>
+                        <PaperButton variant="text" onClick={() => setAskStop(false)}>Cancel</PaperButton>
+                        <PaperButton variant="danger" onClick={() => { setAskStop(false); stopServer(); }}>Stop</PaperButton>
+                    </>
+                }
+            >
+                <PaperText preset="body">
+                    {playing() === 1 ? "1 player is" : `${playing()} players are`} online. Stopping the server disconnects them.
+                </PaperText>
+            </PaperModal>
 
             <ServerIssueModal />
         </PaperFlex>

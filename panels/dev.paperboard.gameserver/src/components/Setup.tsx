@@ -37,7 +37,7 @@ interface VersionStepProps {
 
 function VersionStep(props: VersionStepProps) {
     return (
-        <PaperCenteredInterface size="large">
+        <PaperCenteredInterface size="large" height="100%">
             <PaperFlex direction="column" gap="full" fullWidth fullHeight>
                 <PaperFlex direction="column" gap="half">
                     <PaperText preset="title">Choose Version</PaperText>
@@ -271,7 +271,7 @@ export default function Setup(props: SetupProps) {
             onComplete={handleFinishSetup}
         >
             <PaperWizardStep index={0}>
-                <PaperCenteredInterface size="large">
+                <PaperCenteredInterface size="large" height="100%">
                     <PaperFlex direction="column" gap="half">
                         <PaperText preset="title">Server Software</PaperText>
                         <PaperText preset="body">

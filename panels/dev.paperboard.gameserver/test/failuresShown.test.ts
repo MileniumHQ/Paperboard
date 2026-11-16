@@ -128,8 +128,8 @@ describe("failures are shown", () => {
 
         // a command typed into a stopped server's console
         const mc = await openPage(`${served.url}/?server=s-mc`);
-        await mc.waitFor(`document.querySelector('input[placeholder="Enter command..."]')`, "the console");
-        await mc.type('input[placeholder="Enter command..."]', "list", true);
+        await mc.waitFor(`document.querySelector('input[placeholder="Command"]')`, "the console");
+        await mc.type('input[placeholder="Command"]', "list", true);
         await mc.waitFor(quote("Command not run"), "the refused command to be shown");
         expect(await quoteText(mc, "Command not run")).toContain("Cannot execute command: server is offline.");
         expect(await mc.evaluate<string>("document.body.innerText")).toContain("Cannot execute command: server is offline.");
@@ -178,20 +178,20 @@ describe("failures are shown", () => {
                 fs.chmodSync(ini, 0o600);
             }
 
-            await pal.type('input[placeholder="Message everyone on the server..."]', "restart soon", true);
+            await pal.type('[class*=PaperConsole] input[placeholder="Message"]', "restart soon", true);
             await pal.waitFor(quote("Message not sent"), "the refused broadcast to be shown");
             expect(await quoteText(pal, "Message not sent")).toContain("Palworld answered 500 to announce: chat is switched off");
 
             // the Say button sends through say-chat, and a message that did not go out comes back to the field
             await pal.click('input[name=serverMenu][value="chat"]');
-            await pal.waitFor(`document.querySelector('input[placeholder="Message server..."]') && !document.querySelector('input[placeholder="Message server..."]').disabled`, "the chat field");
+            await pal.waitFor(`document.querySelector('input[placeholder="Message"]:not([class*=PaperConsole] *)') && !document.querySelector('input[placeholder="Message"]:not([class*=PaperConsole] *)').disabled`, "the chat field");
             const sentBefore = pal.sentFrames.length;
-            await pal.type('input[placeholder="Message server..."]', "hello all");
+            await pal.type('input[placeholder="Message"]:not([class*=PaperConsole] *)', "hello all");
             await pal.evaluate(`[...document.querySelectorAll("button")].find((b) => b.innerText.includes("Say")).dataset.test = "say"`);
             await pal.click('button[data-test="say"]');
             await pal.waitFor(quote("Message not sent"), "the refused chat message to be shown");
             expect(await quoteText(pal, "Message not sent")).toContain("Palworld answered 500 to announce: chat is switched off");
-            expect(await pal.evaluate<string>(`document.querySelector('input[placeholder="Message server..."]').value`)).toBe("hello all");
+            expect(await pal.evaluate<string>(`document.querySelector('input[placeholder="Message"]:not([class*=PaperConsole] *)').value`)).toBe("hello all");
             expect(pal.sentFrames.slice(sentBefore).filter((f) => f.includes("command.call-say-chat") && f.includes("hello all"))).toHaveLength(1);
             expect([pal.exceptions, mc.exceptions]).toEqual([[], []]);
         } finally {

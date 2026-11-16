@@ -44,7 +44,7 @@ describe("the server issue repairs", () => {
         try {
             await page.waitFor(`document.body.innerText.includes("ONLINE")`, "the server to show online");
             // the server says its port is taken
-            await page.type('input[placeholder="Enter command..."]', "say FAILED TO BIND TO PORT", true);
+            await page.type('input[placeholder="Command"]', "say FAILED TO BIND TO PORT", true);
             await page.waitFor(`document.body.innerText.includes("Port Conflict Detected")`, "the port conflict to be shown");
             await page.evaluate(`[...document.querySelectorAll("button")].find((b) => b.innerText.includes("Kill Process")).dataset.test = "kill"`);
             await page.click('button[data-test="kill"]');

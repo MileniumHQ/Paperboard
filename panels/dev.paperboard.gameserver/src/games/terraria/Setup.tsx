@@ -71,7 +71,7 @@ export default function TerrariaSetup(props: { onComplete(): void }) {
             onComplete={props.onComplete}
         >
             <PaperWizardStep index={0}>
-                <PaperCenteredInterface size="large">
+                <PaperCenteredInterface size="large" height="100%">
                     <PaperFlex direction="column" gap="half">
                         <PaperText preset="title">Server Software</PaperText>
                         <PaperText preset="body">
@@ -99,7 +99,7 @@ export default function TerrariaSetup(props: { onComplete(): void }) {
             </PaperWizardStep>
 
             <PaperWizardStep index={1} canProceed={support()?.supported === true}>
-                <PaperCenteredInterface size="large">
+                <PaperCenteredInterface size="large" height="100%">
                     <PaperFlex direction="column" gap="half">
                         <PaperText preset="title">Choose Version</PaperText>
                         <PaperText preset="body">

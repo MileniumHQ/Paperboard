@@ -74,7 +74,7 @@ export default function SourceSetup(props: { spec: SourceGameSpec; onComplete():
             steps={
                 <>
                     <PaperWizardStep index={1} hideBack canProceed={mode() !== ""} onStepActive={() => setDownloaded(true)}>
-                        <PaperCenteredInterface size="large">
+                        <PaperCenteredInterface size="large" height="100%">
                             <PaperFlex direction="column" gap="half" fullWidth fullHeight>
                                 <PaperText preset="title">Game Mode</PaperText>
                                 <PaperText preset="body">
@@ -121,7 +121,7 @@ export default function SourceSetup(props: { spec: SourceGameSpec; onComplete():
                     </PaperWizardStep>
 
                     <PaperWizardStep index={2} canProceed={map() !== "" && !saving.busy()}>
-                        <PaperCenteredInterface size="large">
+                        <PaperCenteredInterface size="large" height="100%">
                             <PaperFlex direction="column" gap="half" fullWidth fullHeight>
                                 <PaperText preset="title">Starting Map</PaperText>
                                 <PaperText preset="body">
