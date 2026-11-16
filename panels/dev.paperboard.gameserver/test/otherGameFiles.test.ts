@@ -7,6 +7,7 @@ import { readTree, tempDir, writeTree } from "./helpers/tmp";
 import { keptFile, linkFolder } from "../src/games/serviceKit";
 import { PlayerStore, formatBanlist, parseBanlist } from "../src/games/terraria/roster";
 import { importUpload, inspectUpload, trashWorld, UPLOAD_DIR } from "../src/games/terraria/worldStore";
+import { terrariaWorld } from "./helpers/terrariaWorld";
 
 let daemon: TestDaemon;
 beforeAll(async () => {
@@ -15,27 +16,6 @@ beforeAll(async () => {
 afterAll(async () => {
     await daemon?.stop();
 });
-
-/** a .wld whose header reads as `title`: Terraria's layout, every later field zero */
-function terrariaWorld(title: string): Uint8Array {
-    const bytes = new Uint8Array(8192);
-    const view = new DataView(bytes.buffer);
-    view.setInt32(0, 279, true); // file version (1.4.4)
-    view.setBigUint64(4, 0x6369676f6c6572n | (2n << 56n), true); // "relogic", world
-    view.setInt16(24, 1, true); // one section
-    view.setInt32(26, 64, true); // the header at 64
-    let at = 64;
-    for (const text of [title, "12345"]) {
-        const utf8 = new TextEncoder().encode(text);
-        bytes[at++] = utf8.length;
-        bytes.set(utf8, at);
-        at += utf8.length;
-    }
-    at += 8 + 16 + 4 + 16;
-    view.setInt32(at, 1200, true); // height
-    view.setInt32(at + 4, 4200, true); // width
-    return bytes;
-}
 
 // Other games' user files and saves are kept.
 describe("other games' files", () => {

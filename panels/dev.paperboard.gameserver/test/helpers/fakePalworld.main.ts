@@ -1,7 +1,8 @@
 // A stand-in Palworld dedicated server, compiled by standIn.ts and placed as
 // install/PalServer.sh. Like the real one it reads PalWorldSettings.ini as it
 // starts and serves the REST API on RESTAPIPort with HTTP Basic auth (user
-// "admin", AdminPassword). Its behaviour comes from fake-palworld.json in
+// "admin", AdminPassword) when RESTAPIEnabled=True, as the real one does
+// (without it, there is no API to answer). Its behaviour comes from fake-palworld.json in
 // its working directory: { "exitAfterStart": code } exits once started;
 // { "refuse": { "<endpoint>": "<reason>" } } answers that endpoint 500 with the reason.
 import * as fs from "node:fs";
@@ -26,7 +27,8 @@ if (plan.exitAfterStart !== undefined) process.exit(plan.exitAfterStart);
 
 const authorized = (req: Request) => req.headers.get("authorization") === `Basic ${Buffer.from(`admin:${admin}`).toString("base64")}`;
 const json = (body: unknown) => Response.json(body);
-Bun.serve({
+// the real one serves its REST API only when the settings turn it on
+if (option("RESTAPIEnabled") === "True") Bun.serve({
     port: restPort,
     hostname: "127.0.0.1",
     async fetch(req) {
@@ -53,4 +55,5 @@ Bun.serve({
         }
     },
 });
-say(`REST API listening on ${restPort}`);
+else setInterval(() => undefined, 1 << 30);
+if (option("RESTAPIEnabled") === "True") say(`REST API listening on ${restPort}`);

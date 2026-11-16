@@ -15,6 +15,7 @@ import { fakeSteamcmd } from "./helpers/steamcmd";
 import { tempDir, writeTree } from "./helpers/tmp";
 import { PANEL_ID } from "../src/servers";
 import { entrypoint, releaseFor, tmodloaderReleases } from "../src/games/terraria/catalog";
+import { terrariaWorld } from "./helpers/terrariaWorld";
 
 let daemon: TestDaemon;
 beforeAll(async () => {
@@ -29,27 +30,6 @@ const config = () => path.join(daemon.dataDir, "configs", `${PANEL_ID}.json`);
 const settingsOf = (id: string) => (JSON.parse(fs.readFileSync(config(), "utf8")).servers as { id: string; settings: Record<string, unknown> }[]).find((s) => s.id === id)!.settings;
 const folder = (id: string) => path.join(daemon.dataDir, "files", PANEL_ID, SERVERS, id);
 const vanilla = releaseFor("1.4.5.8");
-
-/** a .wld whose header reads as `title`: Terraria's layout, every later field zero */
-function terrariaWorld(title: string): Uint8Array {
-    const bytes = new Uint8Array(8192);
-    const view = new DataView(bytes.buffer);
-    view.setInt32(0, 279, true); // file version (1.4.4)
-    view.setBigUint64(4, 0x6369676f6c6572n | (2n << 56n), true); // "relogic", world
-    view.setInt16(24, 1, true); // one section
-    view.setInt32(26, 64, true); // the header at 64
-    let at = 64;
-    for (const text of [title, "12345"]) {
-        const utf8 = new TextEncoder().encode(text);
-        bytes[at++] = utf8.length;
-        bytes.set(utf8, at);
-        at += utf8.length;
-    }
-    at += 8 + 16 + 4 + 16;
-    view.setInt32(at, 1200, true); // height
-    view.setInt32(at + 4, 4200, true); // width
-    return bytes;
-}
 
 /** a .tmod as tModLoader writes one: its header, a file table holding only Info, and Info naming the mod */
 function tmod(name: string, displayName: string): Uint8Array {

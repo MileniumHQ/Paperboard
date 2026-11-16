@@ -1,7 +1,8 @@
 // A stand-in Rust dedicated server, compiled by standIn.ts and placed as
 // install/RustDedicated. Like the real one it takes its settings as
 // "+name value" arguments, prints its whole command line, and serves the
-// WebSocket remote console on rcon.port, where the password is the path. It
+// WebSocket remote console on rcon.port (only with +rcon.web 1, as the real
+// one), where the password is the path. It
 // answers the commands Paperboard sends as build 26498655 does: every frame
 // of an answer carries the command's Identifier, a log frame (Identifier 0)
 // may come in between, and a command it doesn't know gets nothing. Its
@@ -58,7 +59,13 @@ function renderMap(scale: number): string {
     return file;
 }
 
-Bun.serve<undefined, never>({
+// the WebSocket console is served only with +rcon.web 1; otherwise the legacy one, which Paperboard does not speak
+if (setting("rcon.web") !== "1") {
+    say("RCon Started on " + setting("rcon.port"));
+    say("Server startup complete");
+    setInterval(() => undefined, 1 << 30);
+}
+else Bun.serve<undefined, never>({
     port: Number(setting("rcon.port")),
     hostname: setting("rcon.ip"),
     fetch(req, server) {
@@ -102,5 +109,7 @@ Bun.serve<undefined, never>({
         },
     },
 });
-say(`WebSocket RCON Started on ${setting("rcon.ip")}:${setting("rcon.port")}`);
-say("Server startup complete");
+if (setting("rcon.web") === "1") {
+    say(`WebSocket RCON Started on ${setting("rcon.ip")}:${setting("rcon.port")}`);
+    say("Server startup complete");
+}
