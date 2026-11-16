@@ -1,7 +1,8 @@
 import { type JSX, createMemo, For, Show } from "solid-js";
 import { createStore, reconcile } from "solid-js/store";
 import { PaperFlex, PaperSlidePage } from "@mileniumhq/paperui";
-import { loadInstalledPanelMedia, panelsApi } from "@mileniumhq/paperapi";
+import { panelsApi } from "@mileniumhq/paperapi";
+import { loadInstalledPanelMedia } from "@mileniumhq/paperapi/internal";
 import { readPanelListingFile } from "../../lib/shell";
 import { isShellTab } from "../../lib/shellTabs";
 import type { AppSettingsData } from "../../lib/appSettings";

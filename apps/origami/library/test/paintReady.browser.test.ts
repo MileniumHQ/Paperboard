@@ -10,7 +10,7 @@ import { launchChrome, type Chrome, type Page } from "../../../../scripts/testin
 // The real paintReady module, served to a real Chrome. Images come from
 // this loopback server: one is held until the test releases it, one is
 // bytes no browser can decode, and one never answers.
-const PAINT_READY = fileURLToPath(import.meta.resolve("@mileniumhq/paperapi/paintReady"));
+const PAINT_READY = fileURLToPath(new URL("src/paintReady.ts", import.meta.resolve("@mileniumhq/paperapi/package.json")));
 const PNG = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=", "base64");
 const LONG = 10 * 60_000;
 

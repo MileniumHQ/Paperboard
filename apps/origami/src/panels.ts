@@ -1,5 +1,5 @@
 import { RegistryLimitError, UnreadableRecordError } from "./recordError";
-import type { StoreListing } from "@mileniumhq/paperapi/storeListing";
+import type { StoreListing } from "@mileniumhq/paperapi/internal";
 
 export interface PanelRecord {
     id: string;

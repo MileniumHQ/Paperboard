@@ -129,7 +129,7 @@ interface StoreRow {
             </PaperTable>
 
             <PaperText preset="body" as="p">
-                The listing's types and limits are exported for tools that build listings: <PaperCode>parseStoreManifest</PaperCode>, <PaperCode>STORE_MAX_SCREENSHOTS</PaperCode>, <PaperCode>STORE_MAX_ROWS</PaperCode>, <PaperCode>STORE_MAX_ABOUT_BYTES</PaperCode> and <PaperCode>STORE_MAX_SCREENSHOT_BYTES</PaperCode>.
+                The listing's types and limits are Paperboard's own, for its publishing tools and the library: <PaperCode>parseStoreManifest</PaperCode>, <PaperCode>STORE_MAX_SCREENSHOTS</PaperCode>, <PaperCode>STORE_MAX_ROWS</PaperCode>, <PaperCode>STORE_MAX_ABOUT_BYTES</PaperCode> and <PaperCode>STORE_MAX_SCREENSHOT_BYTES</PaperCode> come from <PaperCode>@mileniumhq/paperapi/internal</PaperCode>, which panels don't import.
                 Next: <PaperLink href="/docs/paperapi/widgets/">Home widgets</PaperLink>.
             </PaperText>
         </PaperFlex>

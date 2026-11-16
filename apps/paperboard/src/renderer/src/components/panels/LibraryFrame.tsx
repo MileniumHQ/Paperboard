@@ -14,10 +14,10 @@ import {
 } from "@mileniumhq/paperui";
 import {
     PANEL_LIBRARY_URL,
-    type InstalledPanelMedia,
     type PanelItem,
     errorMessage,
 } from "@mileniumhq/paperapi";
+import type { InstalledPanelMedia } from "@mileniumhq/paperapi/internal";
 import { logToMain } from "../../lib/shell";
 import {
     libraryFramePhase,

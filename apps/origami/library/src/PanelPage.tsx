@@ -21,8 +21,7 @@ import {
     PaperSectionHeader,
     PaperText,
 } from "@mileniumhq/paperui";
-import type { PanelItem } from "@mileniumhq/paperapi/panelMerge";
-import type { StoreRow, StoreScreenshot } from "@mileniumhq/paperapi/storeListing";
+import type { PanelItem, StoreRow, StoreScreenshot } from "@mileniumhq/paperapi/internal";
 import type { LibraryMode } from "./bridge";
 import { panelHref } from "./router";
 import styles from "./Library.module.css";

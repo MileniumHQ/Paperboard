@@ -122,7 +122,7 @@ panelsApi.install(panelId: string, scope?: string): Promise<PanelItem>;`}
             <PaperTextList>
                 <li>The registry is <PaperCode>https://origami.ariapis.com</PaperCode>, or the URL in the <PaperCode>ORIGAMI_REGISTRY_URL</PaperCode> environment variable where the code runs. It is exported as <PaperCode>REGISTRY_URL</PaperCode>, and the library page as <PaperCode>PANEL_LIBRARY_URL</PaperCode>.</li>
                 <li><PaperCode>registry</PaperCode> fetches <PaperCode>/panels/index.json</PaperCode> from the document or service that calls it, not the daemon: the code needs internet access.</li>
-                <li>The fetch gives up after 10 seconds and refuses an index over 1 MB. <PaperCode>fetchRegistryIndex()</PaperCode> and <PaperCode>fetchRegistryJson(url, timeoutMs?, maxBytes?)</PaperCode> do the same fetch, and <PaperCode>mergeRegistryWithInstalled</PaperCode> the same merge.</li>
+                <li>The fetch gives up after 10 seconds and refuses an index over 1 MB. <PaperCode>fetchRegistryIndex()</PaperCode> and <PaperCode>fetchRegistryJson(url, timeoutMs?, maxBytes?)</PaperCode> do the same fetch. The merge with what is installed is Paperboard's own, in <PaperCode>@mileniumhq/paperapi/internal</PaperCode>, which panels don't import.</li>
             </PaperTextList>
 
             <PaperText preset="subheader" as="h2" id="errors">Errors</PaperText>

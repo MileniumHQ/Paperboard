@@ -13,8 +13,6 @@ export * from "./records";
 export * from "./serialQueue";
 export * from "./config";
 export * from "./registryFetch";
-export * from "./panelMerge";
-export * from "./storeListing";
 export { isPanelId, requirePanelId } from "./panelIdentity";
 export * from "./identity";
 export { panelPath, parsePanelPath, PANEL_PATH_ROOT } from "./panelPath";

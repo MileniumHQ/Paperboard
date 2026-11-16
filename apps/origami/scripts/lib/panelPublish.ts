@@ -33,7 +33,7 @@ import {
     STORE_MAX_ABOUT_BYTES,
     STORE_MAX_SCREENSHOT_BYTES,
     type StoreListing,
-} from "@mileniumhq/paperapi/storeListing";
+} from "@mileniumhq/paperapi/internal";
 import { kvGetArgs, kvListArgs, kvPut, ORIGAMI_DIR, runCommand, withTempFile, type CommandRunner } from "./wrangler";
 
 export const PANELS_BUCKET = "paperboard-boards";

@@ -9,12 +9,12 @@
 // side holds no authority, so it only validates what it renders.
 import { createSignal } from "solid-js";
 import { isPanelId } from "@mileniumhq/paperapi/panelIdentity";
-import type { PanelItem } from "@mileniumhq/paperapi/panelMerge";
 import {
     isDataImage,
     parseStoreListing,
     type InstalledPanelMedia,
-} from "@mileniumhq/paperapi/storeListing";
+    type PanelItem,
+} from "@mileniumhq/paperapi/internal";
 
 export type LibraryMode = "detecting" | "embedded" | "standalone";
 export type LibraryTheme = "light" | "dark" | "system";

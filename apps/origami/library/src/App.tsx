@@ -31,9 +31,9 @@ import {
     mergeRegistryWithInstalled,
     type PanelItem,
     type RegistryPanelRecord,
-} from "@mileniumhq/paperapi/panelMerge";
+} from "@mileniumhq/paperapi/internal";
+import { waitForContentPainted } from "@mileniumhq/paperapi/internal/paint";
 import { fetchRegistryJson } from "@mileniumhq/paperapi/registryFetch";
-import { waitForContentPainted } from "@mileniumhq/paperapi/paintReady";
 
 // The library runs on the registry origin, and the registry serves only the
 // archive it hosts, so that is the one Download fetches.

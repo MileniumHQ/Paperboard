@@ -4,9 +4,9 @@
 // ONE identity validator (never a copied regex).
 import {
     isPanelId,
-    type InstalledPanelMedia,
     type PanelItem,
 } from "@mileniumhq/paperapi";
+import type { InstalledPanelMedia } from "@mileniumhq/paperapi/internal";
 
 export type LibraryToShellMessage =
     | { type: "paperboard:library-hello"; ready: boolean }

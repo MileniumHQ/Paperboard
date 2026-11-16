@@ -17,7 +17,7 @@ import {
     storeScreenshotField,
     STORE_IMAGE_TYPES,
     STORE_MAX_SCREENSHOT_BYTES,
-} from "../packages/paperapi/src/storeListing";
+} from "../packages/paperapi/src/internal";
 import { DOWNLOAD_HOST, FILE_SEGMENT, GH_REPO, VERSION_SEGMENT } from "../apps/origami/src/downloadUrl";
 
 export { GH_REPO };
