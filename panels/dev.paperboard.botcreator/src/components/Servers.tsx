@@ -24,8 +24,9 @@ import {
     usePaperPanel,
     createLatest,
     createRead,
+    createFailureToast,
+    showError,
 } from "@mileniumhq/paperui";
-import { errorMessage } from "@mileniumhq/paperapi";
 import type { BotSummary } from "../bots";
 import { botCreator } from "../client";
 import { DiscordAvatar, pictureIcon } from "../picture";
@@ -91,21 +92,27 @@ export default function Servers(props: { bot: () => BotSummary }) {
     // slow answer for one server never shows on the page of the one chosen after it
     const detailRead = createRead((guildId) => botCreator.calls.getGuildDetail({ bot: bot(), guildId }), { source: selectedId });
     const detail = () => detailRead.value();
-    // a read again hides the last one's failure, as it did before it was asked
-    const detailError = () => (detailRead.loading() ? null : detailRead.error());
+    // the open server's name: as read, or as announced while it is read or couldn't be
+    const serverName = () => detail()?.name ?? guilds().find((g) => g.id === shownId())?.name ?? "Loading server…";
+    // said while the server's page is open; a read again hides it until it answers
+    createFailureToast(() => (selectedId() && !detailRead.loading() ? detailRead.error() : null), {
+        title: "Couldn't load this server",
+        action: { label: "Try again", onClick: () => void detailRead.reload() },
+    });
 
     const [memberQuery, setMemberQuery] = createSignal("");
     // a search is asked by pressing Search: each press is a new one
     const [search, setSearch] = createSignal<{ guildId: string; query: string } | null>(null);
     const membersRead = createRead((asked) => botCreator.calls.searchGuildMembers({ bot: bot(), ...asked }), { source: search });
-    const membersError = () => (membersRead.loading() ? null : membersRead.error());
+    createFailureToast(() => (search() && !membersRead.loading() ? membersRead.error() : null), { title: "Couldn't search the members" });
     const members = () => (membersRead.error() ? undefined : membersRead.value());
 
     // the channel picked to send to; the server's first until one is picked
     const [pickedChannel, setPickedChannel] = createSignal("");
     const [content, setContent] = createSignal("Hello from Paperboard!");
     const [sending, setSending] = createSignal(false);
-    const [sendError, setSendError] = createSignal("");
+    // what is missing for a message to be sent: said under the message field
+    const [missing, setMissing] = createSignal("");
     const [sentTo, setSentTo] = createSignal("");
 
     const textChannels = () =>
@@ -121,7 +128,7 @@ export default function Servers(props: { bot: () => BotSummary }) {
     const dropSend = () => {
         sendRead.cancel();
         setSending(false);
-        setSendError("");
+        setMissing("");
         setSentTo("");
     };
 
@@ -176,15 +183,15 @@ export default function Servers(props: { bot: () => BotSummary }) {
         // Enter in the message field while one is on its way: the button is off then too
         if (sending()) return;
         const current = sendRead();
-        setSendError("");
+        setMissing("");
         setSentTo("");
         const channel = textChannels().find((c) => c.id === channelId());
         if (!channel) {
-            setSendError("Pick a channel first.");
+            setMissing("Pick a channel first.");
             return;
         }
         if (!content().trim()) {
-            setSendError("Write a message first.");
+            setMissing("Write a message first.");
             return;
         }
         setSending(true);
@@ -196,8 +203,7 @@ export default function Servers(props: { bot: () => BotSummary }) {
             });
             if (current()) setSentTo(`#${channel.name}`);
         } catch (err) {
-            console.error("[Servers] test message send failed:", err);
-            if (current()) setSendError(errorMessage(err));
+            if (current()) showError("Couldn't send the message", err);
         } finally {
             if (current()) setSending(false);
         }
@@ -244,7 +250,7 @@ export default function Servers(props: { bot: () => BotSummary }) {
             <PaperPageHeader
                 icon="dns"
                 // a server's page is titled by the server, once: its card doesn't say the name again
-                title={detail()?.name ?? "Loading server…"}
+                title={serverName()}
             >
                 {/* on a phone the page's bar goes back to the list */}
                 <Show when={!compact()}>
@@ -271,10 +277,12 @@ export default function Servers(props: { bot: () => BotSummary }) {
                 </PaperCard>
             </Show>
 
-            <Show when={detailError()}>
-                <PaperQuote variant="danger" icon="warning" title="Couldn't load this server">
-                    {detailError()}
-                </PaperQuote>
+            <Show when={!detail() && !detailRead.loading() && detailRead.error()}>
+                <PaperCard>
+                    <PaperEmptyState icon="error" title="Couldn't load">
+                        <PaperButton onClick={() => void detailRead.reload()}>Try again</PaperButton>
+                    </PaperEmptyState>
+                </PaperCard>
             </Show>
 
             <Show when={detail()}>
@@ -378,12 +386,6 @@ export default function Servers(props: { bot: () => BotSummary }) {
                                     </PaperButton>
                                 </PaperFlex>
 
-                                <Show when={membersError()}>
-                                    <PaperQuote variant="danger" icon="warning" title="Search failed">
-                                        {membersError()}
-                                    </PaperQuote>
-                                </Show>
-
                                 <Show when={members()}>
                                     <Show
                                         when={members()!.length > 0}
@@ -461,10 +463,8 @@ export default function Servers(props: { bot: () => BotSummary }) {
                                             {sending() ? "Sending…" : "Send"}
                                         </PaperButton>
                                     </PaperFlex>
-                                    <Show when={sendError()}>
-                                        <PaperQuote variant="danger" icon="warning" title="Message not sent">
-                                            {sendError()}
-                                        </PaperQuote>
+                                    <Show when={missing()}>
+                                        <PaperText preset="error" role="alert">{missing()}</PaperText>
                                     </Show>
                                     <Show when={sentTo()}>
                                         <PaperQuote variant="success" icon="check_circle" title="Message sent">
@@ -521,7 +521,7 @@ export default function Servers(props: { bot: () => BotSummary }) {
                 enabled={compact()}
                 position="fixed"
                 open={selectedId() !== null}
-                title={detail()?.name ?? "Loading server…"}
+                title={serverName()}
                 icon={<DiscordAvatar size="small" url={detail()?.icon} fallbackIcon="dns" />}
                 onBack={closeServer}
                 onClosed={clearServer}

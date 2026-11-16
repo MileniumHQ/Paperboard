@@ -16,9 +16,11 @@ import {
     PaperMediaCardGroup,
     PaperPage,
     PaperPageHeader,
-    PaperQuote,
     PaperSeparator,
     PaperToggle,
+    createFailureToast,
+    dismissToast,
+    showError,
     useContextMenuState,
 } from "@mileniumhq/paperui";
 import { DeleteBotModal, NewBotModal, ReplaceTokenModal } from "./BotDialogs";
@@ -26,7 +28,6 @@ import type { BotsState } from "../state";
 import type { BotSummary } from "../bots";
 import { count } from "../types";
 import { pictureIcon } from "../picture";
-import { errorMessage } from "@mileniumhq/paperapi";
 
 /** "3 servers" for a bot online, or why it isn't, as its card says it. */
 function botStatusText(bot: BotSummary): string {
@@ -37,19 +38,23 @@ function botStatusText(bot: BotSummary): string {
 }
 
 export default function BotsHome(props: { bots: BotsState; onOpen: (bot: { id: string }) => void }) {
-    const [failure, setFailure] = createSignal<{ title: string; text: string } | null>(null);
     const [adding, setAdding] = createSignal(false);
-    // a switch flips once saved; its thump waits for the bot to be on or off,
-    // and only the newest flip of a bot may say it failed
-    const flips = new Map<string, number>();
+    // the list can't be read: the service's saved bots, or its state
+    createFailureToast(() => props.bots.state().botsError, { title: "Couldn't read the saved bots" });
+    createFailureToast(props.bots.loadError, { title: "Couldn't load the bots" });
+    // a switch flips once saved; its thump waits for the bot to be on or off.
+    // Only the newest flip of a bot may say it failed, and the next flip
+    // takes back what the last one said
+    const flips = new Map<string, { flip: number; toast?: string }>();
     const setEnabled = async (bot: BotSummary, enabled: boolean) => {
-        const flip = (flips.get(bot.id) ?? 0) + 1;
-        flips.set(bot.id, flip);
-        setFailure(null);
+        const before = flips.get(bot.id);
+        if (before?.toast) dismissToast(before.toast);
+        const mine = { flip: (before?.flip ?? 0) + 1 } as { flip: number; toast?: string };
+        flips.set(bot.id, mine);
         try {
             await props.bots.setEnabled(bot.id, enabled);
         } catch (err) {
-            if (flips.get(bot.id) === flip) setFailure({ title: enabled ? `${bot.name} didn't come online` : `${bot.name} didn't go offline`, text: errorMessage(err) });
+            if (flips.get(bot.id) === mine) mine.toast = showError(enabled ? `${bot.name} didn't come online` : `${bot.name} didn't go offline`, err);
         }
     };
 
@@ -78,27 +83,16 @@ export default function BotsHome(props: { bots: BotsState; onOpen: (bot: { id: s
                 <PaperPageHeader icon="smart_toy" title="Bots">
                     {newBot()}
                 </PaperPageHeader>
-                <Show when={failure()}>
-                    {(f) => (
-                        <PaperQuote variant="danger" icon="warning" title={f().title} role="alert" onDismiss={() => setFailure(null)}>
-                            {f().text}
-                        </PaperQuote>
-                    )}
-                </Show>
-                <Show when={props.bots.state().botsError}>
-                    {(text) => (
-                        <PaperQuote variant="danger" icon="warning" title="Bots could not be read" role="alert">{text()}</PaperQuote>
-                    )}
-                </Show>
                 <Show
-                    when={props.bots.ready()}
+                    when={props.bots.ready() && !props.bots.state().botsError}
                     fallback={
-                        <Show when={props.bots.loadError()} fallback={<PaperLoader loaderStatus="indeterminate" label="Loading bots" />}>
-                            {(reason) => (
-                                <PaperEmptyState icon="error" title="Bots could not be loaded" description={reason()} role="alert">
+                        <Show when={props.bots.loadError() || props.bots.state().botsError} fallback={<PaperLoader loaderStatus="indeterminate" label="Loading bots" />}>
+                            {/* why is the toast's: the service reads its saved bots only as it starts */}
+                            <PaperEmptyState icon="error" title="Couldn't load" description={props.bots.loadError() ? undefined : "Restart Paperboard to read them again."}>
+                                <Show when={props.bots.loadError()}>
                                     <PaperButton onClick={() => void props.bots.load()}>Try again</PaperButton>
-                                </PaperEmptyState>
-                            )}
+                                </Show>
+                            </PaperEmptyState>
                         </Show>
                     }
                 >

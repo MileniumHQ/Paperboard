@@ -1,6 +1,7 @@
 // Adding a bot, replacing its token and deleting it, the same from the home
-// screen and the bot's own pages. Each says what failed, in place, instead
-// of closing on an error, and stays open until the service has answered.
+// screen and the bot's own pages. Each stays open until the service has
+// answered, and on an error: a token's is said under the token, a delete's
+// in a toast.
 import { createEffect, createSignal, on, Show } from "solid-js";
 import {
     PaperButton,
@@ -10,6 +11,7 @@ import {
     PaperModal,
     PaperQuote,
     PaperText,
+    showError,
 } from "@mileniumhq/paperui";
 import type { DeleteBotResult } from "../bots";
 import { extractApplicationIdFromToken } from "../types";
@@ -17,8 +19,19 @@ import { errorMessage } from "@mileniumhq/paperapi";
 
 export const PORTAL_URL = "https://discord.com/developers/applications";
 
-/** The token field and what it says about the token typed into it. */
-export function TokenField(props: { value: string; onInput: (value: string) => void; appId: string | null; expectedAppId?: string }) {
+/**
+ * The token field and what it says about the token typed into it: that it
+ * isn't one, that it names another bot, or `error`, why the service refused it.
+ */
+export function TokenField(props: { value: string; onInput: (value: string) => void; appId: string | null; expectedAppId?: string; error?: string | null }) {
+    // what is wrong with the token, before the service is asked and after
+    const problem = () => {
+        if (props.value.trim() && !props.appId)
+            return "That isn't a bot token. A bot token is a long line of three parts joined by dots, the first of which names the bot. Copy all of it from the Bot tab of your application in the Developer Portal; Reset Token shows it again.";
+        if (props.appId && props.expectedAppId && props.expectedAppId !== props.appId)
+            return `This token is for application ${props.appId}, not this bot (${props.expectedAppId}). Add it as a new bot instead.`;
+        return props.error ?? null;
+    };
     return (
         <PaperFlex direction="column" gap="half">
             <PaperInput
@@ -27,28 +40,15 @@ export function TokenField(props: { value: string; onInput: (value: string) => v
                 type="password"
                 label="Bot token"
                 value={props.value}
-                invalid={Boolean(props.value.trim()) && !props.appId}
+                invalid={problem() !== null}
                 onInput={(e) => props.onInput(e.currentTarget.value)}
             />
-            <Show when={props.value.trim() && !props.appId}>
-                <PaperQuote variant="danger" icon="error" title="That isn't a bot token">
-                    A bot token is a long line of three parts joined by dots, the first of which names the bot. Copy all of it from the Bot tab of your application in the Developer Portal; Reset Token shows it again.
-                </PaperQuote>
+            <Show when={props.appId && (!props.expectedAppId || props.expectedAppId === props.appId) ? props.appId : null}>
+                {/* read from the token, not checked with Discord: named, never shown as good */}
+                {(appId) => <PaperText preset="hint">Application ID: {appId()}</PaperText>}
             </Show>
-            <Show when={props.appId}>
-                {(appId) => (
-                    <Show
-                        when={!props.expectedAppId || props.expectedAppId === appId()}
-                        fallback={
-                            <PaperQuote variant="danger" icon="error" title="A different bot">
-                                This token is for application {appId()}, not this bot ({props.expectedAppId}). Add it as a new bot instead.
-                            </PaperQuote>
-                        }
-                    >
-                        {/* read from the token, not checked with Discord: named, never shown as good */}
-                        <PaperText preset="hint">Application ID: {appId()}</PaperText>
-                    </Show>
-                )}
+            <Show when={problem()}>
+                {(text) => <PaperText preset="error" role="alert" breakWord>{text()}</PaperText>}
             </Show>
         </PaperFlex>
     );
@@ -56,8 +56,8 @@ export function TokenField(props: { value: string; onInput: (value: string) => v
 
 /**
  * A bot added from a token typed in: the token, the application it names,
- * and the add, which says why it failed in place. The New bot dialog and the
- * setup guide both add bots this way.
+ * and the add, whose refusal the token field says. The New bot dialog and
+ * the setup guide both add bots this way.
  */
 export function createAddBot(onAdd: (token: string) => Promise<{ id: string }>, onAdded: (bot: { id: string }) => void) {
     const [token, setToken] = createSignal("");
@@ -81,7 +81,12 @@ export function createAddBot(onAdd: (token: string) => Promise<{ id: string }>, 
         setError(null);
         setBusy(false);
     };
-    return { token, setToken, busy, error, appId, submit, reset };
+    // the refusal was of the token typed before
+    const type = (value: string) => {
+        setToken(value);
+        setError(null);
+    };
+    return { token, setToken: type, busy, error, appId, submit, reset };
 }
 
 export function NewBotModal(props: {
@@ -125,14 +130,7 @@ export function NewBotModal(props: {
                         Paste the token from your bot's page in the{" "}
                         <PaperLink href={PORTAL_URL} target="_blank">Discord Developer Portal</PaperLink>.
                     </PaperText>
-                    <TokenField value={token()} onInput={setToken} appId={appId()} />
-                    <Show when={error()}>
-                        {(text) => (
-                            <PaperQuote variant="danger" icon="error" title="Bot not added" role="alert">
-                                {text()}
-                            </PaperQuote>
-                        )}
-                    </Show>
+                    <TokenField value={token()} onInput={setToken} appId={appId()} error={error()} />
                 </PaperFlex>
             </form>
         </PaperModal>
@@ -153,6 +151,11 @@ export function ReplaceTokenModal(props: {
         if (!busy()) props.onClose();
     };
     const appId = () => extractApplicationIdFromToken(token());
+    // the refusal was of the token typed before
+    const type = (value: string) => {
+        setToken(value);
+        setError(null);
+    };
     // a token for another application would quietly turn this bot into that one
     const fits = () => Boolean(appId()) && (!props.bot?.applicationId || appId() === props.bot.applicationId);
     // opened for a bot, it starts empty: a change to the bot while it is open keeps what was typed
@@ -194,10 +197,7 @@ export function ReplaceTokenModal(props: {
                     <PaperText preset="text">
                         After you reset {props.bot?.name}'s token in the Developer Portal, paste the new one here. Its commands and flows stay as they are.
                     </PaperText>
-                    <TokenField value={token()} onInput={setToken} appId={appId()} expectedAppId={props.bot?.applicationId || undefined} />
-                    <Show when={error()}>
-                        {(text) => <PaperQuote variant="danger" icon="error" title="Token not replaced" role="alert">{text()}</PaperQuote>}
-                    </Show>
+                    <TokenField value={token()} onInput={type} appId={appId()} expectedAppId={props.bot?.applicationId || undefined} error={error()} />
                 </PaperFlex>
             </form>
         </PaperModal>
@@ -210,7 +210,6 @@ export function DeleteBotModal(props: {
     onClose: () => void;
 }) {
     const [busy, setBusy] = createSignal(false);
-    const [error, setError] = createSignal<string | null>(null);
     // why Discord kept its commands: Delete anyway removes the bot regardless
     const [refused, setRefused] = createSignal<string | null>(null);
     // what was asked can't be taken back: the dialog stays for its answer
@@ -219,7 +218,6 @@ export function DeleteBotModal(props: {
     };
     createEffect(on(() => props.bot?.id, (id) => {
         if (!id) return;
-        setError(null);
         setRefused(null);
         setBusy(false);
     }));
@@ -228,13 +226,12 @@ export function DeleteBotModal(props: {
         if (!bot || busy()) return;
         const anyway = refused() !== null;
         setBusy(true);
-        setError(null);
         try {
             const result = await props.onDelete(bot.id, anyway);
             if ("refused" in result) setRefused(result.refused);
             else props.onClose();
         } catch (err) {
-            setError(errorMessage(err));
+            showError(`Couldn't delete ${bot.name}`, err);
         } finally {
             setBusy(false);
         }
@@ -267,9 +264,6 @@ export function DeleteBotModal(props: {
                             Discord said "{why()}". Delete anyway removes the bot from Paperboard, and its slash commands stay on Discord.
                         </PaperQuote>
                     )}
-                </Show>
-                <Show when={error()}>
-                    {(text) => <PaperQuote variant="danger" icon="error" title="Not deleted" role="alert">{text()}</PaperQuote>}
                 </Show>
             </PaperFlex>
         </PaperModal>

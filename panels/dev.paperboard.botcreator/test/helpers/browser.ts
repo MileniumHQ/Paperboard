@@ -117,3 +117,10 @@ export function panelBrowser(): { open(url: string): Promise<Page> } {
         },
     };
 }
+
+/** the text of every toast showing, failures and the rest, oldest first */
+export const TOASTS = `[...document.querySelectorAll("[aria-label=Notifications] [role=alert], [aria-label=Notifications] [role=status]")].map((t) => t.innerText)`;
+
+/** a wait expression: a failure toast titled `title` shows, saying `text` when given */
+export const toastShows = (title: string, text = "") =>
+    `[...document.querySelectorAll("[aria-label=Notifications] [role=alert]")].some((t) => t.innerText.includes(${JSON.stringify(title)}) && t.innerText.includes(${JSON.stringify(text)}))`;

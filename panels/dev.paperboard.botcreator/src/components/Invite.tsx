@@ -1,4 +1,4 @@
-import { createSignal, For, Show } from "solid-js";
+import { createSignal, For } from "solid-js";
 import {
     PaperFlex,
     PaperText,
@@ -7,7 +7,6 @@ import {
     PaperCopyButton,
     PaperGrid,
     PaperPageHeader,
-    PaperQuote,
     PaperSeparator,
     usePaperPanel,
     createRead,
@@ -27,12 +26,13 @@ export default function Invite(props: { bot: () => BotSummary }) {
     // read again for each change of the permissions; only the newest lands
     const invite = createRead((permissions) => botCreator.calls.getInviteUrl({ bot: props.bot().id, permissions }), {
         source: selectedPermissions,
+        failure: { title: "Couldn't make the invite link" },
     });
-    // a read again hides the last one's failure, as it did before it was asked
-    const inviteError = () => (invite.loading() ? null : invite.error());
     // a link for the old permissions must not be copied as the new one
     const inviteUrl = () => (invite.error() ? "" : invite.value() ?? "");
-    const userInstall = createRead(() => botCreator.calls.getUserInstallUrl({ bot: props.bot().id }));
+    const userInstall = createRead(() => botCreator.calls.getUserInstallUrl({ bot: props.bot().id }), {
+        failure: { title: "Couldn't make the install link" },
+    });
     const userInstallUrl = () => userInstall.value() ?? "";
 
     const isSelected = (permId: string) =>
@@ -78,17 +78,11 @@ export default function Invite(props: { bot: () => BotSummary }) {
                 subtitle="Add the bot to a server with the permissions it needs"
             />
 
-            <Show when={inviteError()}>
-                <PaperQuote variant="danger" icon="warning" title="Couldn't make the invite link">
-                    {inviteError()}
-                </PaperQuote>
-            </Show>
-
             <PaperCard>
                 <PaperFlex direction="row" padding="full" gap="full" align="center">
                     <PaperFlex flex minWidth={0}>
                         <PaperText preset="text" truncate>
-                            {inviteUrl() || (inviteError() ? "No invite link" : "Generating invite link…")}
+                            {inviteUrl() || (invite.error() && !invite.loading() ? "No invite link" : "Generating invite link…")}
                         </PaperText>
                     </PaperFlex>
 
@@ -127,11 +121,6 @@ export default function Invite(props: { bot: () => BotSummary }) {
                         group chats. Needs User Install enabled in the Discord
                         developer portal.
                     </PaperText>
-                    <Show when={userInstall.error()}>
-                        <PaperQuote variant="danger" icon="warning" title="Couldn't make the install link">
-                            {userInstall.error()}
-                        </PaperQuote>
-                    </Show>
                     <PaperFlex direction="row" gap="full" align="center">
                         <PaperFlex flex minWidth={0}>
                             <PaperText preset="text" truncate>

@@ -2,7 +2,8 @@ import { afterAll, afterEach, beforeAll, describe, expect, setDefaultTimeout, te
 import * as fs from "node:fs";
 import * as path from "node:path";
 import type { BotsServiceState } from "../src/bots";
-import { panelBrowser, servePanel, type Page } from "./helpers/browser";
+import { GLOBAL_SCOPE } from "../src/types";
+import { panelBrowser, servePanel, TOASTS, toastShows, type Page } from "./helpers/browser";
 import { testDaemon } from "./helpers/daemon";
 import { guild, startFakeDiscord, type FakeDiscord } from "./helpers/discord";
 import { PANEL_ID, savedBots, startService, stopServices, storedBot } from "./helpers/service";
@@ -60,7 +61,7 @@ describe("failures are shown, never guessed", () => {
             await page.waitFor(`document.body.innerText.includes("Nameless")`, "the bot list");
             await clickText(page, "[class*=card], [class*=Card]", "Nameless");
             await openTab(page, "invite");
-            await page.waitFor(quoteShows("Couldn't make the invite link", "Cannot build an invite URL: no application ID is known."), "the invite failure");
+            await page.waitFor(toastShows("Couldn't make the invite link", "Cannot build an invite URL: no application ID is known."), "the invite failure");
             expect(await body(page)).toContain("No invite link");
             expect(await body(page)).not.toContain("Generating invite link…");
             await openTab(page, "home");
@@ -73,11 +74,13 @@ describe("failures are shown, never guessed", () => {
             fs.chmodSync(configs, 0o555);
             try {
                 await clickText(page, "[role=dialog] button", "Delete");
-                await page.waitFor(quoteShows("Not deleted", "Couldn't save the bot list"), "the refused delete");
+                await page.waitFor(toastShows("Couldn't delete Keeper", "Couldn't save the bot list"), "the refused delete");
             } finally {
                 fs.chmodSync(configs, 0o755);
             }
-            expect(await page.evaluate<string>(`document.querySelector("[role=dialog]").innerText`)).toMatch(/EACCES|permission denied/i);
+            // the toast says why, and the dialog stays for another try
+            expect(await page.evaluate<string>(`${TOASTS}.join(" ")`)).toMatch(/EACCES|permission denied/i);
+            expect(await page.evaluate<string>(`document.querySelector("[role=dialog]")?.innerText ?? ""`)).toContain("Delete bot?");
             expect((await stateWhere<BotsServiceState>(PANEL_ID, () => true, "the bots")).bots.map((b) => b.id)).toContain("b-keep");
             await clickText(page, "[role=dialog] button", "Cancel");
             await page.waitFor(`!document.querySelector("[role=dialog]")?.innerText.includes("Delete bot?")`, "the modal to close");
@@ -87,10 +90,12 @@ describe("failures are shown, never guessed", () => {
             // instead of showing an offline bot or a table of zeros
             await service.stop();
             await clickText(page, "[class*=card], [class*=Card]", "Keeper");
-            await page.waitFor(quoteShows("Couldn't check health", "dev.paperboard.botcreator"), "the failed health read");
+            await page.waitFor(toastShows("Couldn't check health", "dev.paperboard.botcreator"), "the failed health read");
             const overview = await body(page);
             expect(overview).not.toContain("Gateway status");
             expect(overview).not.toContain("Checking health…");
+            // with no reading to keep, the card says it couldn't load instead of going blank
+            expect(overview).toContain("Couldn't load");
             expect(page.exceptions).toEqual([]);
         } finally {
             await page.close();
@@ -152,11 +157,34 @@ describe("failures are shown, never guessed", () => {
             await page.waitFor(`document.body.innerText.includes("/hello")`, "the command list");
             await page.click(`button[title="Delete command"]`);
             await clickText(page, "[role=dialog] button", "Delete");
-            await page.waitFor(quoteShows("/hello is still on Discord", "401: Unauthorized"), "the kept command");
+            await page.waitFor(toastShows("/hello is still on Discord", "401: Unauthorized"), "the kept command");
             expect(await body(page)).toContain("/hello stays on Discord.");
             // read, it can be put away
-            await page.click(`button[aria-label="Dismiss"]`);
+            await page.click(`[aria-label=Notifications] button[aria-label="Close"]`);
             await page.waitFor(`!document.body.innerText.includes("/hello is still on Discord")`, "the notice to go");
+            expect(page.exceptions).toEqual([]);
+        } finally {
+            await page.close();
+            served.stop();
+        }
+    });
+
+    test("saved bots that can't be read say why in a toast, and the list says it couldn't load instead of No bots yet", async () => {
+        const fake = discord.addBot({ username: "Damaged" });
+        const ping = { id: "c-ping", name: "ping", description: "Pong", scope: GLOBAL_SCOPE, options: [], userInstall: false };
+        await savedBots([{ stored: storedBot("b-damaged", fake.appId, { commands: [ping, { ...ping, id: "c-again" }] }), token: fake.token }]);
+        await startService({ discordApi: discord.api });
+        await stateWhere<BotsServiceState>(PANEL_ID, (s) => Boolean(s.botsError), "the refusal");
+        const served = await servePanel();
+        const page = await browser.open(served.url);
+        try {
+            await page.waitFor(toastShows("Couldn't read the saved bots", "/ping is saved twice"), "the toast saying why");
+            await page.waitFor(`document.body.innerText.includes("Couldn't load")`, "the list to say it couldn't load");
+            const shown = await body(page);
+            expect(shown).not.toContain("No bots yet");
+            expect(shown).not.toContain("Set up your first bot");
+            expect(await page.evaluate<number>(`document.querySelectorAll("[class*=PaperQuote]").length`)).toBe(0);
+            expect(await page.evaluate<boolean>(`[...document.querySelectorAll("button")].find((b) => b.innerText.includes("New bot")).disabled`)).toBe(true);
             expect(page.exceptions).toEqual([]);
         } finally {
             await page.close();

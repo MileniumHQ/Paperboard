@@ -18,8 +18,9 @@ import {
     PaperSelectMenuItem,
     PaperCheckbox,
     PaperCopyButton,
+    createFailureToast,
+    showError,
 } from "@mileniumhq/paperui";
-import { errorMessage } from "@mileniumhq/paperapi";
 import type { BotSummary } from "../bots";
 import { botCreator } from "../client";
 import {
@@ -44,11 +45,6 @@ import {
 } from "../types";
 
 
-interface Outcome {
-    title: string;
-    message: string;
-}
-
 // local-only ids for builder rows; never sent to Discord
 let nextOptionId = 1;
 function newOptionId(): string {
@@ -65,7 +61,6 @@ export default function Commands(props: { bot: () => BotSummary }) {
     // the servers a command can be scoped to, announced with the bot as it
     // joins, leaves or renames one; reconciled by server id like the commands
     const guilds = (): readonly GuildSummary[] => props.bot().guilds;
-    const [actionError, setActionError] = createSignal<Outcome | null>(null);
 
     const [createOpen, setCreateOpen] = createSignal(false);
     // a field shows as wrong only once it has been used: a form that opens empty isn't a mistake
@@ -78,17 +73,18 @@ export default function Commands(props: { bot: () => BotSummary }) {
     const [userInstall, setUserInstall] = createSignal(false);
     const [options, setOptions] = createSignal<SlashCommandOption[]>([]);
     const [busy, setBusy] = createSignal(false);
-    const [formError, setFormError] = createSignal("");
 
     const [deleteTarget, setDeleteTarget] = createSignal<SlashCommandDefinition | null>(
         null,
     );
 
-    // the last sync's outcome is announced with the bot, so it shows here
+    // the last sync's outcome is announced with the bot, so it is said
     // however the commands changed
-    const syncError = () => props.bot().commandSyncError;
-    const mutationProblem = (result: CommandMutationResult): Outcome | null =>
-        result.triggerError ? { title: "Flow trigger not registered", message: result.triggerError } : null;
+    createFailureToast(() => props.bot().connected && props.bot().commandSyncError, { title: "Not live on Discord yet" });
+    // a command saved whose flow trigger Blocks didn't take
+    const sayTrigger = (result: CommandMutationResult) => {
+        if (result.triggerError) showError("Flow trigger not registered", result.triggerError);
+    };
 
     const scopeLabel = (value: string) => {
         if (value === GLOBAL_SCOPE) return "Global";
@@ -105,7 +101,6 @@ export default function Commands(props: { bot: () => BotSummary }) {
         setScope(guilds().length === 1 ? guilds()[0].id : GLOBAL_SCOPE);
         setUserInstall(false);
         setOptions([]);
-        setFormError("");
         setCreateOpen(true);
     };
 
@@ -189,14 +184,9 @@ export default function Commands(props: { bot: () => BotSummary }) {
     };
 
     const submitCreate = async () => {
-        const problem = formProblem();
-        if (problem) {
-            setFormError(problem);
-            return;
-        }
+        // the fields that are wrong say so, and Create is off until they're right
+        if (formProblem()) return;
         setBusy(true);
-        setFormError("");
-        setActionError(null);
         try {
             const result = await botCreator.calls.createCommand({
                 bot: bot(),
@@ -207,10 +197,10 @@ export default function Commands(props: { bot: () => BotSummary }) {
                 userInstall: userInstall(),
             });
             setCreateOpen(false);
-            setActionError(mutationProblem(result));
+            sayTrigger(result);
         } catch (err) {
-            console.error("[Commands] createCommand failed:", err);
-            setFormError(errorMessage(err));
+            // the form stays open with what was typed
+            showError("Couldn't create the command", err);
         } finally {
             setBusy(false);
         }
@@ -221,18 +211,15 @@ export default function Commands(props: { bot: () => BotSummary }) {
         setDeleteTarget(null);
         if (!target) return;
         setBusy(true);
-        setActionError(null);
         try {
             const result = await botCreator.calls.deleteCommand({ bot: bot(), id: target.id });
             // a bot that is on says what its sync refused above; one that is
             // off clears the command now, and says here if it couldn't
             const kept = props.bot().connected ? null : result.syncError;
-            setActionError(kept
-                ? { title: `/${target.name} is still on Discord`, message: [kept, result.triggerError].filter(Boolean).join(" ") }
-                : mutationProblem(result));
+            if (kept) showError(`/${target.name} is still on Discord`, [kept, result.triggerError].filter(Boolean).join(" "));
+            else sayTrigger(result);
         } catch (err) {
-            console.error("[Commands] deleteCommand failed:", err);
-            setActionError({ title: `/${target.name} not deleted`, message: errorMessage(err) });
+            showError(`Couldn't delete /${target.name}`, err);
         } finally {
             setBusy(false);
         }
@@ -258,22 +245,6 @@ export default function Commands(props: { bot: () => BotSummary }) {
                     Commands are stored here and register the next time the bot
                     connects.
                 </PaperQuote>
-            </Show>
-
-            <Show when={props.bot().connected && syncError()}>
-                {(message) => (
-                    <PaperQuote variant="danger" icon="warning" title="Not live on Discord yet">
-                        {message()}
-                    </PaperQuote>
-                )}
-            </Show>
-
-            <Show when={actionError()}>
-                {(problem) => (
-                    <PaperQuote variant="danger" icon="warning" title={problem().title} onDismiss={() => setActionError(null)}>
-                        {problem().message}
-                    </PaperQuote>
-                )}
             </Show>
 
             <Show
@@ -551,11 +522,6 @@ export default function Commands(props: { bot: () => BotSummary }) {
                         </Index>
                     </PaperFlex>
 
-                    <Show when={formError()}>
-                        <PaperQuote variant="danger" icon="warning" title="Command not created">
-                            {formError()}
-                        </PaperQuote>
-                    </Show>
                 </PaperFlex>
             </PaperModal>
 

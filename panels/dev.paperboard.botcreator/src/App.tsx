@@ -11,8 +11,8 @@ import {
     PaperMenuLabel,
     PaperInterfaceGroup,
     PaperInterfaceItem,
-    PaperQuote,
     PaperSlidePage,
+    showError,
     createPaperCompact,
 } from "@mileniumhq/paperui";
 import BotsHome from "./components/BotsHome";
@@ -26,7 +26,6 @@ import { createBots, type BotsState } from "./state";
 import { DiscordAvatar } from "./picture";
 import "@mileniumhq/paperui/style.css";
 import "@mileniumhq/paperui/panel.css";
-import { errorMessage } from "@mileniumhq/paperapi";
 
 // the menu entry that leaves the bot for the home screen
 const HOME_ENTRY = "home";
@@ -95,8 +94,6 @@ export default function App() {
     const bots = createBots();
     const compact = createPaperCompact();
     const [opened, setOpened] = createSignal<string | null>(null);
-    // a failed save of "the guide was skipped", shown where the guide was
-    const [skipError, setSkipError] = createSignal<string | null>(null);
     // whether the open bot has been in the list, so that leaving it means
     // it was deleted rather than not announced yet: a bot just added is
     // opened before the service's list, a moment later, shows it
@@ -135,23 +132,13 @@ export default function App() {
     // no bots, and the guide not yet finished or skipped
     const guideShown = () => bots.ready() && !bots.state().botsError && !bots.state().setupGuideSeen && bots.list().length === 0 && !opened();
     const skipGuide = () => {
-        setSkipError(null);
-        bots.markSetupGuideSeen().catch((err) => setSkipError(errorMessage(err)));
+        bots.markSetupGuideSeen().catch((err) => showError("Couldn't skip the guide", err, { retry: skipGuide }));
     };
 
     return (
         <PaperFlex fullWidth fullHeight overflow="hidden">
             <Show when={guideShown()} fallback={<Show when={listShown()}><BotsHome bots={bots} onOpen={(bot) => open(bot.id)} /></Show>}>
-                <PaperFlex direction="column" fullWidth fullHeight>
-                    <Show when={skipError()}>
-                        {(text) => (
-                            <PaperFlex padding="half" fullWidth>
-                                <PaperQuote variant="danger" icon="warning" title="The guide could not be skipped" role="alert" onDismiss={() => setSkipError(null)}>{text()}</PaperQuote>
-                            </PaperFlex>
-                        )}
-                    </Show>
-                    <SetupGuide onAdd={bots.add} onAdded={(bot) => open(bot.id)} onSkip={skipGuide} />
-                </PaperFlex>
+                <SetupGuide onAdd={bots.add} onAdded={(bot) => open(bot.id)} onSkip={skipGuide} />
             </Show>
             <PaperSlidePage
                 enabled={compact()}

@@ -1,9 +1,10 @@
-import { createEffect, createSignal, on, Show, For } from "solid-js";
+import { createEffect, on, Show, For } from "solid-js";
 import {
     PaperFlex,
     PaperText,
     PaperQuote,
     PaperButton,
+    PaperEmptyState,
     PaperBadge,
     PaperCard,
     PaperKeyValue,
@@ -15,8 +16,10 @@ import {
     createPolling,
     createLatest,
     createRead,
+    createFailureToast,
+    dismissToast,
+    showError,
 } from "@mileniumhq/paperui";
-import { errorMessage } from "@mileniumhq/paperapi";
 import type { BotSummary } from "../bots";
 import { botCreator } from "../client";
 import {
@@ -36,10 +39,10 @@ interface OverviewProps {
 }
 
 export default function Overview(props: OverviewProps) {
-    const [toggleError, setToggleError] = createSignal("");
     // the bot's name, avatar and connection are the service's, kept live
     const connected = () => props.bot().connected;
-    const connectionError = () => props.bot().lastError;
+    // a connection that failed, or blocks that couldn't be added to Blocks
+    createFailureToast(() => props.bot().lastError, { title: "This bot has a problem" });
 
     // the bot's tag and the messages its session last received, oldest
     // first; reconciled by message id, so a reread keeps the rows already
@@ -59,14 +62,15 @@ export default function Overview(props: OverviewProps) {
                             : { tag, recentMessages: appendCapped(recentMessages, heard, RECENT_MESSAGE_CAP) },
                     );
                 }),
+            failure: { title: "Couldn't read the bot's details" },
         },
     );
     const tag = () => info.value()?.tag ?? "";
     const recent = () => info.value()?.recentMessages ?? [];
-    // a read again hides the last one's failure, as it did before it was asked
-    const infoError = () => (info.loading() ? null : info.error());
-    // the last good reading stays on screen under a failed one's error
+    // the last good reading stays on screen while a toast says the newest
+    // failed; the toast stays through the polls that fail the same way
     const health = createRead(() => botCreator.calls.getHealth({ bot: props.bot().id }));
+    createFailureToast(health.error, { title: "Couldn't check health" });
     createPolling(health.reload, HEALTH_POLL_MS);
 
     // a bot that comes online has a tag and a fresh session to show
@@ -77,15 +81,18 @@ export default function Overview(props: OverviewProps) {
         }
     }, { defer: true }));
 
-    // only the newest flip may say it failed
+    // only the newest flip may say it failed, and the next flip takes back
+    // what the last one said
     const flipped = createLatest();
+    let flipToast: string | undefined;
     const setEnabled = async (enabled: boolean) => {
         const current = flipped();
-        setToggleError("");
+        if (flipToast) dismissToast(flipToast);
+        flipToast = undefined;
         try {
             await props.onSetEnabled(enabled);
         } catch (err) {
-            if (current()) setToggleError(errorMessage(err));
+            if (current()) flipToast = showError("Couldn't turn the bot on or off", err);
         }
     };
 
@@ -138,23 +145,6 @@ export default function Overview(props: OverviewProps) {
                 </PaperFlex>
             </PaperCard>
 
-            <Show when={infoError()}>
-                {(text) => <PaperQuote variant="danger" icon="warning" title="Couldn't read the bot's details">{text()}</PaperQuote>}
-            </Show>
-
-            <Show when={toggleError()}>
-                {(text) => (
-                    <PaperQuote variant="danger" icon="warning" title="Couldn't turn the bot on or off" onDismiss={() => setToggleError("")}>
-                        {text()}
-                    </PaperQuote>
-                )}
-            </Show>
-
-            {/* a connection that failed, or blocks that couldn't be added to Blocks */}
-            <Show when={connectionError()}>
-                {(text) => <PaperQuote variant="danger" icon="warning" title="This bot has a problem">{text()}</PaperQuote>}
-            </Show>
-
             <PaperCard>
                 <PaperFlex direction="column" gap="half" padding="full">
                     <PaperFlex direction="row" justify="space-between" align="center">
@@ -162,15 +152,13 @@ export default function Overview(props: OverviewProps) {
                         <PaperText preset="hint">Refreshes every {HEALTH_POLL_MS / 1000}s</PaperText>
                     </PaperFlex>
 
-                    <Show when={health.error()}>
-                        {(text) => <PaperQuote variant="danger" icon="warning" title="Couldn't check health">{text()}</PaperQuote>}
-                    </Show>
-
                     <Show
                         when={health.value()}
                         fallback={
-                            <Show when={!health.error()}>
-                                <PaperText preset="hint">Checking health…</PaperText>
+                            <Show when={health.error()} fallback={<PaperText preset="hint">Checking health…</PaperText>}>
+                                <PaperEmptyState icon="error" title="Couldn't load">
+                                    <PaperButton disabled={health.loading()} onClick={() => void health.reload()}>Try again</PaperButton>
+                                </PaperEmptyState>
                             </Show>
                         }
                     >

@@ -5,7 +5,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, setDefaultTimeout, te
 import * as fs from "node:fs";
 import * as path from "node:path";
 import type { BotsServiceState } from "../src/bots";
-import { panelBrowser, servePanel, type Page } from "./helpers/browser";
+import { panelBrowser, servePanel, TOASTS, toastShows, type Page } from "./helpers/browser";
 import { testDaemon } from "./helpers/daemon";
 import { guild, startFakeDiscord, type FakeDiscord } from "./helpers/discord";
 import { call, PANEL_ID, savedBots, startService, stopServices, storedBot } from "./helpers/service";
@@ -87,11 +87,11 @@ describe("a bot's on switch", () => {
             try {
                 await page.evaluate(`${overview}.dataset.test = "switch"`);
                 await page.click(`[data-test="switch"]`);
-                await page.waitFor(`document.body.innerText.includes("Couldn't turn the bot on or off")`, "the failed save");
+                await page.waitFor(toastShows("Couldn't turn the bot on or off"), "the failed save");
             } finally {
                 fs.chmodSync(configs, 0o755);
             }
-            expect(await page.evaluate<string>(`document.body.innerText`)).toMatch(/Could not save the bots: .*(EACCES|permission denied)/i);
+            expect(await page.evaluate<string>(`${TOASTS}.join(" ")`)).toMatch(/Could not save the bots: .*(EACCES|permission denied)/i);
             // the next announcement still has the bot on, as it is saved
             await call.markSetupGuideSeen();
             await page.waitFor(`document.body.innerText.includes("Gateway status")`, "the Overview after the next announcement");
@@ -118,13 +118,13 @@ describe("a bot's on switch", () => {
             fs.chmodSync(configs, 0o555);
             try {
                 await page.click(`[data-test="switch"]`);
-                await page.waitFor(`document.body.innerText.includes("Wobbly didn't go offline")`, "the failed flip");
+                await page.waitFor(toastShows("Wobbly didn't go offline"), "the failed flip");
             } finally {
                 fs.chmodSync(configs, 0o755);
             }
             expect(await press(page, toggle("Wobbly"), false)).toBe(true);
             await stateWhere<BotsServiceState>(PANEL_ID, (s) => s.bots[0]?.enabled === false, "Wobbly to be off");
-            expect(await page.evaluate<string>(`document.body.innerText`)).not.toContain("didn't go offline");
+            expect(await page.evaluate<string>(`${TOASTS}.join(" ")`)).not.toContain("didn't go offline");
             expect(page.exceptions).toEqual([]);
         } finally {
             await page.close();

@@ -1,6 +1,6 @@
 import { afterAll, afterEach, beforeAll, describe, expect, setDefaultTimeout, test } from "bun:test";
 import type { BotsServiceState } from "../src/bots";
-import { panelBrowser, servePanel, type Page } from "./helpers/browser";
+import { panelBrowser, servePanel, TOASTS, type Page } from "./helpers/browser";
 import { guild, snowflake, startFakeDiscord, type FakeDiscord } from "./helpers/discord";
 import { call, PANEL_ID, savedBots, startService, stopServices, storedBot } from "./helpers/service";
 import { stateWhere } from "./helpers/wait";
@@ -152,7 +152,7 @@ describe("a test message's answer", () => {
             const text = await page.evaluate<string>(`document.body.innerText`);
             expect(text).toContain("#lobby");
             expect(text).not.toContain("Message sent");
-            expect(text).not.toContain("Message not sent");
+            expect(await page.evaluate<string>(`${TOASTS}.join(" ")`)).not.toContain("Couldn't send the message");
             expect(page.exceptions).toEqual([]);
         } finally {
             await page.close();

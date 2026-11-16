@@ -4,7 +4,7 @@
 // read answers late.
 import { afterAll, afterEach, beforeAll, describe, expect, setDefaultTimeout, test } from "bun:test";
 import type { BotsServiceState } from "../src/bots";
-import { panelBrowser, servePanel, type Page } from "./helpers/browser";
+import { panelBrowser, servePanel, TOASTS, toastShows, type Page } from "./helpers/browser";
 import { guild, slashCommand, startFakeDiscord, userMessage, type FakeDiscord } from "./helpers/discord";
 import { call, PANEL_ID, savedBots, startService, stopServices, storedBot } from "./helpers/service";
 import { problemWhere, stateWhere } from "./helpers/wait";
@@ -243,7 +243,7 @@ describe("a bot's page", () => {
         try {
             await page.waitFor(`document.body.innerText.includes(${JSON.stringify(missing)})`, "the card to say no token is saved");
             await clickText(page, "[class*=card], [class*=Card]", "Keyless");
-            await page.waitFor(`document.body.innerText.includes("This bot has a problem")`, "the Overview to say no token is saved");
+            await page.waitFor(toastShows("This bot has a problem", "No token is saved for this bot."), "the Overview to say no token is saved");
             await page.click(`input[name=botMenu][value="config"]`);
             await clickText(page, "button", "Replace");
             await page.waitFor(`document.querySelector("[role=dialog] input[type=password]") !== null`, "the Replace token dialog");
@@ -253,7 +253,7 @@ describe("a bot's page", () => {
 
             await page.click(`input[name=botMenu][value="overview"]`);
             await page.waitFor(`document.body.innerText.includes("Gateway status")`, "the Overview");
-            expect(await page.evaluate<string>("document.body.innerText")).not.toContain("This bot has a problem");
+            expect(await page.evaluate<string>(`${TOASTS}.join(" ")`)).not.toContain("This bot has a problem");
             await page.click(`input[name=botMenu][value="home"]`);
             await page.waitFor(`document.body.innerText.includes("Keyless") && !document.body.innerText.includes("Gateway status")`, "the bot list");
             expect(await page.evaluate<string>("document.body.innerText")).not.toContain(missing);
