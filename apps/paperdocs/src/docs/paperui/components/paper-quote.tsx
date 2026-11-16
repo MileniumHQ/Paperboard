@@ -18,9 +18,9 @@ export default function PaperQuoteDoc() {
         <PaperFlex direction="column" gap="double" fullWidth>
             <PaperText preset="header" as="h1">PaperQuote</PaperText>
             <PaperText preset="body" as="p">
-                PaperQuote is a callout box with an optional icon and title, for a message that sits in the page: a failure, a warning, a tip, or a note.
-                Use it for a failure that stays true until something changes, such as settings that can't be read. For a press that fails, call <PaperLink href="/docs/paperui/papertoast/">showToast</PaperLink>: it needs no signal and no place in the layout.
-                When a region has no content yet, use <PaperLink href="/docs/paperui/paperemptystate/">PaperEmptyState</PaperLink> instead.
+                PaperQuote is a callout box with an optional icon and title, for a message that sits in the page: a warning, a tip, or a note.
+                A failure is never a quote: it is a <PaperLink href="/docs/paperui/papertoast/#failures">toast</PaperLink>, from <PaperCode>showError</PaperCode>, <PaperCode>createFailureToast</PaperCode> or createRead's <PaperCode>failure</PaperCode>.
+                When a region has no content yet, or couldn't load, use <PaperLink href="/docs/paperui/paperemptystate/">PaperEmptyState</PaperLink> instead.
             </PaperText>
 
             <PaperText preset="subheader" as="h2" id="usage">Usage</PaperText>
@@ -31,7 +31,7 @@ export default function PaperQuoteDoc() {
             <PaperCard data-docs-demo padding="double" surface="front">
                 <PaperFlex direction="column" gap="full">
                     <PaperQuote icon="info" title="Title">A message that belongs to the page.</PaperQuote>
-                    <PaperQuote variant="danger" icon="warning" title="Danger">Something failed.</PaperQuote>
+                    <PaperQuote variant="warning" icon="warning" title="Warning">Applies after a restart.</PaperQuote>
                     <PaperQuote variant="success" icon="check_circle">Saved.</PaperQuote>
                 </PaperFlex>
             </PaperCard>
@@ -42,7 +42,7 @@ export function Example() {
     return (
         <PaperFlex direction="column" gap="full">
             <PaperQuote icon="info" title="Title">A message that belongs to the page.</PaperQuote>
-            <PaperQuote variant="danger" icon="warning" title="Danger">Something failed.</PaperQuote>
+            <PaperQuote variant="warning" icon="warning" title="Warning">Applies after a restart.</PaperQuote>
             <PaperQuote variant="success" icon="check_circle">Saved.</PaperQuote>
         </PaperFlex>
     );
@@ -74,7 +74,7 @@ export function Example() {
                         <td><PaperCode>variant</PaperCode></td>
                         <td><PaperCode>PaperQuoteVariant</PaperCode></td>
                         <td><PaperCode>"monochrome"</PaperCode></td>
-                        <td><PaperCode>"monochrome"</PaperCode> or a role: <PaperCode>"primary"</PaperCode>, <PaperCode>"brand"</PaperCode>, <PaperCode>"success"</PaperCode>, <PaperCode>"danger"</PaperCode>, <PaperCode>"warning"</PaperCode>, <PaperCode>"attention"</PaperCode>, <PaperCode>"extra-1"</PaperCode>, <PaperCode>"extra-2"</PaperCode>, or <PaperCode>"extra-3"</PaperCode>. A role tints the quote in its color.</td>
+                        <td><PaperCode>"monochrome"</PaperCode> or a role: <PaperCode>"primary"</PaperCode>, <PaperCode>"brand"</PaperCode>, <PaperCode>"success"</PaperCode>, <PaperCode>"danger"</PaperCode>, <PaperCode>"warning"</PaperCode>, <PaperCode>"attention"</PaperCode>, <PaperCode>"extra-1"</PaperCode>, <PaperCode>"extra-2"</PaperCode>, or <PaperCode>"extra-3"</PaperCode>. A role tints the quote in its color. <PaperCode>"danger"</PaperCode> is deprecated: a failure is a <PaperLink href="/docs/paperui/papertoast/#failures">toast</PaperLink>, and the code check flags a danger quote.</td>
                     </tr>
                     <tr>
                         <td><PaperCode>icon</PaperCode></td>
@@ -109,45 +109,13 @@ export function Example() {
 
             <PaperText preset="subheader" as="h2" id="behavior">Behavior</PaperText>
             <PaperTextList>
-                <li>The quote has no ARIA role of its own. For a failure that appears after the user acts, add <PaperCode>role="alert"</PaperCode> so assistive technology announces it.</li>
+                <li>The quote has no ARIA role of its own. For a warning that appears after the user acts, add <PaperCode>role="alert"</PaperCode> so assistive technology announces it.</li>
                 <li>The close button is named "Dismiss".</li>
                 <li>The quote is a block that takes the width of its container, with a colored bar on its leading edge. A role variant also tints the background.</li>
-                <li>The message sits in a text wrapper, so an element child works too: a <PaperCode>PaperFlex</PaperCode> holding the message and a retry button is a common failure layout.</li>
+                <li>The message sits in a text wrapper, so an element child works too, such as a <PaperCode>PaperFlex</PaperCode> holding the message and a button.</li>
             </PaperTextList>
 
             <PaperText preset="subheader" as="h2" id="examples">Examples</PaperText>
-            <PaperText preset="subheader" as="h3" id="failure">Show a view that couldn't load</PaperText>
-            <PaperText preset="body" as="p">
-                When a failure covers a whole view, such as a load that failed, put a quote where the view would be, with a button to retry.
-                It stays until the load works. A press that fails, such as a Save button, shows a <PaperLink href="/docs/paperui/papertoast/">toast</PaperLink> instead.
-            </PaperText>
-            <PaperCode block language="tsx">
-{`import { createResource, For, Show } from "solid-js";
-import { PaperButton, PaperFlex, PaperQuote, PaperText } from "@mileniumhq/paperui";
-
-export function Backups(props: { load: () => Promise<string[]> }) {
-    const [backups, { refetch }] = createResource(props.load);
-
-    return (
-        <Show
-            when={!backups.error}
-            fallback={
-                <PaperQuote variant="danger" icon="warning" title="Backups not loaded" role="alert">
-                    <PaperFlex direction="column" gap="half" align="flex-start">
-                        {backups.error instanceof Error ? backups.error.message : String(backups.error)}
-                        <PaperButton size="small" onClick={() => void refetch()}>Retry</PaperButton>
-                    </PaperFlex>
-                </PaperQuote>
-            }
-        >
-            <PaperFlex direction="column" gap="half">
-                <For each={backups()}>{(name) => <PaperText preset="body">{name}</PaperText>}</For>
-            </PaperFlex>
-        </Show>
-    );
-}`}
-            </PaperCode>
-
             <PaperText preset="subheader" as="h3" id="dismissable">A dismissible notice</PaperText>
             <PaperCard data-docs-demo padding="double" surface="front">
                 <PaperFlex direction="column" gap="full" align="flex-start">

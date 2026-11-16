@@ -32,6 +32,8 @@ interface ReadOptions<T, S> {
     follow?: (land: (change: ReadChange<T>) => void) => () => void;
     /** a failure's words, as the view shows them (default its own message) */
     message?: (err: unknown) => string;
+    /** says a failed read as a danger toast; retry gives it a Try again button */
+    failure?: { title: string; retry?: boolean };
 }
 
 interface Read<T> {
@@ -60,18 +62,17 @@ type ReadChange<T> = T | undefined | ((prev: T | undefined) => T | undefined);`}
 
 const worlds = createRead(() => service.calls.listWorlds(), {
     source: () => state().worldsRevision,
+    failure: { title: "Couldn't load the worlds" },
 });
 
 <Switch>
-    <Match when={worlds.error()}>
-        {(why) => (
-            <PaperEmptyState icon="error" title="Worlds can't be read" description={why()}>
-                <PaperButton onClick={() => void worlds.reload()}>Try again</PaperButton>
-            </PaperEmptyState>
-        )}
-    </Match>
     <Match when={worlds.value()}>
         {(list) => <For each={list()}>{(world) => <WorldRow world={world} />}</For>}
+    </Match>
+    <Match when={worlds.error()}>
+        <PaperEmptyState icon="error" title="Couldn't load">
+            <PaperButton disabled={worlds.loading()} onClick={() => void worlds.reload()}>Try again</PaperButton>
+        </PaperEmptyState>
     </Match>
     <Match when={true}>
         <PaperLoader loaderStatus="indeterminate" label="Reading worlds" />
@@ -81,7 +82,9 @@ const worlds = createRead(() => service.calls.listWorlds(), {
             <PaperTextList>
                 <li>Without <PaperCode>source</PaperCode> it reads once, at once. With one, it reads each time the source changes, and the fetcher gets its value. While the source is <PaperCode>false</PaperCode>, <PaperCode>null</PaperCode> or <PaperCode>undefined</PaperCode> nothing is read, and a read still out is dropped. A dialog that reads each time it opens passes <PaperCode>{"source: () => props.open"}</PaperCode>.</li>
                 <li>An answer is reconciled into what was there, so every row of a list keeps its identity and only what changed in it redraws. Items are matched by <PaperCode>key</PaperCode>, and items without it by position.</li>
-                <li>A failure keeps the value that was there. Show <PaperCode>error()</PaperCode> with a way to <PaperCode>reload()</PaperCode>; it clears when the next answer lands.</li>
+                <li>A failure keeps the value that was there, and <PaperCode>error()</PaperCode> says why until the next answer lands.</li>
+                <li>With <PaperCode>failure</PaperCode>, a failed read is a danger toast (see <PaperLink href="/docs/paperui/papertoast/#create-failure-toast">createFailureToast</PaperLink>): the title is what failed and the message is <PaperCode>error()</PaperCode>, so the view formats nothing. It closes while a read is out and comes back if that one fails too; a toast the person closed stays closed while the same failure stands. <PaperCode>retry: true</PaperCode> adds Try again, repeating the view's own.</li>
+                <li>Old data stays on screen and the toast says the reload failed. With no data, the view shows <PaperLink href="/docs/paperui/paperemptystate/#couldnt-load">"Couldn't load"</PaperLink> with its own Try again, never a blank body.</li>
                 <li><PaperCode>loading()</PaperCode> is true while a read is out, the first one and every reload. A view that keeps its rows on screen during a reload shows the loader only while <PaperCode>value()</PaperCode> is undefined.</li>
                 <li>A push (through <PaperCode>follow</PaperCode>) and a <PaperCode>set</PaperCode> are changes newer than any read still out. A whole value lands like an answer and drops that read: the list a remove answered with, or the state a service pushed. <PaperCode>set(undefined)</PaperCode> forgets the value, as before the first read: a view whose data went away.</li>
                 <li>A function changes the part it knows, such as a row taken out after it went, or a progress line pushed while the list is read. It applies at once, and again to the answer of the read still out, so that answer can't bring back what it changed.</li>

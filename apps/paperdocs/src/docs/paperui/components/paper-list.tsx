@@ -288,7 +288,13 @@ export function Example() {
                         <td><PaperCode>actions</PaperCode></td>
                         <td><PaperCode>JSX.Element</PaperCode></td>
                         <td>No default</td>
-                        <td>Trailing controls, such as a menu button. They sit inside the item's label, so each control must stop its own click and pointer events, or a press also selects the item. They keep their full width: the title shortens before they do, and every row's actions end at the same distance from the list's edge.</td>
+                        <td>Trailing controls, such as a menu button. A press in them is theirs: it never chooses the item, reaches the item's own handlers or starts a drag, so a control needs no guard of its own. They keep their full width: the title shortens before they do, and every row's actions end at the same distance from the list's edge.</td>
+                    </tr>
+                    <tr>
+                        <td><PaperCode>wrapTitle</PaperCode></td>
+                        <td><PaperCode>boolean</PaperCode></td>
+                        <td>No default (off)</td>
+                        <td>The title wraps onto more lines instead of ending in an ellipsis, for a title that has to be read whole, such as a question or a path.</td>
                     </tr>
                     <tr>
                         <td><PaperCode>disabled</PaperCode></td>
@@ -376,7 +382,7 @@ onClosed(value: string | number): void;`}
                 <li>Left alone, a vertical list is a sidebar: 190 pixels wide, full height, a right border, on the inset surface. Set <PaperCode>fullWidth</PaperCode> and <PaperCode>borderless</PaperCode> to use it inside a card, as the gameserver panel does.</li>
                 <li>A horizontal list is full width and auto height, with no right border.</li>
                 <li>A list scrolls rather than crushing its rows when it overflows.</li>
-                <li>A title stays on one line: one that doesn't fit, such as a long plugin or player name with no spaces, ends in an ellipsis before it reaches the item's actions. The description wraps instead.</li>
+                <li>A title stays on one line: one that doesn't fit, such as a long plugin or player name with no spaces, ends in an ellipsis before it reaches the item's actions. The description wraps instead. With <PaperCode>wrapTitle</PaperCode> the title wraps too.</li>
                 <li>Items keep the same padding whatever their actions hold, so a switch in a row of buttons lines up with a switch alone in another row. Only a closeable item's close button sits closer to its edge.</li>
             </PaperTextList>
 
