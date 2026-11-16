@@ -509,6 +509,13 @@ export const gameServerService = definePanelService({
     }])),
     async onInit(ctx) {
         rootContext = ctx;
+        // The daemon stops the service with SIGTERM (for a backup, an update, a
+        // restart). Each server's history is on disk before it ends: a server
+        // stopped a moment ago would otherwise be found "running" by the next
+        // service, and started again as one that crashed.
+        process.once("SIGTERM", () => {
+            void Promise.all([...entries.values()].map((server) => server.history!.flush())).then(() => process.kill(process.pid, "SIGTERM"));
+        });
         try {
             const gameTypes = await Promise.all(games.map((g) => gameModuleFor(g.id).blockTypes?.() ?? []));
             const onlinePlayers = (id: string) => {

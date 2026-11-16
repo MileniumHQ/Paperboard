@@ -152,6 +152,22 @@ describe("servers through restarts", () => {
         await state.waitFor("s-a", (s) => s.serverStatus === "offline", "s-a to stop");
     });
 
+    test("a server stopped just before the service stops stays stopped when the service starts again", async () => {
+        const state = servicesState();
+        await serverCalls("s-b").startServer();
+        await state.waitFor("s-b", (s) => s.serverStatus === "online", "s-b online");
+        await waitForFile(historyFile("s-b"), (text) => text.includes(`"running":true`), "the running server's history to be saved");
+        await serverCalls("s-b").stopServer();
+        await state.waitFor("s-b", (s) => s.serverStatus === "offline", "s-b to stop");
+        // a backup, an update or a restart stops the service right after: the stop is what it keeps
+        await restartService();
+        const after = (await state.server("s-b"))!;
+        expect(after.serverStatus).toBe("offline");
+        expect(after.serverEntries.map((e) => e.content)).toContain("[Server] Process stopped.");
+        expect(after.serverEntries.map((e) => e.content)).not.toContain("[Server] The server stopped while Paperboard was not running. Starting it again.");
+        expect(runs("s-b")).toHaveLength(1);
+    });
+
     test("each server is its own backup source: restoring one touches only that server, and removing a server keeps its world", async () => {
         await backupLocationsApi.setForPanel(PANEL_ID, "local", undefined, "s-a");
         const a = backupApi.forSource(PANEL_ID, "s-a");
