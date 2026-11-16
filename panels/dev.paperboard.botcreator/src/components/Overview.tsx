@@ -2,7 +2,6 @@ import { createEffect, on, Show, For } from "solid-js";
 import {
     PaperFlex,
     PaperText,
-    PaperQuote,
     PaperError,
     PaperBadge,
     PaperCard,
@@ -179,10 +178,6 @@ export default function Overview(props: OverviewProps) {
                                 <PaperKeyValue label="Pending replies">{h().pendingInteractions}</PaperKeyValue>
                             </PaperKeyValueList>
                         )}
-                    </Show>
-
-                    <Show when={props.bot().commandSyncError}>
-                        {(text) => <PaperQuote variant="warning" icon="warning" title="Command sync">{text()}</PaperQuote>}
                     </Show>
                 </PaperFlex>
             </PaperCard>

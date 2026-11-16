@@ -41,7 +41,7 @@ const openTab = (page: Page, tab: string) => page.click(`input[name=botMenu][val
 // A failure that stands is said where it happens, and stays while it does:
 // never a toast, which goes by itself.
 describe("failures that stand are said in place", () => {
-    test("commands Discord won't take say so above the commands, which stay listed", async () => {
+    test("commands Discord won't take say so above the commands, which stay listed, and only there", async () => {
         const home = guild("Home");
         const fake = discord.addBot({ username: "Herald", guilds: [home] });
         // scoped to a server the bot was removed from: it can't be registered there
@@ -55,6 +55,9 @@ describe("failures that stand are said in place", () => {
         try {
             await page.waitFor(`document.body.innerText.includes("Herald")`, "the bot list");
             await clickText(page, "[class*=card], [class*=Card]", "Herald");
+            // said once, where it happens: the Overview doesn't say it again
+            await page.waitFor(`document.body.innerText.includes("Gateway status")`, "Herald's Overview");
+            expect(await body(page)).not.toContain("is not in this bot's server list");
             await openTab(page, "commands");
             await page.waitFor(errorShows(title, "is not in this bot's server list"), "the refused sync, above the commands");
             const row = `[...document.querySelectorAll("*")].find((el) => el.children.length === 0 && el.textContent === "/away")`;
