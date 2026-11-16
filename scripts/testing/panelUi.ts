@@ -13,12 +13,17 @@ import type { Page } from "./chrome";
 
 const built = new Map<string, string>();
 
-/** the panel's UI as `bun run build` makes it, built once per test process and removed when the process ends */
+/**
+ * The panel's UI as `bun run build` makes it, built once per test process
+ * into the suite's throwaway PAPERBOARD_DIR, which its hermetic preload
+ * removes once every file has run (bun test fires no exit handlers).
+ */
 export function panelUi(panelDir: string): string {
     const known = built.get(panelDir);
     if (known) return known;
-    const out = fs.mkdtempSync(path.join(os.tmpdir(), `${path.basename(panelDir)}-ui-`));
-    process.on("exit", () => fs.rmSync(out, { recursive: true, force: true }));
+    const home = process.env.PAPERBOARD_DIR;
+    if (!home || !home.startsWith(os.tmpdir())) throw new Error(`The panel UI is built into the suite's throwaway PAPERBOARD_DIR, not ${home}`);
+    const out = fs.mkdtempSync(path.join(home, `${path.basename(panelDir)}-ui-`));
     const build = spawnSync(process.execPath, ["x", "vite", "build", "--outDir", out, "--emptyOutDir", "--logLevel", "error"], { cwd: panelDir, encoding: "utf8" });
     if (build.status !== 0 || !fs.existsSync(path.join(out, "index.html"))) {
         throw new Error(`Building the panel UI failed (exit ${build.status}):\n${build.stdout}\n${build.stderr}`);
