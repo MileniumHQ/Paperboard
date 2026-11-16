@@ -89,6 +89,8 @@ export class Server {
         isRestarting: false,
         stopTimeout: null as Timer | null,
         killDeadline: null as Timer | null,
+        /** the game's cleanup after the last run's exit (afterStop); its files are read once it settles */
+        released: Promise.resolve() as Promise<void>,
     };
     /** the ports the running server opened, by the game's names for them; empty while it is stopped */
     runPorts: ReadonlyMap<string, number> = new Map();

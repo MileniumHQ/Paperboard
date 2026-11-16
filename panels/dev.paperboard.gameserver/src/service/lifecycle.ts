@@ -111,13 +111,14 @@ export const __lifecycleTest = {
 };
 
 /**
- * Tells the game its server's process is gone. A failure is shown in the
- * console, never dropped; undefined when the game has nothing to take back.
+ * Tells the game its server's process is gone, and which of that run's ports
+ * moved off taken ones. A failure is shown in the console, never dropped;
+ * undefined when the game has nothing to take back.
  */
-function releaseServer(ctx: Server): Promise<void> | undefined {
+export function releaseServer(ctx: Server, moves: GameServerState["portMoves"]): Promise<void> | undefined {
     const afterStop = ctx.game.afterStop;
     if (!afterStop) return undefined;
-    return afterStop().catch((err) => {
+    return (ctx.lifecycle.released = afterStop(moves).catch((err) => {
         console.error("[gameserver] cleaning up after the server stopped failed:", err);
         ctx.setState((prev) => ({
             serverEntries: appendCapped(prev.serverEntries, {
@@ -125,7 +126,7 @@ function releaseServer(ctx: Server): Promise<void> | undefined {
                 content: `[Server] Could not clean up after the server stopped: ${errorMessage(err)}`,
             }),
         }));
-    });
+    }));
 }
 
 /** The system's count of programs it ended for memory, or null where it keeps none; a count it can't read is said. */
@@ -143,6 +144,9 @@ export async function startServerInstance(
     ctx: Server,
     carry: GameServerState["serverEntries"] = [],
 ): Promise<void> {
+    if (ctx.state.serverStatus !== "offline") return;
+    // the last run's cleanup puts back files this start reads
+    await ctx.lifecycle.released;
     if (ctx.state.serverStatus !== "offline") return;
     // refused to the caller, and said in the console for the restarts that
     // have none: a half-settled server folder is not a launch failure
@@ -214,7 +218,7 @@ export async function startServerInstance(
     } catch (err) {
         console.error("[Service:Lifecycle] Failed to start server:", err);
         // the launch may have got as far as preparing the server's files
-        void releaseServer(ctx);
+        void releaseServer(ctx, ctx.state.portMoves);
         ctx.setState({
             serverStatus: "offline",
             serverEntries: appendCapped(ctx.state.serverEntries, {
@@ -354,6 +358,8 @@ export function handleProcessExit(ctx: Server, exitCode?: number): void {
         ctx.game.observeLine(ctx.lifecycle.lineBuffer, true);
         ctx.lifecycle.lineBuffer = "";
     }
+    // the run's moves end with it as it goes offline; the game is told them
+    const moves = ctx.state.portMoves;
 
     if (ctx.lifecycle.isRestarting) {
         ctx.lifecycle.isRestarting = false;
@@ -372,12 +378,12 @@ export function handleProcessExit(ctx: Server, exitCode?: number): void {
         // the game takes back what the last start set aside before the next one sets it again
         // quiet: startServerInstance puts its own failure in the console
         const restart = () => void startServerInstance(ctx).catch(err => console.error("[gameserver] restart failed:", err));
-        const released = releaseServer(ctx);
+        const released = releaseServer(ctx, moves);
         if (released) void released.then(restart);
         else restart();
     } else {
         const exit = classifyExit(ctx, exitCode);
-        const released = releaseServer(ctx);
+        const released = releaseServer(ctx, moves);
         ctx.setState({
             serverStatus: "offline",
             onlinePlayers: [],

@@ -26,10 +26,10 @@ import { Server } from "./service/server";
 import { announceChanges, bindBlocks, fireBackupEnded, fireTrigger, mergeBlocks, serverOperation, sharedBlocks, sharedTypes } from "./service/blocks";
 import { SERVER_EVENTS, serverType, serversBlocks, type ServersBlocksHost } from "./service/serversBlocks";
 import { errorMessage } from "@mileniumhq/paperapi";
-import { appendCapped } from "./service/types";
+import { appendCapped, type GameServerState } from "./service/types";
 import { SERVERS_CALLS, gameServerContract, type CallName, type ServerSummary } from "./service/contract";
 import { pictureCall } from "./service/pictures";
-import { handleProcessData, handleProcessExit, stopServerInstance, cancelReadiness, restartServerInstance, startServerInstance } from "./service/lifecycle";
+import { handleProcessData, handleProcessExit, stopServerInstance, cancelReadiness, restartServerInstance, startServerInstance, releaseServer } from "./service/lifecycle";
 import { cancelAutomation, readAutomation, scheduleDailyRestart, scheduleUpdateChecks } from "./service/automation";
 import { historyWriter, readHistory } from "./service/history";
 
@@ -230,10 +230,12 @@ async function initialize(server: Server): Promise<Server> {
         await blocks.register(bindBlocks(server, mergeBlocks(sharedBlocks(server), settingsBlocks(server), await game.blocks?.())));
         let wasRunning = false;
         let onlineSince: number | null = null;
+        let portMoves: GameServerState["portMoves"] = [];
         try {
             const history = await readHistory(await historyFile(server.id));
             wasRunning = history.running;
             onlineSince = history.onlineSince;
+            portMoves = history.portMoves;
             server.history!.loaded(history);
             server.setState({ serverEntries: history.serverEntries, chatMessages: history.chatMessages });
         } catch (err) {
@@ -246,8 +248,14 @@ async function initialize(server: Server): Promise<Server> {
         // a server left running has been online since its history says; one whose history
         // predates that record counts from now
         if (running) server.setState({ serverStatus: "online", ...(onlineSince === null ? {} : { onlineSince }) });
-        // it opened the ports its start claimed, which the registry still holds
-        if (running) server.runPorts = await server.ports.held();
+        // it opened the ports its start claimed, which the registry still holds,
+        // and players join it on the first of them, wherever that run moved it
+        if (running) {
+            server.runPorts = await server.ports.held();
+            const joined = server.runPorts.get(game.portNames[0]!);
+            const moved = portMoves.find((move) => move.primary);
+            if (joined !== undefined) server.setState(moved?.to === joined ? { portMoves, serverPort: String(moved.from) } : { serverPort: String(joined) });
+        }
         server.unsubscribe.push(
             server.process.onData(game.primaryProcessId, (chunk) => handleProcessData(server, chunk)),
             server.process.onExit(game.primaryProcessId, (code) => handleProcessExit(server, code)),
@@ -268,6 +276,8 @@ async function initialize(server: Server): Promise<Server> {
         if (wasRunning && !running) {
             const restart = automation.restartAfterCrash;
             server.setState((prev) => ({ serverEntries: appendCapped(prev.serverEntries, { type: "warn", content: `[Server] The server stopped while Paperboard was not running.${restart ? " Starting it again." : ""}` }) }));
+            // the game takes back what that run set aside, as it would have at its exit
+            await releaseServer(server, portMoves);
             // quiet: startServerInstance puts its own failure in the console
             if (restart) void startServerInstance(server).catch((err) => console.error(`[gameserver] ${server.name} could not start again:`, err));
         }

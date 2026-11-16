@@ -12,8 +12,12 @@ export const HISTORY_WRITE_DELAY_MS = 1000;
 const VERSION = 1;
 
 export type ConsoleHistory = Pick<GameServerState, "serverEntries" | "chatMessages">;
-/** What the file keeps: the console, the chat, whether the server was running when last seen, and since when it had been online. */
-export interface ServerHistory extends ConsoleHistory {
+/**
+ * What the file keeps: the console, the chat, whether the server was running
+ * when last seen, since when it had been online, and the ports that run moved
+ * off taken ones, so a server found running again says where it is.
+ */
+export interface ServerHistory extends ConsoleHistory, Pick<GameServerState, "portMoves"> {
     running: boolean;
     onlineSince: number | null;
 }
@@ -38,11 +42,17 @@ const isChat = (value: unknown): value is ChatMessage => {
     return !!m && typeof m === "object" && typeof m.id === "string" && typeof m.text === "string" && typeof m.timestamp === "string";
 };
 
+const isMove = (value: unknown): value is GameServerState["portMoves"][number] => {
+    const m = value as GameServerState["portMoves"][number];
+    return !!m && typeof m === "object" && typeof m.label === "string" && Number.isInteger(m.from) && Number.isInteger(m.to) && typeof m.primary === "boolean";
+};
+
 /** Only text lines are kept: a console line built from markup does not survive JSON. */
 export function historyOf(state: ServerHistory): ServerHistory {
     return {
         running: state.running,
         onlineSince: state.onlineSince,
+        portMoves: state.portMoves,
         serverEntries: state.serverEntries.filter((e) => typeof e.content === "string").slice(-HISTORY_ENTRIES),
         chatMessages: state.chatMessages.slice(-HISTORY_CHAT),
     };
@@ -51,14 +61,16 @@ export function historyOf(state: ServerHistory): ServerHistory {
 /** Throws on a damaged file; a missing one is a server that has said nothing yet. */
 export async function readHistory(file: string): Promise<ServerHistory> {
     const text = await unlessMissing(nodeFs.readFile(file, "utf8"), null);
-    if (text === null) return { serverEntries: [], chatMessages: [], running: false, onlineSince: null };
-    const raw = JSON.parse(text) as { version?: unknown; serverEntries?: unknown; chatMessages?: unknown; running?: unknown; onlineSince?: unknown };
+    if (text === null) return { serverEntries: [], chatMessages: [], running: false, onlineSince: null, portMoves: [] };
+    const raw = JSON.parse(text) as { version?: unknown; serverEntries?: unknown; chatMessages?: unknown; running?: unknown; onlineSince?: unknown; portMoves?: unknown };
     if (raw?.version !== VERSION || !Array.isArray(raw.serverEntries) || !Array.isArray(raw.chatMessages) || typeof raw.running !== "boolean")
         throw new Error("The saved console history is damaged");
     return {
         running: raw.running,
         // a history written before this was kept has none
         onlineSince: typeof raw.onlineSince === "number" ? raw.onlineSince : null,
+        // as is a history written before its ports were
+        portMoves: Array.isArray(raw.portMoves) ? raw.portMoves.filter(isMove) : [],
         serverEntries: raw.serverEntries
             .filter((e): e is GameServerState["serverEntries"][number] => !!e && typeof e === "object" && typeof (e as { content?: unknown }).content === "string")
             .slice(-HISTORY_ENTRIES),
@@ -102,11 +114,11 @@ export function historyWriter(file: () => Promise<string>, onError: (err: unknow
     return {
         /** The history the server opened with, so it is not written straight back. */
         loaded(history: ServerHistory) { last = history; },
-        changed(state: ConsoleHistory & Pick<GameServerState, "serverStatus" | "onlineSince">) {
+        changed(state: ConsoleHistory & Pick<GameServerState, "serverStatus" | "onlineSince" | "portMoves">) {
             if (stopped) return;
             const running = isRunning(state.serverStatus);
-            if (last && last.serverEntries === state.serverEntries && last.chatMessages === state.chatMessages && last.running === running && last.onlineSince === state.onlineSince) return;
-            last = { serverEntries: state.serverEntries, chatMessages: state.chatMessages, running, onlineSince: state.onlineSince };
+            if (last && last.serverEntries === state.serverEntries && last.chatMessages === state.chatMessages && last.running === running && last.onlineSince === state.onlineSince && last.portMoves === state.portMoves) return;
+            last = { serverEntries: state.serverEntries, chatMessages: state.chatMessages, running, onlineSince: state.onlineSince, portMoves: state.portMoves };
             pending = last;
             if (timer) return;
             timer = setTimeout(() => void flush(), delayMs);

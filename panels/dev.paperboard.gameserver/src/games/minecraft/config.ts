@@ -18,6 +18,8 @@ export async function loadConfigAndProperties(
     if (saved?.version) patch.serverVersion = saved.version;
     if (typeof saved?.ramGB === "number") patch.ramAllocation = saved.ramGB;
 
+    // a moved run's end puts the chosen port back in the file
+    await ctx.lifecycle.released;
     const propertiesContent = await ctx.files.read("server.properties", PANEL_ID);
     if (propertiesContent) {
         const props = parseProperties(propertiesContent);

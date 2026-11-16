@@ -10,7 +10,8 @@ import { loadConfigAndProperties } from "./config";
 import { prepareLaunch } from "./launch";
 import { isInstallRunning } from "./softwareInstall";
 import { commandLine, observeLine, onReady, sendChatMessage } from "./observe";
-import { portSpecs, portNames } from "./ports";
+import { portSpecs, portNames, restoreJavaPort } from "./ports";
+import { livePortDeps } from "../../service/portDeps";
 import { withSavingPaused, pauseSavingForBackup, recoverPausedSaving, saveWorld } from "./saving";
 import { minecraftState, type MinecraftState } from "./state";
 
@@ -37,6 +38,7 @@ export function minecraftService(server: Server): GameService & { minecraft: Min
         backupSkip: ["session.lock"],
         loadOptions: () => loadConfigAndProperties(server),
         prepareLaunch: () => prepareLaunch(server),
+        afterStop: (moves) => restoreJavaPort(moves, livePortDeps(server)),
         isMutating: () => isInstallRunning(server),
         saveWorld: () => saveWorld(server),
         stopEntry: "stop",

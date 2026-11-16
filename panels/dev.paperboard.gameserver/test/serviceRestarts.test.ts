@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import * as fs from "node:fs";
+import * as net from "node:net";
 import * as path from "node:path";
 import { backupApi, backupLocationsApi } from "@mileniumhq/paperapi";
 import { serverCalls } from "./helpers/serverCall";
@@ -9,6 +10,7 @@ import { installPanel, restartService, servicesState, waitForFile } from "./help
 import { readTree, writeTree } from "./helpers/tmp";
 import { PANEL_ID } from "../src/servers";
 import { javaPackageFor } from "../src/lib/versionProfile";
+import { joinPort } from "../src/core/portNames";
 
 const SERVERS = "servers-0123456789ab";
 const dataDir = process.env.PAPERBOARD_DIR!;
@@ -32,11 +34,11 @@ let daemon: TestDaemon;
 beforeAll(async () => {
     installPanel(dataDir);
     fs.mkdirSync(path.join(dataDir, "configs"), { recursive: true });
-    fs.writeFileSync(path.join(dataDir, "configs", `${PANEL_ID}.json`), JSON.stringify({ version: 2, serversDirectory: SERVERS, servers: [stored("s-a"), stored("s-b"), { ...stored("s-c"), settings: {} }, { ...stored("s-d"), settings: {} }] }));
+    fs.writeFileSync(path.join(dataDir, "configs", `${PANEL_ID}.json`), JSON.stringify({ version: 2, serversDirectory: SERVERS, servers: [stored("s-a"), stored("s-b"), stored("s-e"), { ...stored("s-c"), settings: {} }, { ...stored("s-d"), settings: {} }] }));
     // s-c and s-d can't be set up: a file stands where each one's folder goes
     fs.mkdirSync(filesRoot, { recursive: true });
     for (const id of ["s-c", "s-d"]) fs.writeFileSync(serverDir(id), "not a folder");
-    for (const id of ["s-a", "s-b"]) writeTree(serverDir(id), { "server.jar": "jar", "eula.txt": "eula=true\n", "world/level.dat": `${id} world` });
+    for (const id of ["s-a", "s-b", "s-e"]) writeTree(serverDir(id), { "server.jar": "jar", "eula.txt": "eula=true\n", "world/level.dat": `${id} world` });
     writeTree(serverDir("s-a"), { "fake-server.json": JSON.stringify({ players: ["alice", "bob"], maxPlayers: 10 }) });
     installFakeJava(javaPackageFor("1.21.1")!, dataDir);
     daemon = await startTestDaemon();
@@ -45,7 +47,7 @@ beforeAll(async () => {
 });
 afterAll(async () => {
     // no stand-in this file started outlives it
-    for (const pid of [...runs("s-a"), ...runs("s-b")]) if (alive(pid)) process.kill(pid, "SIGKILL");
+    for (const pid of [...runs("s-a"), ...runs("s-b"), ...runs("s-e")]) if (alive(pid)) process.kill(pid, "SIGKILL");
     await daemon?.stop();
 });
 
@@ -98,6 +100,40 @@ describe("servers through restarts", () => {
         // the same process: adopted, not started again
         expect(runs("s-a")).toEqual([pid!]);
         expect(alive(pid!)).toBe(true);
+    });
+
+    test("a server running on a moved port is shown on that port after the service starts again, and its stop puts the chosen one back", async () => {
+        const state = servicesState();
+        // another program has the port the user chose
+        const holder = net.createServer();
+        await new Promise<void>((resolve, reject) => holder.once("error", reject).listen(0, "127.0.0.1", resolve));
+        const chosen = (holder.address() as net.AddressInfo).port;
+        const properties = path.join(serverDir("s-e"), "server.properties");
+        fs.writeFileSync(properties, `server-port=${chosen}\nmotd=Hi\n`);
+        try {
+            await serverCalls("s-e").startServer();
+            const before = await state.waitFor("s-e", (s) => s.serverStatus === "online", "s-e online on a moved port");
+            const moved = Number(joinPort(before));
+            expect(moved).toBeGreaterThan(chosen);
+            // the server saved the run's port into its file as it started, as Paper does
+            expect(fs.readFileSync(properties, "utf8")).toContain(`server-port=${moved}\n`);
+            await waitForFile(historyFile("s-e"), (text) => text.includes(`"to":${moved}`), "the run's port to be saved with its history");
+
+            await restartService();
+            const after = await state.waitFor("s-e", (s) => s.serverStatus === "online", "s-e online again after the restart");
+            // the address players copy is the port it listens on, and the Overview still says why
+            expect(joinPort(after)).toBe(String(moved));
+            expect(after.portMoves).toEqual([{ label: "Game Server (Java)", from: chosen, to: moved, primary: true }]);
+            expect((await serverCalls("s-e").readGameOptions())["server-port"]).toBe(chosen);
+
+            await serverCalls("s-e").stopServer();
+            await state.waitFor("s-e", (s) => s.serverStatus === "offline", "s-e to stop");
+            expect((await serverCalls("s-e").readGameOptions())["server-port"]).toBe(chosen);
+            expect(fs.readFileSync(properties, "utf8")).toContain(`server-port=${chosen}\n`);
+            expect(await serverCalls("s-e").removeServer()).toEqual({ removed: "s-e" });
+        } finally {
+            await new Promise<void>((resolve, reject) => holder.close((err) => (err ? reject(err) : resolve())));
+        }
     });
 
     test("a server that stopped while Paperboard was not running is started again", async () => {

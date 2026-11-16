@@ -6,6 +6,7 @@ import { applyRuntimeProperties } from "../../service/runtimeProperties";
 import { validateOptions } from "../options";
 import { fromProperty, minecraftOptions, RAM_OPTION, toProperty } from "./options";
 import { loadConfigAndProperties } from "./config";
+import { chosenJavaPort } from "./ports";
 
 // a missing file is empty; a failed read throws, so an unreadable file is never shown as defaults and saved over
 async function readProperties(ctx: Server): Promise<Record<string, string>> {
@@ -15,7 +16,10 @@ async function readProperties(ctx: Server): Promise<Record<string, string>> {
 
 /** Every option this version has, from server.properties and the server's settings; a key not in the file reads as its default. */
 export async function readGameOptions(ctx: Server): Promise<Record<string, unknown>> {
-    const properties = await readProperties(ctx);
+    await ctx.lifecycle.released;
+    const read = await readProperties(ctx);
+    // a run on a moved port may have saved that port into the file
+    const properties: Record<string, string | undefined> = { ...read, "server-port": chosenJavaPort(read["server-port"], ctx.state.portMoves) };
     const saved = ctx.settings;
     const values: Record<string, unknown> = {};
     for (const field of minecraftOptions(ctx.state.serverVersion)) {

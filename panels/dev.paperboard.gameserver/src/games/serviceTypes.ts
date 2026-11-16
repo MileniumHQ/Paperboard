@@ -58,8 +58,10 @@ export interface GameService {
      * takes back what prepareLaunch set aside for the start, such as secrets
      * written into its settings files. It can run again for a server it
      * already cleaned up, and a restart waits for it before starting again.
+     * `moves` are the run's ports that moved off taken ones, which a server
+     * that saves its settings as it runs may have written over the user's.
      */
-    afterStop?(): Promise<void>;
+    afterStop?(moves: readonly import("../service/ports").PortMove[]): Promise<void>;
     isMutating(): boolean;
     assertFileAccess?(path: unknown, write: boolean): Promise<void>;
     /** Writes the running world to disk and resolves once the game confirms it; refuses when offline. */

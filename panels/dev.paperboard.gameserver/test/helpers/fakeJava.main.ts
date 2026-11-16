@@ -78,7 +78,21 @@ function server(): void {
         setInterval(() => { if (fs.existsSync(path.join(cwd, plan.eulaHold))) process.exit(0); }, 20);
         return;
     }
-    log("Starting Minecraft server on *:25565");
+    // Paper and the servers built on it save --port into server.properties as
+    // they start, and again whenever they save their settings
+    const portAt = args.indexOf("--port");
+    const override = portAt >= 0 ? args[portAt + 1]! : null;
+    const propertiesFile = path.join(cwd, "server.properties");
+    const saveProperties = (change: Record<string, string> = {}) => {
+        if (override === null) return;
+        const lines = (fs.existsSync(propertiesFile) ? fs.readFileSync(propertiesFile, "utf8") : "").split("\n").filter((line) => line.includes("=") && !line.startsWith("#"));
+        const values = new Map(lines.map((line) => [line.slice(0, line.indexOf("=")), line.slice(line.indexOf("=") + 1)]));
+        for (const [key, value] of Object.entries({ ...change, "server-port": override })) values.set(key, value);
+        fs.writeFileSync(propertiesFile, `#Minecraft server properties\n${[...values].map(([key, value]) => `${key}=${value}`).join("\n")}\n`);
+    };
+    saveProperties();
+    const filePort = fs.existsSync(propertiesFile) ? fs.readFileSync(propertiesFile, "utf8").match(/^server-port=(\d+)/m)?.[1] : undefined;
+    log(`Starting Minecraft server on *:${override ?? filePort ?? 25565}`);
     if (plan.exitBeforeDone !== undefined) {
         // a chunk with no newline at the end: the last line arrives with the exit
         process.stdout.write("[12:00:00] [Server thread/ERROR]: Failed to start the minecraft server");
@@ -153,6 +167,10 @@ function server(): void {
             case "kick":
                 log(`Kicked ${rest[0]}: ${rest.slice(1).join(" ") || "Kicked by an operator"}`);
                 log(`${rest[0]} left the game`);
+                return;
+            case "whitelist":
+                if (rest[0] === "on" || rest[0] === "off") saveProperties({ "white-list": String(rest[0] === "on") });
+                log(`Whitelist is now turned ${rest[0]}`);
                 return;
             case "say":
                 log(`[Server] ${rest.join(" ")}`);

@@ -10,7 +10,8 @@ import { PANEL_ID, createServerId } from "../src/servers";
 import { portApi } from "../src/service/api";
 import { livePortDeps } from "../src/service/portDeps";
 import { prepareServerPorts } from "../src/service/ports";
-import { startServerInstance, stopServerInstance } from "../src/service/lifecycle";
+import { sendServerCommand, startServerInstance, stopServerInstance } from "../src/service/lifecycle";
+import { readGameOptions } from "../src/games/minecraft/gameOptions";
 import { BEDROCK_PORT_NAME, JAVA_PORT_NAME, NETHERNET_PORT_NAME, serverPortName } from "../src/core/portNames";
 
 let daemon: TestDaemon;
@@ -42,40 +43,56 @@ const property = (mc: McServer, key: string) => fs.readFileSync(path.join(mc.dir
 
 // Port conflicts are moved or refused and written where the server reads them.
 describe("ports", () => {
-    test("a taken Java port moves for that run only: the launch opens the free one, server.properties and the next start keep the chosen one", async () => {
+    test("a taken Java port moves for that run only, though the server saves it into server.properties: Options, the stop and the next start keep the chosen one", async () => {
         const held = await holdPort();
         const original = `#Minecraft server properties\nmotd=\\u00A7aHi\nserver-port=${held.port}\nmax-players=7\n`;
-        const mc = minecraftServer({ files: { "server.properties": original } });
+        const mc = minecraftServer({ software: "paper", files: { "server.properties": original } });
         const argv = () => JSON.parse(fs.readFileSync(path.join(mc.dir, "argv.json"), "utf8")) as string[];
-        try {
+        const run = async (what: string) => {
             await startServerInstance(mc.server);
-            await mc.server.waitFor((s) => s.serverStatus === "online", "the server to come online");
-            const moved = (await claims(mc))[JAVA_PORT_NAME]!;
+            await mc.server.waitFor((s) => s.serverStatus === "online", what);
+            return (await claims(mc))[JAVA_PORT_NAME]!;
+        };
+        const stop = async () => {
+            const exit = mc.nextExit();
+            await stopServerInstance(mc.server);
+            await exit;
+        };
+        try {
+            const moved = await run("the server to come online");
             expect(moved).toBeGreaterThan(held.port);
             expect(moved).toBeLessThanOrEqual(held.port + 100);
             // the server opens the free port, and the page says so while it runs
             expect(argv().slice(-2)).toEqual(["--port", String(moved)]);
             expect(mc.server.state.portMoves).toEqual([{ label: "Game Server (Java)", from: held.port, to: moved, primary: true }]);
-            // the user's choice is never overwritten
-            expect(fs.readFileSync(path.join(mc.dir, "server.properties"), "utf8")).toBe(original);
             expect(mc.server.state.serverPort).toBe(String(held.port));
-            const exit = mc.nextExit();
-            await stopServerInstance(mc.server);
-            await exit;
+            // the server saved the run's port into the file, as Paper does; Options still says the chosen one
+            expect(property(mc, "server-port")).toBe(String(moved));
+            expect((await readGameOptions(mc.server))["server-port"]).toBe(held.port);
+            // and saves it again with its settings mid-run
+            await sendServerCommand(mc.server, "whitelist off");
+            await mc.server.waitFor((s) => s.serverEntries.some((e) => String(e.content).includes("Whitelist is now turned off")), "the server to save its settings");
+            expect(property(mc, "server-port")).toBe(String(moved));
+            await stop();
             expect(mc.server.state.portMoves).toEqual([]);
+            // the user's choice is back, beside every other key, once the stop has settled the server's files
+            expect((await readGameOptions(mc.server))["server-port"]).toBe(held.port);
+            expect([property(mc, "server-port"), property(mc, "motd"), property(mc, "max-players"), property(mc, "white-list")]).toEqual([String(held.port), "\\u00A7aHi", "7", "false"]);
+
+            // still taken: the next start asks for the chosen port again, and moves again
+            expect(await run("the server to come online on a moved port again")).toBeGreaterThan(held.port);
+            expect(mc.server.state.portMoves).toEqual([expect.objectContaining({ from: held.port, primary: true })]);
+            await stop();
         } finally {
             await held.release();
         }
         // the port is free again: the next run opens the chosen one
-        await startServerInstance(mc.server);
-        await mc.server.waitFor((s) => s.serverStatus === "online", "the server to come online again");
-        expect(await claims(mc)).toEqual({ [JAVA_PORT_NAME]: held.port });
+        expect(await run("the server to come online on its own port")).toBe(held.port);
         expect(argv()).not.toContain("--port");
         expect(mc.server.state.portMoves).toEqual([]);
-        const exit = mc.nextExit();
-        await stopServerInstance(mc.server);
-        await exit;
-        expect(fs.readFileSync(path.join(mc.dir, "server.properties"), "utf8")).toBe(original);
+        await stop();
+        await mc.server.lifecycle.released;
+        expect(property(mc, "server-port")).toBe(String(held.port));
     });
 
     test("under refuse, a taken Java port fails the start naming the port, and nothing is launched or written", async () => {

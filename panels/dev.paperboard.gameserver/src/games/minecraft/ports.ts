@@ -1,12 +1,14 @@
-import { claimPort, prepareGamePorts, type PortDeps, type RunPorts } from "../../service/ports";
+import { claimPort, prepareGamePorts, type PortDeps, type PortMove, type RunPorts } from "../../service/ports";
 import type { PortSpec } from "../serviceTypes";
 import * as nodeFs from "node:fs/promises";
 import * as nodePath from "node:path";
 import { BEDROCK_PORT_NAME, JAVA_PORT_NAME, NETHERNET_PORT_NAME } from "../../core/portNames";
-import { parseProperties } from "../../core/properties";
+import { parseProperties, stringifyServerProperties } from "../../core/properties";
 import type { ServerSoftwareType } from "../../software/catalog";
 import { BEDROCK_PORT_SETTING_ID, CROSSPLAY, crossplaySetting, NETHERNET_PORT_SETTING_ID } from "../../software/crossplay";
 import { findCrossplayJars, readBedrockTransport, settleBedrockTransport } from "../../service/crossplay";
+import { serializedFileTask } from "../../service/fileWrites";
+import { writeFileAtomic } from "@mileniumhq/paperapi/fs";
 import { writeSchemaSetting, type LoaderDeps, type LoaderFs } from "../../service/loaderSettings";
 import { unlessMissing } from "../../service/failures";
 
@@ -14,7 +16,10 @@ import { unlessMissing } from "../../service/failures";
 // panel and no other program ends up on the same one. The config files say
 // which port the server wants; right before it starts, each is claimed and
 // checked. A Java port the registry moved is this run's alone: the launch
-// passes it as --port and server.properties keeps the user's. Geyser reads
+// passes it as --port. Paper and the servers built on it save that into
+// server.properties as they start and whenever they save their settings, so
+// while the run lasts the file's port is read as the user's, and once it ends
+// the user's is put back. Geyser reads
 // its ports only from its config, so those are pinned. Turning crossplay on
 // claims the Bedrock ports at once, so they are listed before the first
 // start, and the ports it was given are written into Geyser's config then.
@@ -39,6 +44,29 @@ export async function readJavaPort(deps: LoaderDeps): Promise<number> {
     if (text === null) return DEFAULT_JAVA_PORT;
     const port = Number(parseProperties(text)["server-port"]?.trim());
     return Number.isInteger(port) && port >= 1 && port <= 65535 ? port : DEFAULT_JAVA_PORT;
+}
+
+const javaMove = (moves: readonly PortMove[]) => moves.find((move) => move.label === JAVA_LABEL);
+
+/** server.properties' port as the user chose it: the run's own, which a moved run's server wrote there, reads as the one it moved from. */
+export function chosenJavaPort(port: string | undefined, moves: readonly PortMove[]): string | undefined {
+    const move = javaMove(moves);
+    return move && port?.trim() === String(move.to) ? String(move.from) : port;
+}
+
+/** After a moved run, puts the user's port back where the server wrote the run's over it; any other port there is the user's and stays. */
+export async function restoreJavaPort(moves: readonly PortMove[], deps: LoaderDeps): Promise<void> {
+    const move = javaMove(moves);
+    if (!move) return;
+    const fs = fsOf(deps);
+    const file = await propertiesPath(deps);
+    await serializedFileTask(file, async () => {
+        const text = await unlessMissing(fs.readFile(file, "utf8"), null);
+        if (text === null) return;
+        const props = parseProperties(text);
+        if (props["server-port"]?.trim() !== String(move.to)) return;
+        await writeFileAtomic(file, stringifyServerProperties({ ...props, "server-port": String(move.from) }));
+    });
 }
 
 const PINNED = "Choose another port in Crossplay, or close the program using it.";
