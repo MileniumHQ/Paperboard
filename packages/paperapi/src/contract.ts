@@ -200,7 +200,11 @@ export interface ServiceState<T> {
     refresh(): Promise<T>;
     /** why the last read failed, or null */
     error(): string | null;
-    /** stops mirroring: a client that outlives its window must not keep listening */
+    /**
+     * This client lets go of the mirror, and its subscribers hear no more:
+     * a client that outlives its window must not keep listening. The mirror
+     * stops once every client made for the panel has let go of it.
+     */
     dispose(): void;
 }
 
@@ -226,7 +230,7 @@ export interface ServiceClient<C extends PanelContract<any>, Reach extends "scop
     readonly calls: Reach extends "unscoped" ? UnscopedServiceCalls<C> : ServiceCalls<C>;
     /** each event the service emits, to subscribe to */
     readonly events: { [E in keyof EventsOf<C>]: Subscribe<Infer<EventsOf<C>[E]>> };
-    /** the service's state, for a contract that declares one: read from the first time it is asked for */
+    /** the service's state, for a contract that declares one: mirrored from the moment the client is made, so the page's readiness waits for it */
     readonly state: StateOf<C> extends undefined ? undefined : ServiceState<StateOf<C>>;
     /** each keyed state field, read and followed one key at a time */
     readonly keyed: { readonly [F in keyof KeyedOf<C>]: KeyedState<KeyedOf<C>[F]> };
@@ -266,19 +270,16 @@ export function serviceClient<C extends PanelContract<any>>(contract: C, scope?:
         const id = eventBlockId(name);
         events[name] = (onValue) => blocksApi.onEvent(contract.panelId, id, (fired) => onValue(fired.payload));
     }
-    // the state is mirrored from the first time it is asked for: a client that only calls reads none
-    let state: ServiceState<Record<string, unknown>> | undefined;
+    // the state is mirrored from the moment the client is made, so the page's readiness waits for its first read
     const initial = (contract as AnyContract).state?.initial as Record<string, unknown> | undefined;
+    const state = initial ? holdMirror(contract.panelId, initial) : undefined;
     const pushes = keyedPushes(contract.panelId);
     const keyed = Object.fromEntries(Object.keys((contract as AnyContract).keyed).map((field) => [field, keyedState(contract.panelId, field, pushes)]));
     return {
         panelId: contract.panelId,
         calls: calls as ServiceCalls<C>,
         events: events as ServiceClient<C>["events"],
-        get state() {
-            if (initial) state ??= mirrorState(contract.panelId, initial);
-            return state as ServiceClient<C>["state"];
-        },
+        state: state as ServiceClient<C>["state"],
         keyed: keyed as ServiceClient<C>["keyed"],
     };
 }
@@ -336,6 +337,44 @@ function keyedState(panelId: string, field: string, pushes: ReturnType<typeof ke
                 const changes = Object.hasOwn(patch, field) ? patch[field] : undefined;
                 if (changes && Object.hasOwn(changes, key)) onValue(value(changes[key]));
             }),
+    };
+}
+
+// One mirror of a panel's state per document, started by the first client
+// made for the panel and shared by every client after it: a client made for
+// each call (one per server, say) reads nothing more. Each client holds it
+// until its state is disposed, and the last to let go stops it.
+const mirrors = new Map<string, { state: ServiceState<Record<string, unknown>>; holders: number }>();
+
+function holdMirror(panelId: string, initial: Record<string, unknown>): ServiceState<Record<string, unknown>> {
+    let mirror = mirrors.get(panelId);
+    if (!mirror) mirrors.set(panelId, (mirror = { state: mirrorState(panelId, initial), holders: 0 }));
+    const shared = mirror;
+    shared.holders++;
+    let held = true;
+    // this client's subscribers, which hear no more once it lets go
+    const offs = new Set<() => void>();
+    return {
+        current: () => shared.state.current(),
+        subscribe: (onValue) => {
+            const off = shared.state.subscribe(onValue);
+            offs.add(off);
+            return () => {
+                offs.delete(off);
+                off();
+            };
+        },
+        refresh: () => shared.state.refresh(),
+        error: () => shared.state.error(),
+        dispose: () => {
+            if (!held) return;
+            held = false;
+            for (const off of offs) off();
+            offs.clear();
+            if (--shared.holders > 0) return;
+            if (mirrors.get(panelId) === shared) mirrors.delete(panelId);
+            shared.state.dispose();
+        },
     };
 }
 

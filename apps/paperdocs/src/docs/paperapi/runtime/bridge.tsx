@@ -347,7 +347,7 @@ interface ServiceClient {
                     <tr>
                         <td><PaperCode>state</PaperCode></td>
                         <td><PaperCode>{"ServiceState<State>"}</PaperCode></td>
-                        <td>The service's state as this window mirrors it. The mirror is made the first time <PaperCode>state</PaperCode> is read, so a client that only calls reads no state.</td>
+                        <td>The service's state as this window mirrors it. The mirror starts when the first client for the panel is made, and every client after it shares it, so a client made for each call reads nothing more.</td>
                     </tr>
                     <tr>
                         <td><PaperCode>keyed.x</PaperCode></td>
@@ -390,7 +390,7 @@ interface ServiceClient {
                     <tr>
                         <td><PaperCode>dispose()</PaperCode></td>
                         <td><PaperCode>() =&gt; void</PaperCode></td>
-                        <td>Stops mirroring and drops every subscriber. Call it when the component that read <PaperCode>state</PaperCode> goes away, such as a widget Home removes.</td>
+                        <td>This client lets go of the mirror and drops its own subscribers. The mirror stops once every client that holds it has let go. Call it when the component that read <PaperCode>state</PaperCode> goes away, such as a widget Home removes.</td>
                     </tr>
                 </tbody>
             </PaperTable>
@@ -497,7 +497,7 @@ interface ServiceClient {
             <PaperText preset="body" as="p">
                 Before the shell shows a panel with a service, it waits for the service to answer and for every state mirror on the page to read the state.
                 A mirror whose first read fails makes the shell show the failure in place of the panel.
-                A mirror is made the first time a client's <PaperCode>state</PaperCode> is read, so read it as the page loads, as the sample does with <PaperCode>current()</PaperCode>, and it takes part.
+                A mirror starts when its client is made, so a client made as the page loads takes part, whether or not the page has read its <PaperCode>state</PaperCode> yet.
                 See <PaperLink href="/docs/paperapi/connection/#readiness">Readiness</PaperLink> for the whole sequence.
             </PaperText>
 

@@ -172,9 +172,10 @@ try {
             <PaperTextList ordered>
                 <li>Connects, and reads the service's internal <PaperCode>panel-state</PaperCode> value when the manifest names a service. The service answers once it is ready.</li>
                 <li>On a widget page, mounts the widget the shell asked for.</li>
-                <li>Reads the state into every <PaperLink href="/docs/paperapi/bridge/#readiness">state mirror</PaperLink> on the page: each client whose <PaperCode>state</PaperCode> was read.</li>
+                <li>Reads the state into every <PaperLink href="/docs/paperapi/bridge/#readiness">state mirror</PaperLink> on the page: one for each panel a client was made for.</li>
                 <li>Waits for fonts and images to paint, for at most 4 seconds.</li>
                 <li>Posts <PaperCode>paperboard:ready</PaperCode>, or <PaperCode>paperboard:failed</PaperCode> with the error message, which the shell shows.</li>
+                <li>On a page that is not a widget, tells the computer serving it that the page is open, on the page's own connection, and again after each reconnect. The panel's service hears the count (<PaperLink href="/docs/paperapi/service/">onPagesChanged</PaperLink>).</li>
             </PaperTextList>
             <PaperText preset="body" as="p">
                 The same message tells the page whether Paperboard is in <PaperLink href="/docs/paperui/utilities/#mobile-mode">mobile mode</PaperLink> (<PaperCode>mobile</PaperCode>). PaperAPI writes it as <PaperCode>data-paper-mobile</PaperCode> on the page's root, and again whenever the shell posts <PaperCode>paperboard:mobile</PaperCode> (<PaperCode>MOBILE_MODE_MESSAGE</PaperCode>) with the frame's generation. The shell has already stamped the same value on the document before it loaded.

@@ -4,6 +4,7 @@ import { defineContract, serviceClient, type ServiceClient } from "../src/contra
 import { shape } from "../src/shape";
 import { closeTransport, getTransport } from "../src/ipc";
 import { STATE_EVENT, callBlockId } from "../src/serviceCalls";
+import { hydratePanelBridges } from "../src/panelHydration";
 import { NOTES, notesContract } from "./helpers/contract";
 import { startDaemon, type Daemon, type PanelProcess } from "./helpers/daemon";
 
@@ -68,6 +69,23 @@ describe("a panel's contract", () => {
         await expect(service.calls.brokenAnswer()).rejects.toThrow('The call "brokenAnswer" answered what its contract doesn\'t say: the field "text": expected text, got number 7');
         await expect(service.calls.brokenState()).rejects.toThrow('The state was not changed: the field "count": expected a number, got the text "many"');
         expect((await service.state.refresh()).count).toBe(1);
+    });
+
+    test("a client's state is mirrored from the moment it is made, shared by every client of the panel", async () => {
+        const now = await service.state.refresh();
+        // made and never read: the shell's readiness check still reads it
+        const other = serviceClient(notesContract, { book: "chores" });
+        await hydratePanelBridges(NOTES);
+        expect(other.state.current()).toEqual(now);
+        // a client that lets go stops only its own subscribers
+        let heardOther = 0;
+        let heardMine = 0;
+        other.state.subscribe(() => heardOther++);
+        const off = service.state.subscribe(() => heardMine++);
+        other.state.dispose();
+        await service.state.refresh();
+        off();
+        expect({ heardMine, heardOther }).toEqual({ heardMine: 1, heardOther: 0 });
     });
 
     test("the page waits for a call as long as its contract says", async () => {
