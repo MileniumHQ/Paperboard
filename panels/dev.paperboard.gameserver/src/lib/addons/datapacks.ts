@@ -48,7 +48,7 @@ export const datapacksKind = ({ calls, files, serverStatus, serverVersion }: Ser
             meta: listing,
         };
     },
-    listFailureTitle: () => "Could not read the datapacks folder",
+    listFailureTitle: () => "Couldn't read the datapacks folder",
 
     async search(query, signal) {
         const mcVersion = serverVersion();
@@ -63,7 +63,7 @@ export const datapacksKind = ({ calls, files, serverStatus, serverVersion }: Ser
 
     upload: {
         sources: [pickFiles(files, "Upload zips", ["zip"]), pickFolder(files, "Upload folder")],
-        failureTitle: "Not added",
+        failureTitle: "Couldn't add the datapacks",
         commit: (stage) => calls.uploadDatapacks({ stage }),
         discard: discardUpload(calls),
         describe: (result) => ({
@@ -77,7 +77,7 @@ export const datapacksKind = ({ calls, files, serverStatus, serverVersion }: Ser
         action: "Install",
         busyAction: "Installing…",
         icon: "download",
-        errorTitle: "Not installed",
+        errorTitle: (target) => `Couldn't install ${target.title}`,
         noVersions: () => ({
             title: "No compatible build",
             text: `This datapack has no build for Minecraft ${serverVersion()}.`,
@@ -89,7 +89,7 @@ export const datapacksKind = ({ calls, files, serverStatus, serverVersion }: Ser
         title: () => "Remove datapack",
         action: "Remove",
         busyAction: "Removing…",
-        errorTitle: "Not removed",
+        errorTitle: (item) => `Couldn't remove ${item.title}`,
         describe: (item, listing) =>
             `Move ${item.title} out of ${listing?.meta.world}/datapacks/ into the server folder's trash?${
                 serverStatus() === "online" ? " It stays loaded until the next reload or restart." : ""

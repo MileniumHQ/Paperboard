@@ -1,5 +1,5 @@
 import { createMemo, createSignal, For, Show, untrack } from "solid-js";
-import { PaperButton, PaperFlex, PaperInput, PaperLink, PaperQuote, PaperText, createRead } from "@mileniumhq/paperui";
+import { PaperButton, PaperEmptyState, PaperFlex, PaperInput, PaperLink, PaperText, createRead } from "@mileniumhq/paperui";
 import { errorMessage } from "../../lib/failure";
 import { formatCount } from "../../lib/addons/presentation";
 import { type SourceGameSpec } from "./index";
@@ -29,11 +29,12 @@ export default function WorkshopPane(props: {
     const { calls } = useServer();
     const [query, setQuery] = createSignal("");
     // what is popular, until something is asked for; the answer in view is the last one asked for
-    const found = createRead((): Promise<SourceWorkshopResults> => calls.sourceWorkshopFind({ query: untrack(query) }), { message: errorMessage });
+    const found = createRead((): Promise<SourceWorkshopResults> => calls.sourceWorkshopFind({ query: untrack(query) }), {
+        message: errorMessage,
+        failure: { title: "Couldn't search the Steam Workshop" },
+    });
     const results = found.value;
     const searching = found.loading;
-    // a new search clears the failure at once, as it starts
-    const error = () => (found.loading() ? null : found.error());
     const search = () => found.reload();
 
     const choices = createMemo(() => (results()?.items ?? []).map((hit) => workshopChoice(hit, props.inRotation.includes(workshopName(hit.id)) ? "In the rotation" : hit.subscribers === null ? undefined : `${formatCount(hit.subscribers)} subscribers`)));
@@ -55,14 +56,10 @@ export default function WorkshopPane(props: {
                 />
                 <PaperButton variant="primary" disabled={searching()} onClick={() => void search()}>{searching() ? "Searching..." : "Search"}</PaperButton>
             </PaperFlex>
-            <Show when={error()}>
-                <PaperQuote variant="danger" icon="warning" title="The Steam Workshop could not be searched">
-                    <PaperFlex direction="column" gap="half" align="flex-start">
-                        <span>{error()}</span>
-                        <PaperText size={2}>A Workshop link or item id pasted above is looked up on its own, and may still work.</PaperText>
-                        <PaperButton onClick={() => void search()}>Try again</PaperButton>
-                    </PaperFlex>
-                </PaperQuote>
+            <Show when={!results() && !searching() && found.error()}>
+                <PaperEmptyState icon="error" title="Couldn't search" description="A Workshop link or item id pasted above is looked up on its own, and may still work.">
+                    <PaperButton onClick={() => void search()}>Try again</PaperButton>
+                </PaperEmptyState>
             </Show>
             <Show when={results()}>
                 {(found) => (

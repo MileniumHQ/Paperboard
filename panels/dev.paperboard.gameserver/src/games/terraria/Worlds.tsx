@@ -58,7 +58,7 @@ export default function TerrariaWorlds() {
                 details: (world) => (
                     <>
                         <Show when={world().error}>
-                            <PaperQuote variant="danger" icon="warning" title="This world can't be read">
+                            <PaperQuote variant="warning" icon="warning" title="This world can't be read">
                                 {world().error}
                             </PaperQuote>
                         </Show>

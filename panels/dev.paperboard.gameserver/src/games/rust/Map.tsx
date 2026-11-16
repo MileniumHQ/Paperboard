@@ -1,5 +1,5 @@
 import { createEffect, createSignal, on, Show } from "solid-js";
-import { PaperButton, PaperCard, PaperFlex, PaperIcon, PaperLoader, PaperModal, PaperPageHeader, PaperQuote, PaperSettingItem, PaperSettingList, PaperTable, PaperText, PaperToggle, createAction, createRead } from "@mileniumhq/paperui";
+import { PaperButton, PaperCard, PaperEmptyState, PaperFlex, PaperIcon, PaperLoader, PaperModal, PaperPageHeader, PaperQuote, PaperSettingItem, PaperSettingList, PaperTable, PaperText, PaperToggle, createAction, createFailureToast, createRead, showError } from "@mileniumhq/paperui";
 import { useServer } from "../../lib/server";
 import { errorMessage } from "../../lib/failure";
 import type { RustMapView } from "./index";
@@ -22,12 +22,14 @@ export default function RustMap(props: { active: boolean }) {
     // the map, and the map from above: undefined until read, null until the server draws it
     const map = createRead(
         async (): Promise<{ view: RustMapView; picture: string | null }> => ({ view: await calls.rustMap(), picture: await calls.rustMapPicture() }),
-        { source: () => props.active && serverStatus(), message: errorMessage },
+        { source: () => props.active && serverStatus(), message: errorMessage, failure: { title: "Couldn't load the map" } },
     );
     const view = () => map.value()?.view;
     const picture = () => map.value()?.picture;
     const [drawing, setDrawing] = createSignal(false);
+    // a refused draw is not tried again by itself: Try again draws it
     const [pictureError, setPictureError] = createSignal("");
+    createFailureToast(pictureError, { title: "Couldn't draw the map" });
     // a running server without a picture of its map draws one, once each read lands
     createEffect(
         on(map.loading, (loading) => {
@@ -48,21 +50,19 @@ export default function RustMap(props: { active: boolean }) {
         }
     };
 
-    const ask = () => { setBlueprints(false); wiping.setError(null); setOpen(true); };
-    const wipe = () => wiping.run("Not wiped", async () => {
+    const ask = () => { setBlueprints(false); setOpen(true); };
+    // a failure is a toast over the dialog, which stays open
+    const wipe = () => wiping.run("Couldn't wipe the server", async () => {
         const trashed = view()?.made === true;
         map.set({ view: await calls.rustWipe({ blueprints: blueprints() }), picture: null });
         setWiped({ trashed });
         setOpen(false);
-    });
+    }, (failure) => failure && showError(failure.title, failure.message));
 
     return (
         <>
             <PaperPageHeader icon="map" title="Map" />
 
-            <Show when={map.error()}>
-                <PaperQuote variant="danger" icon="warning" title="The map could not be read">{map.error()}</PaperQuote>
-            </Show>
             <Show when={serverStatus() !== "offline"}>
                 <PaperQuote variant="warning" icon="warning" title="Server running">Stop the server to wipe it.</PaperQuote>
             </Show>
@@ -72,6 +72,14 @@ export default function RustMap(props: { active: boolean }) {
                 </PaperQuote>
             </Show>
 
+            <Show
+                when={view() || !map.error() || map.loading()}
+                fallback={
+                    <PaperEmptyState icon="error" title="Couldn't load">
+                        <PaperButton onClick={() => void map.reload()}>Try again</PaperButton>
+                    </PaperEmptyState>
+                }
+            >
             <PaperCard>
                 <PaperFlex direction="row" wrap gap="full" padding="full" align="flex-start">
                 <PaperFlex grow maxWidth="panel-small" minWidth="field-wide" fullWidth>
@@ -82,10 +90,9 @@ export default function RustMap(props: { active: boolean }) {
                                 <Show
                                     when={!pictureError()}
                                     fallback={
-                                        <PaperFlex direction="column" gap="half" align="center" padding="full">
-                                            <PaperQuote variant="danger" icon="warning" title="The map couldn't be drawn">{pictureError()}</PaperQuote>
+                                        <PaperEmptyState icon="error" title="Couldn't draw the map">
                                             <PaperButton disabled={serverStatus() !== "online"} onClick={() => void draw()}>Try again</PaperButton>
-                                        </PaperFlex>
+                                        </PaperEmptyState>
                                     }
                                 >
                                     <Show
@@ -125,6 +132,7 @@ export default function RustMap(props: { active: boolean }) {
                 </PaperFlex>
                 </PaperFlex>
             </PaperCard>
+            </Show>
 
             <PaperFlex direction="row" justify="flex-end" gap="full" fullWidth>
                 <PaperButton variant="danger" disabled={serverStatus() !== "offline" || !view()} onClick={ask}>
@@ -155,9 +163,6 @@ export default function RustMap(props: { active: boolean }) {
                         <PaperToggle checked={blueprints()} disabled={wiping.busy()} aria-label="Wipe blueprints too" onChange={setBlueprints} />
                     </PaperSettingItem>
                 </PaperSettingList>
-                <Show when={wiping.error()}>
-                    {(failure) => <PaperQuote variant="danger" icon="warning" title={failure().title}>{failure().message}</PaperQuote>}
-                </Show>
             </PaperModal>
         </>
     );

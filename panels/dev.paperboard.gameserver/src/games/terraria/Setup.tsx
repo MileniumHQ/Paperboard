@@ -3,9 +3,9 @@ import {
     createRead,
     PaperButton,
     PaperCenteredInterface,
+    PaperEmptyState,
     PaperFlex,
     PaperIcon,
-    PaperQuote,
     PaperSelector,
     PaperSelectorItem,
     PaperText,
@@ -58,8 +58,11 @@ export default function TerrariaSetup(props: { onComplete(): void }) {
     const [software, setSoftware] = createSignal<TerrariaSoftware>("vanilla");
     const [version, setVersion] = createSignal<string>(releases[0].version);
     const { calls } = useServer();
-    const releasesRead = createRead(async (): Promise<Record<TerrariaSoftware, HostSupport>> => (await calls.terrariaVersions()).hosts, { message: errorMessage });
-    const loadError = releasesRead.error;
+    // what this computer runs: Next waits for it
+    const releasesRead = createRead(async (): Promise<Record<TerrariaSoftware, HostSupport>> => (await calls.terrariaVersions()).hosts, {
+        message: errorMessage,
+        failure: { title: "Couldn't load the Terraria releases" },
+    });
     const support = () => releasesRead.value()?.[software()] ?? null;
 
     return (
@@ -105,8 +108,10 @@ export default function TerrariaSetup(props: { onComplete(): void }) {
                         <PaperText preset="body">
                             Select a release for your {software() === "tmodloader" ? "tModLoader" : "Terraria"} dedicated server. A world is created on the first start; to choose its size, difficulty and seed, make one in Worlds first.
                         </PaperText>
-                        <Show when={loadError()}>
-                            <PaperQuote variant="danger" icon="warning" title="Terraria releases could not be read">{loadError()}</PaperQuote>
+                        <Show when={!releasesRead.value() && releasesRead.error() && !releasesRead.loading()}>
+                            <PaperEmptyState icon="error" title="Couldn't load">
+                                <PaperButton onClick={() => void releasesRead.reload()}>Try again</PaperButton>
+                            </PaperEmptyState>
                         </Show>
                         <UnsupportedHost game="Terraria" host={support()} />
                         <ReleaseSelector software={software()} value={version()} onChange={setVersion} />

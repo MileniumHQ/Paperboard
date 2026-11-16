@@ -51,12 +51,13 @@ describe("Rust's Map tab", () => {
             await page.waitFor(`document.querySelector('input[name=serverMenu][value="map"]')`, "the server menu");
             await page.click('input[name=serverMenu][value="map"]');
             // the first draw Rust refuses: its reason is on screen, with a way to try again
-            await page.waitFor(`document.body.innerText.includes("The map couldn't be drawn") && document.body.innerText.includes("Failed to render: Out of memory")`, "the refused draw's reason");
+            const drawToast = `[...document.querySelectorAll("[data-paper-toasts] [role=alert]")].find((t) => t.innerText.includes("Couldn't draw the map"))`;
+            await page.waitFor(`${drawToast}?.innerText.includes("Failed to render: Out of memory")`, "the refused draw's reason");
             expect(await page.evaluate(`!!document.querySelector("img[alt^='The map from above']")`)).toBe(false);
             plan({});
             await page.evaluate(`${button("Try again")}.click()`);
             await page.waitFor(`document.querySelector("img[alt^='The map from above']")?.src.startsWith("data:image/png;base64,")`, "the drawn map");
-            expect(await page.evaluate(`document.body.innerText.includes("The map couldn't be drawn")`)).toBe(false);
+            expect(await page.evaluate(`!${drawToast} && !document.body.innerText.includes("Couldn't draw the map")`)).toBe(true);
             const identity = path.join(folder(), "server", "paperboard");
             expect(fs.existsSync(path.join(identity, "proceduralmap.1000.12345.png"))).toBe(true);
             // running, a wipe is not offered

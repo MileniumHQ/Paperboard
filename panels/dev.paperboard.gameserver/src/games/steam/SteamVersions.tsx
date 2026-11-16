@@ -8,16 +8,14 @@ import {
     PaperIcon,
     PaperLoader,
     PaperPageHeader,
-    PaperQuote,
     PaperTable,
     PaperText,
 } from "@mileniumhq/paperui";
 import InstallNotices from "../../components/InstallNotices";
 import InstallProgressModal from "../../components/InstallProgressModal";
 import { useServer } from "../../lib/server";
-import { errorMessage, type Outcome } from "../../lib/failure";
+import { errorMessage, splitFailure } from "../../lib/failure";
 import { createSteamInstall, type SteamInstallInfo, type SteamUpdateStatus } from "./installRows";
-import FailureText from "../../components/FailureText";
 
 /**
  * Versions for a Steam dedicated server: Steam serves one current build, so
@@ -28,20 +26,25 @@ export default function SteamVersions(props: { name: string }) {
     const { calls, serverStatus } = useServer();
     const [installOpen, setInstallOpen] = createSignal(false);
     const install = createSteamInstall();
-    const read = createRead((): Promise<SteamInstallInfo> => calls.steamInfo(), { message: errorMessage });
+    // a failure's first line: a toast has no room for what SteamCMD printed after it
+    const summary = (err: unknown) => splitFailure(errorMessage(err)).summary;
+    const read = createRead((): Promise<SteamInstallInfo> => calls.steamInfo(), { message: summary, failure: { title: `Couldn't read the ${props.name} install` } });
     const info = read.value;
-    const loadFailure = (): Outcome | undefined => (!read.loading() && read.error() ? { title: `The ${props.name} install could not be read`, message: read.error()! } : undefined);
+    const loadFailed = () => !read.loading() && !!read.error();
     // a check waits behind a download in progress, and asks Steam over the network
-    const latest = createRead((): Promise<SteamUpdateStatus> => calls.steamLatest(), { message: errorMessage });
+    const latest = createRead((): Promise<SteamUpdateStatus> => calls.steamLatest(), { message: summary, failure: { title: `Couldn't check ${props.name} for updates` } });
     const checking = latest.loading;
     // a failed check knows nothing of the newest build
     const status = () => (latest.error() ? undefined : latest.value());
-    const checkFailure = (): Outcome | undefined => (latest.error() ? { title: `${props.name} could not be checked for updates`, message: latest.error()! } : undefined);
-    const check = latest.reload;
+    // checking again reads the install again too, when it could not be read
+    const check = () => {
+        if (loadFailed()) void read.reload();
+        return latest.reload();
+    };
 
     /** what the install says, once it is read; until then it is being read, or could not be */
     const installed = (fact: (read: SteamInstallInfo) => JSX.Element) => (
-        <Show when={info()} fallback={loadFailure() ? "Not read" : <PaperLoader loaderStatus="indeterminate" size="small" label="Reading the install" />}>
+        <Show when={info()} fallback={loadFailed() ? "Not read" : <PaperLoader loaderStatus="indeterminate" size="small" label="Reading the install" />}>
             {(read) => fact(read())}
         </Show>
     );
@@ -61,11 +64,7 @@ export default function SteamVersions(props: { name: string }) {
         <>
             <PaperPageHeader icon="update" title="Updates" />
 
-            <InstallNotices game={props.name} stopFor="update it" loadFailure={loadFailure()} host={info()?.host ?? null} />
-
-            <Show when={checkFailure()}>
-                {(note) => <PaperQuote variant="danger" icon="warning" title={note().title}><FailureText message={note().message} /></PaperQuote>}
-            </Show>
+            <InstallNotices game={props.name} stopFor="update it" host={info()?.host ?? null} />
 
             <PaperCard>
                 <PaperFlex direction="column" gap="half" padding="full">
@@ -124,7 +123,7 @@ export default function SteamVersions(props: { name: string }) {
             <InstallProgressModal
                 open={installOpen()}
                 rows={install.rows(props.name)}
-                failure={install.error() ? { title: "Update failed", message: install.error() } : undefined}
+                failure={install.error() ? { title: `Couldn't update ${props.name}`, message: install.error() } : undefined}
                 onDismiss={() => { setInstallOpen(false); install.reset(); }}
             />
         </>

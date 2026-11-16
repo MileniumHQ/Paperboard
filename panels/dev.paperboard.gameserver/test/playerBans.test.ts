@@ -116,14 +116,14 @@ describe("the Players tab's bans", () => {
             await page.evaluate(`${button("Ban")}.click()`);
             await page.waitFor(`!!${button("Ban", true)}`, "the ban dialog");
             await page.evaluate(`${button("Ban", true)}.click()`);
-            await page.waitFor(`document.body.innerText.includes("Ghost was not banned") && document.body.innerText.includes("That player does not exist")`, "the server's refusal");
+            await page.waitFor(`[...document.querySelectorAll("[data-paper-toasts] [role=alert]")].some((t) => t.innerText.includes("Couldn't ban Ghost") && t.innerText.includes("That player does not exist"))`, "the server's refusal");
             await page.settled();
             expect(await page.evaluate<boolean>(inspectorShows("Ghost", false))).toBe(true);
             expect(banned()).toEqual(["Steve"]);
             // on a phone the player's page covers the roster: the refusal is on it
-            expect(await page.evaluate<boolean>(seen("Ghost was not banned"))).toBe(true);
+            expect(await page.evaluate<boolean>(seen("Couldn't ban Ghost"))).toBe(true);
             await page.resize(400, 820);
-            await page.waitFor(seen("Ghost was not banned"), "the refusal on the phone's player page");
+            await page.waitFor(seen("Couldn't ban Ghost"), "the refusal on the phone's player page");
             await page.resize(1400, 900);
 
             // a pardon the ban plugin words its own way is done once the list no longer has him
@@ -132,7 +132,7 @@ describe("the Players tab's bans", () => {
             await page.evaluate(`${button("Pardon")}.click()`);
             await page.waitFor(inspectorShows("Steve", false), "Steve shown pardoned");
             expect(banned()).toEqual([]);
-            expect(await page.evaluate<boolean>(`document.body.innerText.includes("was not pardoned")`)).toBe(false);
+            expect(await page.evaluate<boolean>(`document.body.innerText.includes("Couldn't pardon")`)).toBe(false);
 
             // the server makes him an operator: the switch is the list it wrote
             const operator = `[...document.querySelectorAll("[role=switch]")].find((el) => !el.closest("[inert]") && el.closest("li, [class*=PaperSettingItem]")?.innerText.includes("Operator"))`;

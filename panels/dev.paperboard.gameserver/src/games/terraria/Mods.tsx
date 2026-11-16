@@ -1,5 +1,5 @@
 import { createEffect, createSignal, For, on, Show } from "solid-js";
-import { PaperButton, PaperEffect, PaperIcon, PaperQuote, PaperText } from "@mileniumhq/paperui";
+import { createFailureToast, PaperButton, PaperEffect, PaperEmptyState, PaperIcon, PaperQuote, PaperText, showError } from "@mileniumhq/paperui";
 import { errorMessage } from "../../lib/failure";
 import { listAdded } from "../../lib/addons/upload";
 import { changeMessage, workshopMods, type ModChange } from "../../lib/addons/workshop";
@@ -14,32 +14,30 @@ import type { WorkshopItem } from "../steam/modscan";
 // checks each file's own references before anything is placed.
 function RequiredMods(props: InstallExtrasProps & { requiredChain(ids: string[]): Promise<WorkshopItem[]> }) {
     const [titles, setTitles] = createSignal<string[] | null>(null);
+    // the install waits until they are resolved, so a failure holds it
     const [error, setError] = createSignal("");
+    createFailureToast(error, { title: "Couldn't resolve its dependencies" });
     const required = () => props.target.dependencies ?? [];
 
-    createEffect(
-        on(
-            () => props.target.projectId,
-            () => {
-                const ids = required();
-                setTitles(null);
-                setError("");
-                props.report({ ready: ids.length === 0, payload: ids });
-                if (ids.length === 0) return;
-                const own = props.target.projectId;
-                props.requiredChain(ids)
-                    .then((items) => {
-                        if (props.target.projectId !== own) return;
-                        setTitles(items.map((i) => i.title));
-                        props.report({ ready: true, payload: ids });
-                    })
-                    .catch((err) => {
-                        if (props.target.projectId !== own) return;
-                        setError(errorMessage(err));
-                    });
-            },
-        ),
-    );
+    const resolve = () => {
+        const ids = required();
+        setTitles(null);
+        setError("");
+        props.report({ ready: ids.length === 0, payload: ids });
+        if (ids.length === 0) return;
+        const own = props.target.projectId;
+        props.requiredChain(ids)
+            .then((items) => {
+                if (props.target.projectId !== own) return;
+                setTitles(items.map((i) => i.title));
+                props.report({ ready: true, payload: ids });
+            })
+            .catch((err) => {
+                if (props.target.projectId !== own) return;
+                setError(errorMessage(err));
+            });
+    };
+    createEffect(on(() => props.target.projectId, resolve));
 
     return (
         <>
@@ -49,9 +47,9 @@ function RequiredMods(props: InstallExtrasProps & { requiredChain(ids: string[])
                 </PaperText>
             </Show>
             <Show when={error()}>
-                <PaperQuote variant="danger" icon="warning" title="Couldn't resolve its dependencies">
-                    {error()}
-                </PaperQuote>
+                <PaperEmptyState icon="error" title="Couldn't load">
+                    <PaperButton onClick={resolve}>Try again</PaperButton>
+                </PaperEmptyState>
             </Show>
             <Show when={titles()?.length}>
                 <PaperText size={3} weight={700}>
@@ -83,10 +81,8 @@ export default function TerrariaMods(props: { active: boolean }) {
     });
 
     const [updating, setUpdating] = createSignal(false);
-    const [updateError, setUpdateError] = createSignal("");
     const update = async () => {
         setUpdating(true);
-        setUpdateError("");
         setNotice(null);
         try {
             const { result, restart } = await server.calls.terrariaModUpdates();
@@ -97,7 +93,7 @@ export default function TerrariaMods(props: { active: boolean }) {
             );
             await browser.reload();
         } catch (err) {
-            setUpdateError(errorMessage(err));
+            showError("Couldn't update the mods", errorMessage(err));
             // the mods updated before the failure show as they now are
             await browser.reload();
         } finally {
@@ -118,20 +114,13 @@ export default function TerrariaMods(props: { active: boolean }) {
                 </PaperEffect>
             }
             notices={
-                <>
-                    <Show when={updateError()}>
-                        <PaperQuote variant="danger" icon="warning" title="Mods not updated">
-                            {updateError()}
+                <Show when={notice()}>
+                    {(note) => (
+                        <PaperQuote variant="success" icon="check_circle" title={note().title}>
+                            {note().message}
                         </PaperQuote>
-                    </Show>
-                    <Show when={notice()}>
-                        {(note) => (
-                            <PaperQuote variant="success" icon="check_circle" title={note().title}>
-                                {note().message}
-                            </PaperQuote>
-                        )}
-                    </Show>
-                </>
+                    )}
+                </Show>
             }
         />
     );

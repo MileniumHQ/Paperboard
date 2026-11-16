@@ -4,17 +4,17 @@ import {
     PaperCenteredInterface,
     PaperEmptyState,
     PaperModal,
-    PaperQuote,
     PaperText,
     PaperWizard,
     PaperWizardStep,
+    showError,
 } from "@mileniumhq/paperui";
 import InstallStepView, { createWizardInstall } from "../../components/InstallStepView";
 import { UnsupportedHost } from "../../components/InstallNotices";
 import { useServer } from "../../lib/server";
-import { errorMessage, type Outcome } from "../../lib/failure";
+import { errorMessage, splitFailure } from "../../lib/failure";
 import { createSteamInstall, type SteamInstallInfo } from "./installRows";
-import FailureText from "../../components/FailureText";
+import FailureOutput from "../../components/FailureOutput";
 import InstallLoaders from "../../components/InstallLoaders";
 import { formatSize } from "../../lib/addons/presentation";
 
@@ -22,7 +22,8 @@ function InstallStep(props: { name: string }) {
     const { calls, installProgress } = useServer();
     const install = createSteamInstall();
     const { run, wizard, disposed } = createWizardInstall(install.run);
-    const [blocked, setBlocked] = createSignal<{ failure?: Outcome; host?: SteamInstallInfo["host"] } | null>(null);
+    // what stops the download: a computer the game can't run on, or a check that failed (its words, with SteamCMD's output)
+    const [blocked, setBlocked] = createSignal<{ failure?: string; host?: SteamInstallInfo["host"] } | null>(null);
     // the download's size, asked of Steam before it starts; the user says when it does
     const [size, setSize] = createSignal<number | null>(null);
     const [asking, setAsking] = createSignal(false);
@@ -33,14 +34,22 @@ function InstallStep(props: { name: string }) {
         void run();
     };
 
+    /** a check that failed: the toast says why, and the step offers Try again */
+    const failed = (title: string, err: unknown) => {
+        if (disposed()) return;
+        const message = errorMessage(err);
+        setBlocked({ failure: message });
+        showError(title, splitFailure(message).summary);
+    };
+
     // the host is checked first, so an unsupported computer is told why instead of downloading
-    onMount(async () => {
-        wizard?.setOptionsShown(false);
+    const check = async () => {
+        setBlocked(null);
         let info: SteamInstallInfo;
         try {
             info = await calls.steamInfo();
         } catch (err) {
-            if (!disposed()) setBlocked({ failure: { title: `${props.name} could not be checked`, message: errorMessage(err) } });
+            failed(`Couldn't check ${props.name}`, err);
             return;
         }
         if (disposed()) return;
@@ -59,13 +68,17 @@ function InstallStep(props: { name: string }) {
             try {
                 bytes = await calls.steamSize();
             } catch (err) {
-                if (!disposed()) setBlocked({ failure: { title: `${props.name}'s download size could not be read`, message: errorMessage(err) } });
+                failed(`Couldn't read ${props.name}'s download size`, err);
                 return;
             }
             if (disposed()) return;
             setSize(bytes);
             setAsking(true);
         }
+    };
+    onMount(() => {
+        wizard?.setOptionsShown(false);
+        void check();
     });
 
     return (
@@ -75,7 +88,15 @@ function InstallStep(props: { name: string }) {
                 <PaperCenteredInterface>
                     <UnsupportedHost game={props.name} host={blocked()!.host ?? null} />
                     <Show when={blocked()!.failure}>
-                        {(note) => <PaperQuote variant="danger" icon="warning" title={note().title}><FailureText message={note().message} /></PaperQuote>}
+                        {(message) => (
+                            <>
+                                <PaperEmptyState icon="error" title="Couldn't load">
+                                    <PaperButton onClick={() => void check()}>Try again</PaperButton>
+                                </PaperEmptyState>
+                                {/* what SteamCMD printed, which the toast leaves out */}
+                                <FailureOutput message={message()} />
+                            </>
+                        )}
                     </Show>
                 </PaperCenteredInterface>
             }

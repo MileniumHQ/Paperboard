@@ -153,7 +153,7 @@ describe("Terraria's Worlds tab", () => {
             expect(await page.evaluate<string>(`${DIALOG}.innerText`)).toContain("Small (4200 × 1200 tiles)");
             // a download here has no Paperboard window to save it through, and says so
             await page.evaluate(`${button("Download", DIALOG)}.click()`);
-            await page.waitFor(`${text("World not downloaded")} && ${text("needs a panel shown in Paperboard")}`, "the download's failure");
+            await page.waitFor(`[...document.querySelectorAll("[data-paper-toasts] [role=alert]")].some((t) => t.textContent.includes("Couldn't download the world") && t.textContent.includes("needs a panel shown in Paperboard"))`, "the download's failure");
             await page.evaluate(`${button("Switch to this world", DIALOG)}.click()`);
             await page.waitFor(`${row("terraria-worlds", "Cavern")}?.parentElement.textContent.includes("Active") && !${row("terraria-worlds", "Island")}.parentElement.textContent.includes("Active")`, "Cavern active");
             expect(settingsOf("s-ter").world).toBe("Cavern");

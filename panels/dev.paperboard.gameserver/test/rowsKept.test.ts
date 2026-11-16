@@ -78,7 +78,7 @@ describe("the Loader tab", () => {
             // the server folder can't be written, so the save is refused and the tab reads the files again
             fs.chmodSync(folder, 0o555);
             await page.evaluate(`${row("Allow the End")}.querySelector("[role=switch]").click()`);
-            await page.waitFor(`document.body.innerText.includes("Not saved")`, "the refusal");
+            await page.waitFor(`[...document.querySelectorAll("[data-paper-toasts] [role=alert]")].some((t) => t.innerText.includes("Couldn't save the setting") && t.innerText.includes("isn't allowed to"))`, "the refusal");
             await page.settled();
             expect(await page.evaluate<string>(`${row("Allow the End")}.querySelector("[role=switch]").getAttribute("aria-checked")`)).toBe("true");
             expect(await page.evaluate<string | undefined>(`${row("Monster spawn limit")}?.dataset.test`)).toBe("kept");

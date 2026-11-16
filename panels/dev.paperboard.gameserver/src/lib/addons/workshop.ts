@@ -181,7 +181,7 @@ export function workshopMods({ calls, files, serverVersion }: ServerPage): { kin
 
     upload: {
         sources: [pickFiles(files, "Upload mods", ["tmod"])],
-        failureTitle: "Not added",
+        failureTitle: "Couldn't add the mods",
         // checking the files and their references waits on any running change
         commit: (stage) => calls.terrariaModUpload({ stage }),
         discard: discardUpload(calls),
@@ -196,7 +196,7 @@ export function workshopMods({ calls, files, serverVersion }: ServerPage): { kin
         action: "Install",
         busyAction: "Installing…",
         icon: "download",
-        errorTitle: "Install failed",
+        errorTitle: (target) => `Couldn't install ${target.title}`,
         noVersions: () => ({ title: "Nothing to install", text: `Steam Workshop has no file for tModLoader ${serverVersion()}.` }),
         // SteamCMD's first run updates itself, then downloads; minutes, not seconds
         run: (target, _versionId, payload) =>
@@ -207,7 +207,7 @@ export function workshopMods({ calls, files, serverVersion }: ServerPage): { kin
         title: (item) => `Uninstall ${item.title}`,
         action: "Uninstall",
         busyAction: "Uninstalling…",
-        errorTitle: "Couldn't uninstall",
+        errorTitle: (item) => `Couldn't uninstall ${item.title}`,
         describe: () =>
             "This moves the mod out of tModLoader/Mods/ into a .trash folder inside the server folder, where it can be restored, and turns it off. The change takes effect after a restart.",
         run: async (item) => {

@@ -2,6 +2,7 @@ import { For, Show, type Component } from "solid-js";
 import { Dynamic } from "solid-js/web";
 import {
     PaperButton,
+    PaperEmptyState,
     PaperFlex,
     PaperIcon,
     PaperLink,
@@ -60,7 +61,14 @@ export function AddonInstallModal<Meta>(props: {
                         <Show
                             when={install().versions()}
                             fallback={
-                                <Show when={!install().error()}>
+                                <Show
+                                    when={!install().versionsFailed()}
+                                    fallback={
+                                        <PaperEmptyState icon="error" title="Couldn't load">
+                                            <PaperButton onClick={install().retryVersions}>Try again</PaperButton>
+                                        </PaperEmptyState>
+                                    }
+                                >
                                     <PaperText size={2} color="text-subtle">
                                         Loading versions from {props.kind.source.name}...
                                     </PaperText>
@@ -113,11 +121,6 @@ export function AddonInstallModal<Meta>(props: {
                                 report={install().report}
                             />
                         </Show>
-                        <Show when={install().error()}>
-                            <PaperQuote variant="danger" icon="warning" title={props.kind.install.errorTitle}>
-                                {install().error()}
-                            </PaperQuote>
-                        </Show>
                     </PaperFlex>
                 )}
             </Show>
@@ -157,11 +160,6 @@ export function AddonRemoveModal<Meta>(props: {
             <PaperFlex direction="column" gap="half">
                 <Show when={remove().pending()}>
                     {(item) => <PaperText preset="body">{props.kind.remove.describe(item(), props.listing)}</PaperText>}
-                </Show>
-                <Show when={remove().error()}>
-                    <PaperQuote variant="danger" icon="warning" title={props.kind.remove.errorTitle}>
-                        {remove().error()}
-                    </PaperQuote>
                 </Show>
             </PaperFlex>
         </PaperModal>

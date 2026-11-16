@@ -1,5 +1,5 @@
 import { createMemo, createSignal, Show } from "solid-js";
-import { createAction, createRead, PaperAvatar, PaperButton, PaperModal, PaperQuote, PaperText } from "@mileniumhq/paperui";
+import { createAction, createFailureToast, createRead, PaperAvatar, PaperButton, PaperEmptyState, PaperModal, PaperText, showError } from "@mileniumhq/paperui";
 import ServerOverview, { EditableDetail } from "../../components/ServerOverview";
 import { useServer } from "../../lib/server";
 import { errorMessage } from "../../lib/failure";
@@ -27,6 +27,7 @@ export default function SourceOverview(props: { spec: SourceGameSpec; game: Game
     const pictures = createMapPictures(props.spec);
     const uptime = createUptime();
     const metrics = createMetrics(calls.sourceMetrics);
+    createFailureToast(metrics.error, { title: "Couldn't read the server's figures" });
     /** how the server plays: the game mode it was started in, or its map's; a map of no listed mode is a custom one */
     const mode = () => {
         const chosen = gameSettings().gamemode;
@@ -36,20 +37,22 @@ export default function SourceOverview(props: { spec: SourceGameSpec; game: Game
     };
     const workshop = createWorkshopMaps(props.spec);
     const choices = createMemo(() => [...mapChoices(props.spec, maps()), ...workshop.choices()]);
-    /** why the dialog can't change the map: the change's failure, or a read's */
-    const error = () => changing.error()?.message ?? (listed.loading() ? null : listed.error()) ?? workshop.error();
+    // the dialog's reads, said while it is open
+    const listFailure = () => (open() && !listed.loading() ? listed.error() : null);
+    createFailureToast(listFailure, { title: "Couldn't load the maps" });
+    createFailureToast(() => open() && workshop.error(), { title: "Couldn't load the Workshop maps" });
 
     const edit = () => {
         setChoice(map());
-        changing.setError(null);
         setOpen(true);
         if (props.spec.workshop) void workshop.reload();
     };
     const change = () =>
-        changing.run("Map not changed", async () => {
+        // a failure is a toast over the dialog, which stays open
+        changing.run("Couldn't change the map", async () => {
             await calls.sourceChangeMap({ map: choice() });
             setOpen(false);
-        });
+        }, (failure) => failure && showError(failure.title, failure.message));
     const label = (name: string) => mapMode(props.spec, name);
     /** the map as people name it: its Workshop title or real name, the file name beside it, and what it plays as */
     const detail = () => {
@@ -75,10 +78,6 @@ export default function SourceOverview(props: { spec: SourceGameSpec; game: Game
                 { icon: "sports_esports", label: "Game mode", value: mode() },
             )}
         >
-            <Show when={metrics.error()}>
-                <PaperQuote variant="danger" icon="warning" title="Server figures unavailable">{metrics.error()}</PaperQuote>
-            </Show>
-
             <PaperModal
                 open={open()}
                 onClose={() => setOpen(false)}
@@ -98,11 +97,17 @@ export default function SourceOverview(props: { spec: SourceGameSpec; game: Game
                         ? "Everyone moves to the new map now, and the server starts on it next time."
                         : "The server starts on this map."}
                 </PaperText>
-                <Show when={maps().length > 0} fallback={<Show when={!error()}><PaperText color="text-subtle">Loading maps...</PaperText></Show>}>
+                <Show
+                    when={maps().length > 0}
+                    fallback={
+                        <Show when={listFailure()} fallback={<PaperText color="text-subtle">Loading maps...</PaperText>}>
+                            <PaperEmptyState icon="error" title="Couldn't load">
+                                <PaperButton onClick={() => void listed.reload()}>Try again</PaperButton>
+                            </PaperEmptyState>
+                        </Show>
+                    }
+                >
                     <MapCards maps={choices()} value={choice()} pictures={pictures} disabled={busy()} onPick={setChoice} />
-                </Show>
-                <Show when={error()}>
-                    <PaperQuote variant="danger" icon="warning" title="Map not changed">{error()}</PaperQuote>
                 </Show>
             </PaperModal>
         </ServerOverview>

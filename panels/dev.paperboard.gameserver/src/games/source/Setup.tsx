@@ -1,5 +1,5 @@
 import { createMemo, createSignal, For, Show } from "solid-js";
-import { createAction, createRead, PaperButton, PaperCenteredInterface, PaperFlex, PaperIcon, PaperMediaCard, PaperMediaCardGroup, PaperQuote, PaperText, PaperWizardStep } from "@mileniumhq/paperui";
+import { createAction, createRead, PaperButton, PaperCenteredInterface, PaperEmptyState, PaperFlex, PaperIcon, PaperMediaCard, PaperMediaCardGroup, PaperText, PaperWizardStep, showError } from "@mileniumhq/paperui";
 import { errorMessage } from "../../lib/failure";
 import SteamSetup from "../steam/SteamSetup";
 import { type SourceGameSpec } from "./index";
@@ -29,8 +29,12 @@ export default function SourceSetup(props: { spec: SourceGameSpec; onComplete():
     const pictures = createMapPictures(props.spec);
     // the maps are only there once the download is, so they are read when its step is left
     const [downloaded, setDownloaded] = createSignal(false);
-    // a failure is shown where the modes would be
-    const listed = createRead((): Promise<string[]> => calls.sourceMaps(), { source: downloaded, message: errorMessage });
+    // a failure is a toast, and Couldn't load stands where the modes would be
+    const listed = createRead((): Promise<string[]> => calls.sourceMaps(), {
+        source: downloaded,
+        message: errorMessage,
+        failure: { title: `Couldn't load ${props.spec.name}'s maps` },
+    });
     const installed = listed.value;
     // the mode picked ("" before one is), and null for the game's own map cycle
     const [mode, setMode] = createSignal<string | null | "">("");
@@ -61,10 +65,11 @@ export default function SourceSetup(props: { spec: SourceGameSpec; onComplete():
         setMap(gameDefault() ?? "");
     };
 
-    const save = () => saving.run("Setup is not finished", () => {
+    // a failure stays on this step, to press Finish Setup again
+    const save = () => saving.run("Couldn't finish setup", () => {
         const choice: Choice = { mode: mode() as string | null, map: map() };
         return calls.sourcePlay(choice);
-    });
+    }, (failure) => failure && showError(failure.title, failure.message));
 
     return (
         <SteamSetup
@@ -81,13 +86,10 @@ export default function SourceSetup(props: { spec: SourceGameSpec; onComplete():
                                     Pick a game mode and the server plays its maps in turn, or leave it mixed. You can change this any time on the Maps tab.
                                 </PaperText>
                                 <PaperFlex direction="column" gap="half" fullWidth flex minHeight={0} scrollable="y">
-                                <Show when={listed.error()}>
-                                    <PaperQuote variant="danger" icon="warning" title={`Couldn't read ${props.spec.name}'s maps`}>
-                                        <PaperFlex direction="column" gap="half" align="flex-start">
-                                            <span>{listed.error()}</span>
-                                            <PaperButton onClick={() => void listed.reload()}>Try again</PaperButton>
-                                        </PaperFlex>
-                                    </PaperQuote>
+                                <Show when={!installed() && listed.error() && !listed.loading()}>
+                                    <PaperEmptyState icon="error" title="Couldn't load">
+                                        <PaperButton onClick={() => void listed.reload()}>Try again</PaperButton>
+                                    </PaperEmptyState>
                                 </Show>
                                 <MapPicturesFailure pictures={pictures} />
                                 <Show when={installed()}>
@@ -129,9 +131,6 @@ export default function SourceSetup(props: { spec: SourceGameSpec; onComplete():
                                         ? "The server starts on this map, then follows the game's own map cycle."
                                         : `The server starts on this map, then plays the other ${chosenMode()?.name ?? ""} maps in turn. Change the rotation any time on the Maps tab.`}
                                 </PaperText>
-                                <Show when={saving.error()}>
-                                    {(failure) => <PaperQuote variant="danger" icon="warning" title={failure().title}>{failure().message}</PaperQuote>}
-                                </Show>
                                 <PaperFlex direction="column" fullWidth flex minHeight={0} scrollable="y">
                                     <MapCards maps={startableChoices()} value={map()} pictures={pictures} hideMode={mode() !== null} disabled={saving.busy()} onPick={setMap} />
                                 </PaperFlex>

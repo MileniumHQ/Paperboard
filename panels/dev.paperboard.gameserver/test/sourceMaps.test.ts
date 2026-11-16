@@ -31,6 +31,8 @@ const installDir = (id: string) => path.join(daemon.dataDir, "files", PANEL_ID, 
 
 // A stand-in for modscan's TF2 answers: one Workshop map, and one item that is no map
 const UPWARD = "3000000001";
+// a community map whose name is longer than its card is wide
+const LONG_MAP = "pl_the_longest_community_payload_map_ever_made_final_v3";
 const workshopItem = (id: string, title: string, tags: string[]) => ({
     id, title, description: "", previewImageUrl: null, tags, authorId: "76561198000000001", subscriptions: 4200, favorites: 10,
     timeUpdated: 1_700_000_000, fileSize: 1024, children: [], workshopUrl: `https://steamcommunity.com/sharedfiles/filedetails/?id=${id}`,
@@ -60,7 +62,7 @@ async function setUp() {
         fs.writeFileSync(config(), JSON.stringify({ version: 2, serversDirectory: SERVERS, servers: [server("s-tf", "Payload", { configured: true }), server("s-new", "Fresh", {})] }));
         writeTree(installDir("s-tf"), {
             [`steamapps/appmanifest_${TF2.appId}.acf`]: `"AppState"\n{\n\t"appid"\t\t"${TF2.appId}"\n\t"buildid"\t\t"19000000"\n}\n`,
-            "tf/maps/ctf_2fort.bsp": "", "tf/maps/pl_badwater.bsp": "", "tf/maps/koth_harvest_final.bsp": "",
+            "tf/maps/ctf_2fort.bsp": "", "tf/maps/pl_badwater.bsp": "", "tf/maps/koth_harvest_final.bsp": "", "tf/maps/cp_well.bsp": "", [`tf/maps/${LONG_MAP}.bsp`]: "",
             "tf/cfg/mapcycle.txt": "ctf_2fort\npl_badwater\n",
         });
         const { gameServerService } = await import("../src/service");
@@ -111,6 +113,30 @@ describe("a Source game's Maps tab", () => {
         }
     });
 
+    test("a map card's long name stays on one line, cut with an ellipsis, so its row of cards keeps the height of the others", async () => {
+        const served = await setUp();
+        const page = await openMaps(served);
+        try {
+            await page.waitFor(`${button("Edit rotation")} || ${button("Add maps")}`, "the rotation");
+            await page.evaluate(`(${button("Edit rotation")} ?? ${button("Add maps")}).click()`);
+            await page.waitFor(`${button("Add maps")} && !${button("Add maps")}.disabled`, "the rotation to be Paperboard's");
+            await page.evaluate(`${button("Add maps")}.click()`);
+            await page.waitFor(`${card(LONG_MAP, "[role=dialog]")} && ${card("cp_well", "[role=dialog]")}`, "the maps to add");
+            // a card's name, as the card shows it
+            const name = (map: string) => `[...${card(map, "[role=dialog]")}.querySelectorAll("[class*=title]")].filter((el) => el.textContent === ${JSON.stringify(map)}).at(-1)`;
+            const fits = await page.evaluate<{ long: number; short: number; cut: boolean }>(`(() => {
+                const long = ${name(LONG_MAP)};
+                const cut = [long, ...long.querySelectorAll("*")].some((el) => el.scrollWidth > el.clientWidth && getComputedStyle(el).textOverflow === "ellipsis");
+                return { long: long.getBoundingClientRect().height, short: ${name("cp_well")}.getBoundingClientRect().height, cut };
+            })()`);
+            expect(fits).toEqual({ long: fits.short, short: fits.short, cut: true });
+            expect(page.exceptions).toEqual([]);
+        } finally {
+            await page.close();
+            served.stop();
+        }
+    });
+
     test("moving a map up or down, or removing one, changes the rotation the server reads; the last map stays with a reason", async () => {
         const served = await setUp();
         await serverCalls("s-tf").sourceMapCycleSet({ maps: ["ctf_2fort", "pl_badwater", "koth_harvest_final"] });
@@ -131,7 +157,7 @@ describe("a Source game's Maps tab", () => {
             await page.evaluate(`${rowButton("ctf_2fort", (t) => `Remove ${t}`)}.click()`);
             await shows(["koth_harvest_final"], "ctf_2fort removed");
             await page.evaluate(`${rowButton("koth_harvest_final", (t) => `Remove ${t}`)}.click()`);
-            await page.waitFor(`document.body.innerText.includes("A rotation needs at least one map")`, "why the last map stays");
+            await page.waitFor(`[...document.querySelectorAll("[data-paper-toasts] [role=alert]")].some((t) => t.innerText.includes("Couldn't remove") && t.innerText.includes("A rotation needs at least one map"))`, "why the last map stays");
             await page.settled();
             expect(await page.evaluate(ROTATION)).toEqual(["koth_harvest_final"]);
             expect(stored("s-tf").mapCycle).toEqual(["koth_harvest_final"]);

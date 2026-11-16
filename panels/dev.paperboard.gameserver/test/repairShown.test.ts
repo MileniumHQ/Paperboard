@@ -48,8 +48,11 @@ describe("the server issue repairs", () => {
             await page.waitFor(`document.body.innerText.includes("Port Conflict Detected")`, "the port conflict to be shown");
             await page.evaluate(`[...document.querySelectorAll("button")].find((b) => b.innerText.includes("Kill Process")).dataset.test = "kill"`);
             await page.click('button[data-test="kill"]');
-            await page.waitFor(`document.body.innerText.includes("Repair failed")`, "the failed repair to be shown");
-            expect(await page.evaluate<string>("document.body.innerText")).toMatch(/Could not look up the process on port \d+ \(lsof exited 2\)/);
+            // a toast over the issue, which stays open
+            const toast = `[...document.querySelectorAll("[data-paper-toasts] [role=alert]")].find((t) => t.innerText.includes("Couldn't repair the server"))`;
+            await page.waitFor(toast, "the failed repair to be shown");
+            expect(await page.evaluate<string>(`${toast}.innerText`)).toMatch(/Could not look up the process on port \d+ \(lsof exited 2\)/);
+            expect(await page.evaluate<string>(`document.querySelector("[role=dialog]")?.innerText ?? ""`)).toContain("Port Conflict Detected");
             expect(page.exceptions).toEqual([]);
         } finally {
             await page.close();
@@ -65,12 +68,13 @@ describe("the server issue repairs", () => {
         const page = await openPage(`${served.url}/?server=s-bad`);
         const button = (label: string) => `[...document.querySelectorAll("button")].find((b) => b.innerText.trim() === ${JSON.stringify(label)})`;
         try {
-            await page.waitFor(`document.body.innerText.includes("This server could not be set up")`, "the setup failure on the Overview");
-            expect(await page.evaluate<string>("document.body.innerText")).toContain("EEXIST");
+            const toast = `[...document.querySelectorAll("[data-paper-toasts] [role=alert]")].find((t) => t.innerText.includes("Couldn't set up this server"))`;
+            await page.waitFor(`${toast} && document.body.innerText.includes("This server isn't set up")`, "the setup failure on the Overview");
+            expect(await page.evaluate<string>(`${toast}.innerText`)).toContain("EEXIST");
             expect(await page.evaluate<string>("document.body.innerText")).not.toContain("needs cleaning up");
             fs.rmSync(path.join(daemon.dataDir, "files", PANEL_ID, SERVERS, "s-bad"));
             await page.evaluate(`${button("Try again")}.click()`);
-            await page.waitFor(`!document.body.innerText.includes("This server could not be set up")`, "the notice to go once it is set up");
+            await page.waitFor(`!${toast} && !document.body.innerText.includes("This server isn't set up")`, "the notice and its toast to go once it is set up");
             expect(fs.statSync(path.join(daemon.dataDir, "files", PANEL_ID, SERVERS, "s-bad")).isDirectory()).toBe(true);
             expect(page.exceptions).toEqual([]);
         } finally {

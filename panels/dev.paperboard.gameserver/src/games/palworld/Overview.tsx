@@ -1,5 +1,5 @@
 import { createSignal, Show } from "solid-js";
-import { createAction, PaperAvatar, PaperButton, PaperInput, PaperModal, PaperQuote, PaperText } from "@mileniumhq/paperui";
+import { createAction, createFailureToast, PaperAvatar, PaperButton, PaperInput, PaperModal, PaperQuote, PaperText, showError } from "@mileniumhq/paperui";
 import ServerOverview, { EditableDetail } from "../../components/ServerOverview";
 import { useServer } from "../../lib/server";
 import { errorMessage } from "../../lib/failure";
@@ -16,14 +16,16 @@ export default function PalworldOverview() {
     const [draft, setDraft] = createSignal("");
     const saving = createAction({ message: errorMessage });
     const [pending, setPending] = createSignal(false);
-    const edit = () => { setDraft(description()); saving.setError(null); setOpen(true); };
-    const save = () => saving.run("Description not saved", async () => {
+    const edit = () => { setDraft(description()); setOpen(true); };
+    // a failure is a toast over the dialog, which stays open to try again
+    const save = () => saving.run("Couldn't save the description", async () => {
         await calls.writeGameOptions({ patch: { [DESCRIPTION]: draft().trim() } });
         setPending(serverStatus() !== "offline");
         setOpen(false);
-    });
+    }, (failure) => failure && showError(failure.title, failure.message));
 
     const metrics = createMetrics(calls.palworldMetrics);
+    createFailureToast(metrics.error, { title: "Couldn't read the server's health" });
     const uptime = createUptime();
 
     return (
@@ -44,10 +46,6 @@ export default function PalworldOverview() {
                 { icon: "wb_sunny", label: "In-game days", value: String(metrics.value()!.days) },
             )}
         >
-            <Show when={metrics.error()}>
-                <PaperQuote variant="danger" icon="warning" title="Server health unavailable">{metrics.error()}</PaperQuote>
-            </Show>
-
             <Show when={pending()}>
                 <PaperQuote variant="warning" icon="info" title="Description saved" onDismiss={() => setPending(false)}>
                     The server list shows it after the server restarts.
@@ -77,9 +75,6 @@ export default function PalworldOverview() {
                     onInput={(e) => setDraft(e.currentTarget.value)}
                     onKeyDown={(e) => { if (e.key === "Enter" && !saving.busy() && draft().trim() !== description()) void save(); }}
                 />
-                <Show when={saving.error()}>
-                    {(failure) => <PaperQuote variant="danger" icon="warning" title={failure().title}>{failure().message}</PaperQuote>}
-                </Show>
             </PaperModal>
         </ServerOverview>
     );

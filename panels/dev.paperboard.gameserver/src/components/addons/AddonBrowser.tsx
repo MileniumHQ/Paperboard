@@ -1,5 +1,5 @@
 import { For, Show, type Component, type JSX } from "solid-js";
-import { PaperButton, PaperFlex, PaperIcon, PaperPageHeader, PaperQuote } from "@mileniumhq/paperui";
+import { PaperButton, PaperEmptyState, PaperFlex, PaperIcon, PaperPageHeader, PaperQuote } from "@mileniumhq/paperui";
 import { AddonInstalledList, AddonResults, AddonSearchCard } from "./AddonCards";
 import { AddonDetail, type DetailExtras } from "./AddonDetail";
 import { AddonInstallModal, AddonRemoveModal, AddonUploadConfirmModal, type InstallExtrasProps } from "./AddonModals";
@@ -44,11 +44,6 @@ export default function AddonBrowser<Meta = undefined>(props: AddonBrowserProps<
 
             {props.notices}
 
-            <Show when={b().uploadError()}>
-                <PaperQuote variant="danger" icon="warning" title={b().kind.upload?.failureTitle ?? "Upload failed"}>
-                    {b().uploadError()}
-                </PaperQuote>
-            </Show>
             <Show when={b().uploadNotice()}>
                 {(notice) => (
                     <PaperQuote variant="success" icon="check_circle" title={notice().title}>
@@ -57,28 +52,6 @@ export default function AddonBrowser<Meta = undefined>(props: AddonBrowserProps<
                 )}
             </Show>
 
-            <Show when={b().listError()}>
-                <PaperQuote variant="danger" icon="warning" title={b().kind.listFailureTitle()}>
-                    <PaperFlex direction="column" gap="half">
-                        <span>{b().listError()}</span>
-                        <PaperFlex direction="row" gap="half">
-                            <PaperButton onClick={() => void b().reload()}>Try again</PaperButton>
-                            <Show when={b().kind.recover}>
-                                {(way) => (
-                                    <PaperButton disabled={b().recovering() || way().disabled?.()} onClick={() => void b().recover()}>
-                                        {way().label}
-                                    </PaperButton>
-                                )}
-                            </Show>
-                        </PaperFlex>
-                    </PaperFlex>
-                </PaperQuote>
-            </Show>
-            <Show when={b().recoverError()}>
-                <PaperQuote variant="danger" icon="warning" title={b().kind.recover?.errorTitle ?? "Failed"}>
-                    {b().recoverError()}
-                </PaperQuote>
-            </Show>
             <Show when={b().listing()?.warning}>
                 {(warning) => (
                     <PaperQuote variant="warning" icon="warning" title={warning().title}>
@@ -88,7 +61,23 @@ export default function AddonBrowser<Meta = undefined>(props: AddonBrowserProps<
             </Show>
 
             <PaperFlex direction="column" gap="full">
-                <Show when={b().listing()}>
+                <Show
+                    when={b().listing()}
+                    fallback={
+                        <Show when={b().listError()}>
+                            <PaperEmptyState icon="error" title="Couldn't load">
+                                <PaperButton disabled={b().listLoading()} onClick={() => void b().reload()}>Try again</PaperButton>
+                                <Show when={b().kind.recover}>
+                                    {(way) => (
+                                        <PaperButton disabled={b().recovering() || way().disabled?.()} onClick={() => void b().recover()}>
+                                            {way().label}
+                                        </PaperButton>
+                                    )}
+                                </Show>
+                            </PaperEmptyState>
+                        </Show>
+                    }
+                >
                     {(current) => (
                         <AddonInstalledList
                             kind={b().kind}

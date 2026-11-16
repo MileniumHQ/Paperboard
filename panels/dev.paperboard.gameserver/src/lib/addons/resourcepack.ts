@@ -85,7 +85,7 @@ export const resourcePackKind = ({ calls, files, serverVersion }: ServerPage): A
         action: "Use pack",
         busyAction: "Setting…",
         icon: "check",
-        errorTitle: "Resource pack not set",
+        errorTitle: (target) => `Couldn't use ${target.title}`,
         noVersions: () => ({
             title: "No compatible build",
             text: `This resource pack has no build for Minecraft ${serverVersion()}.`,
@@ -97,7 +97,7 @@ export const resourcePackKind = ({ calls, files, serverVersion }: ServerPage): A
         title: () => "Remove resource pack",
         action: "Remove",
         busyAction: "Removing…",
-        errorTitle: "Resource pack not removed",
+        errorTitle: () => "Couldn't remove the resource pack",
         describe: (item) =>
             `Stop offering ${item.title} to players? server.properties no longer points at it. Players get the change the next time the server starts.`,
         run: () => calls.removeResourcePack().then(() => undefined),

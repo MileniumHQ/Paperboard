@@ -96,8 +96,9 @@ describe("an online player's page", () => {
         };
         try {
             await onSteve(async (page) => {
-                await page.waitFor(`document.body.innerText.includes("Live stats not read")`, "the failed ask to be shown");
-                expect(await page.evaluate<string>("document.body.innerText")).toContain("the server's console is not taking commands");
+                const toast = `[...document.querySelectorAll("[data-paper-toasts] [role=alert]")].find((t) => t.innerText.includes("Couldn't read the live stats"))`;
+                await page.waitFor(toast, "the failed ask to be shown");
+                expect(await page.evaluate<string>(`${toast}.innerText`)).toContain("the server's console is not taking commands");
             });
         } finally {
             minecraftCalls.queryPlayerStats = ask;

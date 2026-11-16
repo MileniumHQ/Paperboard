@@ -3,13 +3,13 @@ import {
     PaperBadge,
     PaperButton,
     PaperCard,
+    PaperEmptyState,
     PaperFlex,
     PaperIcon,
     PaperInput,
     PaperLink,
     PaperList,
     PaperListItem,
-    PaperQuote,
     PaperText,
 } from "@mileniumhq/paperui";
 import type { AddonHit, AddonKind, AddonListing, InstalledAddon } from "../../lib/addons/kind";
@@ -88,7 +88,7 @@ export function AddonInstalledList<Meta>(props: {
     );
 }
 
-/** The search box and what went wrong with it. */
+/** The search box. */
 export function AddonSearchCard<Meta>(props: { kind: AddonKind<Meta>; search: ReturnType<typeof createAddonSearch> }) {
     return (
         <PaperCard>
@@ -127,16 +127,6 @@ export function AddonSearchCard<Meta>(props: { kind: AddonKind<Meta>; search: Re
                         </PaperText>
                     )}
                 </For>
-                <Show when={props.search.error()}>
-                    <PaperQuote variant="danger" icon="warning" title="Search failed">
-                        <PaperFlex direction="column" gap="half">
-                            <span>{props.search.error()}</span>
-                            <PaperButton disabled={props.search.searching()} onClick={() => void props.search.run()}>
-                                Retry search
-                            </PaperButton>
-                        </PaperFlex>
-                    </PaperQuote>
-                </Show>
             </PaperFlex>
         </PaperCard>
     );
@@ -157,6 +147,11 @@ export function AddonResults<Meta>(props: {
                         Searching {props.kind.source.name}...
                     </PaperText>
                 </PaperFlex>
+            </Show>
+            <Show when={!props.search.searching() && props.search.error()}>
+                <PaperEmptyState icon="error" title="Couldn't search">
+                    <PaperButton onClick={() => void props.search.run()}>Try again</PaperButton>
+                </PaperEmptyState>
             </Show>
             <Show when={!props.search.searching() && !props.search.error() && props.search.results()}>
                 {(hits) => (

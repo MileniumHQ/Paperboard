@@ -12,6 +12,7 @@ import {
     PaperQuote,
     PaperText,
     createRead,
+    showError,
 } from "@mileniumhq/paperui";
 import { useServer } from "../../lib/server";
 import { errorMessage } from "../../lib/failure";
@@ -31,12 +32,13 @@ import { canonicalMap, workshopId, workshopName, type SourceWorkshopHit, type So
 export default function SourceMaps(props: { spec: SourceGameSpec; active: boolean }) {
     const { calls, serverLevel, serverStatus } = useServer();
     // read while the tab is open, and again as the server starts or stops
-    const cycle = createRead((): Promise<SourceMapCycle> => calls.sourceMapCycle(), { source: () => props.active && serverStatus(), message: errorMessage });
+    const cycle = createRead((): Promise<SourceMapCycle> => calls.sourceMapCycle(), {
+        source: () => props.active && serverStatus(),
+        message: errorMessage,
+        failure: { title: "Couldn't load the map rotation" },
+    });
     const view = cycle.value;
-    // a read again clears the failure at once, as it starts
-    const loadError = () => (cycle.loading() ? null : cycle.error());
     const [working, setWorking] = createSignal(false);
-    const [error, setError] = createSignal<{ title: string; message: string } | null>(null);
     const [notice, setNotice] = createSignal("");
     const [resetting, setResetting] = createSignal(false);
     const [adding, setAdding] = createSignal(false);
@@ -47,23 +49,22 @@ export default function SourceMaps(props: { spec: SourceGameSpec; active: boolea
     const shownRemoving = createMemo<SourceWorkshopMap | null>((prev) => removingWorkshop() ?? prev, null);
     const pictures = createMapPictures(props.spec);
 
-    /** Sets the rotation, or hands it back to the game's file with null. */
+    /** Sets the rotation, or hands it back to the game's file with null. `title` names what failed. */
     const save = async (maps: string[] | null, title: string) => {
         setWorking(true);
-        setError(null);
         setNotice("");
         try {
             // a save's answer wins over a read sent before it
             cycle.set(await calls.sourceMapCycleSet({ maps }));
             return true;
         } catch (err) {
-            setError({ title, message: errorMessage(err) });
+            showError(title, errorMessage(err));
             // whatever did land is what the page shows
             await cycle.reload();
-            return false;
         } finally {
             setWorking(false);
         }
+        return false;
     };
 
     const label = (name: string) => mapMode(props.spec, name);
@@ -79,34 +80,33 @@ export default function SourceMaps(props: { spec: SourceGameSpec; active: boolea
     const editable = () => !!view() && !view()!.overriddenBy;
 
     const add = (name: string) => {
-        if (name) void save([...view()!.maps, name], `${titleOf(name)} was not added`);
+        if (name) void save([...view()!.maps, name], `Couldn't add ${titleOf(name)}`);
     };
     const remove = (name: string) => {
         const maps = view()!.maps.filter((m) => m !== name);
-        if (maps.length === 0) setError({ title: `${titleOf(name)} was not removed`, message: "A rotation needs at least one map. Use the game's map cycle instead to stop choosing." });
-        else void save(maps, `${titleOf(name)} was not removed`);
+        if (maps.length === 0) showError(`Couldn't remove ${titleOf(name)}`, "A rotation needs at least one map. Use the game's map cycle instead to stop choosing.");
+        else void save(maps, `Couldn't remove ${titleOf(name)}`);
     };
     /** A Workshop map chosen in the search: added to the server, then to the rotation. */
     const addFromWorkshop = async (hit: SourceWorkshopHit) => {
         setWorking(true);
-        setError(null);
         try {
             await calls.sourceWorkshopAdd({ id: hit.id });
         } catch (err) {
-            setError({ title: `${hit.title} was not added`, message: errorMessage(err) });
+            showError(`Couldn't add ${hit.title}`, errorMessage(err));
             setWorking(false);
             return;
         }
         setWorking(false);
         const name = workshopName(hit.id);
-        if (view()!.maps.includes(name)) setError({ title: `${hit.title} was not added`, message: "It is in the rotation already." });
-        else if (await save([...view()!.maps, name], `${hit.title} was not added to the rotation`)) setJoined(`${hit.title} joined the end of the rotation.`);
+        if (view()!.maps.includes(name)) showError(`Couldn't add ${hit.title}`, "It is in the rotation already.");
+        else if (await save([...view()!.maps, name], `Couldn't add ${hit.title} to the rotation`)) setJoined(`${hit.title} joined the end of the rotation.`);
     };
     const move = (name: string, by: number) => {
         const maps = [...view()!.maps];
         const from = maps.indexOf(name);
         maps.splice(from + by, 0, ...maps.splice(from, 1));
-        void save(maps, `${titleOf(name)} was not moved`);
+        void save(maps, `Couldn't move ${titleOf(name)}`);
     };
 
     /** Makes the file's rotation Paperboard's, leaving out what the server couldn't play anyway. */
@@ -119,24 +119,24 @@ export default function SourceMaps(props: { spec: SourceGameSpec; active: boolea
             missing.length > 0 ? `${missing.join(", ")} ${missing.length === 1 ? "isn't" : "aren't"} installed, so ${missing.length === 1 ? "it was" : "they were"} left out.` : "",
             repeated > 0 ? `${repeated === 1 ? "A map was" : `${repeated} maps were`} listed more than once and play once.` : "",
         ].filter(Boolean).join(" ");
-        if (await save(maps, "Rotation not changed") && left) setNotice(left);
+        if (await save(maps, "Couldn't change the rotation") && left) setNotice(left);
     };
     /** Takes a Steam Workshop map off the server; the server says when it can't. */
     const removeWorkshop = async (map: SourceWorkshopMap) => {
         setWorking(true);
-        setError(null);
         try {
             await calls.sourceWorkshopRemove({ id: map.id });
             setRemovingWorkshop(null);
             await cycle.reload();
         } catch (err) {
-            setError({ title: `${map.title} was not removed`, message: errorMessage(err) });
+            // the dialog stays open
+            showError(`Couldn't remove ${map.title}`, errorMessage(err));
         } finally {
             setWorking(false);
         }
     };
     const reset = async () => {
-        if (await save(null, "Rotation not reset")) setResetting(false);
+        if (await save(null, "Couldn't reset the rotation")) setResetting(false);
     };
 
     return (
@@ -151,15 +151,16 @@ export default function SourceMaps(props: { spec: SourceGameSpec; active: boolea
                 </Show>
             </PaperPageHeader>
 
-            <Show when={loadError()}>
-                <PaperQuote variant="danger" icon="warning" title="Could not read the map rotation">
-                    <PaperFlex direction="column" gap="half">
-                        <span>{loadError()}</span>
-                        <PaperButton onClick={() => void cycle.reload()}>Try again</PaperButton>
-                    </PaperFlex>
-                </PaperQuote>
-            </Show>
-            <Show when={view()}>
+            <Show
+                when={view()}
+                fallback={
+                    <Show when={cycle.error() && !cycle.loading()}>
+                        <PaperEmptyState icon="error" title="Couldn't load">
+                            <PaperButton onClick={() => void cycle.reload()}>Try again</PaperButton>
+                        </PaperEmptyState>
+                    </Show>
+                }
+            >
                 {(current) => (
                     <PaperFlex direction="column" gap="full">
                         <Show when={current().overriddenBy}>
@@ -170,13 +171,6 @@ export default function SourceMaps(props: { spec: SourceGameSpec; active: boolea
                             )}
                         </Show>
                         <MapPicturesFailure pictures={pictures} />
-                        <Show when={error()}>
-                            {(failure) => (
-                                <PaperQuote variant="danger" icon="warning" title={failure().title} onDismiss={() => setError(null)}>
-                                    {failure().message}
-                                </PaperQuote>
-                            )}
-                        </Show>
                         <Show when={notice()}>
                             <PaperQuote variant="warning" icon="info" title="Rotation made from the file" onDismiss={() => setNotice("")}>
                                 {notice()}
@@ -196,7 +190,7 @@ export default function SourceMaps(props: { spec: SourceGameSpec; active: boolea
                                 value=""
                                 fullWidth
                                 reorderable={current().custom && editable() && !working()}
-                                onReorder={(order) => void save(order.map(String), "Rotation not reordered")}
+                                onReorder={(order) => void save(order.map(String), "Couldn't reorder the rotation")}
                             >
                                 <For each={current().maps}>
                                     {(name, index) => {
@@ -235,7 +229,7 @@ export default function SourceMaps(props: { spec: SourceGameSpec; active: boolea
                                                 value={map.id}
                                                 icon={<PictureAvatar from="steam-workshop" size="large" shape="square" url={map.previewImageUrl} alt={map.title} fallbackIcon="map" />}
                                                 description={current().workshopHeld[map.id] ?? "On this server"}
-                                                actions={<PaperButton variant="text" disabled={working() || !!current().workshopHeld[map.id]} onClick={() => { setError(null); setRemovingWorkshop(map); }}>Remove</PaperButton>}
+                                                actions={<PaperButton variant="text" disabled={working() || !!current().workshopHeld[map.id]} onClick={() => setRemovingWorkshop(map)}>Remove</PaperButton>}
                                             >
                                                 {map.title}
                                             </PaperListItem>
@@ -264,9 +258,6 @@ export default function SourceMaps(props: { spec: SourceGameSpec; active: boolea
                 <PaperText preset="body">
                     {shownRemoving()?.title} is taken off this server, and you can add it again from the Steam Workshop any time.
                 </PaperText>
-                <Show when={error()}>
-                    <PaperText size={2} color="danger">{error()!.message}</PaperText>
-                </Show>
             </PaperModal>
 
             <PaperModal
@@ -282,9 +273,6 @@ export default function SourceMaps(props: { spec: SourceGameSpec; active: boolea
                         <PaperChip selected={source() === "server"} onClick={() => setSource("server")}>On this server</PaperChip>
                         <PaperChip selected={source() === "workshop"} onClick={() => setSource("workshop")}>Steam Workshop</PaperChip>
                     </PaperFlex>
-                </Show>
-                <Show when={error()}>
-                    {(failure) => <PaperQuote variant="danger" icon="warning" title={failure().title} onDismiss={() => setError(null)}>{failure().message}</PaperQuote>}
                 </Show>
                 <Show when={joined()}>
                     <PaperQuote variant="success" icon="check_circle" onDismiss={() => setJoined("")}>{joined()}</PaperQuote>
@@ -316,9 +304,6 @@ export default function SourceMaps(props: { spec: SourceGameSpec; active: boolea
                 <PaperText preset="body">
                     This deletes the rotation made here. The server goes back to reading its own map cycle file.
                 </PaperText>
-                <Show when={error()}>
-                    <PaperText size={2} color="danger">{error()!.message}</PaperText>
-                </Show>
             </PaperModal>
         </>
     );

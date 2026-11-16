@@ -48,10 +48,10 @@ export function modpacksKind({ calls, files, serverSoftware, serverStatus, serve
         const { modpack } = await calls.readModpack();
         return { items: modpack ? [installedModpack(modpack, loader())] : [], meta: modpack };
     },
-    listFailureTitle: () => "Could not read the installed modpack",
+    listFailureTitle: () => "Couldn't read the installed modpack",
     recover: {
         label: "Forget it (files stay)",
-        errorTitle: "Not forgotten",
+        errorTitle: "Couldn't forget the modpack",
         disabled: () => !offline(),
         run: () => calls.removeModpack().then(() => undefined),
     },
@@ -82,7 +82,7 @@ export function modpacksKind({ calls, files, serverSoftware, serverStatus, serve
     itemClick: "none",
     upload: {
         sources: [pickModpackFile(files, "Upload .mrpack")],
-        failureTitle: "Not installed",
+        failureTitle: "Couldn't install the modpack",
         confirm: {
             title: "Install this modpack",
             text: "Every jar in mods/ moves to the server folder's trash, and configs the pack ships replace yours (the old ones go to the trash too). The server switches to the pack's Minecraft version and loader build if they differ; a world opened by a newer version cannot go back. Worlds and server.properties are kept.",
@@ -105,7 +105,7 @@ export function modpacksKind({ calls, files, serverSoftware, serverStatus, serve
         action: "Install",
         busyAction: "Installing…",
         icon: "download",
-        errorTitle: "Not installed",
+        errorTitle: (target) => `Couldn't install ${target.title}`,
         noVersions: () => ({ title: "No compatible version", text: `This modpack has no ${loader()} version.` }),
         disabled: () => !offline(),
         // downloading and placing a pack runs for minutes: the contract waits it out (progress arrives through state)
@@ -116,7 +116,7 @@ export function modpacksKind({ calls, files, serverSoftware, serverStatus, serve
         title: () => "Remove modpack",
         action: "Remove",
         busyAction: "Removing…",
-        errorTitle: "Not removed",
+        errorTitle: (item) => `Couldn't remove ${item.title}`,
         describe: (item, listing) =>
             `Move the ${listing?.meta?.files.length} files ${item.title} placed into the server folder's trash? ${loader()} ${listing?.meta?.loaderVersion} stays installed, and so do mods and configs you added.`,
         disabled: () => !offline(),

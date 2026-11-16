@@ -87,7 +87,9 @@ export function pluginsKind(server: ServerPage): AddonKind {
         get sources() {
             return [pickFiles(files, isMods() ? "Upload mods" : "Upload plugins", ["jar"])];
         },
-        failureTitle: "Not added",
+        get failureTitle() {
+            return isMods() ? "Couldn't add the mods" : "Couldn't add the plugins";
+        },
         commit: (stage) => calls.uploadPlugins({ stage }),
         discard: discardUpload(calls),
         describe: (result) => ({
@@ -101,7 +103,7 @@ export function pluginsKind(server: ServerPage): AddonKind {
         action: "Install",
         busyAction: "Installing…",
         icon: "download",
-        errorTitle: "Install failed",
+        errorTitle: (target) => `Couldn't install ${target.title}`,
         noVersions: () => ({
             title: "No compatible build",
             text: `This ${isMods() ? "mod" : "plugin"} has no build for Minecraft ${serverVersion()}.`,
@@ -121,7 +123,7 @@ export function pluginsKind(server: ServerPage): AddonKind {
         title: (item) => `Uninstall ${item.id}`,
         action: "Uninstall",
         busyAction: "Uninstalling…",
-        errorTitle: "Couldn't uninstall",
+        errorTitle: (item) => `Couldn't uninstall ${item.id}`,
         describe: () =>
             `This moves the jar out of the server's ${pluginDirName(minecraftSoftware(serverSoftware()))}/ folder into a .trash folder inside the server folder, where it can be restored. The change takes effect after a restart.`,
         // service-owned: trash-first delete, never a bare fileApi.delete

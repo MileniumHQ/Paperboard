@@ -28,6 +28,8 @@ const SERVERS = "servers-0123456789ab";
 const INI = "saved/Config/LinuxServer/PalWorldSettings.ini";
 const quote = (title: string) => `[...document.querySelectorAll("[role=alert], [class*=PaperQuote]")].find((q) => q.innerText.includes(${JSON.stringify(title)}))`;
 const quoteText = (page: Page, title: string) => page.evaluate<string>(`${quote(title)}?.innerText ?? ""`);
+const toast = (title: string) => `[...document.querySelectorAll("[data-paper-toasts] [role=alert]")].find((t) => t.innerText.includes(${JSON.stringify(title)}))`;
+const toastText = (page: Page, title: string) => page.evaluate<string>(`${toast(title)}?.innerText ?? ""`);
 
 // Failures are shown, not swallowed.
 describe("failures are shown", () => {
@@ -130,8 +132,8 @@ describe("failures are shown", () => {
         const mc = await openPage(`${served.url}/?server=s-mc`);
         await mc.waitFor(`document.querySelector('input[placeholder="Command"]')`, "the console");
         await mc.type('input[placeholder="Command"]', "list", true);
-        await mc.waitFor(quote("Command not run"), "the refused command to be shown");
-        expect(await quoteText(mc, "Command not run")).toContain("Cannot execute command: server is offline.");
+        await mc.waitFor(toast("Couldn't run the command"), "the refused command to be shown");
+        expect(await toastText(mc, "Couldn't run the command")).toContain("Cannot execute command: server is offline.");
         expect(await mc.evaluate<string>("document.body.innerText")).toContain("Cannot execute command: server is offline.");
 
         // the server list message saves into a folder that can't be written
@@ -143,8 +145,11 @@ describe("failures are shown", () => {
             await mc.waitFor(`[...document.querySelectorAll("button")].some((b) => b.innerText.trim() === "Save" && !b.disabled)`, "the message to load");
             await mc.evaluate(`[...document.querySelectorAll("button")].find((b) => b.innerText.trim() === "Save").dataset.test = "motd"`);
             await mc.click('button[data-test="motd"]');
-            await mc.waitFor(quote("Couldn't save"), "the refused message to be shown");
-            expect(await quoteText(mc, "Couldn't save")).toContain("Paperboard isn't allowed to");
+            // a toast over the editor, which stays open with the message in it
+            const saveToast = `[...document.querySelectorAll("[data-paper-toasts] [role=alert]")].find((t) => t.innerText.includes("Couldn't save the message"))`;
+            await mc.waitFor(saveToast, "the refused message to be shown");
+            expect(await mc.evaluate<string>(`${saveToast}.innerText`)).toContain("Paperboard isn't allowed to");
+            expect(await mc.evaluate<boolean>(`document.querySelector("[role=dialog]") !== null`)).toBe(true);
         } finally {
             fs.chmodSync(mcDir, 0o700);
         }
@@ -157,8 +162,8 @@ describe("failures are shown", () => {
             await pal.waitFor(`document.body.innerText.includes("ONLINE")`, "Palworld to show online");
             await pal.evaluate(`[...document.querySelectorAll("button")].find((b) => b.innerText.includes("Save world")).dataset.test = "save"`);
             await pal.click('button[data-test="save"]');
-            await pal.waitFor(quote("World not saved"), "the refused save to be shown");
-            expect(await quoteText(pal, "World not saved")).toContain("Palworld answered 500 to save: disk full");
+            await pal.waitFor(toast("Couldn't save the world"), "the refused save to be shown");
+            expect(await toastText(pal, "Couldn't save the world")).toContain("Palworld answered 500 to save: disk full");
 
             // a description that can't be written says it in a sentence, from the readable failure
             const ini = path.join(filesRoot, "s-pal", ...INI.split("/"));
@@ -169,8 +174,10 @@ describe("failures are shown", () => {
                 await pal.type('input[maxlength="256"]', "A new description");
                 await pal.evaluate(`[...document.querySelectorAll("button")].find((b) => b.innerText.trim() === "Save").dataset.test = "describe"`);
                 await pal.click('button[data-test="describe"]');
-                await pal.waitFor(quote("Description not saved"), "the refused description to be shown");
-                expect(await quoteText(pal, "Description not saved")).toContain("Paperboard isn't allowed to");
+                await pal.waitFor(toast("Couldn't save the description"), "the refused description to be shown");
+                expect(await toastText(pal, "Couldn't save the description")).toContain("Paperboard isn't allowed to");
+                // the dialog stays open to try again
+                expect(await pal.evaluate<boolean>(`!!document.querySelector('input[maxlength="256"]')`)).toBe(true);
                 await pal.evaluate(`[...document.querySelectorAll("button")].find((b) => b.innerText.trim() === "Cancel").dataset.test = "cancel"`);
                 await pal.click('button[data-test="cancel"]');
                 await pal.waitFor(`!document.querySelector('input[maxlength="256"]')`, "the dialog to close");
@@ -179,8 +186,11 @@ describe("failures are shown", () => {
             }
 
             await pal.type('[class*=PaperConsole] input[placeholder="Message"]', "restart soon", true);
-            await pal.waitFor(quote("Message not sent"), "the refused broadcast to be shown");
-            expect(await quoteText(pal, "Message not sent")).toContain("Palworld answered 500 to announce: chat is switched off");
+            await pal.waitFor(toast("Couldn't send the message"), "the refused broadcast to be shown");
+            expect(await toastText(pal, "Couldn't send the message")).toContain("Palworld answered 500 to announce: chat is switched off");
+            // the toasts closed, so the chat's own refusal is a toast of its own and none covers the Say button
+            await pal.evaluate(`document.querySelectorAll('[data-paper-toasts] button[aria-label="Close"]').forEach((close) => close.click())`);
+            await pal.waitFor(`!document.querySelector("[data-paper-toasts]")`, "the toasts to close");
 
             // the Say button sends through say-chat, and a message that did not go out comes back to the field
             await pal.click('input[name=serverMenu][value="chat"]');
@@ -189,8 +199,8 @@ describe("failures are shown", () => {
             await pal.type('input[placeholder="Message"]:not([class*=PaperConsole] *)', "hello all");
             await pal.evaluate(`[...document.querySelectorAll("button")].find((b) => b.innerText.includes("Say")).dataset.test = "say"`);
             await pal.click('button[data-test="say"]');
-            await pal.waitFor(quote("Message not sent"), "the refused chat message to be shown");
-            expect(await quoteText(pal, "Message not sent")).toContain("Palworld answered 500 to announce: chat is switched off");
+            await pal.waitFor(toast("Couldn't send the message"), "the refused chat message to be shown");
+            expect(await toastText(pal, "Couldn't send the message")).toContain("Palworld answered 500 to announce: chat is switched off");
             expect(await pal.evaluate<string>(`document.querySelector('input[placeholder="Message"]:not([class*=PaperConsole] *)').value`)).toBe("hello all");
             expect(pal.sentFrames.slice(sentBefore).filter((f) => f.includes("command.call-say-chat") && f.includes("hello all"))).toHaveLength(1);
             expect([pal.exceptions, mc.exceptions]).toEqual([[], []]);

@@ -118,7 +118,7 @@ export interface AddonUploadSource {
 
 export interface AddonUpload {
     sources: AddonUploadSource[];
-    /** the title over a failed upload */
+    /** what a failed upload says failed: "Couldn't add the plugins" */
     failureTitle: string;
     /** asks before adding what was picked, for an upload that replaces things */
     confirm?: { title: string; text: string; action: string };
@@ -151,7 +151,7 @@ export interface AddonKind<Meta = undefined> {
     watch?(): unknown;
 
     list(): Promise<AddonListing<Meta>>;
-    /** the title over a listing failure */
+    /** what a failed listing says failed: "Couldn't read plugins/" */
     listFailureTitle(): string;
     /** a way out of a listing failure that the kind offers, e.g. forgetting a record it cannot read */
     recover?: { label: string; errorTitle: string; disabled?(): boolean; run(): Promise<void> };
@@ -175,7 +175,8 @@ export interface AddonKind<Meta = undefined> {
         action: string;
         busyAction: string;
         icon: string;
-        errorTitle: string;
+        /** what a failed install says failed: "Couldn't install EssentialsX" */
+        errorTitle(target: AddonTarget): string;
         noVersions(): { title: string; text: string };
         /** the dialog cannot be confirmed, e.g. while the server runs */
         disabled?(): boolean;
@@ -187,7 +188,8 @@ export interface AddonKind<Meta = undefined> {
         title(item: InstalledAddon): string;
         action: string;
         busyAction: string;
-        errorTitle: string;
+        /** what a failed removal says failed */
+        errorTitle(item: InstalledAddon): string;
         describe(item: InstalledAddon, listing: AddonListing<Meta> | null): string;
         disabled?(): boolean;
         run(item: InstalledAddon): Promise<void>;

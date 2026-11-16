@@ -200,11 +200,11 @@ describe("a running server's Overview at the narrowest window", () => {
         try {
             await page.waitFor(`${button("Start")} && ${CONSOLE_INPUT}`, "the stopped server's Overview");
             await page.type(`[class*=PaperConsole] input`, "list", true);
-            await page.waitFor(text("Command not run"), "the refused command's notice");
+            await page.waitFor(text("Couldn't run the command"), "the refused command's notice");
             exited = new Promise<void>((resolve) => processApi.onExit(`${MC}-mc-server`, () => resolve()));
             await start(page);
             await page.waitFor(`${button("Stop")} && ${text("Online")}`, "the server online");
-            await page.waitFor(`!${text("Command not run")}`, "the stale notice gone");
+            await page.waitFor(`!${text("Couldn't run the command")}`, "the stale notice gone");
         } finally {
             await page.close();
             if (exited) {

@@ -1,4 +1,4 @@
-import { createLatest, createRead } from "@mileniumhq/paperui/headless";
+import { createFailureToast, createLatest, createRead, showError } from "@mileniumhq/paperui/headless";
 import { batch, createEffect, createSignal, on, onCleanup, type Accessor } from "solid-js";
 import { errorMessage } from "../../lib/failure";
 import { versionLabel } from "../../lib/addons/presentation";
@@ -20,12 +20,21 @@ import { newStage, stageFolder } from "../../lib/addons/upload";
 
 const TYPING_DEBOUNCE_MS = 400;
 
-/** what is installed, read while `reading` is on and each time it changes; a reload keeps the entries it did not change, so their cards stay */
+/**
+ * What is installed, read while `reading` is on and each time it changes; a
+ * reload keeps the entries it did not change, so their cards stay. A failed
+ * read is a toast, and the last listing stays on screen.
+ */
 export function createAddonListing<Meta>(kind: Accessor<AddonKind<Meta>>, reading: Accessor<unknown>) {
     const read = createRead<AddonListing<Meta>, unknown>(() => kind().list(), { source: reading, message: errorMessage });
-    // a listing that failed shows none, not the last one as if it were current
-    const listing = (): AddonListing<Meta> | null => (read.error() === null ? (read.value() ?? null) : null);
-    return { listing, error: () => read.error() ?? "", reload: read.reload };
+    const error = () => (read.loading() ? "" : (read.error() ?? ""));
+    // the title follows the kind: plugins/ or mods/ as the software changes
+    createFailureToast(error, {
+        get title() {
+            return kind().listFailureTitle();
+        },
+    });
+    return { listing: () => read.value() ?? null, error, loading: read.loading, reload: read.reload };
 }
 
 export function createAddonSearch(kind: Accessor<Pick<AddonKind<unknown>, "title" | "search" | "source">>) {
@@ -66,6 +75,12 @@ export function createAddonSearch(kind: Accessor<Pick<AddonKind<unknown>, "title
         timer = setTimeout(() => void run(), TYPING_DEBOUNCE_MS);
     };
 
+    createFailureToast(error, {
+        get title() {
+            return `Couldn't search ${kind().source.name}`;
+        },
+    });
+
     return { query, type, results, searching, error, run };
 }
 
@@ -77,41 +92,47 @@ export function createAddonInstall<Meta>(
     const [versions, setVersions] = createSignal<AddonVersion[] | null>(null);
     const [loading, setLoading] = createSignal(false);
     const [versionId, setVersionId] = createSignal("");
-    const [error, setError] = createSignal("");
+    // the versions could not be read: the dialog has nothing to pick from
+    const [versionsFailed, setVersionsFailed] = createSignal(false);
     const [installing, setInstalling] = createSignal(false);
     // a kind's dialog extras (dependency checks) hold the install until they are ready
     const [ready, setReady] = createSignal(true);
     const [payload, setPayload] = createSignal<unknown>(undefined);
     const latestVersions = createLatest();
 
+    /** reads the versions of `next`; a newer target (or none) drops this one's answer */
+    const readVersions = (next: AddonTarget | null) => {
+        const current = latestVersions();
+        setVersions(null);
+        setVersionId("");
+        setVersionsFailed(false);
+        setLoading(next !== null);
+        if (!next) return;
+        kind()
+            .versions(next.projectId)
+            .then((answer) => {
+                if (!current()) return;
+                batch(() => {
+                    setVersions(answer);
+                    setVersionId(defaultVersion(kind(), answer)?.id ?? "");
+                    setLoading(false);
+                });
+            })
+            .catch((err) => {
+                if (!current()) return;
+                batch(() => {
+                    setVersionsFailed(true);
+                    setLoading(false);
+                });
+                showError(`Couldn't load the versions of ${next.title}`, errorMessage(err));
+            });
+    };
+
     createEffect(
         on(target, (next) => {
-            // the next target (or none) drops this one's answer
-            const current = latestVersions();
-            setVersions(null);
-            setVersionId("");
-            setError("");
             setReady(true);
             setPayload(undefined);
-            setLoading(next !== null);
-            if (!next) return;
-            kind()
-                .versions(next.projectId)
-                .then((answer) => {
-                    if (!current()) return;
-                    batch(() => {
-                        setVersions(answer);
-                        setVersionId(defaultVersion(kind(), answer)?.id ?? "");
-                        setLoading(false);
-                    });
-                })
-                .catch((err) => {
-                    if (!current()) return;
-                    batch(() => {
-                        setError(errorMessage(err));
-                        setLoading(false);
-                    });
-                });
+            readVersions(next);
         }),
     );
 
@@ -128,13 +149,13 @@ export function createAddonInstall<Meta>(
         const next = target();
         if (!next || !canConfirm()) return;
         setInstalling(true);
-        setError("");
         try {
             hooks.installed(await kind().install.run(next, versionId(), payload()));
             setTarget(null);
             await hooks.reload();
         } catch (err) {
-            setError(errorMessage(err));
+            // the dialog stays open to try again
+            showError(kind().install.errorTitle(next), errorMessage(err));
             // a failure may come after a change that was recorded; show what is there now
             await hooks.reload();
         } finally {
@@ -151,7 +172,9 @@ export function createAddonInstall<Meta>(
         versionId,
         setVersionId,
         chosen,
-        error,
+        versionsFailed,
+        /** reads the versions again after they could not be read */
+        retryVersions: () => readVersions(target()),
         installing,
         canConfirm,
         confirm,
@@ -168,13 +191,11 @@ export function createAddonRemove<Meta>(
 ) {
     const [pending, setPending] = createSignal<InstalledAddon | null>(null);
     const [removing, setRemoving] = createSignal(false);
-    const [error, setError] = createSignal("");
 
     const confirm = async () => {
         const item = pending();
         if (!item || removing() || kind().remove.disabled?.()) return;
         setRemoving(true);
-        setError("");
         try {
             await kind().remove.run(item);
             setPending(null);
@@ -182,7 +203,7 @@ export function createAddonRemove<Meta>(
             await hooks.reload();
         } catch (err) {
             // the dialog stays open: the entry is still on disk
-            setError(errorMessage(err));
+            showError(kind().remove.errorTitle(item), errorMessage(err));
         } finally {
             setRemoving(false);
         }
@@ -190,15 +211,11 @@ export function createAddonRemove<Meta>(
 
     return {
         pending,
-        request: (item: InstalledAddon) => {
-            setError("");
-            setPending(item);
-        },
+        request: (item: InstalledAddon) => setPending(item),
         cancel: () => {
             if (!removing()) setPending(null);
         },
         removing,
-        error,
         confirm,
     };
 }
@@ -236,16 +253,14 @@ export function createAddonBrowser<Meta = undefined>(options: {
     const active = () => options.active?.() ?? true;
     // what exists depends on the server, so the tab reads again whenever it
     // opens, and whenever what the kind watches changes
-    const { listing, error: listError, reload } = createAddonListing(get, () => active() && { watched: kind.watch?.() });
+    const { listing, error: listError, loading: listLoading, reload } = createAddonListing(get, () => active() && { watched: kind.watch?.() });
     const search = createAddonSearch(get);
     const install = createAddonInstall(get, { reload, installed: (result) => options.installed?.(result) });
     const remove = createAddonRemove(get, { reload, removed: () => options.removed?.() });
     const [detail, setDetail] = createSignal<DetailTarget | null>(null);
-    const [recoverError, setRecoverError] = createSignal("");
     const [recovering, setRecovering] = createSignal(false);
 
     const [uploading, setUploading] = createSignal(false);
-    const [uploadError, setUploadError] = createSignal("");
     const [uploadNotice, setUploadNotice] = createSignal<{ title: string; message: string } | null>(null);
 
     const busy = () => install.installing() || remove.removing() || uploading();
@@ -260,7 +275,7 @@ export function createAddonBrowser<Meta = undefined>(options: {
         } catch (cleanup) {
             message += ` The files Paperboard staged could not be removed: ${errorMessage(cleanup)}`;
         }
-        if (message) setUploadError(message.trim());
+        if (message) showError(way.failureTitle, message.trim());
     };
 
     /** has the service check what is staged and add it */
@@ -286,7 +301,6 @@ export function createAddonBrowser<Meta = undefined>(options: {
         const way = kind.upload;
         if (!way || busy() || pendingUpload()) return;
         setUploading(true);
-        setUploadError("");
         setUploadNotice(null);
         const stage = newStage();
         let commit = false;
@@ -359,6 +373,7 @@ export function createAddonBrowser<Meta = undefined>(options: {
         kind,
         listing,
         listError,
+        listLoading,
         reload,
         search,
         install,
@@ -393,21 +408,18 @@ export function createAddonBrowser<Meta = undefined>(options: {
         confirmUpload,
         cancelUpload,
         uploading,
-        uploadError,
         uploadNotice,
         dismissUploadNotice: () => setUploadNotice(null),
-        recoverError,
         recovering,
         recover: async () => {
             const way = kind.recover;
             if (!way || recovering()) return;
             setRecovering(true);
-            setRecoverError("");
             try {
                 await way.run();
                 await reload();
             } catch (err) {
-                setRecoverError(errorMessage(err));
+                showError(way.errorTitle, errorMessage(err));
             } finally {
                 setRecovering(false);
             }

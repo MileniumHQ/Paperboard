@@ -1,6 +1,7 @@
 import { createMemo, createSignal, For, Show } from "solid-js";
 import {
     PaperButton,
+    PaperEmptyState,
     PaperFlex,
     PaperIcon,
     PaperModal,
@@ -12,6 +13,7 @@ import {
     PaperToggle,
     sameData,
     createRead,
+    showError,
 } from "@mileniumhq/paperui";
 import { useServer } from "../../lib/server";
 import { errorMessage } from "../../lib/failure";
@@ -30,12 +32,13 @@ export default function SourceMods(props: { spec: SourceGameSpec; active: boolea
     const upload = pickFiles(files, "Upload plugins", ["smx"]);
     const discard = discardUpload(calls);
     // read while the tab is open, and again as the server starts or stops; a save's answer wins over a read sent before it
-    const mods = createRead((): Promise<SourceModView> => calls.sourceSourcemod(), { source: () => props.active && serverStatus(), message: errorMessage });
+    const mods = createRead((): Promise<SourceModView> => calls.sourceSourcemod(), {
+        source: () => props.active && serverStatus(),
+        message: errorMessage,
+        failure: { title: "Couldn't load SourceMod" },
+    });
     const view = mods.value;
-    // a read again clears the failure at once, as it starts
-    const loadError = () => (mods.loading() ? null : mods.error());
     const [working, setWorking] = createSignal<string | null>(null);
-    const [error, setError] = createSignal<{ title: string; message: string } | null>(null);
     const [notice, setNotice] = createSignal("");
     const [removing, setRemoving] = createSignal<SourcePlugin | null>(null);
     // the plugin stays named while its dialog closes
@@ -46,12 +49,9 @@ export default function SourceMods(props: { spec: SourceGameSpec; active: boolea
     const saves = createSaves({
         failed: (err, key, on) => {
             const what = key === SOURCEMOD ? "SourceMod" : (view()?.plugins.find((plugin) => plugin.file === key)?.title ?? key);
-            setError({ title: `${what} did not turn ${on ? "on" : "off"}`, message: errorMessage(err) });
+            showError(`Couldn't turn ${what} ${on ? "on" : "off"}`, errorMessage(err));
         },
-        changed: () => {
-            setError(null);
-            setNotice("");
-        },
+        changed: () => setNotice(""),
     });
     /** saves through `work`, and on a failure shows whatever did land */
     const answer = async (work: () => Promise<SourceModView>) => {
@@ -71,13 +71,13 @@ export default function SourceMods(props: { spec: SourceGameSpec; active: boolea
 
     const remove = async (plugin: SourcePlugin) => {
         setWorking(plugin.file);
-        setError(null);
         setNotice("");
         try {
             await saves.run(() => answer(() => calls.sourcePluginRemove({ file: plugin.file })));
             setRemoving(null);
         } catch (err) {
-            setError({ title: `${plugin.title} was not removed`, message: errorMessage(err) });
+            // the dialog stays open
+            showError(`Couldn't remove ${plugin.title}`, errorMessage(err));
         } finally {
             setWorking(null);
         }
@@ -85,7 +85,6 @@ export default function SourceMods(props: { spec: SourceGameSpec; active: boolea
     const uploadPlugins = async () => {
         const stage = newStage();
         setWorking("upload");
-        setError(null);
         setNotice("");
         try {
             const picked = await upload.pick(stageFolder(stage));
@@ -99,7 +98,7 @@ export default function SourceMods(props: { spec: SourceGameSpec; active: boolea
             mods.set(next);
             setNotice(`${listAdded(added)} ${added.length === 1 ? "is" : "are"} on.`);
         } catch (err) {
-            setError({ title: "Plugins not added", message: errorMessage(err) });
+            showError("Couldn't add the plugins", errorMessage(err));
             // quiet: the upload's own failure is on screen; a stage left behind holds no user data
             await discard(stage).catch((cleanup) => console.error(`[Mods] Failed to discard upload ${stage}:`, cleanup));
             await mods.reload();
@@ -132,15 +131,16 @@ export default function SourceMods(props: { spec: SourceGameSpec; active: boolea
                 </Show>
             </PaperPageHeader>
 
-            <Show when={loadError()}>
-                <PaperQuote variant="danger" icon="warning" title="Could not read SourceMod">
-                    <PaperFlex direction="column" gap="half">
-                        <span>{loadError()}</span>
-                        <PaperButton onClick={() => void mods.reload()}>Try again</PaperButton>
-                    </PaperFlex>
-                </PaperQuote>
-            </Show>
-            <Show when={view()}>
+            <Show
+                when={view()}
+                fallback={
+                    <Show when={mods.error() && !mods.loading()}>
+                        <PaperEmptyState icon="error" title="Couldn't load">
+                            <PaperButton onClick={() => void mods.reload()}>Try again</PaperButton>
+                        </PaperEmptyState>
+                    </Show>
+                }
+            >
                 {(current) => (
                     <PaperFlex direction="column" gap="full">
                         <PaperSettingList autoHeight>
@@ -149,13 +149,6 @@ export default function SourceMods(props: { spec: SourceGameSpec; active: boolea
                             </PaperSettingItem>
                         </PaperSettingList>
 
-                        <Show when={error()}>
-                            {(failure) => (
-                                <PaperQuote variant="danger" icon="warning" title={failure().title} onDismiss={() => setError(null)}>
-                                    {failure().message}
-                                </PaperQuote>
-                            )}
-                        </Show>
                         <Show when={notice()}>
                             <PaperQuote variant="success" icon="check_circle" title="Plugins added" onDismiss={() => setNotice("")}>
                                 {notice()}
@@ -169,7 +162,7 @@ export default function SourceMods(props: { spec: SourceGameSpec; active: boolea
                         </Show>
 
                         <Show when={current().on && current().missing}>
-                            <PaperQuote variant="danger" icon="error" title="SourceMod's files are missing">
+                            <PaperQuote variant="warning" icon="warning" title="SourceMod's files are missing">
                                 The server won't start with SourceMod on. Turn it off and on again to reinstall it.
                             </PaperQuote>
                         </Show>
@@ -221,9 +214,6 @@ export default function SourceMods(props: { spec: SourceGameSpec; active: boolea
                 <PaperText preset="body">
                     {shownRemoving()?.file} is deleted from the server. Its settings in cfg/sourcemod stay.
                 </PaperText>
-                <Show when={error()}>
-                    <PaperText size={2} color="danger">{error()!.message}</PaperText>
-                </Show>
             </PaperModal>
         </>
     );
