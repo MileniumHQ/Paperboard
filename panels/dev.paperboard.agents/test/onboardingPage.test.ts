@@ -26,6 +26,10 @@ const NEXT = `document.querySelector('form button[type=submit]')`;
 const CHAT = `document.querySelector('[aria-label="Ada: computer and settings"]')`;
 const SAVE_ERROR = `[...document.querySelectorAll('[role=alert]')].find((a) => a.innerText.includes("Settings not saved"))`;
 
+// the name step's field, found by its label and marked to be typed in
+const NAME = `[data-test-field="name"]`;
+const NAME_SHOWN = `(() => { const input = [...document.querySelectorAll("label")].find((l) => l.textContent.trim() === "Name")?.control; if (input) input.dataset.testField = "name"; return Boolean(input); })()`;
+
 /** Waits for the step's way forward to open, and takes it. */
 async function next(page: Page, what: string) {
     await page.waitFor(`${NEXT} && !${NEXT}.disabled`, what);
@@ -44,8 +48,8 @@ async function choose(page: Page, name: string, value: string) {
 
 /** From a fresh window to the last step, answering: Ada, Codex (already signed in), its default model, no computer yet. */
 async function answerAll(page: Page) {
-    await page.waitFor(`document.querySelector('input[placeholder="Name"]')`, "the name step");
-    await page.type('input[placeholder="Name"]', "Ada");
+    await page.waitFor(NAME_SHOWN, "the name step");
+    await page.type(NAME, "Ada");
     await next(page, "the name step's Next");
     // with reduced motion every line is up at once, the first one too
     const said = await page.evaluate<string>(`document.querySelector('[aria-live="polite"]').innerText`);
@@ -95,8 +99,8 @@ describe("the first meeting", () => {
         await page.send("Emulation.setEmulatedMedia", { features: [{ name: "prefers-reduced-motion", value: "reduce" }] });
         const url = await page.evaluate<string>("location.href");
         await page.navigate(url);
-        await page.waitFor(`document.querySelector('input[placeholder="Name"]')`, "the name step");
-        await page.type('input[placeholder="Name"]', "Quill");
+        await page.waitFor(NAME_SHOWN, "the name step");
+        await page.type(NAME, "Quill");
         await next(page, "the name step's Next");
         await choose(page, "harness", "codex");
         // the panel is left, and opened again
@@ -104,7 +108,7 @@ describe("the first meeting", () => {
         await page.navigate(url);
         await page.waitFor(`document.querySelector('input[name="harness"][value="codex"]')?.checked`, "the brain step, Codex still chosen");
         expect(await page.evaluate<string>(`document.querySelector('[aria-live="polite"]').innerText`)).toContain("Quill it is!");
-        expect(await page.evaluate(`Boolean(document.querySelector('input[placeholder="Name"]'))`)).toBe(false);
+        expect(await page.evaluate(NAME_SHOWN)).toBe(false);
 
         // and it goes on from there to the end, saving what was kept
         await next(page, "the brain step's Next");
@@ -116,6 +120,19 @@ describe("the first meeting", () => {
         await next(page, "Let's chat");
         await panel.settingsSaved({ ...SAVED, name: "Quill" });
         await page.waitFor(`document.querySelector('[aria-label="Quill: computer and settings"]')`, "the chat");
+        expect(page.exceptions).toEqual([]);
+    });
+
+    // the speech is typed out over seconds: the way forward is there all along, waiting, not sliding in after it
+    test("the footer is in view from the first words with Next waiting, and the name field says its name once", async () => {
+        panel = await bootPanel({ codexOnPath: { signedIn: true, chosen: true, plan: MODELS } });
+        const page = await panel.open();
+        await page.waitFor(`document.querySelector('[aria-live="polite"]')?.innerText.trim().length > 0 && ${NEXT}`, "the first words");
+        await settledMotion(page);
+        expect(await page.evaluate(`${NEXT}.getBoundingClientRect().bottom <= innerHeight && ${NEXT}.disabled`)).toBe(true);
+
+        await page.waitFor(NAME_SHOWN, "the name step");
+        expect(await page.evaluate<string>(`document.querySelector('${NAME}').placeholder`)).toBe("");
         expect(page.exceptions).toEqual([]);
     });
 });

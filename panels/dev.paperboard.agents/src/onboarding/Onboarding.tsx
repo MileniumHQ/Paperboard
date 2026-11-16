@@ -214,8 +214,8 @@ function Scenes(props: {
         });
     };
 
-    // the Next button appears with the scene, so the way forward is always in
-    // view, and it works once the scene's answer is in
+    // the footer stays in view from the start, so the way forward never
+    // slides in late; Next works once the scene is shown and its answer is in
     const ready = () => {
         if (!revealed()) return false;
         switch (wizard.currentStep()) {
@@ -235,7 +235,6 @@ function Scenes(props: {
                 return true;
         }
     };
-    createEffect(on(revealed, (shown) => wizard.setOptionsShown(shown)));
     createEffect(on(ready, (can) => wizard.setCanProceed(can)));
 
     const scenes: Record<number, () => Promise<boolean>> = {
@@ -350,7 +349,6 @@ function Scenes(props: {
                     <PaperInput
                         ref={(el) => queueMicrotask(() => el.focus())}
                         label="Name"
-                        placeholder="Name"
                         value={props.name()}
                         onInput={(e) => props.setName(e.currentTarget.value)}
                         maxLength={LIMITS.name}
@@ -408,7 +406,7 @@ function Scenes(props: {
                 <Reveal when={revealed()}>
                     <PaperSectionHeader title="Choose a model" role="heading" aria-level={2} />
                     <Show when={(loadedModels(models)?.length ?? 0) >= SEARCH_MODELS_FROM}>
-                        <PaperInput label="Search" icon="search" fullWidth placeholder="Search models" value={search()} onInput={(e) => setSearch(e.currentTarget.value)} />
+                        <PaperInput label="Search" icon="search" fullWidth placeholder="Model" value={search()} onInput={(e) => setSearch(e.currentTarget.value)} />
                     </Show>
                     <PaperSelector name="model" value={props.model()} onValueChange={(v) => props.setModel(String(v))}>
                         <PaperSelectorItem value={DEFAULT_MODEL} icon="tune" description="Whatever it's set to use already.">
