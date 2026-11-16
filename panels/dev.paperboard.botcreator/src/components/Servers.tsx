@@ -360,7 +360,7 @@ export default function Servers(props: { bot: () => BotSummary }) {
                                         <PaperInput
                                             fullWidth
                                             icon="search"
-                                            placeholder="Search members"
+                                            placeholder="Member"
                                             value={memberQuery()}
                                             onInput={(e) =>
                                                 setMemberQuery(e.currentTarget.value)
