@@ -37,6 +37,8 @@ export interface RosterEntry {
     whitelisted: boolean;
     op: boolean;
     banned: boolean;
+    /** why, as banned-players.json gives it; null when not banned or it names no reason */
+    banReason: string | null;
 }
 
 type ListEntry = { uuid?: unknown; name?: unknown } & Record<string, unknown>;
@@ -135,9 +137,11 @@ export async function listRoster(ctx: Server): Promise<RosterEntry[]> {
         for (const entry of entries) {
             const uuid = entryUuid(entry);
             if (!uuid) continue;
+            const banReason = flag === "banned" && typeof entry.reason === "string" && entry.reason.trim() ? entry.reason.trim() : null;
             const existing = roster.get(uuid);
             if (existing) {
                 existing[flag] = true;
+                if (flag === "banned") existing.banReason = banReason;
                 continue;
             }
             const listed = typeof entry.name === "string" ? entry.name : uuid;
@@ -147,6 +151,7 @@ export async function listRoster(ctx: Server): Promise<RosterEntry[]> {
                 whitelisted: flag === "whitelisted",
                 op: flag === "op",
                 banned: flag === "banned",
+                banReason,
             });
         }
     };

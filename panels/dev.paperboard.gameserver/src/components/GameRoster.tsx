@@ -345,7 +345,7 @@ export default function GameRoster<T extends RosterPlayer>(props: {
             <PaperModal
                 open={banOpen()}
                 onClose={closeBanDialog}
-                title={`Ban ${open()?.name ?? "player"}`}
+                title={`Ban ${open()?.name ?? "player"}?`}
                 size="small"
                 footer={
                     <>

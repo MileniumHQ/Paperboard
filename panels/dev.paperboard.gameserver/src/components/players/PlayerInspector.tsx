@@ -39,6 +39,8 @@ export default function PlayerInspector(props: {
     leaderboard: Leaderboard;
     bedrock: boolean;
     banned: boolean;
+    /** why they are banned, as the ban list says */
+    banReason: string | null;
     /** the open player's op or whitelist switch, made once per player shown */
     flag: (field: PlayerFlagField) => SavedSetting<boolean>;
     onAction: (action: "kick" | "ban") => void;
@@ -156,6 +158,9 @@ export default function PlayerInspector(props: {
                                 <PaperBadge variant="monochrome">Bedrock</PaperBadge>
                             </Show>
                         </PaperFlex>
+                        <Show when={props.banned && props.banReason}>
+                            {(reason) => <PaperText size={2} color="text-subtle">Ban reason: {reason()}</PaperText>}
+                        </Show>
                         <Show when={props.player?.uuid}>
                             <PaperFlex direction="row" gap="half" align="center">
                                 <PaperText
@@ -183,7 +188,7 @@ export default function PlayerInspector(props: {
                         disabled={!isOnline() || !isPlayerOnline()}
                         onClick={() => props.onAction("kick")}
                     >
-                        Kick
+                        <PaperIcon>logout</PaperIcon>Kick
                     </PaperButton>
                     <Show
                         when={!props.banned}
@@ -206,7 +211,6 @@ export default function PlayerInspector(props: {
                         </PaperButton>
                     </Show>
                     <PaperButton
-                        variant="warning"
                         disabled={!isOnline() || !isPlayerOnline()}
                         onClick={() => props.onKill()}
                     >

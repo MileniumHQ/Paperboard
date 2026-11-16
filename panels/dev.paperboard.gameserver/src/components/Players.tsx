@@ -131,6 +131,7 @@ export default function Players() {
                     leaderboard={roster.leaderboard}
                     bedrock={roster.openPlayer() ? isBedrockPlayer(roster.openPlayer()!, roster.bedrock()) : false}
                     banned={roster.isBanned(roster.openPlayer()?.name ?? "")}
+                    banReason={roster.banReason(roster.openPlayer()?.name ?? "")}
                     flag={(field) => {
                         // the player it was made for, even once another is open
                         const name = roster.openPlayer()!.name;
@@ -155,7 +156,7 @@ export default function Players() {
 
             <ReasonActionDialog
                 open={actionModal() !== null}
-                title={actionModal() === "ban" ? "Ban Player" : "Kick Player"}
+                title={`${actionModal() === "ban" ? "Ban" : "Kick"} ${roster.openPlayer()?.name ?? "player"}?`}
                 confirmLabel={actionModal() === "ban" ? "Ban" : "Kick"}
                 onClose={() => setActionModal(null)}
                 onSubmit={async (reason) => {

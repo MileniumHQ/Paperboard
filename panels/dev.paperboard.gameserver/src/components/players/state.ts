@@ -24,6 +24,7 @@ export interface PlayerInfo {
 interface RosterEntry extends PlayerInfo {
     uuid: string;
     banned: boolean;
+    banReason: string | null;
 }
 
 export type PlayerFlagField = "op" | "whitelisted";
@@ -32,7 +33,8 @@ export function createPlayers() {
     const server = useServer();
     const { calls, onlinePlayerNames, seenPlayerNames, serverStatus } = server;
     const [players, setPlayers] = createSignal<PlayerInfo[]>([]);
-    const [bannedNames, setBannedNames] = createSignal<Set<string>>(new Set());
+    // banned players by lowercased name, with the reason the ban list gives
+    const [bannedNames, setBannedNames] = createSignal<Map<string, string | null>>(new Map());
     // the names players have now, by uuid: a renamed player is shown by
     // their new name even before they rejoin
     const [currentNames, setCurrentNames] = createSignal<Map<string, string>>(new Map());
@@ -73,10 +75,13 @@ export function createPlayers() {
                     // a ban is shown by name: carry it over to the new one
                     const renamed = players().filter((p) => p.uuid && names[p.uuid.toLowerCase()]);
                     setBannedNames((prev) => {
-                        const next = new Set(prev);
+                        const next = new Map(prev);
                         for (const p of renamed) {
-                            if (!next.delete(p.name.toLowerCase())) continue;
-                            next.add(names[p.uuid!.toLowerCase()].toLowerCase());
+                            const old = p.name.toLowerCase();
+                            if (!next.has(old)) continue;
+                            const reason = next.get(old)!;
+                            next.delete(old);
+                            next.set(names[p.uuid!.toLowerCase()].toLowerCase(), reason);
                         }
                         return next;
                     });
@@ -99,10 +104,10 @@ export function createPlayers() {
             const answer = await calls.listRoster();
             if (!current()) return;
             const roster = answer ?? [];
-            const listed = withCurrentNames(roster.map(({ banned: _banned, ...player }) => player));
+            const listed = withCurrentNames(roster.map(({ banned: _banned, banReason: _reason, ...player }) => player));
             batch(() => {
                 setPlayers(listed);
-                setBannedNames(new Set(listed.filter((_, i) => roster[i].banned).map((p) => p.name.toLowerCase())));
+                setBannedNames(new Map(listed.flatMap((p, i) => (roster[i].banned ? [[p.name.toLowerCase(), roster[i].banReason] as const] : []))));
             });
             refreshNames(roster.map((p) => p.uuid));
         } catch (err) {
@@ -187,6 +192,8 @@ export function createPlayers() {
         return name === undefined ? undefined : find(name);
     });
     const isBanned = (name: string) => bannedNames().has(name.toLowerCase());
+    /** why a banned player is banned, as the ban list says; null when it says nothing or they aren't */
+    const banReason = (name: string) => bannedNames().get(name.toLowerCase()) ?? null;
 
     // a failed change is quoted under the title naming what did not happen
     const callPlayerAction = async (
@@ -307,6 +314,7 @@ export function createPlayers() {
         all: allPlayers,
         find,
         isBanned,
+        banReason,
         bedrock,
         feedback,
         setFeedback,

@@ -440,7 +440,7 @@ export default function WorldsPage<W extends WorldEntry>(props: { list: () => Pr
                 size="small"
                 footer={
                     <>
-                        <PaperButton onClick={() => setDeleteOpen(false)}>Cancel</PaperButton>
+                        <PaperButton variant="text" onClick={() => setDeleteOpen(false)}>Cancel</PaperButton>
                         <PaperButton variant="danger" onClick={() => void confirmDelete()}>Delete</PaperButton>
                     </>
                 }

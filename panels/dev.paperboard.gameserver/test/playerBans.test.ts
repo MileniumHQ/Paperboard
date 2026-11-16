@@ -93,9 +93,19 @@ describe("the Players tab's bans", () => {
             await page.resize(1400, 900);
             await page.evaluate(`${button("Ban")}.click()`);
             await page.waitFor(`!!${button("Ban", true)}`, "the ban dialog");
-            await page.evaluate(`${button("Ban", true)}.click()`);
+            // it names who, its reason is ready to type, and Cancel is plain beside the red Ban, as in every confirm
+            expect(await page.evaluate<string>(`document.querySelector("[role=dialog]").innerText`)).toContain("Ban Steve?");
+            await page.waitFor(`document.activeElement?.tagName === "INPUT" && !!document.activeElement.closest("[role=dialog]")`, "the reason field focused");
+            expect(await page.evaluate<string>(`getComputedStyle(${button("Cancel", true)}).backgroundColor`)).toBe("rgba(0, 0, 0, 0)");
+            // the reason typed and Enter pressed bans him, and his page says why
+            await page.type("[role=dialog] input", "griefing", true);
             await page.waitFor(inspectorShows("Steve", true), "Steve shown banned");
             expect(banned()).toEqual(["Steve"]);
+            await page.waitFor(`document.body.innerText.includes("Ban reason: griefing")`, "the ban's reason on his page");
+            // he is offline: Kick and Kill are both unavailable, and look the same
+            const look = (label: string) =>
+                `(() => { const b = [...document.querySelectorAll("button")].find((b) => b.innerText.trim().split("\\n").pop() === ${JSON.stringify(label)}); return b.disabled && getComputedStyle(b).backgroundColor; })()`;
+            expect(await page.evaluate(look("Kill"))).toBe(await page.evaluate(look("Kick")));
 
             // the server refuses: the tab says why, and Ghost is not shown banned
             await page.evaluate(openRow("Ghost"));

@@ -474,7 +474,7 @@ const minecraftCalls = {
     queryOnlinePlayers: { output: done },
     queryPlayerPositions: { output: done },
     listRoster: {
-        output: shape.list(shape.object({ uuid: shape.text(), name: shape.text(), whitelisted: shape.boolean(), op: shape.boolean(), banned: shape.boolean() })),
+        output: shape.list(shape.object({ uuid: shape.text(), name: shape.text(), whitelisted: shape.boolean(), op: shape.boolean(), banned: shape.boolean(), banReason: shape.nullable(shape.text()) })),
     },
     currentPlayerNames: { input: shape.object({ uuids: texts }), output: shape.record(shape.text()) },
     readBedrockNaming: { output: shape.nullable(shape.object({ prefix: shape.text(), replaceSpaces: shape.boolean() })) },

@@ -74,7 +74,7 @@ export default function TerrariaVersions() {
                 size="small"
                 footer={
                     <>
-                        <PaperButton variant={reinstall() ? "text" : undefined} onClick={() => setConfirmOpen(false)}>Cancel</PaperButton>
+                        <PaperButton variant="text" onClick={() => setConfirmOpen(false)}>Cancel</PaperButton>
                         <PaperButton variant={reinstall() ? "success" : "danger"} onClick={() => void run()}>
                             {reinstall() ? "Reinstall" : "Switch anyway"}
                         </PaperButton>

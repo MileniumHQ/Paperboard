@@ -137,7 +137,7 @@ export function DeleteDataDialog(props: { open: boolean; player: string | undefi
             size="small"
             footer={
                 <>
-                    <PaperButton onClick={props.onClose}>
+                    <PaperButton variant="text" onClick={props.onClose}>
                         Cancel
                     </PaperButton>
                     <PaperButton variant="danger" onClick={props.onDelete}>
@@ -183,7 +183,7 @@ export function ReasonActionDialog(props: {
             size="small"
             footer={
                 <>
-                    <PaperButton onClick={props.onClose}>
+                    <PaperButton variant="text" onClick={props.onClose}>
                         Cancel
                     </PaperButton>
                     <PaperButton variant="danger" disabled={send.busy()} onClick={() => void submit()}>
@@ -195,9 +195,13 @@ export function ReasonActionDialog(props: {
             <PaperFlex direction="column" gap="half" fullWidth>
                 <PaperInput
                     fullWidth
+                    autofocus
                     label="Reason (optional)"
                     value={reason()}
                     onInput={(e) => setReason(e.currentTarget.value)}
+                    onKeyDown={(e) => {
+                        if (e.key === "Enter") void submit();
+                    }}
                 />
                 <Show when={send.error()}>
                     {(failure) => (
