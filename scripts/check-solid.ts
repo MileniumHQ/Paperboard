@@ -94,6 +94,16 @@
 //    add a real public need to its package.json "exports". The files that
 //    still cross, outside the parts already moved, are KNOWN_CROSSINGS below;
 //    one that no longer crosses is a hit too, so the list only shrinks.
+//  error-quote (failures are toasts, PaperToast's docs)
+//    A <PaperQuote> whose `variant` is, or can be, the string "danger": a
+//    failure is said with a toast (createFailureToast, createRead's
+//    `failure`), a field's with the field's error, and a view that could not
+//    load with PaperEmptyState's "Couldn't load". The files that still have
+//    them are scripts/errorQuotes.json, each with how many, until the
+//    migration takes them out: a file over its count is a hit, and so is one
+//    under it or an entry for a file that is gone, so the list only shrinks.
+//    The deprecated panels (dev.paperboard.ai, dev.paperboard.actions) are
+//    left out, as nobody changes them.
 //  test-sleep ("Tests are CI": deterministic, no sleeps tuned to timing)
 //    `Bun.sleep`/`Bun.sleepSync`, `await sleep(…)`, and `setTimeout` handed
 //    the resolve of the `new Promise` it is in (a fixed wait). A promise
@@ -119,7 +129,11 @@ const SKIP_DIRS = new Set(["node_modules", "dist", "out", "build", "release", "c
 const EFFECTS = new Set(["createEffect", "createRenderEffect", "createComputed", "onMount"]);
 
 export type Hit = { file: string; line: number; rule: string; message: string };
-export type Options = { solidOnly?: boolean };
+export type Options = {
+    solidOnly?: boolean;
+    /** the files allowed error quotes, and how many: scripts/errorQuotes.json unless given */
+    errorQuotes?: Record<string, number>;
+};
 
 function listFiles(dir: string, out: string[]): void {
     for (const name of readdirSync(dir)) {
@@ -370,7 +384,7 @@ export function checkSource(file: string, text: string, options: Options = {}): 
     }
 
     visit(sf, false);
-    if (!options.solidOnly) checkHouseRules(sf, file, hit);
+    if (!options.solidOnly) checkHouseRules(sf, file, hit, options);
     return hits;
 }
 
@@ -562,7 +576,58 @@ function checkPackageBoundary(sf: TS.SourceFile, file: string, report: (node: TS
         );
 }
 
-function checkHouseRules(sf: TS.SourceFile, file: string, hit: (node: TS.Node, rule: string, message: string) => void): void {
+const ERROR_QUOTES_FILE = join(ROOT, "scripts/errorQuotes.json");
+// the panels nobody changes: their error quotes go when they do
+const DEPRECATED_PANELS = ["panels/dev.paperboard.ai/", "panels/dev.paperboard.actions/"];
+let errorQuotesListed: Record<string, number> | undefined;
+function errorQuotesAllowed(options: Options): Record<string, number> {
+    if (options.errorQuotes) return options.errorQuotes;
+    errorQuotesListed ??= JSON.parse(readFileSync(ERROR_QUOTES_FILE, "utf8")) as Record<string, number>;
+    return errorQuotesListed;
+}
+
+/** Does this JSX element say a failure in a quote: `<PaperQuote variant="danger">`, or a variant that can be "danger"? */
+function isErrorQuote(n: TS.Node): n is TS.JsxOpeningElement | TS.JsxSelfClosingElement {
+    if (!(ts.isJsxOpeningElement(n) || ts.isJsxSelfClosingElement(n)) || n.tagName.getText() !== "PaperQuote") return false;
+    const variant = n.attributes.properties.find((a): a is TS.JsxAttribute => ts.isJsxAttribute(a) && a.name.getText() === "variant");
+    const value = variant?.initializer;
+    if (!value) return false;
+    let danger = false;
+    const visit = (v: TS.Node): void => {
+        if (ts.isStringLiteralLike(v) && v.text === "danger") danger = true;
+        else ts.forEachChild(v, visit);
+    };
+    visit(value);
+    return danger;
+}
+
+const ERROR_QUOTE_WHY = `a failure is a toast, not an error quote (PaperToast's docs): createFailureToast or createRead's \`failure\` for a standing one, showToast for an action's, the field's error for a field's, PaperEmptyState's "Couldn't load" for a view with nothing to show`;
+
+function checkErrorQuotes(sf: TS.SourceFile, file: string, hit: (node: TS.Node, rule: string, message: string) => void, options: Options): void {
+    const path = relative(ROOT, resolve(file));
+    if (DEPRECATED_PANELS.some((dir) => path.startsWith(dir))) return;
+    const sites: TS.Node[] = [];
+    const visit = (n: TS.Node): void => {
+        if (isErrorQuote(n)) sites.push(n);
+        ts.forEachChild(n, visit);
+    };
+    visit(sf);
+    const allowed = errorQuotesAllowed(options)[path] ?? 0;
+    if (sites.length > allowed) {
+        for (const site of sites)
+            hit(site, "error-quote", allowed === 0 ? ERROR_QUOTE_WHY : `${ERROR_QUOTE_WHY}; this file has ${sites.length} and scripts/errorQuotes.json allows ${allowed}, which only goes down`);
+    } else if (sites.length < allowed) {
+        hit(
+            sf,
+            "error-quote",
+            sites.length === 0
+                ? "this file has no error quotes left: take it off scripts/errorQuotes.json"
+                : `this file has ${sites.length} error quotes and scripts/errorQuotes.json allows ${allowed}: lower its entry to ${sites.length}`,
+        );
+    }
+}
+
+function checkHouseRules(sf: TS.SourceFile, file: string, hit: (node: TS.Node, rule: string, message: string) => void, options: Options): void {
     const lines = sf.text.split("\n");
     const lineOf = (pos: number) => sf.getLineAndCharacterOfPosition(pos).line;
     // The `// quiet: <reason>` marker on the hit's line, the line above it, or
@@ -585,6 +650,7 @@ function checkHouseRules(sf: TS.SourceFile, file: string, hit: (node: TS.Node, r
     };
     const testFile = isTestFile(file);
     checkPackageBoundary(sf, file, report, hit);
+    checkErrorQuotes(sf, file, hit, options);
     const visit = (n: TS.Node): void => {
         // swallowed-error: a catch that only logs or does nothing.
         if (ts.isCatchClause(n) && logsOnly(n.block)) {
@@ -655,7 +721,16 @@ function checkHouseRules(sf: TS.SourceFile, file: string, hit: (node: TS.Node, r
 export function checkDirs(dirs: string[], options: Options = {}): Hit[] {
     const files: string[] = [];
     for (const d of dirs) listFiles(d, files);
-    return files.flatMap((f) => checkSource(f, readFileSync(f, "utf8"), options));
+    const hits = files.flatMap((f) => checkSource(f, readFileSync(f, "utf8"), options));
+    if (options.solidOnly) return hits;
+    // an entry for a file that is gone, under what was scanned
+    const scanned = dirs.map((d) => resolve(d) + "/");
+    for (const listed of Object.keys(errorQuotesAllowed(options))) {
+        const path = join(ROOT, listed);
+        if (scanned.some((dir) => path.startsWith(dir)) && !existsSync(path))
+            hits.push({ file: ERROR_QUOTES_FILE, line: 1, rule: "error-quote", message: `${listed} is gone: take it off scripts/errorQuotes.json` });
+    }
+    return hits;
 }
 
 if (import.meta.main) {

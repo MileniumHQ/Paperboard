@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, relative } from "node:path";
 import { checkDirs, checkSource } from "./check-solid";
 
 const rules = (src: string) => checkSource("Fixture.tsx", src).map((h) => `${h.line}:${h.rule}`);
@@ -125,6 +125,35 @@ describe("the house rules flag each break, honour a reasoned quiet marker, and p
         // a raced deadline is not a wait; outside a test file a sleep is the product's business
         expect(ruleIn("a.test.ts", `await Promise.race([done, new Promise((late) => setTimeout(() => late("timed out"), 5000))]);\n`)).toEqual([]);
         expect(ruleIn("src/retry.ts", `await Bun.sleep(50);\n`)).toEqual([]);
+    });
+
+    test("an error quote (failures are toasts), the allowlist that only shrinks, and the near misses", () => {
+        const root = join(import.meta.dir, "..");
+        const file = join(root, "panels/dev.paperboard.fixture/src/A.tsx");
+        const listed = { "panels/dev.paperboard.fixture/src/A.tsx": 2 };
+        const quotes = (src: string, errorQuotes: Record<string, number> = {}) => checkSource(file, src, { errorQuotes }).map((h) => `${h.line}:${h.rule}`);
+        const danger = `export const A = () => <PaperQuote variant="danger" icon="error">Nope</PaperQuote>;\n`;
+        const picked = `export const B = (p: { bad: boolean }) => <PaperQuote variant={p.bad ? "danger" : "warning"} />;\n`;
+        expect(quotes(danger + picked)).toEqual(["1:error-quote", "2:error-quote"]);
+        // as many as the list allows passes; one more flags them all
+        expect(quotes(danger + picked, listed)).toEqual([]);
+        expect(quotes(danger + picked + danger, listed)).toEqual(["1:error-quote", "2:error-quote", "3:error-quote"]);
+        // fewer than it allows, or none, is a hit until the entry goes down
+        expect(quotes(danger, listed)).toEqual(["1:error-quote"]);
+        expect(quotes(`export const C = () => <b />;\n`, listed)).toEqual(["1:error-quote"]);
+        // another variant, or another component's danger, is no error quote
+        expect(quotes(`export const D = () => <><PaperQuote variant="warning">Heads up</PaperQuote><PaperButton variant="danger">Delete</PaperButton></>;\n`)).toEqual([]);
+        // the deprecated panels keep theirs until they go
+        expect(checkSource(join(root, "panels/dev.paperboard.ai/src/A.tsx"), danger, { errorQuotes: {} })).toEqual([]);
+
+        // an entry for a file that is gone, under a scanned folder
+        const dir = mkdtempSync(join(tmpdir(), "check-solid-"));
+        try {
+            const entry = relative(root, join(dir, "Gone.tsx"));
+            expect(checkDirs([dir], { errorQuotes: { [entry]: 1, "packages/elsewhere/Gone.tsx": 1 } }).map((h) => h.message)).toEqual([`${entry} is gone: take it off scripts/errorQuotes.json`]);
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
     });
 
     test("--solid-only leaves the house rules out", () => {
