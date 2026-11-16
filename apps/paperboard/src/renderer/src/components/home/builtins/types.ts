@@ -6,7 +6,7 @@ export interface BuiltinWidgetProps {
     /** the computer the widget shows */
     computerId: string;
     computerName: string;
-    /** more than one computer is paired, so say which one this is */
+    /** it shows another computer than this one, so it says which (namesComputer) */
     showComputer: boolean;
     size: WidgetSize;
     /** what was chosen in the gallery, by option id; every declared option has a value */

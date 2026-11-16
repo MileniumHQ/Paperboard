@@ -4,6 +4,7 @@
 // neither is ever drawn as zero.
 import type { UsageReport } from "@mileniumhq/paperapi";
 import { formatBytes } from "../../../lib/formatBytes";
+import type { ComputerInfo } from "../../../lib/shell";
 import type { UsageState } from "./usageStore";
 
 export type Figure<T> =
@@ -61,15 +62,24 @@ export function panelRunState(hasService: boolean, liveOwners: ReadonlySet<strin
 }
 
 /**
- * A widget's title, naming its computer when more than one is paired. A
- * one-cell tile has room for the name alone: it names the computer under
- * its figure instead (oneCellCaption).
+ * Whether a widget names the computer it shows: one of another computer's,
+ * once there is more than one. This computer's go without saying, so its
+ * titles fit their tiles.
+ */
+export function namesComputer(computers: readonly ComputerInfo[], computerId: string): boolean {
+    return computers.length > 1 && !computers.find((c) => c.id === computerId)?.isLocal;
+}
+
+/**
+ * A widget's title, naming its computer when it isn't this one
+ * (namesComputer). A one-cell tile has room for the name alone: it names
+ * the computer under its figure instead (oneCellCaption).
  */
 export function widgetTitle(name: string, props: { showComputer: boolean; computerName: string; size: { w: number } }): string {
     return props.showComputer && props.size.w > 1 ? `${name} · ${props.computerName}` : name;
 }
 
-/** What a one-cell tile says under its figure: its computer when more than one is paired, else `own`. */
+/** What a one-cell tile says under its figure: its computer when it names one (namesComputer), else `own`. */
 export function oneCellCaption(own: string | undefined, props: { showComputer: boolean; computerName: string }): string | undefined {
     return props.showComputer ? props.computerName : own;
 }

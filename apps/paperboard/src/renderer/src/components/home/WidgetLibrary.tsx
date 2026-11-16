@@ -25,6 +25,7 @@ import type { ComputerInfo } from "../../lib/shell";
 import PanelIcon from "../computer/PanelIcon";
 import type { LoadQueue } from "../../lib/loadQueue";
 import { BUILTIN_WIDGETS, BuiltinView, builtinWidget } from "./builtins";
+import { namesComputer } from "./builtins/systemFigures";
 import PanelWidgetFrame, { type FrameFacts } from "./PanelWidgetFrame";
 import paperboardIcon from "../../assets/Paperboard.png";
 import styles from "./Home.module.css";
@@ -407,7 +408,7 @@ const WidgetCard: Component<WidgetLibraryProps & { widget: WidgetDeclaration; en
                                         widget={widget()}
                                         computerId={entry().computerId}
                                         computerName={computerName()}
-                                        showComputer={props.computers.length > 1}
+                                        showComputer={namesComputer(props.computers, entry().computerId)}
                                         size={parsed()}
                                         options={entry().options ?? {}}
                                         visible={props.visible}

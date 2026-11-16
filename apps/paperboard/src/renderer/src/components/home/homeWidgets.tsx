@@ -6,6 +6,7 @@ import type { LoadQueue } from "../../lib/loadQueue";
 import type { LibraryEntry } from "./WidgetLibrary";
 import PanelWidgetFrame, { type FrameFacts } from "./PanelWidgetFrame";
 import { BuiltinView, builtinWidget } from "./builtins";
+import { namesComputer } from "./builtins/systemFigures";
 import { tileStatus } from "./tileStatus";
 
 /** What a widget is drawn from: a placed item, or a gallery entry being dragged. */
@@ -67,7 +68,7 @@ export function createHomeWidgets(options: HomeWidgetsOptions) {
                     widget={builtin}
                     computerId={from.computerId}
                     computerName={computerName(from.computerId)}
-                    showComputer={options.computers().length > 1}
+                    showComputer={namesComputer(options.computers(), from.computerId)}
                     size={size()}
                     options={from.options ?? {}}
                     visible={visible()}
