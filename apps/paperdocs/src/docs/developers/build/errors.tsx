@@ -61,8 +61,7 @@ const FOLLOW_RUN = `followCity: async (input, ctx) => {
     await refreshCity(ctx, city);
 },`;
 
-const PAGE_CALL = `import { errorMessage } from "@mileniumhq/paperapi";
-import { showToast } from "@mileniumhq/paperui";
+const PAGE_CALL = `import { showError } from "@mileniumhq/paperui";
 import { service } from "../weather";
 
 const follow = async () => {
@@ -71,7 +70,7 @@ const follow = async () => {
         await service.followCity({ city: city() });
         setCity("");
     } catch (err) {
-        showToast({ variant: "danger", title: "City not added", message: errorMessage(err) });
+        showError("Couldn't follow the city", err);
     } finally {
         setBusy(false);
     }
@@ -94,13 +93,10 @@ const REFRESH_CITY = `async function refreshCity(ctx: Ctx, city: string): Promis
     }
 }`;
 
-const PAGE_FAILURES = `<For each={Object.entries(weather().failures)}>
-    {([name, message]) => (
-        <PaperQuote variant="danger" icon="warning" title={\`\${name} not checked\`}>
-            {message}
-        </PaperQuote>
-    )}
-</For>`;
+const PAGE_FAILURES = `createFailureToast(
+    () => Object.entries(weather().failures).map(([name, message]) => \`\${name}: \${message}\`).join(" "),
+    { title: "Couldn't check the weather" },
+);`;
 
 const ON_INIT = `async onInit(ctx: Ctx) {
     try {
@@ -118,13 +114,7 @@ const ON_INIT = `async onInit(ctx: Ctx) {
     setInterval(() => void refreshAll(ctx), REFRESH_EVERY_MS);
 },`;
 
-const PAGE_LOAD_ERROR = `<Show when={weather().loadError}>
-    {(message) => (
-        <PaperQuote variant="danger" icon="warning" title="Settings could not be read" role="alert">
-            {message()}
-        </PaperQuote>
-    )}
-</Show>`;
+const PAGE_LOAD_ERROR = `createFailureToast(() => weather().loadError, { title: "Couldn't read the settings" });`;
 
 export default function ErrorsGuideDoc() {
     return (
@@ -180,19 +170,20 @@ $ bunx paperapi call dev.example.weather followCity '{"town":"Oslo"}'
 
             <PaperText preset="subheader" as="h2" id="on-the-page">Show it on the page</PaperText>
             <PaperText preset="body" as="p">
-                Every handler that calls something catches the error and shows it with <PaperLink href="/docs/paperui/papertoast/">showToast</PaperLink>.
-                There is no failure signal to keep and no quote to place: one line in the <PaperCode>catch</PaperCode> and the failure is shown.
+                Every handler that calls something catches the error and shows it with <PaperLink href="/docs/paperui/papertoast/#show-error">showError</PaperLink>.
+                There is no failure signal to keep and no place in the layout to find: one line in the <PaperCode>catch</PaperCode> and the failure is shown.
                 Weather's Follow button runs this handler, with <PaperCode>city</PaperCode> and <PaperCode>busy</PaperCode> as <PaperCode>createSignal</PaperCode> signals of the page:
             </PaperText>
             <PaperCode block language="tsx">{PAGE_CALL}</PaperCode>
             <PaperTextList>
-                <li>The title says what didn't happen, and the message is the reason.</li>
-                <li>A danger toast stays until it is closed and a screen reader reads it out, so the failure is never missed.</li>
-                <li>Give the toast a Retry <PaperCode>action</PaperCode> when trying again is what the person would do next.</li>
+                <li>The title says what didn't happen, as "Couldn't …", and the toast says the error's message as the reason.</li>
+                <li>A failure toast stays until it is closed and a screen reader reads it out, so the failure is never missed.</li>
+                <li>Give it <PaperCode>retry</PaperCode> when trying again is what the person would do next. The page keeps its own way to try again too.</li>
                 <li><PaperCode>finally</PaperCode> turns the button back on whether the call worked or not.</li>
             </PaperTextList>
             <PaperText preset="body" as="p">
-                Use a <PaperLink href="/docs/paperui/paperquote/">PaperQuote</PaperLink> instead only for a failure that stays true until something changes, such as the background failures and settings below. Those live in the state, so they show in every window and go away when they are fixed.
+                A failure that stays true until something changes, such as the background failures and settings below, is a toast too, from the state: <PaperLink href="/docs/paperui/papertoast/#create-failure-toast">createFailureToast</PaperLink> shows it while it stands, in every window, and closes it once it is fixed.
+                Never an error quote: <PaperCode>{'<PaperQuote variant="danger">'}</PaperCode> is deprecated, and the code check flags it.
             </PaperText>
 
             <PaperText preset="subheader" as="h2" id="in-the-background">Failures in the background</PaperText>
@@ -202,7 +193,7 @@ $ bunx paperapi call dev.example.weather followCity '{"town":"Oslo"}'
             <PaperCode block language="tsx">{REFRESH_CITY}</PaperCode>
             <PaperCode block language="tsx">{PAGE_FAILURES}</PaperCode>
             <PaperText preset="body" as="p">
-                The next check that works removes the city's entry from <PaperCode>failures</PaperCode>, and its quote goes away.
+                The next check that works removes the city's entry from <PaperCode>failures</PaperCode>, and the toast takes it out, closing once no city is failing.
                 Keep the reason until then: a failure that disappears before anyone looks is a failure nobody sees.
             </PaperText>
             <PaperText preset="body" as="p">
@@ -228,8 +219,10 @@ $ bunx paperapi call dev.example.weather followCity '{"town":"Oslo"}'
                     </tr>
                 </thead>
                 <tbody>
-                    <tr><td>A button, form, menu item or anything else the person pressed</td><td><PaperLink href="/docs/paperui/papertoast/">showToast</PaperLink> with <PaperCode>variant="danger"</PaperCode>.</td></tr>
-                    <tr><td>Something that stays wrong, such as settings that can't be read</td><td><PaperLink href="/docs/paperui/paperquote/">PaperQuote</PaperLink> with <PaperCode>variant="danger"</PaperCode>, from the state.</td></tr>
+                    <tr><td>A button, form, menu item or anything else the person pressed</td><td><PaperLink href="/docs/paperui/papertoast/#show-error">showError</PaperLink> in its <PaperCode>catch</PaperCode>.</td></tr>
+                    <tr><td>Something that stays wrong, such as settings that can't be read</td><td><PaperLink href="/docs/paperui/papertoast/#create-failure-toast">createFailureToast</PaperLink>, from the state, or <PaperLink href="/docs/paperui/state/#create-read">createRead</PaperLink>'s <PaperCode>failure</PaperCode> for a read.</td></tr>
+                    <tr><td>A view with nothing to show because it couldn't load</td><td><PaperLink href="/docs/paperui/paperemptystate/#couldnt-load">"Couldn't load"</PaperLink> with Try again, and the toast says why.</td></tr>
+                    <tr><td>A field the person typed wrong</td><td>The field itself: <PaperLink href="/docs/paperui/paperinput/">PaperInput</PaperLink>'s <PaperCode>invalid</PaperCode>, with the reason under it.</td></tr>
                     <tr><td>Something the panel needs and doesn't have yet, such as an API key</td><td><PaperLink href="/docs/paperui/paperemptystate/">PaperEmptyState</PaperLink> with the button that fixes it.</td></tr>
                     <tr><td>One item in a list or grid</td><td>The item's own error state, such as <PaperCode>tone="danger"</PaperCode> on a <PaperLink href="/docs/paperui/paperstattile/">PaperStatTile</PaperLink>, and the reason below.</td></tr>
                     <tr><td>A Home widget</td><td><PaperCode>PaperWidgetMessage</PaperCode> with <PaperCode>tone="danger"</PaperCode> and the reason as its hint. See <PaperLink href="/docs/developers/widgets/#failures">Add a Home widget</PaperLink>.</td></tr>

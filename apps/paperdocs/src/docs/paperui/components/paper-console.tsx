@@ -225,21 +225,20 @@ export function Example() {
             <PaperText preset="subheader" as="h3" id="live-server">A server console with commands</PaperText>
             <PaperText preset="body" as="p">
                 The gameserver panel feeds a signal of entries from the server's output, sends commands to the server, hides the input when the server cannot take commands, and shows an empty state while the log is empty.
-                Show a failed command to the user instead of dropping it.
+                Say a failed command in a toast instead of dropping it.
             </PaperText>
             <PaperCode block language="tsx">
-{`import { createSignal, Show } from "solid-js";
+{`import { createSignal } from "solid-js";
 import {
     PaperCard,
     PaperConsole,
     PaperEmptyState,
-    PaperQuote,
+    showError,
     type PaperConsoleEntry,
 } from "@mileniumhq/paperui";
 
 export function ServerConsole(props: { send: (command: string) => Promise<string> }) {
     const [entries, setEntries] = createSignal<PaperConsoleEntry[]>([]);
-    const [failure, setFailure] = createSignal("");
 
     const run = async (command: string) => {
         setEntries((prev) => [...prev, { type: "command", content: command }]);
@@ -247,27 +246,20 @@ export function ServerConsole(props: { send: (command: string) => Promise<string
             const reply = await props.send(command);
             setEntries((prev) => [...prev, { type: "return", content: reply }]);
         } catch (err) {
-            setFailure(err instanceof Error ? err.message : String(err));
+            showError(\`Couldn't run \${command}\`, err);
         }
     };
 
     return (
-        <>
-            <Show when={failure()}>
-                <PaperQuote variant="danger" icon="warning" title="Command not run" onDismiss={() => setFailure("")}>
-                    {failure()}
-                </PaperQuote>
-            </Show>
-            <PaperCard grow minHeight={0} padding="full">
-                <PaperConsole
-                    entries={entries()}
-                    onCommand={(command) => void run(command)}
-                    onClear={() => setEntries([])}
-                    title="Console"
-                    empty={<PaperEmptyState icon="terminal" title="Nothing printed yet" />}
-                />
-            </PaperCard>
-        </>
+        <PaperCard grow minHeight={0} padding="full">
+            <PaperConsole
+                entries={entries()}
+                onCommand={(command) => void run(command)}
+                onClear={() => setEntries([])}
+                title="Console"
+                empty={<PaperEmptyState icon="terminal" title="Nothing printed yet" />}
+            />
+        </PaperCard>
     );
 }`}
             </PaperCode>

@@ -54,9 +54,9 @@ import {
     PaperSettingItem,
     PaperSettingList,
     PaperText,
-    showToast,
+    showError,
 } from "@mileniumhq/paperui";
-import { errorMessage, secretsApi } from "@mileniumhq/paperapi";
+import { secretsApi } from "@mileniumhq/paperapi";
 import { API_KEY_SECRET, PANEL_ID } from "../panel";
 import { service, weather } from "../weather";
 
@@ -69,7 +69,7 @@ export default function SettingsPage() {
             if (units !== "metric" && units !== "imperial") throw new Error(\`"\${units}" is not a unit Weather knows\`);
             await service.setUnits({ units });
         } catch (err) {
-            showToast({ variant: "danger", title: "Units not changed", message: errorMessage(err) });
+            showError("Couldn't change the units", err);
         }
     };
 
@@ -80,7 +80,7 @@ export default function SettingsPage() {
             setKey("");
             await service.keyChanged();
         } catch (err) {
-            showToast({ variant: "danger", title: "API key not saved", message: errorMessage(err) });
+            showError("Couldn't save the API key", err);
         }
     };
 
@@ -90,7 +90,7 @@ export default function SettingsPage() {
             await secretsApi.delete(API_KEY_SECRET, PANEL_ID);
             await service.keyChanged();
         } catch (err) {
-            showToast({ variant: "danger", title: "API key not removed", message: errorMessage(err) });
+            showError("Couldn't remove the API key", err);
         }
     };
 

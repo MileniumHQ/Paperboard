@@ -135,33 +135,16 @@ export function Example() {
             <PaperText preset="subheader" as="h2" id="examples">Examples</PaperText>
             <PaperText preset="subheader" as="h3" id="saved-setting">A setting that saves</PaperText>
             <PaperText preset="body" as="p">
-                Keep the switch controlled by the stored value, so a failed save leaves it where it was, and show why.
+                Keep the switch controlled by the stored value, so a failed save leaves it where it was, and say why in a toast.
                 The Blocks panel's project cards use a controlled switch for their on and off setting.
             </PaperText>
             <PaperCode block language="tsx">
-{`import { createSignal, Show } from "solid-js";
-import { PaperFlex, PaperQuote, PaperToggle } from "@mileniumhq/paperui";
+{`import { PaperToggle, showError } from "@mileniumhq/paperui";
 
 export function EnabledSetting(props: { enabled: boolean; save: (enabled: boolean) => Promise<void> }) {
-    const [failure, setFailure] = createSignal<string>();
+    const change = (next: boolean) => props.save(next).catch((err) => showError("Couldn't save Enabled", err));
 
-    async function change(next: boolean) {
-        setFailure(undefined);
-        try {
-            await props.save(next);
-        } catch (error) {
-            setFailure(error instanceof Error ? error.message : String(error));
-        }
-    }
-
-    return (
-        <PaperFlex direction="column" gap="half">
-            <PaperToggle checked={props.enabled} aria-label="Enabled" onChange={change} />
-            <Show when={failure()}>
-                {(message) => <PaperQuote variant="danger" title="Not saved">{message()}</PaperQuote>}
-            </Show>
-        </PaperFlex>
-    );
+    return <PaperToggle checked={props.enabled} aria-label="Enabled" onChange={(next) => void change(next)} />;
 }`}
             </PaperCode>
 

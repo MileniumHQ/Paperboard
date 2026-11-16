@@ -178,7 +178,7 @@ export function Example() {
 export function Notice(props: { open: boolean; message: string; onDismiss: () => void }) {
     return (
         <PaperPresence when={props.open} motion="slide-down">
-            <PaperQuote variant="danger" onDismiss={props.onDismiss}>
+            <PaperQuote variant="info" onDismiss={props.onDismiss}>
                 {props.message}
             </PaperQuote>
         </PaperPresence>

@@ -62,8 +62,8 @@ export default definePanelService({
 });`;
 
 const PAGE_TSX = `// src/ForecastView.tsx: the page's client, made from the same contract
-import { errorMessage, serviceClient } from "@mileniumhq/paperapi";
-import { PaperButton, PaperFlex, PaperInput, PaperQuote, PaperText } from "@mileniumhq/paperui";
+import { serviceClient } from "@mileniumhq/paperapi";
+import { PaperButton, PaperFlex, PaperInput, PaperText, showError } from "@mileniumhq/paperui";
 import { createSignal, onCleanup, Show } from "solid-js";
 import { weatherContract, type Forecast } from "./panel";
 
@@ -76,21 +76,13 @@ weather.state.subscribe((full) => setState(full));
 export function ForecastView() {
     const [city, setCity] = createSignal("");
     const [forecast, setForecast] = createSignal<Forecast>();
-    const [failure, setFailure] = createSignal("");
 
     // a forecast any window read, this one included
     const off = weather.events.forecastRead((read) => setForecast(read));
     onCleanup(off);
 
-    const look = async () => {
-        setFailure("");
-        try {
-            // the answer is a Forecast; the event above hears it too
-            await weather.calls.forecast({ city: city() });
-        } catch (err) {
-            setFailure(errorMessage(err));
-        }
-    };
+    // the answer is a Forecast; the event above hears it too
+    const look = () => weather.calls.forecast({ city: city() }).catch((err) => showError("Couldn't get the forecast", err));
 
     return (
         <PaperFlex direction="column" gap="full">
@@ -100,11 +92,6 @@ export function ForecastView() {
                 {(f) => <PaperText preset="body">{f().city}: {f().high}° / {f().low}°</PaperText>}
             </Show>
             <PaperText preset="body">Recent: {state().recent.join(", ") || "none yet"}</PaperText>
-            <Show when={failure()}>
-                <PaperQuote variant="danger" icon="error" title="No forecast" role="alert" onDismiss={() => setFailure("")}>
-                    {failure()}
-                </PaperQuote>
-            </Show>
         </PaperFlex>
     );
 }`;

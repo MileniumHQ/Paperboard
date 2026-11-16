@@ -244,18 +244,16 @@ clampToStep(120, 0, 100, 1); // 100`}
             </PaperText>
             <PaperCode block language="tsx">
 {`import { createSignal } from "solid-js";
-import { PaperFlex, PaperQuote, PaperRange } from "@mileniumhq/paperui";
+import { PaperFlex, PaperRange, showError } from "@mileniumhq/paperui";
 
 export function Setting(props: { stored: number; save: (value: number) => Promise<void> }) {
     const [draft, setDraft] = createSignal<number | null>(null);
-    const [error, setError] = createSignal("");
 
     async function commit(value: number) {
         try {
             await props.save(value);
-            setError("");
         } catch (err) {
-            setError(err instanceof Error ? err.message : String(err));
+            showError("Couldn't save the players", err);
         }
         setDraft(null);
     }
@@ -270,7 +268,6 @@ export function Setting(props: { stored: number; save: (value: number) => Promis
                 onInput={setDraft}
                 onChange={(value) => void commit(value)}
             />
-            {error() ? <PaperQuote variant="danger">{error()}</PaperQuote> : null}
         </PaperFlex>
     );
 }`}

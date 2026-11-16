@@ -41,6 +41,7 @@ export default function App() {
 
 const FORECAST_PAGE = `import { createSignal, For, Show } from "solid-js";
 import {
+    createFailureToast,
     PaperButton,
     PaperEmptyState,
     PaperFlex,
@@ -48,11 +49,9 @@ import {
     PaperInput,
     PaperPage,
     PaperPageHeader,
-    PaperQuote,
     PaperStatTile,
-    showToast,
+    showError,
 } from "@mileniumhq/paperui";
-import { errorMessage } from "@mileniumhq/paperapi";
 import { service, weather } from "../weather";
 
 export default function ForecastPage(props: { openSettings: () => void }) {
@@ -65,7 +64,7 @@ export default function ForecastPage(props: { openSettings: () => void }) {
             await service.followCity({ city: city() });
             setCity("");
         } catch (err) {
-            showToast({ variant: "danger", title: "City not added", message: errorMessage(err) });
+            showError("Couldn't follow the city", err);
         } finally {
             setBusy(false);
         }
@@ -73,16 +72,16 @@ export default function ForecastPage(props: { openSettings: () => void }) {
 
     const unit = () => (weather().settings.units === "metric" ? "°C" : "°F");
 
+    // what the service couldn't do, in toasts while it stands
+    createFailureToast(() => weather().loadError, { title: "Couldn't read the settings" });
+    createFailureToast(
+        () => Object.entries(weather().failures).map(([name, message]) => \`\${name}: \${message}\`).join(" "),
+        { title: "Couldn't check the weather" },
+    );
+
     return (
         <PaperPage>
             <PaperPageHeader icon="partly_cloudy_day" title="Forecast" subtitle="Checked every 15 minutes" />
-            <Show when={weather().loadError}>
-                {(message) => (
-                    <PaperQuote variant="danger" icon="warning" title="Settings could not be read" role="alert">
-                        {message()}
-                    </PaperQuote>
-                )}
-            </Show>
             <Show
                 when={weather().hasKey}
                 fallback={
@@ -124,13 +123,6 @@ export default function ForecastPage(props: { openSettings: () => void }) {
                         )}
                     </For>
                 </PaperGrid>
-                <For each={Object.entries(weather().failures)}>
-                    {([name, message]) => (
-                        <PaperQuote variant="danger" icon="warning" title={\`\${name} not checked\`}>
-                            {message}
-                        </PaperQuote>
-                    )}
-                </For>
             </Show>
         </PaperPage>
     );
@@ -216,8 +208,8 @@ export default function UiGuideDoc() {
                     <tr><td>A row of fields and a button</td><td><PaperLink href="/docs/paperui/paperflex/">PaperFlex</PaperLink> with <PaperCode>direction="row"</PaperCode></td><td><PaperCode>align="center"</PaperCode> lines the button up with the field.</td></tr>
                     <tr><td>Text input</td><td><PaperLink href="/docs/paperui/paperinput/">PaperInput</PaperLink></td><td>The <PaperCode>label</PaperCode> names the field. The sample also follows the city on Enter.</td></tr>
                     <tr><td>One number per thing</td><td><PaperLink href="/docs/paperui/paperstattile/">PaperStatTile</PaperLink> in a <PaperLink href="/docs/paperui/papergrid/">PaperGrid</PaperLink></td><td>The grid fits as many tiles in a row as the width allows.</td></tr>
-                    <tr><td>A press that failed</td><td><PaperLink href="/docs/paperui/papertoast/">showToast</PaperLink> with <PaperCode>variant="danger"</PaperCode></td><td>One line in the <PaperCode>catch</PaperCode> shows the reason, and it stays until it is closed. See <PaperLink href="/docs/developers/errors/">Show every failure</PaperLink>.</td></tr>
-                    <tr><td>A failure that stays, from the state</td><td><PaperLink href="/docs/paperui/paperquote/">PaperQuote</PaperLink> with <PaperCode>variant="danger"</PaperCode></td><td>Shows in every window until the next check fixes it.</td></tr>
+                    <tr><td>A press that failed</td><td><PaperLink href="/docs/paperui/papertoast/#show-error">showError</PaperLink></td><td>One line in the <PaperCode>catch</PaperCode> shows the reason, and it stays until it is closed. See <PaperLink href="/docs/developers/errors/">Show every failure</PaperLink>.</td></tr>
+                    <tr><td>A failure that stays, from the state</td><td><PaperLink href="/docs/paperui/papertoast/#create-failure-toast">createFailureToast</PaperLink></td><td>Shows in every window until the next check fixes it, and closes then.</td></tr>
                 </tbody>
             </PaperTable>
             <PaperText preset="body" as="p">

@@ -283,19 +283,17 @@ export function Example() {
                 The Agent panel renders every message this way.
             </PaperText>
             <PaperCode block language="tsx">
-{`import { createSignal, Show } from "solid-js";
-import { PaperButton, PaperFlex, PaperMarkdown, PaperQuote } from "@mileniumhq/paperui";
+{`import { createSignal } from "solid-js";
+import { PaperButton, PaperFlex, PaperMarkdown, showError } from "@mileniumhq/paperui";
 
 export function Reply(props: { chunks: AsyncIterable<string> }) {
     const [text, setText] = createSignal("");
-    const [failure, setFailure] = createSignal<string>();
 
     async function read() {
-        setFailure(undefined);
         try {
             for await (const chunk of props.chunks) setText((current) => current + chunk);
-        } catch (error) {
-            setFailure(error instanceof Error ? error.message : String(error));
+        } catch (err) {
+            showError("Couldn't finish the reply", err);
         }
     }
 
@@ -303,13 +301,6 @@ export function Reply(props: { chunks: AsyncIterable<string> }) {
         <PaperFlex direction="column" gap="full">
             <PaperButton onClick={() => void read()}>Read reply</PaperButton>
             <PaperMarkdown text={text()} />
-            <Show when={failure()}>
-                {(message) => (
-                    <PaperQuote variant="danger" title="Reply interrupted" onDismiss={() => setFailure(undefined)}>
-                        {message()}
-                    </PaperQuote>
-                )}
-            </Show>
         </PaperFlex>
     );
 }`}

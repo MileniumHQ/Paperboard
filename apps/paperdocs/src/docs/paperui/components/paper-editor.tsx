@@ -202,45 +202,30 @@ export function Example() {
             <PaperText preset="subheader" as="h2" id="examples">Examples</PaperText>
             <PaperText preset="subheader" as="h3" id="save">Edit and save a file</PaperText>
             <PaperText preset="body" as="p">
-                Keep the draft in a signal, save on Ctrl+S, and show a failed save to the user.
+                Keep the draft in a signal, save on Ctrl+S, and show a failed save in a toast.
             </PaperText>
             <PaperCode block language="tsx">
-{`import { createSignal, Show } from "solid-js";
-import { PaperCard, PaperEditor, PaperQuote } from "@mileniumhq/paperui";
+{`import { createSignal } from "solid-js";
+import { PaperCard, PaperEditor, showError } from "@mileniumhq/paperui";
 
 export function ConfigEditor(props: {
     initial: string;
     save: (text: string) => Promise<void>;
 }) {
     const [draft, setDraft] = createSignal(props.initial);
-    const [failure, setFailure] = createSignal("");
 
-    const save = async () => {
-        try {
-            await props.save(draft());
-            setFailure("");
-        } catch (err) {
-            setFailure(err instanceof Error ? err.message : String(err));
-        }
-    };
+    const save = () => props.save(draft()).catch((err) => showError("Couldn't save server.properties", err, { retry: () => void save() }));
 
     return (
-        <>
-            <Show when={failure()}>
-                <PaperQuote variant="danger" icon="warning" title="Not saved" onDismiss={() => setFailure("")}>
-                    {failure()}
-                </PaperQuote>
-            </Show>
-            <PaperCard grow minHeight={0} padding="none">
-                <PaperEditor
-                    value={draft()}
-                    onChange={setDraft}
-                    onSave={() => void save()}
-                    language="properties"
-                    aria-label="server.properties"
-                />
-            </PaperCard>
-        </>
+        <PaperCard grow minHeight={0} padding="none">
+            <PaperEditor
+                value={draft()}
+                onChange={setDraft}
+                onSave={() => void save()}
+                language="properties"
+                aria-label="server.properties"
+            />
+        </PaperCard>
     );
 }`}
             </PaperCode>

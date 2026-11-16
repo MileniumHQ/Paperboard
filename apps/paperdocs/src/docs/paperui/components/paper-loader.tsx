@@ -264,11 +264,11 @@ type PaperLoaderSize = "small" | "medium" | "large";`}
             <PaperText preset="body" as="p">
                 Show the loader as the <PaperCode>fallback</PaperCode> of a <PaperCode>Show</PaperCode> that waits for data.
                 The delay keeps a fast response from flashing a spinner.
-                A failed load needs its own branch, because the loader has no error of its own to show a reason.
+                A failed load needs its own branch, because the loader has no error of its own: <PaperLink href="/docs/paperui/paperemptystate/#couldnt-load">"Couldn't load"</PaperLink> with Try again, and a <PaperLink href="/docs/paperui/papertoast/">toast</PaperLink> that says why.
             </PaperText>
             <PaperCode block language="tsx">
-{`import { createResource, Show } from "solid-js";
-import { PaperFlex, PaperLoader, PaperQuote, PaperText } from "@mileniumhq/paperui";
+{`import { Match, Switch } from "solid-js";
+import { createRead, PaperButton, PaperEmptyState, PaperFlex, PaperLoader, PaperText } from "@mileniumhq/paperui";
 
 async function readServers(): Promise<string[]> {
     const response = await fetch("/servers.json");
@@ -277,24 +277,24 @@ async function readServers(): Promise<string[]> {
 }
 
 export function Servers() {
-    const [servers] = createResource(readServers);
+    const servers = createRead(readServers, { failure: { title: "Couldn't load the servers" } });
 
     return (
-        <Show
-            when={!servers.error}
-            fallback={<PaperQuote variant="danger">{servers.error.message}</PaperQuote>}
-        >
-            <Show
-                when={servers()}
-                fallback={
-                    <PaperFlex fullWidth fullHeight align="center" justify="center">
-                        <PaperLoader loaderStatus="indeterminate" delay={400} label="Loading servers" />
-                    </PaperFlex>
-                }
-            >
+        <Switch>
+            <Match when={servers.value()}>
                 {(list) => <PaperText preset="body" as="p">{list().length} servers</PaperText>}
-            </Show>
-        </Show>
+            </Match>
+            <Match when={servers.error()}>
+                <PaperEmptyState icon="error" title="Couldn't load">
+                    <PaperButton disabled={servers.loading()} onClick={() => void servers.reload()}>Try again</PaperButton>
+                </PaperEmptyState>
+            </Match>
+            <Match when={true}>
+                <PaperFlex fullWidth fullHeight align="center" justify="center">
+                    <PaperLoader loaderStatus="indeterminate" delay={400} label="Loading servers" />
+                </PaperFlex>
+            </Match>
+        </Switch>
     );
 }`}
             </PaperCode>

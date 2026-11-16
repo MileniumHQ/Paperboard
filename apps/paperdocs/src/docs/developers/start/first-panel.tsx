@@ -157,7 +157,7 @@ Ready: Paperboard can run this panel.`}
             </PaperTextList>
             <PaperText preset="body" as="p">
                 On <PaperCode>Service</PaperCode>, type a name and press Greet. The page shows <PaperCode>Hello, Ada!</PaperCode> and the count goes up.
-                Press Greet with the field empty: a red notice titled <PaperCode>Not greeted</PaperCode> says <PaperCode>Name is required</PaperCode>.
+                Press Greet with the field empty: a toast titled <PaperCode>Couldn't greet</PaperCode> says <PaperCode>Name is required</PaperCode>.
                 That is the service's own error message, passed to the page unchanged.
             </PaperText>
 
@@ -257,16 +257,7 @@ export default definePanelService({
                 Then give the Service page a button for it. In <PaperCode>src/pages/ServicePage.tsx</PaperCode>, add this above the <PaperCode>return</PaperCode>:
             </PaperText>
             <PaperCode block language="tsx">
-{`    const [resetFailure, setResetFailure] = createSignal("");
-    const reset = async () => {
-        setResetFailure("");
-        try {
-            await service.calls.resetGreetings();
-        } catch (err) {
-            console.error("[Service] reset failed:", err);
-            setResetFailure(errorMessage(err));
-        }
-    };`}
+{`    const reset = () => service.calls.resetGreetings().catch((err) => showError("Couldn't reset the count", err));`}
             </PaperCode>
             <PaperText preset="body" as="p">
                 Add the button after the Greet button:
@@ -277,17 +268,7 @@ export default definePanelService({
                             </PaperButton>`}
             </PaperCode>
             <PaperText preset="body" as="p">
-                And show its failure above the existing <PaperCode>{"<Show when={failure()}>"}</PaperCode> block, so a failed reset is never silent:
-            </PaperText>
-            <PaperCode block language="tsx">
-{`                <Show when={resetFailure()}>
-                    <PaperQuote variant="danger" icon="warning" title="Count not reset" role="alert" onDismiss={() => setResetFailure("")}>
-                        {resetFailure()}
-                    </PaperQuote>
-                </Show>`}
-            </PaperCode>
-            <PaperText preset="body" as="p">
-                The new count does not come back from the call. It arrives through the service's state, the same way a greeting from the terminal did.
+                A reset that fails says why in a toast, as a greeting does. The new count does not come back from the call. It arrives through the service's state, the same way a greeting from the terminal did.
             </PaperText>
 
             <PaperText preset="subheader" as="h2" id="run-the-change">7. Run the change</PaperText>

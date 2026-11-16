@@ -214,12 +214,12 @@ export function Example() {
             <PaperText preset="subheader" as="h2" id="examples">Examples</PaperText>
             <PaperText preset="subheader" as="h3" id="confirm">Confirm a destructive action</PaperText>
             <PaperText preset="body" as="p">
-                Run the action in a handler, show a failure in the body, and close only on success.
+                Run the action in a handler, say a failure in a toast, which shows over the modal, and close only on success.
                 The gameserver panel confirms deleting a backup this way.
             </PaperText>
             <PaperCode block language="tsx">
-{`import { createSignal, Show } from "solid-js";
-import { PaperButton, PaperModal, PaperQuote, PaperText } from "@mileniumhq/paperui";
+{`import { createSignal } from "solid-js";
+import { PaperButton, PaperModal, PaperText, showError } from "@mileniumhq/paperui";
 
 export function DeleteConfirm(props: {
     open: boolean;
@@ -227,15 +227,13 @@ export function DeleteConfirm(props: {
     remove: () => Promise<void>;
 }) {
     const [busy, setBusy] = createSignal(false);
-    const [error, setError] = createSignal("");
 
     async function confirm() {
         setBusy(true);
-        setError("");
         try {
             await props.remove();
         } catch (err) {
-            setError(err instanceof Error ? err.message : String(err));
+            showError("Couldn't delete the backup", err);
             return;
         } finally {
             setBusy(false);
@@ -257,9 +255,6 @@ export function DeleteConfirm(props: {
             }
         >
             <PaperText preset="body" as="p">This backup is removed for good.</PaperText>
-            <Show when={error()}>
-                <PaperQuote variant="danger" title="Not deleted">{error()}</PaperQuote>
-            </Show>
         </PaperModal>
     );
 }`}

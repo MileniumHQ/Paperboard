@@ -120,7 +120,7 @@ const send = async () => {
         await service.calls.sendMessage({ channel: channelId(), content: content() });
         if (current()) setSentTo(channelId());
     } catch (err) {
-        if (current()) setSendError(errorMessage(err));
+        if (current()) showError("Couldn't send the message", err);
     }
 };
 const openServer = (id: string) => {
@@ -200,19 +200,19 @@ type SaveQueue = <R>(task: () => Promise<R>) => Promise<R>;`}
                 <PaperCode>stored</PaperCode> is what is saved, as the view last read it or the service pushed it.
             </PaperText>
             <PaperCode block language="tsx">
-{`import { createSavedValue, PaperToggle } from "@mileniumhq/paperui";
+{`import { createSavedValue, PaperToggle, showError } from "@mileniumhq/paperui";
 
 const whitelist = createSavedValue(() => state().whitelist, (on) => service.calls.setWhitelist({ on }));
 
 <PaperToggle
     aria-label="Whitelist"
     checked={whitelist.value()}
-    onChange={(on) => whitelist.set(on).catch((err) => setError(\`Whitelist not changed: \${errorMessage(err)}\`))}
+    onChange={(on) => whitelist.set(on).catch((err) => showError("Couldn't change the whitelist", err))}
 />`}
             </PaperCode>
             <PaperTextList>
                 <li>A change shows at once. Saves run one at a time in the order they were made, so an older one never lands over a newer one. A change that a newer one replaced before its turn is not written at all.</li>
-                <li>When the newest save fails, the control goes back to what is saved (the last change that landed, else <PaperCode>stored</PaperCode>) and <PaperCode>set</PaperCode> rejects with the save's own error. Catch it to show the error beside the control. A rejection handed back to <PaperLink href="/docs/paperui/papertoggle/">PaperToggle</PaperLink>'s <PaperCode>onChange</PaperCode> uncaught reaches the error toast.</li>
+                <li>When the newest save fails, the control goes back to what is saved (the last change that landed, else <PaperCode>stored</PaperCode>) and <PaperCode>set</PaperCode> rejects with the save's own error. Catch it to say the error with <PaperLink href="/docs/paperui/papertoast/#show-error">showError</PaperLink>. A rejection handed back to <PaperLink href="/docs/paperui/papertoggle/">PaperToggle</PaperLink>'s <PaperCode>onChange</PaperCode> uncaught reaches the error toast.</li>
                 <li>A <PaperCode>save</PaperCode> that resolves <PaperCode>false</PaperCode> was called off by the person, such as a folder picker closed: the control goes back with no error.</li>
                 <li>A save that landed shows its value until <PaperCode>stored</PaperCode> catches up. When the save's own answer changes <PaperCode>stored</PaperCode> (a name trimmed), <PaperCode>stored</PaperCode> shows.</li>
                 <li><PaperCode>stored</PaperCode> changing while nothing saves is the truth, and shows. While a change saves, it stays on screen. A push equal to the last one, by <PaperCode>sameData</PaperCode>, is no change.</li>
