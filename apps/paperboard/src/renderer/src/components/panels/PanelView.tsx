@@ -1,5 +1,5 @@
 import { dismissToast, PaperFlex, playHaptic, showToast, swipeFromFrame } from "@mileniumhq/paperui";
-import { backupApi, backupProgressFraction, backupProgressText, type BackupProgress, errorMessage } from "@mileniumhq/paperapi";
+import { backupApi, backupProgressFraction, backupProgressText, type BackupProgress, errorMessage, PAGE_BACK_MESSAGE, PAGE_BARS_MESSAGE } from "@mileniumhq/paperapi";
 import { type Component, type JSX, createEffect, createMemo, createSignal, For, on, Show, onCleanup, onMount } from "solid-js";
 import { recordUse, liveKeys, recordAway, withoutIdle, MAX_LIVE_IFRAMES, IDLE_UNLOAD_MS } from "./panelLru";
 import LoadingOverlay from "./LoadingOverlay";
@@ -32,6 +32,14 @@ export interface PanelViewProps {
     onRestartPanel?: (key: string) => void;
     /** a panel's page could not load: the shell reads the panel list again, which says why its service failed */
     onPanelFailed?: (key: string) => void;
+    /**
+     * A panel's own open pages, outermost first, as it names them. In the
+     * phone layout the shell's bar names them and the pages draw no bar of
+     * their own.
+     */
+    onCrumbs: (key: string, titles: string[]) => void;
+    /** each live panel's way back one of its own pages, by key */
+    backs: Map<string, () => void>;
 }
 
 interface PanelFrameProps {
@@ -46,6 +54,8 @@ interface PanelFrameProps {
     restart?: RestartState;
     retryRestart: () => void;
     failed: () => void;
+    onCrumbs: (titles: string[]) => void;
+    backs: Map<string, () => void>;
 }
 
 // Every open frame of a computer follows its backups over the one
@@ -140,26 +150,33 @@ const PanelFrame: Component<PanelFrameProps> = (props) => {
             onSwipeBack: (data) => { if (frame && props.current) swipeFromFrame(frame, data as Parameters<typeof swipeFromFrame>[1]); },
             // frames can't vibrate; the shell plays it, if it is a kind it knows
             onHaptic: (kind) => { if (props.current) playHaptic(kind as Parameters<typeof playHaptic>[0]); },
+            onCrumbs: (titles) => props.onCrumbs(titles),
             choosing: () => chooser() !== null,
             onChooseLocation: (request) => setChooser({ ...request, generation: current }),
         });
+        // the shell's Back goes back through the panel's own pages first; a new document has opened none yet
+        props.backs.set(props.panelKey, () => { frame?.contentWindow?.postMessage({ type: PAGE_BACK_MESSAGE, generation: current }, "*"); });
+        props.onCrumbs([]);
         // a reloaded document asked nothing; its open window closes unanswered,
         // and a document that goes mid-swipe leaves its page where it was
         onCleanup(() => {
             if (frame) swipeFromFrame(frame, { phase: "cancel", dx: 0, velocity: 0 });
             clearTimeout(timer); setChooser(null); doc.close();
+            props.backs.delete(props.panelKey); props.onCrumbs([]);
         });
     }));
     createEffect(on(failure, (message) => { if (message) props.failed(); }, { defer: true }));
     // mobile mode turning on or off reaches a frame already challenged
     createEffect(on(mobileMode, (mobile) => { if (mobile !== null) frame?.contentWindow?.postMessage({ type: MOBILE_MODE_MESSAGE, generation, mobile }, "*"); }, { defer: true }));
+    // the phone layout's bar names the panel's pages, which then draw none of their own; a foldable opening into the wide layout gives them back
+    createEffect(on(() => props.mobile, (pageBars) => { frame?.contentWindow?.postMessage({ type: PAGE_BARS_MESSAGE, generation, pageBars }, "*"); }, { defer: true }));
     return <div class={styles.panelLayer} classList={{ [styles.away]: !props.current }}>
         <iframe ref={frame} data-panel-key={props.panelKey} title={panelId()}
             sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
             allow="clipboard-read; clipboard-write; microphone; camera; display-capture"
-            onLoad={() => { frame?.contentWindow?.postMessage({ type: "paperboard:initialize", generation, computerName: props.computerName, mobile: requireMobileMode() }, "*"); }}
+            onLoad={() => { frame?.contentWindow?.postMessage({ type: "paperboard:initialize", generation, computerName: props.computerName, mobile: requireMobileMode(), pageBars: props.mobile }, "*"); }}
             class={`${styles.frame} ${styles.panelFrame}`} classList={{ [styles.unpainted]: !ready() || Boolean(failure()) || Boolean(props.restart) || Boolean(held()) }} />
-        <BackupLocationChooser computerId={computerId()} computerName={props.computerName} panelId={panelId()} sourceId={chooser()?.sourceId} open={chooser() !== null} onDone={(result) => {
+        <BackupLocationChooser computerId={computerId()} computerName={props.computerName} panelId={panelId()} panelName={props.heading.name} sourceId={chooser()?.sourceId} open={chooser() !== null} onDone={(result) => {
             const request = chooser();
             setChooser(null);
             if (request && request.generation === generation) request.answer(result);
@@ -221,7 +238,8 @@ const PanelView: Component<PanelViewProps> = (props) => {
             const heading = props.panelHeading(key);
             return <Show when={live().has(key)}>
                 <PanelFrame panelKey={key} heading={heading} mobile={props.mobile} computerName={props.computerName(key.split("::")[0])} current={key === currentKey()} reload={props.reloadTokens?.[key] || 0} retry={() => props.onReloadPanel?.(key)}
-                    restart={props.restartStates?.[key]} retryRestart={() => props.onRestartPanel?.(key)} failed={() => props.onPanelFailed?.(key)} />
+                    restart={props.restartStates?.[key]} retryRestart={() => props.onRestartPanel?.(key)} failed={() => props.onPanelFailed?.(key)}
+                    onCrumbs={(titles) => props.onCrumbs(key, titles)} backs={props.backs} />
             </Show>;
         }}</For>
     </PaperFlex>;

@@ -355,6 +355,7 @@ export const ComputerSetupWizard: Component<ComputerSetupWizardProps> = (
                                 fullWidth
                                 label="Pairing code"
                                 icon="lock"
+                                autofocus
                                 value={code()}
                                 onInput={(e) => handleCodeInput(e.currentTarget)}
                                 disabled={isPairing()}

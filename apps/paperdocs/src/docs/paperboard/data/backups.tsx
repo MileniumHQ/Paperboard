@@ -83,7 +83,7 @@ export default function BackupsDoc() {
             <PaperText preset="subheader" as="h2" id="make-a-backup">Make a backup</PaperText>
             <PaperText preset="body" as="p">
                 In Game Server, open <b>Backups</b> and select <b>Back Up Now</b>.
-                The first time, Paperboard asks <b>Where should backups go?</b>. Pick a location and select <b>Use this location</b>.
+                The first time, Paperboard asks <b>Where should Game Server backups go?</b>. Pick a location and select <b>Use this location</b>.
                 Later backups of that panel go to the same place. Change it with <b>Change</b> next to <b>Kept in</b>.
             </PaperText>
             <PaperText preset="body" as="p">

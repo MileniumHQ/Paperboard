@@ -57,3 +57,19 @@ test("an open panel whose backup progress connection is lost says so until it re
     await page.waitFor(`!${notice}`, "the notice gone once it reconnects");
     expect(page.exceptions).toEqual([]);
 });
+
+// Inventory: Backups — the location chooser says whose backups it places, and where each location is apart from how full it is.
+test("the backup location chooser names the panel, and puts a location's place and its totals on lines of their own", async () => {
+    const { page } = shell;
+    await page.evaluate(`${frame}.contentDocument.querySelector("[data-do=choose]").click()`);
+    const dialog = `document.querySelector("[role=dialog]")`;
+    await page.waitFor(`${dialog}?.innerText.includes("of backups")`, "the chooser, with each location's totals");
+    const lines = await page.evaluate<string[]>(`${dialog}.innerText.split("\\n").map((l) => l.trim()).filter(Boolean)`);
+    expect(lines[0]).toBe("Where should API Demo backups go?");
+    // the folder is a line of its own, and so are its totals
+    expect(lines.some((l) => l.includes("/backups") && !l.includes("of backups"))).toBe(true);
+    expect(lines.some((l) => /^[\d.]+ \w+ of backups, /.test(l))).toBe(true);
+    await page.evaluate(`[...${dialog}.querySelectorAll("button")].find((b) => b.textContent.includes("Cancel")).click()`);
+    await page.waitFor(`!${dialog}`, "the chooser to close");
+    expect(page.exceptions).toEqual([]);
+});

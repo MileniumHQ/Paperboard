@@ -11,7 +11,7 @@ export type BackupLocationChoice = { status: "chosen"; location: BackupLocation 
 // backup locations with how much space each has, and which one this
 // panel's backups go to. Only the shell sets the choice. It stays mounted and
 // opens per request, so PaperModal plays its own open and close.
-const BackupLocationChooser: Component<{ computerId: string; computerName: string; panelId: string; sourceId?: string; open: boolean; onDone: (choice: BackupLocationChoice) => void }> = (props) => {
+const BackupLocationChooser: Component<{ computerId: string; computerName: string; panelId: string; panelName: string; sourceId?: string; open: boolean; onDone: (choice: BackupLocationChoice) => void }> = (props) => {
     // read afresh each time it opens: the list, and the location this panel's backups go to now
     const read = createRead(
         async () => {
@@ -65,7 +65,7 @@ const BackupLocationChooser: Component<{ computerId: string; computerName: strin
     return (
         <PaperModal
             open={props.open}
-            title="Where should backups go?"
+            title={`Where should ${props.panelName} backups go?`}
             size="small"
             onClose={dismiss}
             footer={
@@ -88,7 +88,13 @@ const BackupLocationChooser: Component<{ computerId: string; computerName: strin
                                 {(location) => {
                                     const usage = createLocationUsage(location.id, props.computerId);
                                     return (
-                                        <PaperSelectorItem value={location.id} icon={<LocationLogo kind={location.kind} />} description={`${location.detail}. ${usageText(usage)}`}>
+                                        <PaperSelectorItem value={location.id} icon={<LocationLogo kind={location.kind} />} description={
+                                            // where it is, and how full, each on its own line
+                                            <PaperFlex direction="column">
+                                                <span>{location.detail}</span>
+                                                <span>{usageText(usage)}</span>
+                                            </PaperFlex>
+                                        }>
                                             {backupLocationLabel(location, props.computerName)}
                                         </PaperSelectorItem>
                                     );

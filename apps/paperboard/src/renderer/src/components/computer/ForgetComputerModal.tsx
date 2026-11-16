@@ -52,7 +52,7 @@ const ForgetComputerModal: Component<ForgetComputerModalProps> = (props) => {
         <PaperModal
             open={Boolean(props.computer)}
             onClose={close}
-            title="Forget Computer"
+            title={`Forget ${props.computer?.name ?? "this computer"}?`}
             size="small"
             footer={
                 <>

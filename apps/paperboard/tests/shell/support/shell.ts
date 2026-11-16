@@ -85,11 +85,12 @@ export interface Shell {
     /** pairs a second daemon as `name` through the shell's computer-pair call, as Add Computer does;
      * returns its computer id, daemon, and the call's whole answer.
      * It listens on 127.0.0.2, so Paperboard dials it as another computer (TLS, pinned certificate),
-     * not as this one; Linux routes all of 127/8 to loopback, which is where this suite runs. */
-    pairComputer(name: string): Promise<{ id: string; daemon: Crane; answer: Record<string, unknown> }>;
+     * not as this one; Linux routes all of 127/8 to loopback, which is where this suite runs.
+     * `panels` are installed on it before it starts. */
+    pairComputer(name: string, panels?: DevPanel[]): Promise<{ id: string; daemon: Crane; answer: Record<string, unknown> }>;
     /** a second daemon listening on `host`, with pairing opened by `papercrane pair` as a person opens it:
      * its code, and what pair printed (which says the address to type) */
-    openPairing(host: string): Promise<Pairing>;
+    openPairing(host: string, panels?: DevPanel[]): Promise<Pairing>;
     close(): Promise<void>;
 }
 
@@ -237,9 +238,10 @@ export async function bootShell(options: BootOptions = {}): Promise<Shell> {
         }
 
         let pairings = 0;
-        const openPairing = async (listenOn: string): Promise<Pairing> => {
+        const openPairing = async (listenOn: string, panels: DevPanel[] = []): Promise<Pairing> => {
             const otherDir = path.join(root, `computer-${++pairings}`);
             fs.mkdirSync(otherDir);
+            await Promise.all(panels.map((panel) => installDevPanelInto(panel, otherDir)));
             const other = await startCrane(binary, otherDir, listenOn);
             reaper.track();
             stops.push(() => other.stop());
@@ -268,8 +270,8 @@ export async function bootShell(options: BootOptions = {}): Promise<Shell> {
             });
             return { daemon: other, code, said: () => said, done };
         };
-        const pairComputer = async (name: string) => {
-            const { daemon: other, code, said, done } = await openPairing("127.0.0.2");
+        const pairComputer = async (name: string, panels: DevPanel[] = []) => {
+            const { daemon: other, code, said, done } = await openPairing("127.0.0.2", panels);
             const args = JSON.stringify({ args: { host: "127.0.0.2", port: other.port, code, name } });
             const reply = await page.evaluate<{ ok: boolean; result?: Record<string, unknown>; error?: string }>(
                 `fetch("/_shell/invoke/computer-pair", { method: "POST", headers: { "Content-Type": "application/json" }, body: ${JSON.stringify(args)} }).then((r) => r.json())`,

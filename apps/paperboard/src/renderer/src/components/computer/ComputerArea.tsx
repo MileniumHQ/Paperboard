@@ -1,4 +1,5 @@
 import { type JSX, createMemo, For, Show } from "solid-js";
+import { createStore, reconcile } from "solid-js/store";
 import { PaperFlex, PaperSlidePage } from "@mileniumhq/paperui";
 import { loadInstalledPanelMedia, panelsApi } from "@mileniumhq/paperapi";
 import { readPanelListingFile } from "../../lib/shell";
@@ -45,6 +46,22 @@ export default function ComputerArea(props: {
     const setComputerTab = (compId: string, tab: string) => props.panels.setComputerTab(compId, tab);
     const refreshPanelsForComputer = (compId: string) => props.panels.refreshPanelsForComputer(compId);
     const selectedTab = () => getSelectedTab(activeComputerId());
+
+    // a panel's own open pages, named in the phone layout's bar after the
+    // panel, and each live panel's way back one of them
+    const [panelCrumbs, setPanelCrumbs] = createStore<Record<string, string[]>>({});
+    const frameBacks = new Map<string, () => void>();
+    const setCrumbs = (key: string, titles: string[]) => {
+        // a push that changes nothing notifies nothing
+        if ((panelCrumbs[key] ?? []).join("\u0000") !== titles.join("\u0000")) setPanelCrumbs(key, reconcile(titles));
+    };
+    const openCrumbs = () => (isShellTab(selectedTab()) ? [] : panelCrumbs[`${activeComputerId()}::${selectedTab()}`] ?? []);
+    // Back from the panel's page: out of the panel's own pages first, then to the list
+    const mobilePageBack = () => {
+        const back = openCrumbs().length ? frameBacks.get(`${activeComputerId()}::${selectedTab()}`) : undefined;
+        if (back) back();
+        else props.navigation.setMobilePageOpen(false);
+    };
 
     // The library runs in an iframe and asks for installs over postMessage;
     // the install path is unchanged — daemon RPC, refresh, open the panel.
@@ -143,8 +160,9 @@ export default function ComputerArea(props: {
                 enabled={props.navigation.mobile()}
                 open={props.navigation.mobilePageOpen()}
                 title={mobilePageHeading().title}
+                crumbs={openCrumbs()}
                 icon={mobilePageHeading().icon}
-                onBack={() => props.navigation.setMobilePageOpen(false)}
+                onBack={mobilePageBack}
             >
                 <PaperFlex direction="column" fullHeight flex={1} overflow="hidden" class={styles.computerArea}>
                     <For each={props.navigation.listedComputers()}>
@@ -226,6 +244,8 @@ export default function ComputerArea(props: {
                                 onReloadPanel={props.restarts.bumpReloadToken}
                                 restartStates={props.restarts.restartStates()}
                                 onPanelFailed={(key) => void refreshPanelsForComputer(key.split("::")[0])}
+                                onCrumbs={setCrumbs}
+                                backs={frameBacks}
                                 onRestartPanel={(key) => {
                                     const [compId, panelId] = key.split("::");
                                     void props.restarts.restartPanel(compId, panelId, props.panelName(compId, panelId));

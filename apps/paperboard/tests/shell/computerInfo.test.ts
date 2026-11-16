@@ -157,6 +157,8 @@ test("a failed forget shows why, the dialog opens clean the next time, and forge
     await page.waitFor(`[...document.querySelectorAll("button")].some((b) => b.offsetParent !== null && b.textContent.includes("Forget Computer"))`, "Garage's Forget Computer button");
     await clickText(page, "button", "Forget Computer");
     await page.waitFor(`document.querySelector("[role=dialog]")?.innerText.includes("forget Garage")`, "the Forget Computer dialog");
+    // its title names the computer it forgets
+    expect(await page.evaluate<string>(`document.querySelector("[role=dialog]").innerText.split("\\n")[0].trim()`)).toBe("Forget Garage?");
     await clickText(page, "[role=dialog] button", "Forget Computer");
     await page.waitFor(`document.querySelector("[role=dialog]")?.innerText.includes("The computer list is read-only")`, "why the forget failed");
     await clickText(page, "[role=dialog] button", "Cancel");
