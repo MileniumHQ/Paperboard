@@ -16,13 +16,22 @@ async function failWithDialogOpen() {
     await page.waitFor(`document.activeElement?.closest('${DIALOG}')`, "focus to go into the dialog");
     await page.eval(`t.fail("The name is taken by another world")`);
     await page.waitFor(`document.querySelector('${TOAST}')`, "the failure toast");
-    await page.waitFor(`document.getAnimations().every((a) => a.playState === "finished")`, "the toast and dialog to settle");
+    await page.waitFor(`document.getAnimations().every((a) => a.playState === "finished" || a.effect?.target?.matches("[data-paper-toast-time]"))`, "the toast and dialog to settle (its time line runs on)");
 }
 
 // Inventory: PaperToast — a failure said while a dialog is open.
 describe("a failure toast over an open PaperModal", () => {
-    test("shows in the dialog, is read, takes the press on its close, and the dialog stays open", async () => {
+    test("shows in the corner above the scrim, is read, takes the press on its close, and the dialog stays open", async () => {
         await failWithDialogOpen();
+        // on the page, not in the dialog, in the window's bottom-right corner
+        expect(await page.eval(`!document.querySelector('[data-paper-toasts]').closest('${DIALOG}')`)).toBe(true);
+        const corner = await page.eval<{ right: number; bottom: number; width: number; height: number }>(
+            `(() => { const r = document.querySelector('${TOAST}').getBoundingClientRect(); return { right: innerWidth - r.right, bottom: innerHeight - r.bottom, width: innerWidth, height: innerHeight }; })()`,
+        );
+        expect(corner.right).toBeGreaterThan(0);
+        expect(corner.right).toBeLessThan(corner.width / 10);
+        expect(corner.bottom).toBeGreaterThan(0);
+        expect(corner.bottom).toBeLessThan(corner.height / 10);
         const close = await page.center(CLOSE);
         // what a press there hits is the toast, not the scrim or the page under it
         expect(await page.eval(`!!document.elementFromPoint(${close.x}, ${close.y})?.closest('[data-paper-toasts]')`)).toBe(true);
@@ -41,29 +50,20 @@ describe("a failure toast over an open PaperModal", () => {
         expect(await page.eval("t.presses")).toBe(0);
     });
 
-    test("a failure outlives the dialog it showed in: back on the page, the same element", async () => {
+    test("Tab reaches its close from the dialog and goes back in; once it is closed, focus stays in the dialog", async () => {
         await failWithDialogOpen();
-        await page.eval(`document.querySelector('${TOAST}').dataset.kept = "yes"`);
-        await page.press("Escape");
-        await page.waitFor(`!document.querySelector('[data-paper-toasts]').closest('${DIALOG}')`, "the toast back on the page");
-        expect(await page.eval(`document.querySelector('${TOAST}')?.dataset.kept`)).toBe("yes");
-    });
-
-    test("Tab reaches its close in the dialog's own turn, between its content and its buttons; once it is closed, focus stays in the dialog", async () => {
-        await failWithDialogOpen();
-        await page.eval(`document.getElementById("name").focus()`);
+        await page.eval(`document.getElementById("save").focus()`);
         await page.press("Tab");
         expect(await focused()).toBe("Close");
         expect(await page.eval(`!!document.activeElement.closest('[data-paper-toasts]')`)).toBe(true);
-        await page.press("Tab");
-        expect(await focused()).toBe("save");
         // round the cycle, and back the other way
         await page.press("Tab");
-        expect(await focused()).toBe("Close modal");
+        expect(await page.eval(`!!document.activeElement.closest('${DIALOG}')`)).toBe(true);
+        await page.press("Tab", 8);
+        expect(await page.eval(`!!document.activeElement.closest('[data-paper-toasts]')`)).toBe(true);
         await page.press("Tab", 8);
         expect(await focused()).toBe("save");
-        await page.press("Tab", 8);
-        expect(await focused()).toBe("Close");
+        await page.press("Tab");
 
         await page.press("Enter");
         await page.waitFor(`!document.querySelector('${TOAST}')`, "the toast to close from the keyboard");

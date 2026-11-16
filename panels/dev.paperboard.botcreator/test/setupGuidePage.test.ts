@@ -40,7 +40,7 @@ describe("the setup guide", () => {
             for (const [i, title] of titles.entries()) {
                 await page.waitFor(`[...document.querySelectorAll("h2")].some((h) => h.innerText === ${JSON.stringify(title)} && h.getBoundingClientRect().left >= 0 && h.getBoundingClientRect().right <= innerWidth + 1) && [...document.querySelectorAll("img")].every((img) => img.complete)`, `step "${title}"`);
                 // the step has slid into place
-                await page.evaluate(`Promise.all(document.getAnimations().map((a) => a.finished))`);
+                await page.evaluate(`Promise.all(document.getAnimations().filter((a) => !a.effect?.target?.matches?.("[data-paper-toast-time]")).map((a) => a.finished))`);
                 const shown = await headingTop(page);
                 expect(shown.text).toBe(title);
                 tops.push(shown.top);

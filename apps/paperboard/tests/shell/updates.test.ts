@@ -16,7 +16,7 @@ const updating = `!!${frame}.parentElement.querySelector("[aria-label^='Updating
 const rowDisabled = `document.querySelector("label[data-value='${PANEL}'] input").disabled`;
 
 // every finite animation on the page has run: what moves is where it stays
-const SETTLED = `Promise.all(document.getAnimations().filter((a) => a.effect?.getTiming().iterations !== Infinity).map((a) => a.finished))`;
+const SETTLED = `Promise.all(document.getAnimations().filter((a) => !a.effect?.target?.matches?.("[data-paper-toast-time]")).filter((a) => a.effect?.getTiming().iterations !== Infinity).map((a) => a.finished))`;
 
 let shell: Shell;
 let revision = 0;

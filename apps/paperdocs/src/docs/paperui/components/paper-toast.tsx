@@ -16,21 +16,18 @@ export default function PaperToastDoc() {
         <PaperFlex direction="column" gap="double" fullWidth>
             <PaperText preset="header" as="h1">PaperToast</PaperText>
             <PaperText preset="body" as="p">
-                A toast is a short message in the middle of the window, near its top: something failed or finished, said where it will be seen and where it covers no button.
-                While a <PaperLink href="/docs/paperui/papermodal/">PaperModal</PaperLink> is open, it shows inside the dialog instead, above its buttons.
+                A toast is a short message in the window's bottom-right corner: something that failed or finished just now, said where it will be seen.
                 Call <PaperCode>showToast</PaperCode> from anywhere inside a <PaperLink href="/docs/paperui/paperprovider/">PaperProvider</PaperLink>, which renders the region the toasts stack in.
-                It is the way to show a failure: any button, menu item or call that fails catches the error and passes it to <PaperCode>showError</PaperCode>, with no signal to keep and no place in the layout to find.
+                Every toast goes by itself, and a thin line along its bottom shrinks with the time it has left.
             </PaperText>
 
-            <PaperText preset="subheader" as="h2" id="failures">Failures are toasts</PaperText>
+            <PaperText preset="subheader" as="h2" id="failures">A toast or a PaperError</PaperText>
             <PaperTextList>
-                <li>A failure is a toast, never an error quote. <PaperCode>{'<PaperQuote variant="danger">'}</PaperCode> is deprecated, and the code check flags it.</li>
-                <li>What an action couldn't do: <PaperLink href="/docs/paperui/state/#create-action">createAction</PaperLink>'s <PaperCode>run</PaperCode>, which toasts a failure and closes it once the same action goes through, or <PaperCode>showError</PaperCode> in a catch of your own.</li>
-                <li>A failure that stands until something changes, such as settings that can't be read: <PaperCode>createFailureToast</PaperCode>, or <PaperLink href="/docs/paperui/state/#create-read">createRead</PaperLink>'s <PaperCode>failure</PaperCode>.</li>
-                <li>A field's failure stays on the field, as <PaperLink href="/docs/paperui/paperinput/#validation">PaperInput</PaperLink>'s <PaperCode>error</PaperCode>. Anything else in a dialog is a toast, which shows inside the dialog, above its buttons, while it stays open.</li>
-                <li>Never a red line of text: <PaperCode>{'<PaperText preset="error">'}</PaperCode> and <PaperCode>{'<PaperText color="danger">'}</PaperCode> are flagged like an error quote.</li>
-                <li>A view with nothing to show because it couldn't load shows <PaperLink href="/docs/paperui/paperemptystate/#couldnt-load">"Couldn't load"</PaperLink> with Try again, and the toast says why. A view that still has its old data keeps it on screen, and the toast says the reload failed.</li>
-                <li>A toast may repeat a button, such as Try again, but never holds the only one: a closed toast takes its button with it.</li>
+                <li>A one-off failure is a toast: an action or a save that didn't go through. Catch the error and pass it to <PaperCode>showError</PaperCode>, or run it with <PaperLink href="/docs/paperui/state/#create-action">createAction</PaperLink>, which toasts a failure and closes it once the same action goes through.</li>
+                <li>A failure that stands is a <PaperLink href="/docs/paperui/papererror/">PaperError</PaperLink> where it happens, never a toast: a view that won't load, a setup that failed, a service that refused. A toast goes, and the failure would stay with nothing saying so.</li>
+                <li>A field's failure stays on the field, as <PaperLink href="/docs/paperui/paperinput/#validation">PaperInput</PaperLink>'s <PaperCode>error</PaperCode>.</li>
+                <li>Never an error quote or a red line of text: <PaperCode>{'<PaperQuote variant="danger">'}</PaperCode>, <PaperCode>{'<PaperText preset="error">'}</PaperCode> and <PaperCode>{'<PaperText color="danger">'}</PaperCode> are flagged by the code check.</li>
+                <li>A toast may repeat a button, such as Try again, but never holds the only one: a toast that is gone takes its button with it.</li>
             </PaperTextList>
 
             <PaperText preset="subheader" as="h2" id="usage">Usage</PaperText>
@@ -58,10 +55,14 @@ const save = () => service.calls.saveServer(draft()).catch((err) => showError("C
                 <li><PaperCode>title</PaperCode> says what failed, as "Couldn't …". <PaperCode>err</PaperCode> is whatever the catch got: an Error, a string, anything. The toast says its message in words, so a caller never formats one.</li>
                 <li>A toast holds one line. A reason of several lines, such as a tool's exit and what it printed, shows its first line, and the rest under Details, where it can be read whole and copied. Pass <PaperCode>details</PaperCode> to give them yourself.</li>
                 <li><PaperCode>retry</PaperCode> adds a Try again button that calls it. The view keeps its own way to try again.</li>
-                <li><PaperCode>key</PaperCode> is the title unless given: a failure that repeats shows once, with its newest reason. It returns the toast's id.</li>
+                <li><PaperCode>key</PaperCode> is the title unless given: a failure that repeats shows once, with its newest reason, and its time starts again. It returns the toast's id.</li>
+                <li>It goes after 10 seconds, like every danger toast.</li>
             </PaperTextList>
 
-            <PaperText preset="subheader" as="h2" id="create-failure-toast">createFailureToast</PaperText>
+            <PaperText preset="subheader" as="h2" id="create-failure-toast">createFailureToast (deprecated)</PaperText>
+            <PaperText preset="body" as="p">
+                Deprecated: a failure that stands is a <PaperLink href="/docs/paperui/papererror/">PaperError</PaperLink> in place. A toast goes by itself, so it can't hold a failure that stays. It still works while panels move off it.
+            </PaperText>
             <PaperCode block language="tsx">
 {`createFailureToast(failure: Accessor<unknown>, options: { title: string; action?: { label: string; onClick: () => void } }): void;
 
@@ -127,29 +128,29 @@ createFailureToast(saveError, { title: "Couldn't save the settings" });`}
                     </tr>
                     <tr>
                         <td><PaperCode>duration</PaperCode></td>
-                        <td><PaperCode>number | null</PaperCode></td>
-                        <td>6000, or <PaperCode>null</PaperCode> for danger</td>
-                        <td>Milliseconds before it goes by itself. <PaperCode>null</PaperCode> keeps it until it is closed.</td>
+                        <td><PaperCode>number</PaperCode></td>
+                        <td>10000 for danger and warning, 6000 for the rest</td>
+                        <td>Milliseconds before it goes by itself. Every toast goes: there is no way to keep one, and the code check flags <PaperCode>duration: null</PaperCode>.</td>
                     </tr>
                     <tr>
                         <td><PaperCode>key</PaperCode></td>
                         <td><PaperCode>string</PaperCode></td>
                         <td>No default</td>
-                        <td>Names what the toast is about. While a toast with the same key is showing, no other is added: that toast takes the newest title, message, icon and action, and its id is returned. A failure that repeats says so once.</td>
+                        <td>Names what the toast is about. While a toast with the same key is showing, no other is added: that toast takes the newest title, message, icon and action, its time starts again, and its id is returned. A failure that repeats says so once.</td>
                     </tr>
                 </tbody>
             </PaperTable>
 
             <PaperText preset="subheader" as="h2" id="behavior">Behavior</PaperText>
             <PaperTextList>
-                <li>A danger toast stays until it is closed, so a failure is never missed. Other variants go after 6 seconds.</li>
-                <li>Toasts show in the middle of the window, and take its whole width on a phone. They sit as near the top as they can while they cover no button, field or link the page shows (a header's name, a bar's Back, a wizard's Finish, a composer's Send), sliding down past each one in their way, or else along the bottom. They look again as toasts come and go, a dialog opens or closes, the page changes or the window is resized, and stay put while where they are still covers nothing.</li>
-                <li>Toasts stack with the newest at the bottom. Past five, the oldest goes first.</li>
+                <li>Every toast goes by itself: danger and warning after 10 seconds, the rest after 6. Its close button closes it sooner.</li>
+                <li>A thin line hugs the toast's bottom edge in the variant's color, red for danger, and shrinks from full width to nothing over the time left.</li>
+                <li>Pointing at a toast, or focusing anything in it, holds its time and its line. Leaving lets both run on from where they were, so a toast being read or used never goes from under the person. A toast that shows up under a pointer resting there still goes in its time.</li>
+                <li>Under reduced motion the line steps down in five still moves instead of gliding, and the time is the same.</li>
+                <li>Toasts sit in the window's bottom-right corner, over everything, an open <PaperLink href="/docs/paperui/papermodal/">PaperModal</PaperLink> included, and take its whole width on a phone. They stack with the newest at the bottom. Past five, the oldest goes first.</li>
+                <li>While a dialog is open, Tab goes from the dialog to the toasts and back in, never to the page under the scrim.</li>
                 <li>A danger toast has the <PaperCode>alert</PaperCode> role, so screen readers announce it. Others have the <PaperCode>status</PaperCode> role.</li>
                 <li>Only the outermost PaperProvider renders the region, so a provider inside another doesn't show a toast twice. Outside a PaperProvider, render <PaperCode>{"<PaperToastRegion />"}</PaperCode> yourself.</li>
-                <li>While a <PaperLink href="/docs/paperui/papermodal/">PaperModal</PaperLink> is open, its toasts show inside the top dialog, between its content and its footer, and take room of their own: the content scrolls to make it, and the buttons stay where they are. Tab reaches them in the dialog's own order.</li>
-                <li>When the dialog closes, its toasts go back to the page, the same toasts: a failure is never lost with the dialog it was said in.</li>
-                <li>Over any other dialog (such as <PaperLink href="/docs/paperui/paperpreview/">PaperPreview</PaperLink>), toasts show above the scrim and take presses there, and Tab goes from the dialog to the toasts and back in.</li>
                 <li>A panel's toasts appear in its own window, placed the same way.</li>
                 <li>An error nothing caught shows as a danger toast by itself. See <PaperLink href="/docs/paperui/paperprovider/#uncaught-errors">PaperProvider</PaperLink>.</li>
             </PaperTextList>

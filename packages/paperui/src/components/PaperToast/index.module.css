@@ -1,30 +1,17 @@
-/* In the middle of the window, as near its top as it can be while it
-   covers no button, field or link the page shows (PaperToastRegion
-   measures them and slides it down past them), or else along the bottom:
-   a toast never hides what a person is about to press. */
+/* The window's bottom-right corner, over everything, an open dialog
+   included: newest at the bottom, nearest the corner. */
 .region {
     position: fixed;
-    top: calc(var(--paper-uigap) + var(--paper-safe-area-top));
-    left: 50%;
-    transform: translateX(-50%);
+    right: calc(var(--paper-uigap) + var(--paper-safe-area-right));
+    bottom: calc(var(--paper-uigap) + var(--paper-safe-area-bottom));
     z-index: var(--paper-z-chrome);
     display: flex;
     flex-direction: column;
-    align-items: center;
+    align-items: flex-end;
     gap: var(--paper-uigap-half);
+    max-width: calc(100vw - var(--paper-uigap-double));
     pointer-events: none;
     font-family: var(--paper-font-family);
-}
-
-.atBottom {
-    top: auto;
-    bottom: calc(var(--paper-uigap) + var(--paper-safe-area-bottom));
-}
-
-/* laid out where it would go, unseen, while the region measures what it
-   would cover there */
-.measuring {
-    visibility: hidden;
 }
 
 /* the theme's root rule paints every [data-paperui-theme] the app's
@@ -33,15 +20,11 @@
     background: none;
 }
 
-/* inside the top dialog (PaperModal's slot), in its flow: it takes room
-   of its own between the content and the buttons */
-.inDialog {
-    position: static;
-    transform: none;
-}
-
 .toast {
     pointer-events: auto;
+    position: relative;
+    /* the line along the bottom follows the rounded corners */
+    overflow: hidden;
     box-sizing: border-box;
     width: min(var(--paper-size-menu-max), calc(100vw - var(--paper-uigap-double) - var(--paper-safe-area-left) - var(--paper-safe-area-right)));
     display: flex;
@@ -63,20 +46,24 @@
     padding-top: var(--paper-uigap-onefourth);
 }
 
-.danger .icon {
-    color: var(--paper-danger);
+.danger {
+    --toast-accent: var(--paper-danger);
 }
 
-.warning .icon {
-    color: var(--paper-warning);
+.warning {
+    --toast-accent: var(--paper-warning);
 }
 
-.success .icon {
-    color: var(--paper-success);
+.success {
+    --toast-accent: var(--paper-success);
 }
 
-.info .icon {
-    color: var(--paper-primary);
+.info {
+    --toast-accent: var(--paper-primary);
+}
+
+.toast .icon {
+    color: var(--toast-accent);
 }
 
 .text {
@@ -86,12 +73,6 @@
     flex-direction: column;
     gap: var(--paper-uigap-onefourth);
     padding-top: var(--paper-uigap-onefourth);
-}
-
-.inDialog .toast {
-    width: 100%;
-    box-shadow: none;
-    background: var(--paper-surface);
 }
 
 /* what a tool printed, read whole under Details */
@@ -107,15 +88,59 @@
     padding-top: var(--paper-uigap-onefourth);
 }
 
+/* the time it has left: a line hugging the bottom edge, in the toast's
+   colour, shrinking to nothing as it runs out */
+.time {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: var(--paper-thick-border-width);
+    background: var(--toast-accent);
+    transform-origin: left center;
+    animation: toastTime var(--paper-toast-time) linear forwards;
+}
+
+:dir(rtl) .time {
+    transform-origin: right center;
+}
+
+/* pointed at or worked in: the time holds, and the line with it */
+.held .time {
+    animation-play-state: paused;
+}
+
 @keyframes toastEnter {
     from {
         opacity: 0;
-        transform: translateY(calc(-1 * var(--paper-uigap))) scale(0.97);
+        transform: translateY(var(--paper-uigap)) scale(0.97);
     }
 }
 
+@keyframes toastTime {
+    from {
+        transform: scaleX(1);
+    }
+    to {
+        transform: scaleX(0);
+    }
+}
+
+/* the time is still told without motion: the line steps down in a few
+   still moves instead of gliding */
 @media (prefers-reduced-motion: reduce) {
     .toast {
         animation-duration: 0.01ms !important;
     }
+
+    .toast .time {
+        animation-timing-function: steps(5, end);
+    }
+}
+
+/* Paperboard's own Reduce motion setting zeroes every animation under it;
+   the line keeps its time, stepped the same way */
+[data-paperui-motion="reduced"] .toast .time {
+    animation-duration: var(--paper-toast-time) !important;
+    animation-timing-function: steps(5, end);
 }

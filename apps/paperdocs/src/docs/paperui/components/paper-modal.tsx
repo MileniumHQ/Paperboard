@@ -215,7 +215,7 @@ export function Example() {
             <PaperText preset="subheader" as="h2" id="examples">Examples</PaperText>
             <PaperText preset="subheader" as="h3" id="confirm">Confirm a destructive action</PaperText>
             <PaperText preset="body" as="p">
-                Run the action with <PaperLink href="/docs/paperui/state/#create-action">createAction</PaperLink>, which says a failure in a toast inside the modal, above its buttons, and close only on success.
+                Run the action with <PaperLink href="/docs/paperui/state/#create-action">createAction</PaperLink>, which says a failure in a toast over the modal, and close only on success.
                 The gameserver panel confirms deleting a backup this way.
             </PaperText>
             <PaperCode block language="tsx">

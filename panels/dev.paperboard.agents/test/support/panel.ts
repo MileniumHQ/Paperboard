@@ -303,7 +303,7 @@ export async function openSection(page: Page, name: string, section: string): Pr
 
 /** Resolves once what moves on the page has come to rest (a modal sliding in), so a click lands where it aims. */
 export function settledMotion(page: Page): Promise<unknown> {
-    return page.evaluate(`Promise.allSettled(document.getAnimations().filter((a) => a.effect?.getComputedTiming().endTime !== Infinity).map((a) => a.finished))`);
+    return page.evaluate(`Promise.allSettled(document.getAnimations().filter((a) => !a.effect?.target?.matches?.("[data-paper-toast-time]")).filter((a) => a.effect?.getComputedTiming().endTime !== Infinity).map((a) => a.finished))`);
 }
 
 /** Marks the nodes `selector` finds now, to ask later whether they are the same nodes (kept) or new ones (rebuilt). */

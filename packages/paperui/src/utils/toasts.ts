@@ -28,55 +28,96 @@ export interface PaperToastOptions {
     /** One button beside the message: Retry, Open, Undo. Pressing it closes the toast. */
     action?: PaperToastAction;
     /**
-     * Milliseconds before it goes by itself; null keeps it until it is
-     * closed. Danger toasts stay by default, so a failure is never missed.
+     * Milliseconds it shows before it goes by itself: 10 seconds for danger
+     * and warning, 6 for the rest. Every toast goes; a failure that stands
+     * is said in place, with PaperError.
      */
-    duration?: number | null;
+    duration?: number;
     /**
      * Names what the toast is about: while a toast with the same key is
      * showing, another isn't added. That toast takes the newest title,
      * message, icon and action in place, and its id is returned. A failure
-     * that repeats says so once.
+     * that repeats says so once, and its time starts again.
      */
     key?: string;
 }
 
 export interface ToastEntry extends PaperToastOptions {
     id: string;
+    /** How long it shows, in milliseconds, counted from its latest words. */
+    duration: number;
+    /** Goes up each time its time starts again: its line starts again with it. */
+    round: number;
 }
 
 const DEFAULT_DURATION = 6000;
+// what went wrong, or what to watch, is read longer
+const LONG_DURATION = 10000;
 // a toast stays readable: past this many, the oldest go first
 const MAX_TOASTS = 5;
 
 // a store, so a toast told something newer keeps its element
 const [toasts, setToasts] = createStore<ToastEntry[]>([]);
-const timers = new Map<string, ReturnType<typeof setTimeout>>();
+// each toast's countdown: the time it has left, and its timer while it runs
+interface Countdown {
+    left: number;
+    startedAt: number;
+    timer: ReturnType<typeof setTimeout> | null;
+}
+const timers = new Map<string, Countdown>();
 let nextId = 0;
 
 /** The toasts showing, oldest first. */
 export const shownToasts = (): readonly ToastEntry[] => toasts;
 
 /**
- * Shows a toast: what failed or finished, said where it will be seen. It
- * shows in the middle of the window where it covers no control, or inside
- * the dialog that is open, above its buttons.
- * Returns its id, for dismissToast.
+ * Shows a toast: what failed or finished, said in the window's corner over
+ * everything, an open dialog included. It goes by itself after its
+ * duration; pointing at it or focusing in it holds it. Returns its id, for
+ * dismissToast.
  */
 export function showToast(options: PaperToastOptions): string {
     const at = options.key === undefined ? -1 : toasts.findIndex((toast) => toast.key === options.key);
     if (at >= 0) {
-        setToasts(at, { title: options.title, message: options.message, details: options.details, icon: options.icon, action: options.action });
-        return toasts[at].id;
+        const id = toasts[at].id;
+        setToasts(at, { title: options.title, message: options.message, details: options.details, icon: options.icon, action: options.action, round: toasts[at].round + 1 });
+        startCountdown(id, toasts[at].duration);
+        return id;
     }
     const id = `toast-${++nextId}`;
     const variant = options.variant ?? "info";
-    const next = [...toasts, { ...options, variant, id }];
+    const duration = options.duration ?? (variant === "danger" || variant === "warning" ? LONG_DURATION : DEFAULT_DURATION);
+    const next = [...toasts, { ...options, variant, duration, round: 0, id }];
     for (const dropped of next.slice(0, Math.max(0, next.length - MAX_TOASTS))) clearTimer(dropped.id);
     setToasts(next.slice(-MAX_TOASTS));
-    const duration = options.duration === undefined ? (variant === "danger" ? null : DEFAULT_DURATION) : options.duration;
-    if (duration !== null) timers.set(id, setTimeout(() => dismissToast(id), duration));
+    startCountdown(id, duration);
     return id;
+}
+
+/** Its full time from now: running, unless it is held, which it stays. */
+function startCountdown(id: string, duration: number): void {
+    const held = timers.get(id)?.timer === null;
+    clearTimer(id);
+    const countdown: Countdown = { left: duration, startedAt: Date.now(), timer: null };
+    timers.set(id, countdown);
+    if (!held) countdown.timer = setTimeout(() => dismissToast(id), duration);
+}
+
+/** Holds a toast's time while the person points at it or works in it. */
+export function pauseToast(id: string): void {
+    const countdown = timers.get(id);
+    if (!countdown || countdown.timer === null) return;
+    clearTimeout(countdown.timer);
+    countdown.timer = null;
+    countdown.left = Math.max(0, countdown.left - (Date.now() - countdown.startedAt));
+}
+
+/** Lets a held toast's time run on from where it was. */
+export function resumeToast(id: string): void {
+    const countdown = timers.get(id);
+    if (!countdown || countdown.timer !== null) return;
+    countdown.startedAt = Date.now();
+    countdown.timer = setTimeout(() => dismissToast(id), countdown.left);
 }
 
 export interface ShowErrorOptions {
@@ -102,9 +143,10 @@ export function failureWords(words: string): { message: string; details?: string
 /**
  * Says a failure as a danger toast: `title` is what failed ("Couldn't save
  * the server"), `err` whatever was caught (an Error, a string, anything),
- * shown in words: its first line, and the rest under Details. It stays
- * until it is closed, and a failure that repeats shows once. Returns the
- * toast's id.
+ * shown in words: its first line, and the rest under Details. It goes
+ * after 10 seconds, and a failure that repeats shows once, its time
+ * started again. Returns the toast's id. A failure that stands, such as a
+ * view that won't load, is no toast: say it in place with PaperError.
  *
  *     save().catch((err) => showError("Couldn't save the server", err, { retry: save }));
  */
@@ -131,11 +173,12 @@ export function stopToastTimers(): void {
 }
 
 function clearTimer(id: string): void {
-    const timer = timers.get(id);
+    const timer = timers.get(id)?.timer;
     if (timer) clearTimeout(timer);
     timers.delete(id);
 }
 
+/** @deprecated with createFailureToast: use PaperError. */
 export interface FailureToastOptions {
     /** What failed, as a toast's title: "Couldn't load the worlds". */
     title: string;
@@ -149,6 +192,10 @@ export interface FailureToastOptions {
 let nextFailure = 0;
 
 /**
+ * @deprecated A failure that stands is said where it happens, with
+ * PaperError: `<Show when={failure()}>{(err) => <PaperError title="…" error={err()} />}</Show>`.
+ * A toast goes by itself, so it can't hold a failure that stays.
+ *
  * A standing failure, said as a danger toast: while `failure` gives
  * something (an Error, a string, whatever was caught) the toast shows it in
  * words (its first line, and the rest under Details), the newest in place, and it closes when it clears to `null`,

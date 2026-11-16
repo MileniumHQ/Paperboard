@@ -141,12 +141,13 @@ describe("the Players tab's bans", () => {
             expect(ops()).toEqual(["Steve"]);
             expect(await page.evaluate<string>(`${operator}.getAttribute("aria-checked")`)).toBe("true");
 
-            // a name the server finds no account for is refused in the dialog, and nobody is shown whitelisted
+            // a name the server finds no account for is refused in a toast over the dialog, and nobody is shown whitelisted
             await page.evaluate(`${button("Whitelist")}.click()`);
             await page.waitFor(`!!document.querySelector("[role=dialog] input")`, "the whitelist dialog");
             await page.type("[role=dialog] input", "Nobody");
             await page.evaluate(`${button("Add", true)}.click()`);
-            await page.waitFor(`document.querySelector("[role=dialog]")?.innerText.includes("That player does not exist")`, "the server's refusal in the dialog");
+            await page.waitFor(`[...document.querySelectorAll("[data-paper-toasts] [role=alert]")].some((t) => t.innerText.includes("Couldn't add to the whitelist") && t.innerText.includes("That player does not exist"))`, "the server's refusal, over the dialog");
+            expect(await page.evaluate<boolean>(`!!document.querySelector("[role=dialog]")`)).toBe(true);
             await page.settled();
             expect(await page.evaluate<boolean>(`!!document.querySelector('input[name=playersList][value="Nobody"]')`)).toBe(false);
             expect(page.exceptions).toEqual([]);

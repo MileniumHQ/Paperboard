@@ -52,7 +52,7 @@ const UninstallPanelModal: Component<UninstallPanelModalProps> = (props) => {
                 const { packagesWarning } = await panelsApi.uninstall(target.panel.id, target.compId, { deleteData: deleteData() });
                 await props.onUninstalled(target);
                 if (packagesWarning) {
-                    showToast({ variant: "warning", title: `${target.panel.name} is uninstalled`, message: packagesWarning, duration: null });
+                    showToast({ variant: "warning", title: `${target.panel.name} is uninstalled`, message: packagesWarning });
                 }
                 props.onClose();
             } catch (err) {

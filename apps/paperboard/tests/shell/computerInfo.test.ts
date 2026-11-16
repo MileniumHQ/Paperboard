@@ -4,7 +4,7 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { bootShell, clickText, type Shell } from "./support/shell";
+import { bootShell, clickText, toastShown, type Shell } from "./support/shell";
 
 // Holds the shell's calls of one daemon action until the test sends them
 // on, as they were or with a parameter the daemon refuses.
@@ -75,6 +75,9 @@ test("Refuse taken ports flips at once while it saves, and goes back with why wh
         `document.querySelector("[data-target]").getAttribute("aria-checked") === "true" && document.body.innerText.includes("The setting was not saved")`,
         "the switch back on what the computer kept, with why",
     );
+    // read, it is closed: the next test starts with no toast in the corner
+    await page.click(`[aria-label=Notifications] [role=alert] [aria-label=Close]`);
+    await page.waitFor(`!${toastShown("The setting was not saved")}`, "the toast closed");
     expect(page.exceptions).toEqual([]);
 });
 
@@ -109,7 +112,7 @@ test("an S3 server that refuses the connection is named in words, in view of the
     await page.click("[role=dialog] button[aria-haspopup=listbox]");
     await page.waitFor(`document.querySelector("[role=option][data-select-value=s3]")?.offsetParent`, "the S3 option");
     // the menu has finished opening: an option pressed while it grows can miss
-    await page.evaluate(`Promise.all(document.getAnimations().filter((a) => a.effect?.getTiming().iterations !== Infinity).map((a) => a.finished))`);
+    await page.evaluate(`Promise.all(document.getAnimations().filter((a) => !a.effect?.target?.matches?.("[data-paper-toast-time]")).filter((a) => a.effect?.getTiming().iterations !== Infinity).map((a) => a.finished))`);
     await page.click("[role=option][data-select-value=s3]");
     await page.waitFor(`[...document.querySelectorAll("[role=dialog] label")].some((l) => l.textContent.trim() === "Server address")`, "the S3 form");
     const fields: Record<string, string> = {
@@ -128,10 +131,10 @@ test("an S3 server that refuses the connection is named in words, in view of the
     await clickText(page, "[role=dialog] button", "Add Bucket");
 
     const said = "Couldn't reach 127.0.0.1:1. Is the server running?";
-    await page.waitFor(`[...document.querySelectorAll("[role=dialog] [role=alert]")].some((a) => a.textContent.includes("Couldn't add the backup location") && a.textContent.includes(${JSON.stringify(said)}))`, "the refusal, in words, in a toast in the dialog");
-    // seen as it is: what is drawn at its middle is the error itself, not the form scrolled over it
+    await page.waitFor(toastShown("Couldn't add the backup location", said), "the refusal, in words, in a toast over the dialog");
+    // seen as it is: what is drawn at its middle is the toast itself, not the dialog under it
     expect(await page.evaluate(`(() => {
-        const alert = document.querySelector("[role=dialog] [role=alert]");
+        const alert = document.querySelector("[aria-label=Notifications] [role=alert]");
         const box = alert.getBoundingClientRect();
         return alert.contains(document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2));
     })()`)).toBe(true);
@@ -160,14 +163,14 @@ test("a failed forget shows why, the dialog opens clean the next time, and forge
     // its title names the computer it forgets
     expect(await page.evaluate<string>(`document.querySelector("[role=dialog]").innerText.split("\\n")[0].trim()`)).toBe("Forget Garage?");
     await clickText(page, "[role=dialog] button", "Forget Computer");
-    await page.waitFor(`document.querySelector("[role=dialog]")?.innerText.includes("The computer list is read-only")`, "why the forget failed");
+    await page.waitFor(toastShown("The computer list is read-only"), "why the forget failed");
     await clickText(page, "[role=dialog] button", "Cancel");
     await page.waitFor(`!document.querySelector("[role=dialog]")`, "the dialog to close");
 
-    // opened again: a fresh question, not the last answer (the failure's toast, until it is closed, is the page's)
+    // opened again: a fresh question, not the last answer (the failure's toast is the page's)
     await clickText(page, "button", "Forget Computer");
     await page.waitFor(`document.querySelector("[role=dialog]")?.innerText.includes("forget Garage")`, "the Forget Computer dialog again");
-    expect(await page.evaluate(`[...document.querySelector("[role=dialog]").children].filter((el) => !el.querySelector("[data-paper-toasts]")).some((el) => el.innerText.includes("read-only"))`)).toBe(false);
+    expect(await page.evaluate(`document.querySelector("[role=dialog]").innerText.includes("read-only")`)).toBe(false);
     await clickText(page, "[role=dialog] button", "Cancel");
     await page.waitFor(`!document.querySelector("[role=dialog]")`, "the dialog to close");
 

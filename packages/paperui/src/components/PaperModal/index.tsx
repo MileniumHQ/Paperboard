@@ -1,5 +1,5 @@
 import styles from "./index.module.css";
-import { children, createSignal, splitProps, createUniqueId, Show, type JSX, type ParentProps } from "solid-js";
+import { children, splitProps, createUniqueId, Show, type JSX, type ParentProps } from "solid-js";
 import { ModalLayer } from "./layer";
 import { PaperText } from "../PaperText";
 import { PaperIcon } from "../PaperIcon";
@@ -48,8 +48,6 @@ export function PaperModal(props: ParentProps<PaperModalProps>) {
     ]);
     // resolved once, and kept across openings: the dialog's name is read from it too
     const title = children(() => local.title);
-    // toasts said while this is the top dialog show here, above its buttons
-    const [toastSlot, setToastSlot] = createSignal<HTMLElement>();
 
     const sizeClass = () => {
         if (local.fullscreen) return styles.fullscreen;
@@ -74,7 +72,6 @@ export function PaperModal(props: ParentProps<PaperModalProps>) {
             closeOnEsc={local.closeOnEsc}
             placement={local.placement}
             concealed={local.concealed}
-            toastSlot={toastSlot}
             aria-labelledby={title() && !local.noHeader ? titleId : undefined}
             {...rest}
             class={cx(styles.modalBox, sizeClass(), local.class)}
@@ -134,8 +131,6 @@ export function PaperModal(props: ParentProps<PaperModalProps>) {
                                 >
                                     {local.children}
                                 </div>
-
-                                <div ref={setToastSlot} class={styles.toastSlot} />
 
                                 <Show when={footer()}>
                                     <div class={styles.footer}>{footer()}</div>

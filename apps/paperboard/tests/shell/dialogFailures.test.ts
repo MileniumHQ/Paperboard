@@ -1,4 +1,4 @@
-// What a dialog says when its action fails: a toast in the dialog, which stays
+// What a dialog says when its action fails: a toast over the dialog, which stays
 // open to try again; a name that is wrong under its field; and a panel
 // permission question that can always be closed, however its answer fares.
 import { afterAll, beforeAll, expect, test } from "bun:test";
@@ -22,8 +22,8 @@ afterAll(async () => {
 
 const escape = () => shell.page.evaluate(`document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }))`);
 
-// Inventory: Core contracts — a failure in a dialog is a toast in that dialog, which stays usable for another try.
-test("a forget the computer list refuses is a toast in the dialog, which stays open and forgets on the next try", async () => {
+// Inventory: Core contracts — a failure in a dialog is a toast over that dialog, which stays usable for another try.
+test("a forget the computer list refuses is a toast over the dialog, which stays open and forgets on the next try", async () => {
     const { page } = shell;
     const workshop = await shell.pairComputer("Workshop");
     const WORKSHOP = rail("Workshop (127.0.0.2)");
@@ -36,9 +36,13 @@ test("a forget the computer list refuses is a toast in the dialog, which stays o
     await clickText(page, "[role=dialog] button", "Forget Computer");
 
     await page.waitFor(toastShown("Couldn't forget this computer", "The computer list is read-only"), "the failure, as a toast");
-    // in the dialog, above its buttons, and no red line of text beside the question
-    expect(await page.evaluate(`document.querySelector("[role=dialog]").contains(document.querySelector("[aria-label=Notifications] [role=alert]"))`)).toBe(true);
-    expect(await page.evaluate(`document.querySelector("[role=dialog]").innerText.includes("read-only")`)).toBe(true);
+    // over the dialog, where a press reaches it, and no red line of text beside the question
+    expect(await page.evaluate(`(() => {
+        const toast = document.querySelector("[aria-label=Notifications] [role=alert]");
+        const box = toast.getBoundingClientRect();
+        return toast.contains(document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2));
+    })()`)).toBe(true);
+    expect(await page.evaluate(`document.querySelector("[role=dialog]").innerText.includes("read-only")`)).toBe(false);
     expect(await page.evaluate(`[...document.querySelectorAll("[role=dialog] button")].every((b) => !b.disabled)`)).toBe(true);
 
     // the dialog is still there: the next press goes through

@@ -327,7 +327,7 @@ import {
 
 export function CreateProject(props: { onCreate: (name: string) => Promise<void> }) {
     const [open, setOpen] = createSignal(false);
-    // a failure is a toast, shown in the dialog above its buttons, which stays open to try again
+    // a failure is a toast, shown over the dialog, which stays open to try again
     const creating = createAction();
 
     const finish = (data: Record<string, any>) =>

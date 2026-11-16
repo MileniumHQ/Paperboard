@@ -11,6 +11,7 @@ import {
     PaperButton,
     PaperConsole,
     PaperEmptyState,
+    PaperError,
     PaperContextMenu,
     PaperContextMenuHeader,
     PaperContextMenuItem,
@@ -35,12 +36,13 @@ import {
     PaperSelectMenuItem,
     PaperSlidePage,
     PaperSplit,
+    PaperText,
     PaperToggle,
-    createFailureToast,
     createPaperCompact,
     createRead,
     createPolling,
     showError,
+    showToast,
     setHapticPlayer,
     useContextMenuState,
     type PaperFileBrowserRef,
@@ -149,10 +151,13 @@ const scenarios: Record<string, () => JSX.Element> = {
 
     toastModal() {
         const [open, setOpen] = createSignal(true);
-        const [failure, setFailure] = createSignal<string | null>(null);
-        window.t = { isOpen: () => open(), fail: setFailure, presses: 0 };
+        window.t = {
+            isOpen: () => open(),
+            // longer than any test takes, so the toast is there to press
+            fail: (why: string) => showToast({ variant: "danger", title: "Couldn't rename the world", message: why, duration: 120_000 }),
+            presses: 0,
+        };
         return shell(() => {
-            createFailureToast(failure, { title: "Couldn't rename the world" });
             return (
                 <div style={{ padding: "24px" }}>
                     <button id="under" onClick={() => window.t.presses++}>
@@ -172,55 +177,87 @@ const scenarios: Record<string, () => JSX.Element> = {
         });
     },
 
-    // a page with buttons along its top bar (its corners and its middle)
-    // and along its bottom, the way a panel lays out its header, a wizard
-    // and a composer; ?dialog adds a
-    // dialog with its footer. t.fail(n) says n failures, the first with details.
-    toastCover() {
-        // what the dialog is about: open while there is one, and a new copy of it keeps it open
-        const [about, setAbout] = createSignal<{ name: string } | null>(query.has("dialog") ? { name: "Claude" } : null);
+    // toasts that go by themselves: t.show(options) shows one and returns
+    // its id; t.line() reads its time line's animation
+    toastTime() {
         window.t = {
-            setOpen: (open: boolean) => setAbout(open ? { name: "Claude" } : null),
-            renew: () => setAbout({ name: "Claude" }),
-            fail: (n: number) => {
-                for (let i = 1; i <= n; i++)
-                    showError(`Couldn't install ${i}`, i === 1 ? "SteamCMD exited with code 8\nLogging in anonymously...\nERROR! Failed to install app '2394010' (Disk write failure)" : "The disk is full");
+            show: (options: Parameters<typeof showToast>[0]) => showToast(options),
+            fail: (title: string, why: string) => showError(title, new Error(why)),
+            line: () => {
+                const line = document.querySelector<HTMLElement>("[data-paper-toast-time]");
+                const animation = line?.getAnimations()[0];
+                if (!line || !animation) return null;
+                return {
+                    duration: getComputedStyle(line).animationDuration,
+                    state: animation.playState,
+                    time: Number(animation.currentTime),
+                    scale: new DOMMatrix(getComputedStyle(line).transform).a,
+                    color: getComputedStyle(line).backgroundColor,
+                    width: line.getBoundingClientRect().width,
+                    toastWidth: line.parentElement!.getBoundingClientRect().width,
+                    bottomGap: line.parentElement!.getBoundingClientRect().bottom - line.getBoundingClientRect().bottom,
+                };
             },
         };
         return shell(() => (
-            <div style={{ display: "flex", "flex-direction": "column", height: "100vh", "box-sizing": "border-box" }}>
-                <div style={{ display: "flex", "justify-content": "space-between", padding: "8px" }}>
-                    <PaperButton id="back" data-control>Back</PaperButton>
-                    {/* a name in the middle that opens a menu, as a chat's header has */}
-                    <PaperButton id="name" variant="text" data-control>Ada</PaperButton>
-                    <PaperButton id="new" data-control>New bot</PaperButton>
+            <div style={{ padding: "24px" }}>
+                <PaperButton id="elsewhere">Elsewhere</PaperButton>
+            </div>
+        ));
+    },
+
+    // failures that stand, said in place: ?view=fill is a view with nothing
+    // else to show; without it, a page with each inline kind
+    paperError() {
+        const t = (window.t = { retries: 0, opens: 0, fail: (title: string, why: string) => showError(title, new Error(why)) });
+        const view = query.get("view");
+        const retry = { label: "Try again", onClick: () => t.retries++ };
+        if (view === "fill")
+            return shell(() => (
+                <div style={{ display: "flex", "flex-direction": "column", height: "100vh", padding: "16px", "box-sizing": "border-box" }}>
+                    <PaperText preset="title">Worlds</PaperText>
+                    <PaperError
+                        id="fill"
+                        fill
+                        title="Couldn't load the worlds"
+                        error={new Error(query.has("details") ? "The server didn't answer: connection refused on port 25575\nconnect ECONNREFUSED 127.0.0.1:25575\n    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1607:16)" : "The server didn't answer: connection refused on port 25575")}
+                        action={retry}
+                    />
                 </div>
-                <div style={{ flex: "1" }} />
-                <div style={{ display: "flex", "justify-content": "space-between", padding: "8px" }}>
-                    <PaperButton id="previous" data-control>Back</PaperButton>
-                    <PaperButton id="finish" variant="primary" data-control>Finish</PaperButton>
+            ));
+        return shell(() => (
+            <div style={{ display: "flex", "flex-direction": "column", gap: "24px", padding: "16px", "max-width": "720px", margin: "0 auto", "box-sizing": "border-box" }}>
+                <div style={{ display: "flex", "flex-direction": "column", gap: "8px" }}>
+                    <PaperText preset="heading">Backups</PaperText>
+                    <PaperError id="inline" title="Couldn't load the newest backups" error={new Error("The backup folder is on a drive that isn't connected")} action={retry} />
+                    <PaperList name="backups" selectable={false} fullWidth>
+                        <PaperListItem value="a" icon="inventory_2" description="Yesterday at 03:00 · 412 MB">Survival</PaperListItem>
+                        <PaperListItem value="b" icon="inventory_2" description="Nov 14 at 03:00 · 388 MB">Creative</PaperListItem>
+                        <PaperListItem value="c" icon="inventory_2" description="Nov 12 at 03:00 · 96 MB">Skyblock</PaperListItem>
+                    </PaperList>
                 </div>
-                <div style={{ display: "flex", gap: "8px", padding: "8px" }}>
-                    <div style={{ flex: "1" }}>
-                        <PaperInput id="composer" fullWidth placeholder="Message" data-control />
-                    </div>
-                    <PaperButton id="send" variant="primary" data-control>Send</PaperButton>
+                <div style={{ display: "flex", "flex-direction": "column", gap: "8px" }}>
+                    <PaperText preset="heading">Setup</PaperText>
+                    <PaperError
+                        id="details"
+                        title="Couldn't install the Palworld server"
+                        error={"SteamCMD exited with code 8\nLogging in anonymously...\nWaiting for user info...OK\nERROR! Failed to install app '2394010' (Disk write failure)"}
+                        action={{ label: "Open settings", onClick: () => t.opens++ }}
+                    />
                 </div>
-                <PaperModal
-                    open={!!about()}
-                    onClose={() => setAbout(null)}
-                    title="Claude"
-                    size="small"
-                    footer={
-                        <>
-                            <PaperButton id="cancel" variant="text" data-dialog-control>Cancel</PaperButton>
-                            <PaperButton id="install" variant="primary" data-dialog-control>Install</PaperButton>
-                        </>
-                    }
-                >
-                    <PaperInput id="key" label="API key" fullWidth data-dialog-control />
-                    <PaperButton id="sign-in" data-dialog-control>Sign in instead</PaperButton>
-                </PaperModal>
+                <div style={{ display: "flex", "flex-direction": "column", gap: "8px" }}>
+                    <PaperText preset="heading">Discord</PaperText>
+                    <PaperError
+                        id="long"
+                        title="Couldn't start the bot"
+                        error={new Error("Discord refused the bot's token: it was reset in the Developer Portal, or the bot was removed from the application. Copy a new token from https://discord.com/developers/applications/1187654321098765432/bot and paste it in Settings.")}
+                        action={retry}
+                    />
+                </div>
+                <div style={{ display: "flex", "flex-direction": "column", gap: "8px" }}>
+                    <PaperText preset="heading">After a press</PaperText>
+                    <PaperError id="alert" alert title="Couldn't connect" error="The computer is asleep" />
+                </div>
             </div>
         ));
     },

@@ -21,7 +21,7 @@ const popover = `[...document.querySelectorAll("[role=dialog]")].find((d) => d.t
 const listed = `[...(${popover}?.querySelectorAll("[data-problem]") ?? [])].map((item) => item.textContent)`;
 
 // every finite animation on the page has run: what moves is where it stays
-const SETTLED = `Promise.all(document.getAnimations().filter((a) => a.effect?.getTiming().iterations !== Infinity).map((a) => a.finished))`;
+const SETTLED = `Promise.all(document.getAnimations().filter((a) => !a.effect?.target?.matches?.("[data-paper-toast-time]")).filter((a) => a.effect?.getTiming().iterations !== Infinity).map((a) => a.finished))`;
 
 let shell: Shell;
 

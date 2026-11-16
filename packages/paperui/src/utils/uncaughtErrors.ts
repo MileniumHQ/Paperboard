@@ -1,6 +1,6 @@
 // What nothing caught is said on the page, never only in the console: a
 // throw in an event handler, a rejected promise nobody awaited. Each becomes
-// a danger toast, which stays until it is closed. The console still gets it,
+// a danger toast, which goes after its ten seconds. The console still gets it,
 // as nothing here prevents the event's default. A failure that repeats (a
 // throw on every pointer move) is one toast while it shows. A failure the
 // page caught and shows in place never gets here, so it isn't said twice.

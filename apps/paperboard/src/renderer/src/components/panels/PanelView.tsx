@@ -66,7 +66,7 @@ function progressLost(computerId: string, frameKey: string, why: string | null):
     const lost = lostFrames.get(computerId);
     if (why !== null) {
         if (lost) lost.frames.add(frameKey);
-        else lostFrames.set(computerId, { frames: new Set([frameKey]), toast: showToast({ variant: "warning", key: `backup-progress:${computerId}`, title: "Can't follow backups", message: `${why}. Paperboard keeps trying.`, duration: null }) });
+        else lostFrames.set(computerId, { frames: new Set([frameKey]), toast: showToast({ variant: "warning", key: `backup-progress:${computerId}`, title: "Can't follow backups", message: `${why}. Paperboard keeps trying.` }) });
         return;
     }
     if (!lost?.frames.delete(frameKey) || lost.frames.size > 0) return;

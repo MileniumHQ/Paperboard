@@ -122,7 +122,7 @@ describe("a server's page", () => {
             expect(rows).toEqual({ channel: true, role: true, member: true });
             // the same page on a phone
             await page.resize(390, 800);
-            await page.evaluate(`new Promise((resolve) => { const tick = () => (document.getAnimations().length ? requestAnimationFrame(tick) : resolve(true)); tick(); })`);
+            await page.evaluate(`new Promise((resolve) => { const tick = () => (document.getAnimations().filter((a) => !a.effect?.target?.matches?.("[data-paper-toast-time]")).length ? requestAnimationFrame(tick) : resolve(true)); tick(); })`);
             const spilled = await page.evaluate<string[]>(`[...document.querySelectorAll("[class*=PaperCard]")].filter((el) => el.getClientRects().length > 0 && el.scrollWidth > el.clientWidth).map((el) => el.innerText.slice(0, 40))`);
             expect(spilled).toEqual([]);
             expect(await page.evaluate<number>(`document.documentElement.scrollWidth`)).toBeLessThanOrEqual(390);
@@ -245,7 +245,7 @@ describe("going back on a phone", () => {
     /** waits until `title` is the open page and it has finished sliding into place */
     const at = async (page: Page, title: string) => {
         await page.waitFor(`${top} === ${JSON.stringify(title)}`, `${title} to be the open page`);
-        await page.evaluate(`new Promise((resolve) => { const tick = () => (document.getAnimations().length ? requestAnimationFrame(tick) : resolve(true)); tick(); })`);
+        await page.evaluate(`new Promise((resolve) => { const tick = () => (document.getAnimations().filter((a) => !a.effect?.target?.matches?.("[data-paper-toast-time]")).length ? requestAnimationFrame(tick) : resolve(true)); tick(); })`);
     };
     const backEvent = `window.dispatchEvent(new Event("paperboard:back", { cancelable: true }))`;
     /** marks the one bar a person sees (its Back and its header) so the test can press or drag it */

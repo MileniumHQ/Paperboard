@@ -86,8 +86,11 @@ describe("the first meeting", () => {
         } finally {
             fs.rmSync(blocked, { recursive: true, force: true });
         }
-        // the toast doesn't cover Finish, so it doesn't repeat it: Finish itself is the way to try again
+        // the toast doesn't repeat Finish: Finish itself is the way to try again,
+        // once the toast in the corner is closed
         expect(await page.evaluate(`Boolean(${SAVE_ERROR}.querySelector('button:not([aria-label="Close"])'))`)).toBe(false);
+        await page.click(`[data-paper-toasts] [role=alert] [aria-label="Close"]`);
+        await page.waitFor(`!${SAVE_ERROR}`, "the toast closed");
         await next(page, "Finish, still there to try again");
         await panel.settingsSaved(SAVED);
         await page.waitFor(CHAT, "the chat");
