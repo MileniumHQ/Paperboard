@@ -2,13 +2,14 @@ import { createSignal, For, Show } from "solid-js";
 import {
     createRead,
     PaperButton,
+    PaperEmptyState,
     PaperFlex,
     PaperLoader,
     PaperModal,
-    PaperQuote,
     PaperSelector,
     PaperSelectorItem,
     PaperText,
+    showError,
 } from "@mileniumhq/paperui";
 import { backupApi, fileApi, errorMessage } from "@mileniumhq/paperapi";
 import { PANEL_ID, type SavedFlows } from "./panel";
@@ -79,7 +80,7 @@ export function createFileActions(props: {
         });
         return done;
     };
-    const exportFlows = () => run({ done: "Flows exported", failed: "Flows not exported" }, async () => {
+    const exportFlows = () => run({ done: "Flows exported", failed: "Couldn't export the flows" }, async () => {
         const path = `flows-export-${clientId}.json`;
         // what is exported is what is saved, so the latest edits go first
         const saved = await props.flush();
@@ -89,7 +90,7 @@ export function createFileActions(props: {
         return result.status === "exported" ? `Exported to ${result.name}.` : null;
     });
 
-    const importFlows = () => run({ done: "Flows imported", failed: "Flows not imported" }, async () => {
+    const importFlows = () => run({ done: "Flows imported", failed: "Couldn't import the flows" }, async () => {
         if (!props.loaded()) throw new Error("The canvas has not loaded yet, so nothing can be added to it.");
         const path = `flows-import-${clientId}.json`;
         const result = await fileApi.importFile(path, PANEL_ID, { filters: FLOW_FILE_FILTERS });
@@ -111,7 +112,7 @@ export function createFileActions(props: {
         return (await backupApi.chooseLocation(PANEL_ID)).status === "chosen";
     };
 
-    const createBackup = () => run({ done: "Backup made", failed: "Backup not made" }, async () => {
+    const createBackup = () => run({ done: "Backup made", failed: "Couldn't make a backup" }, async () => {
         if (!(await ensureLocation())) return null;
         const saved = await props.flush();
         if (!saved.ok) throw new Error(`Your latest changes are not saved, so the backup would miss them: ${saved.message}`);
@@ -123,27 +124,21 @@ export function createFileActions(props: {
     // window stays mounted so PaperModal plays its own open and close.
     const [loadOpen, setLoadOpen] = createSignal(false);
     const [chosen, setChosen] = createSignal("");
-    // why a location change or a load didn't happen
-    const [failure, setFailure] = createSignal<{ title: string; text: string } | null>(null);
     const [restoring, setRestoring] = createSignal(false);
     // the backups, read each time the window opens; the newest is chosen until one is picked
     const listing = createRead(async () => {
         const [status, list] = await Promise.all([backupApi.status(PANEL_ID), backupApi.list(PANEL_ID)]);
         return { status, list };
-    }, { source: loadOpen });
+    }, { source: loadOpen, failure: { title: "Couldn't list the backups" } });
     const backups = () => listing.value()?.list ?? null;
     const selected = () => {
         const list = backups() ?? [];
         return list.some((b) => b.id === chosen()) ? chosen() : list[0]?.id ?? "";
     };
-    const listFailure = () => {
-        const text = listing.error();
-        return text ? { title: "Backups not listed", text } : null;
-    };
-    const loadError = () => failure() ?? listFailure();
+    // Try again shows the read going out
+    const listFailure = () => (listing.loading() ? null : listing.error());
     // the list as it is now: none of the last one is left to load from
     const loadBackups = () => {
-        setFailure(null);
         setChosen("");
         listing.set(undefined);
         void listing.reload();
@@ -155,7 +150,7 @@ export function createFileActions(props: {
         try {
             if (!(await ensureLocation())) return;
         } catch (err) {
-            props.onNotice({ kind: "failed", title: "Backups not opened", text: errorMessage(err) });
+            props.onNotice({ kind: "failed", title: "Couldn't open the backups", text: errorMessage(err) });
             return;
         }
         loadBackups();
@@ -166,7 +161,7 @@ export function createFileActions(props: {
         try {
             if ((await backupApi.chooseLocation(PANEL_ID)).status === "chosen") loadBackups();
         } catch (err) {
-            setFailure({ title: "Backup location not changed", text: errorMessage(err) });
+            showError("Couldn't change where backups are kept", err);
         }
     };
 
@@ -174,14 +169,13 @@ export function createFileActions(props: {
         const record = backups()?.find((b) => b.id === selected());
         if (!record) return;
         setRestoring(true);
-        setFailure(null);
         try {
             // a save still going would land over the backup: it goes first. Whether it saves
             // doesn't matter, as the backup replaces the canvas either way
             await props.flush();
             await backupApi.restore(PANEL_ID, record.id);
         } catch (err) {
-            setFailure({ title: "Backup not loaded", text: errorMessage(err) });
+            showError("Couldn't load the backup", err);
             setRestoring(false);
             return;
         }
@@ -191,7 +185,7 @@ export function createFileActions(props: {
             await props.reload();
             props.onNotice({ kind: "done", title: "Backup loaded", text: `Loaded the backup from ${dateText(record.createdAt)}.` });
         } catch (err) {
-            props.onNotice({ kind: "failed", title: "Backup not shown", text: `The backup was loaded, but the canvas could not show it: ${errorMessage(err)}` });
+            props.onNotice({ kind: "failed", title: "Couldn't show the backup", text: `The backup was loaded, but the canvas could not show it: ${errorMessage(err)}` });
         }
     };
 
@@ -217,7 +211,14 @@ export function createFileActions(props: {
         >
             <PaperFlex direction="column" gap="half">
                 <PaperText preset="text">Loading a backup replaces every project, with its flows and variables, with the backup's. Flows running now stop.</PaperText>
-                <Show when={backups()} fallback={<Show when={!listFailure()}><PaperLoader loaderStatus="indeterminate" size="small" label="Loading backups" /></Show>}>
+                <Show
+                    when={backups()}
+                    fallback={
+                        <Show when={!listFailure()} fallback={<PaperEmptyState icon="error" title="Couldn't load" />}>
+                            <PaperLoader loaderStatus="indeterminate" size="small" label="Loading backups" />
+                        </Show>
+                    }
+                >
                     {(list) => (
                         <Show when={list().length > 0} fallback={<PaperText preset="hint">No backups here yet. Make one with Backup, then Create backup.</PaperText>}>
                             <PaperSelector name="blocks-backup" value={selected()} onValueChange={(value) => setChosen(String(value))}>
@@ -238,13 +239,6 @@ export function createFileActions(props: {
                             <PaperText preset="hint">Kept in {location().label}</PaperText>
                             <PaperButton size="tiny" variant="text" disabled={restoring()} onClick={() => void changeLocation()}>Change</PaperButton>
                         </PaperFlex>
-                    )}
-                </Show>
-                <Show when={loadError()}>
-                    {(failure) => (
-                        <PaperQuote variant="danger" icon="warning" title={failure().title} role="alert">
-                            {failure().text}
-                        </PaperQuote>
                     )}
                 </Show>
             </PaperFlex>

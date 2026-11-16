@@ -166,7 +166,7 @@ async function layoutChecks() {
     // a notice, beside the log: Run is refused
     refuse("runFlows", true);
     await clickAt(document.querySelector('[aria-label="Run"]')!);
-    const notice = await until("the refused run's notice", () => alertSaying("Run didn't start"));
+    const notice = await until("the refused run's toast", () => alertSaying("Couldn't run the flows"));
     await settle();
     const look = () => {
         const host = canvas()!.getInjectionDiv().getBoundingClientRect();
@@ -176,7 +176,7 @@ async function layoutChecks() {
         // how much of each docked card lies over the canvas, and outside the panel
         const overlap = (r: DOMRect) => Math.max(0, Math.min(r.right, host.right) - Math.max(r.left, host.left)) * Math.max(0, Math.min(r.bottom, host.bottom) - Math.max(r.top, host.top));
         const outside = (r: DOMRect) => Math.max(0, -r.left, -r.top, r.right - innerWidth, r.bottom - innerHeight);
-        const docked = [panel, notice].map((el) => el.getBoundingClientRect());
+        const docked = [panel].map((el) => el.getBoundingClientRect());
         return {
             dockHeight: Math.round(panel.parentElement!.getBoundingClientRect().height),
             libraryShown: shown,
@@ -225,7 +225,7 @@ async function layoutChecks() {
     const collapsedWide = look();
     byText("button", "Library")!.click();
     refuse("runFlows", false);
-    notice.querySelector<HTMLElement>('[aria-label="Dismiss"]')!.click();
+    notice.querySelector<HTMLElement>('[aria-label="Close"]')!.click();
     await settle();
     return { alpha: alpha ?? 1, backdrop: getComputedStyle(panel).backdropFilter, wide, narrow, narrowOpened, back, collapsedNarrow, collapsedWide, reopened: look() };
 }
@@ -257,10 +257,11 @@ async function dialogChecks() {
     const remove = await menu("Delete");
     await settle();
     byText("button", "Delete", remove)!.click();
-    await until("the delete to fail in the dialog", () => remove.querySelector('[role="alert"]'));
+    await until("the refused delete's toast", () => alertSaying("Couldn't delete the project"));
     await madeElsewhere("Also made elsewhere");
     await settle();
-    const deleteError = remove.querySelector('[role="alert"]')?.textContent ?? "";
+    // the dialog stays open to try again, and the toast keeps saying why
+    const deleteError = remove.isConnected && openDialog() ? (alertSaying("Couldn't delete the project")?.textContent ?? "") : "the dialog closed";
     byText("button", "Cancel", remove)!.click();
     await until("the Delete dialog to close", () => !openDialog());
     refuse("deleteProject", false);
@@ -352,7 +353,7 @@ async function toggleChecks() {
     const moved = { before, after: toggle.getAttribute("aria-checked"), animated, saved: calls().filter((c) => c.name === "updateProject").at(-1)?.input.enabled };
 
     // a flip the service refuses is said, and the notice goes once a flip goes through
-    const notice = () => [...document.querySelectorAll<HTMLElement>('[role="alert"], [role="status"]')].find((el) => el.textContent?.includes("Flows not turned"));
+    const notice = () => [...document.querySelectorAll<HTMLElement>('[role="alert"], [role="status"]')].find((el) => el.textContent?.includes("Couldn't turn the flows"));
     refuse("updateProject", true);
     await clickAt(toggle);
     const refused = (await until("the refused flip's notice", notice))!.textContent ?? "";
@@ -387,7 +388,7 @@ async function registryChecks() {
     // the Late Panel's dropdown fails, as a panel not set up yet does: that is said in a project with
     // its block on the canvas, and in no other, however often the registry changes
     const wave = registryBlockType({ kind: "command", panelId: LATE_PANEL, entry: "command.wave" });
-    const choicesFailed = () => alertSaying(`${LATE_PANEL_NAME}'s choices didn't load`);
+    const choicesFailed = () => alertSaying(`Couldn't load ${LATE_PANEL_NAME}'s choices`);
     /** The registry changes, and the blocks are defined again from it (which comes after their choices are asked for). */
     const redefined = async () => {
         const before = Blockly.Blocks[wave];
@@ -401,7 +402,7 @@ async function registryChecks() {
     await redefined();
     const onCanvas = (await until("the failure for the block on the canvas", choicesFailed))!.textContent ?? "";
     canvas()!.getBlockById("wave-on-canvas")!.dispose(false);
-    choicesFailed()!.querySelector<HTMLElement>('[aria-label="Dismiss"]')!.click();
+    choicesFailed()!.querySelector<HTMLElement>('[aria-label="Close"]')!.click();
     await settle();
     return { lateShown, offCanvas, onCanvas };
 }
@@ -412,7 +413,9 @@ async function loadFailureChecks() {
     const card = await until("the project's card", () => byText("*", "Renamed by hand"));
     refuse("loadFlows", true);
     card.click();
-    const alert = await until("the load failure", () => [...document.querySelectorAll<HTMLElement>('[role="alert"]')].find((el) => el.textContent?.includes("Your flows couldn't be loaded")));
+    const alert = await until("the load failure's toast", () => alertSaying("Couldn't load your flows"));
+    // the canvas says it couldn't load, over where the flows would be, with its own Try again
+    const cover = await until("the canvas's Couldn't load", () => byText("*", "Couldn't load")?.closest<HTMLElement>("[class*=cover]"));
     await settle();
     // the app switches theme meanwhile: Blockly draws its list again, which stays hidden
     document.documentElement.setAttribute("data-theme", "dark");
@@ -420,13 +423,19 @@ async function loadFailureChecks() {
     const failed = {
         text: alert.textContent ?? "",
         readOnly: canvas()!.isReadOnly(),
-        dismissable: Boolean(alert.querySelector('[aria-label="Dismiss"]')),
+        retryOnCanvas: Boolean(byText("button", "Try again", cover)),
         library: Boolean(byText("[role=radio], button, label", "Logic")) || getComputedStyle(canvas()!.getFlyout()!.getWorkspace().getParentSvg()).display !== "none",
     };
+    await shoot("flows-not-loaded");
+    await viewport(NARROWEST);
+    await settle();
+    await fetch("/screenshot", { method: "POST", body: JSON.stringify({ name: "flows-not-loaded-narrowest", ...NARROWEST }) });
+    await viewport(null);
+    await settle();
     document.documentElement.removeAttribute("data-theme");
     refuse("loadFlows", false);
-    byText("button", "Try again", alert)!.click();
-    await until("the failure to go", () => !alert.isConnected);
+    byText("button", "Try again", cover)!.click();
+    await until("the failure and its toast to go", () => !cover.isConnected && !alert.isConnected);
     await settle();
     return { failed, retried: { readOnly: canvas()!.isReadOnly(), library: Boolean(byText("[role=radio], button, label", "Logic")) } };
 }
@@ -520,7 +529,8 @@ async function openChecks() {
     return { saves: saves() - before };
 }
 
-const alertSaying = (text: string) => [...document.querySelectorAll<HTMLElement>('[role="alert"]')].find((el) => el.textContent?.includes(text));
+/** the failure toast saying `text` */
+const alertSaying = (text: string) => [...document.querySelectorAll<HTMLElement>('[data-paper-toasts] [role="alert"]')].find((el) => el.textContent?.includes(text));
 /** the window resized to `width` by `height`, or back to its own size with none */
 async function viewport(size: { width: number; height: number } | null): Promise<void> {
     const answer = await fetch("/viewport", { method: "POST", body: JSON.stringify(size) });
@@ -580,7 +590,7 @@ async function unsavedChecks() {
     await shoot("closed-unsaved", true);
     const onHome = (await until("the failure on home", () => byText("button", "New project") && alertSaying(NOT_SAVED)))!;
     const homeText = onHome.textContent ?? "";
-    onHome.querySelector<HTMLElement>('[aria-label="Dismiss"]')!.click();
+    onHome.querySelector<HTMLElement>('[aria-label="Close"]')!.click();
     await settle();
     return { askedBefore, refused, dialogText, stayAnswer, leaveAnswer, afterSave, sentOnClose, onPhone, homeText, dismissed: !alertSaying(NOT_SAVED) };
 }
@@ -613,11 +623,11 @@ async function homeChecks() {
     await home();
     const name = "Renamed by hand";
     const toggle = await until("the card's switch", () => document.querySelector<HTMLElement>(`[role="switch"][aria-label="${name}: ${AUTO_START}"]`));
-    const alert = (text: string) => [...document.querySelectorAll<HTMLElement>('[role="alert"]')].find((el) => el.textContent?.includes(text));
+    const alert = alertSaying;
     const before = toggle.getAttribute("aria-checked");
     refuse("updateProject", true);
     await clickAt(toggle);
-    const failed = (await until("the switch's failure", () => alert("Flows not turned")))!.textContent ?? "";
+    const failed = (await until("the switch's failure", () => alert("Couldn't turn the flows")))!.textContent ?? "";
     await settle();
     const stayed = toggle.getAttribute("aria-checked");
     // the registry goes away as another window makes a project: the service can't tell the other panels
@@ -635,7 +645,7 @@ async function homeChecks() {
     await settle();
     const after = {
         moved: toggle.getAttribute("aria-checked"),
-        switchFailure: alert("Flows not turned")?.textContent ?? null,
+        switchFailure: alert("Couldn't turn the flows")?.textContent ?? null,
         banner: alert("Flows can't drive projects")?.textContent ?? null,
     };
     await shoot("home-recovered");

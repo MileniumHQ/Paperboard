@@ -16,6 +16,7 @@ export function createProjects() {
     // alone), and joins a read still out, being newer than it
     const read = createRead(() => serviceState.refresh().then((full) => structuredClone(full)), {
         follow: (land) => serviceState.subscribe((_state, patch) => land((prev) => prev && { ...prev, ...structuredClone(patch) })),
+        failure: { title: "Couldn't load the projects" },
     });
     const state = () => read.value() ?? initial;
 
@@ -48,7 +49,7 @@ export function createProjects() {
 export const AUTO_START = "Auto-start";
 
 /** What a project's switch that didn't move says, by where it was going. */
-export const switchFailed = (enabled: boolean) => (enabled ? "Flows not turned on" : "Flows not turned off");
+export const switchFailed = (enabled: boolean) => (enabled ? "Couldn't turn the flows on" : "Couldn't turn the flows off");
 
 /** "Edited 5 minutes ago", as the home screen says it. */
 export function editedText(at: number, now = Date.now()): string {

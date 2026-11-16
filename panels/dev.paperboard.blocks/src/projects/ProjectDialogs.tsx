@@ -1,9 +1,8 @@
 // Renaming and deleting a project, the same from the home screen and the
-// editor. Each says what failed, in place, instead of closing on an error.
-import { createEffect, createMemo, createSignal, on, Show } from "solid-js";
-import { PaperButton, PaperFlex, PaperInput, PaperModal, PaperQuote, PaperText } from "@mileniumhq/paperui";
+// editor. What failed is a toast over the dialog, which stays open to try again.
+import { createEffect, createMemo, createSignal, on } from "solid-js";
+import { PaperButton, PaperFlex, PaperInput, PaperModal, PaperText, showError } from "@mileniumhq/paperui";
 import { MAX_PROJECT_NAME } from "../lib/projects";
-import { errorMessage } from "@mileniumhq/paperapi";
 
 
 /** The project's name in the editor's top bar, renamed in place: Enter or
@@ -12,7 +11,7 @@ import { errorMessage } from "@mileniumhq/paperapi";
 export function ProjectNameField(props: {
     name: string;
     onRename: (name: string) => Promise<unknown>;
-    onFailed: (reason: string) => void;
+    onFailed: (err: unknown) => void;
 }) {
     const [draft, setDraft] = createSignal(props.name);
     const [editing, setEditing] = createSignal(false);
@@ -32,7 +31,7 @@ export function ProjectNameField(props: {
             await props.onRename(name);
         } catch (err) {
             setDraft(props.name);
-            props.onFailed(errorMessage(err));
+            props.onFailed(err);
         }
     };
     return (
@@ -70,7 +69,6 @@ export function RenameProjectModal(props: {
 }) {
     const [name, setName] = createSignal("");
     const [busy, setBusy] = createSignal(false);
-    const [error, setError] = createSignal<string | null>(null);
     // a fresh form each time the dialog opens for a project; the list changing
     // under it (a new announcement) never resets what was typed or a request in flight.
     // The id is a memo: `on` runs again whenever its source is recomputed, and the
@@ -79,19 +77,17 @@ export function RenameProjectModal(props: {
     createEffect(on(openFor, (id) => {
         if (!id) return;
         setName(props.project!.name);
-        setError(null);
         setBusy(false);
     }));
     const submit = async () => {
         const project = props.project;
         if (!project || busy()) return;
         setBusy(true);
-        setError(null);
         try {
             await props.onRename(project.id, name());
             props.onClose();
         } catch (err) {
-            setError(errorMessage(err));
+            showError("Couldn't rename the project", err);
         } finally {
             setBusy(false);
         }
@@ -119,9 +115,6 @@ export function RenameProjectModal(props: {
                         value={name()}
                         onInput={(e) => setName(e.currentTarget.value)}
                     />
-                    <Show when={error()}>
-                        {(text) => <PaperQuote variant="danger" icon="error" title="Not renamed" role="alert">{text()}</PaperQuote>}
-                    </Show>
                 </PaperFlex>
             </form>
         </PaperModal>
@@ -134,24 +127,15 @@ export function DeleteProjectModal(props: {
     onClose: () => void;
 }) {
     const [busy, setBusy] = createSignal(false);
-    const [error, setError] = createSignal<string | null>(null);
-    // what failed stays said while the list is announced again (see RenameProjectModal)
-    const openFor = createMemo(() => props.project?.id);
-    createEffect(on(openFor, (id) => {
-        if (!id) return;
-        setError(null);
-        setBusy(false);
-    }));
     const confirm = async () => {
         const project = props.project;
         if (!project || busy()) return;
         setBusy(true);
-        setError(null);
         try {
             await props.onDelete(project.id);
             props.onClose();
         } catch (err) {
-            setError(errorMessage(err));
+            showError("Couldn't delete the project", err);
         } finally {
             setBusy(false);
         }
@@ -174,9 +158,6 @@ export function DeleteProjectModal(props: {
                     "{props.project?.name}" and its {props.project?.flowCount === 1 ? "flow" : `${props.project?.flowCount ?? 0} flows`} will be deleted.
                     This can't be undone; a backup made before now still has it.
                 </PaperText>
-                <Show when={error()}>
-                    {(text) => <PaperQuote variant="danger" icon="error" title="Not deleted" role="alert">{text()}</PaperQuote>}
-                </Show>
             </PaperFlex>
         </PaperModal>
     );

@@ -5,13 +5,12 @@
 // instead of drawing an editor that can't be used; the flows keep running
 // in the service.
 import { createEffect, createSignal, on, onCleanup, Show } from "solid-js";
-import { PAPER_PANEL_COMPACT_WIDTH, PaperEmptyState, PaperFlex, PaperQuote } from "@mileniumhq/paperui";
+import { PAPER_PANEL_COMPACT_WIDTH, PaperEmptyState, PaperFlex } from "@mileniumhq/paperui";
 import "@mileniumhq/paperui/style.css";
 import "@mileniumhq/paperui/panel.css";
 import Editor from "./Editor";
 import ProjectsHome from "./projects/ProjectsHome";
 import { createProjects } from "./projects/state";
-import { closedUnsaved, NOT_SAVED, setClosedUnsaved } from "./editorFlows";
 import type { ProjectSummary } from "./panel";
 
 export default function App() {
@@ -22,13 +21,8 @@ export default function App() {
     onCleanup(() => query.removeEventListener("change", change));
     return (
         <Show when={!narrow()} fallback={
+            // an editor closed as the window narrowed: an edit it sent that didn't save is its toast, which stays
             <PaperFlex direction="column" fullWidth fullHeight align="center" justify="center" gap="full" padding="double">
-                {/* an editor closed as the window narrowed: an edit it sent that didn't save is said here */}
-                <Show when={closedUnsaved()}>
-                    {(text) => (
-                        <PaperQuote variant="danger" icon="warning" title={NOT_SAVED} role="alert" onDismiss={() => setClosedUnsaved(null)}>{text()}</PaperQuote>
-                    )}
-                </Show>
                 <PaperEmptyState
                     icon="phonelink_off"
                     title="Blocks isn't on phones yet"

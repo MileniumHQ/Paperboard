@@ -31,7 +31,7 @@
     min-height: 0;
 }
 
-/* the notices over the run log, under the canvas: they never cover a block,
+/* the run log, under the canvas: it never covers a block,
    and the canvas keeps at least half of the room */
 .dock {
     flex: none;
@@ -52,6 +52,17 @@
 .canvas {
     position: absolute;
     inset: 0;
+}
+
+/* what the canvas says over it when its flows couldn't load */
+.cover {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: var(--paper-uigap);
+    background: var(--paper-surface);
 }
 
 .expand {

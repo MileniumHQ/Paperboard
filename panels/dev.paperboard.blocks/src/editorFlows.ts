@@ -21,13 +21,9 @@ import { service, type Notice } from "./bridge";
 type Json = Record<string, unknown>;
 type Schemas = SavedFlows["schemas"];
 
-/** the notice a failed save leaves, cleared by the next save that works */
-export const NOT_SAVED = "Your changes weren't saved";
+/** the toast a failed save leaves, closed by the next save that works */
+export const NOT_SAVED = "Couldn't save your changes";
 const SAVE_DELAY_MS = 400;
-
-// why the edits sent as an editor closed didn't save: the editor is gone, so the page says it
-const [closedUnsaved, setClosedUnsaved] = createSignal<string | null>(null);
-export { closedUnsaved, setClosedUnsaved };
 
 /** What the registry offers, as the Library shows it. */
 export interface Registry {
@@ -125,7 +121,7 @@ export function createEditorFlows(options: {
                 refreshChoices(source).catch((err: unknown) => {
                     const panelId = "typeRef" in source ? source.typeRef.slice(0, source.typeRef.indexOf(":")) : source.panelId;
                     if (!onCanvas.has("typeRef" in source ? panelId : `${source.panelId}\u0000${source.entry}`)) return;
-                    fail(`${panelList.find((p) => p.id === panelId)?.name ?? panelId}'s choices didn't load`)(err);
+                    fail(`Couldn't load ${panelList.find((p) => p.id === panelId)?.name ?? panelId}'s choices`)(err);
                 }),
             ),
         );
@@ -230,8 +226,8 @@ export function createEditorFlows(options: {
         if (seen === edits) setUnsaved(false);
     }
 
-    // a save that failed is said in the editor, or by the page once the editor has closed
-    const notSaved = (err: unknown) => (closed ? setClosedUnsaved(errorMessage(err)) : fail(NOT_SAVED)(err));
+    // a save that failed is a toast, which stays once the editor has closed
+    const notSaved = fail(NOT_SAVED);
     /** Saves what isn't saved yet, as the editor or the page goes: the canvas is read as it is, even before Blockly tells of its last change. */
     const saveLeaving = () => void saveNow().catch(notSaved);
     window.addEventListener("pagehide", saveLeaving);

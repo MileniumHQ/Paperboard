@@ -1,24 +1,26 @@
 // The Blocks editor for one project: a top bar with its name, menus, its
 // switch, Stop and Run, then the Library (a rail of categories, and the
 // chosen one's blocks in Blockly's flyout) and the canvas, with a dock under
-// it for the notices and the run log. Edits save as you make them; the
+// it for the run log. What fails is a toast. Edits save as you make them; the
 // service runs the flows.
 import { createEffect, createMemo, createSignal, on, onCleanup, onMount, Show } from "solid-js";
 import * as Blockly from "blockly";
-import { blocksApi, setUnsavedChanges, errorMessage } from "@mileniumhq/paperapi";
+import { blocksApi, setUnsavedChanges } from "@mileniumhq/paperapi";
 import {
     PaperButton,
     PaperContextMenuItem,
     PaperEffect,
+    PaperEmptyState,
     PaperFlex,
     PaperIcon,
     PaperMenuBar,
     PaperMenuBarMenu,
     PaperModal,
-    PaperQuote,
     PaperSeparator,
     PaperText,
     PaperToggle,
+    createFailureToast,
+    showToast,
 } from "@mileniumhq/paperui";
 import { BUILTIN_BLOCKS, builtinPlaceholder } from "./lib/blockDefs";
 import { registerChoicesField, setChoicesProject } from "./lib/choicesField";
@@ -34,6 +36,7 @@ import "./lib/undrawnFields";
 import { parseEntry, parseRegistryBlockType } from "./lib/names";
 import { Console } from "./Console";
 import { oneAtATime } from "./lib/oneAtATime";
+import { createFailures } from "./lib/failures";
 import { service, serviceState, type Notice } from "./bridge";
 import type { PanelState, ProjectSummary } from "./panel";
 import { AUTO_START, switchFailed, type ProjectsState } from "./projects/state";
@@ -45,7 +48,8 @@ import { createLibraryModel } from "./libraryModel";
 import { createEditorFlows, define, NOT_SAVED } from "./editorFlows";
 import styles from "./Editor.module.css";
 
-const RUN_FAILED = "Run didn't start";
+const RUN_FAILED = "Couldn't run the flows";
+const LOAD_FAILED = "Couldn't load your flows";
 const HEADING_CLASSES: HeadingInfo["classes"] = { heading: styles.heading!, icon: styles.headingIcon!, badge: styles.headingBadge!, badgeText: styles.headingBadgeText! };
 
 export default function Editor(props: {
@@ -59,7 +63,6 @@ export default function Editor(props: {
     let trashTile!: HTMLDivElement;
     const [trash, setTrash] = createSignal<TrashState>({ dragging: false, over: false });
     let workspace: Blockly.WorkspaceSvg | undefined;
-    const [notice, setNotice] = createSignal<Notice | null>(null);
     // the Library is collapsed as the person chose, or else while the editor is too narrow
     // for it to leave the canvas the larger share
     const [collapseChoice, setCollapsed] = createSignal<boolean | null>(null);
@@ -69,9 +72,10 @@ export default function Editor(props: {
     // the newest log line already pointed at on the canvas
     let shownLogId = 0;
 
-    const fail = (title: string) => (err: unknown) => setNotice({ kind: "failed", title, text: errorMessage(err) });
-    /** what failed has worked since: its notice goes, and any other stays */
-    const worked = (...titles: string[]) => setNotice((shown) => (shown && titles.includes(shown.title) ? null : shown));
+    // what fails is a toast, which closes once the same thing has worked since
+    const { fail, worked } = createFailures();
+    const notify = (notice: Notice) =>
+        notice.kind === "failed" ? fail(notice.title)(notice.text) : void showToast({ variant: "success", title: notice.title, message: notice.text });
     // the bridge's state as the projects store keeps it (reconciled by id): a log line adds one row
     // to the console rather than handing it a whole new list of rows
     const running = () => props.projects.state().running[props.projectId] ?? 0;
@@ -82,11 +86,12 @@ export default function Editor(props: {
         project: () => props.projectId,
         workspace: () => workspace,
         onRegistry: library.setRegistry,
-        onNotice: setNotice,
+        onNotice: notify,
         onSaved: () => worked(NOT_SAVED),
         // the log lines from before the flows were shown are on the blocks they name
         onLoaded: () => showErrors(props.projects.state()),
     });
+    createFailureToast(flows.loadError, { title: LOAD_FAILED });
 
     function showErrors(next: PanelState): void {
         if (!workspace) return;
@@ -114,7 +119,7 @@ export default function Editor(props: {
     onMount(() => {
         registerChoicesField({
             fetch: (s) => ("typeRef" in s ? blocksApi.typeChoices(s.typeRef, s.project ? { project: s.project } : {}) : blocksApi.choices(s.panelId, s.entry, s.input)),
-            report: (text) => setNotice({ kind: "failed", title: "Choices didn't load", text }),
+            report: (text) => fail("Couldn't load the choices")(text),
         });
         // a type's values are listed in the project of the block they're in, when it's one of the type's own panel's
         setChoicesProject((holder, typeRef) => {
@@ -158,7 +163,7 @@ export default function Editor(props: {
             });
             workspace = canvas.workspace;
             offRegistry = blocksApi.onRegistryChange(flows.registryChanged);
-            flows.load().catch(fail("Your flows couldn't be loaded"));
+            flows.load().catch(fail(LOAD_FAILED));
             setReady(true);
         };
         // Blockly measures text as it draws, so it waits for the font
@@ -306,7 +311,7 @@ export default function Editor(props: {
             const failed = flows.loadError();
             if (failed) throw new Error(failed);
         },
-        onNotice: setNotice,
+        onNotice: notify,
     });
 
     return (
@@ -320,7 +325,7 @@ export default function Editor(props: {
                         <ProjectNameField
                             name={props.project().name}
                             onRename={(name) => props.projects.rename(props.projectId, name)}
-                            onFailed={(text) => setNotice({ kind: "failed", title: "Not renamed", text })}
+                            onFailed={fail("Couldn't rename the project")}
                         />
                         <PaperMenuBar aria-label={props.project().name}>
                             <PaperMenuBarMenu label="Project" size="tiny">
@@ -374,7 +379,7 @@ export default function Editor(props: {
                                     variant="danger"
                                     icon
                                     disabled={running() === 0}
-                                    onClick={() => service.stopFlows({ project: props.projectId }).catch(fail("Stop didn't work"))}
+                                    onClick={() => service.stopFlows({ project: props.projectId }).catch(fail("Couldn't stop the flows"))}
                                     title={running() === 1 ? "Stop the flow running now" : `Stop the ${running()} flows running now`}
                                     aria-label="Stop"
                                 >
@@ -431,6 +436,14 @@ export default function Editor(props: {
                 <div class={styles.main}>
                     <div class={styles.stage}>
                         <div ref={host} class={styles.canvas} />
+                        {/* the canvas holds none of the flows: it says so over them, and the toast says why */}
+                        <Show when={flows.loadError()}>
+                            <div class={styles.cover}>
+                                <PaperEmptyState icon="error" title="Couldn't load" description="Nothing here can be changed until the flows load.">
+                                    <PaperButton onClick={() => void flows.load()}>Try again</PaperButton>
+                                </PaperEmptyState>
+                            </div>
+                        </Show>
                         <Show when={!flows.loadError()}>
                             <Show
                                 when={!collapsed()}
@@ -482,34 +495,9 @@ export default function Editor(props: {
                             </div>
                         </div>
                     </div>
-                    <Show when={flows.loadError() || notice() || log().length > 0}>
+                    <Show when={log().length > 0}>
                         <div class={styles.dock}>
-                            <Show when={flows.loadError()}>
-                                {(why) => (
-                                    <PaperQuote variant="danger" icon="warning" title="Your flows couldn't be loaded" role="alert">
-                                        <PaperFlex direction="column" align="flex-start" gap="half">
-                                            <span>Nothing here can be changed until they load: {why()}</span>
-                                            <PaperButton variant="danger" onClick={() => void flows.load()}>
-                                                Try again
-                                            </PaperButton>
-                                        </PaperFlex>
-                                    </PaperQuote>
-                                )}
-                            </Show>
-                            <Show when={notice()}>
-                                {(shown) => (
-                                    <PaperQuote
-                                        variant={shown().kind === "failed" ? "danger" : "success"}
-                                        icon={shown().kind === "failed" ? "warning" : "check_circle"}
-                                        title={shown().title}
-                                        role={shown().kind === "failed" ? "alert" : "status"}
-                                        onDismiss={() => setNotice(null)}
-                                    >
-                                        {shown().text}
-                                    </PaperQuote>
-                                )}
-                            </Show>
-                            <Console entries={log()} onClear={() => service.clearLog({ project: props.projectId }).catch(fail("The log wasn't cleared"))} />
+                            <Console entries={log()} onClear={() => service.clearLog({ project: props.projectId }).catch(fail("Couldn't clear the log"))} />
                         </div>
                     </Show>
                 </div>

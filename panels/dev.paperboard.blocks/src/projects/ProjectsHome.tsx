@@ -15,40 +15,40 @@ import {
     PaperMediaCardGroup,
     PaperPage,
     PaperPageHeader,
-    PaperQuote,
     PaperSeparator,
     PaperText,
     PaperToggle,
+    createFailureToast,
     useContextMenuState,
 } from "@mileniumhq/paperui";
 import CanvasPreview from "./CanvasPreview";
 import { DeleteProjectModal, RenameProjectModal } from "./ProjectDialogs";
 import { AUTO_START, editedText, switchFailed, type ProjectsState } from "./state";
 import { oneAtATime } from "../lib/oneAtATime";
+import { createFailures } from "../lib/failures";
 import type { ProjectSummary } from "../panel";
-import { closedUnsaved, NOT_SAVED, setClosedUnsaved } from "../editorFlows";
-import { errorMessage } from "@mileniumhq/paperapi";
 
 
 export default function ProjectsHome(props: { projects: ProjectsState; onOpen: (project: ProjectSummary) => void }) {
-    const [failure, setFailure] = createSignal<{ title: string; text: string } | null>(null);
+    // what fails is a toast, which closes once the same thing has worked since
+    const { fail, worked } = createFailures();
     const changes = oneAtATime();
     const working = changes.busy;
     const change = (failed: string, work: () => Promise<void>) =>
         changes.run(async () => {
-            setFailure(null);
             await work();
-        }, (err) => setFailure({ title: failed, text: errorMessage(err) }));
+            worked(failed);
+        }, fail(failed));
 
-    const create = () => change("Project not made", async () => props.onOpen(await props.projects.create()));
-    const duplicate = (id: string) => change("Project not copied", async () => { await props.projects.duplicate(id); });
+    const create = () => change("Couldn't make a project", async () => props.onOpen(await props.projects.create()));
+    const duplicate = (id: string) => change("Couldn't copy the project", async () => { await props.projects.duplicate(id); });
     // a switch flips on its own, never waiting on another change, and moves once the service says so
     // once a switch moves, what an earlier one that didn't said goes
     const setEnabled = (id: string, enabled: boolean) =>
-        props.projects.setEnabled(id, enabled).then(
-            () => setFailure((shown) => (shown && [switchFailed(true), switchFailed(false)].includes(shown.title) ? null : shown)),
-            (err) => setFailure({ title: switchFailed(enabled), text: errorMessage(err) }),
-        );
+        props.projects.setEnabled(id, enabled).then(() => worked(switchFailed(true), switchFailed(false)), fail(switchFailed(enabled)));
+    // what the service can't do stands until it says it is over
+    createFailureToast(() => props.projects.state().projectsError, { title: "Couldn't read the projects" });
+    createFailureToast(() => props.projects.state().blocksError, { title: "Flows can't drive projects" });
 
     const menu = useContextMenuState("below-right");
     const [menuFor, setMenuFor] = createSignal<ProjectSummary | null>(null);
@@ -81,46 +81,25 @@ export default function ProjectsHome(props: { projects: ProjectsState; onOpen: (
                     {/* an empty page offers this in its empty state instead */}
                     <Show when={props.projects.kept().length > 0}>{newProject()}</Show>
                 </PaperPageHeader>
-                <Show when={failure()}>
-                    {(f) => (
-                        <PaperQuote variant="danger" icon="warning" title={f().title} role="alert" onDismiss={() => setFailure(null)}>
-                            {f().text}
-                        </PaperQuote>
-                    )}
-                </Show>
-                <Show when={closedUnsaved()}>
-                    {(text) => (
-                        <PaperQuote variant="danger" icon="warning" title={NOT_SAVED} role="alert" onDismiss={() => setClosedUnsaved(null)}>{text()}</PaperQuote>
-                    )}
-                </Show>
-                <Show when={props.projects.state().projectsError}>
-                    {(text) => (
-                        <PaperQuote variant="danger" icon="warning" title="Projects could not be read" role="alert">{text()}</PaperQuote>
-                    )}
-                </Show>
-                <Show when={props.projects.state().blocksError}>
-                    {(text) => (
-                        <PaperQuote variant="danger" icon="warning" title="Flows can't drive projects" role="alert">{text()}</PaperQuote>
-                    )}
-                </Show>
                 <Show
                     when={props.projects.ready()}
                     fallback={
                         <Show when={props.projects.loadError()} fallback={<PaperLoader loaderStatus="indeterminate" label="Loading projects" />}>
-                            {(reason) => (
-                                <PaperEmptyState icon="error" title="Projects could not be loaded" description={reason()} role="alert">
-                                    <PaperButton onClick={() => void props.projects.load()}>Try again</PaperButton>
-                                </PaperEmptyState>
-                            )}
+                            <PaperEmptyState icon="error" title="Couldn't load">
+                                <PaperButton onClick={() => void props.projects.load()}>Try again</PaperButton>
+                            </PaperEmptyState>
                         </Show>
                     }
                 >
                     <Show
                         when={props.projects.kept().length > 0}
                         fallback={
-                            <PaperEmptyState icon="extension" title="No projects yet" description="A project holds flows built from blocks, which run when something happens in any panel, or when you click Run.">
-                                {newProject()}
-                            </PaperEmptyState>
+                            // unreadable is not empty: the toast says why
+                            <Show when={!props.projects.state().projectsError} fallback={<PaperEmptyState icon="error" title="Couldn't load" />}>
+                                <PaperEmptyState icon="extension" title="No projects yet" description="A project holds flows built from blocks, which run when something happens in any panel, or when you click Run.">
+                                    {newProject()}
+                                </PaperEmptyState>
+                            </Show>
                         }
                     >
                         <PaperMediaCardGroup minCardWidth="card-min">

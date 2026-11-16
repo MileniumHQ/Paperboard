@@ -24,10 +24,10 @@ describe("the project dialogs while the project list is announced again", () => 
     );
 
     test(
-        "Delete keeps saying why it failed",
+        "Delete stays open while its toast keeps saying why it failed",
         async () => {
             const { dialogs } = await panelFixture();
-            expect(dialogs.deleteError).toContain("Not deleted");
+            expect(dialogs.deleteError).toContain("Couldn't delete the project");
             expect(dialogs.deleteError).toContain(REFUSAL);
         },
         TIMEOUT,
@@ -151,7 +151,7 @@ describe("the editor", () => {
             const { loadFailure } = await panelFixture();
             expect(loadFailure.failed.text).toContain(REFUSAL);
             expect(loadFailure.failed.readOnly).toBe(true);
-            expect(loadFailure.failed.dismissable).toBe(false);
+            expect(loadFailure.failed.retryOnCanvas).toBe(true);
             expect(loadFailure.failed.library).toBe(false);
             expect(loadFailure.retried).toEqual({ readOnly: false, library: true });
         },
