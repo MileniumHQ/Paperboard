@@ -27,15 +27,26 @@ export function findSession(tabs: TerminalTab[], id: string): { tab: TerminalTab
 }
 
 /**
- * What a tab is called: its name when it was given one, with the program
- * running in it ("Server — java"); otherwise the program alone, as a
- * terminal's title shows it. A tab whose shell hasn't started yet goes by
- * its label.
+ * What a tab is called: its name when it was given one, with what is
+ * running in it ("Server — java"); otherwise what is running alone, as a
+ * terminal's title shows it. What is running is the command line the shell
+ * marked as running, as typed, or else the program in front. A tab whose
+ * shell hasn't started yet goes by its label.
  */
-export function tabTitle(tab: TerminalTab, live: Record<string, LiveSession>, focused: string = tab.id): string {
-    const program = live[focused]?.program || live[tab.id]?.program || "";
+export function tabTitle(
+    tab: TerminalTab,
+    live: Record<string, LiveSession>,
+    running: Record<string, string | null> = {},
+    focused: string = tab.id,
+): string {
+    const program = sessionTitle(focused, live, running) || sessionTitle(tab.id, live, running);
     if (!program) return tab.label;
     return tab.named ? `${tab.label} — ${program}` : program;
+}
+
+/** what is running in one shell: the command line it marked, or the program in front; "" before it starts */
+export function sessionTitle(session: string, live: Record<string, LiveSession>, running: Record<string, string | null>): string {
+    return running[session] || live[session]?.program || "";
 }
 
 /** the most characters a tab along the top shows of its title; a longer one ends in an ellipsis */

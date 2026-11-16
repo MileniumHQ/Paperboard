@@ -88,4 +88,29 @@ describe("splitting a tab", () => {
             served.stop();
         }
     });
+
+    // a desktop window at 860 leaves the panel about 620 wide: a side list there would leave each shell a third of that
+    test("tabs saved down the side go along the top where the side list would crowd a split, and back down the side where there is room", async () => {
+        await panelFiles({ "tabs.json": { tabs: [{ id: "tab1", label: "One", split: { direction: "right", session: { id: "pane1" } } }], activeTabId: "tab1", layout: "vertical" } });
+        await startService();
+        const served = await servePanel();
+        const page = await browser.open(served.url);
+        // each shell's width, and whether the tabs sit above the shells
+        const widths = `[...document.querySelectorAll(".xterm")].map((x) => Math.round(x.getBoundingClientRect().width))`;
+        const tabsOnTop = `document.querySelector('label[data-value="tab1"]').getBoundingClientRect().bottom <= document.querySelector(".xterm").getBoundingClientRect().top`;
+        const toggle = `document.querySelector('button[aria-label="Tabs along the top"], button[aria-label="Tabs down the side"]')`;
+        try {
+            await page.resize(620, 520);
+            await page.waitFor(`document.querySelectorAll(".xterm").length === 2 && ${tabsOnTop}`, "the tabs along the top at 620");
+            await page.waitFor(`${widths}.every((w) => w > 260)`, "each shell with room to work at 620");
+            expect(await page.evaluate<boolean>(`!${toggle}`)).toBe(true);
+
+            await page.resize(1040, 700);
+            await page.waitFor(`!(${tabsOnTop}) && ${toggle}?.getAttribute("aria-label") === "Tabs along the top"`, "the tabs down the side at 1040");
+            expect(page.exceptions).toEqual([]);
+        } finally {
+            await page.close();
+            served.stop();
+        }
+    });
 });

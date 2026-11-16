@@ -39,6 +39,8 @@ describe("saved commands in the panel", () => {
             await page.waitFor(`document.body.innerText.includes("No saved commands")`, "the empty menu");
             await page.clickText("[role=menuitem]", "Manage saved commands");
             await page.waitFor(dialog, "the modal");
+            // its first field has the keyboard, so a name can be typed at once
+            await page.waitFor(`document.activeElement?.labels?.[0]?.textContent.trim() === "Name (optional)"`, "the name field to have the keyboard");
 
             await fill(page, "Name", "Greet");
             await fill(page, "Command", "exit 0");

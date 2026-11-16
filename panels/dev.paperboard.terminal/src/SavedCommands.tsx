@@ -229,6 +229,7 @@ function SavedCommandsModal(props: {
                     <PaperInput
                         fullWidth
                         label="Name (optional)"
+                        autofocus
                         maxLength={MAX_LABEL_LENGTH}
                         value={label()}
                         onInput={(e) => setLabel(e.currentTarget.value)}

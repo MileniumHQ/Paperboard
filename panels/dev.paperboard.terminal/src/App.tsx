@@ -1,6 +1,7 @@
-import { createEffect, createMemo, createSignal, For, on, Show } from "solid-js";
+import { createEffect, createMemo, createSignal, For, on, onCleanup, Show } from "solid-js";
 import { createStore } from "solid-js/store";
 import {
+    PAPER_PANEL_COMPACT_WIDTH,
     PaperFlex,
     PaperButton,
     PaperEffect,
@@ -29,6 +30,7 @@ import { createKeyRow } from "./lib/keyRow";
 import { createAttention } from "./lib/attention";
 import { createFind } from "./FindBar";
 import { createPasteConfirm } from "./PasteConfirm";
+import { createCloseConfirm } from "./CloseConfirm";
 import { createRenameTab } from "./RenameTab";
 import { ScreenMenu, ShellMenu, SplitMenu, TabMenu } from "./Menus";
 import { TabBar, Toolbar } from "./TabBar";
@@ -70,7 +72,14 @@ export default function App() {
     // most of the width, and split shells share the one screen
     const compact = createPaperCompact();
     const mobile = createPaperMobile();
-    const vertical = () => service.value()?.layout === "vertical" && !compact();
+    // the tabs go down the side only where that leaves a split's two shells
+    // room to work: a phone's width and a half. Narrower, they go along the top
+    const sideQuery = window.matchMedia(`(min-width: ${PAPER_PANEL_COMPACT_WIDTH * 1.5}px)`);
+    const [sideRoom, setSideRoom] = createSignal(sideQuery.matches);
+    const sideChange = () => setSideRoom(sideQuery.matches);
+    sideQuery.addEventListener("change", sideChange);
+    onCleanup(() => sideQuery.removeEventListener("change", sideChange));
+    const vertical = () => service.value()?.layout === "vertical" && sideRoom();
 
     // which of a split tab's two shells has the keyboard, per tab
     const [focusedPane, setFocusedPane] = createStore<Record<string, string>>({});
@@ -89,6 +98,13 @@ export default function App() {
     const attention = createAttention(tabs, activeTab);
     const find = createFind(currentSession);
     const pasteConfirm = createPasteConfirm();
+    const closeConfirm = createCloseConfirm();
+    // the command each shell marked as running now, by session: what its tab
+    // is called while it runs, and what closing it would stop
+    const [running, setRunning] = createStore<Record<string, string | null>>({});
+    /** the commands running in these shells, as typed (or the program, when the shell didn't say the line) */
+    const runningIn = (sessions: string[]) =>
+        sessions.filter((id) => typeof running[id] === "string").map((id) => running[id] || live()[id]?.program || id);
     const rename = createRenameTab();
 
     // what went wrong for the shell in front where no one was waiting on it;
@@ -145,7 +161,12 @@ export default function App() {
     // a screen takes the keyboard once it is mounted and shown
     const focusSession = (id: string) => queueMicrotask(() => activeTerminals.get(id)?.focus());
 
-    const handleCloseTab = (closedId: string) => {
+    // a tab with a command running is closed only once its closing is agreed to
+    const handleCloseTab = async (closedId: string) => {
+        const closing = tabs().find((item) => item.id === closedId);
+        if (!closing) return;
+        const busy = runningIn(tabSessions(closing).map((s) => s.id));
+        if (busy.length > 0 && !(await closeConfirm.confirm("tab", busy))) return;
         const current = tabs();
         const closedIndex = current.findIndex((item) => item.id === closedId);
         if (closedIndex < 0) return;
@@ -223,7 +244,10 @@ export default function App() {
             })
             .catch(report("Tab not split"));
     };
-    const unsplit = (tabId: string) => {
+    const unsplit = async (tabId: string) => {
+        const pane = tabs().find((t) => t.id === tabId)?.split?.session.id;
+        const busy = pane ? runningIn([pane]) : [];
+        if (busy.length > 0 && !(await closeConfirm.confirm("split", busy))) return;
         setFailure(null);
         terminal.calls.unsplitTab({ id: tabId }).catch(report("Split not closed"));
     };
@@ -293,7 +317,7 @@ export default function App() {
         const tab = contextTab();
         setContextTabId(null);
         // what the tab shows: a tab that was never named is called by its program, and that is the name to start from
-        if (tab) rename.open(tab.id, tab.named ? tab.label : tabTitle(tab, live(), tab.id));
+        if (tab) rename.open(tab.id, tab.named ? tab.label : tabTitle(tab, live(), running));
     };
 
     // a split's shells sit side by side, or stack when asked to or when the
@@ -317,6 +341,7 @@ export default function App() {
                 onFailure={(shown) => setFailure(shown)}
                 onActivity={() => attention.output(paneProps.session)}
                 onBell={() => attention.bell(paneProps.session)}
+                onRunning={(command) => setRunning(paneProps.session, command)}
                 onKeyAction={(action) => action === "find" && find.open()}
                 modifiers={keys.modifiers}
                 onModifiersUsed={keys.used}
@@ -342,6 +367,7 @@ export default function App() {
                             <TabBar
                                 tabs={tabs()}
                                 live={live()}
+                                running={running}
                                 vertical={vertical()}
                                 value={currentSession()}
                                 status={attention.status}
@@ -356,6 +382,7 @@ export default function App() {
                         <Toolbar
                             vertical={vertical()}
                             compact={compact()}
+                            sideRoom={sideRoom()}
                             shown={shownTab()}
                             manyShells={shells().length > 1}
                             shellMenu={shellMenu}
@@ -497,6 +524,7 @@ export default function App() {
             <ShellMenu state={shellMenu} shells={shells()} onPick={(path) => void addTab(path)} />
             <SavedCommands menu={savedMenu} commands={service.value()?.savedCommands ?? []} runs={service.value()?.commandRuns ?? {}} loadError={service.value()?.savedCommandsError ?? ""} />
             {pasteConfirm.modal}
+            {closeConfirm.modal}
             {rename.modal}
         </>
     );

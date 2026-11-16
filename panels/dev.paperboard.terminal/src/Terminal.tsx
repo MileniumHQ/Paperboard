@@ -36,6 +36,19 @@ export interface TerminalHandle {
 
 export const activeTerminals = new Map<string, TerminalHandle>();
 
+// the command line an OSC 133 C mark carries (cmdline_url=, percent-encoded); "" when it carries none
+function commandLine(params: string[]): string {
+    const encoded = params.find((p) => p.startsWith("cmdline_url="))?.slice("cmdline_url=".length);
+    if (!encoded) return "";
+    try {
+        return decodeURIComponent(encoded).trim();
+    } catch (err) {
+        // a line that isn't valid percent-encoding is one the shell didn't say: the tab goes by its program
+        console.debug("[terminal] a running command's line wasn't valid percent-encoding:", err);
+        return "";
+    }
+}
+
 export async function copySelection(id: string) {
     const term = activeTerminals.get(id)?.term;
     const selection = term?.getSelection() || window.getSelection()?.toString() || "";
@@ -73,6 +86,12 @@ export interface TerminalComponentProps {
     onActivity?: () => void;
     /** the shell rang the bell */
     onBell?: () => void;
+    /**
+     * The command the shell marked as running now, as typed ("" when it
+     * didn't say the line), or null once it is back at its prompt. A shell
+     * that marks nothing never says.
+     */
+    onRunning?: (command: string | null) => void;
     /** a shortcut for the panel (find) */
     onKeyAction?: (action: Exclude<TerminalKeyAction, null | "copy">) => void;
     /** this screen has the keyboard in its window: a paste from outside the screen lands here */
@@ -121,10 +140,16 @@ export function TerminalComponent(props: TerminalComponentProps) {
         const live = (marker: IMarker) => !marker.isDisposed && marker.line >= 0;
         // the shell marked a prompt and hasn't started a command since
         let atPrompt = false;
+        // the command it marked as started and not yet ended
+        let running: string | null = null;
         term.parser.registerOscHandler(133, (data) => {
-            const kind = data.split(";", 1)[0];
+            const [kind, ...params] = data.split(";");
             if (kind === "A") atPrompt = true;
             else if (kind === "C") atPrompt = false;
+            // a second mark of the same command (fish marks its own) keeps the line the other said
+            if (kind === "C") running = commandLine(params) || running || "";
+            else if (kind === "A" || kind === "D") running = null;
+            if (kind === "A" || kind === "C" || kind === "D") props.onRunning?.(running);
             if (kind === "A") {
                 prompts = prompts.filter(live);
                 const marker = term.registerMarker(0);
@@ -242,6 +267,8 @@ export function TerminalComponent(props: TerminalComponentProps) {
             replaying = false;
             prompts = [];
             commands = [];
+            running = null;
+            props.onRunning?.(null);
             // output that arrives while the scrollback is on its way waits
             // here, then joins it without repeating what the scrollback holds
             let pending: string[] | null = [];
@@ -251,6 +278,9 @@ export function TerminalComponent(props: TerminalComponentProps) {
                 if (hidden()) props.onActivity?.();
             });
             const offExit = terminalApi.onExit(id, (code) => {
+                // nothing runs in a shell that is gone
+                running = null;
+                props.onRunning?.(null);
                 stop(`This shell exited${code ? ` with code ${code}` : ""}.`, "Press any key to start a new one.");
             });
             disconnect = () => {
