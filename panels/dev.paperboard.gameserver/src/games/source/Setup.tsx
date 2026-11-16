@@ -1,5 +1,5 @@
 import { createMemo, createSignal, For, Show } from "solid-js";
-import { createAction, createRead, PaperButton, PaperCenteredInterface, PaperEmptyState, PaperFlex, PaperIcon, PaperMediaCard, PaperMediaCardGroup, PaperText, PaperWizardStep } from "@mileniumhq/paperui";
+import { createAction, createRead, PaperCenteredInterface, PaperError, PaperFlex, PaperIcon, PaperMediaCard, PaperMediaCardGroup, PaperText, PaperWizardStep } from "@mileniumhq/paperui";
 import { errorMessage } from "../../lib/failure";
 import SteamSetup from "../steam/SteamSetup";
 import { type SourceGameSpec } from "./index";
@@ -29,11 +29,10 @@ export default function SourceSetup(props: { spec: SourceGameSpec; onComplete():
     const pictures = createMapPictures(props.spec);
     // the maps are only there once the download is, so they are read when its step is left
     const [downloaded, setDownloaded] = createSignal(false);
-    // a failure is a toast, and Couldn't load stands where the modes would be
+    // a failure stands where the modes would be
     const listed = createRead((): Promise<string[]> => calls.sourceMaps(), {
         source: downloaded,
         message: errorMessage,
-        failure: { title: `Couldn't load ${props.spec.name}'s maps` },
     });
     const installed = listed.value;
     // the mode picked ("" before one is), and null for the game's own map cycle
@@ -86,10 +85,15 @@ export default function SourceSetup(props: { spec: SourceGameSpec; onComplete():
                                     Pick a game mode and the server plays its maps in turn, or leave it mixed. You can change this any time on the Maps tab.
                                 </PaperText>
                                 <PaperFlex direction="column" gap="half" fullWidth flex minHeight={0} scrollable="y">
-                                <Show when={!installed() && listed.error() && !listed.loading()}>
-                                    <PaperEmptyState icon="error" title="Couldn't load">
-                                        <PaperButton onClick={() => void listed.reload()}>Try again</PaperButton>
-                                    </PaperEmptyState>
+                                <Show when={listed.error()}>
+                                    {(err) => (
+                                        <PaperError
+                                            fill={!installed()}
+                                            title={`Couldn't load ${props.spec.name}'s maps`}
+                                            error={err()}
+                                            action={{ label: "Try again", disabled: listed.loading(), onClick: () => void listed.reload() }}
+                                        />
+                                    )}
                                 </Show>
                                 <MapPicturesFailure pictures={pictures} />
                                 <Show when={installed()}>

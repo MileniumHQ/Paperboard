@@ -2,7 +2,7 @@ import { For, Show, type Component } from "solid-js";
 import { Dynamic } from "solid-js/web";
 import {
     PaperButton,
-    PaperEmptyState,
+    PaperError,
     PaperFlex,
     PaperIcon,
     PaperLink,
@@ -62,11 +62,13 @@ export function AddonInstallModal<Meta>(props: {
                             when={install().versions()}
                             fallback={
                                 <Show
-                                    when={!install().versionsFailed()}
+                                    when={!install().versionsError()}
                                     fallback={
-                                        <PaperEmptyState icon="error" title="Couldn't load">
-                                            <PaperButton onClick={install().retryVersions}>Try again</PaperButton>
-                                        </PaperEmptyState>
+                                        <PaperError
+                                            title={`Couldn't load the versions of ${target().title}`}
+                                            error={install().versionsError()}
+                                            action={{ label: "Try again", onClick: install().retryVersions }}
+                                        />
                                     }
                                 >
                                     <PaperText size={2} color="text-subtle">

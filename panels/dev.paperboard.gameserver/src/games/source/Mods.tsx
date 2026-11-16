@@ -1,7 +1,7 @@
 import { createMemo, createSignal, For, Show } from "solid-js";
 import {
     PaperButton,
-    PaperEmptyState,
+    PaperError,
     PaperFlex,
     PaperIcon,
     PaperModal,
@@ -35,7 +35,6 @@ export default function SourceMods(props: { spec: SourceGameSpec; active: boolea
     const mods = createRead((): Promise<SourceModView> => calls.sourceSourcemod(), {
         source: () => props.active && serverStatus(),
         message: errorMessage,
-        failure: { title: "Couldn't load SourceMod" },
     });
     const view = mods.value;
     const [working, setWorking] = createSignal<string | null>(null);
@@ -131,16 +130,18 @@ export default function SourceMods(props: { spec: SourceGameSpec; active: boolea
                 </Show>
             </PaperPageHeader>
 
-            <Show
-                when={view()}
-                fallback={
-                    <Show when={mods.error() && !mods.loading()}>
-                        <PaperEmptyState icon="error" title="Couldn't load">
-                            <PaperButton onClick={() => void mods.reload()}>Try again</PaperButton>
-                        </PaperEmptyState>
-                    </Show>
-                }
-            >
+            {/* above SourceMod as it was read before, or in its place */}
+            <Show when={mods.error()}>
+                {(err) => (
+                    <PaperError
+                        fill={!view()}
+                        title="Couldn't load SourceMod"
+                        error={err()}
+                        action={{ label: "Try again", disabled: mods.loading(), onClick: () => void mods.reload() }}
+                    />
+                )}
+            </Show>
+            <Show when={view()}>
                 {(current) => (
                     <PaperFlex direction="column" gap="full">
                         <PaperSettingList autoHeight>

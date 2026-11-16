@@ -1,7 +1,7 @@
 import { batch, createEffect, createSignal, For, onCleanup, onMount, Show, on, type Accessor } from "solid-js";
 import {
     PaperButton,
-    PaperEmptyState,
+    PaperError,
     PaperFlex,
     PaperIcon,
     PaperInput,
@@ -9,7 +9,6 @@ import {
     PaperSelectMenu,
     PaperSelectMenuItem,
     PaperText,
-    createFailureToast,
     dismissToast,
     showError,
 } from "@mileniumhq/paperui";
@@ -48,7 +47,6 @@ export default function MapView() {
     const [info, setInfo] = createSignal<MapRegionsResult | null>(null);
     // why the region files could not be listed, until a listing goes through
     const [regionsError, setRegionsError] = createSignal<string | null>(null);
-    createFailureToast(regionsError, { title: "Couldn't read the world's region files" });
     const [dimension, setDimension] = createSignal<MapDimension>("overworld");
     const [grabbing, setGrabbing] = createSignal(false);
     const [scale, setScale] = createSignal(1);
@@ -365,20 +363,38 @@ export default function MapView() {
                 </div>
             </div>
 
-            <Show when={unexplored()}>
+            <Show when={unexplored() || (info() && regionsError())}>
                 <PaperFlex class={styles.bottomLeft} direction="column" gap="half">
-                    <PaperQuote variant="primary" icon="explore" title="Only the land around spawn so far" onDismiss={() => setExplained(true)}>
-                        Nobody has played on this world yet, so the server has saved only the area where players start. The map fills in as players explore, each time the server saves the world.
-                    </PaperQuote>
+                    {/* a listing again that failed leaves the map drawn as it was, under why */}
+                    <Show when={info() && regionsError()}>
+                        {(err) => (
+                            <PaperError
+                                class={styles.overMap}
+                                title="Couldn't read the world's region files"
+                                error={err()}
+                                action={{ label: "Try again", onClick: () => void loadRegions() }}
+                            />
+                        )}
+                    </Show>
+                    <Show when={unexplored()}>
+                        <PaperQuote variant="primary" icon="explore" title="Only the land around spawn so far" onDismiss={() => setExplained(true)}>
+                            Nobody has played on this world yet, so the server has saved only the area where players start. The map fills in as players explore, each time the server saves the world.
+                        </PaperQuote>
+                    </Show>
                 </PaperFlex>
             </Show>
 
             <Show when={!info() && regionsError()}>
-                <div class={styles.empty}>
-                    <PaperEmptyState icon="error" title="Couldn't load">
-                        <PaperButton onClick={() => void loadRegions()}>Try again</PaperButton>
-                    </PaperEmptyState>
-                </div>
+                {(err) => (
+                    <div class={styles.empty}>
+                        <PaperError
+                            fill
+                            title="Couldn't read the world's region files"
+                            error={err()}
+                            action={{ label: "Try again", onClick: () => void loadRegions() }}
+                        />
+                    </div>
+                )}
             </Show>
 
             <Show

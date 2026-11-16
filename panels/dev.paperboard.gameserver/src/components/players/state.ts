@@ -1,8 +1,8 @@
 // What the Players tab knows and does: the roster (the server's lists plus
 // everyone with data in this world), the names players have now, who is
-// banned, which player is open, and every change to them. The tab draws it;
-// every failure is a toast.
-import { keepUnchanged, createFailureToast, createLatest, createPolling, createRead, showError } from "@mileniumhq/paperui";
+// banned, which player is open, and every change to them. The tab draws it:
+// what couldn't be read stands above the roster, a change that failed is a toast.
+import { keepUnchanged, createLatest, createPolling, createRead, showError } from "@mileniumhq/paperui";
 import { batch, createEffect, createMemo, createSignal, on, onMount } from "solid-js";
 import { useServer } from "../../lib/server";
 import { type CallName } from "../../service/contract";
@@ -43,9 +43,7 @@ export function createPlayers() {
     const [openName, setOpenName] = createSignal<string | undefined>();
     // why the lists or who is online couldn't be read, until they are read again
     const [rosterError, setRosterError] = createSignal("");
-    createFailureToast(rosterError, { title: "Couldn't load the players" });
     const [onlineError, setOnlineError] = createSignal("");
-    createFailureToast(onlineError, { title: "Couldn't read who is online" });
     // how Floodgate names Bedrock players; null without crossplay
     const [bedrock, setBedrock] = createSignal<BedrockNaming | null>(null);
 
@@ -127,7 +125,6 @@ export function createPlayers() {
     const stats = createRead(async () => (await calls.listPlayerStats()).filter((entry) => entry && typeof entry.uuid === "string"), {
         key: "uuid",
         message: errorMessage,
-        failure: { title: "Couldn't load the player stats" },
     });
     const playerStatSummaries = createMemo(() => new Map((stats.value() ?? []).map((entry) => [entry.uuid.toLowerCase(), entry])));
     createPolling(() => stats.reload(), STATS_POLL_MS);
@@ -312,6 +309,14 @@ export function createPlayers() {
     };
 
     return {
+        /** why the server's lists couldn't be read, until they are read again; "" while they can */
+        rosterError,
+        reloadRoster: loadRoster,
+        /** why who is online couldn't be asked, until it is asked again */
+        onlineError,
+        askOnline,
+        /** why the world's stats files couldn't be read, and whether a read is out */
+        stats: { error: stats.error, loading: stats.loading, reload: stats.reload },
         /** the players' numbers: the world's stats files, else this session's count */
         leaderboard: createLeaderboard(playerStatSummaries, server.playerPlaytime),
         /** the server's lists, without players known only from their data */

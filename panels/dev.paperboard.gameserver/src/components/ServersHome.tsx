@@ -7,6 +7,7 @@ import {
     PaperContextMenuItem,
     PaperEffect,
     PaperEmptyState,
+    PaperError,
     PaperFlex,
     PaperIcon,
     PaperInput,
@@ -17,7 +18,6 @@ import {
     PaperPageHeader,
     PaperSeparator,
     PaperText,
-    createFailureToast,
     showError,
     useContextMenuState,
 } from "@mileniumhq/paperui";
@@ -81,8 +81,6 @@ export default function ServersHome(props: {
         </PaperEffect>
     );
 
-    createFailureToast(() => props.state.serversError, { title: "Couldn't read the servers" });
-
     return (
         <PaperFlex fullWidth fullHeight overflowY="auto">
             <PaperPage width="wide">
@@ -90,79 +88,85 @@ export default function ServersHome(props: {
                     {/* an empty page offers this in its empty state instead */}
                     <Show when={props.state.servers.length > 0}>{newServer()}</Show>
                 </PaperPageHeader>
+                {/* the servers' file couldn't be read: no list stands for it, and nothing is added over it */}
                 <Show
-                    when={props.state.servers.length}
-                    fallback={
-                        <PaperEmptyState
-                            icon="dns"
-                            title="No servers yet"
-                            description="Choose a game, set up a server, and invite your friends."
-                        >
-                            {newServer()}
-                        </PaperEmptyState>
-                    }
+                    when={!props.state.serversError}
+                    fallback={<Show when={props.state.serversError}>{(err) => <PaperError fill title="Couldn't read the servers" error={err()} />}</Show>}
                 >
-                    <PaperMediaCardGroup minCardWidth="card-min">
-                        <For each={props.state.servers}>
-                            {(server) => (
-                                <PaperMediaCard
-                                    effect={false}
-                                    banner={gameFor(server.game).art.banner}
-                                    bannerAlt={`${gameFor(server.game).name} art`}
-                                    icon={<PaperAvatar size="large" shape="square" src={server.icon ?? gameFor(server.game).art.icon} alt="" fallbackIcon={gameFor(server.game).icon} />}
-                                    title={server.name}
-                                    subtitle={serverSubtitle(gameFor(server.game), { software: server.state.serverSoftware, version: server.state.serverVersion })}
-                                    description={
-                                        server.state.initFailure ??
-                                        server.state.recoveryBlock ??
-                                        (!server.configured ? "Finish setup" : undefined)
-                                    }
-                                    badge={
-                                        <PaperBadge
-                                            variant={
-                                                server.state.initFailure ?? server.state.recoveryBlock
-                                                    ? "danger"
-                                                    : server.state.serverStatus === "online"
-                                                      ? "success"
-                                                      : "monochrome"
-                                            }
-                                        >
-                                            {server.state.initFailure ?? server.state.recoveryBlock
-                                                ? "Error"
-                                                : server.state.serverStatus}
-                                        </PaperBadge>
-                                    }
-                                    onClick={() => props.onOpen(server.id)}
-                                    footerLeft={
-                                        <Show when={server.configured && server.state.serverPort}>
-                                            {(port) => (
-                                                <PaperText size={2} color="text-subtle">
-                                                    Port {port()}
-                                                    <Show when={server.state.serverStatus === "online"}>
-                                                        {` · ${server.state.playerCount}${server.state.maxPlayers === null ? "" : `/${server.state.maxPlayers}`} ${server.state.playerCount === 1 && server.state.maxPlayers === null ? "player" : "players"}`}
-                                                    </Show>
-                                                </PaperText>
-                                            )}
-                                        </Show>
-                                    }
-                                    footerRight={
-                                        <PaperButton
-                                            icon
-                                            variant="text"
-                                            title="More"
-                                            aria-label={`More for ${server.name}`}
-                                            onClick={(e) => {
-                                                setTarget(server);
-                                                menu.openBelow(e, { align: "right" });
-                                            }}
-                                        >
-                                            <PaperIcon>more_vert</PaperIcon>
-                                        </PaperButton>
-                                    }
-                                />
-                            )}
-                        </For>
-                    </PaperMediaCardGroup>
+                    <Show
+                        when={props.state.servers.length}
+                        fallback={
+                            <PaperEmptyState
+                                icon="dns"
+                                title="No servers yet"
+                                description="Choose a game, set up a server, and invite your friends."
+                            >
+                                {newServer()}
+                            </PaperEmptyState>
+                        }
+                    >
+                        <PaperMediaCardGroup minCardWidth="card-min">
+                            <For each={props.state.servers}>
+                                {(server) => (
+                                    <PaperMediaCard
+                                        effect={false}
+                                        banner={gameFor(server.game).art.banner}
+                                        bannerAlt={`${gameFor(server.game).name} art`}
+                                        icon={<PaperAvatar size="large" shape="square" src={server.icon ?? gameFor(server.game).art.icon} alt="" fallbackIcon={gameFor(server.game).icon} />}
+                                        title={server.name}
+                                        subtitle={serverSubtitle(gameFor(server.game), { software: server.state.serverSoftware, version: server.state.serverVersion })}
+                                        description={
+                                            server.state.initFailure ??
+                                            server.state.recoveryBlock ??
+                                            (!server.configured ? "Finish setup" : undefined)
+                                        }
+                                        badge={
+                                            <PaperBadge
+                                                variant={
+                                                    server.state.initFailure ?? server.state.recoveryBlock
+                                                        ? "danger"
+                                                        : server.state.serverStatus === "online"
+                                                          ? "success"
+                                                          : "monochrome"
+                                                }
+                                            >
+                                                {server.state.initFailure ?? server.state.recoveryBlock
+                                                    ? "Error"
+                                                    : server.state.serverStatus}
+                                            </PaperBadge>
+                                        }
+                                        onClick={() => props.onOpen(server.id)}
+                                        footerLeft={
+                                            <Show when={server.configured && server.state.serverPort}>
+                                                {(port) => (
+                                                    <PaperText size={2} color="text-subtle">
+                                                        Port {port()}
+                                                        <Show when={server.state.serverStatus === "online"}>
+                                                            {` · ${server.state.playerCount}${server.state.maxPlayers === null ? "" : `/${server.state.maxPlayers}`} ${server.state.playerCount === 1 && server.state.maxPlayers === null ? "player" : "players"}`}
+                                                        </Show>
+                                                    </PaperText>
+                                                )}
+                                            </Show>
+                                        }
+                                        footerRight={
+                                            <PaperButton
+                                                icon
+                                                variant="text"
+                                                title="More"
+                                                aria-label={`More for ${server.name}`}
+                                                onClick={(e) => {
+                                                    setTarget(server);
+                                                    menu.openBelow(e, { align: "right" });
+                                                }}
+                                            >
+                                                <PaperIcon>more_vert</PaperIcon>
+                                            </PaperButton>
+                                        }
+                                    />
+                                )}
+                            </For>
+                        </PaperMediaCardGroup>
+                    </Show>
                 </Show>
             </PaperPage>
             <PaperContextMenu

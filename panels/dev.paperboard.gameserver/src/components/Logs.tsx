@@ -1,9 +1,10 @@
-import { createSignal, For, onMount, Show } from "solid-js";
+import { createSignal, For, Match, onMount, Show, Switch } from "solid-js";
 import {
     PaperButton,
     PaperCard,
     PaperConsole,
     PaperEmptyState,
+    PaperError,
     PaperFlex,
     PaperIcon,
     PaperInput,
@@ -12,7 +13,6 @@ import {
     PaperSelectMenuItem,
     createLatest,
     createRead,
-    createFailureToast,
 } from "@mileniumhq/paperui";
 import { useServer } from "../lib/server";
 import type { ServerCalls } from "../lib/api";
@@ -33,13 +33,11 @@ export default function Logs() {
     // the log picked is read, the newest pick the one shown; a log that
     // can't be read shows nothing of the one before it. Nothing is read
     // until the list has named one.
-    const log = createRead((name) => calls.readLogFile({ name }), { source: () => selected() || null, message: errorMessage, failure: { title: "Couldn't read this log" } });
+    const log = createRead((name) => calls.readLogFile({ name }), { source: () => selected() || null, message: errorMessage });
     const loading = log.loading;
     const content = () => (log.error() === null ? (log.value() ?? null) : null);
     // why the list of logs couldn't be read, until it is listed again
     const [listError, setListError] = createSignal("");
-    createFailureToast(listError, { title: "Couldn't list the logs" });
-    const couldntLoad = () => listError() !== "" || (!log.loading() && log.error() !== null);
     const [filter, setFilter] = createSignal("");
 
     // the newest listing and the newest read are the ones shown: an older
@@ -126,12 +124,21 @@ export default function Logs() {
                 </PaperFlex>
             </PaperCard>
 
+            {/* a listing again that failed leaves the log it read on screen, under why */}
+            <Show when={content() && listError()}>
+                {(err) => (
+                    <PaperError
+                        title="Couldn't list the logs"
+                        error={err()}
+                        action={{ label: "Try again", disabled: loading(), onClick: () => void loadFiles(selected()) }}
+                    />
+                )}
+            </Show>
             <PaperCard grow minHeight={0} padding="full">
                 <Show
                     when={content()}
                     fallback={
-                        <Show
-                            when={couldntLoad()}
+                        <Switch
                             fallback={
                                 <PaperEmptyState
                                     icon="description"
@@ -145,10 +152,27 @@ export default function Logs() {
                                 />
                             }
                         >
-                            <PaperEmptyState icon="error" title="Couldn't load">
-                                <PaperButton disabled={loading()} onClick={() => void loadFiles(selected())}>Try again</PaperButton>
-                            </PaperEmptyState>
-                        </Show>
+                            <Match when={listError()}>
+                                {(err) => (
+                                    <PaperError
+                                        fill
+                                        title="Couldn't list the logs"
+                                        error={err()}
+                                        action={{ label: "Try again", disabled: loading(), onClick: () => void loadFiles(selected()) }}
+                                    />
+                                )}
+                            </Match>
+                            <Match when={log.error()}>
+                                {(err) => (
+                                    <PaperError
+                                        fill
+                                        title="Couldn't read this log"
+                                        error={err()}
+                                        action={{ label: "Try again", disabled: loading(), onClick: () => void loadFiles(selected()) }}
+                                    />
+                                )}
+                            </Match>
+                        </Switch>
                     }
                 >
                     <PaperConsole

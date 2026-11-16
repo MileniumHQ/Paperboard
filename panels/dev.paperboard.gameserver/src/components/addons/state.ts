@@ -1,4 +1,4 @@
-import { createFailureToast, createLatest, createRead, showError } from "@mileniumhq/paperui/headless";
+import { createLatest, createRead, showError } from "@mileniumhq/paperui/headless";
 import { batch, createEffect, createSignal, on, onCleanup, type Accessor } from "solid-js";
 import { errorMessage } from "../../lib/failure";
 import { versionLabel } from "../../lib/addons/presentation";
@@ -23,17 +23,11 @@ const TYPING_DEBOUNCE_MS = 400;
 /**
  * What is installed, read while `reading` is on and each time it changes; a
  * reload keeps the entries it did not change, so their cards stay. A failed
- * read is a toast, and the last listing stays on screen.
+ * read stands until a read goes through, and the last listing stays on screen.
  */
 export function createAddonListing<Meta>(kind: Accessor<AddonKind<Meta>>, reading: Accessor<unknown>) {
     const read = createRead<AddonListing<Meta>, unknown>(() => kind().list(), { source: reading, message: errorMessage });
-    const error = () => (read.loading() ? "" : (read.error() ?? ""));
-    // the title follows the kind: plugins/ or mods/ as the software changes
-    createFailureToast(error, {
-        get title() {
-            return kind().listFailureTitle();
-        },
-    });
+    const error = () => read.error() ?? "";
     return { listing: () => read.value() ?? null, error, loading: read.loading, reload: read.reload };
 }
 
@@ -75,12 +69,6 @@ export function createAddonSearch(kind: Accessor<Pick<AddonKind<unknown>, "title
         timer = setTimeout(() => void run(), TYPING_DEBOUNCE_MS);
     };
 
-    createFailureToast(error, {
-        get title() {
-            return `Couldn't search ${kind().source.name}`;
-        },
-    });
-
     return { query, type, results, searching, error, run };
 }
 
@@ -92,8 +80,8 @@ export function createAddonInstall<Meta>(
     const [versions, setVersions] = createSignal<AddonVersion[] | null>(null);
     const [loading, setLoading] = createSignal(false);
     const [versionId, setVersionId] = createSignal("");
-    // the versions could not be read: the dialog has nothing to pick from
-    const [versionsFailed, setVersionsFailed] = createSignal(false);
+    // why the versions could not be read: the dialog has nothing to pick from
+    const [versionsError, setVersionsError] = createSignal("");
     const [installing, setInstalling] = createSignal(false);
     // a kind's dialog extras (dependency checks) hold the install until they are ready
     const [ready, setReady] = createSignal(true);
@@ -105,7 +93,7 @@ export function createAddonInstall<Meta>(
         const current = latestVersions();
         setVersions(null);
         setVersionId("");
-        setVersionsFailed(false);
+        setVersionsError("");
         setLoading(next !== null);
         if (!next) return;
         kind()
@@ -121,10 +109,9 @@ export function createAddonInstall<Meta>(
             .catch((err) => {
                 if (!current()) return;
                 batch(() => {
-                    setVersionsFailed(true);
+                    setVersionsError(errorMessage(err));
                     setLoading(false);
                 });
-                showError(`Couldn't load the versions of ${next.title}`, errorMessage(err));
             });
     };
 
@@ -172,7 +159,7 @@ export function createAddonInstall<Meta>(
         versionId,
         setVersionId,
         chosen,
-        versionsFailed,
+        versionsError,
         /** reads the versions again after they could not be read */
         retryVersions: () => readVersions(target()),
         installing,

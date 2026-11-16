@@ -6,7 +6,7 @@ import {
     PaperButton,
     PaperCard,
     PaperEffect,
-    PaperEmptyState,
+    PaperError,
     PaperFlex,
     PaperIcon,
     PaperInput,
@@ -112,10 +112,9 @@ export default function WorldsPage<W extends WorldEntry>(props: { list: () => Pr
         source: serverStatus,
         key: "name",
         message: errorMessage,
-        failure: { title: "Couldn't load the worlds" },
     });
     const worlds = () => listing.value() ?? null;
-    const listFailed = () => !listing.loading() && listing.error() !== null;
+    const retryListing = () => ({ label: "Try again", disabled: listing.loading(), onClick: () => void listing.reload() });
     const [selected, setSelected] = createSignal<string | null>(null);
     const [mutating, setMutating] = createSignal(false);
     const [deleteOpen, setDeleteOpen] = createSignal(false);
@@ -270,13 +269,15 @@ export default function WorldsPage<W extends WorldEntry>(props: { list: () => Pr
                     Stop the server to switch, create, or delete worlds.
                 </PaperQuote>
             </Show>
+            {/* the worlds read before stay listed, under why they couldn't be read again */}
+            <Show when={worlds() !== null && listing.error()}>
+                {(err) => <PaperError title="Couldn't load the worlds" error={err()} action={retryListing()} />}
+            </Show>
             <Show
                 when={worlds() !== null}
                 fallback={
-                    <Show when={listFailed()} fallback={emptyCard("Loading worlds...")}>
-                        <PaperEmptyState icon="error" title="Couldn't load">
-                            <PaperButton disabled={listing.loading()} onClick={() => void listing.reload()}>Try again</PaperButton>
-                        </PaperEmptyState>
+                    <Show when={listing.error()} fallback={emptyCard("Loading worlds...")}>
+                        {(err) => <PaperError fill title="Couldn't load the worlds" error={err()} action={retryListing()} />}
                     </Show>
                 }
             >
@@ -408,7 +409,7 @@ export default function WorldsPage<W extends WorldEntry>(props: { list: () => Pr
                             error={nameProblem(newName()) || undefined}
                             onInput={(e) => setNewName(e.currentTarget.value)}
                         />
-                        <Show when={worlds() === null && !listFailed()}>
+                        <Show when={worlds() === null && listing.error() === null}>
                             <PaperText size={2} color="text-subtle">Checking existing worlds...</PaperText>
                         </Show>
                         <Show when={props.game.create.note}>

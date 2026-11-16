@@ -4,6 +4,7 @@ import {
     PaperButton,
     PaperCopyButton,
     PaperEmptyState,
+    PaperError,
     PaperFlex,
     PaperIcon,
     PaperModal,
@@ -43,7 +44,6 @@ export function createRosterState<R>(read: () => Promise<R>) {
         source: () => [onlinePlayerNames(), serverStatus()],
         key: "name",
         message: errorMessage,
-        failure: { title: "Couldn't load the players" },
     });
     const reload = roster.reload;
     const [busy, setBusy] = createSignal(false);
@@ -82,8 +82,10 @@ export function createRosterState<R>(read: () => Promise<R>) {
     return {
         /** the game's roster as last read; undefined until the first answer */
         roster: roster.value,
-        /** the roster was never read, and the last read failed: the page says it couldn't load */
-        failed: () => roster.value() === undefined && !roster.loading() && roster.error() !== null,
+        /** why the newest read failed, until one goes through; the players read before stay */
+        error: roster.error,
+        /** the roster was never read, and the last read failed: the page has no players to show */
+        failed: () => roster.value() === undefined && roster.error() !== null,
         reloading: roster.loading,
         reload,
         busy,
@@ -223,14 +225,17 @@ export default function GameRoster<T extends RosterPlayer>(props: {
     return (
         <>
             <PaperPageHeader icon="group" title="Players" />
-            <Show
-                when={!props.state.failed()}
-                fallback={
-                    <PaperEmptyState icon="error" title="Couldn't load">
-                        <PaperButton disabled={props.state.reloading()} onClick={() => void props.state.reload()}>Try again</PaperButton>
-                    </PaperEmptyState>
-                }
-            >
+            <Show when={props.state.error()}>
+                {(err) => (
+                    <PaperError
+                        fill={props.state.failed()}
+                        title="Couldn't load the players"
+                        error={err()}
+                        action={{ label: "Try again", disabled: props.state.reloading(), onClick: () => void props.state.reload() }}
+                    />
+                )}
+            </Show>
+            <Show when={!props.state.failed()}>
                 <PlayerRoster
                     search={search()}
                     total={players().length}

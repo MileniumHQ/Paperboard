@@ -1,7 +1,7 @@
-// A failure is a toast, never an error quote in the page. A refused Start
-// says why in a toast; a tab that couldn't load, with nothing to show,
-// says "Couldn't load" with its own Try again, while a standing toast says
-// why and closes once the read goes through.
+// A failure is never an error quote in the page. A refused Start, a one-off,
+// says why in a toast. Logs that can't be read stand where they happen: a
+// PaperError fills the tab with nothing to show, or sits above the log read
+// before, with its own Try again, and goes once the read goes through.
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import * as fs from "node:fs";
 import * as path from "node:path";
@@ -40,13 +40,17 @@ async function setUp() {
     return servePanel(daemon);
 }
 
+/** the failure standing in the page under `title` */
+const failure = (title: string) => `document.querySelector(${JSON.stringify(`[data-paper-error][aria-label="${title}"]`)})`;
+/** its Try again, once it can be pressed */
+const retry = (title: string) => `[...(${failure(title)}?.querySelectorAll("button") ?? [])].find((b) => b.innerText.trim() === "Try again" && !b.disabled)`;
 const toast = (title: string) => `[...document.querySelectorAll("[data-paper-toasts] [role=alert]")].find((t) => t.innerText.includes(${JSON.stringify(title)}))`;
 /** an enabled button by its label, after its icon */
 const button = (label: string) => `[...document.querySelectorAll("button")].find((b) => b.innerText.trim().split("\\n").at(-1).trim() === ${JSON.stringify(label)} && !b.disabled)`;
 /** a danger quote anywhere in the page, which a failure never is */
 const ERROR_QUOTE = `!![...document.querySelectorAll("[class*=PaperQuote]")].find((q) => q.className.includes("danger"))`;
 
-describe("failures are toasts", () => {
+describe("failures say where they happen", () => {
     test("a refused Start says why in a toast, and the page holds no error quote", async () => {
         const served = await setUp();
         const page = await openPage(`${served.url}/?server=${MC}`);
@@ -62,7 +66,7 @@ describe("failures are toasts", () => {
         }
     });
 
-    test("a tab that couldn't load shows Couldn't load with Try again, and its toast closes once it loads", async () => {
+    test("logs that can't be listed fill the tab with why and Try again, never a toast, and go once they can be", async () => {
         const served = await setUp();
         const logs = path.join(serverDir(), "logs");
         fs.chmodSync(logs, 0o000);
@@ -70,16 +74,48 @@ describe("failures are toasts", () => {
         try {
             await page.waitFor(`document.querySelector('input[name=serverMenu][value="logs"]')`, "the server menu");
             await page.click('input[name=serverMenu][value="logs"]');
-            await page.waitFor(`${toast("Couldn't list the logs")} && document.body.innerText.includes("Couldn't load")`, "the failed listing");
-            expect(await page.evaluate<string>(`${toast("Couldn't list the logs")}.innerText`)).toMatch(/Permission denied|isn't allowed/);
-            // never a blank body, and never an error quote
+            await page.waitFor(failure("Couldn't list the logs"), "the failed listing");
+            // it fills the body, which has nothing else to show, and says why
+            expect(await page.evaluate<boolean>(`${failure("Couldn't list the logs")}.className.includes("fill")`)).toBe(true);
+            expect(await page.evaluate<string>(`${failure("Couldn't list the logs")}.innerText`)).toMatch(/Permission denied|isn't allowed/);
+            // a failure that stands is never a toast, and never an error quote
+            expect(await page.evaluate<number>(`document.querySelectorAll("[data-paper-toasts] [role=alert]").length`)).toBe(0);
             expect(await page.evaluate<boolean>(ERROR_QUOTE)).toBe(false);
 
-            // the body's own Try again is the way out; once it reads, the toast goes
+            // its own Try again is the way out; once it reads, it goes
             fs.chmodSync(logs, 0o700);
-            await page.waitFor(`[...document.querySelectorAll("[class*=PaperEmptyState] button")].find((b) => b.innerText.trim() === "Try again" && !b.disabled)`, "the empty state's Try again");
-            await page.evaluate(`[...document.querySelectorAll("[class*=PaperEmptyState] button")].find((b) => b.innerText.trim() === "Try again").click()`);
-            await page.waitFor(`!${toast("Couldn't list the logs")} && !document.body.innerText.includes("Couldn't load") && document.body.innerText.includes("Done (1.0s)!")`, "the log read once it can be");
+            await page.waitFor(retry("Couldn't list the logs"), "the failure's Try again");
+            await page.evaluate(`${retry("Couldn't list the logs")}.click()`);
+            await page.waitFor(`!document.querySelector("[data-paper-error]") && document.body.innerText.includes("Done (1.0s)!")`, "the log read once it can be");
+            expect(page.exceptions).toEqual([]);
+        } finally {
+            fs.chmodSync(logs, 0o700);
+            await page.close();
+        }
+    });
+
+    test("a refresh that can't list the logs says why above the log still shown, and goes once it can", async () => {
+        const served = await setUp();
+        const logs = path.join(serverDir(), "logs");
+        const page = await openPage(`${served.url}/?server=${MC}`);
+        try {
+            await page.waitFor(`document.querySelector('input[name=serverMenu][value="logs"]')`, "the server menu");
+            await page.click('input[name=serverMenu][value="logs"]');
+            await page.waitFor(`document.body.innerText.includes("Done (1.0s)!")`, "the log read");
+            fs.chmodSync(logs, 0o000);
+            await page.evaluate(`${button("Refresh")}.click()`);
+            await page.waitFor(failure("Couldn't list the logs"), "the failed refresh");
+            // in line, over the log it read before, which stays
+            expect(await page.evaluate<boolean>(`${failure("Couldn't list the logs")}.className.includes("inline")`)).toBe(true);
+            expect(await page.evaluate<string>(`${failure("Couldn't list the logs")}.innerText`)).toMatch(/Permission denied|isn't allowed/);
+            expect(await page.evaluate<boolean>(`document.body.innerText.includes("Done (1.0s)!")`)).toBe(true);
+            expect(await page.evaluate<boolean>(`!!(${failure("Couldn't list the logs")}.compareDocumentPosition(document.querySelector("[class*=PaperConsole]")) & Node.DOCUMENT_POSITION_FOLLOWING)`)).toBe(true);
+            expect(await page.evaluate<number>(`document.querySelectorAll("[data-paper-toasts] [role=alert]").length`)).toBe(0);
+
+            fs.chmodSync(logs, 0o700);
+            await page.waitFor(retry("Couldn't list the logs"), "the failure's Try again");
+            await page.evaluate(`${retry("Couldn't list the logs")}.click()`);
+            await page.waitFor(`!document.querySelector("[data-paper-error]") && document.body.innerText.includes("Done (1.0s)!")`, "the listing once it can be");
             expect(page.exceptions).toEqual([]);
         } finally {
             fs.chmodSync(logs, 0o700);

@@ -2,6 +2,7 @@ import { createEffect, createMemo, createSignal, For, Show, untrack, type JSX, o
 import {
     PaperButton,
     PaperEffect,
+    PaperError,
     PaperFlex,
     PaperIcon,
     PaperLink,
@@ -12,7 +13,6 @@ import {
     PaperText,
     usePaperPanel,
     type MarkdownImage,
-    createFailureToast,
     createRead,
 } from "@mileniumhq/paperui";
 import type { AddonKind, AddonProject, AddonTarget, InstalledAddon } from "../../lib/addons/kind";
@@ -29,16 +29,19 @@ const truncate = (text: string, max: number) => (text.length > max ? `${text.sli
 /**
  * An image in a project's page, fetched by the service from wherever its
  * author put it; its alt text stands in while it loads, and for an address
- * that isn't on the web. One that fails is a toast; its alt text stays.
+ * that isn't on the web. One that fails says why in its place.
  */
 function BodyPicture(props: { image: MarkdownImage }) {
     const address = () => (/^https?:\/\//i.test(props.image.src) ? props.image.src : null);
     const picture = createServedPicture(() => "web", address);
-    createFailureToast(picture.error, { title: "Couldn't load a picture in the description" });
     return (
         <Show
             when={picture.src()}
-            fallback={<PaperText as="span" color="text-subtle">{props.image.alt}</PaperText>}
+            fallback={
+                <Show when={picture.error()} fallback={<PaperText as="span" color="text-subtle">{props.image.alt}</PaperText>}>
+                    {(err) => <PaperError title="Couldn't load a picture in the description" error={err()} />}
+                </Show>
+            }
         >
             <img src={picture.src()} alt={props.image.alt} title={props.image.title ?? undefined} />
         </Show>
@@ -173,9 +176,15 @@ export function AddonDetail<Meta>(props: {
                                 <Show
                                     when={project()?.body}
                                     fallback={
-                                        <PaperText size={2} color={loadError() ? "danger" : "text-subtle"}>
-                                            {loadError() ? `Couldn't load details: ${loadError()}` : "No description provided."}
-                                        </PaperText>
+                                        <Show when={loadError()} fallback={<PaperText size={2} color="text-subtle">No description provided.</PaperText>}>
+                                            {(err) => (
+                                                <PaperError
+                                                    title="Couldn't load the details"
+                                                    error={err()}
+                                                    action={{ label: "Try again", disabled: read.loading(), onClick: () => void read.reload() }}
+                                                />
+                                            )}
+                                        </Show>
                                     }
                                 >
                                     {/* Third-party markdown goes through PaperMarkdown, which renders PaperUI

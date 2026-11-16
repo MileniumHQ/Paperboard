@@ -2,7 +2,7 @@ import GameOptions from "./components/GameOptions";
 import { createEffect, createMemo, createSignal, on, onMount, onCleanup, untrack, ErrorBoundary, For, Index, Show, type Accessor } from "solid-js";
 import { tabIds } from "./lib/tabIds";
 import {
-    PaperPanel, PaperPresence, PaperButton, PaperIcon, PaperLoader, PaperFlex, PaperText, PaperEmptyState, showError,
+    PaperPanel, PaperPresence, PaperButton, PaperIcon, PaperLoader, PaperFlex, PaperText, PaperError,
     PaperSlidePage, getVar,
     PaperMenu,
     PaperMenuItem,
@@ -44,8 +44,8 @@ const serverInAddress = () => new URL(window.location.href).searchParams.get("se
 
 export default function App() {
     const [servers, setServers] = createSignal<ServersState | null>(null);
-    // the page failed and stands empty: it says so, and Try again goes back to the servers
-    const [failed, setFailed] = createSignal(false);
+    // the page failed and stands empty: it says why, and Try again goes back to the servers
+    const [failed, setFailed] = createSignal<{ title: string; error: unknown } | null>(null);
     // The open server is this page's state, not its address: switching is a
     // change here, and the server's page is made again for the new server
     // (see serverPage). The address follows, so a reload opens the same one.
@@ -60,8 +60,7 @@ export default function App() {
     );
     const fail = (what: string, err: unknown) => {
         console.error(`[App] couldn't ${what}:`, err);
-        showError(`Couldn't ${what}`, errorMessage(err));
-        setFailed(true);
+        setFailed({ title: `Couldn't ${what}`, error: err });
     };
 
     // A tab holding work that leaving would lose (the Files editor's unsaved
@@ -142,7 +141,7 @@ export default function App() {
         void load();
     });
     const backToServers = () => {
-        setFailed(false);
+        setFailed(null);
         setSelected(null);
         setShown(null);
         setPageOpen(false);
@@ -280,11 +279,13 @@ export default function App() {
                                     <ErrorBoundary
                                         fallback={(err, reset) => {
                                             console.error(`[App] the ${tabId} tab could not be drawn:`, err);
-                                            showError(`Couldn't open ${untrack(tab).label}`, errorMessage(err));
                                             return (
-                                                <PaperEmptyState icon="error" title="Couldn't load">
-                                                    <PaperButton onClick={reset}>Try again</PaperButton>
-                                                </PaperEmptyState>
+                                                <PaperError
+                                                    fill
+                                                    title={`Couldn't open ${untrack(tab).label}`}
+                                                    error={errorMessage(err)}
+                                                    action={{ label: "Try again", onClick: reset }}
+                                                />
                                             );
                                         }}
                                     >
@@ -324,9 +325,9 @@ export default function App() {
         <Show
             when={!failed()}
             fallback={
-                <PaperEmptyState icon="error" title="Couldn't load">
-                    <PaperButton onClick={backToServers}>Try again</PaperButton>
-                </PaperEmptyState>
+                <Show when={failed()}>
+                    {(failure) => <PaperError fill title={failure().title} error={failure().error} action={{ label: "Try again", onClick: backToServers }} />}
+                </Show>
             }
         >
         <Show

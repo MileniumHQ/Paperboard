@@ -88,7 +88,7 @@ describe("an online player's page", () => {
         });
     }, 60_000);
 
-    test("an ask for their live stats that fails says why", async () => {
+    test("an ask for their live stats that fails says why on their page", async () => {
         await setUp();
         const ask = minecraftCalls.queryPlayerStats!;
         minecraftCalls.queryPlayerStats = async () => {
@@ -96,9 +96,10 @@ describe("an online player's page", () => {
         };
         try {
             await onSteve(async (page) => {
-                const toast = `[...document.querySelectorAll("[data-paper-toasts] [role=alert]")].find((t) => t.innerText.includes("Couldn't read the live stats"))`;
-                await page.waitFor(toast, "the failed ask to be shown");
-                expect(await page.evaluate<string>(`${toast}.innerText`)).toContain("the server's console is not taking commands");
+                const failure = `document.querySelector(${JSON.stringify(`[data-paper-error][aria-label="Couldn't read the live stats"]`)})`;
+                await page.waitFor(failure, "the failed ask to be shown");
+                expect(await page.evaluate<string>(`${failure}.innerText`)).toContain("the server's console is not taking commands");
+                expect(await page.evaluate<number>(`document.querySelectorAll("[data-paper-toasts] [role=alert]").length`)).toBe(0);
             });
         } finally {
             minecraftCalls.queryPlayerStats = ask;

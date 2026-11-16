@@ -3,7 +3,7 @@ import {
     PaperBadge,
     PaperButton,
     PaperCard,
-    PaperEmptyState,
+    PaperError,
     PaperFlex,
     PaperIcon,
     PaperInput,
@@ -149,9 +149,7 @@ export function AddonResults<Meta>(props: {
                 </PaperFlex>
             </Show>
             <Show when={!props.search.searching() && props.search.error()}>
-                <PaperEmptyState icon="error" title="Couldn't search">
-                    <PaperButton onClick={() => void props.search.run()}>Try again</PaperButton>
-                </PaperEmptyState>
+                {(err) => <PaperError title={`Couldn't search ${props.kind.source.name}`} error={err()} action={{ label: "Try again", onClick: () => void props.search.run() }} />}
             </Show>
             <Show when={!props.search.searching() && !props.search.error() && props.search.results()}>
                 {(hits) => (

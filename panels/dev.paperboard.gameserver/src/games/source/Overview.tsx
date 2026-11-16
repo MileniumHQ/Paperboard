@@ -1,5 +1,5 @@
 import { createMemo, createSignal, Show } from "solid-js";
-import { createAction, createFailureToast, createRead, PaperAvatar, PaperButton, PaperEmptyState, PaperModal, PaperText } from "@mileniumhq/paperui";
+import { createAction, createRead, PaperAvatar, PaperButton, PaperError, PaperModal, PaperText } from "@mileniumhq/paperui";
 import ServerOverview, { EditableDetail } from "../../components/ServerOverview";
 import { useServer } from "../../lib/server";
 import { errorMessage } from "../../lib/failure";
@@ -27,7 +27,6 @@ export default function SourceOverview(props: { spec: SourceGameSpec; game: Game
     const pictures = createMapPictures(props.spec);
     const uptime = createUptime();
     const metrics = createMetrics(calls.sourceMetrics);
-    createFailureToast(metrics.error, { title: "Couldn't read the server's figures" });
     /** how the server plays: the game mode it was started in, or its map's; a map of no listed mode is a custom one */
     const mode = () => {
         const chosen = gameSettings().gamemode;
@@ -37,10 +36,6 @@ export default function SourceOverview(props: { spec: SourceGameSpec; game: Game
     };
     const workshop = createWorkshopMaps(props.spec);
     const choices = createMemo(() => [...mapChoices(props.spec, maps()), ...workshop.choices()]);
-    // the dialog's reads, said while it is open
-    const listFailure = () => (open() && !listed.loading() ? listed.error() : null);
-    createFailureToast(listFailure, { title: "Couldn't load the maps" });
-    createFailureToast(() => open() && workshop.error(), { title: "Couldn't load the Workshop maps" });
 
     const edit = () => {
         setChoice(map());
@@ -78,6 +73,16 @@ export default function SourceOverview(props: { spec: SourceGameSpec; game: Game
                 { icon: "sports_esports", label: "Game mode", value: mode() },
             )}
         >
+            <Show when={metrics.error()}>
+                {(err) => (
+                    <PaperError
+                        title="Couldn't read the server's figures"
+                        error={err()}
+                        action={{ label: "Try again", disabled: metrics.loading(), onClick: () => void metrics.reload() }}
+                    />
+                )}
+            </Show>
+
             <PaperModal
                 open={open()}
                 onClose={() => setOpen(false)}
@@ -97,13 +102,21 @@ export default function SourceOverview(props: { spec: SourceGameSpec; game: Game
                         ? "Everyone moves to the new map now, and the server starts on it next time."
                         : "The server starts on this map."}
                 </PaperText>
+                <Show when={workshop.error()}>
+                    {(err) => <PaperError title="Couldn't load the Workshop maps" error={err()} action={{ label: "Try again", onClick: () => void workshop.reload() }} />}
+                </Show>
                 <Show
                     when={maps().length > 0}
                     fallback={
-                        <Show when={listFailure()} fallback={<PaperText color="text-subtle">Loading maps...</PaperText>}>
-                            <PaperEmptyState icon="error" title="Couldn't load">
-                                <PaperButton onClick={() => void listed.reload()}>Try again</PaperButton>
-                            </PaperEmptyState>
+                        <Show when={listed.error()} fallback={<PaperText color="text-subtle">Loading maps...</PaperText>}>
+                            {(err) => (
+                                <PaperError
+                                    fill
+                                    title="Couldn't load the maps"
+                                    error={err()}
+                                    action={{ label: "Try again", disabled: listed.loading(), onClick: () => void listed.reload() }}
+                                />
+                            )}
                         </Show>
                     }
                 >

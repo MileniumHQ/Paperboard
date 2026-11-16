@@ -3,6 +3,7 @@ import { createMemo, createSignal, Show } from "solid-js";
 import {
     PaperFlex,
     PaperButton,
+    PaperError,
     PaperQuote,
     PaperAvatar,
     PaperContextMenu,
@@ -50,7 +51,7 @@ export default function Overview(props: {
             const on = parsed["white-list"] ?? whitelistDefault(serverVersion());
             return { world: parsed["level-name"] || "world", restriction: joinRestriction(on === "true", countJsonEntries(list), countJsonEntries(ops)) };
         },
-        { source: () => props.active && [serverStatus(), serverVersion()], message: errorMessage, failure: { title: "Couldn't check the whitelist" } },
+        { source: () => props.active && [serverStatus(), serverVersion()], message: errorMessage },
     );
     // unreadable files make no claim either way, and say so
     const restriction = (): JoinRestriction => (whitelist.error() === null ? (whitelist.value()?.restriction ?? null) : null);
@@ -59,7 +60,7 @@ export default function Overview(props: {
 
     // the server list icon: the avatar's edit button opens the file picker,
     // and a right click offers to change or remove it
-    const iconRead = createRead(() => calls.readServerIcon(), { message: errorMessage, failure: { title: "Couldn't read the server icon" } });
+    const iconRead = createRead(() => calls.readServerIcon(), { message: errorMessage });
     const icon = () => iconRead.value() ?? null;
     let iconPicker!: HTMLInputElement;
 
@@ -159,6 +160,25 @@ export default function Overview(props: {
                         </PaperFlex>
                     </PaperFlex>
                 </PaperQuote>
+            </Show>
+
+            <Show when={whitelist.error()}>
+                {(err) => (
+                    <PaperError
+                        title="Couldn't check the whitelist"
+                        error={err()}
+                        action={{ label: "Try again", disabled: whitelist.loading(), onClick: () => void whitelist.reload() }}
+                    />
+                )}
+            </Show>
+            <Show when={iconRead.error()}>
+                {(err) => (
+                    <PaperError
+                        title="Couldn't read the server icon"
+                        error={err()}
+                        action={{ label: "Try again", disabled: iconRead.loading(), onClick: () => void iconRead.reload() }}
+                    />
+                )}
             </Show>
 
             <MotdEditor

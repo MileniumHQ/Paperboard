@@ -83,7 +83,12 @@
     pointer-events: none;
 }
 
-/* what it says can be pressed: Try again over a map that couldn't load */
-.empty button {
+/* what it says can be pressed: Try again and Details over a map that couldn't load */
+.empty [data-paper-error] {
     pointer-events: auto;
+}
+
+/* a failure over the terrain reads on the panel's own surface */
+.overMap {
+    background: var(--paper-surface-raised);
 }

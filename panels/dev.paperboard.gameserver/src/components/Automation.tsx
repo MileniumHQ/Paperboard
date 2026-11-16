@@ -1,7 +1,6 @@
 import { For, Show } from "solid-js";
 import {
-    PaperButton,
-    PaperEmptyState,
+    PaperError,
     PaperPageHeader,
     PaperSelectMenu,
     PaperSelectMenuItem,
@@ -24,10 +23,8 @@ const hourLabel = (hour: string) => new Date(2000, 0, 1, Number(hour.slice(0, 2)
 /** What the server does on its own, for every game: restart after a crash and once a day. */
 export default function Automation() {
     const { calls } = useServer();
-    const read = createRead(() => calls.readAutomation(), { message: errorMessage, failure: { title: "Couldn't load the automation settings" } });
+    const read = createRead(() => calls.readAutomation(), { message: errorMessage });
     const view = read.value;
-    // a read again shows the loader, not the last failure
-    const loadFailed = () => !read.loading() && read.error() !== null;
 
     const saves = createSaves({ failed: (err) => showError("Couldn't save the automation settings", errorMessage(err)) });
     // each switch and menu saves its own field; the answer is the whole view
@@ -42,10 +39,15 @@ export default function Automation() {
             <Show
                 when={view()}
                 fallback={
-                    <Show when={loadFailed()} fallback={<PaperText size={2} color="text-subtle">Loading settings…</PaperText>}>
-                        <PaperEmptyState icon="error" title="Couldn't load">
-                            <PaperButton disabled={read.loading()} onClick={() => void read.reload()}>Try again</PaperButton>
-                        </PaperEmptyState>
+                    <Show when={read.error()} fallback={<PaperText size={2} color="text-subtle">Loading settings…</PaperText>}>
+                        {(err) => (
+                            <PaperError
+                                fill
+                                title="Couldn't load the automation settings"
+                                error={err()}
+                                action={{ label: "Try again", disabled: read.loading(), onClick: () => void read.reload() }}
+                            />
+                        )}
                     </Show>
                 }
             >

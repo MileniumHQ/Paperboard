@@ -1,12 +1,11 @@
 import { createEffect, createSignal, For, onCleanup, Show, on } from "solid-js";
 import {
     PaperButton,
-    PaperEmptyState,
+    PaperError,
     PaperFlex,
     PaperModal,
     PaperSwatch,
     createAction,
-    createFailureToast,
     createLatest,
 } from "@mileniumhq/paperui";
 import {
@@ -155,9 +154,8 @@ export function MotdEditor(props: {
     save: (raw: string) => Promise<void>;
 }) {
     const [loaded, setLoaded] = createSignal(false);
-    // a message that can't be read can't be edited: the body says so until it is read
+    // a message that can't be read can't be edited: the body says why until it is read
     const [loadError, setLoadError] = createSignal("");
-    createFailureToast(loadError, { title: `Couldn't load ${props.source}` });
     const saving = createAction({ message: errorMessage });
     const [active, setActive] = createSignal<MotdStyle>(plainStyle());
 
@@ -356,11 +354,7 @@ export function MotdEditor(props: {
         >
             <Show
                 when={!loadError()}
-                fallback={
-                    <PaperEmptyState icon="error" title="Couldn't load">
-                        <PaperButton onClick={() => void load()}>Try again</PaperButton>
-                    </PaperEmptyState>
-                }
+                fallback={<PaperError fill title={`Couldn't load ${props.source}`} error={loadError()} action={{ label: "Try again", onClick: () => void load() }} />}
             >
                 <PaperFlex direction="column" gap="half" fullWidth>
                     <PaperFlex direction="row" gap="onefourth" align="center" wrap class={styles.palette}>

@@ -50,14 +50,15 @@ describe("Rust's Map tab", () => {
             await state.waitFor(ID, (s) => s.serverStatus === "online", "Rust online");
             await page.waitFor(`document.querySelector('input[name=serverMenu][value="map"]')`, "the server menu");
             await page.click('input[name=serverMenu][value="map"]');
-            // the first draw Rust refuses: its reason is on screen, with a way to try again
-            const drawToast = `[...document.querySelectorAll("[data-paper-toasts] [role=alert]")].find((t) => t.innerText.includes("Couldn't draw the map"))`;
-            await page.waitFor(`${drawToast}?.innerText.includes("Failed to render: Out of memory")`, "the refused draw's reason");
+            // the first draw Rust refuses: its reason stands where the map would be, with a way to try again, never as a toast
+            const drawFailure = `document.querySelector(${JSON.stringify(`[data-paper-error][aria-label="Couldn't draw the map"]`)})`;
+            await page.waitFor(`${drawFailure}?.innerText.includes("Failed to render: Out of memory")`, "the refused draw's reason");
+            expect(await page.evaluate<number>(`document.querySelectorAll("[data-paper-toasts] [role=alert]").length`)).toBe(0);
             expect(await page.evaluate(`!!document.querySelector("img[alt^='The map from above']")`)).toBe(false);
             plan({});
-            await page.evaluate(`${button("Try again")}.click()`);
+            await page.evaluate(`${button("Try again", drawFailure)}.click()`);
             await page.waitFor(`document.querySelector("img[alt^='The map from above']")?.src.startsWith("data:image/png;base64,")`, "the drawn map");
-            expect(await page.evaluate(`!${drawToast} && !document.body.innerText.includes("Couldn't draw the map")`)).toBe(true);
+            expect(await page.evaluate(`!${drawFailure} && !document.body.innerText.includes("Couldn't draw the map")`)).toBe(true);
             const identity = path.join(folder(), "server", "paperboard");
             expect(fs.existsSync(path.join(identity, "proceduralmap.1000.12345.png"))).toBe(true);
             // running, a wipe is not offered

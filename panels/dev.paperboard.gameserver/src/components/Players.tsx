@@ -1,6 +1,6 @@
 import { createMemo, createSignal, For, Show } from "solid-js";
 import { useServer } from "../lib/server";
-import { PaperBadge, PaperButton, PaperFlex, PaperIcon, PaperPageHeader, PaperSelectMenu, PaperSelectMenuItem, showError } from "@mileniumhq/paperui";
+import { PaperBadge, PaperButton, PaperError, PaperFlex, PaperIcon, PaperPageHeader, PaperSelectMenu, PaperSelectMenuItem, showError } from "@mileniumhq/paperui";
 import { gamertagOf, isFloodgateUuid, type BedrockNaming } from "../core/bedrock";
 import { errorMessage } from "../lib/failure";
 import { createSaves } from "../lib/saves";
@@ -97,6 +97,23 @@ export default function Players() {
                     <PaperIcon>how_to_reg</PaperIcon>Whitelist
                 </PaperButton>
             </PaperPageHeader>
+
+            {/* what couldn't be read stands above the players read before */}
+            <Show when={roster.rosterError()}>
+                {(err) => <PaperError title="Couldn't load the players" error={err()} action={{ label: "Try again", onClick: () => void roster.reloadRoster() }} />}
+            </Show>
+            <Show when={roster.onlineError()}>
+                {(err) => <PaperError title="Couldn't read who is online" error={err()} action={{ label: "Try again", onClick: () => void roster.askOnline() }} />}
+            </Show>
+            <Show when={roster.stats.error()}>
+                {(err) => (
+                    <PaperError
+                        title="Couldn't load the player stats"
+                        error={err()}
+                        action={{ label: "Try again", disabled: roster.stats.loading(), onClick: () => void roster.stats.reload() }}
+                    />
+                )}
+            </Show>
 
             <PlayerRoster
                 search={searchQuery()}

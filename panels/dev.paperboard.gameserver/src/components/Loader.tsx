@@ -1,6 +1,6 @@
 import { minecraftSoftware } from "../games/minecraft/index";
 import { Show } from "solid-js";
-import { PaperButton, PaperEmptyState, PaperPageHeader, PaperQuote, createRead } from "@mileniumhq/paperui";
+import { PaperError, PaperPageHeader, PaperQuote, createRead } from "@mileniumhq/paperui";
 import ConfigSettings from "./ConfigSettings";
 import { useServer } from "../lib/server";
 import { SOFTWARE_NAMES } from "../lib/software";
@@ -17,7 +17,6 @@ export default function Loader(props: { active: boolean }) {
     const read = createRead(() => calls.readLoaderSettings(), {
         source: () => props.active && serverSoftware(),
         message: errorMessage,
-        failure: { title: "Couldn't load the loader settings" },
     });
     const settings = read.value;
     const load = read.reload;
@@ -27,10 +26,16 @@ export default function Loader(props: { active: boolean }) {
     return (
         <>
             <PaperPageHeader icon="settings_applications" title="Loader" />
-            <Show when={!settings() && !read.loading() && read.error()}>
-                <PaperEmptyState icon="error" title="Couldn't load">
-                    <PaperButton disabled={read.loading()} onClick={() => void load()}>Try again</PaperButton>
-                </PaperEmptyState>
+            {/* above the settings read before, or in their place */}
+            <Show when={read.error()}>
+                {(err) => (
+                    <PaperError
+                        fill={!settings()}
+                        title="Couldn't load the loader settings"
+                        error={err()}
+                        action={{ label: "Try again", disabled: read.loading(), onClick: () => void load() }}
+                    />
+                )}
             </Show>
             <Show when={settings()}>
                 {(view) => (

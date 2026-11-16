@@ -3,6 +3,7 @@ import {
     PaperButton,
     PaperCard,
     PaperEmptyState,
+    PaperError,
     PaperFlex,
     PaperInput,
     PaperPageHeader,
@@ -192,10 +193,8 @@ export default function GameOptions(props: {
     whileRunning: GameFeatures["optionsWhileRunning"];
 }) {
     const { calls, serverStatus } = useServer();
-    const options = createRead(() => calls.readGameOptions(), { message: errorMessage, failure: { title: "Couldn't load the options" } });
+    const options = createRead(() => calls.readGameOptions(), { message: errorMessage });
     const values = options.value;
-    // a read again shows the loader, not the last failure
-    const loadFailed = () => !options.loading() && options.error() !== null;
     const [search, setSearch] = createSignal("");
     const listed = createMemo(() => props.fields.filter((field) => !field.scope && (field.tab ?? "options") === props.tab.id));
     // the game describes its options again as its state changes, in new
@@ -302,10 +301,15 @@ export default function GameOptions(props: {
             <Show
                 when={values()}
                 fallback={
-                    <Show when={loadFailed()} fallback={<PaperText size={2} color="text-subtle">Loading settings…</PaperText>}>
-                        <PaperEmptyState icon="error" title="Couldn't load">
-                            <PaperButton disabled={options.loading()} onClick={() => void options.reload()}>Try again</PaperButton>
-                        </PaperEmptyState>
+                    <Show when={options.error()} fallback={<PaperText size={2} color="text-subtle">Loading settings…</PaperText>}>
+                        {(err) => (
+                            <PaperError
+                                fill
+                                title="Couldn't load the options"
+                                error={err()}
+                                action={{ label: "Try again", disabled: options.loading(), onClick: () => void options.reload() }}
+                            />
+                        )}
                     </Show>
                 }
             >

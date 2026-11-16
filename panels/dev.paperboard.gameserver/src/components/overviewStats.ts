@@ -50,13 +50,13 @@ const METRICS_MS = 5_000;
  * ask failed, for the Overview to show. An answer that lands after the
  * server stopped, or after the Overview closed, is dropped.
  */
-export function createMetrics<T>(read: () => Promise<T>): { value: () => T | undefined; error: () => string } {
+export function createMetrics<T>(read: () => Promise<T>): { value: () => T | undefined; error: () => string; loading: () => boolean; reload: () => Promise<void> } {
     const { serverStatus } = useServer();
     const online = () => serverStatus() === "online";
     const metrics = createRead(read, { source: online, message: errorMessage });
     createEffect(on(online, (now) => now || metrics.set(undefined), { defer: true }));
     createPolling(() => (online() ? metrics.reload() : undefined), METRICS_MS);
-    return { value: metrics.value, error: () => metrics.error() ?? "" };
+    return { value: metrics.value, error: () => metrics.error() ?? "", loading: metrics.loading, reload: metrics.reload };
 }
 
 /** The game's own stats between Players and Uptime. */

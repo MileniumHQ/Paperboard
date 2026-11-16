@@ -4,6 +4,7 @@ import {
     PaperButton,
     PaperChip,
     PaperEmptyState,
+    PaperError,
     PaperFlex,
     PaperList,
     PaperListItem,
@@ -35,7 +36,6 @@ export default function SourceMaps(props: { spec: SourceGameSpec; active: boolea
     const cycle = createRead((): Promise<SourceMapCycle> => calls.sourceMapCycle(), {
         source: () => props.active && serverStatus(),
         message: errorMessage,
-        failure: { title: "Couldn't load the map rotation" },
     });
     const view = cycle.value;
     const [working, setWorking] = createSignal(false);
@@ -151,16 +151,18 @@ export default function SourceMaps(props: { spec: SourceGameSpec; active: boolea
                 </Show>
             </PaperPageHeader>
 
-            <Show
-                when={view()}
-                fallback={
-                    <Show when={cycle.error() && !cycle.loading()}>
-                        <PaperEmptyState icon="error" title="Couldn't load">
-                            <PaperButton onClick={() => void cycle.reload()}>Try again</PaperButton>
-                        </PaperEmptyState>
-                    </Show>
-                }
-            >
+            {/* above the rotation as it was read before, or in its place */}
+            <Show when={cycle.error()}>
+                {(err) => (
+                    <PaperError
+                        fill={!view()}
+                        title="Couldn't load the map rotation"
+                        error={err()}
+                        action={{ label: "Try again", disabled: cycle.loading(), onClick: () => void cycle.reload() }}
+                    />
+                )}
+            </Show>
+            <Show when={view()}>
                 {(current) => (
                     <PaperFlex direction="column" gap="full">
                         <Show when={current().overriddenBy}>

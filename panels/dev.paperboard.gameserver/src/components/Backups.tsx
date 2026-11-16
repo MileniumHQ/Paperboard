@@ -1,7 +1,7 @@
 import { createSignal, For, Show } from "solid-js";
 import {
     PaperButton,
-    PaperEmptyState,
+    PaperError,
     PaperFlex,
     PaperIcon,
     PaperModal,
@@ -14,7 +14,6 @@ import {
     PaperSettingList,
     PaperText,
     PaperToggle,
-    createFailureToast,
     createRead,
     showError,
 } from "@mileniumhq/paperui";
@@ -78,15 +77,11 @@ export default function Backups(props: { active: boolean; whileRunning: "quiesce
                     },
                 ),
             message: errorMessage,
-            failure: { title: "Couldn't load the backups" },
         },
     );
-    createFailureToast(lost, { title: "Couldn't follow the backup's progress" });
     const status = () => read.value()?.status ?? null;
     const backups = () => read.value()?.backups ?? null;
     const progress = () => status()?.progress ?? null;
-    // a read again shows the loader, not the last failure
-    const loadFailed = () => !read.loading() && read.error() !== null;
     const load = read.reload;
     const [notice, setNotice] = createSignal<Outcome | null>(null);
     const [busy, setBusy] = createSignal<"create" | "location" | null>(null);
@@ -207,6 +202,11 @@ export default function Backups(props: { active: boolean; whileRunning: "quiesce
                 </PaperButton>
             </PaperPageHeader>
 
+            {/* it hears the progress again by itself, and reads what it missed */}
+            <Show when={lost()}>
+                {(why) => <PaperError title="Couldn't follow the backup's progress" error={why()} />}
+            </Show>
+
             <Show when={notice()}>
                 {(done) => (
                     <PaperQuote variant="success" icon="check" title={done().title}>{done().message}</PaperQuote>
@@ -282,16 +282,21 @@ export default function Backups(props: { active: boolean; whileRunning: "quiesce
 
             <PaperFlex direction="column" gap="half" fullWidth>
                 <PaperSectionHeader icon="history" title="Saved Backups" count={backups()?.length || undefined} />
+                {/* above the backups read before, which stay on screen */}
+                <Show when={read.error()}>
+                    {(err) => (
+                        <PaperError
+                            title="Couldn't load the backups"
+                            error={err()}
+                            action={{ label: "Try again", disabled: read.loading(), onClick: () => void load() }}
+                        />
+                    )}
+                </Show>
                 <Show
                     when={backups()}
                     fallback={
-                        <Show
-                            when={loadFailed()}
-                            fallback={<PaperFlex paddingX="full"><PaperText size={2} color="text-subtle">Loading backups…</PaperText></PaperFlex>}
-                        >
-                            <PaperEmptyState icon="error" title="Couldn't load">
-                                <PaperButton disabled={read.loading()} onClick={() => void load()}>Try again</PaperButton>
-                            </PaperEmptyState>
+                        <Show when={read.error() === null}>
+                            <PaperFlex paddingX="full"><PaperText size={2} color="text-subtle">Loading backups…</PaperText></PaperFlex>
                         </Show>
                     }
                 >

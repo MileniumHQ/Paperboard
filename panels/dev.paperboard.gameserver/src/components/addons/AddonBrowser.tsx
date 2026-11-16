@@ -1,5 +1,5 @@
 import { For, Show, type Component, type JSX } from "solid-js";
-import { PaperButton, PaperEmptyState, PaperFlex, PaperIcon, PaperPageHeader, PaperQuote } from "@mileniumhq/paperui";
+import { PaperButton, PaperError, PaperFlex, PaperIcon, PaperPageHeader, PaperQuote } from "@mileniumhq/paperui";
 import { AddonInstalledList, AddonResults, AddonSearchCard } from "./AddonCards";
 import { AddonDetail, type DetailExtras } from "./AddonDetail";
 import { AddonInstallModal, AddonRemoveModal, AddonUploadConfirmModal, type InstallExtrasProps } from "./AddonModals";
@@ -61,23 +61,27 @@ export default function AddonBrowser<Meta = undefined>(props: AddonBrowserProps<
             </Show>
 
             <PaperFlex direction="column" gap="full">
-                <Show
-                    when={b().listing()}
-                    fallback={
-                        <Show when={b().listError()}>
-                            <PaperEmptyState icon="error" title="Couldn't load">
-                                <PaperButton disabled={b().listLoading()} onClick={() => void b().reload()}>Try again</PaperButton>
-                                <Show when={b().kind.recover}>
-                                    {(way) => (
-                                        <PaperButton disabled={b().recovering() || way().disabled?.()} onClick={() => void b().recover()}>
-                                            {way().label}
-                                        </PaperButton>
-                                    )}
-                                </Show>
-                            </PaperEmptyState>
-                        </Show>
-                    }
-                >
+                {/* above what was listed before, which stays */}
+                <Show when={b().listError()}>
+                    {(err) => (
+                        <PaperError
+                            title={b().kind.listFailureTitle()}
+                            error={err()}
+                            action={{ label: "Try again", disabled: b().listLoading(), onClick: () => void b().reload() }}
+                        />
+                    )}
+                </Show>
+                {/* nothing listed: the kind's own way out, such as setting the folder up again */}
+                <Show when={!b().listing() && b().listError() !== "" && b().kind.recover}>
+                    {(way) => (
+                        <PaperFlex>
+                            <PaperButton disabled={b().recovering() || way().disabled?.()} onClick={() => void b().recover()}>
+                                {way().label}
+                            </PaperButton>
+                        </PaperFlex>
+                    )}
+                </Show>
+                <Show when={b().listing()}>
                     {(current) => (
                         <AddonInstalledList
                             kind={b().kind}

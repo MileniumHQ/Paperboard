@@ -1,8 +1,7 @@
 import { Show } from "solid-js";
 import {
-    PaperButton,
     PaperCopyButton,
-    PaperEmptyState,
+    PaperError,
     PaperFlex,
     PaperPageHeader,
     PaperQuote,
@@ -31,7 +30,6 @@ export default function Crossplay(props: { active: boolean }) {
     const read = createRead(() => calls.readCrossplay(), {
         source: () => props.active && crossplayPlatform(serverSoftware()) !== null && serverSoftware(),
         message: errorMessage,
-        failure: { title: "Couldn't load crossplay" },
     });
     const view = read.value;
     const load = read.reload;
@@ -73,10 +71,16 @@ export default function Crossplay(props: { active: boolean }) {
     return (
         <>
             <PaperPageHeader icon="devices" title="Crossplay" />
-            <Show when={!view() && !read.loading() && read.error()}>
-                <PaperEmptyState icon="error" title="Couldn't load">
-                    <PaperButton disabled={read.loading()} onClick={() => void load()}>Try again</PaperButton>
-                </PaperEmptyState>
+            {/* above crossplay as it was read before, or in its place */}
+            <Show when={read.error()}>
+                {(err) => (
+                    <PaperError
+                        fill={!view()}
+                        title="Couldn't load crossplay"
+                        error={err()}
+                        action={{ label: "Try again", disabled: read.loading(), onClick: () => void load() }}
+                    />
+                )}
             </Show>
             <Show when={view()}>
                 <PaperSettingList autoHeight>

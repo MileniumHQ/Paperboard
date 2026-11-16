@@ -1,5 +1,5 @@
 import { createEffect, createSignal, on, Show } from "solid-js";
-import { PaperButton, PaperCard, PaperEmptyState, PaperFlex, PaperIcon, PaperLoader, PaperModal, PaperPageHeader, PaperQuote, PaperSettingItem, PaperSettingList, PaperTable, PaperText, PaperToggle, createAction, createFailureToast, createRead } from "@mileniumhq/paperui";
+import { PaperButton, PaperCard, PaperError, PaperFlex, PaperIcon, PaperLoader, PaperModal, PaperPageHeader, PaperQuote, PaperSettingItem, PaperSettingList, PaperTable, PaperText, PaperToggle, createAction, createRead } from "@mileniumhq/paperui";
 import { useServer } from "../../lib/server";
 import { errorMessage } from "../../lib/failure";
 import type { RustMapView } from "./index";
@@ -22,14 +22,13 @@ export default function RustMap(props: { active: boolean }) {
     // the map, and the map from above: undefined until read, null until the server draws it
     const map = createRead(
         async (): Promise<{ view: RustMapView; picture: string | null }> => ({ view: await calls.rustMap(), picture: await calls.rustMapPicture() }),
-        { source: () => props.active && serverStatus(), message: errorMessage, failure: { title: "Couldn't load the map" } },
+        { source: () => props.active && serverStatus(), message: errorMessage },
     );
     const view = () => map.value()?.view;
     const picture = () => map.value()?.picture;
     const [drawing, setDrawing] = createSignal(false);
     // a refused draw is not tried again by itself: Try again draws it
     const [pictureError, setPictureError] = createSignal("");
-    createFailureToast(pictureError, { title: "Couldn't draw the map" });
     // a running server without a picture of its map draws one, once each read lands
     createEffect(
         on(map.loading, (loading) => {
@@ -72,14 +71,18 @@ export default function RustMap(props: { active: boolean }) {
                 </PaperQuote>
             </Show>
 
-            <Show
-                when={view() || !map.error() || map.loading()}
-                fallback={
-                    <PaperEmptyState icon="error" title="Couldn't load">
-                        <PaperButton onClick={() => void map.reload()}>Try again</PaperButton>
-                    </PaperEmptyState>
-                }
-            >
+            {/* above the map as it was read before, or in its place */}
+            <Show when={map.error()}>
+                {(err) => (
+                    <PaperError
+                        fill={!view()}
+                        title="Couldn't load the map"
+                        error={err()}
+                        action={{ label: "Try again", disabled: map.loading(), onClick: () => void map.reload() }}
+                    />
+                )}
+            </Show>
+            <Show when={view() || !map.error()}>
             <PaperCard>
                 <PaperFlex direction="row" wrap gap="full" padding="full" align="flex-start">
                 <PaperFlex grow maxWidth="panel-small" minWidth="field-wide" fullWidth>
@@ -90,9 +93,12 @@ export default function RustMap(props: { active: boolean }) {
                                 <Show
                                     when={!pictureError()}
                                     fallback={
-                                        <PaperEmptyState icon="error" title="Couldn't draw the map">
-                                            <PaperButton disabled={serverStatus() !== "online"} onClick={() => void draw()}>Try again</PaperButton>
-                                        </PaperEmptyState>
+                                        <PaperError
+                                            fill
+                                            title="Couldn't draw the map"
+                                            error={pictureError()}
+                                            action={{ label: "Try again", disabled: serverStatus() !== "online" || drawing(), onClick: () => void draw() }}
+                                        />
                                     }
                                 >
                                     <Show

@@ -5,10 +5,10 @@ import {
     PaperCard,
     PaperCopyButton,
     PaperEmptyState,
+    PaperError,
     PaperFlex,
     PaperGrid,
     PaperIcon,
-    createFailureToast,
     PaperSeparator,
     PaperSettingItem,
     PaperSettingList,
@@ -61,7 +61,6 @@ export default function PlayerInspector(props: {
     const liveName = createMemo(() => (props.player && isPlayerOnline() ? name() : undefined));
     // why the game could not be asked, until an ask goes through
     const [liveError, setLiveError] = createSignal("");
-    createFailureToast(liveError, { title: "Couldn't read the live stats" });
     createEffect(
         on(liveName, (player) => {
             setLiveError("");
@@ -99,7 +98,6 @@ export default function PlayerInspector(props: {
     };
     // why the head could not be looked up, in words: a phone shows no tooltip
     const [headFailure, setHeadFailure] = createSignal<string | null>(null);
-    createFailureToast(headFailure, { title: "Couldn't look up the head" });
     const healthMeter = () => {
         const value = health();
         return value === undefined ? undefined : { value, max: 20, variant: "danger" as const };
@@ -179,6 +177,10 @@ export default function PlayerInspector(props: {
                     </PaperFlex>
                 </PaperFlex>
 
+                <Show when={headFailure()}>
+                    {(err) => <PaperError title="Couldn't look up the head" error={err()} />}
+                </Show>
+
                 <PaperSeparator />
 
                 {/* moderation */}
@@ -223,6 +225,10 @@ export default function PlayerInspector(props: {
                 <PaperText size={2} weight={700} color="text-subtle">
                     Status
                 </PaperText>
+                {/* asked again on its own every few seconds */}
+                <Show when={liveError()}>
+                    {(err) => <PaperError title="Couldn't read the live stats" error={err()} />}
+                </Show>
                 <PaperGrid min="field">
                     <PaperStatTile
                         icon="favorite"

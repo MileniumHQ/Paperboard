@@ -1,5 +1,5 @@
 import { createMemo, createSignal, For, Show, untrack } from "solid-js";
-import { PaperButton, PaperEmptyState, PaperFlex, PaperInput, PaperLink, PaperText, createRead } from "@mileniumhq/paperui";
+import { PaperButton, PaperError, PaperFlex, PaperInput, PaperLink, PaperText, createRead } from "@mileniumhq/paperui";
 import { errorMessage } from "../../lib/failure";
 import { formatCount } from "../../lib/addons/presentation";
 import { type SourceGameSpec } from "./index";
@@ -31,7 +31,6 @@ export default function WorkshopPane(props: {
     // what is popular, until something is asked for; the answer in view is the last one asked for
     const found = createRead((): Promise<SourceWorkshopResults> => calls.sourceWorkshopFind({ query: untrack(query) }), {
         message: errorMessage,
-        failure: { title: "Couldn't search the Steam Workshop" },
     });
     const results = found.value;
     const searching = found.loading;
@@ -56,10 +55,16 @@ export default function WorkshopPane(props: {
                 />
                 <PaperButton variant="primary" disabled={searching()} onClick={() => void search()}>{searching() ? "Searching..." : "Search"}</PaperButton>
             </PaperFlex>
-            <Show when={!results() && !searching() && found.error()}>
-                <PaperEmptyState icon="error" title="Couldn't search" description="A Workshop link or item id pasted above is looked up on its own, and may still work.">
-                    <PaperButton onClick={() => void search()}>Try again</PaperButton>
-                </PaperEmptyState>
+            {/* above what was found before, which stays */}
+            <Show when={found.error()}>
+                {(err) => (
+                    <>
+                        <PaperError title="Couldn't search the Steam Workshop" error={err()} action={{ label: "Try again", disabled: searching(), onClick: () => void search() }} />
+                        <Show when={!results()}>
+                            <PaperText size={2} color="text-subtle">A Workshop link or item id pasted above is looked up on its own, and may still work.</PaperText>
+                        </Show>
+                    </>
+                )}
             </Show>
             <Show when={results()}>
                 {(found) => (

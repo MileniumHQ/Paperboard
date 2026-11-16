@@ -1,5 +1,5 @@
 import { createSignal, Show } from "solid-js";
-import { createAction, createFailureToast, PaperAvatar, PaperButton, PaperInput, PaperModal, PaperQuote, PaperText } from "@mileniumhq/paperui";
+import { createAction, PaperAvatar, PaperButton, PaperError, PaperInput, PaperModal, PaperQuote, PaperText } from "@mileniumhq/paperui";
 import ServerOverview, { EditableDetail } from "../../components/ServerOverview";
 import { useServer } from "../../lib/server";
 import { errorMessage } from "../../lib/failure";
@@ -25,7 +25,6 @@ export default function PalworldOverview() {
     });
 
     const metrics = createMetrics(calls.palworldMetrics);
-    createFailureToast(metrics.error, { title: "Couldn't read the server's health" });
     const uptime = createUptime();
 
     return (
@@ -46,6 +45,15 @@ export default function PalworldOverview() {
                 { icon: "wb_sunny", label: "In-game days", value: String(metrics.value()!.days) },
             )}
         >
+            <Show when={metrics.error()}>
+                {(err) => (
+                    <PaperError
+                        title="Couldn't read the server's health"
+                        error={err()}
+                        action={{ label: "Try again", disabled: metrics.loading(), onClick: () => void metrics.reload() }}
+                    />
+                )}
+            </Show>
             <Show when={pending()}>
                 <PaperQuote variant="warning" icon="info" title="Description saved" onDismiss={() => setPending(false)}>
                     The server list shows it after the server restarts.

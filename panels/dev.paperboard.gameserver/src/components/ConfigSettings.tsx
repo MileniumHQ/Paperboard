@@ -1,7 +1,7 @@
 import { createSignal, For, onCleanup, Show, untrack } from "solid-js";
 import { errorMessage } from "../lib/failure";
 import { createSaves } from "../lib/saves";
-import { createFailureToast, PaperFlex, PaperSettingList, PaperText, showError } from "@mileniumhq/paperui";
+import { PaperError, PaperFlex, PaperSettingList, PaperText, showError } from "@mileniumhq/paperui";
 import { FieldItem } from "./PropertyFieldControl";
 import type { LoaderGroupView, LoaderSettingView } from "../service/loaderSettings";
 import type { PropertyField } from "../lib/properties";
@@ -86,11 +86,12 @@ export default function ConfigSettings(props: {
         );
     };
 
-    // a file that can't be read stands until the files are read again
-    const fileError = (group: LoaderGroupView) => {
-        createFailureToast(() => group.error, { title: `Couldn't load ${group.path}` });
-        return null;
-    };
+    // a file that can't be read stands, above what was read of it, until the files are read again
+    const fileError = (group: LoaderGroupView) => (
+        <Show when={group.error}>
+            {(err) => <PaperError title={`Couldn't load ${group.path}`} error={err()} action={{ label: "Try again", onClick: () => void props.reload() }} />}
+        </Show>
+    );
 
     return (
         <>
