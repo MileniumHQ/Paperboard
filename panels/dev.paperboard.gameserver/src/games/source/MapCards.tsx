@@ -99,8 +99,16 @@ export function mapNames(map: MapChoice, pictures: Pick<MapPicturesState, "title
     return title ? { title, file: workshopId(map.name) ? undefined : map.name } : { title: map.name };
 }
 
-/** A map's file name, which may break after an underscore instead of mid-word. */
-export const breakable = (name: string) => <>{name.split(/(?<=_)/).map((part) => <>{part}<wbr /></>)}</>;
+/**
+ * A card's name on one line, cut with an ellipsis: a wrapped name would make
+ * its whole row of cards taller. The full name is its tooltip.
+ */
+const oneLine = (name: string, size: 1 | 4) =>
+    size === 4 ? (
+        <PaperText as="div" size={4} weight={700} truncate title={name}>{name}</PaperText>
+    ) : (
+        <PaperText as="div" size={1} color="text-subtle" truncate title={name}>{name}</PaperText>
+    );
 
 const OTHER_MODE = "Other";
 const ALL_MODES = "";
@@ -182,8 +190,8 @@ export default function MapCards(props: {
                                         (preview.loading() || props.pictures.loading(map.name) ? <PictureLoading /> : <NoPicture failed={preview.error()} />)
                                     }
                                     bannerAlt={names().title}
-                                    title={breakable(names().title)}
-                                    subtitle={names().file ? breakable(names().file!) : undefined}
+                                    title={oneLine(names().title, 4)}
+                                    subtitle={names().file ? oneLine(names().file!, 1) : undefined}
                                     description={props.hideMode ? undefined : map.mode}
                                     footerLeft={map.note ? <PaperText size={2} color="text-subtle">{map.note}</PaperText> : undefined}
                                     selected={props.value === map.name}
