@@ -14,6 +14,9 @@ import { placeStandIn } from "./helpers/standIn";
 import { writeTree } from "./helpers/tmp";
 import { PANEL_ID } from "../src/servers";
 import { entrypoint, releaseFor } from "../src/games/terraria/catalog";
+import { installFakeJava } from "./helpers/fakeJava";
+import { serverCalls } from "./helpers/serverCall";
+import { javaPackageFor } from "../src/lib/versionProfile";
 
 let daemon: TestDaemon;
 beforeAll(async () => {
@@ -25,6 +28,7 @@ afterAll(async () => {
 
 const SERVERS = "servers-0123456789ab";
 const ID = "s-ter";
+const MC = "s-mc";
 const vanilla = releaseFor("1.4.5.8");
 const NARROWEST = "620,520";
 const config = () => path.join(daemon.dataDir, "configs", `${PANEL_ID}.json`);
@@ -35,7 +39,13 @@ let ready: Promise<void> | null = null;
 async function setUp(port: number) {
     ready ??= (async () => {
         fs.mkdirSync(path.dirname(config()), { recursive: true });
-        fs.writeFileSync(config(), JSON.stringify({ version: 2, serversDirectory: SERVERS, servers: [{ id: ID, name: "Island", game: "terraria", directory: `${SERVERS}/${ID}`, createdAt: 0, settings: { configured: true, version: vanilla.version, port } }] }));
+        fs.writeFileSync(config(), JSON.stringify({ version: 2, serversDirectory: SERVERS, servers: [
+            { id: ID, name: "Island", game: "terraria", directory: `${SERVERS}/${ID}`, createdAt: 0, settings: { configured: true, version: vanilla.version, port } },
+            { id: MC, name: "Survival", game: "minecraft", directory: `${SERVERS}/${MC}`, createdAt: 0, settings: { configured: true, software: "paper", version: "1.21.1" } },
+        ] }));
+        // the whitelist is on and nobody is on it: the Overview says so above its console
+        writeTree(path.join(daemon.dataDir, "files", PANEL_ID, SERVERS, MC), { "server.jar": "jar", "eula.txt": "eula=true\n", "server.properties": `server-port=${await freePort()}\nwhite-list=true\n`, "whitelist.json": "[]" });
+        installFakeJava(javaPackageFor("1.21.1")!);
         const folder = path.join(daemon.dataDir, "files", PANEL_ID, SERVERS, ID);
         writeTree(folder, { [`install/${vanilla.directory}/manifest.json`]: JSON.stringify({ software: "vanilla", version: vanilla.version, sha256: vanilla.sha256, os: process.platform, arch: process.arch }) });
         placeStandIn("fakeTerraria", path.join(folder, "install", vanilla.directory, entrypoint(process.platform)));
@@ -89,6 +99,28 @@ describe("a running server's Overview at the narrowest window", () => {
         } finally {
             if (await page.evaluate<boolean>(`${button("Stop")} !== undefined`)) await stop(page);
             await page.close();
+            served.stop();
+        }
+    }, 90_000);
+
+    test("at the window's default size, a notice above the console still leaves the whole Overview on screen, its command line in view", async () => {
+        const served = await setUp(await freePort());
+        const exited = new Promise<void>((resolve) => processApi.onExit(`${MC}-mc-server`, () => resolve()));
+        await serverCalls(MC).startServer();
+        // the panel beside the app's menus in its default window
+        const page = await openPage(`${served.url}/?server=${MC}`);
+        try {
+            await page.resize(860, 680);
+            await page.waitFor(`${button("Stop")} && ${text("Whitelist is on")} && document.querySelector("[class*=PaperConsole] input")`, "the running server's Overview with its notice");
+            await page.settled();
+            // nothing around the console scrolls: the console alone does, and its command line is in view
+            const scrolled = `(() => { const out = []; for (let el = document.querySelector("[class*=PaperConsole] input"); el; el = el.parentElement) { const y = getComputedStyle(el).overflowY; if ((y === "auto" || y === "scroll") && el.scrollHeight > el.clientHeight + 1) out.push(el.className); } return out; })()`;
+            expect(await page.evaluate<string[]>(scrolled)).toEqual([]);
+            expect(await page.evaluate<number>(`document.querySelector("[class*=PaperConsole] input").getBoundingClientRect().bottom`)).toBeLessThanOrEqual(680);
+        } finally {
+            await page.close();
+            await serverCalls(MC).stopServer();
+            await exited;
             served.stop();
         }
     }, 90_000);

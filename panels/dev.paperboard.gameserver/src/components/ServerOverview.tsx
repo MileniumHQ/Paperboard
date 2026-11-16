@@ -4,7 +4,6 @@ import {
     PaperText,
     PaperButton,
     PaperIcon,
-    PaperSeparator,
     PaperConsole,
     PaperEmptyState,
     PaperCopyButton,
@@ -185,9 +184,7 @@ export default function ServerOverview(props: {
 
             {props.children}
 
-            <PaperSeparator />
-
-            <PaperCard grow minHeight="panel-height-small" padding="full">
+            <PaperCard grow minHeight="field-wide" padding="full">
                 <PaperConsole
                     entries={serverEntries()}
                     onCommand={runCommand}

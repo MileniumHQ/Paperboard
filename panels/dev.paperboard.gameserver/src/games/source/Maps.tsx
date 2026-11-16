@@ -289,13 +289,16 @@ export default function SourceMaps(props: { spec: SourceGameSpec; active: boolea
                 <Show when={joined()}>
                     <PaperQuote variant="success" icon="check_circle" onDismiss={() => setJoined("")}>{joined()}</PaperQuote>
                 </Show>
-                <Show when={source() === "workshop" && props.spec.workshop} fallback={
-                    <Show when={addable().length > 0} fallback={<PaperText color="text-subtle">Every map the server has is in the rotation.</PaperText>}>
-                        <MapCards maps={choices()} pictures={pictures} disabled={working()} onPick={add} />
+                {/* one height for both sources, so switching or searching doesn't shrink the dialog and grow it again */}
+                <PaperFlex direction="column" minHeight="panel-height-large">
+                    <Show when={source() === "workshop" && props.spec.workshop} fallback={
+                        <Show when={addable().length > 0} fallback={<PaperText color="text-subtle">Every map the server has is in the rotation.</PaperText>}>
+                            <MapCards maps={choices()} pictures={pictures} disabled={working()} onPick={add} />
+                        </Show>
+                    }>
+                        <WorkshopPane spec={props.spec} inRotation={view()?.maps ?? []} disabled={working()} onPick={(hit) => void addFromWorkshop(hit)} />
                     </Show>
-                }>
-                    <WorkshopPane spec={props.spec} inRotation={view()?.maps ?? []} disabled={working()} onPick={(hit) => void addFromWorkshop(hit)} />
-                </Show>
+                </PaperFlex>
             </PaperModal>
 
             <PaperModal

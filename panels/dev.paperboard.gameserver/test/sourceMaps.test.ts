@@ -152,12 +152,19 @@ describe("a Source game's Maps tab", () => {
             await page.evaluate(`${button("Add maps")}.click()`);
             const chip = `[...document.querySelectorAll("[role=dialog] *")].find((el) => el.children.length === 0 && el.textContent.trim() === "Steam Workshop")`;
             await page.waitFor(chip, "the Steam Workshop chip");
+            // the dialog keeps its height as it switches to the Workshop and searches it
+            const height = `document.querySelector("[role=dialog]").offsetHeight`;
+            await page.waitFor(card("koth_harvest_final", "[role=dialog]"), "the server's maps");
+            const before = await page.evaluate<number>(height);
             await page.evaluate(`${chip}.click()`);
             await page.waitFor(`document.querySelector("[role=dialog] input[placeholder^='Search the Steam Workshop']")`, "the Workshop search");
             await page.type("[role=dialog] input[placeholder^='Search the Steam Workshop']", "upward", true);
             const hit = card("Upward Remix", "[role=dialog]");
             await page.waitFor(`${hit} && document.querySelector("[role=dialog]").innerText.includes("1 result is not a map and left out.")`, "the search's maps");
+            expect(await page.evaluate<number>(height)).toBe(before);
             expect(await page.evaluate<string>(`document.querySelector("[role=dialog]").innerText`)).not.toContain("Fancy Hat");
+            // every card is from the Workshop: none says so again
+            expect(await page.evaluate<string>(`${hit}.innerText`)).not.toContain("Steam Workshop");
             await page.evaluate(`${hit}.click()`);
             await page.waitFor(`document.body.innerText.includes("Upward Remix joined the end of the rotation.")`, "the map added");
             await page.settled();

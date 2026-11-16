@@ -108,7 +108,7 @@ export default function SourceSetup(props: { spec: SourceGameSpec; onComplete():
                                             banner={mixedMaps().length > 0 ? mixedMaps().map((name) => pictures.of(name)!) : iconBanner("shuffle")}
                                             bannerAlt={`Mixed, shown by ${mixedMaps().map((name) => pictures.titleOf(name) ?? name).join(", ")}`}
                                             title="Mixed"
-                                            description="Every kind of map, in the game's own map cycle."
+                                            description="The game's own map cycle"
                                             selected={mode() === null}
                                             onClick={() => pick(null)}
                                         />
