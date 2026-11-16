@@ -201,14 +201,13 @@ describe("going back on a phone", () => {
     /** the open page's title: the innermost page that isn't closed */
     const top = `(() => { const open = [...document.querySelectorAll("[role=region]")].filter((el) => !el.inert); return open.at(-1)?.getAttribute("aria-label") ?? "the bots"; })()`;
     /**
-     * the ways back the open page offers that a person can see and reach: its
-     * bar's (an outer page's bar above it goes further back, and in
-     * Paperboard the shell draws one bar for all of them)
+     * the ways back a person can see and reach: one bar's (a page inside
+     * another is named in the outermost page's bar, whose Back goes back from
+     * the innermost open page; in Paperboard the shell draws that bar)
      */
     const backs = `(() => {
-        const open = [...document.querySelectorAll("[role=region]")].filter((el) => !el.inert).at(-1);
-        return [...open.querySelectorAll("button")].filter((b) => {
-            if (b.closest("[role=region]") !== open || !/^(Back|arrow_back)/.test(b.getAttribute("aria-label") ?? b.innerText)) return false;
+        return [...document.querySelectorAll("button")].filter((b) => {
+            if (b.closest("[inert]") || !/^(Back|arrow_back)/.test(b.getAttribute("aria-label") ?? b.innerText)) return false;
             const r = b.getBoundingClientRect();
             return document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2)?.closest("button") === b;
         }).length;
@@ -219,6 +218,14 @@ describe("going back on a phone", () => {
         await page.evaluate(`new Promise((resolve) => { const tick = () => (document.getAnimations().length ? requestAnimationFrame(tick) : resolve(true)); tick(); })`);
     };
     const backEvent = `window.dispatchEvent(new Event("paperboard:back", { cancelable: true }))`;
+    /** marks the one bar a person sees (its Back and its header) so the test can press or drag it */
+    const markBar = (page: Page) =>
+        page.evaluate(`(() => {
+            for (const el of document.querySelectorAll("[data-test]")) delete el.dataset.test;
+            const back = [...document.querySelectorAll("button[aria-label=Back]")].find((b) => !b.closest("[inert]") && b.checkVisibility());
+            back.dataset.test = "back";
+            back.closest("header").dataset.test = "bar";
+        })()`);
 
     test("a server goes back to the servers, then the bot's menu, then the bots, one way at a time", async () => {
         const home = guild("Home");
@@ -248,7 +255,8 @@ describe("going back on a phone", () => {
             await openServer();
 
             // the bar's back: the server, then the servers
-            await page.click(`[role=region][aria-label="Home"] button[aria-label=Back]`);
+            await markBar(page);
+            await page.click(`[data-test=back]`);
             await at(page, "Servers");
             expect(await page.evaluate<number>(backs)).toBe(1);
 
@@ -263,9 +271,11 @@ describe("going back on a phone", () => {
             await page.click(`input[name=botMenu][value="servers"]`);
             await at(page, "Servers");
             await openServer();
-            await page.drag(`[role=region][aria-label="Home"] header`, 300);
+            await markBar(page);
+            await page.drag(`[data-test=bar]`, 300);
             await at(page, "Servers");
-            await page.drag(`[role=region][aria-label="Servers"] header`, 300);
+            await markBar(page);
+            await page.drag(`[data-test=bar]`, 300);
             await at(page, "Keeper");
             await page.evaluate(backEvent);
             await at(page, "the bots");
