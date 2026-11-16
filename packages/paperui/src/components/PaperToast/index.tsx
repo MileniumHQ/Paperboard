@@ -98,7 +98,7 @@ function Toast(props: { toast: ToastEntry }) {
                     {(details) => (
                         <PaperCollapsible title="Details">
                             <div class={styles.details}>
-                                <PaperCode block language="text">{details()}</PaperCode>
+                                <PaperCode block wrap language="text">{details()}</PaperCode>
                             </div>
                         </PaperCollapsible>
                     )}

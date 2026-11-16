@@ -78,7 +78,7 @@ const backups = createRead(() => service.calls.listBackups());
                         <td><PaperCode>details</PaperCode></td>
                         <td><PaperCode>string</PaperCode></td>
                         <td>The error's other lines</td>
-                        <td>Anything longer, such as what a tool printed. It folds under Details, scrolls when it is long, and has a copy button.</td>
+                        <td>Anything longer, such as what a tool printed. It folds under Details, wraps its long lines, scrolls when it is long, and has a copy button.</td>
                     </tr>
                     <tr>
                         <td><PaperCode>action</PaperCode></td>

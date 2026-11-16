@@ -65,3 +65,16 @@
     -webkit-user-select: text;
     user-select: text;
 }
+
+/* wrapped: every line fits the block's width, and a copyable block's
+   padding keeps each one clear of the button */
+.wrap .PaperCodeBlock {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    overflow-x: hidden;
+}
+
+.wrap.copyable .PaperCodeBlock > code {
+    flex: 1 1 auto;
+    min-width: 0;
+}

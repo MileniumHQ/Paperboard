@@ -6,7 +6,8 @@ const browser = useBrowser();
 let page: Page;
 
 const TOAST = "[data-paper-toasts] [role]";
-type Line = { duration: string; state: string; time: number; scale: number; color: string; width: number; toastWidth: number; bottomGap: number };
+type Box = { left: number; right: number; bottom: number };
+type Line = { duration: string; state: string; time: number; scale: number; color: string; line: Box; toast: Box };
 const line = () => page.eval<Line | null>("t.line()");
 const toasts = () => page.eval<number>(`document.querySelectorAll('${TOAST}').length`);
 
@@ -19,6 +20,19 @@ async function letPass(ms: number) {
     await page.waitFor(`(window.until ??= performance.now() + ${ms}) && performance.now() > window.until && !(window.until = undefined)`, `${ms}ms to pass`, ms + 5000);
 }
 
+/**
+ * Whether the code block under `root` reads whole: nothing scrolls sideways,
+ * and no line of it sits under its copy button.
+ */
+const READS_WHOLE = (root: string) => `(() => {
+    const pre = document.querySelector(${JSON.stringify(`${root} pre`)});
+    const button = document.querySelector(${JSON.stringify(`${root} [aria-label="Copy code"]`)}).getBoundingClientRect();
+    const range = document.createRange();
+    range.selectNodeContents(pre);
+    const covered = [...range.getClientRects()].some((r) => r.width > 0 && r.left < button.right && button.left < r.right && r.top < button.bottom && button.top < r.bottom);
+    return { scrolls: pre.scrollWidth > pre.clientWidth + 1, covered };
+})()`;
+
 // Inventory: PaperToast — every toast goes by itself, and says how long it has left.
 describe("a toast that goes by itself", () => {
     test("a danger toast goes after ten seconds, its red line hugging the bottom and shrinking as it runs out", async () => {
@@ -29,15 +43,25 @@ describe("a toast that goes by itself", () => {
         expect(start?.duration).toBe("10s");
         // the line is in the toast's colour: the same red as its icon
         expect(start?.color).toBe(await page.eval(`getComputedStyle(document.querySelector('${TOAST} > :first-child')).color`));
-        // full width, along the very bottom edge
-        expect(Math.abs((start?.width ?? 0) - (start?.toastWidth ?? 0))).toBeLessThanOrEqual(2);
-        expect(start?.bottomGap).toBeLessThanOrEqual(2);
+        // the toast's whole bottom edge, from its very left to its very right
+        expect(Math.abs(start!.line.left - start!.toast.left)).toBeLessThanOrEqual(0.5);
+        expect(Math.abs(start!.line.right - start!.toast.right)).toBeLessThanOrEqual(0.5);
+        expect(Math.abs(start!.line.bottom - start!.toast.bottom)).toBeLessThanOrEqual(0.5);
         await page.waitFor(`t.line()?.time > 1000`, "a second of its time to pass");
         const later = await line();
         expect(later?.scale).toBeLessThan(0.95);
         expect(later?.scale).toBeGreaterThan(0);
         // a failure is never kept on screen: it goes by itself
         await page.waitFor(`!document.querySelector('${TOAST}')`, "the danger toast to go by itself", 15_000);
+    });
+
+    test("at phone width a toast's Details wrap long lines, and the copy button covers none", async () => {
+        page = await browser.open("toastTime", { width: 390, height: 844, touch: true });
+        await page.eval(`t.show({ variant: "danger", title: "Couldn't install the server", message: "SteamCMD exited with code 8", details: "Logging in anonymously...\\nERROR! Failed to install app '2394010' (Disk write failure) into /srv/paperboard/servers/palworld-community/steamapps/common/PalServer", duration: 60000 })`);
+        await page.waitFor(`document.querySelector('${TOAST} button[aria-expanded="false"]')`, "the toast's Details");
+        await page.click(`${TOAST} button[aria-expanded="false"]`);
+        await page.waitFor(`document.querySelector('${TOAST} button[aria-expanded="true"]')`, "the details to open");
+        expect(await page.eval(READS_WHOLE(TOAST))).toEqual({ scrolls: false, covered: false });
     });
 
     test("warning toasts stay ten seconds too, and the rest six", async () => {

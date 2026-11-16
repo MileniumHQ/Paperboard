@@ -89,7 +89,7 @@ export function PaperError(props: PaperErrorProps) {
                     {(text) => (
                         <PaperCollapsible title="Details" class={styles.details}>
                             <div class={styles.detailsText}>
-                                <PaperCode block language="text">{text()}</PaperCode>
+                                <PaperCode block wrap language="text">{text()}</PaperCode>
                             </div>
                         </PaperCollapsible>
                     )}

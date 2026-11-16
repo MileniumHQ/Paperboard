@@ -23,8 +23,6 @@
 .toast {
     pointer-events: auto;
     position: relative;
-    /* the line along the bottom follows the rounded corners */
-    overflow: hidden;
     box-sizing: border-box;
     width: min(var(--paper-size-menu-max), calc(100vw - var(--paper-uigap-double) - var(--paper-safe-area-left) - var(--paper-safe-area-right)));
     display: flex;
@@ -88,21 +86,20 @@
     padding-top: var(--paper-uigap-onefourth);
 }
 
-/* the time it has left: a line hugging the bottom edge, in the toast's
-   colour, shrinking to nothing as it runs out */
+/* the time it has left: a line along the toast's bottom edge, in its
+   colour, laid over its border from corner to corner and curving up with
+   them, cut back from the end as the time runs out */
 .time {
     position: absolute;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    height: var(--paper-thick-border-width);
-    background: var(--toast-accent);
-    transform-origin: left center;
+    inset: calc(-1 * var(--paper-border-width));
+    border-radius: inherit;
+    border-bottom: var(--paper-thick-border-width) solid var(--toast-accent);
+    pointer-events: none;
     animation: toastTime var(--paper-toast-time) linear forwards;
 }
 
 :dir(rtl) .time {
-    transform-origin: right center;
+    animation-name: toastTimeRtl;
 }
 
 /* pointed at or worked in: the time holds, and the line with it */
@@ -119,10 +116,19 @@
 
 @keyframes toastTime {
     from {
-        transform: scaleX(1);
+        clip-path: inset(0 0 0 0);
     }
     to {
-        transform: scaleX(0);
+        clip-path: inset(0 100% 0 0);
+    }
+}
+
+@keyframes toastTimeRtl {
+    from {
+        clip-path: inset(0 0 0 0);
+    }
+    to {
+        clip-path: inset(0 0 0 100%);
     }
 }
 

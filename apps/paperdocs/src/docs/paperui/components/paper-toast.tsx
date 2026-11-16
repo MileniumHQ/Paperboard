@@ -106,7 +106,7 @@ createFailureToast(saveError, { title: "Couldn't save the settings" });`}
                         <td><PaperCode>details</PaperCode></td>
                         <td><PaperCode>string</PaperCode></td>
                         <td>No default</td>
-                        <td>Anything longer than a line, such as what a tool printed. It folds under Details, scrolls when it is long, and has a copy button.</td>
+                        <td>Anything longer than a line, such as what a tool printed. It folds under Details, wraps its long lines, scrolls when it is long, and has a copy button.</td>
                     </tr>
                     <tr>
                         <td><PaperCode>variant</PaperCode></td>
@@ -144,7 +144,7 @@ createFailureToast(saveError, { title: "Couldn't save the settings" });`}
             <PaperText preset="subheader" as="h2" id="behavior">Behavior</PaperText>
             <PaperTextList>
                 <li>Every toast goes by itself: danger and warning after 10 seconds, the rest after 6. Its close button closes it sooner.</li>
-                <li>A thin line hugs the toast's bottom edge in the variant's color, red for danger, and shrinks from full width to nothing over the time left.</li>
+                <li>A thin line lies along the toast's whole bottom edge, over its border and round its corners, in the variant's color, red for danger. It is cut back from the end to nothing over the time left.</li>
                 <li>Pointing at a toast, or focusing anything in it, holds its time and its line. Leaving lets both run on from where they were, so a toast being read or used never goes from under the person. A toast that shows up under a pointer resting there still goes in its time.</li>
                 <li>Under reduced motion the line steps down in five still moves instead of gliding, and the time is the same.</li>
                 <li>Toasts sit in the window's bottom-right corner, over everything, an open <PaperLink href="/docs/paperui/papermodal/">PaperModal</PaperLink> included, and take its whole width on a phone. They stack with the newest at the bottom. Past five, the oldest goes first.</li>

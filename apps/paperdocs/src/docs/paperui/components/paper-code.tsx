@@ -95,6 +95,12 @@ export function Example() {
                         <td>Shows the copy button. Only a block has a button, so <PaperCode>copyable</PaperCode> on inline code does nothing; set <PaperCode>copyable={"{false}"}</PaperCode> on a block to hide it.</td>
                     </tr>
                     <tr>
+                        <td><PaperCode>wrap</PaperCode></td>
+                        <td><PaperCode>boolean</PaperCode></td>
+                        <td><PaperCode>false</PaperCode></td>
+                        <td>A block wraps its long lines instead of scrolling sideways, breaking long words such as paths and stack frames, and keeps every line clear of the copy button. For output read in a narrow place, such as a failure's Details in a toast or a <PaperLink href="/docs/paperui/papererror/">PaperError</PaperLink>.</td>
+                    </tr>
+                    <tr>
                         <td><PaperCode>ref</PaperCode></td>
                         <td>Solid ref</td>
                         <td>No default</td>

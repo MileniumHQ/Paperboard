@@ -20,6 +20,12 @@ export interface PaperCodeProps extends JSX.HTMLAttributes<HTMLElement> {
     language?: string;
     lang?: string;
     copyable?: boolean;
+    /**
+     * A block wraps its long lines, breaking long words such as paths and
+     * stack frames, instead of scrolling sideways: for output read in a
+     * narrow place, such as a failure's Details.
+     */
+    wrap?: boolean;
     ref?: HTMLElement | ((el: HTMLElement) => void);
 }
 
@@ -29,6 +35,7 @@ export function PaperCode(props: ParentProps<PaperCodeProps>) {
         "language",
         "lang",
         "copyable",
+        "wrap",
         "class",
         "classList",
         "children",
@@ -81,7 +88,7 @@ export function PaperCode(props: ParentProps<PaperCodeProps>) {
         >
             <div
                 class={styles.PaperCodeWrapper}
-                classList={{ [styles.copyable]: isCopyable() }}
+                classList={{ [styles.copyable]: isCopyable(), [styles.wrap]: !!local.wrap }}
             >
                 <Show when={isCopyable()}>
                     <PaperButton

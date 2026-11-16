@@ -191,11 +191,11 @@ const scenarios: Record<string, () => JSX.Element> = {
                     duration: getComputedStyle(line).animationDuration,
                     state: animation.playState,
                     time: Number(animation.currentTime),
-                    scale: new DOMMatrix(getComputedStyle(line).transform).a,
-                    color: getComputedStyle(line).backgroundColor,
-                    width: line.getBoundingClientRect().width,
-                    toastWidth: line.parentElement!.getBoundingClientRect().width,
-                    bottomGap: line.parentElement!.getBoundingClientRect().bottom - line.getBoundingClientRect().bottom,
+                    // the share of the line still drawn: what its clip leaves of it from the start
+                    scale: 1 - Number(/inset\([^ ]+ ([\d.]+)%/.exec(getComputedStyle(line).clipPath)?.[1] ?? 0) / 100,
+                    color: getComputedStyle(line).borderBottomColor,
+                    line: line.getBoundingClientRect().toJSON(),
+                    toast: line.parentElement!.getBoundingClientRect().toJSON(),
                 };
             },
         };
