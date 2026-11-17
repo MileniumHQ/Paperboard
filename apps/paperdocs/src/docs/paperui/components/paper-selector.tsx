@@ -175,7 +175,7 @@ export function Example() {
                         <td><PaperCode>icon</PaperCode></td>
                         <td><PaperCode>JSX.Element | string</PaperCode></td>
                         <td>No default</td>
-                        <td>A leading icon. A string is a Material icon name.</td>
+                        <td>A leading icon. A string is a Material icon name; an element (a <PaperCode>PaperIcon</PaperCode> with a logo as its <PaperCode>src</PaperCode>) is drawn as is, centered beside the title and description.</td>
                     </tr>
                     <tr>
                         <td><PaperCode>disabled</PaperCode></td>

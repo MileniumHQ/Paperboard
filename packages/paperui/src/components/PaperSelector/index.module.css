@@ -50,7 +50,11 @@
     text-align: right;
 }
 
+/* a logo passed as JSX sits in a wrapper: it centers what it holds, so the mark isn't left at the top of a line box */
 .itemIcon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     color: var(--paper-primary-ink);
     font-size: var(--paper-icon-size-huge);
 }

@@ -32,6 +32,8 @@ import {
     PaperRail,
     PaperRailItem,
     PaperSelectMenu,
+    PaperSelector,
+    PaperSelectorItem,
     PaperSelectMenuItem,
     PaperSlidePage,
     PaperSplit,
@@ -522,6 +524,21 @@ const scenarios: Record<string, () => JSX.Element> = {
                 <button id="elsewhere" type="button">
                     elsewhere
                 </button>
+            </div>
+        ));
+    },
+
+    selector() {
+        return shell(() => (
+            <div style={{ padding: "24px", width: "360px" }}>
+                <PaperSelector name="pick" value="two">
+                    <PaperSelectorItem value="one" icon="tune" description="A symbol icon.">
+                        Symbol
+                    </PaperSelectorItem>
+                    <PaperSelectorItem value="two" icon={<PaperIcon src="/pictures/mark.svg" tint="text" />} description="A logo, as a panel passes it.">
+                        Logo
+                    </PaperSelectorItem>
+                </PaperSelector>
             </div>
         ));
     },
