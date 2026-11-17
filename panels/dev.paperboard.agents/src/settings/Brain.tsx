@@ -86,7 +86,7 @@ export function BrainStatus(props: { agent: Agent; harness: Harness; actions: Br
             <Switch>
                 <Match when={b().phase === "installing"}>
                     <PaperText preset="hint">
-                        Downloading {name()}. It comes straight from its maker and is checked before it's used.
+                        Downloading {name()}…
                     </PaperText>
                     <PaperProgress value={b().percent ?? undefined} aria-label={`Installing ${name()}`} />
                 </Match>
