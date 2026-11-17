@@ -271,7 +271,7 @@ describe("paired computers", () => {
 			const clientsBefore = remote.instance.auth.getAuthorizedClients().length;
 			const code = remote.instance.auth.startPairing();
 			await expect(pool.pairComputer("127.0.0.1", remote.port, code)).rejects.toThrow(
-				"That address reaches this computer's own Paperboard server, not another computer.",
+				"That's this computer's own Paperboard server, not another computer",
 			);
 			expect(remote.instance.auth.getAuthorizedClients()).toHaveLength(clientsBefore);
 		} finally {

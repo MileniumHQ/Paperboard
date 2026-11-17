@@ -52,13 +52,11 @@ export function classifyProbeError(err: any): string {
     return msg || "Unreachable";
 }
 
-const NOT_THE_DAEMON = "Something answered on that port, but not the way the Paperboard server daemon does. Check the port number";
+const NOT_THE_DAEMON = "Something other than Paperboard answered there. Check the port";
 // a daemon started with --host 127.0.0.1 serves plain HTTP, which only this computer's own app may use
-const LOOPBACK_DAEMON =
-    "That port answers only on this computer, without encryption, so Paperboard can't pair with it. Start that daemon with --host 0.0.0.0 to pair it over your network";
+const LOOPBACK_DAEMON = "That server only accepts this computer. Start it with --host 0.0.0.0";
 
-const OWN_DAEMON =
-    "That address reaches this computer's own Paperboard server, not another computer. If you meant a tunnel to another computer, check that it is running and forwards to that computer's port";
+const OWN_DAEMON = "That's this computer's own Paperboard server, not another computer";
 
 /** a plain (unencrypted) server answered where a paired daemon's TLS was expected */
 function isPlaintextAnswer(err: any): boolean {

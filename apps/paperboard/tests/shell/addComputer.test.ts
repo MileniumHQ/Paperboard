@@ -52,7 +52,7 @@ test("a daemon on loopback: papercrane pair offers no address to type, and Add C
     // labelled fields name what goes in them; no example stands in a field
     expect(await page.evaluate(`[...document.querySelectorAll("[role=dialog] input")].map((i) => i.placeholder).filter(Boolean)`)).toEqual([]);
     await page.waitFor(
-        `document.querySelector("[role=dialog]").innerText.includes("That port answers only on this computer, without encryption, so Paperboard can't pair with it.")`,
+        `document.querySelector("[role=dialog]").innerText.includes("That server only accepts this computer. Start it with --host 0.0.0.0")`,
         "why the loopback daemon can't pair",
     );
     expect(await page.evaluate(NEXT_ENABLED)).toBe(false);
@@ -100,7 +100,7 @@ test("a port that answers without the daemon's encryption is said in words, insi
         await page.resize(860, 560);
         await typeAddress(`127.0.0.2:${(server.address() as AddressInfo).port}`);
         await page.waitFor(
-            `document.querySelector("[role=dialog]").innerText.includes("Something answered on that port, but not the way the Paperboard server daemon does.")`,
+            `document.querySelector("[role=dialog]").innerText.includes("Something other than Paperboard answered there. Check the port")`,
             "the reason the address isn't a daemon",
         );
         const fit = await page.evaluate<{ raw: boolean; overflowing: string[] }>(`(() => {

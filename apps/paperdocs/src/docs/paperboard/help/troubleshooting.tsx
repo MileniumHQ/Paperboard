@@ -105,8 +105,8 @@ export default function TroubleshootingDoc() {
                 <li><PaperCode>Host not found.</PaperCode> The name does not resolve. Type the computer's IP address instead.</li>
                 <li><PaperCode>Network unreachable.</PaperCode> This computer has no route to that address. Check that both are on the same network, or connected through your VPN.</li>
                 <li><PaperCode>Something other than the Paperboard server daemon answered on that port.</PaperCode> Another program uses that port on the computer. Check the port number, or move the other program to a different port.</li>
-                <li><PaperCode>Something answered on that port, but not the way the Paperboard server daemon does.</PaperCode> A program that isn't the daemon answered there. Check the port number.</li>
-                <li><PaperCode>That port answers only on this computer, without encryption.</PaperCode> The daemon was started with <PaperCode>--host 127.0.0.1</PaperCode>, which Paperboard can't pair with. Start it with <PaperCode>--host 0.0.0.0</PaperCode>.</li>
+                <li><PaperCode>Something other than Paperboard answered there.</PaperCode> A program that isn't the daemon answered on that port. Check the port number.</li>
+                <li><PaperCode>That server only accepts this computer.</PaperCode> The daemon was started with <PaperCode>--host 127.0.0.1</PaperCode>, which Paperboard can't pair with. Start it with <PaperCode>--host 0.0.0.0</PaperCode>.</li>
                 <li><PaperCode>That isn't a valid address.</PaperCode> What you typed is not an IP address or a computer name. Check it for spaces and stray characters.</li>
                 <li><PaperCode>That isn't a valid port.</PaperCode> The port must be a whole number from 1 to 65535. The default is 45464.</li>
             </PaperTextList>
