@@ -15,7 +15,7 @@ import {
     useWizard,
 } from "@mileniumhq/paperui";
 import { errorMessage } from "@mileniumhq/paperapi";
-import { Face } from "../face/Face";
+import { AGENT_FACE_PX, Face } from "../face/Face";
 import { skinFor } from "../face/skins";
 import { createFace, type FaceController } from "../face/controller";
 import { createSpeaker, type Speaker } from "./speech";
@@ -320,9 +320,7 @@ function Scenes(props: {
             <div ref={above} class={styles.above} />
             <Show when={speakerShown()}>
                 <div ref={speakerEl} class={styles.speaker} classList={{ [styles.leaving!]: leaving() }}>
-                    <span class={styles.faceChip}>
-                        <Face face={props.face} size={64} frame="sphere" skin={skinFor(name())} />
-                    </span>
+                    <Face face={props.face} size={AGENT_FACE_PX} frame="sphere" hologram skin={skinFor(name())} />
                     <div
                         class={styles.bubble}
                         classList={{

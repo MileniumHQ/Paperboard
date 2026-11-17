@@ -1,7 +1,7 @@
 import { For, Show, createComputed, createEffect, createMemo, createSignal, on, onCleanup, onMount, type JSX } from "solid-js";
 import { PAPER_PANEL_COMPACT_WIDTH, PaperButton, PaperContextMenu, PaperError, PaperContextMenuItem, PaperEmptyState, PaperFlex, PaperIcon, copyText, haptic, PaperMarkdown, useContextMenuState, PaperPresence, PaperProgress, PaperText, showError, type MarkdownImage, type MarkdownLink } from "@mileniumhq/paperui";
 import { createStore, reconcile } from "solid-js/store";
-import { Face } from "../face/Face";
+import { AGENT_FACE_PX, Face } from "../face/Face";
 import { skinFor } from "../face/skins";
 import type { FaceController } from "../face/controller";
 import type { AccessEntry, ChatEntry, PageEntry, PromptEntry, SignInEntry, ToolServerEntry, ToolSignInEntry, WaitingMessage } from "../contract";
@@ -32,8 +32,6 @@ const PAGE_ROWS = 60;
 const MORE_AT_PX = 200;
 /** this close to the end, the chat stays at its end as it grows */
 const END_PX = 48;
-/** the agent's face at the top of the chat */
-const AVATAR_PX = 56;
 
 interface Row {
     key: string;
@@ -290,7 +288,7 @@ export default function Chat(props: { agent: Agent; face: FaceController; pages:
             {/* who this is, in the middle, and tapping their name opens their computer and settings; the conversation's buttons on the right,
                 folded into one menu when the chat is narrow */}
             <div class={styles.header} ref={header}>
-                <Face class={styles.face} face={props.face} size={AVATAR_PX} frame="sphere" hologram skin={skinFor(props.agent.state.settings?.name)} />
+                <Face class={styles.face} face={props.face} size={AGENT_FACE_PX} frame="sphere" hologram skin={skinFor(props.agent.state.settings?.name)} />
                 <div class={styles.who}>
                     <PaperButton variant="text" size="small" class={styles.name} aria-label={`${name()}: computer and settings`} title="Computer and settings" onClick={() => props.onMenu()}>
                         <span class={styles.nameText}>{name()}</span>

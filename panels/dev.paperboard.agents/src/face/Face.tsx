@@ -42,6 +42,9 @@ const spring = (s: Spring, target: readonly number[], k: number, c: number, dt: 
     }
 };
 
+/** the agent's face wherever it is the head of the page: the chat's top, the first meeting */
+export const AGENT_FACE_PX = 56;
+
 export function Face(props: {
     face: FaceController;
     size?: number;
