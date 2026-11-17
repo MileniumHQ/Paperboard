@@ -4,7 +4,7 @@
 // (the model, the computer) lives in the menu and settings.
 
 import { For, Show, createEffect, createSignal, on, onCleanup } from "solid-js";
-import { PaperButton, PaperEffect, PaperIcon, haptic, showError } from "@mileniumhq/paperui";
+import { PaperButton, PaperEffect, PaperIcon, createPaperMobile, haptic, showError } from "@mileniumhq/paperui";
 import { LIMITS, type ChatEntry } from "../contract";
 import type { Agent } from "../lib/agent";
 import type { Tray } from "./tray";
@@ -23,6 +23,8 @@ export default function Composer(props: {
     tray: Tray;
 }) {
     const name = () => props.agent.name();
+    // mobile mode: a phone's keyboard has no Shift+Enter, so Enter breaks the line there
+    const mobile = createPaperMobile();
 
     const [dragging, setDragging] = createSignal(false);
     let field!: HTMLTextAreaElement;
@@ -184,8 +186,9 @@ export default function Composer(props: {
                         attach(files);
                     }}
                     onKeyDown={(e) => {
-                        // Enter breaks the line, like a phone's keyboard; the send button sends, and so does Ctrl or Cmd+Enter
-                        if (e.key === "Enter" && (e.ctrlKey || e.metaKey) && !e.isComposing) {
+                        // on a desktop Enter sends and Shift+Enter breaks the line; on a phone Enter breaks
+                        // the line and the send button sends. Ctrl or Cmd+Enter sends on either
+                        if (e.key === "Enter" && !e.isComposing && (e.ctrlKey || e.metaKey || (!mobile() && !e.shiftKey))) {
                             e.preventDefault();
                             void send();
                         }
