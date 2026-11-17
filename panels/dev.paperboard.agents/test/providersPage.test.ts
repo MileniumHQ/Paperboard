@@ -135,6 +135,7 @@ describe("a provider's sign-in", () => {
         await page.waitFor(regionalKey, "Regional's key field");
         await page.evaluate(fill(regionalKey, "sk-test"));
         await page.waitFor(button("Connect"), "the key typed");
+        expect(await page.evaluate(`${MODAL}.textContent.includes("Use an API key")`), "a provider's only way to connect was headed, over its own field").toBe(false);
         expect(await page.evaluate(`[...${MODAL}.querySelectorAll("label")].some((l) => l.textContent.includes("Endpoint"))`), "a field depending on a default wasn't shown").toBe(true);
         expect(await page.evaluate(`${button("Connect")}.disabled`), "Connect was offered without a needed field").toBe(true);
         expect(page.exceptions).toEqual([]);

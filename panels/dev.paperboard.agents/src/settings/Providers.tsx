@@ -154,9 +154,12 @@ export default function Providers(props: { agent: Agent; open: boolean; onClose:
                                     <For each={p().methods}>
                                         {(m) => (
                                             <PaperFlex gap="half">
-                                                <PaperText preset="section">
-                                                    {m.label}
-                                                </PaperText>
+                                                {/* a heading tells the ways to connect apart; one alone would only repeat its field */}
+                                                <Show when={p().methods.length > 1}>
+                                                    <PaperText preset="section">
+                                                        {m.label}
+                                                    </PaperText>
+                                                </Show>
                                                 <For each={m.fields.filter((f) => shown(f, valuesOf(m)))}>
                                                     {(f) => (
                                                         <Show
