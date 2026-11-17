@@ -77,6 +77,18 @@ test("an open panel shows its update while it installs, and loads again once it 
 
     await push([update("widgets-1", "running")]);
     await page.waitFor(`${updating} && ${rowDisabled}`, "the panel's page to say it is updating, and its row to be disabled");
+    // the panel's name stands a full gap over the bar, not pressed onto it
+    const room = await page.evaluate<{ gap: number; uigap: number }>(`(() => {
+        const bar = ${frame}.parentElement.querySelector("[aria-label^='Updating panel']");
+        const name = bar.closest("[class*='_overlay_']").querySelector("h1");
+        const probe = document.createElement("div");
+        probe.style.height = "var(--paper-uigap)";
+        document.querySelector(".paperui-root").append(probe);
+        const uigap = probe.getBoundingClientRect().height;
+        probe.remove();
+        return { gap: bar.getBoundingClientRect().top - name.getBoundingClientRect().bottom, uigap };
+    })()`);
+    expect(room.gap).toBeGreaterThanOrEqual(room.uigap - 0.5);
 
     await push([update("widgets-1", "done")]);
     await page.waitFor(`!${updating} && ${loaded} && !${frame}.contentWindow.kept`, "the panel's page to load again");

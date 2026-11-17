@@ -30,47 +30,51 @@ export interface LoadingOverlayProps {
 
 // The one loading surface for shell-owned frames: panels and the panel
 // library both sit behind this until their content is loaded and painted.
+// The panel's name stands a full gap over the bar, and goes once the load
+// failed: the failure names the panel itself.
 const LoadingOverlay: Component<LoadingOverlayProps> = (props) => (
     <PaperFlex
         direction="column"
         center
         fullWidth
         fullHeight
-        gap="half"
+        gap="full"
         class={styles.overlay}
     >
-        <Show when={props.heading}>{(heading) => (
+        <Show when={!props.error && props.heading}>{(heading) => (
             <PaperText as="h1" size={props.compact ? 6 : 9} weight={700} class={styles.overlayHeading}>
                 {heading().icon}
                 <span class={styles.overlayName}>{heading().name}</span>
             </PaperText>
         )}</Show>
-        <Show when={!props.error}>
-            <PaperProgress
-                aria-label={props.label ?? "Loading"}
-                value={props.value === undefined ? undefined : props.value * 100}
-                class={styles.overlayProgress}
-            />
-        </Show>
-        <Show when={!props.error && props.title}>
-            <PaperText preset="label">{props.title}</PaperText>
-        </Show>
-        <Show when={props.error}>
-            {(error) => (
-                <div class={styles.overlayError}>
-                    <PaperError
-                        fill
-                        alert
-                        title={props.errorTitle ?? "Couldn't load"}
-                        error={error()}
-                        action={props.onRetry ? { label: props.retryLabel ?? "Reload", onClick: props.onRetry } : undefined}
-                    />
-                </div>
-            )}
-        </Show>
-        <Show when={props.detail}>
-            <PaperText preset="hint">{props.detail}</PaperText>
-        </Show>
+        <PaperFlex direction="column" center fullWidth gap="half">
+            <Show when={!props.error}>
+                <PaperProgress
+                    aria-label={props.label ?? "Loading"}
+                    value={props.value === undefined ? undefined : props.value * 100}
+                    class={styles.overlayProgress}
+                />
+            </Show>
+            <Show when={!props.error && props.title}>
+                <PaperText preset="label">{props.title}</PaperText>
+            </Show>
+            <Show when={props.error}>
+                {(error) => (
+                    <div class={styles.overlayError}>
+                        <PaperError
+                            fill
+                            alert
+                            title={props.errorTitle ?? "Couldn't load"}
+                            error={error()}
+                            action={props.onRetry ? { label: props.retryLabel ?? "Reload", onClick: props.onRetry } : undefined}
+                        />
+                    </div>
+                )}
+            </Show>
+            <Show when={props.detail}>
+                <PaperText preset="hint">{props.detail}</PaperText>
+            </Show>
+        </PaperFlex>
     </PaperFlex>
 );
 

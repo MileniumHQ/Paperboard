@@ -138,5 +138,11 @@ test("a panel whose service can't start shows the service's own reason under the
         `[...document.querySelectorAll("[data-paper-error][role=alert]")].some((a) => a.offsetParent !== null && a.getAttribute("aria-label").startsWith("Couldn't load ") && a.parentElement.nextElementSibling?.innerText === "Its service stopped: the config file is unreadable")`,
         "the service's reason under the panel's failure",
     );
+    // the failure names the panel, so its big name over the loader goes
+    const overlays = await page.evaluate<{ shown: number; named: number }>(`(() => {
+        const shown = [...document.querySelectorAll("[data-paper-error][role=alert]")].filter((a) => a.offsetParent !== null).map((a) => a.closest("[class*='_overlay_']")).filter(Boolean);
+        return { shown: shown.length, named: shown.filter((o) => o.querySelector("h1")).length };
+    })()`);
+    expect(overlays).toEqual({ shown: 1, named: 0 });
     expect(page.exceptions).toEqual([]);
 });

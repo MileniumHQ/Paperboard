@@ -75,7 +75,7 @@
 }
 
 /* the panel's icon centered on its name, and the line no taller than the
-   name, so the bar under it sits close */
+   name, so the overlay's gap is all the room between it and the bar */
 .overlayHeading {
     display: flex;
     align-items: center;
