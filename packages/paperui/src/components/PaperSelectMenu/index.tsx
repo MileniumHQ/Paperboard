@@ -7,6 +7,7 @@ import {
     children,
     splitProps,
     createSignal,
+    createUniqueId,
     createContext,
     useContext,
     onCleanup,
@@ -55,6 +56,8 @@ function useSelectMenu() {
 export type PaperSelectMenuProps = SelectionProviderProps &
     Omit<JSX.HTMLAttributes<HTMLDivElement>, "onChange" | "onInput"> & {
         placeholder?: string;
+        /** The menu's name, in a notch of its border as PaperInput's label: it stays when an option is chosen. */
+        label?: string;
         disabled?: boolean;
         fullWidth?: boolean;
         /** a search field above the options, for long lists; it filters by label, description, value and keywords */
@@ -71,6 +74,7 @@ export function PaperSelectMenu(props: ParentProps<PaperSelectMenuProps>) {
         "defaultValue",
         "onValueChange",
         "placeholder",
+        "label",
         "disabled",
         "fullWidth",
         "searchable",
@@ -94,6 +98,7 @@ export function PaperSelectMenu(props: ParentProps<PaperSelectMenuProps>) {
             <SelectMenuInner
                 {...rest}
                 placeholder={local.placeholder}
+                label={local.label}
                 disabled={local.disabled}
                 fullWidth={local.fullWidth}
                 searchable={local.searchable}
@@ -113,6 +118,7 @@ function SelectMenuInner(
     props: ParentProps<
         JSX.HTMLAttributes<HTMLDivElement> & {
             placeholder?: string;
+            label?: string;
             disabled?: boolean;
             fullWidth?: boolean;
             searchable?: boolean;
@@ -124,6 +130,7 @@ function SelectMenuInner(
 ) {
     const [local, rest] = splitProps(props, [
         "placeholder",
+        "label",
         "disabled",
         "fullWidth",
         "searchable",
@@ -149,6 +156,9 @@ function SelectMenuInner(
     );
     let hiddenInputRef: HTMLInputElement | undefined;
     let triggerEl: HTMLButtonElement | undefined;
+    // a labelled trigger is named by its label, then what it shows
+    const labelId = `paper-select-menu-label-${createUniqueId()}`;
+    const shownId = `paper-select-menu-shown-${createUniqueId()}`;
 
     const menuContext: SelectMenuContextType = {
         register: (option) => {
@@ -240,6 +250,7 @@ function SelectMenuInner(
         cx(
             styles.PaperSelectMenu,
             local.fullWidth ? styles.fullWidth : "",
+            local.label ? styles.labelled : "",
             local.disabled ? styles.disabled : "",
             local.class,
         );
@@ -264,6 +275,18 @@ function SelectMenuInner(
                     />
                 </Show>
 
+                <Show when={local.label}>
+                    {/* the legend cuts the notch in the border; the visible name is the label */}
+                    <fieldset class={styles.outline} aria-hidden="true">
+                        <legend>
+                            <span>{local.label}</span>
+                        </legend>
+                    </fieldset>
+                    <span id={labelId} class={styles.label}>
+                        {local.label}
+                    </span>
+                </Show>
+
                 <button
                     type="button"
                     ref={triggerEl}
@@ -272,8 +295,9 @@ function SelectMenuInner(
                     onClick={() => toggleOpen()}
                     aria-haspopup="listbox"
                     aria-expanded={open()}
+                    aria-labelledby={local.label ? `${labelId} ${shownId}` : undefined}
                 >
-                    <span class={styles.triggerLabel}>
+                    <span id={shownId} class={styles.triggerLabel}>
                         <Show when={selectedIcon()}>
                             {typeof selectedIcon() === "string" ? (
                                 <PaperIcon zeroHeight class={styles.triggerIcon}>

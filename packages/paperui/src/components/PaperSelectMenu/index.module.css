@@ -119,3 +119,76 @@
     font-size: var(--paper-text-size-2);
     color: var(--paper-text-subtle);
 }
+
+/* Labelled: the name sits in a notch of the top border, as PaperInput's
+   does. The fieldset draws the border and fill; its legend reserves the
+   notch, so the gap follows the label's width on any background. */
+.PaperSelectMenu.labelled {
+    --paper-select-menu-label-line: calc(var(--paper-text-size-1) * 1.4);
+    margin-top: calc(var(--paper-select-menu-label-line) / 2);
+}
+.labelled .outline {
+    position: absolute;
+    inset: calc(var(--paper-select-menu-label-line) / -2) 0 0 0;
+    margin: 0;
+    padding: 0 calc(var(--paper-uigap) - var(--paper-uigap-onefourth));
+    border: var(--paper-border-width) solid var(--paper-border);
+    border-radius: var(--paper-border-radius);
+    background: var(--paper-surface-raised);
+    pointer-events: none;
+    min-width: 0;
+    transition: var(--paper-medium-transition) border-color;
+}
+.labelled .outline legend {
+    float: none;
+    width: auto;
+    max-width: 100%;
+    height: var(--paper-select-menu-label-line);
+    padding: 0 var(--paper-uigap-onefourth);
+    font-family: var(--paper-font-family-rounded);
+    font-size: var(--paper-text-size-1);
+    font-weight: 700;
+    line-height: var(--paper-select-menu-label-line);
+    white-space: nowrap;
+    overflow: hidden;
+}
+.labelled .outline legend span {
+    visibility: hidden;
+}
+.labelled .label {
+    position: absolute;
+    top: 0;
+    left: calc(var(--paper-uigap) - var(--paper-uigap-onefourth) + var(--paper-border-width));
+    max-width: calc(100% - var(--paper-uigap) * 2);
+    transform: translateY(-50%);
+    padding: 0 var(--paper-uigap-onefourth);
+    font-family: var(--paper-font-family-rounded);
+    font-size: var(--paper-text-size-1);
+    font-weight: 700;
+    line-height: var(--paper-select-menu-label-line);
+    color: var(--paper-text-faint);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    pointer-events: none;
+    z-index: 1;
+    transition: var(--paper-medium-transition) color;
+}
+.labelled .trigger {
+    position: relative;
+    background: transparent;
+    border-color: transparent;
+}
+.labelled:focus-within .outline,
+.labelled:has([aria-expanded="true"]) .outline {
+    border-color: var(--paper-primary);
+    border-width: var(--paper-thick-border-width);
+}
+.labelled:focus-within .label,
+.labelled:has([aria-expanded="true"]) .label {
+    color: var(--paper-primary);
+}
+.labelled.disabled .outline,
+.labelled.disabled .label {
+    opacity: 0.45;
+}

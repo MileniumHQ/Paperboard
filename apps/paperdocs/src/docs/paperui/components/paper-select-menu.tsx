@@ -94,6 +94,12 @@ export function Example() {
                         <td>Called with the option's <PaperCode>value</PaperCode> when the user picks one, including the one already chosen.</td>
                     </tr>
                     <tr>
+                        <td><PaperCode>label</PaperCode></td>
+                        <td><PaperCode>string</PaperCode></td>
+                        <td>No default</td>
+                        <td>The menu's name, in a notch of its top border as on <PaperLink href="/docs/paperui/paperinput/">PaperInput</PaperLink>. It stays once an option is chosen, and names the trigger with what it shows.</td>
+                    </tr>
+                    <tr>
                         <td><PaperCode>placeholder</PaperCode></td>
                         <td><PaperCode>string</PaperCode></td>
                         <td>"Select" and an ellipsis</td>
@@ -201,6 +207,7 @@ export function Example() {
             <PaperText preset="subheader" as="h3" id="opening">Opening and choosing</PaperText>
             <PaperTextList>
                 <li>The trigger is a button with <PaperCode>aria-haspopup="listbox"</PaperCode> and <PaperCode>aria-expanded</PaperCode>. It shows the chosen option's icon and label, the placeholder, or, for a value with no matching option, the value as text.</li>
+                <li>With a <PaperCode>label</PaperCode>, the trigger's accessible name is the label followed by what it shows, like "Region EU". Without one, give the menu an <PaperCode>aria-label</PaperCode>.</li>
                 <li>The list opens below the trigger, at least as wide as the trigger, in a portal so no clipping parent cuts it off. It has <PaperCode>role="listbox"</PaperCode>, and each option <PaperCode>role="option"</PaperCode> with <PaperCode>aria-selected</PaperCode>.</li>
                 <li>Options stay in the page while the list is closed, so the trigger can show the chosen option's label before the first open. An option added later, or one whose <PaperCode>value</PaperCode> changes, labels the trigger under its current value.</li>
                 <li>In a <PaperLink href="/docs/paperui/papersettinglist/">PaperSettingList</PaperLink>, a named menu without <PaperCode>value</PaperCode> takes its value from the list's record.</li>
@@ -258,7 +265,8 @@ export function Example() {
                 <PaperSelectMenu
                     name="docs-provider"
                     searchable
-                    placeholder="Provider"
+                    label="Provider"
+                    fullWidth
                     value={provider()}
                     onValueChange={setProvider}
                 >
@@ -278,7 +286,8 @@ export function Provider() {
         <PaperSelectMenu
             name="docs-provider"
             searchable
-            placeholder="Provider"
+            label="Provider"
+            fullWidth
             value={provider()}
             onValueChange={setProvider}
         >

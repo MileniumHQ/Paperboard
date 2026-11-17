@@ -366,6 +366,12 @@ const scenarios: Record<string, () => JSX.Element> = {
                         <PaperSelectMenuItem value="l">Large</PaperSelectMenuItem>
                     </PaperSelectMenu>
                 </div>
+                <div id="labelled">
+                    <PaperSelectMenu name="region" label="Region" fullWidth>
+                        <PaperSelectMenuItem value="eu">EU</PaperSelectMenuItem>
+                        <PaperSelectMenuItem value="us">US</PaperSelectMenuItem>
+                    </PaperSelectMenu>
+                </div>
                 <div id="late">
                     <PaperSelectMenu name="late" value="x">
                         <PaperSelectMenuItem value="w">Double-u</PaperSelectMenuItem>

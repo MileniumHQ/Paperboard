@@ -40,6 +40,23 @@ describe("PaperSelectMenu", () => {
         expect(await triggerText("free")).toContain("Banana");
     });
 
+    test("a labelled menu keeps its name in the border's notch, and names its trigger by it, before and after a choice", async () => {
+        page = await browser.open("selectMenu");
+        const name = () => page.eval<string>(`(() => { const b = document.querySelector('${trigger("labelled")}'); return (b.getAttribute("aria-labelledby") ?? "").split(" ").map((id) => document.getElementById(id)?.textContent.trim()).join(" "); })()`);
+        // the label sits on the trigger's top edge, inside the menu's width, and is shown
+        const onTheBorder = `(() => { const l = [...document.querySelectorAll('#labelled span')].find((s) => s.textContent.trim() === "Region" && s.checkVisibility()); if (!l) return false;
+            const r = l.getBoundingClientRect(), t = document.querySelector('${trigger("labelled")}').getBoundingClientRect();
+            return r.top < t.top && r.bottom > t.top && r.left > t.left && r.right < t.right; })()`;
+        expect(await page.eval(onTheBorder)).toBe(true);
+        expect(await name()).toBe("Region Select…");
+
+        await openMenu("labelled", "us");
+        await page.click(option("us"));
+        expect(await triggerText("labelled")).toContain("US");
+        expect(await page.eval(onTheBorder)).toBe(true);
+        expect(await name()).toBe("Region US");
+    });
+
     test("a controlled menu changes only when its value does", async () => {
         page = await browser.open("selectMenu");
         expect(await triggerText("controlled")).toContain("Small");
