@@ -178,3 +178,31 @@ test("an update that failed says why in its dialog, never only in a toast", asyn
     await page.waitFor(`!${dialog}`, "the dialog closed");
     expect(page.exceptions).toEqual([]);
 });
+
+// Inventory: Updates — Paperboard's own download is the top bar's to show; its dialog is for what needs a choice.
+test("a download in progress has no dialog, and a new attempt closes a failure's", async () => {
+    const { page } = shell;
+    await page.click("[role=radio][aria-label='Home']");
+    const railAction = `document.querySelector("button[aria-label^='Paperboard update']")`;
+    const dialog = `[...document.querySelectorAll("[role=dialog]")].find((d) => d.innerText.includes("Paperboard update"))`;
+    const appUpdate = (revision: number, status: string) =>
+        shell.host({
+            cmd: "push",
+            channel: "app-update-state",
+            payload: { revision, status, installMode: "automatic", version: "1.5.0", percent: status === "downloading" ? 40 : null, error: status === "failed" ? "The update server closed the connection" : null },
+        });
+
+    await appUpdate(2000, "downloading");
+    await page.waitFor(`!${dialog} && !${railAction}`, "no dialog and no rail button while it downloads");
+    await appUpdate(2001, "failed");
+    await page.waitFor(`!!${dialog} && !!${railAction}`, "the failure's dialog, and the rail's way back to it");
+    await appUpdate(2002, "downloading");
+    await page.waitFor(`!${dialog} && !${railAction}`, "the failure's dialog closed once a new attempt downloads");
+    await appUpdate(2003, "ready");
+    await page.waitFor(`!!${railAction}`, "the rail's update button back once the download is ready");
+    await page.click("button[aria-label^='Paperboard update']");
+    await page.waitFor(`!!${dialog} && ${dialog}.innerText.includes("Version 1.5.0 is downloaded")`, "the ready dialog");
+    await clickText(page, "button", "Later");
+    await page.waitFor(`!${dialog}`, "the dialog closed");
+    expect(page.exceptions).toEqual([]);
+});

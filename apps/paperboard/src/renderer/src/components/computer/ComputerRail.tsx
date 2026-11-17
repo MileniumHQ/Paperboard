@@ -76,7 +76,7 @@ const ComputerRail = (props: ComputerRailProps): JSX.Element => {
                 label="Settings"
                 class={styles.foot}
             />
-            <Show when={props.showUpdate && ["downloading", "ready", "failed", "manual"].includes(props.updateState?.status ?? "")}>
+            <Show when={props.showUpdate && ["ready", "failed", "manual"].includes(props.updateState?.status ?? "")}>
                 <PaperRailAction
                     icon="browser_updated"
                     class={`${styles.updateAction} ${props.updateState?.status === "failed" ? styles.updateFailed : styles.updateAvailable}`}
