@@ -10,6 +10,8 @@ import {
     PaperLink,
     PaperList,
     PaperListItem,
+    PaperMediaCard,
+    PaperMediaCardGroup,
     PaperText,
 } from "@mileniumhq/paperui";
 import type { AddonHit, AddonKind, AddonListing, InstalledAddon } from "../../lib/addons/kind";
@@ -132,7 +134,7 @@ export function AddonSearchCard<Meta>(props: { kind: AddonKind<Meta>; search: Re
     );
 }
 
-/** The list of projects a search found. */
+/** The cards of the projects a search found. */
 export function AddonResults<Meta>(props: {
     kind: AddonKind<Meta>;
     search: ReturnType<typeof createAddonSearch>;
@@ -163,33 +165,28 @@ export function AddonResults<Meta>(props: {
                             </PaperFlex>
                         }
                     >
-                        <PaperList
-                            name="addon-results"
-                            value=""
-                            onValueChange={(projectId) => {
-                                const hit = hits().find((candidate) => candidate.projectId === projectId);
-                                if (hit) props.onOpen(hit);
-                            }}
-                            buttons
-                            fullWidth
-                        >
+                        <PaperMediaCardGroup minCardWidth="card-min">
                             <For each={hits()}>
                                 {(hit) => (
-                                    <PaperListItem
-                                        value={hit.projectId}
+                                    <PaperMediaCard
                                         icon={<PictureAvatar from={props.kind.source.pictures} url={hit.iconUrl} shape="square" size="large" fallbackIcon={props.kind.glyph} />}
-                                        description={[truncate(hit.description, 110), hit.stat].filter(Boolean).join(" · ")}
-                                        actions={
-                                            <Show when={props.installedProjects.has(hit.projectId)}>
+                                        title={hit.title}
+                                        subtitle={truncate(hit.description, 110)}
+                                        badge={
+                                            props.installedProjects.has(hit.projectId) ? (
                                                 <PaperBadge variant="success">{props.kind.resultBadge}</PaperBadge>
-                                            </Show>
+                                            ) : undefined
                                         }
-                                    >
-                                        {hit.title}
-                                    </PaperListItem>
+                                        footerLeft={
+                                            <PaperText size={2} color="text-subtle">
+                                                {hit.stat}
+                                            </PaperText>
+                                        }
+                                        onClick={() => props.onOpen(hit)}
+                                    />
                                 )}
                             </For>
-                        </PaperList>
+                        </PaperMediaCardGroup>
                     </Show>
                 )}
             </Show>

@@ -1,5 +1,6 @@
 import { createMemo, createSignal, For, Index, Show, type JSX } from "solid-js";
 import {
+    PaperCard,
     PaperChip,
     PaperFlex,
     PaperInput,
@@ -92,62 +93,64 @@ export default function PlayerRoster<T extends { name: string }>(props: {
                                 </Index>
                             </PaperFlex>
                         </PaperFlex>
-                        <Show
-                            when={any()}
-                            fallback={
-                                <PaperFlex padding="full" center>
-                                    <PaperText size={3}>{props.total > 0 ? "No players match these filters." : "No players yet. Players who join show up here."}</PaperText>
-                                </PaperFlex>
-                            }
-                        >
-                            <PaperList
-                                name="playersList"
-                                value={compact() ? undefined : props.open}
-                                onValueChange={(val) => props.onOpen(String(val))}
-                                fullWidth
-                                flex={1}
-                                scrollable
+                        <PaperCard flex={any() || undefined} minHeight={0} fullWidth>
+                            <Show
+                                when={any()}
+                                fallback={
+                                    <PaperFlex padding="full" center>
+                                        <PaperText size={3}>{props.total > 0 ? "No players match these filters." : "No players yet. Players who join show up here."}</PaperText>
+                                    </PaperFlex>
+                                }
                             >
-                                <Index each={props.sections}>
-                                    {(section) => (
-                                        <Show when={section().players.length > 0}>
-                                            <PaperListLabel as="h3">{section().label} ({section().players.length})</PaperListLabel>
-                                            <For each={section().players}>
-                                                {(player) => (
-                                                    <PaperListItem
-                                                        value={player.name}
-                                                        onClick={(e) => {
-                                                            // compact: the roster sits behind the detail modal and its
-                                                            // selection cannot be seen or re-triggered, so suppress the
-                                                            // hidden radio — a re-click then opens instead of toggling a
-                                                            // selection nobody can see.
-                                                            if (compact()) e.preventDefault();
-                                                            props.onOpen(player.name);
-                                                            setDetailOpen(true);
-                                                        }}
-                                                        icon={props.icon(player)}
-                                                        description={
-                                                            // one line, so a row with every badge stands as tall as the rest
-                                                            <PaperText as="div" truncate size={1} weight={600}>
-                                                                {props.description(player)}
-                                                            </PaperText>
-                                                        }
-                                                        actions={
-                                                            <PaperFlex direction="row" gap="onefourth" align="center">
-                                                                {props.badges?.(player)}
-                                                                <PaperSwatch color={props.status(player)} size="small" />
-                                                            </PaperFlex>
-                                                        }
-                                                    >
-                                                        {player.name}
-                                                    </PaperListItem>
-                                                )}
-                                            </For>
-                                        </Show>
-                                    )}
-                                </Index>
-                            </PaperList>
-                        </Show>
+                                <PaperList
+                                    name="playersList"
+                                    value={compact() ? undefined : props.open}
+                                    onValueChange={(val) => props.onOpen(String(val))}
+                                    fullWidth
+                                    flex={1}
+                                    scrollable
+                                >
+                                    <Index each={props.sections}>
+                                        {(section) => (
+                                            <Show when={section().players.length > 0}>
+                                                <PaperListLabel as="h3">{section().label} ({section().players.length})</PaperListLabel>
+                                                <For each={section().players}>
+                                                    {(player) => (
+                                                        <PaperListItem
+                                                            value={player.name}
+                                                            onClick={(e) => {
+                                                                // compact: the roster sits behind the detail modal and its
+                                                                // selection cannot be seen or re-triggered, so suppress the
+                                                                // hidden radio — a re-click then opens instead of toggling a
+                                                                // selection nobody can see.
+                                                                if (compact()) e.preventDefault();
+                                                                props.onOpen(player.name);
+                                                                setDetailOpen(true);
+                                                            }}
+                                                            icon={props.icon(player)}
+                                                            description={
+                                                                // one line, so a row with every badge stands as tall as the rest
+                                                                <PaperText as="div" truncate size={1} weight={600}>
+                                                                    {props.description(player)}
+                                                                </PaperText>
+                                                            }
+                                                            actions={
+                                                                <PaperFlex direction="row" gap="onefourth" align="center">
+                                                                    {props.badges?.(player)}
+                                                                    <PaperSwatch color={props.status(player)} size="small" />
+                                                                </PaperFlex>
+                                                            }
+                                                        >
+                                                            {player.name}
+                                                        </PaperListItem>
+                                                    )}
+                                                </For>
+                                            </Show>
+                                        )}
+                                    </Index>
+                                </PaperList>
+                            </Show>
+                        </PaperCard>
                     </PaperFlex>
                 }
             >

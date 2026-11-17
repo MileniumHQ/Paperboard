@@ -223,8 +223,10 @@ describe("a tModLoader server's Mods tab", () => {
             await openTab(page, "mods");
             await page.waitFor(`${row("addon-installed", "HandMade.tmod")}?.parentElement.textContent.includes("Hand Made")`, "the mod put in by hand");
             await page.type(`input[placeholder="Mod"]`, "wing", true);
-            await page.waitFor(`${row("addon-results", WING_SLOT)}?.parentElement.textContent.includes("Wing Slot")`, "the Workshop's answer");
-            await page.evaluate(`${row("addon-results", WING_SLOT)}.click()`);
+            // the Workshop's answer is a card for the mod
+            const wingCard = `[...document.querySelectorAll('[class*="_card_"]')].find((card) => card.querySelector('[class*="_headerRow_"]')?.textContent.includes("Wing Slot"))`;
+            await page.waitFor(wingCard, "the Workshop's answer");
+            await page.evaluate(`${wingCard}.click()`);
             await page.waitFor(`${button("Install", DIALOG)}`, "Wing Slot's page");
             await page.evaluate(`${button("Install", DIALOG)}.click()`);
             await page.waitFor(`${DIALOG}?.innerText.includes("Install Wing Slot") && ${button("Install", DIALOG)}`, "the install dialog, ready");

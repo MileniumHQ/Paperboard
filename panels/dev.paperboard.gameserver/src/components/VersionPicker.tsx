@@ -1,6 +1,7 @@
 import { createEffect, createSignal, For, Show, untrack, on, batch } from "solid-js";
 import { useServer } from "../lib/server";
 import {
+    PaperCard,
     PaperCheckbox,
     PaperError,
     PaperFlex,
@@ -90,6 +91,11 @@ export default function VersionPicker(props: {
             minWidth={0}
             minHeight={0}
         >
+            <PaperQuote variant="warning" icon="info" title="Compatibility">
+                Paperboard works best on the latest Minecraft version. Full
+                feature support for older versions may vary.
+            </PaperQuote>
+
             <PaperInput
                 fullWidth
                 icon="search"
@@ -98,22 +104,24 @@ export default function VersionPicker(props: {
                 onInput={(e) => setSearchQuery(e.currentTarget.value)}
             />
 
-            <PaperFlex direction="row" wrap gap="full" shrink={false}>
-                <PaperCheckbox
-                    checked={includeReleases()}
-                    onChange={setIncludeReleases}
-                    disabled={loading() || !allVersions().some((v) => v.type === "release")}
-                    label="Releases"
-                />
-                <PaperCheckbox
-                    checked={includeSnapshots()}
-                    onChange={setIncludeSnapshots}
-                    disabled={loading() || !allVersions().some((v) => v.type === "snapshot")}
-                    label="Snapshots"
-                />
-            </PaperFlex>
+            <PaperCard>
+                <PaperFlex direction="row" wrap gap="full" padding="full" shrink={false}>
+                    <PaperCheckbox
+                        checked={includeReleases()}
+                        onChange={setIncludeReleases}
+                        disabled={loading() || !allVersions().some((v) => v.type === "release")}
+                        label="Releases"
+                    />
+                    <PaperCheckbox
+                        checked={includeSnapshots()}
+                        onChange={setIncludeSnapshots}
+                        disabled={loading() || !allVersions().some((v) => v.type === "snapshot")}
+                        label="Snapshots"
+                    />
+                </PaperFlex>
+            </PaperCard>
 
-            <PaperFlex direction="column" grow minHeight={0}>
+            <PaperCard flex minHeight={0} fullWidth>
                 <Show
                     when={!loading()}
                     fallback={
@@ -166,12 +174,7 @@ export default function VersionPicker(props: {
                         </PaperList>
                     </Show>
                 </Show>
-            </PaperFlex>
-
-            <PaperQuote variant="warning" icon="info" title="Compatibility">
-                Paperboard works best on the latest Minecraft version. Full
-                feature support for older versions may vary.
-            </PaperQuote>
+            </PaperCard>
         </PaperFlex>
     );
 }
