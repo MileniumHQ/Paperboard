@@ -6,7 +6,7 @@
 // The screenshots are from discord.py's documentation (MIT); see
 // assets/portal/CREDITS.md.
 import type { JSX } from "solid-js";
-import { PaperButton, PaperFlex, PaperIcon, PaperText, PaperWizard, PaperWizardStep } from "@mileniumhq/paperui";
+import { PaperButton, PaperCenteredInterface, PaperFlex, PaperIcon, PaperText, PaperWizard, PaperWizardStep } from "@mileniumhq/paperui";
 import createApplication from "../assets/portal/1-create-application.webp";
 import botTab from "../assets/portal/2-bot-tab.webp";
 import resetToken from "../assets/portal/3-reset-token.webp";
@@ -16,14 +16,16 @@ import styles from "./SetupGuide.module.css";
 
 function Step(props: { title: string; shot: string; alt: string; children: JSX.Element; action?: JSX.Element }) {
     return (
-        <PaperFlex direction="column" gap="full" padding="double" fullWidth fullHeight align="center">
-            <PaperFlex direction="column" gap="half" fullWidth>
-                <PaperText preset="title" as="h2">{props.title}</PaperText>
-                <PaperText preset="body">{props.children}</PaperText>
-                {props.action}
+        <PaperCenteredInterface size="large">
+            <PaperFlex direction="column" gap="full" fullWidth align="center">
+                <PaperFlex direction="column" gap="half" fullWidth>
+                    <PaperText preset="title">{props.title}</PaperText>
+                    <PaperText preset="body">{props.children}</PaperText>
+                    {props.action}
+                </PaperFlex>
+                <img class={styles.shot} src={props.shot} alt={props.alt} />
             </PaperFlex>
-            <img class={styles.shot} src={props.shot} alt={props.alt} />
-        </PaperFlex>
+        </PaperCenteredInterface>
     );
 }
 
@@ -39,8 +41,8 @@ export default function SetupGuide(props: {
     );
     return (
         <PaperFlex direction="column" fullWidth fullHeight>
-            <PaperFlex direction="row" align="center" justify="space-between" gap="half" paddingX="double" paddingY="half" fullWidth>
-                <PaperText preset="subheader" as="h1">Set up your first bot</PaperText>
+            <PaperFlex direction="row" align="center" justify="space-between" gap="half" paddingX="double" paddingY="full" fullWidth>
+                <PaperText preset="subheader">Set up your first bot</PaperText>
                 <PaperButton variant="text" size="small" onClick={props.onSkip}>Skip</PaperButton>
             </PaperFlex>
             <PaperFlex flex minHeight={0} fullWidth>
@@ -78,13 +80,15 @@ export default function SetupGuide(props: {
                         </Step>
                     </PaperWizardStep>
                     <PaperWizardStep index={4} canProceed={Boolean(appId()) && !busy()}>
-                        <PaperFlex direction="column" gap="full" padding="double" fullWidth fullHeight>
-                            <PaperFlex direction="column" gap="half" fullWidth>
-                                <PaperText preset="title" as="h2">Paste the token</PaperText>
-                                <PaperText preset="body">It's kept in Paperboard's vault, not in the bot's files.</PaperText>
+                        <PaperCenteredInterface size="large">
+                            <PaperFlex direction="column" gap="full" fullWidth>
+                                <PaperFlex direction="column" gap="half" fullWidth>
+                                    <PaperText preset="title">Paste the token</PaperText>
+                                    <PaperText preset="body">It's kept in Paperboard's vault, not in the bot's files.</PaperText>
+                                </PaperFlex>
+                                <TokenField value={token()} onInput={setToken} appId={appId()} error={error()} />
                             </PaperFlex>
-                            <TokenField value={token()} onInput={setToken} appId={appId()} error={error()} />
-                        </PaperFlex>
+                        </PaperCenteredInterface>
                     </PaperWizardStep>
                 </PaperWizard>
             </PaperFlex>
