@@ -40,8 +40,9 @@ const LoadingOverlay: Component<LoadingOverlayProps> = (props) => (
         class={styles.overlay}
     >
         <Show when={props.heading}>{(heading) => (
-            <PaperText as="h1" size={props.compact ? 6 : 9} weight={700} truncate class={styles.overlayHeading}>
-                {heading().icon} {heading().name}
+            <PaperText as="h1" size={props.compact ? 6 : 9} weight={700} class={styles.overlayHeading}>
+                {heading().icon}
+                <span class={styles.overlayName}>{heading().name}</span>
             </PaperText>
         )}</Show>
         <Show when={!props.error}>

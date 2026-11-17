@@ -74,7 +74,21 @@
     width: 100%;
 }
 
-/* a long panel name ends in an ellipsis instead of leaving the overlay */
+/* the panel's icon centered on its name, and the line no taller than the
+   name, so the bar under it sits close */
 .overlayHeading {
+    display: flex;
+    align-items: center;
+    gap: var(--paper-uigap-half);
     max-width: 100%;
+    margin: 0;
+    line-height: 1;
+}
+
+/* a long panel name ends in an ellipsis instead of leaving the overlay */
+.overlayName {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
