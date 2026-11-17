@@ -89,6 +89,17 @@ describe("OpenCode's provider server", () => {
         expect(host.kills.map((k) => k.signal)).toEqual(["SIGTERM", "SIGKILL"]);
     }, SLOW);
 
+    test("a server left by the service's last run (its password gone with it) is replaced, not refused", async () => {
+        const { root, host, providers } = rig();
+        await providers.list();
+        // the panel restarted: a new service, the old one's server still up on the host
+        const again = new Providers({ host: { ...host, packages: packageHost({}) } as never, program: () => brainProgram(root, "opencode"), env: () => ({}), cwd: root, onChange: async () => undefined });
+        cleanups.push(() => again.stop());
+        expect((await again.list()).length).toBeGreaterThan(0);
+        expect(host.startedAs(SERVER_PROCESS_ID)).toHaveLength(2);
+        expect(host.kills.map((k) => k.signal)).toEqual(["SIGTERM"]);
+    }, SLOW);
+
     test("each start's listeners go when its server stops", async () => {
         const { host, providers } = rig();
         for (let i = 0; i < 3; i++) {

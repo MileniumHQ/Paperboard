@@ -170,6 +170,9 @@ export class Providers {
         let stderr = "";
         let died: string | null = null;
         this.unsubscribe();
+        // one still up from before (the service restarted, or an idle stop still under way) answers to a password
+        // this run doesn't have: it goes first, before this start listens for an exit
+        await stopProcess(SERVER_PROCESS_ID, { host: this.deps.host });
         this.offs = [
             this.deps.host.onStderr(SERVER_PROCESS_ID, (d) => (stderr = (stderr + d).slice(-2000))),
             this.deps.host.onExit(SERVER_PROCESS_ID, (code) => {
