@@ -60,6 +60,12 @@ const openTab = async (page: Page, id: string, shows: string) => {
 };
 /** the nearest PaperCard around `selector`'s element, as a page expression */
 const cardAround = (selector: string) => `document.querySelector(${JSON.stringify(selector)})?.closest('[class*="PaperCard"]')`;
+/** the empty room under a card's last row: none, when its list is shorter than the page */
+const roomUnderRows = (name: string) => `(() => {
+    const rows = [...document.querySelectorAll("input[name=${name}]")].map((i) => i.closest("label"));
+    const card = rows[0].closest('[class*="PaperCard"]');
+    return card.getBoundingClientRect().bottom - rows[rows.length - 1].getBoundingClientRect().bottom;
+})()`;
 /** with PAPERBOARD_SHOTS set: the page as a person sees it, light and dark, on a desktop and on a phone */
 const shot = async (page: Page, name: string) => {
     if (!SHOTS) return;
@@ -92,6 +98,8 @@ describe("the version list", () => {
             expect(await page.evaluate<boolean>(`(() => { const c = [...document.querySelectorAll("*")].find((e) => e.children.length === 0 && e.textContent === "Releases")?.closest('[class*="PaperCard"]'); return !!c && c.innerText.includes("Snapshots") && c !== ${list} && !c.querySelector("input[name=minecraftVersion]"); })()`)).toBe(true);
             // the notice is read before the list
             expect(await page.evaluate<boolean>(`(() => { const notice = [...document.querySelectorAll("*")].filter((e) => e.children.length === 0 || e.innerText).find((e) => e.innerText?.startsWith("Compatibility") && e.innerText.length < 200); const input = document.querySelector("input[name=minecraftVersion]"); return !!notice && !!(notice.compareDocumentPosition(input) & Node.DOCUMENT_POSITION_FOLLOWING); })()`)).toBe(true);
+            // a short list leaves no empty card under its last row
+            expect(await page.evaluate<number>(roomUnderRows("minecraftVersion"))).toBeLessThanOrEqual(4);
             await shot(page, "versions");
             expect(page.exceptions).toEqual([]);
         } finally {
@@ -111,6 +119,7 @@ describe("the player roster", () => {
             expect(await page.evaluate<boolean>(`!!${cardAround("input[name=playersList]")}`)).toBe(true);
             // the detail side stays as it was: no card around "Select a player"
             expect(await page.evaluate<boolean>(`!document.querySelector("input[name=playersList]").closest('[class*="PaperCard"]')?.innerText.includes("Select a player")`)).toBe(true);
+            expect(await page.evaluate<number>(roomUnderRows("playersList"))).toBeLessThanOrEqual(4);
             await shot(page, "players");
         } finally {
             await page.close();

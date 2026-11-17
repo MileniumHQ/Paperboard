@@ -121,7 +121,7 @@ export default function VersionPicker(props: {
                 </PaperFlex>
             </PaperCard>
 
-            <PaperCard flex minHeight={0} fullWidth>
+            <PaperCard shrink minHeight={0} fullWidth>
                 <Show
                     when={!loading()}
                     fallback={

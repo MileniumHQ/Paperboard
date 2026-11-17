@@ -93,7 +93,7 @@ export default function PlayerRoster<T extends { name: string }>(props: {
                                 </Index>
                             </PaperFlex>
                         </PaperFlex>
-                        <PaperCard flex={any() || undefined} minHeight={0} fullWidth>
+                        <PaperCard shrink minHeight={0} fullWidth>
                             <Show
                                 when={any()}
                                 fallback={
