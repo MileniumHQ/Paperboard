@@ -145,26 +145,30 @@ export function overlayJs(o: {
   const palette = ['#e63946', '#1d78dc', '#229650', '#c86e00', '#8c3cc8'];
   const s = o.grid ? o.grid.scale : 1;
   const font = (px) => 'font:bold ' + (px / s) + 'px/1 sans-serif;';
-  let html = '';
+  // elements, not an HTML string: pages that enforce Trusted Types (Google sign-in) reject innerHTML
+  const add = (css, text) => {
+    const el = document.createElement('div');
+    el.style.cssText = 'position:absolute;' + css;
+    if (text !== undefined) el.textContent = text;
+    root.appendChild(el);
+  };
   if (o.grid) {
     const g = o.grid;
     for (let gx = Math.ceil(g.x / g.step) * g.step; gx < g.x + g.w; gx += g.step) {
-      html += '<div style="position:absolute;left:' + gx + 'px;top:' + g.y + 'px;width:' + (1 / s) + 'px;height:' + g.h + 'px;background:rgba(255,0,140,.45)"></div>';
-      if ((gx - g.x) * s >= 30) html += '<div style="position:absolute;left:' + (gx + 1 / s) + 'px;top:' + g.y + 'px;padding:0 ' + (2 / s) + 'px;background:rgba(255,255,255,.85);color:#c8006e;' + font(12) + '">' + gx + '</div>';
+      add('left:' + gx + 'px;top:' + g.y + 'px;width:' + (1 / s) + 'px;height:' + g.h + 'px;background:rgba(255,0,140,.45)');
+      if ((gx - g.x) * s >= 30) add('left:' + (gx + 1 / s) + 'px;top:' + g.y + 'px;padding:0 ' + (2 / s) + 'px;background:rgba(255,255,255,.85);color:#c8006e;' + font(12), String(gx));
     }
     for (let gy = Math.ceil(g.y / g.step) * g.step; gy < g.y + g.h; gy += g.step) {
-      html += '<div style="position:absolute;left:' + g.x + 'px;top:' + gy + 'px;width:' + g.w + 'px;height:' + (1 / s) + 'px;background:rgba(255,0,140,.45)"></div>';
-      html += '<div style="position:absolute;left:' + g.x + 'px;top:' + (gy + 1 / s) + 'px;padding:0 ' + (2 / s) + 'px;background:rgba(255,255,255,.85);color:#c8006e;' + font(12) + '">' + gy + '</div>';
+      add('left:' + g.x + 'px;top:' + gy + 'px;width:' + g.w + 'px;height:' + (1 / s) + 'px;background:rgba(255,0,140,.45)');
+      add('left:' + g.x + 'px;top:' + (gy + 1 / s) + 'px;padding:0 ' + (2 / s) + 'px;background:rgba(255,255,255,.85);color:#c8006e;' + font(12), String(gy));
     }
   }
   o.boxes.forEach((b, i) => {
     const c = o.color === 'blue' ? '#1d78dc' : palette[i % palette.length];
-    const label = String(b.label).replace(/[<&]/g, '');
     const above = b.y >= 16 / s;
-    html += '<div style="position:absolute;left:' + b.x + 'px;top:' + b.y + 'px;width:' + b.w + 'px;height:' + b.h + 'px;box-sizing:border-box;border:' + (2 / s) + 'px solid ' + c + '"></div>';
-    html += '<div style="position:absolute;left:' + Math.max(0, b.x - 1) + 'px;top:' + (above ? b.y - 16 / s : b.y) + 'px;height:' + (16 / s) + 'px;padding:' + (2 / s) + 'px ' + (3 / s) + 'px;box-sizing:border-box;background:' + c + ';color:#fff;' + font(12) + '">' + label + '</div>';
+    add('left:' + b.x + 'px;top:' + b.y + 'px;width:' + b.w + 'px;height:' + b.h + 'px;box-sizing:border-box;border:' + (2 / s) + 'px solid ' + c);
+    add('left:' + Math.max(0, b.x - 1) + 'px;top:' + (above ? b.y - 16 / s : b.y) + 'px;height:' + (16 / s) + 'px;padding:' + (2 / s) + 'px ' + (3 / s) + 'px;box-sizing:border-box;background:' + c + ';color:#fff;' + font(12), String(b.label));
   });
-  root.innerHTML = html;
   (document.body || document.documentElement).appendChild(host);
   return true;
 })()`;
