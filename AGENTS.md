@@ -2,6 +2,8 @@
 
 Hi agents, Pxl here! I'm the dev you're probably working with.
 
+**Thoroughly test everything and study it to ensure it looks good, works well, and has the cleanest code before it ships. Do not leave a part of the codebase untested.**
+
 Paperboard is a dashboard for self-hostable programs. Panels are like the apps. Here's some rules:
 
 - **Optimize for a thousand panels:** Never hard code a function for a single panel or create a global API that has an extremely narrow use case. Paperboard should work the same for any panel, as it's an SDK at heart. There are a few exceptions in the codebase for this, but don't write them in yourself.
