@@ -343,8 +343,9 @@ export default function App() {
                 direction={vertical() ? "row" : "column"}
             >
                 <Show when={tabs().length > 0}>
-                    {/* the buttons after the tabs stay where they are while the tabs scroll */}
-                    <PaperFlex direction={vertical() ? "column" : "row"} align={vertical() ? undefined : "center"} fullHeight={vertical()} minWidth={0} minHeight={0}>
+                    {/* the buttons after the tabs stay where they are while the tabs scroll,
+                        on the tab strip's own surface so the bar reads as one */}
+                    <PaperFlex direction={vertical() ? "column" : "row"} align={vertical() ? undefined : "center"} fullHeight={vertical()} minWidth={0} minHeight={0} background="surface-inset">
                         <PaperFlex flex minWidth={0} minHeight={0}>
                             <TabBar
                                 tabs={tabs()}
