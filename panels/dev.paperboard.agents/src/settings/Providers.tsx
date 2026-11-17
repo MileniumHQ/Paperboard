@@ -119,7 +119,7 @@ export default function Providers(props: { agent: Agent; open: boolean; onClose:
                         <Show when={providers.error()}>
                             {(err) => <PaperError title="Couldn't list the providers" error={err()} action={{ label: "Try again", disabled: providers.loading(), onClick: () => void refetch() }} />}
                         </Show>
-                        <PaperSelectMenu name="provider" aria-label="Provider" placeholder="Provider" fullWidth searchable value={selected()} onValueChange={(v) => setSelected(String(v))}>
+                        <PaperSelectMenu name="provider" label="Provider" fullWidth searchable value={selected()} onValueChange={(v) => setSelected(String(v))}>
                             <For each={providers.value() ?? []}>
                                 {(p) => (
                                     <PaperSelectMenuItem value={p.id} icon={p.connected ? "check_circle" : undefined} description={p.connected ? "Connected" : (p.unsupported ?? undefined)}>
@@ -176,8 +176,7 @@ export default function Providers(props: { agent: Agent; open: boolean; onClose:
                                                             {(options) => (
                                                                 <PaperSelectMenu
                                                                     name={f.key}
-                                                                    aria-label={f.title}
-                                                                    placeholder={f.title}
+                                                                    label={f.title}
                                                                     fullWidth
                                                                     value={valuesOf(m)[f.key] || undefined}
                                                                     onValueChange={(v) => setAnswers({ ...answers(), [f.key]: String(v) })}

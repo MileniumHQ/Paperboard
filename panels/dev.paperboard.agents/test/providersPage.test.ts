@@ -50,7 +50,8 @@ const button = (text: string) => `[...(${MODAL}?.querySelectorAll("button") ?? [
 const shows = (text: string) => `Boolean(${MODAL}?.innerText.includes(${JSON.stringify(text)}))`;
 /** a failure toast, over the modal, that says `text` */
 const toasted = (text: string) => `[...document.querySelectorAll("[data-paper-toasts] [role=alert]")].some((a) => a.innerText.includes(${JSON.stringify(text)}))`;
-const TRIGGER = `${MODAL}?.querySelector('[aria-label="Provider"] button, button[aria-label="Provider"]')`;
+/** the menu named by its label, as a screen reader names it */
+const TRIGGER = `[...(${MODAL}?.querySelectorAll('button[aria-haspopup="listbox"]') ?? [])].find((b) => document.getElementById((b.getAttribute("aria-labelledby") ?? "").split(" ")[0])?.textContent.trim() === "Provider")`;
 /** types into a field as a keyboard does: the value changes, then the field says so */
 const fill = (field: string, text: string) => `(() => { const el = ${field}; el.value = ${JSON.stringify(text)}; el.dispatchEvent(new InputEvent("input", { bubbles: true })); })()`;
 
