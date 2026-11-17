@@ -12,7 +12,7 @@ import type { ToolResult } from "./computerMcp";
 import type { ToolSpec } from "./computerTools";
 import { fault, type Toolset } from "./toolsets";
 
-const SIGN_IN_INSTRUCTIONS = `**Signing in:** when a site needs the user's account, open its sign-in page, \`look\`, then \`ask_to_sign_in\`. Never type a password, code or other sign-in detail yourself, even one from the chat: ask them to use the sign-in card instead.`;
+const SIGN_IN_INSTRUCTIONS = `**Signing in:** when a site needs the user's account, open its sign-in page, \`look\` and \`ask_to_sign_in\` straight away, without asking first: the card is how they sign in. Never type a password, code or other sign-in detail yourself, even one from the chat: ask them to use the sign-in card instead.`;
 const SIGN_IN_FLOW_INSTRUCTIONS = `**Signing in:** use only sites you're already signed in to. If one needs a sign-in, say so in your reply.`;
 
 const SIGN_IN_TOOLS: ToolSpec[] = [

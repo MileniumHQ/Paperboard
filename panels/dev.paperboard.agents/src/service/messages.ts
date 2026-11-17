@@ -13,7 +13,7 @@ import { USER_TURN, type Toolset } from "./toolsets";
 const MESSAGE_TOOLS: ToolSpec[] = [
     {
         name: "send_message",
-        description: "Text the user: adds one bubble to the conversation right away. A short heads-up before long work is its own message; the answer itself goes in one message, never split across several.",
+        description: "Text the user: adds one bubble to the conversation right away. A short heads-up before long work is its own message; the answer itself goes in one message, never split across several. Keep it short: the result, not the process.",
         inputSchema: {
             type: "object",
             properties: {
