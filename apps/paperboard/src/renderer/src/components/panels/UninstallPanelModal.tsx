@@ -33,13 +33,16 @@ const UninstallPanelModal: Component<UninstallPanelModalProps> = (props) => {
     const [deleteData, setDeleteData] = createSignal(false);
     // the panel is gone, but the packages only it used are still on the computer: why
     const [leftBehind, setLeftBehind] = createSignal("");
+    // the name the title asks about, kept while the dialog fades out
+    const [name, setName] = createSignal("");
 
     createEffect(
         on(
             () => props.target,
-            () => {
+            (target) => {
                 setDeleteData(false);
                 setLeftBehind("");
+                if (target) setName(target.panel.name);
             },
         ),
     );
@@ -68,7 +71,7 @@ const UninstallPanelModal: Component<UninstallPanelModalProps> = (props) => {
         <PaperModal
             open={props.target !== null}
             onClose={close}
-            title={leftBehind() ? "Panel Uninstalled" : "Uninstall Panel"}
+            title={leftBehind() ? "Panel Uninstalled" : `Uninstall ${name()}?`}
             size="small"
             footer={
                 <Show when={!leftBehind()} fallback={<PaperButton onClick={close}>Close</PaperButton>}>
@@ -85,26 +88,18 @@ const UninstallPanelModal: Component<UninstallPanelModalProps> = (props) => {
                 {(why) => <PaperError alert title={`Couldn't remove the packages only ${props.target?.panel.name ?? "the panel"} used`} error={why()} />}
             </Show>
             <Show when={!leftBehind() && props.target}>
-                {(target) => (
-                    <PaperFlex direction="column" gap="half">
-                        <PaperText preset="text">
-                            Are you sure you want to uninstall{" "}
-                            <strong>{target().panel.name}</strong>?
-                        </PaperText>
-                        <PaperText preset="hint">
-                            This stops the panel and removes its installed code.
-                            Your configuration, files and saved credentials are
-                            kept for reinstalling.
-                        </PaperText>
-                        <PaperCheckbox
-                            checked={deleteData()}
-                            disabled={busy()}
-                            onChange={setDeleteData}
-                            label="Also delete this panel's data and saved credentials"
-                            description="Configuration, files and vault entries are removed. This cannot be undone."
-                        />
-                    </PaperFlex>
-                )}
+                <PaperFlex direction="column" gap="full">
+                    <PaperText preset="text">
+                        Its settings and files stay, so installing it again picks up where you left off.
+                    </PaperText>
+                    <PaperCheckbox
+                        checked={deleteData()}
+                        disabled={busy()}
+                        onChange={setDeleteData}
+                        label="Delete its settings and files too"
+                        description="Saved keys and backups go with them. This can't be undone."
+                    />
+                </PaperFlex>
             </Show>
         </PaperModal>
     );

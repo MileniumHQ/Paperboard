@@ -22,14 +22,16 @@ afterAll(async () => {
 const row = (panelId: string) => `label[data-value='${panelId}']`;
 
 /** opens the panel's Uninstall dialog from its menu in the sidebar, and confirms it */
-async function uninstall(panelId: string): Promise<void> {
+async function uninstall(panelId: string, name: string): Promise<void> {
     const { page } = shell;
     await page.click("[role=radio][aria-label='This Computer (127.0.0.1)']");
     await page.waitFor(`document.querySelector("${row(panelId)}")`, `${panelId} in the sidebar`);
     await page.click(row(panelId), "right");
     await page.waitFor(`document.querySelector("[data-context-item='Uninstall Panel']")`, "the panel's menu");
     await page.click("[data-context-item='Uninstall Panel']");
-    await page.waitFor(`[...document.querySelectorAll("[role=dialog]")].some((d) => d.innerText.includes("Uninstall Panel"))`, "the Uninstall dialog");
+    // the dialog asks about the panel by name, in a line a person reads at a glance
+    const dialog = `[...document.querySelectorAll("[role=dialog]")].find((d) => d.innerText.includes(${JSON.stringify(`Uninstall ${name}?`)}))`;
+    await page.waitFor(`!!${dialog} && ${dialog}.innerText.includes("Its settings and files stay")`, `the Uninstall dialog asking about ${name}`);
     await clickText(page, "button", "Uninstall");
     await page.waitFor(`!document.querySelector("${row(panelId)}")`, `${panelId} to leave the sidebar`);
 }
@@ -44,7 +46,7 @@ test("a panel uninstalled as the dialog opens keeps its configuration and files"
     fs.writeFileSync(config, '{ "kept": true }');
     fs.writeFileSync(file, "kept");
 
-    await uninstall(id);
+    await uninstall(id, "API Demo");
     expect(fs.existsSync(path.join(shell.dataDir, "panels", id))).toBe(false);
     expect(fs.readFileSync(config, "utf8")).toBe('{ "kept": true }');
     expect(fs.readFileSync(file, "utf8")).toBe("kept");
@@ -59,7 +61,7 @@ test("an uninstall whose packages can't be removed says so in its dialog once th
     fs.mkdirSync(path.dirname(users), { recursive: true });
     fs.writeFileSync(users, "{ not json");
 
-    await uninstall(WIDGET_DEMO_ID);
+    await uninstall(WIDGET_DEMO_ID, "Widget Demo");
     const dialog = `[...document.querySelectorAll("[role=dialog]")].find((d) => d.innerText.includes("Panel Uninstalled"))`;
     const title = "Couldn't remove the packages only Widget Demo used";
     await page.waitFor(

@@ -231,7 +231,7 @@ export default function SettingsAndSecretsDoc() {
             <PaperText preset="subheader" as="h2" id="removal">When the panel is removed</PaperText>
             <PaperText preset="body" as="p">
                 Uninstalling a panel keeps its config, files and secrets, so installing it again picks up where the person left off.
-                They are deleted only when the person turns on <b>Also delete this panel's data and saved credentials</b> as they uninstall it. Never delete them yourself when the panel stops or updates.
+                They are deleted only when the person turns on <b>Delete its settings and files too</b> as they uninstall it. Never delete them yourself when the panel stops or updates.
             </PaperText>
 
             <PaperText preset="subheader" as="h2" id="check-it">Check it</PaperText>

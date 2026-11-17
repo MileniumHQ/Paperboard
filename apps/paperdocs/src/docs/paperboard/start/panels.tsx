@@ -57,7 +57,7 @@ export default function PanelsDoc() {
             <PaperText preset="subheader" as="h2" id="uninstall-a-panel">Uninstall a panel</PaperText>
             <PaperTextList ordered>
                 <li>Right-click the panel in the sidebar and choose <b>Uninstall Panel</b>.</li>
-                <li>Leave <b>Also delete this panel's data and saved credentials</b> off to keep its data, or turn it on to delete it.</li>
+                <li>Leave <b>Delete its settings and files too</b> off to keep its data, or turn it on to delete it.</li>
                 <li>Select <b>Uninstall</b>.</li>
             </PaperTextList>
             <PaperText preset="body" as="p">
