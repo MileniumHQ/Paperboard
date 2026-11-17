@@ -4,7 +4,7 @@
 // A key goes from its field to OpenCode and is kept nowhere else.
 
 import { For, Match, Show, Switch, createEffect, createSignal, on } from "solid-js";
-import { createPolling, PaperButton, PaperCopyButton, PaperFlex, PaperInput, PaperLink, PaperLoader, PaperModal, PaperError, PaperSectionHeader, PaperSelectMenu, PaperSelectMenuItem, PaperText, createAction, createRead, showError } from "@mileniumhq/paperui";
+import { createPolling, PaperButton, PaperCopyButton, PaperFlex, PaperInput, PaperLink, PaperLoader, PaperModal, PaperError, PaperSelectMenu, PaperSelectMenuItem, PaperText, createAction, createRead, showError } from "@mileniumhq/paperui";
 import type { ProviderAttempt, ProviderField, ProviderInfo, ProviderMethod } from "../contract";
 import type { Agent } from "../lib/agent";
 
@@ -102,7 +102,7 @@ export default function Providers(props: { agent: Agent; open: boolean; onClose:
     };
 
     return (
-        <PaperModal open={props.open} onClose={() => void close()} title="OpenCode providers" size="large">
+        <PaperModal open={props.open} onClose={() => void close()} title="OpenCode providers" size="medium">
             <PaperFlex gap="full">
                 <PaperText preset="hint">
                     OpenCode already has free models. Connect a provider to use its models too.
@@ -119,7 +119,7 @@ export default function Providers(props: { agent: Agent; open: boolean; onClose:
                         <Show when={providers.error()}>
                             {(err) => <PaperError title="Couldn't list the providers" error={err()} action={{ label: "Try again", disabled: providers.loading(), onClick: () => void refetch() }} />}
                         </Show>
-                        <PaperSelectMenu name="provider" aria-label="Provider" searchable value={selected()} onValueChange={(v) => setSelected(String(v))}>
+                        <PaperSelectMenu name="provider" aria-label="Provider" placeholder="Provider" fullWidth searchable value={selected()} onValueChange={(v) => setSelected(String(v))}>
                             <For each={providers.value() ?? []}>
                                 {(p) => (
                                     <PaperSelectMenuItem value={p.id} icon={p.connected ? "check_circle" : undefined} description={p.connected ? "Connected" : (p.unsupported ?? undefined)}>
@@ -130,8 +130,7 @@ export default function Providers(props: { agent: Agent; open: boolean; onClose:
                         </PaperSelectMenu>
                         <Show when={current()}>
                             {(p) => (
-                                <PaperFlex gap="half">
-                                    <PaperSectionHeader title={p().name} role="heading" aria-level={3} />
+                                <PaperFlex gap="full">
                                     <For each={p().connections}>
                                         {(c) => (
                                             <PaperFlex direction="row" gap="half" align="center">
@@ -178,6 +177,8 @@ export default function Providers(props: { agent: Agent; open: boolean; onClose:
                                                                 <PaperSelectMenu
                                                                     name={f.key}
                                                                     aria-label={f.title}
+                                                                    placeholder={f.title}
+                                                                    fullWidth
                                                                     value={valuesOf(m)[f.key] || undefined}
                                                                     onValueChange={(v) => setAnswers({ ...answers(), [f.key]: String(v) })}
                                                                 >
@@ -191,23 +192,25 @@ export default function Providers(props: { agent: Agent; open: boolean; onClose:
                                                     when={m.kind === "key"}
                                                     fallback={
                                                         <PaperFlex direction="row">
-                                                            <PaperButton variant="primary" disabled={busy() || attempt() !== null || incomplete(m)} onClick={() => void begin(p(), m)}>
+                                                            <PaperButton variant="primary" size="large" disabled={busy() || attempt() !== null || incomplete(m)} onClick={() => void begin(p(), m)}>
                                                                 Sign in
                                                             </PaperButton>
                                                         </PaperFlex>
                                                     }
                                                 >
-                                                    <PaperInput
-                                                        label="API key"
-                                                        type="password"
-                                                        fullWidth
-                                                        autocomplete="off"
-                                                        value={key()}
-                                                        onInput={(e) => setKey(e.currentTarget.value)}
-                                                        onKeyDown={(e) => e.key === "Enter" && key().trim() && !incomplete(m) && void connectKey(p(), m)}
-                                                    />
-                                                    <PaperFlex direction="row">
-                                                        <PaperButton variant="primary" disabled={busy() || !key().trim() || incomplete(m)} onClick={() => void connectKey(p(), m)}>
+                                                    <PaperFlex direction="row" gap="half" align="end">
+                                                        <PaperFlex grow>
+                                                            <PaperInput
+                                                                label="API key"
+                                                                type="password"
+                                                                fullWidth
+                                                                autocomplete="off"
+                                                                value={key()}
+                                                                onInput={(e) => setKey(e.currentTarget.value)}
+                                                                onKeyDown={(e) => e.key === "Enter" && key().trim() && !incomplete(m) && void connectKey(p(), m)}
+                                                            />
+                                                        </PaperFlex>
+                                                        <PaperButton variant="primary" size="large" disabled={busy() || !key().trim() || incomplete(m)} onClick={() => void connectKey(p(), m)}>
                                                             Connect
                                                         </PaperButton>
                                                     </PaperFlex>
