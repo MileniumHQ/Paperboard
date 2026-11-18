@@ -207,25 +207,25 @@ export function DeleteBotModal(props: {
     onClose: () => void;
 }) {
     const [busy, setBusy] = createSignal(false);
-    // why Discord kept its commands: Delete anyway removes the bot regardless
-    const [refused, setRefused] = createSignal<string | null>(null);
+    // Discord kept its commands: Delete anyway removes the bot regardless
+    const [refused, setRefused] = createSignal(false);
     // what was asked can't be taken back: the dialog stays for its answer
     const close = () => {
         if (!busy()) props.onClose();
     };
     createEffect(on(() => props.bot?.id, (id) => {
         if (!id) return;
-        setRefused(null);
+        setRefused(false);
         setBusy(false);
     }));
     const confirm = async () => {
         const bot = props.bot;
         if (!bot || busy()) return;
-        const anyway = refused() !== null;
+        const anyway = refused();
         setBusy(true);
         try {
             const result = await props.onDelete(bot.id, anyway);
-            if ("refused" in result) setRefused(result.refused);
+            if ("refused" in result) setRefused(true);
             else props.onClose();
         } catch (err) {
             showError(`Couldn't delete ${bot.name}`, err);
@@ -243,7 +243,7 @@ export function DeleteBotModal(props: {
                 <PaperFlex direction="row" gap="half" justify="end" fullWidth>
                     <PaperButton variant="text" disabled={busy()} onClick={close}>Cancel</PaperButton>
                     <PaperButton variant="danger" disabled={busy()} onClick={() => void confirm()}>
-                        {refused() === null ? "Delete" : "Delete anyway"}
+                        {refused() ? "Delete anyway" : "Delete"}
                     </PaperButton>
                 </PaperFlex>
             }
@@ -251,16 +251,13 @@ export function DeleteBotModal(props: {
             <PaperFlex direction="column" gap="half">
                 <PaperText preset="text">
                     {props.bot?.hasToken && props.bot.commands.length > 0
-                        ? `${props.bot.name}'s slash commands are removed from Discord, it goes offline, and`
-                        : `${props.bot?.name} goes offline and`} its token is deleted from Paperboard.
-                    Flows that use it stop working. The application stays in the Discord Developer Portal.
+                        ? `${props.bot.name} goes offline, its slash commands are removed from Discord, and its token is deleted.`
+                        : `${props.bot?.name} goes offline and its token is deleted.`}
                 </PaperText>
                 <Show when={refused()}>
-                    {(why) => (
-                        <PaperQuote variant="warning" icon="cloud_off" title="Discord kept its slash commands" role="alert">
-                            Discord said "{why()}". Delete anyway removes the bot from Paperboard, and its slash commands stay on Discord.
-                        </PaperQuote>
-                    )}
+                    <PaperQuote variant="warning" icon="cloud_off" title="Discord kept its slash commands" role="alert">
+                        Delete anyway removes the bot here. Its slash commands stay on Discord.
+                    </PaperQuote>
                 </Show>
             </PaperFlex>
         </PaperModal>

@@ -1,7 +1,7 @@
 import { afterAll, afterEach, beforeAll, describe, expect, setDefaultTimeout, test } from "bun:test";
 import type { BotsServiceState } from "../src/bots";
 import { panelBrowser, servePanel, TOASTS, type Page } from "./helpers/browser";
-import { guild, snowflake, startFakeDiscord, type FakeDiscord } from "./helpers/discord";
+import { guild, snowflake, startFakeDiscord, userMessage, type FakeDiscord } from "./helpers/discord";
 import { call, PANEL_ID, savedBots, startService, stopServices, storedBot } from "./helpers/service";
 import { stateWhere } from "./helpers/wait";
 
@@ -52,7 +52,9 @@ describe("the server explorer", () => {
             const sent = await discord.request((r) => r.method === "POST" && r.path === `/channels/${home.channels[0]!.id}/messages`, "the message to reach Discord");
             expect(sent.bot).toBe(fake.token);
             expect(sent.body.content).toBe("Hello from Paperboard!");
-            await page.waitFor(`document.body.innerText.includes("Posted to #general")`, "the confirmation");
+            // the confirmation is a toast, not a quote that stands in the server's page
+            await page.waitFor(`${TOASTS}.some((t) => t.includes("Message sent") && t.includes("Posted to #general"))`, "the confirmation toast");
+            expect(await page.evaluate<boolean>(`[...document.querySelectorAll("[class*=PaperCard]")].some((c) => c.innerText.includes("Send a message") && c.innerText.includes("Posted to"))`)).toBe(false);
             expect(page.exceptions).toEqual([]);
         } finally {
             await page.close();
@@ -126,6 +128,71 @@ describe("a server's page", () => {
             const spilled = await page.evaluate<string[]>(`[...document.querySelectorAll("[class*=PaperCard]")].filter((el) => el.getClientRects().length > 0 && el.scrollWidth > el.clientWidth).map((el) => el.innerText.slice(0, 40))`);
             expect(spilled).toEqual([]);
             expect(await page.evaluate<number>(`document.documentElement.scrollWidth`)).toBeLessThanOrEqual(390);
+            expect(page.exceptions).toEqual([]);
+        } finally {
+            await page.close();
+            served.stop();
+        }
+    });
+});
+
+// A list that shares its card with a title is its own bordered, rounded card:
+// every row and the category titles sit inside that border.
+describe("lists that share a card with a title", () => {
+    test("Channels, Roles, Members and Recent messages are bordered, rounded and clip their rows and titles", async () => {
+        const category = snowflake();
+        const home = {
+            ...guild("Home"),
+            channels: [
+                { id: snowflake(), name: "lobby", parentId: category },
+                { id: category, name: "Text Channels", type: 4 },
+                { id: snowflake(), name: "loose" },
+            ],
+        };
+        const fake = discord.addBot({ username: "Framer", guilds: [home] });
+        await savedBots([{ stored: storedBot("b-frame", fake.appId, { name: "Framer" }), token: fake.token }]);
+        await startService({ discordApi: discord.api });
+        await stateWhere<BotsServiceState>(PANEL_ID, (s) => Boolean(s.bots[0]?.connected), "Framer to connect");
+        const served = await servePanel();
+        const page = await browser.open(served.url);
+        /** the list around the row showing `text`: its border, corners and clipping, and whether it holds `inside` */
+        const frame = (text: string, inside: string[]) => page.evaluate<{ border: number; radius: number; clipped: boolean; holds: boolean } | null>(`(() => {
+            const row = [...document.querySelectorAll("[data-value]")].find((el) => el.innerText.includes(${JSON.stringify(text)}));
+            if (!row) return null;
+            for (let el = row.parentElement; el; el = el.parentElement) {
+                const style = getComputedStyle(el);
+                if (el.className.toString().includes("PaperList") && el.getAttribute("role") !== "option") {
+                    return {
+                        border: parseFloat(style.borderTopWidth),
+                        radius: parseFloat(style.borderTopLeftRadius),
+                        clipped: style.overflow === "hidden",
+                        holds: ${JSON.stringify(inside)}.every((t) => el.innerText.toLowerCase().includes(t.toLowerCase())),
+                    };
+                }
+            }
+            return null;
+        })()`);
+        try {
+            await page.waitFor(`document.body.innerText.includes("Framer")`, "the bot list");
+            await clickText(page, "[class*=card], [class*=Card]", "Framer");
+            discord.dispatch(fake, "MESSAGE_CREATE", userMessage(home, "heard here"));
+            await page.waitFor(`document.body.innerText.includes("heard here")`, "the message");
+            expect(await frame("heard here", ["heard here"])).toEqual({ border: 1, radius: expect.any(Number), clipped: true, holds: true } as never);
+            expect((await frame("heard here", []))!.radius).toBeGreaterThan(0);
+
+            await page.click(`input[name=botMenu][value="servers"]`);
+            await clickText(page, "[class*=card], [class*=Card]", "Home");
+            await page.waitFor(`document.body.innerText.includes("@everyone")`, "the server's page");
+            await clickText(page, "button", "Search");
+            await page.waitFor(`document.body.innerText.includes("@Framer")`, "the member search");
+            for (const [text, inside] of [["lobby", ["Text Channels", "No category"]], ["@everyone", []], ["@Framer", []]] as const) {
+                const framed = await frame(text, [...inside]);
+                expect(framed, text).not.toBeNull();
+                expect(framed!.border, text).toBeGreaterThan(0);
+                expect(framed!.radius, text).toBeGreaterThan(0);
+                expect(framed!.clipped, text).toBe(true);
+                expect(framed!.holds, text).toBe(true);
+            }
             expect(page.exceptions).toEqual([]);
         } finally {
             await page.close();

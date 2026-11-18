@@ -26,6 +26,7 @@ import {
     createLatest,
     createRead,
     showError,
+    showToast,
 } from "@mileniumhq/paperui";
 import type { BotSummary } from "../bots";
 import { botCreator } from "../client";
@@ -107,7 +108,6 @@ export default function Servers(props: { bot: () => BotSummary }) {
     const [sending, setSending] = createSignal(false);
     // what is wrong with the message to send: said under the message field
     const [missing, setMissing] = createSignal("");
-    const [sentTo, setSentTo] = createSignal("");
 
     const textChannels = () =>
         (detail()?.channels ?? []).filter(
@@ -123,7 +123,6 @@ export default function Servers(props: { bot: () => BotSummary }) {
         sendRead.cancel();
         setSending(false);
         setMissing("");
-        setSentTo("");
     };
 
     const selectGuild = (guildId: string) => {
@@ -178,7 +177,6 @@ export default function Servers(props: { bot: () => BotSummary }) {
         if (sending()) return;
         const current = sendRead();
         setMissing("");
-        setSentTo("");
         const channel = textChannels().find((c) => c.id === channelId());
         if (!channel) {
             showError("Couldn't send the message", "Pick a channel first.");
@@ -195,7 +193,7 @@ export default function Servers(props: { bot: () => BotSummary }) {
                 channel: channel.id,
                 content: content().trim(),
             });
-            if (current()) setSentTo(`#${channel.name}`);
+            if (current()) showToast({ variant: "success", title: "Message sent", message: `Posted to #${channel.name}.` });
         } catch (err) {
             if (current()) showError("Couldn't send the message", err);
         } finally {
@@ -320,7 +318,7 @@ export default function Servers(props: { bot: () => BotSummary }) {
                                 <PaperText preset="heading">
                                     Channels
                                 </PaperText>
-                                <PaperList selectable={false} fullWidth borderless scrollable={false}>
+                                <PaperList selectable={false} standalone scrollable={false}>
                                     <For each={categories()}>
                                         {(category) => channelSection(category.name, () => channelsIn(category.id))}
                                     </For>
@@ -336,7 +334,7 @@ export default function Servers(props: { bot: () => BotSummary }) {
                                 <PaperText preset="heading">
                                     Roles
                                 </PaperText>
-                                <PaperList selectable={false} fullWidth borderless scrollable={false}>
+                                <PaperList selectable={false} standalone scrollable={false}>
                                     <For each={guild().roles}>
                                         {(role) => (
                                             <PaperListItem
@@ -402,7 +400,7 @@ export default function Servers(props: { bot: () => BotSummary }) {
                                             </PaperText>
                                         }
                                     >
-                                        <PaperList selectable={false} fullWidth borderless scrollable={false}>
+                                        <PaperList selectable={false} standalone scrollable={false}>
                                             <For each={members()}>
                                                 {(member) => (
                                                     <PaperListItem
@@ -465,18 +463,13 @@ export default function Servers(props: { bot: () => BotSummary }) {
                                             />
                                         </PaperFlex>
                                         <PaperButton
-                                            variant="success"
+                                                variant="success"
                                             disabled={sending()}
                                             onClick={() => void sendTest()}>
                                             <PaperIcon>send</PaperIcon>
                                             {sending() ? "Sending…" : "Send"}
                                         </PaperButton>
                                     </PaperFlex>
-                                    <Show when={sentTo()}>
-                                        <PaperQuote variant="success" icon="check_circle" title="Message sent">
-                                            Posted to {sentTo()}.
-                                        </PaperQuote>
-                                    </Show>
                                 </PaperFlex>
                             </PaperCard>
                         </Show>

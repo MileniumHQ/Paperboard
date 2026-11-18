@@ -1,10 +1,12 @@
-import { createSignal, For, Show } from "solid-js";
+import { createSignal, For, Show, type JSX } from "solid-js";
 import {
     PaperFlex,
     PaperText,
     PaperCard,
     PaperCheckbox,
+    PaperButton,
     PaperCopyButton,
+    PaperIcon,
     PaperError,
     PaperGrid,
     PaperPageHeader,
@@ -68,88 +70,77 @@ export default function Invite(props: { bot: () => BotSummary }) {
         </PaperCard>
     );
 
+    // what a link is for: copy it, or open it; the address itself is not shown
+    const linkActions = (url: () => string, what: string): JSX.Element => (
+        <PaperFlex direction="row" gap="half" wrap>
+            <PaperCopyButton variant="outline" label="Copy link" text={url()} title={`Copy the ${what} link`} disabled={!url()} />
+            <PaperButton variant="primary" href={url() || undefined} target="_blank" rel="noopener noreferrer" disabled={!url()}>
+                <PaperIcon>open_in_new</PaperIcon>
+                Open
+            </PaperButton>
+        </PaperFlex>
+    );
+
     return (
         <>
             <PaperPageHeader
                 icon="person_add"
                 title="Invite"
-                subtitle="Add the bot to a server with the permissions it needs"
+                subtitle="Add the bot to a server, or install it on your account"
             />
 
-            {/* the link stands where it would be copied from, or why there is none */}
-            <Show
-                when={invite.error()}
-                fallback={
-                    <PaperCard>
-                        <PaperFlex direction="row" padding="full" gap="full" align="center">
-                            <PaperFlex flex minWidth={0}>
-                                <PaperText preset="text" truncate>
-                                    {inviteUrl() || "Generating invite link…"}
-                                </PaperText>
-                            </PaperFlex>
+            <PaperCard>
+                <PaperFlex direction="column" padding="full" gap="full">
+                    <PaperFlex direction="column" gap="onefourth">
+                        <PaperText preset="heading">Add to a server</PaperText>
+                        <PaperText preset="hint">
+                            Pick what the bot can do. The link below follows your picks.
+                        </PaperText>
+                    </PaperFlex>
 
-                            <PaperCopyButton
-                                label="Copy"
-                                text={inviteUrl()}
-                                disabled={!inviteUrl()}
+                    {/* three groups fill the row; an auto-filling grid would leave a column empty */}
+                    <PaperGrid columns={compact() ? 1 : 3}>
+                        {permissionGroup(
+                            "General",
+                            PERMISSION_DEFINITIONS.filter((p) => p.category === "general"),
+                        )}
+                        {permissionGroup(
+                            "Text",
+                            PERMISSION_DEFINITIONS.filter((p) => p.category === "text"),
+                        )}
+                        {permissionGroup(
+                            "Voice",
+                            PERMISSION_DEFINITIONS.filter((p) => p.category === "voice"),
+                        )}
+                    </PaperGrid>
+
+                    {/* the actions stand where the link would be used, or why there is none */}
+                    <Show
+                        when={invite.error()}
+                        fallback={linkActions(inviteUrl, "server invite")}
+                    >
+                        {(err) => (
+                            <PaperError
+                                title="Couldn't make the invite link"
+                                error={err()}
+                                action={{ label: "Try again", disabled: invite.loading(), onClick: () => void invite.reload() }}
                             />
-                        </PaperFlex>
-                    </PaperCard>
-                }
-            >
-                {(err) => (
-                    <PaperError
-                        title="Couldn't make the invite link"
-                        error={err()}
-                        action={{ label: "Try again", disabled: invite.loading(), onClick: () => void invite.reload() }}
-                    />
-                )}
-            </Show>
-
-            {/* three groups fill the row; an auto-filling grid would leave a column empty */}
-            <PaperGrid columns={compact() ? 1 : 3}>
-                {permissionGroup(
-                    "General",
-                    PERMISSION_DEFINITIONS.filter((p) => p.category === "general"),
-                )}
-                {permissionGroup(
-                    "Text",
-                    PERMISSION_DEFINITIONS.filter((p) => p.category === "text"),
-                )}
-                {permissionGroup(
-                    "Voice",
-                    PERMISSION_DEFINITIONS.filter((p) => p.category === "voice"),
-                )}
-            </PaperGrid>
+                        )}
+                    </Show>
+                </PaperFlex>
+            </PaperCard>
 
             <PaperCard>
-                <PaperFlex direction="column" padding="full" gap="half">
-                    <PaperText preset="label">
-                        Install on your account
-                    </PaperText>
-                    <PaperText preset="hint">
-                        For user-app commands: installs the app for one user
-                        instead of a server, so its commands work in DMs and
-                        group chats. Needs User Install enabled in the Discord
-                        developer portal.
-                    </PaperText>
+                <PaperFlex direction="column" padding="full" gap="full">
+                    <PaperFlex direction="column" gap="onefourth">
+                        <PaperText preset="heading">Install on your account</PaperText>
+                        <PaperText preset="hint">
+                            Use the bot's commands in DMs and group chats. Turn on User Install in the Discord developer portal first.
+                        </PaperText>
+                    </PaperFlex>
                     <Show
                         when={userInstall.error()}
-                        fallback={
-                            <PaperFlex direction="row" gap="full" align="center">
-                                <PaperFlex flex minWidth={0}>
-                                    <PaperText preset="text" truncate>
-                                        {userInstallUrl() || "Generating user install link…"}
-                                    </PaperText>
-                                </PaperFlex>
-
-                                <PaperCopyButton
-                                    label="Copy"
-                                    text={userInstallUrl()}
-                                    disabled={!userInstallUrl()}
-                                />
-                            </PaperFlex>
-                        }
+                        fallback={linkActions(userInstallUrl, "install")}
                     >
                         {(err) => (
                             <PaperError

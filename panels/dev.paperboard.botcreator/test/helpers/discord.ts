@@ -24,6 +24,10 @@ export function snowflake(at = Date.now()): string {
 export interface FakeChannel {
     id: string;
     name: string;
+    /** Discord's channel type: 0 text (default), 4 category */
+    type?: number;
+    /** the category the channel sits in */
+    parentId?: string;
 }
 
 export interface FakeGuild {
@@ -119,12 +123,12 @@ export function startFakeDiscord(): FakeDiscord {
     };
     const channelPayload = (channel: FakeChannel, guild: FakeGuild) => ({
         id: channel.id,
-        type: 0,
+        type: channel.type ?? 0,
         guild_id: guild.id,
         name: channel.name,
         position: 0,
         permission_overwrites: [],
-        parent_id: null,
+        parent_id: channel.parentId ?? null,
         nsfw: false,
     });
     const messagePayload = (author: Record<string, unknown>, channelId: string, body: any, attachments: { name: string; bytes: Uint8Array }[] = []) => ({

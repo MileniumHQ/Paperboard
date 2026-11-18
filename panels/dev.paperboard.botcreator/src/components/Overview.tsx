@@ -186,7 +186,7 @@ export default function Overview(props: OverviewProps) {
                 <PaperCard>
                     <PaperFlex direction="column" gap="half" padding="full">
                         <PaperText preset="heading">Recent messages</PaperText>
-                        <PaperList selectable={false} fullWidth borderless scrollable={false}>
+                        <PaperList selectable={false} standalone scrollable={false}>
                             <For each={recent()}>
                                 {(msg) => (
                                     <PaperListItem value={msg.messageId} icon="chat" description={msg.content || "(no text)"}>

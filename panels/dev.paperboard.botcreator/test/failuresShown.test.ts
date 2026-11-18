@@ -57,16 +57,14 @@ describe("failures are shown, never guessed", () => {
         const page = await browser.open(served.url);
         const configs = path.join((await testDaemon()).dataDir, "configs");
         try {
-            // an invite link that can't be made says so where the link would be, instead of "Generating…"
+            // an invite link that can't be made says so where its actions would be
             await page.waitFor(`document.body.innerText.includes("Nameless")`, "the bot list");
             await clickText(page, "[class*=card], [class*=Card]", "Nameless");
             await openTab(page, "invite");
             await page.waitFor(errorShows("Couldn't make the invite link", "Cannot build an invite URL: no application ID is known."), "the invite failure, in place");
-            expect(await body(page)).not.toContain("Generating invite link…");
             expect(await page.evaluate<string>(`${errorButton("Couldn't make the invite link")}?.innerText ?? ""`)).toBe("Try again");
             // the install link has no application ID to name either
             await page.waitFor(errorShows("Couldn't make the install link"), "the install link failure, in place");
-            expect(await body(page)).not.toContain("Generating user install link…");
             await openTab(page, "home");
 
             // a delete the service refuses keeps the bot, the modal and the reason
@@ -125,12 +123,14 @@ describe("failures are shown, never guessed", () => {
             await clickText(page, "button", "Delete");
             await page.waitFor(`document.querySelector("[role=dialog]")?.innerText.includes("Delete bot?")`, "the delete confirmation");
             // off, it is cleared with its token all the same
-            expect(await dialog()).toContain("Revoked's slash commands are removed from Discord, it goes offline, and its token is deleted from Paperboard.");
+            expect(await dialog()).toContain("Revoked goes offline, its slash commands are removed from Discord, and its token is deleted.");
             expect(await dialog()).not.toContain("stay on Discord");
 
             await clickText(page, "[role=dialog] button", "Delete");
-            await page.waitFor(quoteShows("Discord kept its slash commands", "401: Unauthorized"), "the refusal");
-            expect(await dialog()).toContain("Delete anyway removes the bot from Paperboard, and its slash commands stay on Discord.");
+            await page.waitFor(quoteShows("Discord kept its slash commands", "Delete anyway removes the bot here."), "the refusal");
+            expect(await dialog()).toContain("Its slash commands stay on Discord.");
+            // what Discord said is not the person's to read
+            expect(await dialog()).not.toContain("401");
             expect((await stateWhere<BotsServiceState>(PANEL_ID, () => true, "the bots")).bots.map((b) => b.id)).toEqual(["b-revoked"]);
 
             await clickText(page, "[role=dialog] button", "Delete anyway");
