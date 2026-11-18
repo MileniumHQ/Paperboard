@@ -4,6 +4,7 @@
 // cannot pin a self-signed daemon certificate. Under Node (Electron, which
 // is what dials remote computers) "ws" already is the npm client; under
 // Bun (tests) the same client is loaded from the package's own files.
+import { createRequire } from "module";
 import * as path from "path";
 import { WebSocket } from "ws";
 
@@ -12,7 +13,9 @@ let bunWebSocket: typeof WebSocket | null = null;
 export function pinnableWebSocket(): typeof WebSocket {
     if (!process.versions.bun) return WebSocket;
     if (!bunWebSocket) {
-        const load = (import.meta as unknown as { require: NodeJS.Require }).require;
+        // __filename, not import.meta: Bun defines it in every module, and the
+        // app's CommonJS bundle keeps it, where import.meta would be emptied
+        const load = createRequire(__filename);
         const dir = path.dirname(load.resolve("ws/package.json"));
         bunWebSocket = load(path.join(dir, "index.js")) as typeof WebSocket;
     }

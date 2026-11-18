@@ -1,7 +1,7 @@
 import { defineConfig } from "vite";
 import solid from "vite-plugin-solid";
-import { docsSearchPlugin } from "./vite-plugin-docs-search";
-import { paperuiAlias } from "./vite.site.shared";
+import { docsSearchPlugin } from "./vite-plugin-docs-search.ts";
+import { paperuiAlias } from "./vite.site.shared.ts";
 
 // Site SSR build for every prerendered page: the root pages and the docs
 // pages share this one entry. The client pass (vite.site.client.config.ts)

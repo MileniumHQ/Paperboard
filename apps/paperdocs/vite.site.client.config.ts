@@ -1,7 +1,7 @@
 import { defineConfig } from "vite";
 import solid from "vite-plugin-solid";
-import { docsSearchPlugin } from "./vite-plugin-docs-search";
-import { paperuiAlias } from "./vite.site.shared";
+import { docsSearchPlugin } from "./vite-plugin-docs-search.ts";
+import { paperuiAlias } from "./vite.site.shared.ts";
 
 // Browser bundle for the prerendered pages: the interactive islands (site
 // topbar, contact form) and the docs app, plus their stylesheet. Output lands

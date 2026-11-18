@@ -9,6 +9,7 @@
     "moduleResolution": "bundler",
     "isolatedModules": true,
     "noEmit": true,
+    "allowImportingTsExtensions": true,
     "strict": true
   },
   "include": [

@@ -59,11 +59,11 @@
     "@types/ws": "^8.18.2",
     "electron": "^45.3.4",
     "electron-builder": "^26.18.0",
-    "electron-vite": "^5.0.0",
+    "electron-vite": "^6.0.0",
     "origami": "workspace:*",
     "solid-js": "^1.9.19",
     "typescript": "^5.9.3",
-    "vite": "^7.3.8",
+    "vite": "^8.3.8",
     "vite-plugin-solid": "^2.11.16"
   }
 }

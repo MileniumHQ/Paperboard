@@ -1,6 +1,6 @@
 import { resolve } from "node:path";
 
-const paperuiRoot = resolve(__dirname, "../../packages/paperui");
+const paperuiRoot = resolve(import.meta.dirname, "../../packages/paperui");
 
 // PaperUI's published entry is client-compiled, so both site builds resolve
 // the library from source. The server and client must compile the same source
