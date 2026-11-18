@@ -143,8 +143,9 @@ export function installPanelPermissions(ses: Session, store: PanelPermissionStor
     ses.setDisplayMediaRequestHandler((request, callback) => {
         const frame = request.frame;
         const asker = panelAsker(request.securityOrigin || frame?.url || "");
-        // a refusal is a callback with nothing to share
-        const nothing = () => callback({});
+        // a refusal is a callback with null: an empty answer to a request for
+        // video throws ("no video stream was provided") instead of refusing
+        const nothing = () => callback(null);
         if (!asker || !frame || !request.videoRequested) return nothing();
         const wc = allWebContents.fromFrame(frame) ?? null;
         void (async () => {
