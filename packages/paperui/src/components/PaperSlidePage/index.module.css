@@ -38,6 +38,10 @@
     background: var(--paper-surface-sunken);
     border-bottom: var(--paper-border-width) solid var(--paper-border);
     touch-action: none;
+    /* a drag handle: a swipe across it goes back and selects none of its
+       text, or the next press there would drag that text instead */
+    user-select: none;
+    -webkit-user-select: none;
 }
 
 /* an app's top-level page keeps its bar slim: the screen's height is for
