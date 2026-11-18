@@ -46,9 +46,7 @@ export default function SignIn(props: { agent: Agent; entry: SignInEntry; name: 
                 <PaperFlex direction="row" align="start" gap="half">
                     <PaperIcon>lock</PaperIcon>
                     <PaperFlex gap="onefourth">
-                        <PaperText preset="label">
-                            Sign in on <strong>{e().site}</strong>
-                        </PaperText>
+                        <PaperText preset="label">Sign in on {e().site}</PaperText>
                         <PaperText preset="hint">
                             {props.name} picked these fields in its browser. It never sees what you type here.
                         </PaperText>

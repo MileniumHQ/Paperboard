@@ -62,6 +62,9 @@ async function run(): Promise<Record<string, unknown>> {
     );
     // pressed twice while the first is on its way, then refused
     await until("the sign-in's fields", () => card()?.querySelector('input[name="sign-in-1"]'));
+    // the title is one weight from end to end: the site's name is not set heavier than the words around it
+    const title = [...card().querySelectorAll<HTMLElement>("*")].filter((el) => el.textContent?.trim() === `Sign in on ${entry.site}`).pop()!;
+    const titleWeights = [...new Set([title, ...title.querySelectorAll<HTMLElement>("*")].map((el) => getComputedStyle(el).fontWeight))];
     fill("sign-in-0", "ada@example.com");
     fill("sign-in-1", PASSWORD);
     button("Sign in").click();
@@ -69,7 +72,7 @@ async function run(): Promise<Record<string, unknown>> {
     const sends = asked.length;
     refuse(new Error("The browser window closed"));
     await until("the sign-in's refusal", () => toast());
-    return { sends, values: asked[0]?.values, refusal: toast(), inCard: alertIn(), holdsPassword: holds(PASSWORD), uncaught: [...errors] };
+    return { titleWeights, sends, values: asked[0]?.values, refusal: toast(), inCard: alertIn(), holdsPassword: holds(PASSWORD), uncaught: [...errors] };
 }
 
 report(run);

@@ -61,6 +61,7 @@ describe("a request card in the chat", () => {
     test("a sign-in pressed twice is sent once; refused, it says why and the typed password is gone", async () => {
         const { checks, error } = await runBrowserFixture("test/fixtures/signInCard.html");
         expect(error, "the fixture threw").toBe("");
+        expect(checks.titleWeights, "the title's site name is set in a weight of its own").toHaveLength(1);
         expect(checks.sends, "the sign-in was sent more than once").toBe(1);
         expect(checks.values).toEqual(["ada@example.com", "correct horse battery staple"]);
         expect(checks.refusal).toContain("Couldn't send your answer");
