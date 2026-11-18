@@ -390,7 +390,14 @@ describe("workloads and terminals take input on every platform", () => {
 		expect(dataOf(rpc, "drain")).toContain(`read:${4 * 65536}`);
 
 		// input to a program that closed its own is reported where its output goes, and later writes are refused
-		await rpc.ok("process:run", { id: "deaf", ...js("require('fs').closeSync(0); console.log('closed'); setInterval(() => {}, 1000)") });
+		// closed at the OS: on Windows, libuv's close of fd 0-2 does nothing,
+		// so the program closes its standard input handle itself
+		const closeInput =
+			process.platform === "win32"
+				? `const k = require("bun:ffi").dlopen("kernel32.dll", { GetStdHandle: { args: ["u32"], returns: "ptr" }, CloseHandle: { args: ["ptr"], returns: "i32" } }).symbols;
+				   if (!k.CloseHandle(k.GetStdHandle(0xfffffff6))) throw new Error("CloseHandle on standard input failed");`
+				: `require("fs").closeSync(0);`;
+		await rpc.ok("process:run", { id: "deaf", ...js(`${closeInput} console.log('closed'); setInterval(() => {}, 1000)`) });
 		await waitFor("the input to close", () => dataOf(rpc, "deaf").includes("closed"));
 		await rpc.ok("process:write", { id: "deaf", data: "lost\n" });
 		await waitFor("the undelivered input reported", () => dataOf(rpc, "deaf", "stderr").includes("[Input Error] input was not delivered"));
