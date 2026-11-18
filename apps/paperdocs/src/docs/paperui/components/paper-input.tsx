@@ -103,10 +103,10 @@ export function Example() {
                         <td>A leading icon: a string is a Material icon name. It is decoration and does not take clicks.</td>
                     </tr>
                     <tr>
-                        <td><PaperCode>compact</PaperCode></td>
-                        <td><PaperCode>boolean</PaperCode></td>
-                        <td>No default (off)</td>
-                        <td>A shorter field with smaller corners, for toolbars and command rows.</td>
+                        <td><PaperCode>size</PaperCode></td>
+                        <td><PaperCode>"small" | "medium" | "large"</PaperCode></td>
+                        <td><PaperCode>"medium"</PaperCode></td>
+                        <td>The field's height: 32, 40, or 48 pixels, the same as a PaperButton of that size, so a field and the button beside it line up. Small has smaller text and corners, for toolbars and command rows. A multiline field keeps the size's text and grows with its rows.</td>
                     </tr>
                     <tr>
                         <td><PaperCode>fullWidth</PaperCode></td>
@@ -212,18 +212,18 @@ export function Example() {
             </PaperText>
 
             <PaperText preset="subheader" as="h2" id="examples">Examples</PaperText>
-            <PaperText preset="subheader" as="h3" id="icon-and-compact">Icon, compact, and full width</PaperText>
+            <PaperText preset="subheader" as="h3" id="icon-and-size">Icon, size, and full width</PaperText>
             <PaperCard data-docs-demo padding="double" surface="front">
                 <PaperFlex direction="column" gap="full">
                     <PaperInput icon="search" placeholder="Search" fullWidth />
-                    <PaperInput compact icon="chevron_right" placeholder="Command" fullWidth />
+                    <PaperInput size="small" icon="chevron_right" placeholder="Command" fullWidth />
                     <PaperInput label="Disabled" disabled defaultValue="Text" fullWidth />
                 </PaperFlex>
             </PaperCard>
             <PaperCode block language="tsx">
 {`<PaperFlex direction="column" gap="full">
     <PaperInput icon="search" placeholder="Search" fullWidth />
-    <PaperInput compact icon="chevron_right" placeholder="Command" fullWidth />
+    <PaperInput size="small" icon="chevron_right" placeholder="Command" fullWidth />
     <PaperInput label="Disabled" disabled defaultValue="Text" fullWidth />
 </PaperFlex>`}
             </PaperCode>

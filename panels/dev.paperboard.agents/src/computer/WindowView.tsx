@@ -194,7 +194,7 @@ export function WindowView(props: {
                     class={styles.address}
                     name="address"
                     aria-label="Address"
-                    compact
+                    size="small"
                     placeholder="Type a web address"
                     value={shownAddress()}
                     maxLength={2048}
@@ -230,7 +230,7 @@ export function WindowView(props: {
                     >
                         <PaperText preset="text">{d().type === "beforeunload" ? "Leave this page? Changes you made may not be saved." : d().message || "The page is waiting."}</PaperText>
                         <Show when={d().type === "prompt"}>
-                            <PaperInput compact name="answer" aria-label="Answer" value={answer()} maxLength={2000} onInput={(e) => setAnswer(e.currentTarget.value)} />
+                            <PaperInput size="small" name="answer" aria-label="Answer" value={answer()} maxLength={2000} onInput={(e) => setAnswer(e.currentTarget.value)} />
                         </Show>
                         <div class={styles.dialogActions}>
                             <Show when={d().type !== "alert"}>

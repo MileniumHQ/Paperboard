@@ -74,7 +74,7 @@ export function DocsSearch(props: { class?: string }) {
         >
             <PaperInput
                 fullWidth
-                compact
+                size="small"
                 icon="search"
                 placeholder="Search..."
                 aria-label="Search documentation"

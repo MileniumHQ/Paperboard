@@ -38,7 +38,7 @@ export function createFind(session: () => string) {
         <Show when={isOpen()}>
             <PaperFlex direction="row" align="center" gap="half" padding="half" fullWidth>
                 <PaperInput
-                    compact
+                    size="small"
                     fullWidth
                     icon="search"
                     placeholder="Find"

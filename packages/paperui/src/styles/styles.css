@@ -260,7 +260,7 @@ body[data-unselectable="true"],
     --paper-console-prefix-scale: 1.15em;
     --paper-console-line-height: 1.45em;
     --paper-media-icon-size: 3em;
-    --paper-icon-font-scale: 0.72em;
+    --paper-icon-font-scale: 0.56em;
     --paper-icon-tracking: -0.02em;
     --paper-icon-em: 1em;
     --paper-rail-item-height: 50px;
@@ -285,6 +285,11 @@ body[data-unselectable="true"],
     --paper-control-size-medium: 36px;
     --paper-control-size-large: 48px;
     --paper-control-size-xlarge: 64px;
+    /* one height per size for what you press or type in: a button, a field
+       and a menu of one size are the same height, so a row of them lines up */
+    --paper-field-size-small: var(--paper-control-size-small);
+    --paper-field-size-medium: 40px;
+    --paper-field-size-large: var(--paper-control-size-large);
     /* inline chips and editable fields that sit inside a line of text */
     --paper-control-size-inline: 22px;
     --paper-icon-size-tiny: 16px;

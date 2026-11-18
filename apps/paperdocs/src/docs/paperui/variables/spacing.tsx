@@ -276,7 +276,11 @@ export default function SpacingDoc() {
                 </thead>
                 <tbody>
                     <tr>
-                        <td>Controls (buttons, loaders)</td>
+                        <td>Fields (buttons, inputs, menus)</td>
+                        <td><PaperCode>--paper-field-size-small</PaperCode> 32px, <PaperCode>-medium</PaperCode> 40px, <PaperCode>-large</PaperCode> 48px: the height of a PaperButton, PaperInput, or PaperSelectMenu of that size, so a row of them lines up</td>
+                    </tr>
+                    <tr>
+                        <td>Controls (loaders, rails, icon chips)</td>
                         <td><PaperCode>--paper-control-size-tiny</PaperCode> 28px, <PaperCode>-small</PaperCode> 32px, <PaperCode>-medium</PaperCode> 36px, <PaperCode>-large</PaperCode> 48px, <PaperCode>-xlarge</PaperCode> 64px, <PaperCode>-inline</PaperCode> 22px (chips and fields inside a line of text)</td>
                     </tr>
                     <tr>

@@ -134,7 +134,7 @@ export default function FunctionModal(props: {
                             {(param, index) => (
                                 <div class="library-param-row">
                                     <PaperInput
-                                        compact
+                                        size="small"
                                         fullWidth
                                         placeholder="Parameter"
                                         value={param.name}

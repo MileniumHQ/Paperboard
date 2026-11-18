@@ -40,7 +40,7 @@
 .PaperInput.fullWidth {
     width: 100%;
 }
-.PaperInput.compact {
+.PaperInput.size-small {
     border-radius: var(--paper-border-radius-half);
 }
 
@@ -91,21 +91,21 @@
     );
 }
 
-.PaperInput.compact input,
-.PaperInput.compact textarea {
+.PaperInput.size-small input,
+.PaperInput.size-small textarea {
     padding: var(--paper-uigap-half) var(--paper-uigap-threefourths);
     font-size: var(--paper-text-size-2);
     border-radius: var(--paper-border-radius-half);
 }
 
-.PaperInput.compact .inputIcon {
+.PaperInput.size-small .inputIcon {
     left: var(--paper-uigap-half);
     font-size: var(--paper-icon-size-small);
     line-height: 0.9;
 }
 
-.PaperInput.compact.hasIcon input,
-.PaperInput.compact.hasIcon textarea {
+.PaperInput.size-small.hasIcon input,
+.PaperInput.size-small.hasIcon textarea {
     padding-left: calc(
         var(--paper-uigap-half) + var(--paper-icon-size-small) +
             var(--paper-uigap-onefourth)
@@ -151,7 +151,7 @@
 .PaperInput:has(textarea:focus)::after {
     height: var(--paper-thickest-border-width);
 }
-.PaperInput.compact:has(input:focus)::after {
+.PaperInput.size-small:has(input:focus)::after {
     height: var(--paper-thick-border-width);
 }
 
@@ -255,10 +255,10 @@
     z-index: 1;
     transition: var(--paper-medium-transition) color;
 }
-.PaperInput.labelled.compact .outline {
+.PaperInput.labelled.size-small .outline {
     padding: 0 calc(var(--paper-uigap-threefourths) - var(--paper-uigap-onefourth));
 }
-.PaperInput.labelled.compact .label {
+.PaperInput.labelled.size-small .label {
     left: calc(var(--paper-uigap-threefourths) - var(--paper-uigap-onefourth) + var(--paper-border-width));
 }
 .PaperInput.labelled input,
@@ -295,4 +295,28 @@
 .PaperInput.labelled.disabled .outline {
     background: var(--paper-surface-inset);
     border-color: var(--paper-border);
+}
+
+/* A single-line field is exactly its size's height, the height of a
+   PaperButton of the same size, so a field and the button beside it line up.
+   A multiline field keeps its padding and grows with its rows. */
+.PaperInput.size-small input,
+.PaperInput.size-medium input,
+.PaperInput.size-large input {
+    box-sizing: border-box;
+    padding-top: 0;
+    padding-bottom: 0;
+}
+.PaperInput.size-small input {
+    height: var(--paper-field-size-small);
+}
+.PaperInput.size-medium input {
+    height: var(--paper-field-size-medium);
+}
+.PaperInput.size-large input {
+    height: var(--paper-field-size-large);
+}
+.PaperInput.size-large input,
+.PaperInput.size-large textarea {
+    font-size: var(--paper-text-size-4);
 }

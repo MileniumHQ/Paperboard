@@ -37,7 +37,7 @@ export function ProjectNameField(props: {
     };
     return (
         <PaperInput
-            compact
+            size="small"
             aria-label="Project name"
             title="Rename"
             maxLength={MAX_PROJECT_NAME}

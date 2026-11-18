@@ -19,7 +19,10 @@
     justify-content: space-between;
     gap: var(--paper-uigap-half);
     width: 100%;
-    padding: var(--paper-uigap-threefourths) var(--paper-uigap);
+    /* a medium field's height, the height of a medium button beside it */
+    box-sizing: border-box;
+    height: var(--paper-field-size-medium);
+    padding: 0 var(--paper-uigap);
     border-radius: var(--paper-border-radius);
     border: var(--paper-border-width) solid var(--paper-border);
     background: var(--paper-surface-raised);

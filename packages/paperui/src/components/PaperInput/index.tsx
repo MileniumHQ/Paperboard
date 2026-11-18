@@ -24,14 +24,21 @@ const isThenable = (value: unknown): value is PromiseLike<unknown> =>
 /**
  * `ref` is re-declared because the multiline form hands back a textarea, which
  * the inherited input signature cannot express. Attributes that only exist on
- * an input (`type`, `min`, `max`, `step`, `pattern`, `size`) have no effect on a
+ * an input (`type`, `min`, `max`, `step`, `pattern`) have no effect on a
  * multiline field and are ignored.
  */
-export interface PaperInputProps extends Omit<JSX.InputHTMLAttributes<HTMLInputElement>, "ref"> {
+/** a field's height: the same as a PaperButton of the same size */
+export type PaperInputSize = "small" | "medium" | "large";
+
+export interface PaperInputProps extends Omit<JSX.InputHTMLAttributes<HTMLInputElement>, "ref" | "size"> {
     /** The field's name, shown in a notch of its top border. It is the input's accessible name. */
     label?: string;
     icon?: JSX.Element | string;
-    compact?: boolean;
+    /**
+     * The field's height, the same as a PaperButton of the same size, so a
+     * field and the button beside it line up. Default "medium".
+     */
+    size?: PaperInputSize;
     fullWidth?: boolean;
     /** Draws the field as wrong, with no words. A field with something to say gets `error`. */
     invalid?: boolean;
@@ -56,7 +63,7 @@ export function PaperInput(props: PaperInputProps) {
         "label",
         "id",
         "icon",
-        "compact",
+        "size",
         "fullWidth",
         "invalid",
         "error",
@@ -187,7 +194,7 @@ export function PaperInput(props: PaperInputProps) {
     const className = () =>
         cx(
             styles.PaperInput,
-            local.compact ? styles.compact : "",
+            styles[`size-${local.size ?? "medium"}`],
             local.fullWidth ? styles.fullWidth : "",
             icon() ? styles.hasIcon : "",
             local.label ? styles.labelled : "",

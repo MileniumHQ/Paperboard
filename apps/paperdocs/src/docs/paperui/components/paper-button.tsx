@@ -79,13 +79,13 @@ export function Example() {
                         <td><PaperCode>size</PaperCode></td>
                         <td><PaperCode>PaperButtonSize</PaperCode></td>
                         <td><PaperCode>"medium"</PaperCode></td>
-                        <td><PaperCode>"tiny"</PaperCode>, <PaperCode>"small"</PaperCode>, <PaperCode>"medium"</PaperCode>, or <PaperCode>"large"</PaperCode>. <PaperCode>large</PaperCode> is the hero action, <PaperCode>tiny</PaperCode> a low-emphasis control. Every button of a size has the same height, with or without an icon.</td>
+                        <td><PaperCode>"tiny"</PaperCode>, <PaperCode>"small"</PaperCode>, <PaperCode>"medium"</PaperCode>, or <PaperCode>"large"</PaperCode>. <PaperCode>large</PaperCode> is the hero action, <PaperCode>tiny</PaperCode> a low-emphasis control. Every button of a size has the same height, with or without an icon: 32, 40, or 48 pixels from small to large, the height of a PaperInput or PaperSelectMenu of the same size, so a button lines up with the field beside it.</td>
                     </tr>
                     <tr>
                         <td><PaperCode>icon</PaperCode></td>
                         <td><PaperCode>boolean</PaperCode></td>
                         <td>No default (off)</td>
-                        <td>Draws a square control sized to <PaperCode>size</PaperCode>: 28, 32, 36, or 48 pixels from tiny to large. A string child is read as a Material icon name and drawn as the glyph.</td>
+                        <td>Draws a square control sized to <PaperCode>size</PaperCode>: 28, 32, 40, or 48 pixels from tiny to large. A string child is read as a Material icon name and drawn as the glyph.</td>
                     </tr>
                     <tr>
                         <td><PaperCode>fullWidth</PaperCode></td>

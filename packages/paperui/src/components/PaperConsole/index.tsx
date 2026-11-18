@@ -571,7 +571,7 @@ export function PaperConsole(props: ParentProps<PaperConsoleProps>) {
                     <PaperInput
                         ref={inputRef}
                         fullWidth
-                        compact
+                        size="small"
                         class={styles.consoleInput}
                         icon={local.prompt ?? "chevron_right"}
                         placeholder={local.placeholder ?? "Enter command..."}

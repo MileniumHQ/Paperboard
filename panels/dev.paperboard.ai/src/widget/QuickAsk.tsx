@@ -95,7 +95,7 @@ export default function QuickAsk(props: { widget: WidgetContext }) {
                     <form class={styles.askRow} onSubmit={submit}>
                         <PaperInput
                             fullWidth
-                            compact
+                            size="small"
                             aria-label={model() ? `Ask ${model()}` : "Ask AI"}
                             placeholder="Ask anything"
                             maxLength={MAX_USER_MESSAGE_CHARS}

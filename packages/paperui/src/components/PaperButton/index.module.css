@@ -52,9 +52,30 @@
     }
 }
 
-/* sizes: medium is the default; small is more compact, large is the hero */
+/* sizes: medium is the default; small is more compact, large is the hero.
+   Each is exactly its field size's height, the height of a PaperInput or
+   PaperSelectMenu of the same size, so a button lines up with the field
+   beside it. */
+.PaperButton.size-small,
+.PaperButton.size-medium,
+.PaperButton.size-large {
+    box-sizing: border-box;
+}
+
+.PaperButton.size-small {
+    height: var(--paper-field-size-small);
+}
+
 .PaperButton.size-medium {
-    padding: var(--paper-uigap-half) var(--paper-uigap-sixfourths);
+    height: var(--paper-field-size-medium);
+}
+
+.PaperButton.size-large {
+    height: var(--paper-field-size-large);
+}
+
+.PaperButton.size-medium {
+    padding: 0 var(--paper-uigap-sixfourths);
     font-size: var(--paper-text-size-3);
     gap: var(--paper-uigap-half);
 }
@@ -64,7 +85,7 @@
 }
 
 .PaperButton.size-large {
-    padding: var(--paper-uigap-threefourths) var(--paper-uigap-double);
+    padding: 0 var(--paper-uigap-double);
     font-size: var(--paper-text-size-4);
     gap: var(--paper-uigap-half);
 }
@@ -74,7 +95,7 @@
 }
 
 .PaperButton.size-small {
-    padding: var(--paper-uigap-half) var(--paper-uigap);
+    padding: 0 var(--paper-uigap);
     font-size: var(--paper-text-size-2);
     gap: var(--paper-uigap-half);
 }
@@ -241,20 +262,20 @@
 }
 
 .PaperButton.icon.size-large {
-    height: var(--paper-control-size-large);
-    width: var(--paper-control-size-large);
+    height: var(--paper-field-size-large);
+    width: var(--paper-field-size-large);
     font-size: var(--paper-icon-size-large);
 }
 
 .PaperButton.icon.size-medium {
-    height: var(--paper-control-size-medium);
-    width: var(--paper-control-size-medium);
+    height: var(--paper-field-size-medium);
+    width: var(--paper-field-size-medium);
     font-size: var(--paper-icon-size-medium);
 }
 
 .PaperButton.icon.size-small {
-    height: var(--paper-control-size-small);
-    width: var(--paper-control-size-small);
+    height: var(--paper-field-size-small);
+    width: var(--paper-field-size-small);
     font-size: var(--paper-icon-size-small);
 }
 
