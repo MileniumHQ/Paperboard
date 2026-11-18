@@ -7,7 +7,7 @@ import type { GameServer } from "../helpers/game";
 import { cs2Call as call, cs2Server } from "../helpers/cs2";
 import { PANEL_ID } from "../../src/servers";
 import { sendServerCommand, sendChatMessage, startServerInstance, stopServerInstance } from "../../src/service/lifecycle";
-import { CS2 } from "../../src/games/cs2";
+import { gameFor } from "../../src/games";
 import { SOURCE_CALLS } from "../../src/games/source";
 
 let daemon: TestDaemon;
@@ -18,8 +18,9 @@ afterAll(async () => {
     await daemon?.stop();
 });
 
-// the dedicated server Paperboard runs is the Linux build
-const linux = process.platform === "linux";
+// whether this computer runs the dedicated server, by the game's own rule
+// (Paperboard runs the Linux build, on x64 only)
+const support = gameFor("counter-strike-2").hostSupport({ os: process.platform, arch: process.arch }, { software: "", version: "" });
 const ids = SOURCE_CALLS;
 const BANNED = "[U:1:24691]";
 const command = (server: GameServer, line: string) => sendServerCommand(server.server, line);
@@ -29,7 +30,7 @@ const said = (server: GameServer, text: string, what: string) => server.server.w
 
 // Counter-Strike 2 running, against a stand-in that prints what the real server was measured to (build 26598758).
 describe("Counter-Strike 2", () => {
-    test.skipIf(!linux)("the server is driven through its console: passwords stay out of sight, a banned player is put out as they join, chat, kicks and map changes are read back, and time on survives a failed save", async () => {
+    test.skipIf(!support.supported)("the server is driven through its console: passwords stay out of sight, a banned player is put out as they join, chat, kicks and map changes are read back, and time on survives a failed save", async () => {
         const server = await cs2Server();
         await call(server, "writeGameOptions", { patch: { password: "join-Secret-1", token: "token-Secret-1", gamemode: "casual", bot_quota: 2 } });
         await startServerInstance(server.server);
@@ -101,5 +102,11 @@ describe("Counter-Strike 2", () => {
         expect(commands(server).at(-1)).toBe("quit");
         const seen = JSON.parse(fs.readFileSync(path.join(server.dir, "players.json"), "utf8")) as { steamId: string; playtime?: number }[];
         expect(seen.find((p) => p.steamId === "[U:1:1]")?.playtime).toBeGreaterThan(0);
+    });
+
+    test.skipIf(support.supported)("a computer it doesn't run on is told why at Start, and the server stays offline", async () => {
+        const server = await cs2Server();
+        await expect(startServerInstance(server.server)).rejects.toThrow(support.reason!);
+        expect(server.server.state.serverStatus).toBe("offline");
     });
 });
