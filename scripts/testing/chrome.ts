@@ -96,7 +96,9 @@ async function reaper(group: number, profile: string): Promise<Reaper> {
     const fifo = path.join(profile, "reaper");
     const made = spawnSync("mkfifo", [fifo], { encoding: "utf8" });
     if (made.status !== 0) throw new Error(`Could not make the Chrome reaper's FIFO (exit ${made.status}): ${made.stderr}`);
-    const reap = 'exec < "$3"; if read -r _; then exit 0; fi; kill -9 -- "-$1" 2> /dev/null; for _ in 1 2 3 4 5 6 7 8 9 10; do rm -rf -- "$2"; [ -e "$2" ] || exit 0; sleep 0.2; done; exit 1';
+    // `kill -s KILL -- -PGID` is the POSIX form every /bin/sh takes; dash
+    // (Ubuntu's /bin/sh) refuses `kill -9 -- -PGID` and kills nothing
+    const reap = 'exec < "$3"; if read -r _; then exit 0; fi; kill -s KILL -- "-$1"; for _ in 1 2 3 4 5 6 7 8 9 10; do rm -rf -- "$2"; [ -e "$2" ] || exit 0; sleep 0.2; done; exit 1';
     // in a session of its own, so no signal to this process's group reaches it
     const shell = spawn("/bin/sh", ["-c", `(${reap}) > /dev/null 2>&1 &`, "chrome-reaper", String(group), profile, fifo], {
         stdio: "ignore",
