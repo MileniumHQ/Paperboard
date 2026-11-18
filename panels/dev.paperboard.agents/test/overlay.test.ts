@@ -40,7 +40,7 @@ async function pixel(x: number, y: number): Promise<number[]> {
 
 describe("screenshot overlay", () => {
     test("draws boxes, labels and a grid on a page that enforces Trusted Types, and comes off again", async () => {
-        expect(await chrome.evaluate<boolean>(`(() => { try { document.body.innerHTML = '<b></b>'; return false; } catch { return true; } })()`)).toBe(true);
+        expect(await chrome.evaluate<boolean>(`(() => { let refused = false; try { document.body.innerHTML = '<b></b>'; } catch { refused = true; } return refused; })()`)).toBe(true);
         const js = overlayJs({
             boxes: [
                 { x: 10, y: 40, w: 100, h: 30, label: "1" },
