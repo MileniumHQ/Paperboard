@@ -103,7 +103,7 @@ export async function withSavingPaused<T>(ctx: Server, work: () => Promise<T>): 
     }
 }
 
-/** Save world: everything in memory is written out, confirmed by the server's "Saved the game". */
+/** Save: everything in memory is written out, confirmed by the server's "Saved the game". */
 export async function saveWorld(ctx: Server): Promise<void> {
     if (ctx.state.serverStatus !== "online") throw new Error("Start the server before saving");
     await send(ctx, "save-all flush", flushed, FLUSH_TIMEOUT_MS, "that the world is saved");

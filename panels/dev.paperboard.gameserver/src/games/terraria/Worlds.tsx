@@ -38,7 +38,6 @@ export default function TerrariaWorlds() {
         <WorldsPage
             list={() => calls.terrariaWorlds()}
             game={{
-                listName: "terraria-worlds",
                 title: (world) => world.header?.name ?? world.name,
                 summary: (world) => summary(world.header, world.generated),
                 badges: (world) => (

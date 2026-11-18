@@ -38,7 +38,7 @@ export function EditableDetail(props: { edit: string; onEdit(): void; children: 
 }
 
 /**
- * Every game's Overview: the address card, the power controls, Save world,
+ * Every game's Overview: the address card, the power controls, Save,
  * a running server's four readouts and the console. A game fills in its own
  * avatar, the line under the address, its readouts, extra buttons for a
  * running server and its notices.
@@ -62,7 +62,7 @@ export default function ServerOverview(props: {
     children?: JSX.Element;
     /** what the console line does; console commands when left out */
     control?: Control;
-    /** false for a game that keeps no world, which has no Save world */
+    /** false for a game that keeps no world, which has no Save */
     world?: boolean;
 }) {
     const { calls, summary, serverStatus, serverEntries, onlinePlayers, localIp, serverPort, portMoves, serverVersion, initFailure, loadServerConfig, startServer, stopServer, restartServer } = useServer();
@@ -138,7 +138,7 @@ export default function ServerOverview(props: {
                             <Show when={props.world !== false}>
                                 <PaperButton onClick={() => void save()} disabled={saving.busy()}>
                                     <PaperIcon>save</PaperIcon>
-                                    {saving.busy() ? "Saving..." : "Save world"}
+                                    {saving.busy() ? "Saving..." : "Save"}
                                 </PaperButton>
                             </Show>
                             {props.actions}

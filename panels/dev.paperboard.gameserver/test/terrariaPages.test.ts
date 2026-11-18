@@ -87,8 +87,10 @@ const button = (label: string, within = "document") => `[...${within}.querySelec
 const DIALOG = `[...document.querySelectorAll("[role=dialog]")].at(-1)`;
 // textContent: innerText reads a badge's CSS capitals
 const text = (value: string) => `document.body.textContent.includes(${JSON.stringify(value)})`;
-/** the row of list `list` for `value` */
-const row = (list: string, value: string) => `document.querySelector('input[name=${list}][value=${JSON.stringify(value)}]')`;
+/** the card of the world `value` */
+const world = (value: string) => `document.querySelector('[data-world=${JSON.stringify(value)}]')`;
+/** the card of the installed add-on `value` */
+const addon = (value: string) => `document.querySelector('[data-addon=${JSON.stringify(value)}]')`;
 
 /** resolves once `element` holds the focus: a focus moves nothing in the DOM, so waitFor's mutations don't see it */
 function focused(page: Page, element: string, what: string): Promise<void> {
@@ -160,15 +162,15 @@ describe("Terraria's Worlds tab", () => {
         const page = await openPage(`${served.url}/?server=s-ter`);
         try {
             await openTab(page, "worlds");
-            await page.waitFor(`${row("terraria-worlds", "Island")}?.parentElement.textContent.includes("Active") && ${row("terraria-worlds", "Cavern")}`, "both worlds, Island active");
-            await page.evaluate(`${row("terraria-worlds", "Cavern")}.click()`);
+            await page.waitFor(`${world("Island")}?.textContent.includes("Active") && ${world("Cavern")}`, "both worlds, Island active");
+            await page.evaluate(`${world("Cavern")}.click()`);
             await page.waitFor(`${DIALOG}?.innerText.includes("Inactive. Switching takes effect after a restart.")`, "Cavern's details");
             expect(await page.evaluate<string>(`${DIALOG}.innerText`)).toContain("Small (4200 × 1200 tiles)");
             // a download here has no Paperboard window to save it through, and says so
             await page.evaluate(`${button("Download", DIALOG)}.click()`);
             await page.waitFor(`[...document.querySelectorAll("[data-paper-toasts] [role=alert]")].some((t) => t.textContent.includes("Couldn't download the world") && t.textContent.includes("needs a panel shown in Paperboard"))`, "the download's failure");
             await page.evaluate(`${button("Switch to this world", DIALOG)}.click()`);
-            await page.waitFor(`${row("terraria-worlds", "Cavern")}?.parentElement.textContent.includes("Active") && !${row("terraria-worlds", "Island")}.parentElement.textContent.includes("Active")`, "Cavern active");
+            await page.waitFor(`${world("Cavern")}?.textContent.includes("Active") && !${world("Island")}.textContent.includes("Active")`, "Cavern active");
             expect(settingsOf("s-ter").world).toBe("Cavern");
             await page.evaluate(`[...document.querySelectorAll("[role=dialog] button")].find((b) => b.innerText.trim() === "Close")?.click()`);
 
@@ -176,8 +178,8 @@ describe("Terraria's Worlds tab", () => {
             await page.waitFor(`${DIALOG}?.innerText.includes("New World") && ${button("Create", DIALOG)}`, "the New World dialog, ready");
             expect(await page.evaluate<string>(`${DIALOG}.querySelector("input").value`)).toBe("World");
             await page.evaluate(`${button("Create", DIALOG)}.click()`);
-            await page.waitFor(`${row("terraria-worlds", "World")}?.parentElement.textContent.includes("Not generated yet")`, "the new world, not generated yet");
-            expect(await page.evaluate<string>(`${row("terraria-worlds", "World")}.parentElement.textContent`)).toContain("Active");
+            await page.waitFor(`${world("World")}?.textContent.includes("Not generated yet")`, "the new world, not generated yet");
+            expect(await page.evaluate<string>(`${world("World")}.textContent`)).toContain("Active");
             expect(settingsOf("s-ter")).toMatchObject({ world: "World", autocreate: "1", difficulty: "0" });
             // nothing is generated until Terraria starts on it
             expect(fs.existsSync(path.join(folder("s-ter"), "worlds", "World.wld"))).toBe(false);
@@ -221,7 +223,7 @@ describe("a tModLoader server's Mods tab", () => {
         const mods = path.join(folder("s-tml"), "tModLoader", "Mods");
         try {
             await openTab(page, "mods");
-            await page.waitFor(`${row("addon-installed", "HandMade.tmod")}?.parentElement.textContent.includes("Hand Made")`, "the mod put in by hand");
+            await page.waitFor(`${addon("HandMade.tmod")}?.textContent.includes("Hand Made")`, "the mod put in by hand");
             await page.type(`input[placeholder="Mod"]`, "wing", true);
             // the Workshop's answer is a card for the mod
             const wingCard = `[...document.querySelectorAll('[class*="_card_"]')].find((card) => card.querySelector('[class*="_headerRow_"]')?.textContent.includes("Wing Slot"))`;
@@ -231,7 +233,7 @@ describe("a tModLoader server's Mods tab", () => {
             await page.evaluate(`${button("Install", DIALOG)}.click()`);
             await page.waitFor(`${DIALOG}?.innerText.includes("Install Wing Slot") && ${button("Install", DIALOG)}`, "the install dialog, ready");
             await page.evaluate(`${button("Install", DIALOG)}.click()`);
-            await page.waitFor(`${text("Wing Slot is on.")} && ${row("addon-installed", "WingSlot.tmod")}`, "the installed mod");
+            await page.waitFor(`${text("Wing Slot is on.")} && ${addon("WingSlot.tmod")}`, "the installed mod");
             expect(JSON.parse(fs.readFileSync(path.join(mods, "enabled.json"), "utf8"))).toEqual(["HandMade", "WingSlot"]);
             expect(Buffer.from(fs.readFileSync(path.join(mods, "WingSlot.tmod")))).toEqual(Buffer.from(tmod("WingSlot", "Wing Slot")));
 
@@ -240,7 +242,7 @@ describe("a tModLoader server's Mods tab", () => {
             await page.evaluate(`${button("Uninstall", DIALOG)}.click()`);
             await page.waitFor(`${DIALOG}?.innerText.includes("Uninstall Wing Slot") && ${button("Uninstall", DIALOG)}`, "the uninstall confirmation");
             await page.evaluate(`${button("Uninstall", DIALOG)}.click()`);
-            await page.waitFor(`!${row("addon-installed", "WingSlot.tmod")} && ${row("addon-installed", "HandMade.tmod")}`, "the mod gone from the list");
+            await page.waitFor(`!${addon("WingSlot.tmod")} && ${addon("HandMade.tmod")}`, "the mod gone from the list");
             expect(fs.existsSync(path.join(mods, "WingSlot.tmod"))).toBe(false);
             expect(JSON.parse(fs.readFileSync(path.join(mods, "enabled.json"), "utf8"))).toEqual(["HandMade"]);
             const trash = fs.readdirSync(folder("s-tml")).filter((name) => name.startsWith(".trash-"));

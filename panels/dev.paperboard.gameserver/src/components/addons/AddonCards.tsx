@@ -8,8 +8,6 @@ import {
     PaperIcon,
     PaperInput,
     PaperLink,
-    PaperList,
-    PaperListItem,
     PaperMediaCard,
     PaperMediaCardGroup,
     PaperText,
@@ -28,6 +26,7 @@ export function AddonInstalledList<Meta>(props: {
     onOpen(item: InstalledAddon): void;
     onAction(item: InstalledAddon, does: "install" | "remove"): void;
 }) {
+    const actionsOf = (item: InstalledAddon) => props.kind.itemActions?.filter((a) => a.does !== "install" || item.project) ?? [];
     return (
         <Show when={props.listing.items.length > 0}>
             <PaperFlex direction="column" gap="half">
@@ -39,52 +38,40 @@ export function AddonInstalledList<Meta>(props: {
                         {props.listing.note}
                     </PaperText>
                 </Show>
-                <PaperList
-                    name="addon-installed"
-                    value=""
-                    onValueChange={(id) => {
-                        const item = props.listing.items.find((candidate) => candidate.id === id);
-                        if (item) props.onOpen(item);
-                    }}
-                    buttons
-                    selectable={props.kind.itemClick !== "none"}
-                    fullWidth
-                >
+                <PaperMediaCardGroup minCardWidth="card-min">
                     <For each={props.listing.items}>
                         {(item) => (
-                            <PaperListItem
-                                value={item.id}
+                            <PaperMediaCard
+                                data-addon={item.id}
                                 icon={<PictureAvatar from={props.kind.source.pictures} url={item.iconUrl} shape="square" size="large" fallbackIcon={props.kind.glyph} />}
-                                description={
-                                    // a file name has no spaces to wrap at; it breaks where it must
-                                    <PaperText breakWord size={1} weight={600}>
-                                        {[item.subtitle, item.footer].filter(Boolean).join(" · ")}
-                                    </PaperText>
+                                title={item.title}
+                                // a file name has no spaces to wrap at; it breaks where it must
+                                subtitle={[item.subtitle, item.footer].filter(Boolean).join(" · ") || undefined}
+                                badge={<PaperBadge variant={item.badge.variant}>{item.badge.label}</PaperBadge>}
+                                onClick={props.kind.itemClick === "none" ? undefined : () => props.onOpen(item)}
+                                footerRight={
+                                    <Show when={actionsOf(item).length > 0}>
+                                        <PaperFlex direction="row" gap="half" align="center">
+                                            <For each={actionsOf(item)}>
+                                                {(action) => (
+                                                    <PaperButton
+                                                        size="tiny"
+                                                        variant={action.variant}
+                                                        disabled={props.busy || action.disabled?.()}
+                                                        onClick={() => props.onAction(item, action.does)}
+                                                    >
+                                                        <PaperIcon aria-hidden="true">{action.icon}</PaperIcon>
+                                                        {action.label}
+                                                    </PaperButton>
+                                                )}
+                                            </For>
+                                        </PaperFlex>
+                                    </Show>
                                 }
-                                actions={
-                                    <PaperFlex direction="row" gap="half" align="center">
-                                        <PaperBadge variant={item.badge.variant}>{item.badge.label}</PaperBadge>
-                                        <For each={props.kind.itemActions?.filter((a) => a.does !== "install" || item.project)}>
-                                            {(action) => (
-                                                <PaperButton
-                                                    size="tiny"
-                                                    variant={action.variant}
-                                                    disabled={props.busy || action.disabled?.()}
-                                                    onClick={() => props.onAction(item, action.does)}
-                                                >
-                                                    <PaperIcon aria-hidden="true">{action.icon}</PaperIcon>
-                                                    {action.label}
-                                                </PaperButton>
-                                            )}
-                                        </For>
-                                    </PaperFlex>
-                                }
-                            >
-                                {item.title}
-                            </PaperListItem>
+                            />
                         )}
                     </For>
-                </PaperList>
+                </PaperMediaCardGroup>
             </PaperFlex>
         </Show>
     );

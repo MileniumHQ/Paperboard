@@ -160,7 +160,7 @@ describe("failures are shown", () => {
         const pal = await openPage(`${served.url}/?server=s-pal`);
         try {
             await pal.waitFor(`document.body.innerText.includes("ONLINE")`, "Palworld to show online");
-            await pal.evaluate(`[...document.querySelectorAll("button")].find((b) => b.innerText.includes("Save world")).dataset.test = "save"`);
+            await pal.evaluate(`[...document.querySelectorAll("button")].find((b) => b.innerText.trim() === "Save").dataset.test = "save"`);
             await pal.click('button[data-test="save"]');
             await pal.waitFor(toast("Couldn't save the world"), "the refused save to be shown");
             expect(await toastText(pal, "Couldn't save the world")).toContain("Palworld answered 500 to save: disk full");

@@ -10,6 +10,7 @@ import { openPage, servePanel, type Page } from "./helpers/browser";
 import { installFakeJava } from "./helpers/fakeJava";
 import { loopbackServer, routeHost } from "./helpers/http";
 import { writeTree } from "./helpers/tmp";
+import { strToU8, zipSync } from "fflate";
 import { PANEL_ID } from "../src/servers";
 import { javaPackageFor } from "../src/lib/versionProfile";
 
@@ -43,7 +44,7 @@ async function setUp() {
             { name: "Steve", uuid: "8667ba71-b85a-4004-af54-457a9734eed7" },
             { name: "Alex", uuid: "ec561538-f3fd-461d-aff5-086b22154bce" },
         ]);
-        writeTree(serverDir("s-mc"), { "server.jar": "jar", "eula.txt": "eula=true\n", "whitelist.json": whitelist });
+        writeTree(serverDir("s-mc"), { "server.jar": "jar", "eula.txt": "eula=true\n", "whitelist.json": whitelist, "server.properties": "level-name=world\nresource-pack=https://example.com/pack.zip\n", "world/level.dat": "w", "creative_flat/level.dat": "c", "plugins/Essentials.jar": zipSync({ "plugin.yml": strToU8("name: Essentials\nmain: x.Main\nversion: 1.0\n"), "x/Main.class": strToU8("class") }) });
         writeTree(serverDir("s-empty"), { "server.jar": "jar", "eula.txt": "eula=true\n" });
         installFakeJava(javaPackageFor("1.21.1")!);
         const { gameServerService } = await import("../src/service");
@@ -60,7 +61,7 @@ const openTab = async (page: Page, id: string, shows: string) => {
 };
 /** the nearest PaperCard around `selector`'s element, as a page expression */
 const cardAround = (selector: string) => `document.querySelector(${JSON.stringify(selector)})?.closest('[class*="PaperCard"]')`;
-/** the empty room under a card's last row: none, when its list is shorter than the page */
+/** the empty room under a card's last row */
 const roomUnderRows = (name: string) => `(() => {
     const rows = [...document.querySelectorAll("input[name=${name}]")].map((i) => i.closest("label"));
     const card = rows[0].closest('[class*="PaperCard"]');
@@ -80,6 +81,10 @@ const shot = async (page: Page, name: string) => {
             fs.writeFileSync(path.join(SHOTS, `${name}-${width}-${scheme}.png`), await page.screenshot());
         }
     }
+    // the test goes on at the size it started at
+    await page.resize(1400, 813);
+    await page.send("Emulation.setEmulatedMedia", { features: [{ name: "prefers-color-scheme", value: "light" }] });
+    await page.settled();
 };
 
 describe("the version list", () => {
@@ -119,7 +124,9 @@ describe("the player roster", () => {
             expect(await page.evaluate<boolean>(`!!${cardAround("input[name=playersList]")}`)).toBe(true);
             // the detail side stays as it was: no card around "Select a player"
             expect(await page.evaluate<boolean>(`!document.querySelector("input[name=playersList]").closest('[class*="PaperCard"]')?.innerText.includes("Select a player")`)).toBe(true);
-            expect(await page.evaluate<number>(roomUnderRows("playersList"))).toBeLessThanOrEqual(4);
+            // the roster fills its column to the bottom, short list or not
+            expect(await page.evaluate<number>(`(() => { const card = ${cardAround("input[name=playersList]")}; return card.parentElement.getBoundingClientRect().bottom - card.getBoundingClientRect().bottom; })()`)).toBeLessThanOrEqual(4);
+            expect(await page.evaluate<number>(roomUnderRows("playersList"))).toBeGreaterThan(40);
             await shot(page, "players");
         } finally {
             await page.close();
@@ -132,6 +139,54 @@ describe("the player roster", () => {
             expect(empty.exceptions).toEqual([]);
         } finally {
             await empty.close();
+            served.stop();
+        }
+    }, 60_000);
+});
+
+/** every element that matches `selector`, as a page expression */
+const all = (selector: string) => `[...document.querySelectorAll(${JSON.stringify(selector)})]`;
+
+describe("the worlds and the installed add-ons", () => {
+    test("each world is a PaperMediaCard with its Active badge that opens its dialog, and the same for an installed plugin", async () => {
+        const served = await setUp();
+        const page = await openPage(`${served.url}/?server=s-mc`);
+        try {
+            await openTab(page, "worlds", "creative_flat");
+            await page.settled();
+            const worlds = await page.evaluate<string[]>(`${all("[data-world]")}.map((c) => c.dataset.world)`);
+            expect(worlds.sort()).toEqual(["creative_flat", "world"]);
+            expect(await page.evaluate<boolean>(`${all("[data-world]")}.every((c) => c.getAttribute("role") === "button" && c.matches('[class*="_card_"]'))`)).toBe(true);
+            expect(await page.evaluate<boolean>(`!document.querySelector("input[name=worlds]")`)).toBe(true);
+            // the active one wears its badge; the other does not
+            expect(await page.evaluate<string>(`document.querySelector('[data-world="world"]').textContent`)).toContain("Active");
+            expect(await page.evaluate<string>(`document.querySelector('[data-world="creative_flat"]').textContent`)).not.toContain("Active");
+            // pressing a card opens that world's dialog with its actions
+            await page.evaluate(`document.querySelector('[data-world="creative_flat"]').click()`);
+            await page.waitFor(`document.querySelector("[role=dialog]")?.innerText.includes("Switch to this world")`, "the world's dialog");
+            expect(await page.evaluate<string>(`document.querySelector("[role=dialog]").innerText`)).toContain("Delete");
+            await page.evaluate(`[...document.querySelectorAll("[role=dialog] button")].find((b) => b.innerText.trim() === "Close").click()`);
+            await shot(page, "worlds");
+
+            await openTab(page, "plugins", "Installed Plugins");
+            await page.waitFor(`document.querySelector("[data-addon]")`, "the installed plugin");
+            await page.settled();
+            expect(await page.evaluate<boolean>(`!document.querySelector("input[name=addon-installed]")`)).toBe(true);
+            const card = `document.querySelector('[data-addon="Essentials.jar"]')`;
+            expect(await page.evaluate<boolean>(`${card}.matches('[class*="_card_"]') && ${card}.innerText.includes("Essentials")`)).toBe(true);
+            // its status badge stands on the card, and a card with no actions has no empty footer
+            expect(await page.evaluate<string>(`${card}.querySelector('[class*="_badge_"]').textContent`)).toBe("Installed");
+            expect(await page.evaluate<boolean>(`!${card}.querySelector('[class*="_footer_"]')`)).toBe(true);
+            await shot(page, "plugins");
+
+            // a kind with actions puts them on the card: the resource pack's Remove
+            await openTab(page, "resourcepack", "Current Resource Pack");
+            await page.waitFor(`document.querySelector('[data-addon="resource-pack"]')`, "the current resource pack");
+            expect(await page.evaluate<string[]>(`[...document.querySelector('[data-addon="resource-pack"]').querySelectorAll("button")].map((b) => b.innerText.trim())`)).toEqual(["delete\nRemove"]);
+            await shot(page, "resourcepack");
+            expect(page.exceptions).toEqual([]);
+        } finally {
+            await page.close();
             served.stop();
         }
     }, 60_000);

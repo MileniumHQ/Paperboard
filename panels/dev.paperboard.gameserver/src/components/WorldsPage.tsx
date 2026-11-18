@@ -10,8 +10,8 @@ import {
     PaperFlex,
     PaperIcon,
     PaperInput,
-    PaperList,
-    PaperListItem,
+    PaperMediaCard,
+    PaperMediaCardGroup,
     PaperModal,
     PaperPageHeader,
     PaperQuote,
@@ -42,8 +42,6 @@ export interface WorldUpload {
 
 /** How a game's worlds are created, uploaded, switched and removed. */
 export interface WorldsGame<W extends WorldEntry> {
-    /** the list's form name */
-    listName: string;
     /** what the list and dialogs call a world */
     title(world: W): string;
     /** the row under its title */
@@ -282,20 +280,20 @@ export default function WorldsPage<W extends WorldEntry>(props: { list: () => Pr
                 }
             >
                 <Show when={(worlds() ?? []).length > 0} fallback={emptyCard("No worlds yet. Create one, or start the server to generate one.")}>
-                    <PaperList name={props.game.listName} value="" onValueChange={(name) => setSelected(String(name))} buttons fullWidth>
+                    <PaperMediaCardGroup minCardWidth="card-min">
                         <For each={worlds() ?? []}>
                             {(world) => (
-                                <PaperListItem
-                                    value={world.name}
+                                <PaperMediaCard
+                                    data-world={world.name}
                                     icon={<WorldTile active={world.active} />}
-                                    description={props.game.summary(world)}
-                                    actions={world.active ? <PaperBadge variant="success">Active</PaperBadge> : undefined}
-                                >
-                                    {props.game.title(world)}
-                                </PaperListItem>
+                                    title={props.game.title(world)}
+                                    subtitle={props.game.summary(world)}
+                                    badge={world.active ? <PaperBadge variant="success">Active</PaperBadge> : undefined}
+                                    onClick={() => setSelected(world.name)}
+                                />
                             )}
                         </For>
-                    </PaperList>
+                    </PaperMediaCardGroup>
                 </Show>
             </Show>
 

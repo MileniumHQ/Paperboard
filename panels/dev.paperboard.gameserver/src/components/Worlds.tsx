@@ -40,7 +40,6 @@ export default function Worlds() {
         <WorldsPage
             list={() => calls.listWorlds()}
             game={{
-                listName: "worlds",
                 title: (world) => world.name,
                 summary: dimensionsLabel,
                 details: (world) => (
