@@ -16,6 +16,9 @@
     height: var(--paper-text-size-0);
 }
 
+/* A monogram takes the room of the glyph it stands in for: two capitals,
+   even wide ones like MW, fit in about one em of the icon's size, so a
+   computer's initials fit the rail item a glyph would. */
 .monogram {
     font-family: var(--paper-font-family-rounded);
     font-weight: 700;
@@ -26,7 +29,6 @@
     align-items: center;
     justify-content: center;
     aspect-ratio: 1;
-    padding: var(--paper-uigap-onefourth) var(--paper-uigap-half);
     line-height: 1;
     text-align: center;
 }
