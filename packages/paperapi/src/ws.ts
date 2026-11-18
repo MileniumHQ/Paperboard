@@ -269,14 +269,16 @@ export class CraneTransport {
                 } catch (err) { debugErr("message handler", err); }
             });
 
-            ws.on("close", () => {
-                fail(new Error("PaperCrane closed before connecting"));
+            ws.on("close", (code, reason) => {
+                // the daemon names why it closed a socket (an auth timeout, a slow consumer): say it
+                const why = `${code}${String(reason) ? ` ${String(reason)}` : ""}`;
+                fail(new Error(`PaperCrane closed before connecting (${why})`));
                 this.ws = null;
                 this.authenticated = false;
                 // Tunnel died with the socket; open() re-establishes it
                 this.tunnelId = null;
                 this.emitStatus(false);
-                this.rejectAllPending("PaperCrane connection closed");
+                this.rejectAllPending(`PaperCrane connection closed (${why})`);
                 if (!this.closedByUser) this.scheduleReconnect();
             });
         });

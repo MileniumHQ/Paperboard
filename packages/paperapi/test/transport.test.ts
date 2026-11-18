@@ -461,6 +461,16 @@ describe("failures reach the caller", () => {
         await expect(processApi.kill("p1")).rejects.toThrow("refused process:kill");
     });
 
+    test("a call on a socket the daemon closes fails with the daemon's code and reason", async () => {
+        await initPaperApi({ port: server.port, token: server.token });
+        const unanswered = deferred();
+        server.answer = () => unanswered.promise;
+        const write = terminalApi.write("t1", "ls\n");
+        await server.next("the write to reach the daemon", isAction("term:write"));
+        await server.dropConnections({ code: 4429, reason: "Too many concurrent requests" });
+        await expect(write).rejects.toThrow("PaperCrane connection closed (4429 Too many concurrent requests)");
+    });
+
     test("attaching to a process that is not there reports failure and is not replayed on reconnect", async () => {
         await initPaperApi({ port: server.port, token: server.token });
         getTransport().subscribeEvent("keepalive", () => {});

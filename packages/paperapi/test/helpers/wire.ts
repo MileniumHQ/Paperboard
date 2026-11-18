@@ -36,8 +36,9 @@ export interface WireServer {
     sendRaw(obj: unknown): void;
     // tells the newest connection its tunnel closed
     closeTunnel(): void;
-    // drops every connection, as a daemon restart does
-    dropConnections(): Promise<void>;
+    // drops every connection, as a daemon restart does; with a close frame,
+    // as the daemon closes a socket it refuses (an auth timeout, a slow consumer)
+    dropConnections(close?: { code: number; reason: string }): Promise<void>;
     connections(): number;
     // resolves once connection `conn` has closed
     connectionClosed(conn: number): Promise<void>;
@@ -117,12 +118,13 @@ export async function startWireServer(token = "test-token"): Promise<WireServer>
             s.tunnel = null;
             s.ws.send(JSON.stringify({ type: "tunnel-closed", id }));
         },
-        dropConnections: async () => {
+        dropConnections: async (close) => {
             const closing = sockets.splice(0).map(
                 (s) =>
                     new Promise<void>((resolve) => {
                         s.ws.once("close", () => resolve());
-                        s.ws.terminate();
+                        if (close) s.ws.close(close.code, close.reason);
+                        else s.ws.terminate();
                     }),
             );
             await Promise.all(closing);

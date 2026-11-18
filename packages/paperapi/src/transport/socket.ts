@@ -6,7 +6,8 @@
 /** What a socket tells its listeners, as the ws package names it. */
 export interface SocketEvents {
     open: () => void;
-    close: () => void;
+    /** the close code and the reason the other end gave, as the ws package passes them */
+    close: (code: number, reason: string) => void;
     error: (err: Error) => void;
     // a frame: text from a native socket, a Buffer from the ws package
     message: (data: unknown) => void;
@@ -38,7 +39,7 @@ export async function nodeBuiltin<N extends keyof NodeBuiltins>(name: N): Promis
 // each native event as the ws package's listener hears it
 const adapt: { [E in keyof SocketEvents]: (cb: SocketEvents[E], url: string) => EventListener } = {
     open: (cb) => () => cb(),
-    close: (cb) => () => cb(),
+    close: (cb) => (e) => cb((e as CloseEvent).code, (e as CloseEvent).reason),
     // a native error event carries no reason; the ws package hands its
     // listeners an Error, so this one does too
     error: (cb, url) => () => cb(new Error(`Couldn't reach PaperCrane at ${url}`)),
