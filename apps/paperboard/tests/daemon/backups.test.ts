@@ -155,12 +155,17 @@ describe("named sources and beforeBackup", () => {
 	test("a beforeBackup error refuses the backup and restarts the service; progress lists a running backup", async () => {
 		const dir = dataDir();
 		const log = path.join(tempDir(), "starts.log");
+		// the backup goes on once this file is there. Not an action: the daemon
+		// stops the service the moment beforeBackup returns, which would race
+		// that action's own reply
+		const release = path.join(tempDir(), "release");
 		await installPanelFiles(dir, {
 			id: "test.prep",
 			service: countedService(log, {
-				extra: "let released = false; let release: () => void = () => { released = true; }; let mode = 'refuse';",
-				actions: "{ ping: async () => 'pong', allow: async () => { mode = 'wait'; return true; }, release: async () => { release(); return true; } }",
-				options: "beforeBackup: async () => { if (mode === 'refuse') throw new Error('world is busy'); if (!released) await new Promise<void>((r) => { release = r; }); },",
+				extra: "let mode = 'refuse';",
+				actions: "{ ping: async () => 'pong', allow: async () => { mode = 'wait'; return true; } }",
+				// quiet: the daemon's own deadline for getting ready bounds this wait
+				options: `beforeBackup: async () => { if (mode === 'refuse') throw new Error('world is busy'); while (!fs.existsSync(${JSON.stringify(release)})) await new Promise((r) => setTimeout(r, 20)); },`,
 			}),
 		});
 		const daemon = await startDaemon({ dataDir: dir });
@@ -183,7 +188,7 @@ describe("named sources and beforeBackup", () => {
 			return list.length ? list : null;
 		});
 		expect(progress[0]).toMatchObject({ panelId: "test.prep", kind: "create" });
-		await host.ok("actions:call", { panelId: "test.prep", action: "release", args: [] });
+		fs.writeFileSync(release, "");
 		expect((await running).error).toBeUndefined();
 		await panel.close();
 		await host.close();
