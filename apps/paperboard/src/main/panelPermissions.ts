@@ -60,11 +60,6 @@ export function mediaPermissions(permission: string, mediaTypes: readonly string
     return [...wanted];
 }
 
-/** getDisplayMedia's request: "media" with no media types (Electron 44), or "display-capture". */
-export function isScreenRequest(permission: string, mediaTypes: readonly string[] | undefined): boolean {
-    return permission === "display-capture" || (permission === "media" && mediaTypes !== undefined && mediaTypes.length === 0);
-}
-
 /** A permission check (navigator.permissions, device labels) names one kind. */
 export function checkedPermission(permission: string, mediaType: string | undefined): PanelPermission | null {
     if (permission !== "media") return null;

@@ -166,10 +166,11 @@ export async function launchElectron(options: {
 }
 
 // Resolves inside a page with the value of `expression` once it is truthy,
-// watching the DOM rather than polling a clock.
+// watching the DOM rather than polling a clock. A found element answers
+// true: Electron can't send a DOM node back from the page.
 export function domCondition(expression: string, ms = WAIT_MS): string {
     return `new Promise((resolve, reject) => {
-        const check = () => (${expression});
+        const check = () => { const value = (${expression}); return value instanceof Node ? true : value; };
         const first = check();
         if (first) return resolve(first);
         const observer = new MutationObserver(() => { const value = check(); if (value) { observer.disconnect(); clearTimeout(timer); resolve(value); } });

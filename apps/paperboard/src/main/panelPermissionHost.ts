@@ -16,7 +16,6 @@ import {
     checkedPermission,
     isClipboardPermission,
     isPanelOrigin,
-    isScreenRequest,
     mediaPermissions,
     panelAsker,
     type PanelAsker,
@@ -116,10 +115,9 @@ export function installPanelPermissions(ses: Session, store: PanelPermissionStor
         const origin = details?.requestingUrl || "";
         if (isClipboardPermission(permission)) return callback(isPanelOrigin(origin));
         const mediaTypes = "mediaTypes" in details ? details.mediaTypes : undefined;
-        // getDisplayMedia arrives as "media" with no media types: it's let
-        // through to setDisplayMediaRequestHandler below, which asks about
-        // the screen and what to share
-        if (isScreenRequest(permission, mediaTypes)) return callback(isPanelOrigin(origin));
+        // getDisplayMedia is let through to setDisplayMediaRequestHandler
+        // below, which asks about the screen and what to share
+        if (permission === "display-capture") return callback(isPanelOrigin(origin));
         const asker = panelAsker(origin);
         const wanted = mediaPermissions(permission, mediaTypes);
         if (!asker || !wanted) return callback(false);
