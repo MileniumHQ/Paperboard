@@ -1,14 +1,15 @@
 import { execFile, spawn } from "child_process";
 import { KeyedQueue } from "@mileniumhq/paperapi/serialQueue";
 import * as fs from "fs";
+import * as os from "os";
+import * as path from "path";
 import connectionPool from "./communication/papercrane/ConnectionPool";
 import { logger } from "../../papercrane/logger";
 import { panelFilesDirName } from "../../papercrane/storage";
 import {
     buildWindowsMountCommand,
-    buildMacMountScript,
-    macMountedVolume,
-    macMountScriptPath,
+    macFolderHasWindow,
+    mountMacFolder,
     powershellErrorLine,
     windowsDavRoot,
     remoteFolderSupported,
@@ -33,7 +34,7 @@ interface ActiveSession {
     davUser: string;
     // kept in memory to make a panel's folder in an open session
     davPass: string;
-    mount: string; // drive "Z:", the /Volumes folder macOS picked, or "" (linux)
+    mount: string; // drive "Z:", the folder macOS mounted on, or "" (linux)
     relay: DavRelay | null; // loopback relay to the remote daemon
     timer: NodeJS.Timeout | null;
     seen: boolean;
@@ -108,6 +109,9 @@ async function unmount(s: ActiveSession): Promise<void> {
             } catch {
                 await execAsync("diskutil", ["unmount", s.mount], 20_000);
             }
+            // the empty folder it was mounted on is ours; a folder that is
+            // still mounted isn't empty, and rmdir refuses it
+            await fs.promises.rmdir(s.mount);
         }
     } catch (err: any) {
         logger.warn("[RemoteFolder] unmount failed:", err?.message ?? err);
@@ -145,25 +149,6 @@ async function windowsHasWindow(drive: string): Promise<boolean> {
     return stdout
         .split(/\r?\n/)
         .some((line) => line.toLowerCase().includes(needle));
-}
-
-// each open Finder window's folder, one per line; no window is no line
-const FINDER_WINDOWS = [
-    'set out to ""',
-    'tell application "Finder"',
-    "repeat with w in (every Finder window)",
-    "try",
-    "set out to out & (POSIX path of (target of w as alias)) & linefeed",
-    "end try",
-    "end repeat",
-    "end tell",
-    "return out",
-];
-
-async function macHasWindow(mountPoint: string): Promise<boolean> {
-    const { stdout } = await execAsync("osascript", FINDER_WINDOWS.flatMap((line) => ["-e", line]), 15_000);
-    // Finder's paths end in "/": /Volumes/dav/ is in /Volumes/dav, not in /Volumes/dav-1
-    return stdout.split(/\r?\n/).some((line) => line.startsWith(`${mountPoint}/`));
 }
 
 // The folder closes once its window does: after a grace period for the
@@ -365,30 +350,25 @@ async function openNow(computerId: string, panelId?: string): Promise<{ ok: bool
             }
             rec.mount = drive;
         } else if (process.platform === "darwin") {
-            // credential in a 0600 temp file, never argv/URL (both leak
-            // into ps output)
-            const scriptPath = macMountScriptPath();
-            // a file already there is never written through
-            fs.writeFileSync(scriptPath, buildMacMountScript(session.user, session.pass, "127.0.0.1", rec.relay.port), {
-                mode: 0o600,
-                flag: "wx",
-            });
+            // the real path: Finder names its windows' folders by it
+            const mountPoint = await fs.promises.realpath(await fs.promises.mkdtemp(path.join(os.tmpdir(), "paperboard-folder-")));
             try {
-                rec.mount = macMountedVolume((await execAsync("osascript", [scriptPath], 60_000)).stdout);
-            } finally {
-                try {
-                    fs.unlinkSync(scriptPath);
-                } catch (err) {
-                    logger.warn(`[RemoteFolder] couldn't remove the mount script ${scriptPath}, which holds this session's password:`, err);
-                }
+                await mountMacFolder(session.user, session.pass, rec.relay.port, mountPoint);
+            } catch (err) {
+                await fs.promises.rmdir(mountPoint).catch((rmErr) => {
+                    // quiet: the failed mount is what's shown; this only leaves an empty temp folder
+                    logger.warn(`[RemoteFolder] couldn't remove the unused mount folder ${mountPoint}:`, rmErr);
+                });
+                throw err;
             }
+            rec.mount = mountPoint;
         }
 
         const shown = await showFolder(rec, subDir);
         if (shown) return await fail(shown);
         // linux: no window API to watch, so the relay's own idle timer ends it
         if (process.platform === "win32") startWatcher(rec, () => windowsHasWindow(rec.mount));
-        else if (process.platform === "darwin") startWatcher(rec, () => macHasWindow(rec.mount));
+        else if (process.platform === "darwin") startWatcher(rec, () => macFolderHasWindow(rec.mount));
         return { ok: true };
     } catch (err: any) {
         logger.warn("[RemoteFolder] open failed:", err?.message ?? err);

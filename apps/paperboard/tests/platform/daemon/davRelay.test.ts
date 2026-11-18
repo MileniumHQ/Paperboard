@@ -4,14 +4,14 @@ import * as fs from "node:fs";
 import * as http from "node:http";
 import * as https from "node:https";
 import * as net from "node:net";
+import * as os from "node:os";
 import * as path from "node:path";
 import { promisify } from "node:util";
 import { createTlsIdentity } from "../../../papercrane/tlsIdentity";
 import { type DavRelay, type DavRelayOptions, startDavRelay } from "../../../src/main/davRelay";
-import { buildMacMountScript, buildWindowsMountCommand, macMountedVolume, macMountScriptPath, windowsDavRoot } from "../../../src/main/remoteFolderMount";
-import { tempDir } from "../../daemon/support/fs";
+import { buildMacMountArgs, buildWindowsMountCommand, macFolderHasWindow, macMountCredentials, mountMacFolder, windowsDavRoot } from "../../../src/main/remoteFolderMount";
 import { type InProcessDaemon, startDaemon } from "../../daemon/support/inproc";
-import { TEST_TIMEOUT_MS } from "../../daemon/support/wait";
+import { TEST_TIMEOUT_MS, waitFor } from "../../daemon/support/wait";
 
 setDefaultTimeout(TEST_TIMEOUT_MS);
 
@@ -239,51 +239,67 @@ describe("remote folder mounts", () => {
 		expect(() => windowsDavRoot(4321, "")).toThrow();
 	});
 
-	test("the macOS mount script escapes the credential and its path names neither user nor password", () => {
-		const script = buildMacMountScript('us"er\\', 'pa"ss\\word', "127.0.0.1", 4321);
-		expect(script).toBe('return POSIX path of (mount volume "http://127.0.0.1:4321/dav" as user name "us\\"er\\\\" with password "pa\\"ss\\\\word")');
-		expect(() => buildMacMountScript("user", "pass\nword", "127.0.0.1", 4321)).toThrow();
-		const scriptPath = macMountScriptPath();
-		expect(scriptPath).not.toContain("user");
-		expect(scriptPath).not.toContain("pass");
-	});
-
-	test("the macOS folder is wherever the mount script says macOS put it", () => {
-		// macOS names the folder itself, and a second mount of the same share name lands beside it
-		expect(macMountedVolume("/Volumes/dav-1/\n")).toBe("/Volumes/dav-1");
-		expect(() => macMountedVolume("")).toThrow();
-		expect(() => macMountedVolume("/Users/someone/dav/")).toThrow();
+	test("the macOS mount hands mount_webdav the credential in its file record, and its argv names neither user nor password", () => {
+		const args = buildMacMountArgs(4321, "/private/tmp/paperboard-folder-x");
+		expect(args).toEqual(["-S", "-a", "3", "-v", "Paperboard", "http://127.0.0.1:4321/dav", "/private/tmp/paperboard-folder-x"]);
+		// webdavfs' record: u32 big-endian length + bytes for user, password,
+		// proxy user, proxy password, and an empty certificate chain
+		const u32 = (n: number) => Buffer.from([n >>> 24, (n >>> 16) & 255, (n >>> 8) & 255, n & 255]);
+		expect(macMountCredentials("us\"er", "pa:ss")).toEqual(
+			Buffer.concat([u32(5), Buffer.from("us\"er"), u32(5), Buffer.from("pa:ss"), u32(0), u32(0), u32(0)]),
+		);
+		expect(() => macMountCredentials("user", "p".repeat(256))).toThrow("too long");
 	});
 
 	if (process.platform === "darwin") {
-		test("the mount script mounts the relay and prints the folder that holds its files", async () => {
+		const mountedFrom = async (folder: string) => (await promisify(execFile)("mount", [])).stdout.split("\n").filter((line) => line.includes(folder));
+
+		test("macOS mounts the relay with no dialog to answer, the mount names neither user nor password, and its Finder window is seen", async () => {
 			// the relay answers macOS from this process, so nothing here may block the loop
-			const run = promisify(execFile);
 			const served = await relay({});
-			const scriptPath = macMountScriptPath();
-			fs.writeFileSync(scriptPath, buildMacMountScript(session.user, session.pass, "127.0.0.1", served.port), { mode: 0o600, flag: "wx" });
-			let mount = "";
+			const folder = await fs.promises.realpath(await fs.promises.mkdtemp(path.join(os.tmpdir(), "paperboard-folder-")));
 			try {
-				mount = macMountedVolume((await run("osascript", [scriptPath], { timeout: 60_000 })).stdout);
-				expect(await fs.promises.readFile(path.join(mount, "files", "test.relay", "hello.txt"), "utf8")).toBe("hello over the relay");
+				// Finder's `mount volume` asks the user whether to send a password
+				// over http and waits on that dialog; this never shows one
+				await mountMacFolder(session.user, session.pass, served.port, folder);
+				try {
+					expect(await fs.promises.readFile(path.join(folder, "files", "test.relay", "hello.txt"), "utf8")).toBe("hello over the relay");
+					const listed = await mountedFrom(folder);
+					expect(listed).toHaveLength(1);
+					expect(listed[0]).toContain(`http://127.0.0.1:${served.port}/dav`);
+					expect(listed[0]).not.toContain(session.user);
+					expect(listed[0]).not.toContain(session.pass);
+
+					// the folder stays while Finder shows it, and closes once it doesn't
+					await promisify(execFile)("open", [path.join(folder, "files")]);
+					await waitFor("Finder's window on the folder to be seen", () => macFolderHasWindow(folder), { intervalMs: 250 });
+					await promisify(execFile)("osascript", [
+						"-e", 'tell application "Finder"',
+						"-e", "repeat with w in (get every Finder window)",
+						"-e", `if (POSIX path of (target of w as alias)) starts with ${JSON.stringify(`${folder}/`)} then close w`,
+						"-e", "end repeat",
+						"-e", "end tell",
+					]);
+					await waitFor("the closed window to be gone", async () => !(await macFolderHasWindow(folder)), { intervalMs: 250 });
+				} finally {
+					await promisify(execFile)("umount", [folder], { timeout: 20_000 });
+				}
+				// nothing that held the credential is left in the temp folder
+				expect(fs.readdirSync(os.tmpdir()).filter((name) => name.startsWith("paperboard-mount-"))).toEqual([]);
 			} finally {
-				fs.rmSync(scriptPath, { force: true });
-				if (mount) await run("umount", [mount], { timeout: 20_000 });
+				fs.rmdirSync(folder);
 			}
 		});
 
-		test("osascript compiles the escaped script as one mount command with the credential intact", () => {
-			const dir = tempDir();
-			const source = path.join(dir, "mount.applescript");
-			const pass = 'p"a\\ss" & do shell script "touch pwned" & "';
-			fs.writeFileSync(source, buildMacMountScript("user", pass, "127.0.0.1", 4321));
-			const compiled = spawnSync("osacompile", ["-o", path.join(dir, "mount.scpt"), source], { encoding: "utf8" });
-			expect({ status: compiled.status, stderr: compiled.stderr }).toEqual({ status: 0, stderr: "" });
-			const decompiled = spawnSync("osadecompile", [path.join(dir, "mount.scpt")], { encoding: "utf8" });
-			expect(decompiled.status).toBe(0);
-			// the whole password is one string literal, so nothing in it runs
-			expect(decompiled.stdout).toContain('with password "p\\"a\\\\ss\\" & do shell script \\"touch pwned\\" & \\""');
-			expect(fs.existsSync(path.join(dir, "pwned"))).toBe(false);
+		test("a mount the relay refuses fails at once and says why, and leaves nothing mounted", async () => {
+			const served = await relay({});
+			const folder = await fs.promises.realpath(await fs.promises.mkdtemp(path.join(os.tmpdir(), "paperboard-folder-")));
+			try {
+				await expect(mountMacFolder(session.user, "not-the-session-password", served.port, folder)).rejects.toThrow("the computer refused this folder session's password");
+				expect(await mountedFrom(folder)).toEqual([]);
+			} finally {
+				fs.rmdirSync(folder);
+			}
 		});
 	}
 
