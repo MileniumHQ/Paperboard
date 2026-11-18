@@ -16,6 +16,6 @@
         "wrangler": "^4.164.0"
     },
     "peerDependencies": {
-        "typescript": "^5"
+        "typescript": "^6"
     }
 }

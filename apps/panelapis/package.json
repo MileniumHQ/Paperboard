@@ -18,5 +18,5 @@
     "miniflare": "5.20261117.0-beta",
     "esbuild": "^0.28.1"
   },
-  "peerDependencies": { "typescript": "^5" }
+  "peerDependencies": { "typescript": "^6" }
 }
