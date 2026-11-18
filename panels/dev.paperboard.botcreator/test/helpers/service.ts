@@ -6,7 +6,7 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { secretsApi, serviceClient, type ServiceClient } from "@mileniumhq/paperapi";
+import { blocksApi, secretsApi, serviceClient, type ServiceClient } from "@mileniumhq/paperapi";
 import { TEST_TRUSTED_ORIGINS_ENV } from "@mileniumhq/paperapi/net";
 import { botCreatorContract } from "../../src/contract";
 import { PANEL_ID, tokenName, type StoredBot } from "../../src/bots";
@@ -72,6 +72,9 @@ export async function startService(options: { discordApi: string; entry?: string
     delete env.PAPERCRANE_TOKEN;
     const child: ChildProcess = spawn(process.execPath, [options.entry ?? SERVICE_ENTRY], { env, stdio: ["ignore", "pipe", "pipe", "ipc"] });
     let log = "";
+    // heard from the moment the service is ready, so the close can't be missed
+    let stopping = false;
+    let released: Promise<void> | null = null;
     child.stdout!.on("data", (chunk: Buffer) => (log += chunk.toString("utf8")));
     child.stderr!.on("data", (chunk: Buffer) => (log += chunk.toString("utf8")));
     const exited = new Promise<void>((resolve) => child.once("exit", () => resolve()));
@@ -88,14 +91,28 @@ export async function startService(options: { discordApi: string; entry?: string
             }), READY_MS, () => log),
         async stop() {
             running.delete(service);
+            stopping = true;
             if (child.exitCode === null && child.signalCode === null) child.kill("SIGTERM");
             await within("the Bot Creator service to exit", exited, READY_MS, () => log);
+            // a service that got ready registered its blocks: the daemon drops
+            // them when it hears the socket close, which can come after the
+            // exit, and the next service's registration is refused until then
+            if (released) await within("the daemon to drop the stopped service's blocks", released, READY_MS, () => log);
         },
     };
     running.add(service);
     const ready = new Promise<void>((resolve, reject) => {
         child.on("message", (message: any) => {
-            if (message?.type === "paperboard:service-ready" && message.panelId === PANEL_ID) resolve();
+            if (message?.type === "paperboard:service-ready" && message.panelId === PANEL_ID) {
+                released ??= new Promise<void>((done) => {
+                    const off = blocksApi.onRegistryChange((change) => {
+                        if (!stopping || (change as { type?: string })?.type !== "socket:closed") return;
+                        off();
+                        done();
+                    });
+                });
+                resolve();
+            }
         });
         void exited.then(() => reject(new Error(`The Bot Creator service exited before it was ready:\n${log}`)));
     });
