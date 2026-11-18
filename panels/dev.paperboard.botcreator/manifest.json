@@ -44,17 +44,17 @@
             {
                 "light": "./store/1-light.png",
                 "dark": "./store/1-dark.png",
-                "alt": "Several bots, each with its own token, commands and project"
+                "alt": "Several bots, each with its own token, commands and Blocks project"
             },
             {
                 "light": "./store/2-light.png",
                 "dark": "./store/2-dark.png",
-                "alt": "A bot's health and its latest messages"
+                "alt": "A bot's health and the latest messages it heard"
             },
             {
                 "light": "./store/3-light.png",
                 "dark": "./store/3-dark.png",
-                "alt": "The servers a bot is in"
+                "alt": "The servers a bot is in, with their members, channels and roles"
             },
             {
                 "light": "./store/4-light.png",
@@ -64,12 +64,12 @@
             {
                 "light": "./store/5-light.png",
                 "dark": "./store/5-dark.png",
-                "alt": "Slash commands the bot registers with Discord"
+                "alt": "The slash commands the bot registers with Discord"
             },
             {
                 "light": "./store/6-light.png",
                 "dark": "./store/6-dark.png",
-                "alt": "Polls, files and scheduled events as Blocks in a bot's project"
+                "alt": "A bot's games built in Blocks: a slash command answered with buttons"
             }
         ],
         "services": [
