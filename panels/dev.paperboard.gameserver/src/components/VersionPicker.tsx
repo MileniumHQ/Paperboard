@@ -155,6 +155,7 @@ export default function VersionPicker(props: {
                             value={props.selectedVersion}
                             onValueChange={(val) => props.onSelectVersion(String(val))}
                             fullWidth
+                            borderless
                             flex
                         >
                             <For each={filteredVersions()}>

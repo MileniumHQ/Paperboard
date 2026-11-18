@@ -190,7 +190,7 @@ export default function SourceMaps(props: { spec: SourceGameSpec; active: boolea
                             <PaperList
                                 name="source-map-cycle"
                                 value=""
-                                fullWidth
+                                standalone
                                 reorderable={current().custom && editable() && !working()}
                                 onReorder={(order) => void save(order.map(String), "Couldn't reorder the rotation")}
                             >
@@ -224,7 +224,7 @@ export default function SourceMaps(props: { spec: SourceGameSpec; active: boolea
                         <Show when={current().workshop.length > 0}>
                             <PaperFlex direction="column" gap="half">
                                 <PaperText size={2} weight={700} color="text-subtle">Steam Workshop maps</PaperText>
-                                <PaperList name="source-workshop-maps" value="" fullWidth>
+                                <PaperList name="source-workshop-maps" value="" standalone>
                                     <For each={current().workshop}>
                                         {(map) => (
                                             <PaperListItem

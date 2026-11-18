@@ -93,7 +93,7 @@ export default function PlayerRoster<T extends { name: string }>(props: {
                                 </Index>
                             </PaperFlex>
                         </PaperFlex>
-                        <PaperCard shrink minHeight={0} fullWidth>
+                        <PaperCard flex={any() || undefined} minHeight={0} fullWidth>
                             <Show
                                 when={any()}
                                 fallback={
@@ -107,6 +107,7 @@ export default function PlayerRoster<T extends { name: string }>(props: {
                                     value={compact() ? undefined : props.open}
                                     onValueChange={(val) => props.onOpen(String(val))}
                                     fullWidth
+                                    borderless
                                     flex={1}
                                     scrollable
                                 >
