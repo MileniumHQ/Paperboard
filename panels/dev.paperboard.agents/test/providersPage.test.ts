@@ -41,6 +41,15 @@ const INTEGRATIONS = [
         ],
         connections: [],
     },
+    {
+        id: "gamma",
+        name: "Gamma",
+        methods: [
+            { id: "browser", type: "oauth", label: "Sign in with Gamma" },
+            { type: "key", label: "Use an API key" },
+        ],
+        connections: [{ id: "gamma-1", type: "credential", label: "Gamma sign-in" }],
+    },
 ];
 // the first sign-in is refused, by the time its answer arrives
 const PLAN = { integrations: INTEGRATIONS, attempts: { attempt1: { status: "failed", message: "the first sign-in was refused" } } };
@@ -140,6 +149,39 @@ describe("a provider's sign-in", () => {
         expect(await page.evaluate(`${MODAL}.textContent.includes("Use an API key")`), "a provider's only way to connect was headed, over its own field").toBe(false);
         expect(await page.evaluate(`[...${MODAL}.querySelectorAll("label")].some((l) => l.textContent.includes("Endpoint"))`), "a field depending on a default wasn't shown").toBe(true);
         expect(await page.evaluate(`${button("Connect")}.disabled`), "Connect was offered without a needed field").toBe(true);
+        expect(page.exceptions).toEqual([]);
+    });
+});
+
+describe("a provider's buttons", () => {
+    // a button that reads as one: it has an edge or a fill of its own, unlike plain text
+    const looksLikeButton = (el: string) => `(() => { const cs = getComputedStyle(${el}); return cs.boxShadow !== "none" || cs.borderTopWidth !== "0px" || (cs.backgroundColor !== "rgba(0, 0, 0, 0)" && cs.backgroundColor !== "transparent"); })()`;
+    const named = (text: string) => `[...${MODAL}.querySelectorAll("button, a")].find((b) => b.textContent.includes(${JSON.stringify(text)}))`;
+
+    test("Disconnect reads as a button and Sign in isn't oversized; a sign-in under way is one group of equal buttons, alone in the dialog", async () => {
+        if (await page.evaluate(`Boolean(${MODAL})`)) {
+            await page.evaluate(`${MODAL}.querySelector('button[aria-label="Close modal"]').click()`);
+            await page.waitFor(`!${MODAL}`, "the modal closed");
+        }
+        await openProviders();
+        await choose("gamma");
+        await page.waitFor(shows("Gamma sign-in is connected."), "the connection");
+        expect(await page.evaluate(looksLikeButton(named("Disconnect"))), "Disconnect is plain text").toBe(true);
+        expect(await page.evaluate(`[...${named("Sign in")}.classList].some((c) => c.includes("size-large"))`), "Sign in is the hero size").toBe(false);
+
+        // signing in: the way to connect is the whole of the dialog's content, not one more row among the rest
+        await page.evaluate(`${named("Sign in")}.click()`);
+        await page.waitFor(shows("Waiting for you to finish signing in"), "the sign-in");
+        expect(await page.evaluate(shows("API key")), "the key's field is still on show").toBe(false);
+        expect(await page.evaluate(shows("Disconnect")), "the connection is still on show").toBe(false);
+        expect(await page.evaluate(`${TRIGGER}.disabled`), "the provider can be changed under a sign-in").toBe(true);
+        const group = ["Open the sign-in page", "Copy link", "Cancel"];
+        for (const text of group) expect(await page.evaluate(looksLikeButton(named(text))), `${text} is plain text`).toBe(true);
+        expect(await page.evaluate(`[...${MODAL}.querySelectorAll("a")].filter((a) => !a.className.includes("PaperButton")).length`), "a plain link is among the buttons").toBe(0);
+        const heights = await page.evaluate<number[]>(`${JSON.stringify(group)}.map((t) => Math.round([...${MODAL}.querySelectorAll("button, a")].find((b) => b.textContent.includes(t)).getBoundingClientRect().height))`);
+        expect(new Set(heights).size, `the buttons are ${heights.join(", ")}px tall`).toBe(1);
+        await page.evaluate(`${named("Cancel")}.click()`);
+        await page.waitFor(`!${shows("Waiting for you to finish signing in")} && ${shows("Gamma sign-in is connected.")}`, "the dialog back to its forms");
         expect(page.exceptions).toEqual([]);
     });
 });
