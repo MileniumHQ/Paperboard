@@ -79,13 +79,17 @@ export async function installDevPanelInto(panel: DevPanel, dataDir: string): Pro
     mkdirSync(join(staging, "dist"), { recursive: true });
 
     // build against the SDK's packed dist, the artifact real panels bundle;
-    // rebuild it first when this checkout's source is newer
+    // rebuild it first when this checkout's source is newer. A dist the gate
+    // names in PAPERBOARD_GATE_PREBUILT was restored by CI from a cache of
+    // these exact sources (scripts/gate.sh): it is current, though its files
+    // are older than the checkout's
     const SDK = resolve(import.meta.dir, "../../../packages/paperapi");
     const sdkDist = join(SDK, "dist/paperapi.es.js");
+    const prebuilt = ` ${process.env.PAPERBOARD_GATE_PREBUILT ?? ""} `.includes(" paperapi ");
     const newestSource = Math.max(...readdirSync(join(SDK, "src"), { recursive: true, withFileTypes: true })
         .filter((entry) => entry.isFile())
         .map((entry) => statSync(join(entry.parentPath, entry.name)).mtimeMs));
-    if (!existsSync(sdkDist) || statSync(sdkDist).mtimeMs < newestSource) {
+    if (!existsSync(sdkDist) || (!prebuilt && statSync(sdkDist).mtimeMs < newestSource)) {
         console.log("Rebuilding @mileniumhq/paperapi (its source is newer than its dist)...");
         const built = spawnSync("bun", ["run", "build"], { cwd: SDK, stdio: "inherit" });
         if (built.status !== 0) {
