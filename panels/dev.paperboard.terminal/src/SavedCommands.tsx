@@ -151,7 +151,7 @@ function SavedCommandsModal(props: {
                         </Show>
                     }
                 >
-                    <PaperList selectable={false} fullWidth borderless scrollable={false}>
+                    <PaperList selectable={false} standalone scrollable={false}>
                         <For each={props.commands}>
                             {(saved) => {
                                 const status = () => describeRun(props.runs[saved.id], now());

@@ -76,6 +76,40 @@ describe("saved commands in the panel", () => {
             served.stop();
         }
     });
+    test("the list is its own card beside the text and the form, and the Save button is as tall as its field", async () => {
+        await panelFiles({ "tabs.json": TABS });
+        await startService();
+        const served = await servePanel();
+        const page = await browser.open(served.url);
+        try {
+            await page.waitFor(`document.querySelectorAll(".xterm").length === 1`, "the shell");
+            await page.click('button[aria-label="Saved commands"]');
+            await page.clickText("[role=menuitem]", "Manage saved commands");
+            await page.waitFor(dialog, "the modal");
+            await fill(page, "Command", "uptime -p");
+            await page.press("Enter");
+            await page.waitFor(rowShowing("uptime -p", "Not run yet"), "the saved command's row");
+            const looks = await page.evaluate<{ borders: number[]; radius: number; save: number; field: number }>(`(() => {
+                const list = ${dialog}.querySelector("[data-value]").closest("[class*='_PaperList_']");
+                const style = getComputedStyle(list);
+                const save = [...${dialog}.querySelectorAll("button")].find((b) => b.innerText.trim().endsWith("Save"));
+                const field = [...${dialog}.querySelectorAll("label")].find((l) => l.innerText.includes("Command")).closest("[class*='_PaperInput_']");
+                return {
+                    borders: ["Top", "Right", "Bottom", "Left"].map((side) => parseFloat(style["border" + side + "Width"])),
+                    radius: parseFloat(style.borderTopLeftRadius),
+                    save: save.getBoundingClientRect().height,
+                    field: field.getBoundingClientRect().height,
+                };
+            })()`);
+            expect(looks.borders.every((width) => width > 0)).toBe(true);
+            expect(looks.radius).toBeGreaterThan(0);
+            expect(looks.save).toBe(looks.field);
+        } finally {
+            await page.close();
+            served.stop();
+        }
+    });
+
     // the modal's error in place of the list, saying why: never a toast, which would go while the file stays unread
     const failure = `${dialog}?.querySelector("[data-paper-error][role=region][aria-label=\\"Couldn't read the saved commands\\"]")`;
     const tryAgain = `[...(${failure}?.querySelectorAll("button") ?? [])].find((b) => b.innerText.includes("Try again"))`;
