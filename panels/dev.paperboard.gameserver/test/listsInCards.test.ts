@@ -127,6 +127,8 @@ describe("the player roster", () => {
             // the roster fills its column to the bottom, short list or not
             expect(await page.evaluate<number>(`(() => { const card = ${cardAround("input[name=playersList]")}; return card.parentElement.getBoundingClientRect().bottom - card.getBoundingClientRect().bottom; })()`)).toBeLessThanOrEqual(4);
             expect(await page.evaluate<number>(roomUnderRows("playersList"))).toBeGreaterThan(40);
+            // the room under the rows is the card's own surface, not a band of the list's
+            expect(await page.evaluate<string>(`getComputedStyle(document.querySelector("input[name=playersList]").closest('[class*="_PaperList_"]')).backgroundColor`)).toBe("rgba(0, 0, 0, 0)");
             await shot(page, "players");
         } finally {
             await page.close();

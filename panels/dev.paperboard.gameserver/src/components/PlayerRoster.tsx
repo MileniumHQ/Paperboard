@@ -108,6 +108,7 @@ export default function PlayerRoster<T extends { name: string }>(props: {
                                     onValueChange={(val) => props.onOpen(String(val))}
                                     fullWidth
                                     borderless
+                                    background="transparent"
                                     flex={1}
                                     scrollable
                                 >
