@@ -24,6 +24,18 @@ const rowShowing = (label: string, text: string) =>
     `[...${dialog}.querySelectorAll("[data-value]")].some((row) => row.innerText.includes(${JSON.stringify(label)}) && row.innerText.includes(${JSON.stringify(text)}))`;
 const press = (page: Page, selector: string) => page.evaluate(`document.querySelector(${JSON.stringify(selector)}).click()`);
 
+/**
+ * Opens the saved-commands modal from the toolbar and waits until its first
+ * field has the keyboard: the modal focuses it as it opens, so a field
+ * focused before then loses the keyboard to it mid-typing.
+ */
+async function openManager(page: Page) {
+    await page.click('button[aria-label="Saved commands"]');
+    await page.clickText("[role=menuitem]", "Manage saved commands");
+    await page.waitFor(dialog, "the modal");
+    await page.waitFor(`document.activeElement?.labels?.[0]?.textContent.trim() === "Name (optional)"`, "the name field to have the keyboard");
+}
+
 /** types into the modal's field with this label */
 async function fill(page: Page, label: string, text: string) {
     await page.evaluate(`[...${dialog}.querySelectorAll("label")].find((l) => l.innerText.includes(${JSON.stringify(label)})).closest("div").querySelector("input").focus()`);
@@ -40,10 +52,9 @@ describe("saved commands in the panel", () => {
             await page.waitFor(`document.querySelectorAll(".xterm").length === 1`, "the shell");
             await page.click('button[aria-label="Saved commands"]');
             await page.waitFor(`document.body.innerText.includes("No saved commands")`, "the empty menu");
-            await page.clickText("[role=menuitem]", "Manage saved commands");
-            await page.waitFor(dialog, "the modal");
+            await page.press("Escape");
             // its first field has the keyboard, so a name can be typed at once
-            await page.waitFor(`document.activeElement?.labels?.[0]?.textContent.trim() === "Name (optional)"`, "the name field to have the keyboard");
+            await openManager(page);
 
             await fill(page, "Name", "Greet");
             await fill(page, "Command", "exit 0");
@@ -83,9 +94,7 @@ describe("saved commands in the panel", () => {
         const page = await browser.open(served.url);
         try {
             await page.waitFor(`document.querySelectorAll(".xterm").length === 1`, "the shell");
-            await page.click('button[aria-label="Saved commands"]');
-            await page.clickText("[role=menuitem]", "Manage saved commands");
-            await page.waitFor(dialog, "the modal");
+            await openManager(page);
             await fill(page, "Command", "uptime -p");
             await page.press("Enter");
             await page.waitFor(rowShowing("uptime -p", "Not run yet"), "the saved command's row");
@@ -172,9 +181,7 @@ describe("saved commands in the panel", () => {
         const page = await browser.open(served.url);
         try {
             await page.waitFor(`document.querySelectorAll(".xterm").length === 1`, "the shell");
-            await page.click('button[aria-label="Saved commands"]');
-            await page.clickText("[role=menuitem]", "Manage saved commands");
-            await page.waitFor(dialog, "the modal");
+            await openManager(page);
             expect(await page.evaluate<string[]>(`[...${dialog}.querySelectorAll("input")].map((i) => i.placeholder).filter(Boolean)`)).toEqual([]);
             expect(await page.evaluate<boolean>(`[...${dialog}.querySelectorAll("input")].some((i) => i.placeholder === "git pull")`)).toBe(false);
             // the row names the command once
