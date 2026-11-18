@@ -31,8 +31,8 @@ export default defineConfig({
             // no CSS); the modules both entries share land in one chunk, so
             // each is one instance whichever entry imported it
             entry: {
-                index: path.resolve(__dirname, "src/index.ts"),
-                headless: path.resolve(__dirname, "src/headless.ts"),
+                index: path.resolve(import.meta.dirname, "src/index.ts"),
+                headless: path.resolve(import.meta.dirname, "src/headless.ts"),
             },
             fileName: (format, entry) => `${entry === "index" ? "paperui" : entry}.${format === "es" ? "es.js" : "cjs"}`,
             formats: ["es", "cjs"],
