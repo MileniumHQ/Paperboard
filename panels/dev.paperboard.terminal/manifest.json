@@ -22,16 +22,21 @@
             {
                 "light": "./store/1-light.png",
                 "dark": "./store/1-dark.png",
-                "alt": "Tabs for each job, here working in a git project"
+                "alt": "Tabs named by what runs in them, here working in a git project"
             },
             {
                 "light": "./store/2-light.png",
                 "dark": "./store/2-dark.png",
-                "alt": "Saved commands, one click from the tab bar"
+                "alt": "Saved commands, one click from the toolbar, with how each last run went"
             },
             {
                 "light": "./store/3-light.png",
                 "dark": "./store/3-dark.png",
+                "alt": "Managing saved commands, with each run's exit code and output"
+            },
+            {
+                "light": "./store/4-light.png",
+                "dark": "./store/4-dark.png",
                 "alt": "A clean shell, ready for any command-line tool"
             }
         ],
