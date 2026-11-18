@@ -291,20 +291,16 @@ export async function bootPanel(o: BootOptions = {}): Promise<BootedPanel> {
 export async function openSection(page: Page, name: string, section: string): Promise<void> {
     const item = `input[name="ai-pages"][value="${section}"]`;
     // a menu still closing is not one to choose from
-    await settledMotion(page);
+    await page.motionSettled();
     await page.waitFor(`document.querySelector('[aria-label="${name}: computer and settings"]') || document.querySelector('${item}')`, "the chat or its menu");
     if (!(await page.evaluate<boolean>(`Boolean(document.querySelector('${item}'))`))) await page.click(`[aria-label="${name}: computer and settings"]`);
     await page.waitFor(`document.querySelector('${item}')`, "the menu");
-    await settledMotion(page);
+    await page.motionSettled();
     await page.click(item);
     await page.waitFor(`document.querySelector('${item}').checked`, `the ${section} page`);
-    await settledMotion(page);
+    await page.motionSettled();
 }
 
-/** Resolves once what moves on the page has come to rest (a modal sliding in), so a click lands where it aims. */
-export function settledMotion(page: Page): Promise<unknown> {
-    return page.evaluate(`Promise.allSettled(document.getAnimations().filter((a) => !a.effect?.target?.matches?.("[data-paper-toast-time]")).filter((a) => a.effect?.getComputedTiming().endTime !== Infinity).map((a) => a.finished))`);
-}
 
 /** Marks the nodes `selector` finds now, to ask later whether they are the same nodes (kept) or new ones (rebuilt). */
 export function markNodes(page: Page, selector: string, mark: string): Promise<number> {

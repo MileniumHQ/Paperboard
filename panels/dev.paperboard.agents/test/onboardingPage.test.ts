@@ -9,7 +9,7 @@ import { afterEach, describe, expect, setDefaultTimeout, test } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
 import { DEFAULT_MODEL } from "../src/contract";
-import { PANEL_ID, bootPanel, settledMotion, type BootedPanel, type Page } from "./support/panel";
+import { PANEL_ID, bootPanel, type BootedPanel, type Page } from "./support/panel";
 
 setDefaultTimeout(120_000);
 
@@ -37,7 +37,7 @@ const NAME_SHOWN = `(() => { const input = [...document.querySelectorAll("label"
 /** Waits for the step's way forward to open, and takes it. */
 async function next(page: Page, what: string) {
     await page.waitFor(`${NEXT} && !${NEXT}.disabled`, what);
-    await settledMotion(page);
+    await page.motionSettled();
     await page.click("form button[type=submit]");
 }
 
@@ -45,7 +45,7 @@ async function next(page: Page, what: string) {
 async function choose(page: Page, name: string, value: string) {
     const item = `input[name="${name}"][value="${value}"]`;
     await page.waitFor(`document.querySelector('${item}')`, `the ${name} choices`);
-    await settledMotion(page);
+    await page.motionSettled();
     await page.click(item);
     await page.waitFor(`document.querySelector('${item}').checked`, `${value} chosen`);
 }
@@ -139,7 +139,7 @@ describe("the first meeting", () => {
         panel = await bootPanel({ codexOnPath: { signedIn: true, chosen: true, plan: MODELS } });
         const page = await panel.open();
         await page.waitFor(`document.querySelector('[aria-live="polite"]')?.innerText.trim().length > 0 && ${NEXT}`, "the first words");
-        await settledMotion(page);
+        await page.motionSettled();
         expect(await page.evaluate(`${NEXT}.getBoundingClientRect().bottom <= innerHeight && ${NEXT}.disabled`)).toBe(true);
 
         await page.waitFor(NAME_SHOWN, "the name step");

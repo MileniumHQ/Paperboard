@@ -53,6 +53,13 @@ export interface Page {
     receivedFrames: string[];
     /** resolves once every call the page has made so far is answered */
     settled(): Promise<void>;
+    /**
+     * resolves once what moves on the page has come to rest, so a click lands
+     * where it aims: every finite animation has finished or was cancelled (a
+     * menu rebuilt mid-open cancels its own). A PaperUI toast's time line runs
+     * on and isn't waited for.
+     */
+    motionSettled(): Promise<void>;
     /** resolves once the page has received a socket message `match` accepts */
     received(match: (frame: string) => boolean, what: string): Promise<void>;
     /** what the page shows, as a PNG, for a person to look at */
@@ -392,6 +399,10 @@ async function drive(connection: Connection, url: string, options: PageOptions, 
             listeners.add(listener);
             return () => listeners.delete(listener);
         },
+        motionSettled: () =>
+            evaluate<void>(
+                `Promise.allSettled(document.getAnimations().filter((a) => !a.effect?.target?.matches?.("[data-paper-toast-time]") && a.effect?.getComputedTiming().endTime !== Infinity).map((a) => a.finished)).then(() => undefined)`,
+            ),
         async settled() {
             if (!options.isCall) return;
             // every frame the daemon and page exchange is JSON

@@ -40,7 +40,7 @@ describe("the setup guide", () => {
             for (const [i, title] of titles.entries()) {
                 await page.waitFor(`[...document.querySelectorAll("[data-preset=title]")].some((h) => h.innerText === ${JSON.stringify(title)} && h.getBoundingClientRect().left >= 0 && h.getBoundingClientRect().right <= innerWidth + 1) && [...document.querySelectorAll("img")].every((img) => img.complete)`, `step "${title}"`);
                 // the step has slid into place
-                await page.evaluate(`Promise.all(document.getAnimations().filter((a) => !a.effect?.target?.matches?.("[data-paper-toast-time]")).map((a) => a.finished))`);
+                await page.motionSettled();
                 const shown = await headingTop(page);
                 expect(shown.text).toBe(title);
                 tops.push(shown.top);
@@ -88,7 +88,7 @@ describe("the setup guide", () => {
             await page.waitFor(`document.querySelectorAll("[data-preset=large]").length > 0`, "the centred interface");
             for (let i = 0; i < 4; i++) await pressButton(page, "Next");
             await page.waitFor(`document.body.innerText.includes("Paste the token") && document.querySelector('input[type="password"]')?.getBoundingClientRect().left >= 0`, "the token step");
-            await page.evaluate(`Promise.all(document.getAnimations().filter((a) => !a.effect?.target?.matches?.("[data-paper-toast-time]")).map((a) => a.finished))`);
+            await page.motionSettled();
             const wide = await widths();
             // a column of sensible width in the middle, with the field no wider than it
             expect(wide.field).toBeLessThan(wide.panel * 0.75);
@@ -97,7 +97,7 @@ describe("the setup guide", () => {
             if (process.env.BOT_SHOTS) fs.writeFileSync(`${process.env.BOT_SHOTS}/wide-token.png`, await page.screenshot());
 
             await page.resize(390, 800);
-            await page.evaluate(`Promise.all(document.getAnimations().filter((a) => !a.effect?.target?.matches?.("[data-paper-toast-time]")).map((a) => a.finished))`);
+            await page.motionSettled();
             const phone = await widths();
             // on a phone the column gives way to the screen: nothing runs off it
             expect(phone.field).toBeGreaterThan(200);
@@ -117,7 +117,7 @@ describe("the setup guide", () => {
         const page = await browser.open(served.url);
         try {
             await page.waitFor(`document.body.innerText.includes("Make an application")`, "the guide");
-            await page.evaluate(`Promise.all(document.getAnimations().filter((a) => !a.effect?.target?.matches?.("[data-paper-toast-time]")).map((a) => a.finished))`);
+            await page.motionSettled();
             const gaps = await page.evaluate<{ above: number; below: number }>(`(() => {
                 const rect = (el) => el.getBoundingClientRect();
                 const visible = (el) => el.getClientRects().length > 0 && rect(el).left >= 0 && rect(el).right <= innerWidth + 1;

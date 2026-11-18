@@ -20,8 +20,6 @@ const popover = `[...document.querySelectorAll("[role=dialog]")].find((d) => d.t
 // textContent: the list is in the page while the popover is still opening
 const listed = `[...(${popover}?.querySelectorAll("[data-problem]") ?? [])].map((item) => item.textContent)`;
 
-// every finite animation on the page has run: what moves is where it stays
-const SETTLED = `Promise.all(document.getAnimations().filter((a) => !a.effect?.target?.matches?.("[data-paper-toast-time]")).filter((a) => a.effect?.getTiming().iterations !== Infinity).map((a) => a.finished))`;
 
 let shell: Shell;
 
@@ -74,7 +72,7 @@ test("a service's problems show on its row, can be dismissed, and go once the pa
     })()`)).toEqual([]);
 
     // the person dismisses one, once the list has opened: it is gone from the computer, not only the list
-    await page.evaluate(SETTLED);
+    await page.motionSettled();
     await page.evaluate(`[...${popover}.querySelectorAll("[data-problem]")].find((i) => i.textContent.includes("readings"))?.querySelector("button[aria-label^=Dismiss]")?.setAttribute("data-dismiss", "")`);
     await page.click("[data-dismiss]");
     await page.waitFor(`${badge("1 problem")} && ${listed}.length === 1`, "the dismissed problem gone");

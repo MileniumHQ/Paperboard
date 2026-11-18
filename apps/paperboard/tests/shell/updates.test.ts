@@ -16,8 +16,6 @@ const loaded = `${frame}?.contentDocument?.readyState === "complete" && ${frame}
 const updating = `!!${frame}.parentElement.querySelector("[aria-label^='Updating panel']")`;
 const rowDisabled = `document.querySelector("label[data-value='${PANEL}'] input").disabled`;
 
-// every finite animation on the page has run: what moves is where it stays
-const SETTLED = `Promise.all(document.getAnimations().filter((a) => !a.effect?.target?.matches?.("[data-paper-toast-time]")).filter((a) => a.effect?.getTiming().iterations !== Infinity).map((a) => a.finished))`;
 
 let shell: Shell;
 let revision = 0;
@@ -118,7 +116,7 @@ test("Stop and update that fails says why, and runs when pressed again", async (
     const { page } = shell;
     await shell.host({ cmd: "fail-release", message: "The panel's files are in use by another program" });
     // the list the hold opened is still easing in; a press lands once it has
-    await page.evaluate(SETTLED);
+    await page.motionSettled();
     await clickText(page, "button", "Stop and update");
     await page.waitFor(
         `document.body.innerText.includes("Widget Demo couldn't update") && document.body.innerText.includes("The panel's files are in use by another program")`,
@@ -126,7 +124,7 @@ test("Stop and update that fails says why, and runs when pressed again", async (
     );
 
     await page.waitFor(`[...document.querySelectorAll("button")].some((b) => b.textContent.includes("Stop and update") && !b.disabled)`, "Stop and update, ready again");
-    await page.evaluate(SETTLED);
+    await page.motionSettled();
     await clickText(page, "button", "Stop and update");
     expect(await shell.host<string[]>({ cmd: "next-release" })).toEqual([HOLD.key]);
     expect(page.exceptions).toEqual([]);

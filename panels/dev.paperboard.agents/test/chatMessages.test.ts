@@ -6,7 +6,7 @@
 // through. The one answer the test gives itself is the thumbnail's: the
 // service would fetch it from YouTube, and a test reaches no internet.
 import { afterAll, beforeAll, describe, expect, setDefaultTimeout, test } from "bun:test";
-import { bootPanel, frames, seedConversation, settledMotion, type BootedPanel, type Page } from "./support/panel";
+import { bootPanel, frames, seedConversation, type BootedPanel, type Page } from "./support/panel";
 import { answerHeld, deliverAnswer, heldAnswers, heldCalls, holdAnswers, holdCalls, releaseCall, sent, WIRE } from "./support/wire";
 
 setDefaultTimeout(60_000);
@@ -45,11 +45,11 @@ afterAll(() => panel?.close());
 async function reopen(id: string): Promise<void> {
     // the history from the switch before has closed, so the button is there to press
     await page.waitFor(`!document.querySelector('input[name="agents-history"]')`, "the history to close");
-    await settledMotion(page);
+    await page.motionSettled();
     await page.click('button[aria-label="Past conversations"]');
     const item = `input[name="agents-history"][value="${id}"]`;
     await page.waitFor(`document.querySelector('${item}') && !document.querySelector('${item}').disabled`, "the past conversation in the history");
-    await settledMotion(page);
+    await page.motionSettled();
     await page.click(item);
 }
 

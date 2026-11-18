@@ -2,7 +2,7 @@
 // face in both (the hologram sphere at the chat's size), and the brain
 // choices' logos sit in the middle of their two lines of text.
 import { afterEach, describe, expect, setDefaultTimeout, test } from "bun:test";
-import { bootPanel, settledMotion, type BootedPanel } from "./support/panel";
+import { bootPanel, type BootedPanel } from "./support/panel";
 
 setDefaultTimeout(120_000);
 
@@ -26,7 +26,7 @@ describe("the agent's head", () => {
         panel = await bootPanel({ codexOnPath: { signedIn: true, chosen: true } });
         const page = await panel.open();
         await page.waitFor(`document.querySelector('svg[role=img][aria-label^="Agent"]')`, "the first meeting");
-        await settledMotion(page);
+        await page.motionSettled();
         expect(inChat.hologram).toBe(true);
         expect(await page.evaluate(HEAD)).toEqual(inChat);
     });
@@ -38,10 +38,10 @@ describe("the agent's head", () => {
         await page.evaluate(`[...document.querySelectorAll("label")].find((l) => l.textContent.trim() === "Name").control.dataset.testField = "name"`);
         await page.type(`[data-test-field="name"]`, "Ada");
         await page.waitFor(`document.querySelector('form button[type=submit]') && !document.querySelector('form button[type=submit]').disabled`, "Next");
-        await settledMotion(page);
+        await page.motionSettled();
         await page.click("form button[type=submit]");
         await page.waitFor(`document.querySelector('input[name="harness"]')`, "the brain choices");
-        await settledMotion(page);
+        await page.motionSettled();
         const offsets = await page.evaluate<number[]>(`[...document.querySelectorAll("label")].filter((l) => l.querySelector('input[name=harness]')).map((label) => {
             const icon = (label.querySelector("[class*=iconImage]") ?? label.querySelector("[class*=itemIcon]")).getBoundingClientRect();
             const text = label.querySelector("[class*=itemText]").getBoundingClientRect();

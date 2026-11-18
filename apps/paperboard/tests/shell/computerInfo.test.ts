@@ -112,7 +112,7 @@ test("an S3 server that refuses the connection is named in words, in view of the
     await page.click("[role=dialog] button[aria-haspopup=listbox]");
     await page.waitFor(`document.querySelector("[role=option][data-select-value=s3]")?.offsetParent`, "the S3 option");
     // the menu has finished opening: an option pressed while it grows can miss
-    await page.evaluate(`Promise.all(document.getAnimations().filter((a) => !a.effect?.target?.matches?.("[data-paper-toast-time]")).filter((a) => a.effect?.getTiming().iterations !== Infinity).map((a) => a.finished))`);
+    await page.motionSettled();
     await page.click("[role=option][data-select-value=s3]");
     await page.waitFor(`[...document.querySelectorAll("[role=dialog] label")].some((l) => l.textContent.trim() === "Server address")`, "the S3 form");
     const fields: Record<string, string> = {
