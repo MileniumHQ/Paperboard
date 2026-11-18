@@ -6,7 +6,7 @@
 // user's back.
 
 import { For, Match, Show, Switch, createEffect, createSignal, on, onCleanup } from "solid-js";
-import { PaperButton, PaperEmptyState, PaperError, PaperFlex, PaperIcon, PaperList, PaperListItem, PaperLoader, PaperText, createAction, createPolling, createRead, showError } from "@mileniumhq/paperui";
+import { PaperButton, PaperEmptyState, PaperError, PaperFlex, PaperIcon, PaperList, PaperListItem, PaperLoader, createAction, createPolling, createRead, showError } from "@mileniumhq/paperui";
 import type { ComputerWindow } from "../contract";
 import type { Agent } from "../lib/agent";
 import { SetupProgress } from "./Computer";
@@ -122,24 +122,25 @@ export default function ComputerView(props: { agent: Agent }) {
                         <PaperEmptyState icon="desktop_access_disabled" title="No computer on this machine" description={c().error ?? undefined} />
                     </Match>
                     <Match when={c().phase === "installing" || (c().phase === "failed" && !c().installed)}>
-                        <div class={styles.setup}>
-                            <SetupProgress
-                                computer={c()}
-                                retry={{ label: "Set up again", disabled: busy(), onClick: () => void action.run("Couldn't set up the computer", props.agent.calls.installComputer) }}
-                            />
-                        </div>
+                        <PaperFlex center padding="double">
+                            <PaperFlex fullWidth maxWidth="panel-small">
+                                <SetupProgress
+                                    computer={c()}
+                                    retry={{ label: "Set up again", disabled: busy(), onClick: () => void action.run("Couldn't set up the computer", props.agent.calls.installComputer) }}
+                                />
+                            </PaperFlex>
+                        </PaperFlex>
                     </Match>
                     <Match when={c().phase === "none"}>
-                        <div class={styles.setup}>
-                            <PaperText preset="text">
-                                A web browser of its own that {name()} uses for its work, about 400 MB of storage. It reaches the internet, never your files or your network.
-                            </PaperText>
-                            <PaperFlex direction="row">
-                                <PaperButton variant="primary" disabled={busy()} onClick={() => void action.run("Couldn't set up the computer", props.agent.calls.installComputer)}>
-                                    <PaperIcon>computer</PaperIcon> Set up {name()}'s computer
-                                </PaperButton>
-                            </PaperFlex>
-                        </div>
+                        <PaperEmptyState
+                            icon="computer"
+                            title={`${name()} has no computer yet`}
+                            description={`A web browser of its own that ${name()} uses for its work, about 400 MB of storage. It reaches the internet, never your files or your network.`}
+                        >
+                            <PaperButton variant="primary" disabled={busy()} onClick={() => void action.run("Couldn't set up the computer", props.agent.calls.installComputer)}>
+                                <PaperIcon>computer</PaperIcon> Set up {name()}'s computer
+                            </PaperButton>
+                        </PaperEmptyState>
                     </Match>
                     <Match when={c().phase === "starting" || c().phase === "stopping"}>
                         <PaperFlex center>

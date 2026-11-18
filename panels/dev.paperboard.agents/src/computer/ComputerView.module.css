@@ -21,18 +21,6 @@
     min-height: 0;
 }
 
-.setup {
-    flex: 0 1 auto;
-    display: flex;
-    flex-direction: column;
-    gap: var(--paper-uigap);
-    box-sizing: border-box;
-    /* room for the range labels that hang past the track's ends */
-    padding: var(--paper-uigap) var(--paper-uigap-half);
-    overflow-x: hidden;
-    overflow-y: auto;
-}
-
 .pane {
     position: absolute;
     inset: 0;
