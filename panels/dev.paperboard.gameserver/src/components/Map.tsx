@@ -336,7 +336,7 @@ export default function MapView() {
                     <PaperFlex flex minWidth={0}>
                         <PaperInput
                             placeholder="X"
-                            size={9}
+                            fullWidth
                             value={coordX()}
                             error={coordX().trim() !== "" && coordinate(coordX()) === null ? "Numbers only" : undefined}
                             onInput={(e) => setCoordX(e.currentTarget.value)}
@@ -348,7 +348,7 @@ export default function MapView() {
                     <PaperFlex flex minWidth={0}>
                         <PaperInput
                             placeholder="Z"
-                            size={9}
+                            fullWidth
                             value={coordZ()}
                             error={coordZ().trim() !== "" && coordinate(coordZ()) === null ? "Numbers only" : undefined}
                             onInput={(e) => setCoordZ(e.currentTarget.value)}

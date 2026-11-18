@@ -52,6 +52,17 @@ describe("the Map tab", () => {
             await page.evaluate(`document.querySelector('input[name=serverMenu][value="map"]').click()`);
             await page.waitFor(`document.body.textContent.includes("Only the land around spawn so far")`, "the note on the spawn-only map");
             expect(await page.evaluate<boolean>(`document.body.textContent.includes("The map fills in as players explore")`)).toBe(true);
+            // the coordinate fields share the toolbar's row, inside the panel
+            const fields = await page.evaluate<{ fits: boolean; heights: number[] }>(`(() => {
+                const boxes = ["X", "Z"].map((p) => document.querySelector('input[placeholder="' + p + '"]').closest('[class*="_PaperInput_"]').getBoundingClientRect());
+                return { fits: boxes.every((b) => b.width > 0 && b.right <= innerWidth), heights: boxes.map((b) => b.height) };
+            })()`);
+            expect(fields.fits).toBe(true);
+            expect(fields.heights[0]).toBe(fields.heights[1]);
+            if (process.env.PAPERBOARD_SHOTS) {
+                const shot = await page.send("Page.captureScreenshot", { format: "png" });
+                fs.writeFileSync(path.join(process.env.PAPERBOARD_SHOTS, "map-toolbar.png"), Buffer.from(shot.data, "base64"));
+            }
         } finally {
             await page.close();
             served.stop();
