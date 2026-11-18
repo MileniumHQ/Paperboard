@@ -31,6 +31,7 @@ beforeAll(async () => {
             await routines.shutdown();
             const memory = new Memory({ dir: path.join(storage, "memory"), onChange: () => {} });
             for (const fact of ["Likes tea", "Lives in Lyon", "Has a cat"]) await memory.addFact(fact);
+            await memory.saveNote("survival-server", "When the user asks about the Minecraft server", "# Survival server\n\nRuns Paper 1.21.");
         },
     });
 });
@@ -55,6 +56,52 @@ describe("a list in the menu, when one of its items goes", () => {
             expect(view.exceptions).toEqual([]);
         });
     }
+});
+
+describe("a list that is all its page holds", () => {
+    // each page's own row, by a button only that page's rows have
+    for (const [section, row] of [
+        ["routines", 'button[aria-label^="Stop: "]'],
+        ["access", 'button[aria-label^="Take back "]'],
+        ["pages", 'button[aria-label^="Delete “"]'],
+    ] as const) {
+        test(`${section}: its rows fill the pane, edge to edge, with no padding around them`, async () => {
+            const view = await panel.open();
+            await openSection(view, "Ada", section);
+            await view.waitFor(`document.querySelector(${JSON.stringify(`[role=dialog] ${row}`)})`, `a row of ${section}`);
+            await view.settled();
+            const gaps = await view.evaluate<{ left: number; right: number }>(`(() => {
+                const item = document.querySelector(${JSON.stringify(`[role=dialog] ${row}`)}).closest('[class*="PaperListItem"]');
+                // the pane beside the menu: nothing may sit between its edges and the rows
+                const pane = item.closest('[class*="layout"]').children[1];
+                const edges = pane.getBoundingClientRect();
+                const r = item.getBoundingClientRect();
+                return { left: Math.round(r.left - edges.left), right: Math.round(edges.right - r.right) };
+            })()`);
+            expect(gaps.left, `${section}'s rows start ${gaps.left}px in from the pane's edge`).toBe(0);
+            expect(gaps.right, `${section}'s rows end ${gaps.right}px short of the pane's edge`).toBe(0);
+            expect(view.exceptions).toEqual([]);
+        });
+    }
+});
+
+describe("a memory note", () => {
+    test("is set off from its header by a separator line", async () => {
+        const view = await panel.open();
+        await openSection(view, "Ada", "memories");
+        await view.waitFor(`document.body.innerText.includes("survival-server")`, "the note");
+        await view.evaluate(`[...document.querySelectorAll("[role=dialog] *")].filter((e) => e.innerText?.startsWith("survival-server") && e.tabIndex >= 0).pop().click()`);
+        await view.waitFor(`document.body.innerText.includes("Runs Paper 1.21")`, "the note's body");
+        const spots = await view.evaluate<{ header: number; line: number | null; body: number }>(`(() => {
+            const text = (t) => [...document.querySelectorAll("[role=dialog] *")].filter((e) => e.children.length === 0 && e.textContent.trim().startsWith(t)).pop().getBoundingClientRect();
+            const line = document.querySelector('[role=dialog] [class*="PaperSeparator"]');
+            return { header: text("Read When").bottom, line: line ? line.getBoundingClientRect().top : null, body: text("Runs Paper").top };
+        })()`);
+        expect(spots.line, "no separator under the note's header").not.toBeNull();
+        expect(spots.line!).toBeGreaterThanOrEqual(spots.header);
+        expect(spots.line!).toBeLessThanOrEqual(spots.body);
+        expect(view.exceptions).toEqual([]);
+    });
 });
 
 describe("the page view", () => {

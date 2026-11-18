@@ -36,7 +36,16 @@ export default function Routines(props: { agent: Agent }) {
     // the read's failure, or the service's own: routines it can't read
     const why = () => routines.error() ?? props.agent.state.routines.error;
     const retry = () => ({ label: "Try again", disabled: routines.loading(), onClick: () => void routines.reload() });
-    const readAgain = () => <Show when={why()}>{(err) => <PaperError title="Couldn't read the routines" error={err()} action={retry()} />}</Show>;
+    // beside the list, never in it: the list is the page's own content and fills the pane
+    const readAgain = () => (
+        <Show when={why()}>
+            {(err) => (
+                <PaperFlex padding="full">
+                    <PaperError title="Couldn't read the routines" error={err()} action={retry()} />
+                </PaperFlex>
+            )}
+        </Show>
+    );
 
     return (
         <Switch>
@@ -44,26 +53,36 @@ export default function Routines(props: { agent: Agent }) {
                 {(err) => <PaperError fill title="Couldn't read the routines" error={err()} action={retry()} />}
             </Match>
             <Match when={list() === null}>
-                <PaperLoader loaderStatus="indeterminate" label="Reading routines" />
+                <PaperFlex padding="double">
+                    <PaperLoader loaderStatus="indeterminate" label="Reading routines" />
+                </PaperFlex>
             </Match>
             <Match when={list()!.length === 0}>
                 <PaperFlex gap="full">
                     {readAgain()}
-                    <PaperEmptyState
-                        icon="event_repeat"
-                        title="No routines yet"
-                        description={`Ask ${name()} to do something later or regularly, like “text me a flag fact every weekday at 9”.`}
-                    />
+                    <PaperFlex padding="double">
+                        <PaperEmptyState
+                            icon="event_repeat"
+                            title="No routines yet"
+                            description={`Ask ${name()} to do something later or regularly, like “text me a flag fact every weekday at 9”.`}
+                        />
+                    </PaperFlex>
                 </PaperFlex>
             </Match>
             <Match when={true}>
-                <PaperFlex gap="half">
-                    {/* what was read last stays, under why it couldn't be read again */}
-                    {readAgain()}
-                    {/* a run that went wrong says so for as long as it's the last run, by what it was */}
-                    <For each={list()!.filter((r) => r.lastError)}>{(r) => <PaperError title={`Couldn't run “${r.what}”`} error={r.lastError} />}</For>
+                {/* what was read last stays, under why it couldn't be read again */}
+                {readAgain()}
+                {/* a run that went wrong says so for as long as it's the last run, by what it was */}
+                <For each={list()!.filter((r) => r.lastError)}>
+                    {(r) => (
+                        <PaperFlex padding="full">
+                            <PaperError title={`Couldn't run “${r.what}”`} error={r.lastError} />
+                        </PaperFlex>
+                    )}
+                </For>
+                <PaperFlex flex minHeight={0}>
                     {/* like alarms: when it runs is the title, what it does wraps below it */}
-                    <PaperList selectable={false} borderless fullWidth>
+                    <PaperList selectable={false} borderless fullWidth fullHeight>
                         <For each={list()!}>
                             {(r) => {
                                 return (

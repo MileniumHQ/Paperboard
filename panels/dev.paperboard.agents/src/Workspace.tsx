@@ -111,7 +111,7 @@ export default function Workspace(props: { agent: Agent }) {
                             )}
                         </For>
                     </PaperMenu>
-                    <PaperFlex flex minWidth={0} minHeight={0} scrollable="y" padding={shown() === "computer" || shown() === "pages" || shown() === "tools" || shown() === "access" ? undefined : "double"}>
+                    <PaperFlex flex minWidth={0} minHeight={0} scrollable="y" padding={shown() === "computer" || shown() === "pages" || shown() === "routines" || shown() === "tools" || shown() === "access" ? undefined : "double"}>
                         <For each={mounted()}>
                             {(p) => {
                                 // a chosen page asks for its first reads as it mounts; one that reads nothing shows in this same frame

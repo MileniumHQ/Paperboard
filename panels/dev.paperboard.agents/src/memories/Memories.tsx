@@ -16,6 +16,7 @@ import {
     PaperMarkdown,
     PaperMediaCard,
     PaperSectionHeader,
+    PaperSeparator,
     PaperText,
     createAction,
     createRead,
@@ -132,6 +133,7 @@ function Note(props: { agent: Agent; noteKey: string; onDone: () => void }) {
                         <PaperText preset="hint" inset>
                             Read {n().when}
                         </PaperText>
+                        <PaperSeparator />
                         <PaperMarkdown text={n().body} />
                         <PaperFlex direction="row">
                             <PaperButton variant="danger" disabled={forgetting()} onClick={() => void forget()}>
