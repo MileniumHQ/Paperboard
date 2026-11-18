@@ -169,10 +169,16 @@ describe("failures are shown", () => {
             await page.waitFor(toastShows("Couldn't copy", "Nothing is selected"), "the empty copy to be said");
             expect(await page.evaluate<unknown>("window.copied")).toBeUndefined();
 
+            // the prompt as this system's bash draws it: a system bashrc (Ubuntu's
+            // sets PS1 outright) decides it, not the test
+            const prompt = await page.evaluate<string>(`(${screens})[0].split("\\n").map((line) => line.trimEnd()).filter(Boolean).at(-1)`);
             await runBlock("type-in-tab", { tab: "tab1", text: "echo copied-$((2+3))\n" });
             // the output shows before the shell marks the command's end; the
             // end mark comes just before the next prompt, so wait for that
-            await page.waitFor(`/copied-5\\s*\\n\\$/.test((${screens})[0] ?? "")`, "the command to end at a new prompt");
+            await page.waitFor(
+                `(${screens})[0]?.split("\\n").map((line) => line.trimEnd()).filter(Boolean).slice(-2).join("\\n") === ${JSON.stringify(`copied-5\n${prompt}`)}`,
+                "the command to end at a new prompt",
+            );
             await menuItem("Copy Last Output");
             await page.waitFor(`window.copied?.trim() === "copied-5"`, "the last output on the clipboard");
             expect(page.exceptions).toEqual([]);
