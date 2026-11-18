@@ -22,6 +22,7 @@ import {
     PaperInterfaceItem,
     PaperList,
     PaperListItem,
+    PaperListLabel,
     PaperMarkdown,
     PaperMenu,
     PaperMediaCard,
@@ -94,6 +95,23 @@ const scenarios: Record<string, () => JSX.Element> = {
                     <p id="modal-body">The page under this dialog takes presses once it closes.</p>
                 </PaperModal>
             </>
+        ));
+    },
+
+    railMonogram() {
+        return shell(() => (
+            <div style={{ padding: "24px", height: "400px", display: "flex" }}>
+                <div id="rail-box" style={{ height: "100%", "overflow-y": "auto" }}>
+                    <PaperRail name="rail" value="wo">
+                        <PaperRailItem value="home" icon="home" label="Home" />
+                        <For each={["WO", "MW", "OO"]}>
+                            {(letters) => (
+                                <PaperRailItem value={letters.toLowerCase()} data-item={letters} icon={<PaperIcon monogram>{letters}</PaperIcon>} label={letters} />
+                            )}
+                        </For>
+                    </PaperRail>
+                </div>
+            </div>
         ));
     },
 
@@ -270,6 +288,54 @@ const scenarios: Record<string, () => JSX.Element> = {
                 <span>Server name</span>
                 <PaperInput id="name" label="Name" aria-describedby="name-hint" error={error()} />
                 <span id="name-hint">Shown in the server list</span>
+            </div>
+        ));
+    },
+
+    controlHeights() {
+        const sizes = ["small", "medium", "large"] as const;
+        return shell(() => (
+            <div style={{ padding: "24px", display: "flex", "flex-direction": "column", gap: "8px", "align-items": "flex-start" }}>
+                <For each={sizes}>
+                    {(size) => (
+                        <div data-size={size} style={{ display: "flex", gap: "8px", "align-items": "flex-start" }}>
+                            <PaperInput data-control="input" size={size} placeholder="Member" />
+                            <PaperInput data-control="labelled" size={size} label="Name" />
+                            <PaperInput data-control="icon-input" size={size} icon="search" placeholder="Member" />
+                            <PaperButton data-control="button" size={size}>
+                                Send
+                            </PaperButton>
+                            <PaperButton data-control="icon-label-button" size={size} variant="primary">
+                                <PaperIcon>send</PaperIcon>
+                                Send
+                            </PaperButton>
+                            <PaperButton data-control="icon-button" size={size} icon title="Send">
+                                send
+                            </PaperButton>
+                        </div>
+                    )}
+                </For>
+                <div data-size="menu" style={{ display: "flex", gap: "8px", width: "400px" }}>
+                    <PaperSelectMenu name="channel" value="general">
+                        <PaperSelectMenuItem value="general">#general</PaperSelectMenuItem>
+                    </PaperSelectMenu>
+                    <PaperInput data-row="input" placeholder="Message" />
+                    <PaperButton data-row="button">Send</PaperButton>
+                </div>
+            </div>
+        ));
+    },
+
+    standaloneList() {
+        return shell(() => (
+            <div id="column" style={{ padding: "24px", width: "360px", height: "400px", display: "flex", "flex-direction": "column", gap: "8px", overflow: "auto" }}>
+                <span>Roles</span>
+                <PaperList id="list" standalone selectable={false}>
+                    <PaperListLabel id="label">Staff</PaperListLabel>
+                    <PaperListItem value="admin" data-item="admin">Admin</PaperListItem>
+                    <PaperListItem value="helper" data-item="helper">Helper</PaperListItem>
+                </PaperList>
+                <span>Below</span>
             </div>
         ));
     },

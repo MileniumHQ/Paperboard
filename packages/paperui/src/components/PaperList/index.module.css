@@ -32,6 +32,21 @@
     touch-action: pan-x;
 }
 
+/* standalone: the list is its own card beside other content. Its border
+   frames every row and label, its corners are rounded, and it clips the rows'
+   square surfaces and their outlines to that edge. It sizes to its rows and
+   keeps that size in a column: the clipping zeroes its auto min-size, so
+   without flex-shrink: 0 a scrolling column would crush it. */
+.PaperList.standalone {
+    box-sizing: border-box;
+    width: 100%;
+    height: auto;
+    flex-shrink: 0;
+    border: var(--paper-border-width) solid var(--paper-border);
+    border-radius: var(--paper-border-radius);
+    overflow: hidden;
+}
+
 /* A scrollable list owns the overflow on its own axis and scrolls; it must
    not crush its rows. Items clip their own overflow, which zeroes their auto
    min-size, so without flex-shrink: 0 an overfull list shrinks every row to a

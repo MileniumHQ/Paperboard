@@ -71,6 +71,7 @@ UI:
 - **AVOID USING CUSTOM COMPONENTS UNLESS THEY DO SOMETHING UNIQUE!** If there's something that should be a component, ask about it.
 - **NEVER use static values, use PaperUI tokens.** In fact, avoid using any CSS at all, and let me know if the component needs an improvement.
 - **Avoid inline styles and custom components:** In general, you shouldn't even have to think about PaperUI tokens, the goal is for the app to be buildable with just PaperUI elements and no style tags. This isn't always possible, especially in more custom components like the text input in the Agents panel or the entire Actions panel and many more examples. However, if you're just building buttons that do things, there's a high chance PaperUI's existing components are all you'll need.
+- **Lists fill or stand alone:** a PaperList (or any list like it) that is all its container holds fills it, with no padding around it (`fullWidth borderless`). One that shares its container with other content (a title, text, a form) gets `standalone`, which gives it its own border and rounded corners. Never leave a borderless list in a padded box beside other content.
 - **Use getVarCss:** If you do use design tokens, do not use inline `var(--paper-example-property)`. Instead, use PaperUI's `getVarCss()` function.
 - **Update docs:** After the change, update the docs in the below docs folder, adhering to the style of the rest of the docs.
 

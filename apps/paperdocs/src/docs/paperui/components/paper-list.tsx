@@ -177,6 +177,12 @@ export function Example() {
                         <td>Removes the list's right border.</td>
                     </tr>
                     <tr>
+                        <td><PaperCode>standalone</PaperCode></td>
+                        <td><PaperCode>boolean</PaperCode></td>
+                        <td>No default (off)</td>
+                        <td>The list is its own card: full width, as tall as its rows, with a border on every side, rounded corners, and its labels and rows clipped to them. Use it for a list that shares its container with other content.</td>
+                    </tr>
+                    <tr>
                         <td><PaperCode>fullWidth</PaperCode></td>
                         <td><PaperCode>boolean</PaperCode></td>
                         <td>No default</td>
@@ -379,7 +385,9 @@ onClosed(value: string | number): void;`}
 
             <PaperText preset="subheader" as="h3" id="layout">Layout</PaperText>
             <PaperTextList>
-                <li>Left alone, a vertical list is a sidebar: 190 pixels wide, full height, a right border, on the inset surface. Set <PaperCode>fullWidth</PaperCode> and <PaperCode>borderless</PaperCode> to use it inside a card, as the gameserver panel does.</li>
+                <li>Left alone, a vertical list is a sidebar: 190 pixels wide, full height, a right border, on the inset surface.</li>
+                <li>A list that is all its container holds (a card, a dialog's pane) fills it: the container has no padding, and the list is <PaperCode>fullWidth</PaperCode> and <PaperCode>borderless</PaperCode>, so the container's edge frames it.</li>
+                <li>A list that shares its container with other content, such as a title, a description, or a form, is <PaperCode>standalone</PaperCode>. Never leave a borderless list in a padded box beside other content: its rows have square corners and its labels have no side borders.</li>
                 <li>A horizontal list is full width and auto height, with no right border.</li>
                 <li>A list scrolls rather than crushing its rows when it overflows.</li>
                 <li>A title stays on one line: one that doesn't fit, such as a long plugin or player name with no spaces, ends in an ellipsis before it reaches the item's actions. The description wraps instead. With <PaperCode>wrapTitle</PaperCode> the title wraps too.</li>
@@ -405,6 +413,33 @@ onClosed(value: string | number): void;`}
     <PaperListLabel>Another group</PaperListLabel>
     <PaperListItem value="c">Third</PaperListItem>
 </PaperList>`}
+            </PaperCode>
+
+            <PaperText preset="subheader" as="h3" id="standalone">Beside other content</PaperText>
+            <PaperText preset="body" as="p">
+                A list under a title, in a card with padding, is its own card with <PaperCode>standalone</PaperCode>: its border runs around the labels as well as the rows.
+            </PaperText>
+            <PaperCard data-docs-demo surface="front" padding="full">
+                <PaperFlex direction="column" gap="half">
+                    <PaperText preset="heading">Channels</PaperText>
+                    <PaperList selectable={false} standalone>
+                        <PaperListLabel>Info</PaperListLabel>
+                        <PaperListItem value="rules" icon="tag" description="Text">rules</PaperListItem>
+                        <PaperListItem value="announcements" icon="campaign" description="Announcement">announcements</PaperListItem>
+                    </PaperList>
+                </PaperFlex>
+            </PaperCard>
+            <PaperCode block language="tsx">
+{`<PaperCard padding="full">
+    <PaperFlex direction="column" gap="half">
+        <PaperText preset="heading">Channels</PaperText>
+        <PaperList selectable={false} standalone>
+            <PaperListLabel>Info</PaperListLabel>
+            <PaperListItem value="rules" icon="tag" description="Text">rules</PaperListItem>
+            <PaperListItem value="announcements" icon="campaign" description="Announcement">announcements</PaperListItem>
+        </PaperList>
+    </PaperFlex>
+</PaperCard>`}
             </PaperCode>
 
             <PaperText preset="subheader" as="h3" id="static">A list that only shows things</PaperText>

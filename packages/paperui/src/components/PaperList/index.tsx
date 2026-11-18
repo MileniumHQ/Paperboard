@@ -50,6 +50,14 @@ export type PaperListProps = (
         onItemClose?: (event: PaperListItemCloseEvent) => void;
         onItemClosed?: (value: string | number) => void;
         borderless?: boolean;
+        /**
+         * The list is its own card: full width, its own height, bordered,
+         * rounded and clipped. For a list that shares its container with other
+         * content (a title, a form). A list that is all its container holds
+         * fills it instead, with no padding around it and no border of its own
+         * (fullWidth, borderless). Default false.
+         */
+        standalone?: boolean;
         fullWidth?: boolean;
         fullHeight?: boolean;
         flex?: boolean | number | JSX.CSSProperties["flex"];
@@ -117,6 +125,7 @@ export function PaperList(props: ParentProps<PaperListProps>) {
         "onItemClose",
         "onItemClosed",
         "borderless",
+        "standalone",
         "fullWidth",
         "fullHeight",
         "flex",
@@ -197,6 +206,7 @@ export function PaperList(props: ParentProps<PaperListProps>) {
             isSelectable() ? "" : styles.static,
             isCompact() ? styles.compact : "",
             local.borderless ? styles.borderless : "",
+            local.standalone ? styles.standalone : "",
             local.fullWidth ? styles.fullWidth : "",
             local.fullHeight ? styles.fullHeight : "",
             isScrollable() ? styles.scrollable : "",
