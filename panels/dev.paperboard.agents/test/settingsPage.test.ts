@@ -79,20 +79,37 @@ describe("a pick", () => {
 describe("the models", () => {
     test("are listed again once the brain is set up, and the error that it wasn't goes", async () => {
         const page = await settingsPage({ codexOnPath: { signedIn: true, plan: MODELS } });
-        // the list stays unlisted until the brain is set up, so it's said in place, in the Agent section, never as a toast
-        const unlisted = `document.querySelector('[role=region][aria-label="Agent"] [data-paper-error][aria-label="Couldn\\'t list the models"]')`;
-        await page.waitFor(unlisted, "the models not to be listed");
-        expect(await page.evaluate(`${unlisted}.innerText`)).toContain("Codex isn't installed");
-        expect(await page.evaluate(`${unlisted}.getAttribute("role")`), "a failure there when the page opens is an alert").toBe("region");
-        expect(await page.evaluate(`[...${unlisted}.querySelectorAll("button")].map((b) => b.innerText.trim())`)).toEqual(["Try again"]);
+        // the list stays unlisted until the brain is set up, so it's said in the Model row itself: beside the field to type
+        // in and the button that asks again, never as a card between sections
+        const row = `document.querySelector('[role=region][aria-label="Agent"] input[name="model"]').closest('[class*="PaperSettingItem"]')`;
+        await page.waitFor(`document.querySelector('[role=region][aria-label="Agent"] input[name="model"]')`, "the model field to type in");
+        expect(await page.evaluate<string>(`${row}.innerText`)).toContain("Couldn't list the models: Codex isn't installed");
+        expect(await page.evaluate<string>(`${row}.innerText`), "the hint says where to type").toContain("Type a model's id instead");
+        expect(await page.evaluate(`[...${row}.querySelectorAll("button")].map((b) => b.getAttribute("aria-label"))`)).toEqual(["Try again"]);
+        expect(await page.evaluate(`Boolean(document.querySelector('[role=region][aria-label="Agent"] [data-paper-error]'))`), "the failure is a card between the sections").toBe(false);
         expect(await page.evaluate(`Boolean(${toast("Couldn't list the models")})`), "a failure that stands is a toast").toBe(false);
+        const unlisted = `${row}.innerText.includes("Couldn't list the models")`;
         // Brains: run the Codex that is on this computer
         await page.waitFor(`[...document.querySelectorAll("button")].some((b) => b.innerText.trim().endsWith("Use it"))`, "Codex to be found on this computer");
         await page.evaluate(`[...document.querySelectorAll("button")].find((b) => b.innerText.trim().endsWith("Use it")).dataset.testUse = "1"`);
         await page.click(`button[data-test-use]`);
-        await page.waitFor(`document.querySelector('[role=region][aria-label="Agent"] input[name="model"]') && !${unlisted}`, "the models to be listed");
+        await page.waitFor(`document.querySelector('[role=region][aria-label="Agent"] input[name="model"]') && !(${unlisted})`, "the models to be listed");
         await page.click(`[role=region][aria-label="Agent"] input[name="model"] ~ button[aria-haspopup=listbox]`);
         await page.waitFor(`[...document.querySelectorAll("[role=option]")].some((o) => o.innerText.includes("GPT X"))`, "Codex's model in the list");
+        expect(page.exceptions).toEqual([]);
+    });
+});
+
+describe("a brain found on this computer", () => {
+    test("has one action in its row, and installing its own copy is in the row's menu", async () => {
+        const page = await settingsPage({ codexOnPath: { signedIn: true } });
+        const row = `[...document.querySelectorAll('[role=region][aria-label="Brains"] [class*="PaperSettingItem"]')].find((r) => r.innerText.startsWith("Codex"))`;
+        await page.waitFor(`${row}?.innerText.includes("Use it")`, "Codex found on this computer");
+        // a button that says what it does, and a menu for the rest: no second labeled button beside it
+        expect(await page.evaluate(`[...${row}.querySelectorAll("button")].map((b) => b.getAttribute("aria-label") ?? b.innerText.trim().split("\\n").pop())`)).toEqual(["Use it", "More for Codex"]);
+        expect(await page.evaluate(`document.body.innerText.includes("Install its own copy")`)).toBe(false);
+        await page.click(`button[aria-label="More for Codex"]`);
+        await page.waitFor(`[...document.querySelectorAll("[role=menuitem]")].some((i) => i.innerText.includes("Install its own copy"))`, "the menu's item");
         expect(page.exceptions).toEqual([]);
     });
 });

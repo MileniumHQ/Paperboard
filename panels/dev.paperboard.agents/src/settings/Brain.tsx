@@ -4,7 +4,24 @@
 
 import { Match, Show, Switch, createEffect, createSignal, on, type JSX } from "solid-js";
 import { createStore } from "solid-js/store";
-import { PaperButton, PaperCopyButton, PaperError, PaperFlex, PaperIcon, PaperInput, PaperLoader, PaperModal, PaperProgress, PaperQuote, PaperText, createAction } from "@mileniumhq/paperui";
+import {
+    PaperButton,
+    PaperContextMenu,
+    PaperContextMenuItem,
+    PaperCopyButton,
+    PaperError,
+    PaperFlex,
+    PaperIcon,
+    PaperInput,
+    PaperLink,
+    PaperLoader,
+    PaperModal,
+    PaperProgress,
+    PaperQuote,
+    PaperText,
+    createAction,
+    useContextMenuState,
+} from "@mileniumhq/paperui";
 import { SIGN_IN_REQUIRED, type BrainState, type Harness } from "../contract";
 import type { Agent } from "../lib/agent";
 import { harnessName } from "../lib/brains";
@@ -96,7 +113,7 @@ export function BrainStatus(props: { agent: Agent; harness: Harness; actions: Br
                         harness={props.harness}
                         actions={props.actions}
                         cancel={
-                            <PaperButton variant="text" onClick={() => void props.actions.cancel(props.harness)}>
+                            <PaperButton variant="outline" onClick={() => void props.actions.cancel(props.harness)}>
                                 Cancel
                             </PaperButton>
                         }
@@ -132,6 +149,17 @@ export function SignInSteps(props: { agent: Agent; harness: Harness; actions: Br
     // the page was opened: what it hands back is the one thing left to show
     const [opened, setOpened] = createSignal(false);
     createEffect(on(() => b().login?.url, () => setOpened(false)));
+
+    // the way back to the page, once it's been opened: a sentence of its own, not a button beside the one thing to do
+    const again = () => (
+        <Show when={b().login?.url}>
+            {(url) => (
+                <PaperText preset="hint">
+                    Closed it? <PaperLink href={url()}>Open the sign-in page again</PaperLink>
+                </PaperText>
+            )}
+        </Show>
+    );
 
     const forward = createLoopbackCatch(
         () => b().login?.callback ?? null,
@@ -180,7 +208,7 @@ export function SignInSteps(props: { agent: Agent; harness: Harness; actions: Br
                                     {(shown) => (
                                         <PaperFlex direction="row" gap="half" align="center">
                                             <PaperText preset="title">{shown()}</PaperText>
-                                            <PaperCopyButton text={shown()} label="Copy code" variant="text" />
+                                            <PaperCopyButton text={shown()} label="Copy code" variant="outline" />
                                         </PaperFlex>
                                     )}
                                 </Show>
@@ -188,7 +216,7 @@ export function SignInSteps(props: { agent: Agent; harness: Harness; actions: Br
                                     <PaperButton variant="primary" href={login().url!} target="_blank" onClick={() => setOpened(true)}>
                                         Open sign-in page <PaperIcon>open_in_new</PaperIcon>
                                     </PaperButton>
-                                    <PaperCopyButton text={login().url!} label="Copy link" variant="text" />
+                                    <PaperCopyButton text={login().url!} label="Copy link" variant="outline" />
                                     {props.cancel}
                                 </PaperFlex>
                             </>
@@ -203,7 +231,12 @@ export function SignInSteps(props: { agent: Agent; harness: Harness; actions: Br
                                 fallback={
                                     <Show
                                         when={forward.paste()}
-                                        fallback={<PaperLoader loaderStatus="indeterminate" label="Waiting for you to finish signing in" />}
+                                        fallback={
+                                            <>
+                                                <PaperLoader loaderStatus="indeterminate" label="Waiting for you to finish signing in" />
+                                                {again()}
+                                            </>
+                                        }
                                     >
                                         <Show when={forward.error()}>
                                             {(shown) => (
@@ -213,6 +246,7 @@ export function SignInSteps(props: { agent: Agent; harness: Harness; actions: Br
                                             )}
                                         </Show>
                                         <PaperText preset="body">When you've signed in, your browser ends on a page that doesn't load. Copy its address and paste it here.</PaperText>
+                                        {again()}
                                         <PaperInput
                                             label="Address"
                                             fullWidth
@@ -226,7 +260,9 @@ export function SignInSteps(props: { agent: Agent; harness: Harness; actions: Br
                                     </Show>
                                 }
                             >
-                                <PaperText preset="body">Sign in on the page, then paste the code it shows.</PaperText>
+                                <PaperText preset="body">
+                                    Sign in on <PaperLink href={login().url ?? undefined}>the page</PaperLink>, then paste its code.
+                                </PaperText>
                                 <PaperInput
                                     label="Code"
                                     fullWidth
@@ -240,19 +276,7 @@ export function SignInSteps(props: { agent: Agent; harness: Harness; actions: Br
                                 />
                             </Show>
                         </Show>
-                        {/* the way back to the page, and out: quiet, so the one thing to do above stays the one thing */}
-                        <Show when={login().url || props.cancel}>
-                            <PaperFlex direction="row" gap="half" align="center" wrap>
-                                <Show when={login().url}>
-                                    {(url) => (
-                                        <PaperButton variant="text" href={url()} target="_blank">
-                                            Open page
-                                        </PaperButton>
-                                    )}
-                                </Show>
-                                {props.cancel}
-                            </PaperFlex>
-                        </Show>
+                        {props.cancel}
                     </Show>
                 </PaperFlex>
             )}
@@ -337,6 +361,7 @@ export function BrainButtons(props: { agent: Agent; harness: Harness; actions: B
     // signed in (or needing no sign-in) and ready: nothing left to set up
     const busy = () => props.actions.busy(props.harness);
     const usable = () => b().phase === "ready" && (b().signedIn || !SIGN_IN_REQUIRED[props.harness]);
+    const menu = useContextMenuState("below-right");
     return (
         <PaperFlex direction="row" gap="half" align="center" wrap>
             <Switch>
@@ -374,11 +399,29 @@ export function BrainButtons(props: { agent: Agent; harness: Harness; actions: B
                     </Show>
                 </Match>
             </Switch>
-            {/* the package, with the version Paperboard pins, stays a click away from a program on the computer: one offered, or one the brain runs, until it's signed in and in use */}
+            {/* the package, with the version Paperboard pins, stays a click away from a program on the computer: one offered, or one the brain runs, until it's signed in and in use. Beside the row's one action, not another button of its own */}
             <Show when={!usable() && ((b().existing && b().phase !== "installing" && b().phase !== "signing-in") || (b().phase === "none" && b().found))}>
-                <PaperButton variant="text" disabled={busy()} onClick={() => void props.actions.installOwn(props.harness)}>
-                    Install its own copy
+                <PaperButton
+                    icon
+                    variant="text"
+                    title="More"
+                    aria-label={`More for ${harnessName(props.harness)}`}
+                    disabled={busy()}
+                    onClick={(e) => menu.openBelow(e, { align: "right" })}
+                >
+                    <PaperIcon>more_vert</PaperIcon>
                 </PaperButton>
+                <PaperContextMenu open={menu.isOpen()} target={menu.target()} placement={menu.placement()} onClose={menu.close}>
+                    <PaperContextMenuItem
+                        icon="download"
+                        onClick={() => {
+                            menu.close();
+                            void props.actions.installOwn(props.harness);
+                        }}
+                    >
+                        Install its own copy
+                    </PaperContextMenuItem>
+                </PaperContextMenu>
             </Show>
         </PaperFlex>
     );

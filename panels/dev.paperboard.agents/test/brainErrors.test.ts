@@ -55,6 +55,9 @@ test("a brain's button pressed twice before the service answers is sent once", a
     // what the button opens is the person's own browser's business: here, nothing
     await page.evaluate(`(() => { window.open = () => null; const a = [...${CLAUDE}.querySelectorAll("a")].find((b) => b.innerText.includes("Open sign-in page")); a.addEventListener("click", (e) => e.preventDefault()); a.click(); })()`);
     await page.waitFor(`${CLAUDE}?.querySelector("input")`, "Claude Code's code field");
+    // the way back to the page is the words "the page", in the sentence that asks for the code: no button of its own under the field
+    expect(await page.evaluate(`[...${CLAUDE}.querySelectorAll('button:not([aria-label="Close modal"])')].map((b) => b.innerText.trim())`), "the code step has a button of its own to open the page").toEqual(["Cancel"]);
+    expect(await page.evaluate(`[...${CLAUDE}.querySelectorAll("a")].map((a) => a.parentElement.innerText.replace("open_in_new", "").trim())`)).toEqual(["Sign in on the page, then paste its code."]);
     await holdCalls(page, "brainCode");
     await page.evaluate(`(() => {
         const paste = new ClipboardEvent("paste", { clipboardData: new DataTransfer(), bubbles: true, cancelable: true });

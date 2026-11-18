@@ -5,7 +5,6 @@
 import { For, Match, Show, Switch, createEffect, createSignal, on } from "solid-js";
 import {
     PaperButton,
-    PaperError,
     PaperFlex,
     PaperIcon,
     PaperInput,
@@ -21,6 +20,7 @@ import {
     createSavedValue,
     showError,
 } from "@mileniumhq/paperui";
+import { errorMessage } from "@mileniumhq/paperapi";
 import BrainLogo from "../lib/BrainLogo";
 import { COMPACTIONS, DEFAULT_MODEL, HARNESSES, LIMITS, type Compaction, type Harness, type Settings as Saved } from "../contract";
 import type { Agent } from "../lib/agent";
@@ -121,20 +121,33 @@ function AgentSettings(props: { agent: Agent }) {
                         </For>
                     </PaperSelectMenu>
                 </PaperSettingItem>
-                <PaperSettingItem title="Model" description="Leave it on the default to use whatever the harness is set to already.">
+                <PaperSettingItem
+                    title="Model"
+                    description={
+                        // a list that stands failed is said in its own row, beside the field to type in and the button that asks again
+                        models.error()
+                            ? `Couldn't list the models: ${errorMessage(models.error()).split("\n")[0]!.replace(/\.$/, "")}. Type a model's id instead, or leave it empty for the default.`
+                            : "Leave it on the default to use whatever the harness is set to already."
+                    }
+                >
                     <Show
                         when={!models.error()}
                         fallback={
-                            <PaperInput
-                                name="model"
-                                label="Model"
-                                placeholder="Default"
-                                value={model()}
-                                maxLength={LIMITS.model}
-                                onInput={(e) => setModel(e.currentTarget.value)}
-                                onChange={() => report("Couldn't change the model", save({ model: model().trim() || null }))}
-                                onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
-                            />
+                            <PaperFlex direction="row" gap="half" align="end">
+                                <PaperInput
+                                    name="model"
+                                    label="Model"
+                                    placeholder="Default"
+                                    value={model()}
+                                    maxLength={LIMITS.model}
+                                    onInput={(e) => setModel(e.currentTarget.value)}
+                                    onChange={() => report("Couldn't change the model", save({ model: model().trim() || null }))}
+                                    onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
+                                />
+                                <PaperButton icon variant="outline" title="Try listing the models again" aria-label="Try again" disabled={models.loading()} onClick={() => void models.reload()}>
+                                    <PaperIcon>refresh</PaperIcon>
+                                </PaperButton>
+                            </PaperFlex>
                         }
                     >
                         <PaperSelectMenu
@@ -163,16 +176,6 @@ function AgentSettings(props: { agent: Agent }) {
                     </Show>
                 </PaperSettingItem>
             </PaperSettingList>
-            <Show when={models.error()}>
-                {(err) => (
-                    <PaperFlex gap="half">
-                        <PaperError title="Couldn't list the models" error={err()} action={{ label: "Try again", disabled: models.loading(), onClick: () => void models.reload() }} />
-                        <PaperText preset="hint" inset>
-                            Type a model's id instead.
-                        </PaperText>
-                    </PaperFlex>
-                )}
-            </Show>
         </PaperFlex>
     );
 }
