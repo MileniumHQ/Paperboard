@@ -32,9 +32,9 @@
         "update:opencode": "bun scripts/update-opencode.ts"
     },
     "devDependencies": {
-        "@cloudflare/workers-types": "^5.20261005.1",
+        "@cloudflare/workers-types": "^5.20261117.1",
         "@types/bun": "latest",
-        "wrangler": "^4.147.0"
+        "wrangler": "^4.164.0"
     },
     "peerDependencies": {
         "typescript": "^5"

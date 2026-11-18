@@ -41,20 +41,20 @@
         "@solidjs/testing-library": "^0.8.10",
         "@types/prismjs": "^1.26.6",
         "@types/node": "^22.20.5",
-        "jsdom": "^30.1.2",
-        "solid-js": "^1.9.17",
+        "jsdom": "^30.1.3",
+        "solid-js": "^1.9.19",
         "typescript": "~6.0.3",
-        "vite": "^8.3.2",
+        "vite": "^8.3.8",
         "vite-plugin-dts": "^5.1.2",
-        "vite-plugin-solid": "^2.11.14",
-        "vitest": "^4.1.11"
+        "vite-plugin-solid": "^2.11.16",
+        "vitest": "^4.1.12"
     },
     "peerDependencies": {
-        "solid-js": "^1.9.0"
+        "solid-js": "^1.9.19"
     },
     "dependencies": {
         "anser": "^2.3.5",
-        "marked": "^18.0.14",
+        "marked": "^18.2.1",
         "prismjs": "^1.30.0",
         "solid-transition-group": "^0.3.0"
     },

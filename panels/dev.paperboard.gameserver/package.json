@@ -17,8 +17,8 @@
         "fflate": "^0.8.3",
         "pngjs": "^7.0.0",
         "prismarine-nbt": "^2.8.0",
-        "semver": "^7.8.5",
-        "solid-js": "^1.9.17",
+        "semver": "^7.8.6",
+        "solid-js": "^1.9.19",
         "strip-ansi": "^7.2.0",
         "yaml": "^2.9.1"
     },
@@ -27,7 +27,7 @@
         "@types/semver": "^7.8.0",
         "paperboard": "workspace:*",
         "typescript": "~6.0.3",
-        "vite": "^8.3.2",
-        "vite-plugin-solid": "^2.11.14"
+        "vite": "^8.3.8",
+        "vite-plugin-solid": "^2.11.16"
     }
 }

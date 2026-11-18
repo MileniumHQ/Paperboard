@@ -62,13 +62,13 @@
         "@types/tar": "^7.0.87",
         "@types/ws": "^8.18.2",
         "typescript": "~6.0.3",
-        "vite": "^8.3.2",
+        "vite": "^8.3.8",
         "vite-plugin-dts": "^5.1.2"
     },
     "dependencies": {
-        "commander": "^15.0.0",
-        "tar": "^7.5.22",
-        "ws": "^8.22.0"
+        "commander": "^15.1.0",
+        "tar": "^7.5.23",
+        "ws": "^8.23.0"
     },
     "description": "Runtime bridge between Paperboard panels and the host: terminals, processes, packages, files, and config.",
     "keywords": [

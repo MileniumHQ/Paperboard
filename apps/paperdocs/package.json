@@ -16,7 +16,7 @@
   },
   "dependencies": {
     "@mileniumhq/paperui": "workspace:*",
-    "solid-js": "^1.9.17"
+    "solid-js": "^1.9.19"
   },
   "devDependencies": {
     "@mileniumhq/paperapi": "workspace:*",
@@ -24,10 +24,10 @@
     "dev.paperboard.actions": "workspace:*",
     "node-html-parser": "^7.1.0",
     "playwright": "1.61.1",
-    "sharp": "0.33.5",
+    "sharp": "0.35.5",
     "typescript": "^5.9.3",
-    "vite": "^6.4.3",
-    "vite-plugin-solid": "^2.11.14",
-    "wrangler": "^4.147.0"
+    "vite": "^6.4.6",
+    "vite-plugin-solid": "^2.11.16",
+    "wrangler": "^4.164.0"
   }
 }

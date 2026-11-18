@@ -23,10 +23,13 @@ function run(command, args, cwd = tmp) {
 
 const workspaceLock = Bun.JSONC.parse(fs.readFileSync(path.join(root, "bun.lock"), "utf8"));
 // The workspace's patches are left out on purpose: a consumer installs the
-// published, unpatched packages. Overrides or catalogs would change resolution
-// in ways that copying entries does not carry, so they stop the check.
+// published, unpatched packages. Catalogs would change resolution in ways that
+// copying entries does not carry, so they stop the check. An override does
+// too, but only for a consumer that installs the package it overrides
+// (installOffline refuses those): the others resolve as they would published.
 const unknownLockFields = Object.keys(workspaceLock)
-    .filter((field) => !["lockfileVersion", "configVersion", "workspaces", "packages", "patchedDependencies"].includes(field));
+    .filter((field) => !["lockfileVersion", "configVersion", "workspaces", "packages", "patchedDependencies", "overrides"].includes(field));
+const overridden = new Set(Object.keys(workspaceLock.overrides ?? {}));
 const bunCache = execFileSync("bun", ["pm", "cache"], { encoding: "utf8" }).trim();
 const lockMeta = (entry) => entry.find((part) => part && typeof part === "object" && !Array.isArray(part)) ?? {};
 const lockVersion = (key) => workspaceLock.packages[key][0].slice(workspaceLock.packages[key][0].lastIndexOf("@") + 1);
@@ -100,6 +103,14 @@ function installOffline(dir, extraArgs = []) {
         for (const name of [...Object.keys(meta.optionalDependencies ?? {}), ...Object.keys(meta.peerDependencies ?? {})]) {
             const dep = lockResolve(key, name);
             if (dep) queue.push(dep);
+        }
+    }
+    for (const key of Object.keys(packages)) {
+        // a lock key is the package's path of names: a/@scope/b names @scope/b
+        const parts = key.split("/");
+        const name = parts.length > 1 && parts.at(-2).startsWith("@") ? parts.slice(-2).join("/") : parts.at(-1);
+        if (overridden.has(name)) {
+            throw new Error(`${manifest.name ?? "the consumer"} installs ${name}, which bun.lock overrides: a consumer of the published package would not get the override`);
         }
     }
     const lock = { lockfileVersion: workspaceLock.lockfileVersion, configVersion: workspaceLock.configVersion, workspaces: { "": workspace }, packages };

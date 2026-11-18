@@ -67,7 +67,7 @@ describe("the macOS ZIP keeps framework symlinks when built off-Mac", () => {
         expect(config.dmg).toBeUndefined();
     });
 
-    test("the patched archiver stores Versions/Current and the framework's top-level link as symlinks", async () => {
+    test("the archiver stores Versions/Current and the framework's top-level link as symlinks", async () => {
         const archiveModule = appRequire.resolve("app-builder-lib/out/targets/archive.js", {
             paths: [dirname(appRequire.resolve("electron-builder/package.json"))],
         });
