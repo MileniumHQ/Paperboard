@@ -63,7 +63,7 @@ export default function Access(props: { agent: Agent }) {
                             </PaperFlex>
                         }
                     >
-                        <PaperList selectable={false} borderless fullWidth fullHeight>
+                        <PaperList selectable={false} borderless fullWidth fullHeight background="transparent">
                             <For each={grants()}>
                                 {(row) => {
                                     const g = row.grant;

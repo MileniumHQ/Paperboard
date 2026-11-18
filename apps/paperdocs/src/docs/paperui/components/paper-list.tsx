@@ -386,7 +386,7 @@ onClosed(value: string | number): void;`}
             <PaperText preset="subheader" as="h3" id="layout">Layout</PaperText>
             <PaperTextList>
                 <li>Left alone, a vertical list is a sidebar: 190 pixels wide, full height, a right border, on the inset surface.</li>
-                <li>A list that is all its container holds (a card, a dialog's pane) fills it: the container has no padding, and the list is <PaperCode>fullWidth</PaperCode> and <PaperCode>borderless</PaperCode>, so the container's edge frames it.</li>
+                <li>A list that is all its container holds (a card, a dialog's pane) fills it: the container has no padding, and the list is <PaperCode>fullWidth</PaperCode> and <PaperCode>borderless</PaperCode>, so the container's edge frames it. When the container has a surface of its own, the list is <PaperCode>background="transparent"</PaperCode> too, so the room under a short list is the container's, not a band of the list's inset surface.</li>
                 <li>A list that shares its container with other content, such as a title, a description, or a form, is <PaperCode>standalone</PaperCode>. Never leave a borderless list in a padded box beside other content: its rows have square corners and its labels have no side borders.</li>
                 <li>A horizontal list is full width and auto height, with no right border.</li>
                 <li>A list scrolls rather than crushing its rows when it overflows.</li>

@@ -129,7 +129,7 @@ function List(props: { tools: ToolsClient; name: string }) {
                     )}
                 </Show>
                 {/* the server being edited is marked */}
-                <PaperList name="agents-tools" value={form()?.editing ? rowOf(form()!.name) : ""} onValueChange={(v) => choose(String(v))} borderless fullWidth fullHeight>
+                <PaperList name="agents-tools" value={form()?.editing ? rowOf(form()!.name) : ""} onValueChange={(v) => choose(String(v))} borderless fullWidth fullHeight background="transparent">
                     <PaperListLabel as="h3">Tool servers</PaperListLabel>
                     <For each={view().config.servers}>
                         {(server) => {

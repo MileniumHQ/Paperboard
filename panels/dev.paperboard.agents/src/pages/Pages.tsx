@@ -64,6 +64,7 @@ export default function Pages(props: { pages: Launcher; name: string; onOpened: 
                             borderless
                             fullWidth
                             fullHeight
+                            background="transparent"
                         >
                             <For each={props.pages.list()}>
                                 {(a) => (

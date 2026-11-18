@@ -78,6 +78,7 @@ export default function History(props: { agent: Agent; open: boolean; onClose: (
                             borderless
                             fullWidth
                             fullHeight
+                            background="transparent"
                         >
                             <For each={all()}>
                                 {(c) => (

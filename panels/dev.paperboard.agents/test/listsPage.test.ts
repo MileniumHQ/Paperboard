@@ -70,16 +70,19 @@ describe("a list that is all its page holds", () => {
             await openSection(view, "Ada", section);
             await view.waitFor(`document.querySelector(${JSON.stringify(`[role=dialog] ${row}`)})`, `a row of ${section}`);
             await view.settled();
-            const gaps = await view.evaluate<{ left: number; right: number }>(`(() => {
+            const gaps = await view.evaluate<{ left: number; right: number; below: string }>(`(() => {
                 const item = document.querySelector(${JSON.stringify(`[role=dialog] ${row}`)}).closest('[class*="PaperListItem"]');
                 // the pane beside the menu: nothing may sit between its edges and the rows
                 const pane = item.closest('[class*="layout"]').children[1];
                 const edges = pane.getBoundingClientRect();
                 const r = item.getBoundingClientRect();
-                return { left: Math.round(r.left - edges.left), right: Math.round(edges.right - r.right) };
+                // under the last row the pane shows through, not a band of the list's own surface
+                const list = item.closest('[class*="_PaperList_"]');
+                return { left: Math.round(r.left - edges.left), right: Math.round(edges.right - r.right), below: getComputedStyle(list).backgroundColor };
             })()`);
             expect(gaps.left, `${section}'s rows start ${gaps.left}px in from the pane's edge`).toBe(0);
             expect(gaps.right, `${section}'s rows end ${gaps.right}px short of the pane's edge`).toBe(0);
+            expect(gaps.below, `${section}'s list paints its own surface under its rows`).toBe("rgba(0, 0, 0, 0)");
             expect(view.exceptions).toEqual([]);
         });
     }

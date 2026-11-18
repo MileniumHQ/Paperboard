@@ -82,7 +82,7 @@ export default function Routines(props: { agent: Agent }) {
                 </For>
                 <PaperFlex flex minHeight={0}>
                     {/* like alarms: when it runs is the title, what it does wraps below it */}
-                    <PaperList selectable={false} borderless fullWidth fullHeight>
+                    <PaperList selectable={false} borderless fullWidth fullHeight background="transparent">
                         <For each={list()!}>
                             {(r) => {
                                 return (
