@@ -10,7 +10,8 @@ import * as tar from "tar";
 import { createWranglerStorage, publishPanel, unlistPanel, type PanelUpload } from "../../services/origami/scripts/lib/panelPublish";
 import { PANELS_INDEX_KEY, type PanelRecord } from "../../services/origami/src/panels";
 import { ORIGAMI_HOST, storeUploadParts } from "./publishLib";
-import { assertRelativePanelBuild, discoverPanels, PANELS_ROOT, type DiscoveredPanel } from "./publishManifest";
+import { PANELS_ROOT } from "./panelsRoot";
+import { assertRelativePanelBuild, discoverPanels, type DiscoveredPanel } from "./publishManifest";
 import { loadReleaseSigningKey, releaseMessage } from "./releaseSigning";
 import { bar, cancelled, checkCancel, fail, hex, mb, ORIGAMI_URL, printTable, sh, signVerified } from "./common";
 

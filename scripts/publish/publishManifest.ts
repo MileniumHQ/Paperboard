@@ -3,9 +3,8 @@
 // version its manifest declares (0.x while unfinished), never a fabricated
 // 1.0.0; packages/paperapi/src/pack.ts refuses a version-less manifest too.
 //
-// Panel discovery lives here too because every consumer (Publish panels, the
-// dev bootstrap's panel builds) must read the same root: a wrong root
-// silently finds zero panels.
+// Panel discovery lives here too; the root it reads is PANELS_ROOT in
+// panelsRoot.ts.
 import { existsSync, readdirSync, readFileSync } from "fs";
 import { basename, join, relative } from "path";
 import { requirePanelId } from "../../packages/paperapi/src/panelIdentity";
@@ -15,10 +14,6 @@ export interface PublishTarget {
     name: string;
     version: string;
 }
-
-// The one canonical panel source: <repo>/panels. publishManifest.ts lives in
-// scripts/, so its parent is the repo root.
-export const PANELS_ROOT = join(import.meta.dir, "..", "..", "panels");
 
 export interface DiscoveredPanel extends PublishTarget {
     dir: string;

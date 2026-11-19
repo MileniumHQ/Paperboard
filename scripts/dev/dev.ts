@@ -19,7 +19,8 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { linkAllPanels, unlinkPanel, listLinkedPanels } from "../../packages/paperapi/src/link";
 import { ensureElectron } from "./ensureElectron";
-import { discoverPanels, PANELS_ROOT, type DiscoveredPanel } from "../publish/publishManifest";
+import { PANELS_ROOT } from "../publish/panelsRoot";
+import { discoverPanels, type DiscoveredPanel } from "../publish/publishManifest";
 import { buildSupervisor } from "../build/supervisor";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");

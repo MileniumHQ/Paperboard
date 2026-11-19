@@ -3,7 +3,8 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { storeUploadParts } from "./publishLib";
-import { assertRelativePanelBuild, discoverPanels, PANELS_ROOT, resolvePublishTarget, rootAbsoluteRefs } from "./publishManifest";
+import { PANELS_ROOT } from "./panelsRoot";
+import { assertRelativePanelBuild, discoverPanels, resolvePublishTarget, rootAbsoluteRefs } from "./publishManifest";
 
 let work: string;
 
