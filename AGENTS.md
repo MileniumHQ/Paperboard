@@ -16,6 +16,8 @@ Paperboard is a dashboard for self-hostable programs. Panels are like the apps. 
 - **No weird fallbacks:** Don't create a placeholder if something isn't available, throw an error and handle it.
 - **Changelogs are suspended:** No changelogs right now. I'm figuring that out.
 - **Nothing ships that is unfinished:** Don't write experimental code, write production-ready code.
+- **Rewrites > band-aids:** For a lot of the work, it's better to rewrite a part of the code rather than patch it to make it work. Even for small changes, bring up if this is necessary.
+- This doesn't mean every change should be major though. If a change is truly better as a 5 line change, then that is the better option.
 - **Don't touch .paperboard:** The user's .paperboard is theirs, ensure tests don't reach it. Use `PAPERBOARD_DIR`.
 - **Suicide prevention:** Don't `pkill` or `killall` at all (not `-f`, not `-x`): it kills your own shell or another session's work. Stop only what you started, by PID.
 - **Leave the real app alone:** Never kill the installed Paperboard app or its workloads (game servers, supervisors). People play on those servers. If the real app crashed, check whether a session killed it before debugging Paperboard.
@@ -32,19 +34,28 @@ Tests:
 - **Never skip or loosen a failing test.** Fix the code, or the test if it expects broken behavior.
 - **A UI fix ships with a browser test that fails on the old code.** Nobody reads the diff, so the test is the review. Press the thing; reading the code is not a check.
 
+*drumroll:* PRs!
+
+When doing work, it's accepted in PRs. Split your work into multiple commits, then post them as a PR upon the user's request, after running relevant gates locally. Fix red CI, or fix the test.
+
 Some rules about Git:
 
 - **Keep the workspace clean:** Only code, assets and markdown in this repo, no logs, builds, etc should end up here.
 - Conventional commits (`feat:`, `fix:`, `chore:`). Never `stuff` or `checkpoint`.
-- Split into multiple commits when necessary.
 - **Shared checkout:** Other sessions may switch this checkout's branch mid-task. Run `git branch --show-current` before every commit or merge, commit with `git commit -- <paths>` (never `git add -A` or a bare `git commit`), and never touch another session's uncommitted files. No `git stash`: the stash is shared too.
 - **Branches:** `company` is only for accounts work (sign-in, Paperboard Cloud, web hosting). Everything else goes to `main`, even if you're sitting on `company`. Merge `main` into `company`, never the other way, and never push `company`.
 
-Gates:
+**Gates:**
 
-- **bun run gate** only before a full release.
-- **Use targets:** run the gate for specific parts of the codebase, not the whole thing.
-- Target names are simply their names in the codebase. paperboard, gameserver, paperapi, etc.
+Paperboard has gates relevant to each individual part of the codebase. `bun run gate [target]`
+
+- Apps: `paperboard` (desktop app), `daemon` (server daemon and its Go supervisor), `paperdocs` (docs site)
+- Services: `origami` (registry), `library` (panel store), `arilink` (pbd.lc short links), `panelapis` (panel APIs)
+- Packages: `paperapi`, `paperui`, `create-panel`, `npx` (the npx launcher), `release`, `testkit` (the shared test harness), `packages` (the packed libraries as a consumer gets them)
+- Panels: `agents`, `blocks`, `botcreator`, `gameserver`, `terminal`
+- Repo: `scripts` (root scripts), `global` (repo-wide checks), `platform` (the OS-dependent suites CI runs on every release target)
+
+Run them before pushing code. No need to run the full gate unless you're so inclined!
 
 Browser mode:
 
