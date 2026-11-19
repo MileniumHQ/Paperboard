@@ -8,6 +8,7 @@ import type { Client, ChatInputCommandInteraction, RepliableInteraction } from "
 import { discord, discordApiBase, discordCdnBase, loadDiscord, tokenRest } from "./discord";
 import {
     AUTO_ACK_DELAY_MS,
+    awaitsReply,
     autoAcknowledge,
     componentClickPayload,
     modalSubmitPayload,
@@ -309,7 +310,7 @@ export class BotSession {
             cachedUsers: bot?.users?.cache?.size ?? 0,
             cachedChannels: bot?.channels?.cache?.size ?? 0,
             commandsReceived: this.commandsReceived,
-            pendingInteractions: this.pending.size,
+            pendingInteractions: [...this.pending.values()].filter((entry) => awaitsReply(entry.interaction)).length,
         };
     }
 

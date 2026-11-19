@@ -407,6 +407,22 @@ function acknowledgesWithUpdate(interaction: RepliableInteraction): boolean {
     return Boolean(interaction.isModalSubmit?.() && interaction.isFromMessage());
 }
 
+/** Discord accepts a first response this long after it sent the interaction. */
+const FIRST_RESPONSE_WINDOW_MS = 3_000;
+
+/**
+ * Whether the user is still waiting on an answer the bot can send: a
+ * "thinking…" deferral not yet filled in, or an interaction nothing has
+ * answered while Discord still takes a first response. A click acked with an
+ * invisible update owes nothing, and an answered one is done; both stay
+ * pending only so a flow can follow up or edit.
+ */
+export function awaitsReply(interaction: RepliableInteraction, now = Date.now()): boolean {
+    if (interaction.replied) return false;
+    if (interaction.deferred) return !answersAsNewMessage.has(interaction);
+    return now - interaction.createdTimestamp < FIRST_RESPONSE_WINDOW_MS;
+}
+
 /**
  * The automatic acknowledgement. A button or select click (or a modal opened
  * from one) gets an invisible update ack, so a flow that answers nothing

@@ -89,6 +89,28 @@ describe("interactions get exactly one first answer and stay answerable", () => 
         expect(answers(payload)).toEqual(["callback 6", "POST webhook", expect.stringMatching(/^PATCH message \d+$/)]);
     });
 
+    test("pending replies count only interactions still waiting on an answer, not ones kept for follow-ups", async () => {
+        const { fake, home, bot, ops } = await connectedBot("counter");
+        const pending = () => bot.session.health().pendingInteractions;
+        const command = slashCommand(fake, { guild: home, name: "ping" });
+        const click = buttonClick(fake, { guild: home, customId: "go" });
+        await deliver(bot, fake, command, "command:global:ping");
+        await deliver(bot, fake, click, "interaction-triggered");
+        expect(pending()).toBe(2);
+        // the automatic acknowledgement, sent now: the click's invisible update owes nothing,
+        // the command's "thinking…" still does
+        await autoAcknowledge(bot.session.takeInteraction(click.id));
+        expect(pending()).toBe(1);
+        await autoAcknowledge(bot.session.takeInteraction(command.id));
+        expect(pending()).toBe(1);
+        await ops.respond(command.id, { content: "pong" });
+        expect(pending()).toBe(0);
+        // both are still kept, so they can be followed up
+        await ops.respond(click.id, { content: "clicked" });
+        await ops.followUp(command.id, { content: "more" });
+        expect(pending()).toBe(0);
+    });
+
     test("an interaction that was never received can't be answered, and says so", async () => {
         const { ops } = await connectedBot("stranger");
         await expect(ops.respond("123456789012345678", { content: "hi" })).rejects.toThrow(
