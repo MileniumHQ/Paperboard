@@ -6,6 +6,8 @@
 
 .frame {
     display: block;
+    /* a border (a panel's left edge) is inside the frame's size, not added to it */
+    box-sizing: border-box;
     width: 100%;
     height: 100%;
     border: none;

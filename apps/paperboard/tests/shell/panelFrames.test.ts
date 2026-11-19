@@ -64,6 +64,19 @@ test("restarting one panel reloads only that panel's page", async () => {
     expect(page.exceptions).toEqual([]);
 });
 
+// A panel's frame fills its column, its border inside it: never past the window's edge.
+test("an open panel's frame fits its column, border and all", async () => {
+    const { page } = shell;
+    await open("dev.paperboard.widgetdemo", WIDGETS);
+    const edges = await page.evaluate<{ frame: [number, number]; column: [number, number] }>(`(() => {
+        const frame = ${frame(WIDGETS)}.getBoundingClientRect();
+        const column = ${frame(WIDGETS)}.parentElement.getBoundingClientRect();
+        return { frame: [frame.left, frame.right], column: [column.left, column.right] };
+    })()`);
+    expect(edges.frame).toEqual(edges.column);
+    expect(page.exceptions).toEqual([]);
+});
+
 const NOTES_KEY = "local::dev.paperboard.testnotes";
 // the note's page, reached from the shell (its own policy allows no eval)
 const notesDoc = `${frame(NOTES_KEY)}.contentDocument`;
