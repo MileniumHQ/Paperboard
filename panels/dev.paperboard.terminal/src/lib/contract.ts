@@ -98,10 +98,15 @@ const state = shape.object({
     tabsError: shape.text(),
     // what went wrong for a session where no one was waiting on it, by session id
     sessionErrors,
+    // the home folder of the computer the shells run on, which a folder is shown from as ~
+    home: shape.text(),
 });
 export type TerminalState = Infer<typeof state>;
 
 const byId = shape.object({ id: shape.text() });
+
+/** what a shell printed while its screen was one size (lib/scrollback.ts) */
+const scrollbackRun = shape.object({ cols: shape.optional(shape.number()), rows: shape.optional(shape.number()), text: shape.text() });
 
 export const terminalContract = defineContract(PANEL_ID, {
     calls: {
@@ -124,7 +129,9 @@ export const terminalContract = defineContract(PANEL_ID, {
          * screen a window mounts opens its session, shown or not, so opening
          * says nothing about which tab is in front: touchTab says that.
          */
-        openTab: { input: shape.object({ id: shape.text(), cols: shape.optional(shape.number()), rows: shape.optional(shape.number()) }), output: shape.text() },
+        openTab: { input: shape.object({ id: shape.text(), cols: shape.optional(shape.number()), rows: shape.optional(shape.number()) }), output: shape.list(scrollbackRun) },
+        /** sets a session's screen size; its scrollback notes it, so it replays at the sizes it was printed at */
+        resizeTab: { input: shape.object({ id: shape.text(), cols: shape.number(), rows: shape.number() }), output: shape.nothing() },
         renameTab: { input: shape.object({ id: shape.text(), label: shape.text() }), output: shape.nothing() },
         closeTab: { input: byId, output: shape.nothing() },
         reorderTabs: { input: shape.object({ orderedIds: shape.list(shape.text()) }), output: shape.nothing() },
@@ -151,6 +158,7 @@ export const terminalContract = defineContract(PANEL_ID, {
             savedCommandsError: "",
             tabsError: "",
             sessionErrors: {},
+            home: "",
         },
     },
 });

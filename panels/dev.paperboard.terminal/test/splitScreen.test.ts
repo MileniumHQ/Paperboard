@@ -89,6 +89,48 @@ describe("splitting a tab", () => {
         }
     });
 
+    // A program writes for the size its screen is: a line that wraps, then a
+    // move up over it, as a shell redraws the line it is editing. Shown
+    // again in a window of another size, the second shell's screen is what
+    // it was, not drawn over the line above it.
+    test("a split's second shell shows what it showed after a reload at another size", async () => {
+        await panelFiles({ "tabs.json": { tabs: [{ id: "tab1", label: "One", split: { direction: "right", session: { id: "pane1" } } }], activeTabId: "tab1" } });
+        await startService();
+        const served = await servePanel();
+        const rows = `[...document.querySelectorAll(".xterm")[1].querySelectorAll(".xterm-rows > div")].map((r) => r.textContent.trimEnd()).filter(Boolean)`;
+        let page = await browser.open(served.url);
+        try {
+            await page.resize(900, 700);
+            await stateWhere<any>(PANEL_ID, (s) => Boolean(s.live?.tab1?.program && s.live?.pane1?.program), "both shells to run");
+            await answered(page);
+            await page.evaluate(`document.querySelectorAll(".xterm")[1].querySelector("textarea").focus()`);
+            // a line five past the screen's width, then up the one row it wrapped onto
+            await page.insertText(`w=$(stty size | cut -d' ' -f2); printf "%$((w+5))s\\033[1A\\rdrawn-over\\n" end; echo done-$((6*7))`);
+            await page.press("Enter");
+            await page.waitFor(`${rows}.some((r) => r.startsWith("done-42"))`, "the second shell's output");
+            const before = await page.evaluate<string[]>(rows);
+            expect(before[0]).toStartWith("$ w=$(stty size");
+            expect(before.some((r) => r.startsWith("drawn-over"))).toBe(true);
+        } finally {
+            await page.close();
+        }
+        page = await browser.open(served.url);
+        try {
+            await page.resize(1300, 700);
+            await page.waitFor(`${rows}.some((r) => r.startsWith("done-42"))`, "the second shell's output again");
+            await answered(page);
+            const after = await page.evaluate<string[]>(rows);
+            // the command line is still there, and the move up landed on the line that wrapped
+            expect(after[0]).toStartWith("$ w=$(stty size");
+            expect(after.some((r) => r.startsWith("drawn-over"))).toBe(true);
+            expect(after.find((r) => r.startsWith("done-42"))).toBe("done-42");
+            expect(page.exceptions).toEqual([]);
+        } finally {
+            await page.close();
+            served.stop();
+        }
+    });
+
     // a desktop window at 860 leaves the panel about 620 wide: a side list there would leave each shell a third of that
     test("tabs saved down the side go along the top where the side list would crowd a split, and back down the side where there is room", async () => {
         await panelFiles({ "tabs.json": { tabs: [{ id: "tab1", label: "One", split: { direction: "right", session: { id: "pane1" } } }], activeTabId: "tab1", layout: "vertical" } });

@@ -82,6 +82,6 @@ describe("a shell asked for twice at once", () => {
             runBlock("type-in-tab", { tab: "tab2", text: "printf 'both-%s\\n' $((6*7))\n" }),
         ]);
         expect(outcomes.map((o) => (o.status === "rejected" ? String(o.reason) : "ok"))).toEqual(["ok", "ok"]);
-        await until("the keystrokes' output in the tab's screen", () => call.openTab({ id: "tab2", cols: 80, rows: 24 }), (screen) => screen.includes("both-42"));
+        await until("the keystrokes' output in the tab's screen", () => call.openTab({ id: "tab2", cols: 80, rows: 24 }), (screen) => screen.some((run) => run.text.includes("both-42")));
     });
 });

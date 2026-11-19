@@ -8,7 +8,7 @@ import { terminalApi, errorMessage } from "@mileniumhq/paperapi";
 import { terminal } from "./client";
 import { terminalKeyAction, type TerminalKeyAction } from "./keys";
 import { keyBytes, withModifiers, type Modifiers, type NamedKey } from "./lib/softKeys";
-import { joinScrollback } from "./lib/scrollback";
+import { outputAfter, scrollbackText, type Scrollback } from "./lib/scrollback";
 import { linkOpens, outputText, pasteRunsAtOnce, promptTarget, type ScreenLine } from "./lib/screen";
 import { onThemeChange, screenColors, token } from "./lib/theme";
 import { writeRefusal, writeTerminal } from "./lib/terminalWrite";
@@ -165,7 +165,9 @@ export function TerminalComponent(props: TerminalComponentProps) {
             }
             return true;
         });
-        // the history written back after a reload holds bells that rang long ago: only a bell rung now is news
+        // The history written back after a reload, at the sizes it was printed
+        // at. It holds bells that rang long ago: only a bell rung now is news.
+        // The screen fits to its box once it is all written.
         let replaying = false;
         term.onBell(() => {
             if (!replaying) props.onBell?.();
@@ -186,15 +188,16 @@ export function TerminalComponent(props: TerminalComponentProps) {
         let sentCols = 0;
         let sentRows = 0;
         let refused = "";
+        const shown = () => containerRef.clientWidth > 0 && containerRef.clientHeight > 0;
         const fit = () => {
             // a hidden tab has no size to fit to; it fits when it is shown
-            if (containerRef.clientWidth === 0 || containerRef.clientHeight === 0) return;
+            if (replaying || !shown()) return;
             fitAddon.fit();
             if (!opened) return;
             const { cols, rows } = term;
             if (cols === sentCols && rows === sentRows) return;
-            terminalApi
-                .resize(props.id, cols, rows)
+            terminal.calls
+                .resizeTab({ id: props.id, cols, rows })
                 .then(() => {
                     sentCols = cols;
                     sentRows = rows;
@@ -283,19 +286,23 @@ export function TerminalComponent(props: TerminalComponentProps) {
                 offData();
                 offExit();
             };
-            const { cols, rows } = term;
+            // a hidden screen has no size of its own to give the shell; it gives one when it is shown
+            const size = shown() ? { cols: term.cols, rows: term.rows } : {};
             terminal.calls
-                .openTab({ id, cols, rows })
+                .openTab({ id, ...size })
                 .then((scrollback) => {
                     if (!current()) return;
                     opened = true;
-                    sentCols = cols;
-                    sentRows = rows;
-                    // the screen may have changed size while it opened
-                    fit();
-                    replaying = true;
-                    term.write(joinScrollback(scrollback, pending!), () => (replaying = false));
-                    pending = null;
+                    sentCols = size.cols ?? 0;
+                    sentRows = size.rows ?? 0;
+                    replay(scrollback, current, () => {
+                        if (!current()) return;
+                        // what the shell printed while the history was on its way, at the size it is now
+                        term.write(outputAfter(scrollbackText(scrollback), pending!));
+                        pending = null;
+                        // the screen may have changed size while it opened
+                        fit();
+                    });
                 })
                 .catch((err) => {
                     if (!current()) return;
@@ -304,6 +311,25 @@ export function TerminalComponent(props: TerminalComponentProps) {
                     console.error("[terminal] could not open session:", err);
                     stop(`Could not open this terminal: ${errorMessage(err)}`, "Press any key to try again.");
                 });
+        };
+        // Writes the history run by run, each at the size it was printed at,
+        // as the live screen took them: a line a shell drew for one width
+        // lands where it drew it, and reflows as the live one did.
+        const replay = (scrollback: Scrollback, current: () => boolean, done: () => void) => {
+            replaying = true;
+            let next = 0;
+            const step = () => {
+                if (!current()) return;
+                const run = scrollback[next++];
+                if (!run) {
+                    replaying = false;
+                    done();
+                    return;
+                }
+                if (run.cols && run.rows && (run.cols !== term.cols || run.rows !== term.rows)) term.resize(run.cols, run.rows);
+                term.write(run.text, step);
+            };
+            step();
         };
         // a keystroke the daemon refused means the session is gone: say so,
         // and let the next key reconnect instead of typing into nothing

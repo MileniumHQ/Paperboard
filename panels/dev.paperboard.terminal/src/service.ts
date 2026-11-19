@@ -14,7 +14,8 @@ import {
     KeyedQueue,
 } from "@mileniumhq/paperapi";
 import * as fs from "node:fs";
-import { SCROLLBACK_CHARS, applyScrollbackCap, readWholeLines } from "./lib/scrollback";
+import * as os from "node:os";
+import { SCROLLBACK_CHARS, appendOutput, appendSize, parseScrollback, readWholeLines, scrollbackText, type Scrollback } from "./lib/scrollback";
 import { PANEL_ID } from "./lib/panel";
 import { runShellCommand } from "./lib/shellCommand";
 import { writeTerminal } from "./lib/terminalWrite";
@@ -40,7 +41,10 @@ let tabsError = "";
 // tab changes are saved one at a time, so a failed save undoes only its own
 const tabsSaving = new SerialQueue();
 
-const buffers = new Map<string, string>();
+const buffers = new Map<string, Scrollback>();
+// sessions whose scrollback was last saved as plain text, before it kept
+// the sizes it was printed at: that file goes once the new one is written
+const legacyScrollback = new Set<string>();
 const persistTimers = new Map<string, ReturnType<typeof setTimeout>>();
 // sessions whose saved scrollback could not be read: unreadable is not
 // empty, so it is never written over (a new shell starts a new screen)
@@ -51,7 +55,18 @@ const sessionErrors: SessionErrors = {};
 const sessionUnsubs = new Map<string, Array<() => void>>();
 
 function scrollbackPath(id: string): string {
+    return `${SCROLLBACK_DIR}/${id}.json`;
+}
+
+function legacyScrollbackPath(id: string): string {
     return `${SCROLLBACK_DIR}/${id}.log`;
+}
+
+/** the session's scrollback, made empty when it has none yet */
+function scrollbackOf(id: string): Scrollback {
+    let buffer = buffers.get(id);
+    if (!buffer) buffers.set(id, (buffer = []));
+    return buffer;
 }
 
 /** Says (or, with "", stops saying) what went wrong for a session; a change that changes nothing tells no one. */
@@ -76,7 +91,8 @@ function forgetSessionErrors(id: string) {
 
 async function writeScrollback(id: string): Promise<void> {
     try {
-        await files.write(scrollbackPath(id), buffers.get(id) || "", PANEL_ID);
+        await files.write(scrollbackPath(id), JSON.stringify(buffers.get(id) ?? []), PANEL_ID);
+        if (legacyScrollback.delete(id)) await files.delete(legacyScrollbackPath(id), PANEL_ID);
         if (buffers.has(id)) setSessionError(id, "scrollback", "");
     } catch (err) {
         if (buffers.has(id)) {
@@ -161,7 +177,7 @@ function subscribeSession(id: string) {
     sessionUnsubs.set(id, [
         terminalApi.onData(id, (data) => {
             if (!findSession(tabs, id)) return;
-            buffers.set(id, applyScrollbackCap(data, buffers.get(id) || ""));
+            appendOutput(scrollbackOf(id), data);
             schedulePersist(id);
         }),
         terminalApi.onExit(id, (exitCode) => {
@@ -255,7 +271,7 @@ async function startSession(id: string, cols?: number, rows?: number): Promise<v
         // must not fail the open.
         if (isValidTerminalSize(cols, rows)) {
             try {
-                await terminalApi.resize(id, cols as number, rows as number);
+                await resizeSession(id, cols as number, rows as number);
                 setSessionError(id, "size", "");
             } catch (err) {
                 setSessionError(id, "size", `This screen's size didn't reach the shell, so long lines may wrap wrong: ${errorMessage(err)}`);
@@ -277,9 +293,25 @@ async function startSession(id: string, cols?: number, rows?: number): Promise<v
         cwd = undefined;
         session!.cwd = undefined;
     }
-    buffers.set(id, notice);
-    await files.write(scrollbackPath(id), notice, PANEL_ID);
-    await terminalApi.create(id, { cols, rows, cwd, shell: session?.shell });
+    // the daemon's own size when none is given, said here so the screen replays at it
+    const size = isValidTerminalSize(cols, rows) ? { cols: cols as number, rows: rows as number } : { cols: 80, rows: 24 };
+    const screen: Scrollback = [{ ...size, text: notice }];
+    buffers.set(id, screen);
+    await files.write(scrollbackPath(id), JSON.stringify(screen), PANEL_ID);
+    if (legacyScrollback.delete(id)) await files.delete(legacyScrollbackPath(id), PANEL_ID);
+    await terminalApi.create(id, { ...size, cwd, shell: session?.shell });
+}
+
+/**
+ * Sets a shell's screen size, and notes it in its scrollback: what the shell
+ * prints next was printed at it. The daemon answers the resize after the
+ * output it sent before it, so the size lands between the two.
+ */
+async function resizeSession(id: string, cols: number, rows: number): Promise<void> {
+    await terminalApi.resize(id, cols, rows);
+    if (!findSession(tabs, id)) return;
+    appendSize(scrollbackOf(id), cols, rows);
+    schedulePersist(id);
 }
 
 /** Where tabs.json is on this computer, said whole so a person can find it. */
@@ -486,12 +518,14 @@ async function unsplitTab(ctx: Ctx, tabId: string | undefined): Promise<void> {
 /** Forgets a session whose shell is gone: its listeners, output and saved scrollback. */
 async function dropSession(id: string): Promise<void> {
     buffers.delete(id);
+    legacyScrollback.delete(id);
     // teardown: detach listeners and drop the subscription id, then
     // cancel the pending debounce so no write fires for a dead session
     unsubscribeSession(id);
     cancelPersistTimer(id);
     forgetSessionErrors(id);
     await files.delete(scrollbackPath(id), PANEL_ID);
+    await files.delete(legacyScrollbackPath(id), PANEL_ID);
 }
 
 /** Ends a shell that was started for a tab or split that could not be saved. */
@@ -577,7 +611,7 @@ async function showTab(ctx: Ctx, tabId: string | undefined): Promise<void> {
 
 /** The tab's last whole lines, 1 to 1000 of them (100 when not given). */
 function readOutput(tabId: string | undefined, lines?: number): string {
-    return readWholeLines(buffers.get(resolveTabId(tabId)) || "", lines);
+    return readWholeLines(scrollbackText(buffers.get(resolveTabId(tabId)) ?? []), lines);
 }
 
 function tabLabel(id: string): string {
@@ -603,7 +637,13 @@ const calls: CallHandlers<typeof terminalContract> = {
         if (!findSession(tabs, id)) throw new Error(`Unknown terminal tab "${input.id}"`);
         await ensureSession(id, input.cols, input.rows);
         subscribeSession(id);
-        return buffers.get(id) || "";
+        return buffers.get(id) ?? [];
+    },
+    resizeTab: async (input) => {
+        const id = input.id.trim();
+        if (!findSession(tabs, id)) throw new Error(`Unknown terminal tab "${input.id}"`);
+        if (!isValidTerminalSize(input.cols, input.rows)) throw new Error(`${input.cols}x${input.rows} isn't a screen size`);
+        await resizeSession(id, input.cols, input.rows);
     },
     renameTab: (input, ctx) => renameTab(ctx, input.id, input.label),
     closeTab: (input, ctx) => closeTab(ctx, input.id),
@@ -652,7 +692,14 @@ export default definePanelService({
             try {
                 const saved = await files.read(scrollbackPath(session.id), PANEL_ID);
                 if (saved) {
-                    buffers.set(session.id, saved.slice(-SCROLLBACK_CHARS));
+                    buffers.set(session.id, parseScrollback(saved));
+                } else {
+                    // saved as plain text, before the scrollback kept its sizes: replayed at the screen's
+                    const legacy = await files.read(legacyScrollbackPath(session.id), PANEL_ID);
+                    if (legacy) {
+                        buffers.set(session.id, [{ text: legacy.slice(-SCROLLBACK_CHARS) }]);
+                        legacyScrollback.add(session.id);
+                    }
                 }
             } catch (err) {
                 unreadScrollback.add(session.id);
@@ -711,7 +758,8 @@ export default definePanelService({
             { tabs: tabs.map((t) => t.id), "active-tab": [activeTabId], "saved-commands": savedCommands.view().savedCommands.map((c) => c.id) },
         );
         publishTabs(ctx);
-        ctx.setState({ sessionErrors: structuredClone(sessionErrors) });
+        // the service runs where the shells do, started by the same daemon: its home is theirs
+        ctx.setState({ sessionErrors: structuredClone(sessionErrors), home: os.homedir() });
         console.log(`[TerminalService] Ready with ${tabs.length} persistent session(s).`);
     },
 });

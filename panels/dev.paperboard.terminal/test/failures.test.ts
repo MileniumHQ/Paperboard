@@ -47,7 +47,7 @@ describe("failures are shown", () => {
         await expect(write).rejects.toThrow(DAEMON_REASON);
         await expect(call.openTab({ id: REFUSED, cols: 80, rows: 24 })).rejects.toThrow(DAEMON_REASON);
         // the other tab is unaffected
-        expect(typeof (await call.openTab({ id: "tab1", cols: 80, rows: 24 }))).toBe("string");
+        expect(Array.isArray(await call.openTab({ id: "tab1", cols: 80, rows: 24 }))).toBe(true);
     });
 
     test("in the panel, a terminal that can't open, a large paste, a refused rename and a refused new tab say why", async () => {
@@ -134,7 +134,7 @@ describe("failures are shown", () => {
         // the shell starts, and runs on while the service restarts
         await call.openTab({ id: "tab1", cols: 80, rows: 24 });
         await stopServices();
-        const file = path.join(dir, "terminal-scrollback", "tab1.log");
+        const file = path.join(dir, "terminal-scrollback", "tab1.json");
         fs.chmodSync(file, 0o200);
         writeOnly = file;
         await startService();

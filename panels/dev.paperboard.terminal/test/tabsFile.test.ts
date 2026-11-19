@@ -86,14 +86,25 @@ describe("a tab's scrollback", () => {
         await startService();
         await call.openTab({ id: "tab2" });
         await runBlock("type-in-tab", { tab: "tab2", text: "echo kept-$((6*7))\n" });
-        await fileHolds(path.join(scrollback(dir), "tab2.log"), "kept-42");
+        await fileHolds(path.join(scrollback(dir), "tab2.json"), "kept-42");
 
         await stopServices();
         await startService();
         expect(await readBlock("output", { tab: "tab2", lines: 100 })).toContain("kept-42");
 
         await runBlock("close-tab", { tab: "tab2" });
-        expect(fs.existsSync(path.join(scrollback(dir), "tab2.log"))).toBe(false);
+        expect(fs.existsSync(path.join(scrollback(dir), "tab2.json"))).toBe(false);
+    });
+
+    test("saved as plain text, before it kept its sizes, is read, and goes with its tab", async () => {
+        const dir = await panelFiles({ "tabs.json": TABS });
+        fs.mkdirSync(scrollback(dir), { recursive: true });
+        fs.writeFileSync(path.join(scrollback(dir), "tab2.log"), "older-42\r\n$ ");
+        await startService();
+        expect(await readBlock("output", { tab: "tab2", lines: 100 })).toContain("older-42");
+
+        await runBlock("close-tab", { tab: "tab2" });
+        expect(fs.readdirSync(scrollback(dir))).not.toContain("tab2.log");
     });
 
     test("holds what the shell printed just before the service stopped", async () => {
@@ -113,7 +124,7 @@ describe("a tab's scrollback", () => {
         await startService();
         await call.openTab({ id: "tab1" });
         await runBlock("type-in-tab", { tab: "tab1", text: "echo kept-$((6*7))\n" });
-        const file = path.join(scrollback(dir), "tab1.log");
+        const file = path.join(scrollback(dir), "tab1.json");
         await fileHolds(file, "kept-42");
         await stopServices();
         // the shell runs on; its saved output can be written but not read
