@@ -21,7 +21,8 @@ import { WebSocket } from "ws";
 import { verifyDaemonProof, DAEMON_CHALLENGE_HEADER, DAEMON_PROOF_TYPE } from "../../apps/daemon/src/security/handshake";
 import { CraneSocket, randomChallenge, readHandshake, startCrane, watch, WAIT_MS } from "../../apps/paperboard/tests/platform/app/support/crane";
 import { cleanupSuite, ownChild, tempDir } from "../../apps/paperboard/tests/platform/app/support/temp";
-import { ALL_TARGETS, archOf, assetFileName, osOf, type Target } from "./publishLib";
+import { ALL_TARGETS, archOf, osOf, type Target } from "../build/targets";
+import { assetFileName } from "./publishLib";
 
 const APP_DIR = path.join(import.meta.dir, "..", "..", "apps", "paperboard");
 const VERSION = (JSON.parse(fs.readFileSync(path.join(APP_DIR, "package.json"), "utf8")) as { version: string }).version;

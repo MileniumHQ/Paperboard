@@ -6,17 +6,15 @@ import { chmodSync, cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFi
 import { basename, extname, join } from "path";
 import * as tar from "tar";
 import { craneCompileCommand } from "../build/supervisor";
+import { ALL_TARGETS, osOf, type Target } from "../build/targets";
 import {
-    ALL_TARGETS,
     assetFileName,
     isUpdatePayload,
     isValidVersionSegment,
     missingLinuxPackageTools,
-    osOf,
     paperboardArtifacts,
     paperboardPackages,
     type DlApp,
-    type Target,
 } from "./publishLib";
 import { applyWindowsIcon } from "./windowsIcon";
 import { APP_DIR, bar, checkCancel, hashFile, mb, printTable, REPO_ROOT, sh, version } from "./common";

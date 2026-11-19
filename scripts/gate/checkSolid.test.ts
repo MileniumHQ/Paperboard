@@ -178,7 +178,7 @@ describe("the house rules flag each break, honour a reasoned quiet marker, and p
         ).toEqual(["1:cross-package-import", "2:cross-package-import", "3:cross-package-import", "4:cross-package-import"]);
         expect(
             hits(
-                `import { ensureCrane } from "./launcher";\nimport pkg from "../package.json";\nimport { ALL_TARGETS } from "../../../scripts/publish/publishLib";\nimport { semverGt } from "@mileniumhq/release";\n`,
+                `import { ensureCrane } from "./launcher";\nimport pkg from "../package.json";\nimport { ALL_TARGETS } from "../../../scripts/build/targets";\nimport { semverGt } from "@mileniumhq/release";\n`,
             ),
         ).toEqual([]);
     });

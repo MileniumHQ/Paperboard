@@ -4,7 +4,6 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { RELEASE_PUBLIC_KEY, releaseMessage, verifyRelease } from "../../packages/release/src";
 import {
-    ALL_TARGETS,
     assetFileName,
     buildCraneIndex,
     buildLatestYml,
@@ -24,8 +23,8 @@ import {
     PAPERDL_R2_BUCKET,
     r2YmlKey,
     tagFor,
-    type Target,
 } from "./publishLib";
+import { ALL_TARGETS, type Target } from "../build/targets";
 import { signRelease } from "./releaseSigning";
 
 const ROOT = join(import.meta.dir, "..", "..");
