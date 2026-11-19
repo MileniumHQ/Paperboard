@@ -103,6 +103,11 @@ jobs:
           DEVELOPER_DIR="$xcode/Contents/Developer" actool --version
       - name: Build
         run: bun scripts/publish/publish.ts ci-build --target ${{ matrix.target.name }}
+        # the app keys apps/paperboard/.env.local holds on a computer
+        # (publishLib.ts APP_KEYS); the build refuses to start without them
+        env:
+          MAIN_VITE_GOOGLE_CLIENT_ID: ${{ secrets.MAIN_VITE_GOOGLE_CLIENT_ID }}
+          MAIN_VITE_GOOGLE_CLIENT_SECRET: ${{ secrets.MAIN_VITE_GOOGLE_CLIENT_SECRET }}
       - uses: actions/upload-artifact@v4
         with:
           name: release-${{ matrix.target.name }}

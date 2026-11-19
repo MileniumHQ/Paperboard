@@ -18,6 +18,8 @@ import {
     isValidVersionSegment,
     KV_PACKAGES_BINDING,
     mergeVersionRecord,
+    APP_KEYS,
+    missingAppKeys,
     missingLinuxPackageTools,
     paperboardArtifacts,
     paperboardPackages,
@@ -242,6 +244,22 @@ describe("publishing writes where the download worker reads", () => {
         };
         expect(wrangler.kv_namespaces.map((kv) => kv.binding)).toContain(KV_PACKAGES_BINDING);
         expect(wrangler.r2_buckets.find((r2) => r2.binding === "PAPERDL_BUCKET")?.bucket_name).toBe(PAPERDL_R2_BUCKET);
+    });
+});
+
+describe("a release build carries every app key, or refuses to start", () => {
+    test("every key the app declares is required, and no other", () => {
+        const declared = [...readFileSync(join(ROOT, "apps", "paperboard", "src", "main", "env.d.ts"), "utf8").matchAll(/readonly (MAIN_VITE_\w+)/g)].map((m) => m[1]);
+        const required: string[] = [...APP_KEYS];
+        expect(required.sort()).toEqual(declared.sort());
+    });
+
+    test("all keys pass; a missing or blank one is named with where it goes", () => {
+        expect(missingAppKeys({ MAIN_VITE_GOOGLE_CLIENT_ID: "id", MAIN_VITE_GOOGLE_CLIENT_SECRET: "secret" })).toBeNull();
+        expect(missingAppKeys({ MAIN_VITE_GOOGLE_CLIENT_ID: "id", MAIN_VITE_GOOGLE_CLIENT_SECRET: " " })).toBe(
+            "A release build needs MAIN_VITE_GOOGLE_CLIENT_SECRET: put it in apps/paperboard/.env.local, or in the repository's Actions secrets for the release workflow.",
+        );
+        expect(missingAppKeys({})).toContain("needs MAIN_VITE_GOOGLE_CLIENT_ID and MAIN_VITE_GOOGLE_CLIENT_SECRET: put them in");
     });
 });
 
