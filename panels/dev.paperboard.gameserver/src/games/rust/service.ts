@@ -13,7 +13,7 @@ import {
     serverSecret, settingPort, settled, singleLine, unlessMissing, waitUntil,
 } from "../serviceKit";
 import { trashDirName } from "../../service/trash";
-import { rust, options, RUST_APP_ID, type RustMapView, type RustOption } from "./index";
+import { rust, options, RUST_APP_ID, type RustMapView, type RustOption, type RustWipeResult } from "./index";
 import { parseInfo, parsePlayers, RustRcon, RustRconSilent, type RustChat, type RustInfo, type RustPlayer } from "./webrcon";
 import { parseBanList, parseBansCfg, RustRoster, steamId, type RustBan } from "./roster";
 import { renderScale, worldPicture } from "./mapPicture";
@@ -225,17 +225,19 @@ export function rustService(ctx: Server): GameService {
      * move to a trash folder in the server folder, never deleted, and the server
      * gets a new seed, so its next start makes a new map.
      */
-    async function wipe(blueprints: boolean): Promise<RustMapView> {
+    async function wipe(blueprints: boolean): Promise<RustWipeResult> {
         const dir = await identityDir();
         const names = (await exists(dir)) ? await fs.readdir(dir) : [];
         const files = wipedFiles(names, blueprints);
+        // any map moved, not only the one the settings name: a size or seed changed since it was made
+        const trashed = files.some((name) => name.startsWith("proceduralmap."));
         if (files.length > 0) {
             const trash = path.join(await ctx.root(), trashDirName(), "server", IDENTITY);
             await fs.mkdir(trash, { recursive: true });
             for (const file of files) await fs.rename(path.join(dir, file), path.join(trash, file));
         }
         await ctx.updateSettings({ seed: randomInt(1, 2147483647) });
-        return mapView();
+        return { ...(await mapView()), trashed };
     }
 
     /** The bans: the running server's own list, or the file it keeps them in while it is stopped. */

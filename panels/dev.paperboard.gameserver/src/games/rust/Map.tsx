@@ -16,7 +16,7 @@ export default function RustMap(props: { active: boolean }) {
     const [open, setOpen] = createSignal(false);
     const [blueprints, setBlueprints] = createSignal(false);
     const wiping = createAction({ message: errorMessage });
-    /** set once a wipe is done: whether there was a map to move to the trash */
+    /** set once a wipe is done: whether it moved a map to the trash, as the wipe says */
     const [wiped, setWiped] = createSignal<{ trashed: boolean }>();
 
     // the map, and the map from above: undefined until read, null until the server draws it
@@ -52,8 +52,8 @@ export default function RustMap(props: { active: boolean }) {
     const ask = () => { setBlueprints(false); setOpen(true); };
     // a failure is a toast over the dialog, which stays open
     const wipe = () => wiping.run("Couldn't wipe the server", async () => {
-        const trashed = view()?.made === true;
-        map.set({ view: await calls.rustWipe({ blueprints: blueprints() }), picture: null });
+        const { trashed, ...next } = await calls.rustWipe({ blueprints: blueprints() });
+        map.set({ view: next, picture: null });
         setWiped({ trashed });
         setOpen(false);
     });
