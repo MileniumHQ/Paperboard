@@ -121,31 +121,35 @@ export class LinuxPackageUpdater extends EventEmitter {
         fs.mkdirSync(downloadDir, { recursive: true, mode: 0o755 });
         const target = path.join(downloadDir, file);
         const partial = `${target}.partial`;
-        const response = await fetch(`${downloadBase}/latest/${file}`, { signal: controller.signal });
-        if (!response.ok || !response.body) throw new Error(`Could not download ${file}: HTTP ${response.status}`);
-        const total = Number(response.headers.get("content-length")) || 0;
-        const hash = createHash("sha256");
-        const progress = (transferred: number) => {
-            if (total) this.emit("download-progress", { percent: (transferred / total) * 100, transferred, total });
-        };
-        async function* count(source: AsyncIterable<Uint8Array>) {
-            let transferred = 0;
-            for await (const chunk of source) {
-                transferred += chunk.length;
-                if (transferred > MAX_PACKAGE_BYTES) throw new Error(`${file} is larger than a Paperboard package can be`);
-                hash.update(chunk);
-                progress(transferred);
-                yield chunk;
-            }
-        }
+        // the package manager reads it as its own user. Opened before the
+        // download, not by the stream: a stream opens its file later, so a
+        // download cut off first would create it after the cleanup below
+        const out = fs.createWriteStream(partial, { fd: fs.openSync(partial, "w", 0o644) });
         // a download that fails at any point (the network, the size cap, a
         // full disk) leaves nothing behind
         try {
-            // the package manager reads it as its own user
-            await pipeline(response.body as unknown as AsyncIterable<Uint8Array>, count, fs.createWriteStream(partial, { mode: 0o644 }));
+            const response = await fetch(`${downloadBase}/latest/${file}`, { signal: controller.signal });
+            if (!response.ok || !response.body) throw new Error(`Could not download ${file}: HTTP ${response.status}`);
+            const total = Number(response.headers.get("content-length")) || 0;
+            const hash = createHash("sha256");
+            const progress = (transferred: number) => {
+                if (total) this.emit("download-progress", { percent: (transferred / total) * 100, transferred, total });
+            };
+            async function* count(source: AsyncIterable<Uint8Array>) {
+                let transferred = 0;
+                for await (const chunk of source) {
+                    transferred += chunk.length;
+                    if (transferred > MAX_PACKAGE_BYTES) throw new Error(`${file} is larger than a Paperboard package can be`);
+                    hash.update(chunk);
+                    progress(transferred);
+                    yield chunk;
+                }
+            }
+            await pipeline(response.body as unknown as AsyncIterable<Uint8Array>, count, out);
             const actual = hash.digest("hex");
             if (actual !== expected) throw new Error(`The downloaded ${file} doesn't match its checksum (expected ${expected}, got ${actual})`);
         } catch (err) {
+            out.destroy();
             fs.rmSync(partial, { force: true });
             throw err;
         }
