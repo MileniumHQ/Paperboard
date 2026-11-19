@@ -13,7 +13,7 @@ Almost all code here is written in TypeScript, CSS and SolidJS. I'll explain eve
 - **Paperboard** (`apps/paperboard`) is comprised of two parts internally: the server component/backend (which the code likes to call PaperCrane), and the frontend. The frontend displays the interfaces of any panels, while the backend runs their persistent code and lets them integrate deeper into the user's device through a WebSocket.
 - **PaperAPI** (`packages/paperapi`) abstracts the WebSocket calls into basic functions that panels can use.
 - **PaperUI** (`packages/paperui`) provides a distinctive and unified design language for Paperboard UI. It's primarily components, with over 40 of them. It also includes tokens for spacing, fonts, and colors.
-- **Origami** (`apps/origami`) is a Cloudflare Worker with a few jobs, as the backend server for Paperboard downloads. It currently includes the CDN for distributing Paperboard packaged binaries, the CDN and registry for distributing panels, and the URL index for external packages like Java.
+- **Origami** (`services/origami`) is a Cloudflare Worker with a few jobs, as the backend server for Paperboard downloads. It currently includes the CDN for distributing Paperboard packaged binaries, the CDN and registry for distributing panels, and the URL index for external packages like Java.
 - **PaperDocs** (`apps/paperdocs`) is a Cloudflare Worker that serves the landing pages for Paperboard as well as the official docs and blog (soon). It contains the entire documentation for PaperAPI and PaperUI.
 
 And of course, the panels:

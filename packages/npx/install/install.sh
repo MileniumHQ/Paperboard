@@ -4,11 +4,11 @@
 #   curl -fsSL https://i.paperboard.dev | sh
 #
 # `npx @mileniumhq/paperboard install` and `npm install -g @mileniumhq/paperboard`
-# run this same file (packages/crane-launcher/install/install.sh; Origami serves
+# run this same file (packages/npx/install/install.sh; Origami serves
 # it at i.paperboard.dev). install.ps1 is the Windows half.
 #
 # What it installs, and where (the launcher looks for Paperboard in the same
-# places: packages/crane-launcher/src/app.ts):
+# places: packages/npx/src/app.ts):
 #   Debian, Ubuntu (apt)          the .deb, with apt         /opt/Paperboard/paperboard
 #   Fedora, openSUSE (dnf, zypper) the .rpm                   /opt/Paperboard/paperboard
 #   any other Linux               the AppImage               ~/.local/share/paperboard/Paperboard.AppImage

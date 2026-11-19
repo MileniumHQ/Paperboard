@@ -12,7 +12,7 @@ let wranglerBin: string[] | null = null;
 
 async function wrBin(): Promise<string[]> {
     if (!wranglerBin) {
-        // a wrangler on PATH wins; otherwise `bun x` runs apps/origami's own
+        // a wrangler on PATH wins; otherwise `bun x` runs services/origami's own
         // dev dependency, from the directory every wrangler call runs in
         wranglerBin = (await cmdOk(["wrangler", "--version"], ORIGAMI_DIR))
             ? ["wrangler"]

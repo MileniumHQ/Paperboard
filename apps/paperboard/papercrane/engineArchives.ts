@@ -77,7 +77,7 @@ export function findBinDir(dir: string, maxDepth: number): string | null {
 // ─── Package archive layouts ─────────────────────────────────────────────────
 // A registry package record may declare how its archive maps onto the
 // installed package directory (Origami writes these; see
-// apps/origami/scripts/lib/records.ts). The installed package always ends
+// services/origami/scripts/lib/records.ts). The installed package always ends
 // up with a bin/ directory at its root, which is what getPackagePath and
 // every consumer (`${path}/bin/<program>`) relies on.
 //

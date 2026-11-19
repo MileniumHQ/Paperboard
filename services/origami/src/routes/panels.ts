@@ -2,7 +2,7 @@ import { getPanelsIndex, getPanel, storeMediaPrefix, type PanelRecord } from "..
 import { jsonResponse, type Env } from "../lib";
 
 // Read-only panel routes. Panel writes are operator actions through
-// wrangler (apps/origami/scripts/lib/panelPublish.ts): there is no public
+// wrangler (services/origami/scripts/lib/panelPublish.ts): there is no public
 // publish route and no registry key. The registry serves what the operator
 // wrote and verified.
 export async function handlePanelsRoutes(

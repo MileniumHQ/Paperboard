@@ -5,9 +5,9 @@
   "packageManager": "bun@1.4.4",
   "workspaces": [
     "apps/*",
-    "apps/origami/library",
     "packages/*",
-    "panels/*"
+    "panels/*",
+    "services/*"
   ],
   "scripts": {
     "gate": "bash scripts/gate.sh",

@@ -5,7 +5,7 @@ import { createServer, type Server, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
 import { fileURLToPath } from "node:url";
 import ts from "typescript";
-import { launchChrome, type Chrome, type Page } from "../../../../scripts/testing/chrome";
+import { launchChrome, type Chrome, type Page } from "../../../scripts/testing/chrome";
 
 // The real paintReady module, served to a real Chrome. Images come from
 // this loopback server: one is held until the test releases it, one is

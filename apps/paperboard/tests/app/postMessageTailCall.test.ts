@@ -53,7 +53,7 @@ function sources(dir: string): string[] {
 const subdirs = (dir: string) => fs.readdirSync(dir, { withFileTypes: true }).filter((e) => e.isDirectory()).map((e) => path.join(dir, e.name, "src"));
 const ROOTS = [
     path.join(REPO_DIR, "apps", "paperboard", "src"),
-    path.join(REPO_DIR, "apps", "origami", "library", "src"),
+    path.join(REPO_DIR, "services", "library", "src"),
     ...subdirs(path.join(REPO_DIR, "packages")),
     ...subdirs(path.join(REPO_DIR, "panels")),
 ];

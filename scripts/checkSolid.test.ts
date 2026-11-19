@@ -174,7 +174,7 @@ describe("the house rules flag each break, honour a reasoned quiet marker, and p
 
     test("a relative import into another package, and the near misses: its own files, the repo root, a package by name", () => {
         // a file of crane-launcher, by its place in this repository (the packages around it are real)
-        const file = join(import.meta.dir, "..", "packages/crane-launcher/src/fixture.ts");
+        const file = join(import.meta.dir, "..", "packages/npx/src/fixture.ts");
         const hits = (src: string) => checkSource(file, src).map((h) => `${h.line}:${h.rule}`);
         expect(
             hits(

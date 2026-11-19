@@ -235,8 +235,8 @@ describe("the install scripts' checksum list", () => {
 });
 
 describe("publishing writes where the download worker reads", () => {
-    test("the KV binding and R2 bucket are the ones apps/origami/wrangler.jsonc binds", () => {
-        const wrangler = require(join(ROOT, "apps/origami/wrangler.jsonc")) as {
+    test("the KV binding and R2 bucket are the ones services/origami/wrangler.jsonc binds", () => {
+        const wrangler = require(join(ROOT, "services/origami/wrangler.jsonc")) as {
             kv_namespaces: { binding: string }[];
             r2_buckets: { binding: string; bucket_name: string }[];
         };

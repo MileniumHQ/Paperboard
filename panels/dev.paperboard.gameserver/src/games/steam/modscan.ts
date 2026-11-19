@@ -1,6 +1,6 @@
 import { errorMessage } from "@mileniumhq/paperapi";
 // Steam Workshop metadata through Paperboard's modscan service
-// (apps/panelapis). The Steam Web API key stays in that Worker; the panel
+// (services/panelapis). The Steam Web API key stays in that Worker; the panel
 // sends only a game slug and a query. Metadata only: mod files come from
 // SteamCMD. Answers are checked here, and every failure carries modscan's
 // own message so the tab can show it.

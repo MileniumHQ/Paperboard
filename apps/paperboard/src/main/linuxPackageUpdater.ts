@@ -6,7 +6,7 @@
 // desktop's software center does.
 //
 // The package is checked against the release's SHA256SUMS (the list the
-// install scripts read, packages/crane-launcher/install) before it is kept,
+// install scripts read, packages/npx/install) before it is kept,
 // and again right before root installs it: it waits in a folder this user
 // can write to.
 import { EventEmitter } from "node:events";

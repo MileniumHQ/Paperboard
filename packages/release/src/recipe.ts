@@ -7,7 +7,7 @@
 //
 //   { "unpack": "dmg", "take": { "bin/Helium.app": "Helium.app" } }
 //
-// Origami writes recipes (apps/origami/scripts/lib/records.ts validates
+// Origami writes recipes (services/origami/scripts/lib/records.ts validates
 // them with parsePackageRecipe); the daemon's papercrane/engineArchives.ts
 // runs them.
 import crypto from "crypto";

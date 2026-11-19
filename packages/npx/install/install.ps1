@@ -3,12 +3,12 @@
 #   irm https://i.paperboard.dev | iex
 #
 # `npx @mileniumhq/paperboard install` and `npm install -g @mileniumhq/paperboard`
-# run this same file (packages/crane-launcher/install/install.ps1; Origami
+# run this same file (packages/npx/install/install.ps1; Origami
 # serves it at i.paperboard.dev). install.sh is the Linux and macOS half.
 #
 # It runs Paperboard's own installer silently, for this account only, into
 # %LOCALAPPDATA%\Programs\paperboard\paperboard.exe (where the launcher,
-# packages/crane-launcher/src/app.ts, looks for it). The download is checked
+# packages/npx/src/app.ts, looks for it). The download is checked
 # against the release's SHA256SUMS before it runs.
 #
 # Errors are thrown, never `exit`: piped into iex, exit would close the

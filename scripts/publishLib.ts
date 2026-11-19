@@ -7,9 +7,9 @@
 // around it.
 //
 // The download URL shape (host, repo, path segments) is the worker's own
-// (apps/origami/src/downloadUrl.ts), imported rather than copied. kvKeyFor
+// (services/origami/src/downloadUrl.ts), imported rather than copied. kvKeyFor
 // and the canonical asset names are mirrored by
-// apps/origami/src/routes/paperdl.ts: change both sides together.
+// services/origami/src/routes/paperdl.ts: change both sides together.
 
 import {
     parseStoreManifest,
@@ -18,13 +18,13 @@ import {
     STORE_IMAGE_TYPES,
     STORE_MAX_SCREENSHOT_BYTES,
 } from "../packages/paperapi/src/internal";
-import { DOWNLOAD_HOST, FILE_SEGMENT, GH_REPO, VERSION_SEGMENT } from "../apps/origami/src/downloadUrl";
+import { DOWNLOAD_HOST, FILE_SEGMENT, GH_REPO, VERSION_SEGMENT } from "../services/origami/src/downloadUrl";
 
 export { GH_REPO };
 export const ORIGAMI_HOST = "origami.ariapis.com";
 
 // Deploy targets. PAPERDL_R2_BUCKET and KV_PACKAGES_BINDING must match
-// apps/origami/wrangler.jsonc (bucket_name / binding); publishLib.test.ts
+// services/origami/wrangler.jsonc (bucket_name / binding); publishLib.test.ts
 // pins them so a rename on either side fails loudly instead of uploading
 // into the void. R2 holds only small metadata (latest.yml feeds, the crane
 // index, SHA256SUMS); binaries live on GitHub Releases and Origami only
@@ -234,7 +234,7 @@ export function buildCraneIndex(
     return index;
 }
 
-// URL-shape guards: the worker's own (apps/origami/src/downloadUrl.ts)
+// URL-shape guards: the worker's own (services/origami/src/downloadUrl.ts)
 export function isValidVersionSegment(v: string): boolean {
     return VERSION_SEGMENT.test(v);
 }
@@ -336,11 +336,11 @@ export function buildLatestYml(
     return { key: r2YmlKey(feed), text: yamlLines.join("\n") };
 }
 
-// The checksum list the install scripts read (packages/crane-launcher/
+// The checksum list the install scripts read (packages/npx/
 // install/): one "<sha256>  <file>" line per Paperboard download of the
 // latest release, in the format sha256sum writes. Served from R2 at
 // i.paperboard.dev/pb/SHA256SUMS beside the feeds; each file is at
-// /pb/latest/<file>. apps/origami/src/routes/paperdl.ts serves this key.
+// /pb/latest/<file>. services/origami/src/routes/paperdl.ts serves this key.
 export const SHA256SUMS_KEY = "pb/SHA256SUMS";
 
 export function buildSha256Sums(files: { file: string; sha256: string }[]): string {

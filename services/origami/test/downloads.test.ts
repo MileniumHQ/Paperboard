@@ -146,8 +146,8 @@ describe("update feeds and the crane index are served where updaters ask", () =>
 
 // curl -fsSL https://i.paperboard.dev | sh, and irm https://i.paperboard.dev | iex
 describe("the base of the download host installs Paperboard", () => {
-    const sh = readFileSync(join(import.meta.dir, "../../../packages/crane-launcher/install/install.sh"), "utf8");
-    const ps1 = readFileSync(join(import.meta.dir, "../../../packages/crane-launcher/install/install.ps1"), "utf8");
+    const sh = readFileSync(join(import.meta.dir, "../../../packages/npx/install/install.sh"), "utf8");
+    const ps1 = readFileSync(join(import.meta.dir, "../../../packages/npx/install/install.ps1"), "utf8");
 
     test("curl gets install.sh and PowerShell gets install.ps1, byte for byte the files npx runs", async () => {
         const curl = await get("https://i.paperboard.dev/", { headers: { "user-agent": "curl/8.10.1", accept: "*/*" } });

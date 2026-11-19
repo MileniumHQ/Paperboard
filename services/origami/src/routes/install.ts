@@ -3,7 +3,7 @@
 //   curl -fsSL https://i.paperboard.dev | sh        (Linux, macOS)
 //   irm https://i.paperboard.dev | iex              (Windows PowerShell)
 //
-// Both scripts are packages/crane-launcher/install's, the same files
+// Both scripts are packages/npx/install's, the same files
 // `npx @mileniumhq/paperboard install` runs. A browser opening the base gets
 // the downloads page instead of a script.
 import installPs1 from "@mileniumhq/paperboard/install.ps1";

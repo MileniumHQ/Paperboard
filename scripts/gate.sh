@@ -14,20 +14,20 @@
 #   section names, and the house rules that kept coming back (a catch that
 #   only logs, an effect without on(), <For> fed fresh rows, fixed sleeps in
 #   tests). The deprecated panels (actions, ai) get the Solid rules alone.
-#   paperboard, origami-library and the panels also run an advisory styling
+#   paperboard, library and the panels also run an advisory styling
 #   check (scripts/check-app-styling.sh): literal sizes, colors, motion,
 #   z-index and the like that have a PaperUI token. It warns, never fails.
 #     create-panel   panel scaffolder: build, tests, silent-catches
 #     release        @mileniumhq/release (release key, signed messages, package
 #                    recipes, version order): typecheck, tests, silent-catches
-#     crane-launcher @mileniumhq/paperboard (npx launcher for the daemon):
+#     npx            @mileniumhq/paperboard (npx launcher for the daemon):
 #                    build, tests, silent-catches
 #     paperboard     desktop app: typechecks, tests, lint, silent-catches, and
 #                    the workload supervisor's (Go) format, vet and tests
 #     paperdocs      docs site: tests, build
 #     origami        registry worker: typecheck, tests, silent-catches
-#     origami-library  library UI: tests, build, silent-catches
-#     pbd            pbd.lc short-link worker: typecheck, tests, silent-catches
+#     library        panel library (store) web app: tests, build, silent-catches
+#     arilink        pbd.lc short-link worker: typecheck, tests, silent-catches
 #     panelapis      third-party API proxy worker: typecheck, tests, silent-catches
 #     scripts        root dev/publish scripts: typecheck, tests, silent-catches
 #     actions agents ai blocks botcreator gameserver terminal   first-party panels
@@ -88,7 +88,7 @@ supervisor_vet() {
 # Every selectable target. The *-build names are prerequisites, not
 # user-facing: they exist so a filtered run can pull in the shared library
 # artifact a consumer needs without running that library's whole suite.
-KNOWN_TARGETS="global platform packages paperapi paperui create-panel release crane-launcher paperapi-build paperui-build create-panel-build paperboard paperdocs origami origami-library pbd panelapis scripts actions agents ai blocks botcreator gameserver terminal"
+KNOWN_TARGETS="global platform packages paperapi paperui create-panel release npx paperapi-build paperui-build create-panel-build paperboard paperdocs origami library arilink panelapis scripts actions agents ai blocks botcreator gameserver terminal"
 
 # Prerequisites per target, expanded transitively. A panel (and any app that
 # bundles the SDK/design system) needs paperapi/paperui dist present; the
@@ -99,7 +99,7 @@ target_deps() {
         paperui) echo "paperui-build" ;;
         create-panel) echo "paperapi-build paperui-build create-panel-build" ;;
         packages) echo "paperapi-build paperui-build create-panel-build" ;;
-        paperboard | paperdocs | origami-library | platform) echo "paperapi-build paperui-build" ;;
+        paperboard | paperdocs | library | platform) echo "paperapi-build paperui-build" ;;
         actions | agents | ai | blocks | botcreator | gameserver | terminal) echo "paperapi-build paperui-build" ;;
         *) echo "" ;;
     esac
@@ -242,36 +242,36 @@ gstep release "release typecheck" run_in "$ROOT/packages/release" bunx tsc --noE
 gstep release "release tests" run_in "$ROOT/packages/release" bun run test
 gstep release "release silent-catches" run_in "$ROOT/packages/release" bash "$CATCH" src test
 gstep release "release code check" run_in "$ROOT" bun scripts/check-solid.ts packages/release/src packages/release/test
-gstep crane-launcher "crane-launcher tests" run_in "$ROOT/packages/crane-launcher" bun run test
-gstep crane-launcher "crane-launcher silent-catches" run_in "$ROOT/packages/crane-launcher" bash "$CATCH" src test
-gstep crane-launcher "crane-launcher code check" run_in "$ROOT" bun scripts/check-solid.ts packages/crane-launcher/src packages/crane-launcher/test
+gstep npx "npx tests" run_in "$ROOT/packages/npx" bun run test
+gstep npx "npx silent-catches" run_in "$ROOT/packages/npx" bash "$CATCH" src test
+gstep npx "npx code check" run_in "$ROOT" bun scripts/check-solid.ts packages/npx/src packages/npx/test
 
 # ── registry service: typecheck plus its worker suite (the library division
 # has its own vitest suite below; `bun test ./test` scopes bun to the worker) ─
-gstep origami "origami typecheck" run_in "$ROOT/apps/origami" bun run typecheck
-gstep origami "origami tests" run_in "$ROOT/apps/origami" bun run test
-gstep origami "origami silent-catches" run_in "$ROOT/apps/origami" bash "$CATCH" src test
-gstep origami "origami code check" run_in "$ROOT" bun scripts/check-solid.ts apps/origami/src apps/origami/test apps/origami/scripts
+gstep origami "origami typecheck" run_in "$ROOT/services/origami" bun run typecheck
+gstep origami "origami tests" run_in "$ROOT/services/origami" bun run test
+gstep origami "origami silent-catches" run_in "$ROOT/services/origami" bash "$CATCH" src test
+gstep origami "origami code check" run_in "$ROOT" bun scripts/check-solid.ts services/origami/src services/origami/test services/origami/scripts
 
-# ── pbd.lc short-link worker ─────────────────────────────────────────────────
-gstep pbd "pbd typecheck" run_in "$ROOT/apps/pbd" bun run typecheck
-gstep pbd "pbd tests" run_in "$ROOT/apps/pbd" bun run test
-gstep pbd "pbd silent-catches" run_in "$ROOT/apps/pbd" bash "$CATCH" src test
-gstep pbd "pbd code check" run_in "$ROOT" bun scripts/check-solid.ts apps/pbd/src apps/pbd/test
+# ── arilink: the pbd.lc short-link worker ───────────────────────────────────
+gstep arilink "arilink typecheck" run_in "$ROOT/services/arilink" bun run typecheck
+gstep arilink "arilink tests" run_in "$ROOT/services/arilink" bun run test
+gstep arilink "arilink silent-catches" run_in "$ROOT/services/arilink" bash "$CATCH" src test
+gstep arilink "arilink code check" run_in "$ROOT" bun scripts/check-solid.ts services/arilink/src services/arilink/test
 
 # ── panelapis: third-party API proxy worker ─────────────────────────────────
-gstep panelapis "panelapis typecheck" run_in "$ROOT/apps/panelapis" bun run typecheck
-gstep panelapis "panelapis tests" run_in "$ROOT/apps/panelapis" bun run test
-gstep panelapis "panelapis silent-catches" run_in "$ROOT/apps/panelapis" bash "$CATCH" src test
-gstep panelapis "panelapis code check" run_in "$ROOT" bun scripts/check-solid.ts apps/panelapis/src apps/panelapis/test
+gstep panelapis "panelapis typecheck" run_in "$ROOT/services/panelapis" bun run typecheck
+gstep panelapis "panelapis tests" run_in "$ROOT/services/panelapis" bun run test
+gstep panelapis "panelapis silent-catches" run_in "$ROOT/services/panelapis" bash "$CATCH" src test
+gstep panelapis "panelapis code check" run_in "$ROOT" bun scripts/check-solid.ts services/panelapis/src services/panelapis/test
 
 # ── the panel library division of origami: browser-logic suite and the
 # production build that static assets serve (typecheck rides origami's) ──────
-gstep origami-library "origami library tests" run_in "$ROOT/apps/origami/library" bun run test
-gstep origami-library "origami library build" run_in "$ROOT/apps/origami/library" bun run build
-gstep origami-library "origami library silent-catches" run_in "$ROOT/apps/origami/library" bash "$CATCH" src test
-gstep origami-library "origami library code check" run_in "$ROOT" bun scripts/check-solid.ts apps/origami/library/src apps/origami/library/test
-gwarn origami-library "origami library styling literals" bash "$ROOT/scripts/check-app-styling.sh" apps/origami/library
+gstep library "library tests" run_in "$ROOT/services/library" bun run test
+gstep library "library build" run_in "$ROOT/services/library" bun run build
+gstep library "library silent-catches" run_in "$ROOT/services/library" bash "$CATCH" src test
+gstep library "library code check" run_in "$ROOT" bun scripts/check-solid.ts services/library/src services/library/test
+gwarn library "library styling literals" bash "$ROOT/scripts/check-app-styling.sh" services/library
 
 # ── first-party panels: suite, typecheck, production build, silent-catch gate.
 # The daemon runs the built dist/service.js, not the TypeScript source, so the
@@ -301,7 +301,7 @@ if [ "${#SELECTED[@]}" -gt 0 ]; then
     gstep platform "gameserver platform tests" run_in "$ROOT/panels/dev.paperboard.gameserver" bun test --isolate --conditions browser ./test/platform
     gstep platform "agents platform tests" run_in "$ROOT/panels/dev.paperboard.agents" bun test ./test/platform
     gstep platform "terminal platform tests" run_in "$ROOT/panels/dev.paperboard.terminal" bun test ./test/platform
-    gstep platform "crane-launcher platform tests" run_in "$ROOT/packages/crane-launcher" bash -c "bun run build && bun test ./test/platform"
+    gstep platform "npx platform tests" run_in "$ROOT/packages/npx" bash -c "bun run build && bun test ./test/platform"
 fi
 
 # ── repo-wide checks (full gate, or `global`) ────────────────────────────────

@@ -11,7 +11,7 @@ import { RELEASE_PUBLIC_KEY, verifyRelease } from "../../packages/release/src";
 
 export const REPO_ROOT = join(import.meta.dir, "..", "..");
 export const APP_DIR = join(REPO_ROOT, "apps", "paperboard");
-export const ORIGAMI_DIR = join(REPO_ROOT, "apps", "origami");
+export const ORIGAMI_DIR = join(REPO_ROOT, "services", "origami");
 export const ORIGAMI_URL = process.env.ORIGAMI_URL || "https://origami.ariapis.com";
 
 // the app and the server always release under the app's version

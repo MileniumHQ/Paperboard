@@ -70,7 +70,7 @@ papercrane pair                 # show a pairing code on the running daemon
 papercrane status               # is it running? (exits 3 when it isn't)
 papercrane uninstall-service    # remove the service; your data stays
 ```
-- No binary yet? `npx @mileniumhq/paperboard serve` downloads the signed release for your computer, checks it against the release key, and runs it (see [packages/crane-launcher](../../packages/crane-launcher/README.md)). Any command above works the same way.
+- No binary yet? `npx @mileniumhq/paperboard serve` downloads the signed release for your computer, checks it against the release key, and runs it (see [packages/npx](../../packages/npx/README.md)). Any command above works the same way.
 - `serve` is the default command, so `papercrane --headless --port 45465` still works like it always did.
 - `install-service` writes a systemd unit on Linux (`~/.config/systemd/user/papercrane.service`, or `/etc/systemd/system/` with `--system`) and a launchd job on macOS (`~/Library/LaunchAgents/dev.paperboard.papercrane.plist`, or `/Library/LaunchDaemons/` with `--system`), enables it and waits for the daemon to answer. Windows prints the Task Scheduler command to use instead. `--dry-run` prints the file without touching anything.
 - The service runs `--headless` and stops only the daemon process (`KillMode=process`, `AbandonProcessGroup`), so game servers keep running through a restart and the next daemon adopts them.

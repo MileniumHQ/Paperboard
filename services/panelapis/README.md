@@ -72,9 +72,9 @@ The Cache API stores only successful reshaped responses, with canonical validate
 From the repository root, install workspace dependencies with `bun install`, then:
 
 ```sh
-bun run --cwd apps/panelapis test
-bun run --cwd apps/panelapis typecheck
-bun run --cwd apps/panelapis dev
+bun run --cwd services/panelapis test
+bun run --cwd services/panelapis typecheck
+bun run --cwd services/panelapis dev
 ```
 
 Tests run local workerd via Miniflare, with real cache, rate-limit and durable storage bindings; only outgoing Steam HTTP is mocked. Test storage is ephemeral, and dev persistence lives under `/tmp/paperboard-panelapis-dev`, never the user's `.paperboard`. For dev requests supply a local `CF-Connecting-IP` header. Local secrets belong in an ignored `.dev.vars`, never source control. The test harness uses Miniflare's v4 configuration converter because the installed Wrangler dependency uses Miniflare 5's updated API.
@@ -85,7 +85,7 @@ Operator steps below are documentation only; no deployment, secret upload or Clo
 2. Authenticate Wrangler to the intended Cloudflare account; confirm the `ariapis.com` zone is in that account. The config attaches `panels.ariapis.com` as a Worker custom domain, so the Worker owns the whole host and deployment creates its DNS record and certificate. The hostname must not already have a conflicting DNS record. Other panel APIs are routed in code, not with extra Cloudflare routes.
 3. Confirm rate-limit namespace `1281930` is unique in the account (change before first deployment if necessary). The first deployment migration creates the SQLite Durable Object; remote bindings are not used locally.
 4. Set the Worker secret named `STEAM_WEB_API_KEY` securely through the Cloudflare dashboard for Worker `panelapis`; never put its value in `wrangler.jsonc`, shell history, a URL shared with users or Git. Missing configuration produces a clear 503. No secret-setting command is run by these scripts.
-5. When separately authorized to publish, run `bun run --cwd apps/panelapis deploy`. Verify routing, attribution, privacy disclosures, cache behavior and visible failures before integrating any panel.
+5. When separately authorized to publish, run `bun run --cwd services/panelapis deploy`. Verify routing, attribution, privacy disclosures, cache behavior and visible failures before integrating any panel.
 
 ### Emailing Valve about growth
 

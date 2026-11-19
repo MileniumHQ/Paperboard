@@ -15,11 +15,11 @@
         }
     ],
     // The panel library division: built by `bun run build:library` into
-    // library/dist and served from the same origin as the registry it
+    // services/library/dist and served from the same origin as the registry it
     // reads. Registry routes never match an asset, so the worker keeps
     // serving them; unmatched paths fall through to the worker's 404.
     "assets": {
-        "directory": "./library/dist",
+        "directory": "../library/dist",
         "not_found_handling": "none",
         "run_worker_first": false
     },
@@ -40,7 +40,7 @@
         }
     ],
     // the install scripts i.paperboard.dev serves at its base, bundled as
-    // text from packages/crane-launcher/install (src/routes/install.ts)
+    // text from packages/npx/install (src/routes/install.ts)
     "rules": [
         {
             "type": "Text",

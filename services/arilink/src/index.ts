@@ -36,14 +36,14 @@ export default {
             value = await env.LINKS.get(key);
         } catch (err) {
             // unavailable is not "no such link"
-            console.error(`[pbd] link lookup failed for ${key}:`, err);
+            console.error(`[arilink] link lookup failed for ${key}:`, err);
             return text("Links are unavailable right now. Try again in a moment.", 503);
         }
         if (value === null) return text("No such link.", 404);
 
         const target = parseTarget(value);
         if (!target) {
-            console.error(`[pbd] link ${key} has an invalid target`);
+            console.error(`[arilink] link ${key} has an invalid target`);
             return text("This link is broken.", 500);
         }
         // 302, not 301: links are edited in KV and browsers cache 301s forever

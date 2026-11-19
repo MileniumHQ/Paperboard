@@ -1,4 +1,4 @@
-// The Workers types the publish flows reach through apps/origami's code,
+// The Workers types the publish flows reach through services/origami's code,
 // which is written against them. Only these: the whole Workers global scope
 // would replace Node's Buffer and stream types, which the rest of scripts/
 // is written against.

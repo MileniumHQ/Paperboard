@@ -23,7 +23,7 @@ cd "$ROOT" || exit 1
 if [ "$#" -gt 0 ]; then
     SCOPE=("$@")
 else
-    SCOPE=(apps/paperboard apps/origami/library panels packages/create-panel/template)
+    SCOPE=(apps/paperboard services/library panels packages/create-panel/template)
 fi
 
 # a scope git does not know (a moved or mistyped folder) fails here, not as
