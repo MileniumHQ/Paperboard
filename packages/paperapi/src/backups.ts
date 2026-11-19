@@ -8,7 +8,7 @@ import type { BackupStatusAnswer } from "./protocol";
 import { BACKUP_PROGRESS_EVENT } from "./channels";
 import { requirePanelId } from "./panelIdentity";
 import { requestShell } from "./shellRequest";
-import { currentFrameSession } from "./frameSession";
+import { currentFrameSession, frameSessionArrived, type FrameSession } from "./frameSession";
 
 export interface BackupRecord {
     format: 1;
@@ -198,11 +198,9 @@ export function backupLocationLabel(location: Pick<BackupLocation, "kind" | "lab
     return location.kind === "local" && computerName ? computerName : location.label;
 }
 
-function named(location: BackupLocation | null): BackupLocation | null {
-    return location && { ...location, label: backupLocationLabel(location, currentFrameSession()?.computerName) };
-}
+const named = (location: BackupLocation, session: FrameSession | null): BackupLocation => ({ ...location, label: backupLocationLabel(location, session?.computerName) });
 
-const status = (r: BackupStatusAnswer): BackupStatus => ({ location: named(r.destination ?? null), running: r.running ?? null, progress: r.progress ?? null, schedule: r.schedule ?? null });
+const status = async (r: BackupStatusAnswer): Promise<BackupStatus> => ({ location: r.destination ? named(r.destination, await frameSessionArrived()) : null, running: r.running ?? null, progress: r.progress ?? null, schedule: r.schedule ?? null });
 
 /** A named subset of a panel's files and config, with its own backup history. */
 export interface BackupSource {
@@ -291,7 +289,10 @@ export const backupApi = {
             busy: () => new BackupLocationError("busy", "The backup location window is already open"),
             parse: (result: any) => {
                 if (result?.status === "canceled") return { status: "canceled" };
-                if (result?.status === "chosen" && result.location && typeof result.location.id === "string") return { status: "chosen", location: named(result.location)! };
+                if (result?.status === "chosen" && result.location && typeof result.location.id === "string") {
+                    // a reply comes only to a frame the shell has given a session
+                    return { status: "chosen", location: named(result.location, currentFrameSession()) };
+                }
                 if (result?.status === "failed") return new BackupLocationError("failed", String(result.message ?? "Choosing a backup location failed"));
                 return new BackupLocationError("failed", "The shell sent a malformed backup location result");
             },

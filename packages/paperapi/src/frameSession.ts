@@ -18,9 +18,22 @@ export function frameComputerName(value: unknown): string | null {
 }
 
 let session: FrameSession | null = null;
+let arrived: (() => void) | null = null;
+const firstSession = new Promise<void>((resolve) => (arrived = resolve));
 
 export function setFrameSession(next: FrameSession): void {
     session = next;
+    arrived?.();
+}
+
+/** the shell's session once it has given one; a page outside a frame has
+ * none to wait for. A panel's first reads run before the shell's
+ * initialize message lands, so whatever they show from the session (the
+ * computer's name) waits for it rather than read it too early. */
+export async function frameSessionArrived(): Promise<FrameSession | null> {
+    if (typeof window === "undefined" || window.parent === window) return session;
+    await firstSession;
+    return session;
 }
 
 export function currentFrameSession(): FrameSession | null {

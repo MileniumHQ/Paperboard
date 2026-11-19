@@ -2,6 +2,7 @@
 // confirmation, and a reload after either keeps the rows it did not change.
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import * as fs from "node:fs";
+import * as os from "node:os";
 import * as path from "node:path";
 import { backupApi, backupLocationsApi } from "@mileniumhq/paperapi";
 import { startTestDaemon, type TestDaemon } from "./helpers/crane";
@@ -71,6 +72,28 @@ describe("the Backups tab", () => {
             expect(fs.readFileSync(notes, "utf8")).toBe("kept");
             await page.settled();
             expect(await page.evaluate<string | undefined>(`${row("Before the update")}?.dataset.test`)).toBe("kept");
+            expect(page.exceptions).toEqual([]);
+        } finally {
+            await page.close();
+            served.stop();
+        }
+    }, 90_000);
+    test("the computer's own folder is named as the shell names it, even when the tab reads it before the shell's challenge lands", async () => {
+        await backupLocationsApi.setForPanel(PANEL_ID, "local", undefined, "s-mc");
+        const served = await servePanel(daemon);
+        // a reload: the page reads its backups before the shell has said who it is
+        const page = await openPage(panelHostUrl(served.url, { server: "s-mc", initialize: "later" }));
+        const inFrame = (expression: string) => `((document) => ${expression})(${PANEL_DOC})`;
+        const keptIn = inFrame(`[...document.querySelectorAll("[class*=PaperSettingItem]")].find((el) => el.innerText.startsWith("Kept in"))?.innerText ?? ""`);
+        try {
+            await page.waitFor(inFrame(`document?.querySelector('input[name=serverMenu][value="backups"]')`), "the server menu");
+            await page.evaluate(inFrame(`document.querySelector('input[name=serverMenu][value="backups"]').click()`));
+            await page.settled();
+            await page.evaluate("window.initialize()");
+            await page.waitFor(`${keptIn}.includes(":")`, "where the backups are kept");
+            const said = await page.evaluate<string>(keptIn);
+            expect(said).toContain("This Computer: ");
+            expect(said).not.toContain(os.hostname());
             expect(page.exceptions).toEqual([]);
         } finally {
             await page.close();

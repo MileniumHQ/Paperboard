@@ -73,6 +73,9 @@ frame.addEventListener("load", () => {
 // can ask the shell for what only the shell shows (the backup location
 // chooser). Each request it sends is kept in window.shellRequests and left
 // unanswered, as a chooser still open would be. Read the frame with PANEL_DOC.
+// It names the computer as the shell names this one. With ?initialize=later
+// the challenge waits for window.initialize(), as a frame's own first reads
+// can run before the shell's message lands.
 const PANEL_HOST = `<!doctype html><html><head><meta charset="utf-8"></head><body style="margin:0">
 <iframe id="panel" style="border:0;width:100vw;height:100vh"></iframe>
 <script>
@@ -83,9 +86,10 @@ const changed = () => (document.body.dataset.changes = String(++changes));
 window.addEventListener("message", (event) => {
     if (event.source === frame.contentWindow && typeof event.data?.requestId === "string") { window.shellRequests.push(event.data.type); changed(); }
 });
+window.initialize = () => frame.contentWindow.postMessage({ type: "paperboard:initialize", generation: "g1", computerName: "This Computer" }, "*");
 frame.addEventListener("load", () => {
     new MutationObserver(changed).observe(frame.contentDocument, { subtree: true, childList: true, attributes: true, characterData: true });
-    frame.contentWindow.postMessage({ type: "paperboard:initialize", generation: "g1" }, "*");
+    if (new URLSearchParams(location.search).get("initialize") !== "later") window.initialize();
 });
 frame.src = "./" + location.search;
 </script></body></html>`;
