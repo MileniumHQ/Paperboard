@@ -213,7 +213,7 @@ export function Example() {
 
             <PaperText preset="subheader" as="h2" id="behavior">Behavior</PaperText>
             <PaperTextList>
-                <li>The console follows the newest line. Scrolling up away from the bottom stops following, and the view stays where it is while new lines arrive. Scrolling back to the bottom resumes. Submitting a command jumps to the bottom.</li>
+                <li>The console follows the newest line, even when rows already shown change height (a web font arriving, a resize). Only the reader stops it, by scrolling up with the wheel, a touch, the scrollbar or a key; the view then stays where it is while new lines arrive. Scrolling back to the bottom resumes. Submitting a command jumps to the bottom.</li>
                 <li>Only rows near the viewport are in the page. Long lines wrap, and the scrollbar still spans the whole log.</li>
                 <li>The command input keeps the last 200 submitted commands. The Up arrow recalls older ones, the Down arrow moves back toward the text you were typing.</li>
                 <li>The console does not append a typed command to <PaperCode>entries</PaperCode>. Add your own <PaperCode>command</PaperCode> entry in <PaperCode>onCommand</PaperCode> if you want it echoed.</li>

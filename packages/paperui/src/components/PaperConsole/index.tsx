@@ -295,47 +295,70 @@ export function PaperConsole(props: ParentProps<PaperConsoleProps>) {
 
     // measure the mounted rows; estimates above the viewport turning into
     // real heights are absorbed by relayout so nothing jumps
-    createEffect(
-        on(visible, () => {
-            if (!windowRef || !outputRef?.clientHeight) return;
-            const { start } = range();
-            const list = items();
-            let changed = false;
-            const rows = windowRef.children;
-            for (let i = 0; i < rows.length; i++) {
-                const index = start + i;
-                if (index >= list.length) break;
-                const height = rows[i].getBoundingClientRect().height;
-                if (height > 0 && setHeight(heightKey(list[index], index), height)) changed = true;
-            }
-            if (heights.size > list.length * 4 + 1000) {
-                // drop heights of rows that have scrolled out of the log
-                const keep = new Map<unknown, number>();
-                list.forEach((entry, i) => {
-                    const key = heightKey(entry, i);
-                    const h = heights.get(key);
-                    if (h !== undefined) keep.set(key, h);
-                });
-                clearHeights();
-                keep.forEach((h, key) => setHeight(key, h));
-            }
-            if (changed) relayout(() => setHeightsVersion((v) => v + 1));
-        }),
-    );
+    const measureRows = () => {
+        if (!windowRef || !outputRef?.clientHeight) return;
+        const { start } = range();
+        const list = items();
+        let changed = false;
+        const rows = windowRef.children;
+        for (let i = 0; i < rows.length; i++) {
+            const index = start + i;
+            if (index >= list.length) break;
+            const height = rows[i].getBoundingClientRect().height;
+            if (height > 0 && setHeight(heightKey(list[index], index), height)) changed = true;
+        }
+        if (heights.size > list.length * 4 + 1000) {
+            // drop heights of rows that have scrolled out of the log
+            const keep = new Map<unknown, number>();
+            list.forEach((entry, i) => {
+                const key = heightKey(entry, i);
+                const h = heights.get(key);
+                if (h !== undefined) keep.set(key, h);
+            });
+            clearHeights();
+            keep.forEach((h, key) => setHeight(key, h));
+        }
+        if (changed) relayout(() => setHeightsVersion((v) => v + 1));
+    };
+    createEffect(on(visible, measureRows));
+    // a row drawn can change height later with nothing new to show (a web
+    // font arriving after a reload, a picture loading), so the rows are
+    // measured again whenever their window changes size
+    const rowsObserver = typeof ResizeObserver === "undefined" ? undefined : new ResizeObserver(measureRows);
+    onCleanup(() => rowsObserver?.disconnect());
+    const observeRows = (el: HTMLDivElement) => {
+        windowRef = el;
+        rowsObserver?.observe(el);
+        onCleanup(() => rowsObserver?.unobserve(el));
+    };
+
+    // what the reader does to scroll: the wheel, a touch, the scrollbar (a
+    // press on the scroll box itself, not on a row), or a key that scrolls
+    let readerScrolled = false;
+    const SCROLL_KEYS = new Set(["ArrowUp", "ArrowDown", "PageUp", "PageDown", "Home", "End", " "]);
+    const readerScrolls = () => { readerScrolled = true; };
+    const readerPresses = (e: PointerEvent) => { if (e.target === outputRef) readerScrolled = true; };
+    const readerKeys = (e: KeyboardEvent) => { if (SCROLL_KEYS.has(e.key)) readerScrolled = true; };
 
     const handleScroll = () => {
         const el = outputRef;
         if (!el) return;
         setScrollTop(el.scrollTop);
         if (local.autoScroll === false) return;
-        // A frame sends scroll events before resize observations: the event
-        // for the console's own move to the bottom can arrive after its box
-        // shrank (a page's readouts appeared above it) and before the
-        // observer below has heard. That gap is the resize's, not the
-        // reader's; the observer puts the tail back in view.
-        if (stuck() && (el.clientHeight !== viewportHeight() || el.clientWidth !== viewportWidth)) return;
+        // Only the reader leaves the tail. A scroll event comes a frame after
+        // its cause, and by then the log may have grown, shrunk or been
+        // resized again, so its distance from the end says nothing about who
+        // moved it: while following, a scroll the reader didn't start is the
+        // console's own (or the browser clamping it), and it follows on.
+        if (stuck() && !readerScrolled) {
+            if (el.scrollHeight - el.clientHeight - el.scrollTop > 0.5) scrollToBottom();
+            return;
+        }
         const distance = el.scrollHeight - el.clientHeight - el.scrollTop;
-        setStuck(distance <= estimate() / 2);
+        const atEnd = distance <= estimate() / 2;
+        setStuck(atEnd);
+        // back at the end, the console follows again until the reader moves
+        if (atEnd) readerScrolled = false;
     };
 
     onMount(() => {
@@ -366,7 +389,10 @@ export function PaperConsole(props: ParentProps<PaperConsoleProps>) {
     createEffect(
         on(
             () => local.autoScroll,
-            (auto) => setStuck(auto !== false),
+            (auto) => {
+                readerScrolled = false;
+                setStuck(auto !== false);
+            },
             { defer: true },
         ),
     );
@@ -411,6 +437,7 @@ export function PaperConsole(props: ParentProps<PaperConsoleProps>) {
         local.onInputChange?.("");
         // sending a command returns to the newest output
         if (local.autoScroll !== false) {
+            readerScrolled = false;
             setStuck(true);
             scrollToBottomSoon();
         }
@@ -518,7 +545,15 @@ export function PaperConsole(props: ParentProps<PaperConsoleProps>) {
                 </div>
             </Show>
 
-            <div ref={outputRef} class={styles.outputArea} onScroll={handleScroll}>
+            <div
+                ref={outputRef}
+                class={styles.outputArea}
+                onScroll={handleScroll}
+                onWheel={readerScrolls}
+                onTouchStart={readerScrolls}
+                onPointerDown={readerPresses}
+                onKeyDown={readerKeys}
+            >
                 <Show when={banner()}>
                     <div class={styles.banner}>{banner()}</div>
                 </Show>
@@ -534,7 +569,7 @@ export function PaperConsole(props: ParentProps<PaperConsoleProps>) {
                         style={{ height: `${offsets()[items().length]}px` }}
                     >
                         <div
-                            ref={windowRef}
+                            ref={observeRows}
                             class={styles.window}
                             style={{ transform: `translateY(${offsets()[range().start]}px)` }}
                         >

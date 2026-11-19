@@ -103,6 +103,31 @@ describe("PaperConsole windowing", () => {
         await showing("line 204");
     });
 
+    test("rows that grow after they are drawn, as a web font arriving after a reload makes them, leave the newest line in view", async () => {
+        page = await browser.open("console", { query: "lines=300" });
+        await showing("line 299");
+        // nothing new arrives: only the rows already drawn get taller
+        await page.eval(`(() => { const s = document.createElement("style"); s.textContent = '${ROWS} { font-size: 2em; }'; document.head.append(s); })()`);
+        await page.frames();
+        await showing("line 299");
+    });
+
+    test("following the tail, a scroll the reader didn't make never stops it, however late its event lands", async () => {
+        page = await browser.open("console", { query: "lines=300" });
+        await showing("line 299");
+        // the console's own move to the end, then the log growing before
+        // that move's scroll event arrives, a frame later
+        await page.eval(`(() => {
+            const out = document.querySelector('${OUTPUT}');
+            out.scrollTop = out.scrollHeight;
+            const s = document.createElement("style"); s.textContent = '${ROWS} { padding-bottom: 6px; }'; document.head.append(s);
+            out.scrollTop -= 40;
+        })()`);
+        await page.frames();
+        await page.eval("t.append(5)");
+        await showing("line 304");
+    });
+
     test("a row whose height flickers by a sub-pixel settles instead of re-measuring forever", async () => {
         page = await browser.open("console", { query: "lines=0&flicker=1" });
         await page.eval(`t.set(["flicker", ...Array.from({ length: 300 }, (_, i) => "line " + i)])`);
