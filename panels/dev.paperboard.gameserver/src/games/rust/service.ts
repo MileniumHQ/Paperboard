@@ -226,10 +226,11 @@ export function rustService(ctx: Server): GameService {
      * gets a new seed, so its next start makes a new map.
      */
     async function wipe(blueprints: boolean): Promise<RustWipeResult> {
-        const { made: trashed } = await mapView();
         const dir = await identityDir();
         const names = (await exists(dir)) ? await fs.readdir(dir) : [];
         const files = wipedFiles(names, blueprints);
+        // any map moved, not only the one the settings name: a size or seed changed since it was made
+        const trashed = files.some((name) => name.startsWith("proceduralmap."));
         if (files.length > 0) {
             const trash = path.join(await ctx.root(), trashDirName(), "server", IDENTITY);
             await fs.mkdir(trash, { recursive: true });

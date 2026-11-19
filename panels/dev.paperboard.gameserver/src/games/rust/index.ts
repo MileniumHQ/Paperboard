@@ -43,7 +43,7 @@ export interface RustMapView {
     blueprints: boolean;
 }
 
-/** What a wipe leaves: the new map, and whether there was an old one to move to the trash. */
+/** What a wipe leaves: the new map, and whether it moved an old map to the trash. */
 export interface RustWipeResult extends RustMapView {
     trashed: boolean;
 }

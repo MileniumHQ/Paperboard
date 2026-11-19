@@ -156,6 +156,10 @@ describe("Rust", () => {
         // a map never made on the new seed is nothing to trash, though the blueprints move
         expect(await call(server, "rustWipe", { blueprints: true })).toMatchObject({ made: false, blueprints: false, trashed: false });
         expect(left()).toEqual(["player.identities.19.db", "player.tokens.db"]);
+        // a map the settings no longer name (the size changed since it was made) is still a map moved to the trash
+        fs.writeFileSync(path.join(identity, "proceduralmap.3000.999.290.map"), "an older size");
+        expect(await call(server, "rustWipe", { blueprints: false })).toMatchObject({ made: false, trashed: true });
+        expect(left()).toEqual(["player.identities.19.db", "player.tokens.db"]);
         // the next start is on the new seed
         await online(server);
         const started = JSON.parse(fs.readFileSync(path.join(server.dir, "install", "started-with.json"), "utf8")).args as string[];
