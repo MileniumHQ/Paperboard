@@ -52,6 +52,21 @@ export class LibraryFlyout extends Blockly.VerticalFlyout {
         return top;
     }
 
+    /** whether the Library is open: Blockly shows the list each time it fills it, so it asks here */
+    private shown = true;
+
+    /** Opens or collapses the Library's list. Shown again, it is laid out for the canvas beside it now. */
+    setShown(shown: boolean): void {
+        this.shown = shown;
+        this.setVisible(shown);
+        if (shown) this.reflow();
+    }
+
+    /** Blockly shows the list as it fills it (show), and a collapsed Library keeps it hidden. */
+    override setVisible(visible: boolean): void {
+        super.setVisible(visible && this.shown);
+    }
+
     /**
      * Shown or hidden again as it should be: a new theme makes the list's own
      * workspace show itself, whether or not the Library is shown.

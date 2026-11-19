@@ -37,6 +37,8 @@ export interface LibraryProps {
     project: string | null;
     onProject(id: string): void;
     sections: string[];
+    /** the section last jumped to, or "" */
+    section: string;
     onJump(section: string): void;
     onCollapse(): void;
     /** shown for the Variables category: makes a new variable */
@@ -116,7 +118,7 @@ export function LibraryHeader(props: Omit<LibraryProps, "builtins" | "panels" | 
                     )}
                 </Show>
                 <Show when={!props.search && props.sections.length > 1}>
-                    <PaperSelectMenu name="librarySectionJump" fullWidth value="" placeholder="Section" onValueChange={(value) => props.onJump(String(value))}>
+                    <PaperSelectMenu name="librarySectionJump" fullWidth value={props.section} placeholder="Section" onValueChange={(value) => props.onJump(String(value))}>
                         <For each={props.sections}>{(section) => <PaperSelectMenuItem value={section}>{section}</PaperSelectMenuItem>}</For>
                     </PaperSelectMenu>
                 </Show>

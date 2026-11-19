@@ -4,7 +4,7 @@
 // it for the run log. A one-off failure is a toast; flows that can't load
 // say why over the canvas. Edits save as you make them; the service runs
 // the flows.
-import { createEffect, createMemo, createSignal, on, onCleanup, onMount, Show } from "solid-js";
+import { createEffect, createMemo, createSignal, on, onCleanup, onMount, Show, untrack } from "solid-js";
 import * as Blockly from "blockly";
 import { blocksApi, setUnsavedChanges } from "@mileniumhq/paperapi";
 import {
@@ -26,7 +26,7 @@ import {
 } from "@mileniumhq/paperui";
 import { BUILTIN_BLOCKS, builtinPlaceholder } from "./lib/blockDefs";
 import { registerChoicesField, setChoicesProject } from "./lib/choicesField";
-import { setLibraryTop } from "./lib/libraryFlyout";
+import { setLibraryTop, type LibraryFlyout } from "./lib/libraryFlyout";
 import { tokenPixels } from "./lib/tokens";
 import { loadBlockFonts } from "./lib/paperRenderer";
 import { setPanelIcons } from "./lib/blockStyles";
@@ -104,8 +104,12 @@ export default function Editor(props: {
         shownLogId = next.log.at(-1)?.id ?? shownLogId;
     }
 
+    // the section last jumped to in the list shown, which the Section menu says
+    const [jumpedTo, setJumpedTo] = createSignal("");
     /** Scrolls the list to a section's heading. */
     function jump(section: string): void {
+        const before = untrack(jumpedTo);
+        setJumpedTo(section);
         try {
             const flyout = workspace?.getFlyout();
             const list = flyout?.getWorkspace();
@@ -114,6 +118,7 @@ export default function Editor(props: {
             if (!heading) throw new Error(`The Library has no section "${section}"`);
             list.scrollbar.setY(heading.getElement().getBoundingRectangle().top * list.scale);
         } catch (err) {
+            setJumpedTo(before);
             showError("Couldn't jump to that section", err);
         }
     }
@@ -189,7 +194,10 @@ export default function Editor(props: {
             if (!drawn || !workspace) return;
             const list = JSON.stringify([selected, project, query]);
             workspace.updateToolbox({ kind: "flyoutToolbox", contents } as unknown as Blockly.utils.toolbox.ToolboxDefinition);
-            if (list !== shownList) workspace.getFlyout()?.scrollToStart();
+            if (list !== shownList) {
+                workspace.getFlyout()?.scrollToStart();
+                setJumpedTo("");
+            }
             shownList = list;
         }),
     );
@@ -199,7 +207,7 @@ export default function Editor(props: {
     createEffect(
         on([libraryShown, ready], ([shown, drawn]) => {
             if (!drawn || !workspace) return;
-            workspace.getFlyout()?.setVisible(shown);
+            (workspace.getFlyout() as LibraryFlyout | null)?.setShown(shown);
             Blockly.svgResize(workspace);
         }),
     );
@@ -473,6 +481,7 @@ export default function Editor(props: {
                                     project={library.shownProject()}
                                     onProject={library.chooseProject}
                                     sections={library.sectionNames()}
+                                    section={jumpedTo()}
                                     onJump={jump}
                                     onCollapse={() => setCollapsed(true)}
                                     onCreateVariable={library.showsVariables() && ready() ? () => Blockly.Variables.createVariableButtonHandler(workspace!) : undefined}
