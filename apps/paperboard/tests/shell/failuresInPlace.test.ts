@@ -200,3 +200,22 @@ test("Attempt Reconnect that finds nothing says why over the lost computer", asy
     await page.waitFor(`[...document.querySelectorAll("button")].some((b) => b.textContent.includes("Attempt Reconnect") && !b.disabled)`, "Attempt Reconnect to answer");
     expect(page.exceptions).toEqual([]);
 });
+
+// Inventory: Core contracts — a reconnect check that reaches the computer takes the last failure down, even while the overlay stays.
+test("Attempt Reconnect that reaches the computer clears the last failure over the lost computer", async () => {
+    const { page } = shell;
+    const title = "Couldn't reach this computer";
+    await page.waitFor(errorShown(title), "the last reconnect's failure, from the test before");
+    // the computer answers the check, but the reconnect still finds nothing, so the overlay stays up
+    await page.evaluate(`(() => {
+        const fetch = window.fetch;
+        window.fetch = (input, init) => String(input).endsWith("/computer-probe")
+            ? Promise.resolve(new Response(JSON.stringify({ ok: true, result: { reachable: true } }), { status: 200 }))
+            : fetch(input, init);
+    })()`);
+    await clickText(page, "button", "Attempt Reconnect");
+    await page.waitFor(`[...document.querySelectorAll("button")].some((b) => b.textContent.includes("Attempt Reconnect") && !b.disabled)`, "Attempt Reconnect to answer");
+    expect(await page.evaluate<boolean>(`document.body.innerText.includes("Connection Lost")`)).toBe(true);
+    await page.waitFor(errorGone(title), "the failure the check answered to be gone");
+    expect(page.exceptions).toEqual([]);
+});

@@ -5,7 +5,8 @@ import { errorMessage } from "@mileniumhq/paperapi";
 
 /**
  * Whether a paired computer answers, for the dialogs that offer to try it
- * again. A newer check, or a reset, makes an older one's answer moot. A
+ * again. A newer check, or a reset, makes an older one's answer moot. The
+ * last answer stays shown while a check runs, until the new one replaces it. A
  * check that finds the computer resolves true; reconnecting to it is the
  * caller's, and the same for every dialog.
  */
@@ -17,11 +18,13 @@ export function createReachCheck() {
     const check = async (computer: { host: string; port: number }): Promise<boolean> => {
         const current = latest();
         setChecking(true);
-        setError(null);
         try {
             const probe = await computersApi.probe(computer.host, computer.port);
             if (!current()) return false;
-            if (probe?.reachable) return true;
+            if (probe?.reachable) {
+                setError(null);
+                return true;
+            }
             setError(probe?.error || "Unreachable");
         } catch (err) {
             logToMain("error", "Checking a computer failed:", err);
