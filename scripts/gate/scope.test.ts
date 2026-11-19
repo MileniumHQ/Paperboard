@@ -183,6 +183,45 @@ describe("paths in strings", () => {
     });
 });
 
+describe("what a part ships", () => {
+    test("its build config is public: a change to it reruns the part's consumers", () => {
+        const files = { "packages/paperapi/vite.config.ts": "export default {};\n", "packages/paperapi/tsconfig.json": "{}" };
+        for (const config of Object.keys(files)) expect(targets(files, [config])).toContain("daemon");
+    });
+
+    test("its tests, their configs and its tooling are not", () => {
+        const files = {
+            "packages/paperapi/vitest.config.ts": "export default {};\n",
+            "packages/paperapi/test/setup.ts": "export {};\n",
+            "packages/paperapi/scripts/bump.ts": "export {};\n",
+        };
+        for (const f of Object.keys(files)) expect(targets(files, [f])).toEqual(["global", "packages", "paperapi"]);
+    });
+
+    test("a script the part's build runs ships, wherever it sits", () => {
+        const files = {
+            "packages/paperapi/package.json": JSON.stringify({ name: "@mileniumhq/paperapi", scripts: { build: "tsc && bun scripts/bundle.ts", test: "bun scripts/check.ts" } }),
+            "packages/paperapi/scripts/bundle.ts": "export {};\n",
+            "packages/paperapi/scripts/check.ts": "export {};\n",
+        };
+        expect(targets(files, ["packages/paperapi/scripts/bundle.ts"])).toContain("daemon");
+        expect(targets(files, ["packages/paperapi/scripts/check.ts"])).not.toContain("daemon");
+    });
+
+    test("an edge to a private file covers what that file uses, in its part or another", () => {
+        // the publish script compiles in origami's tooling, which compiles in its helper and the release library
+        const files = {
+            "services/origami/scripts/lib/publish.ts": 'import "./wrangler";\n',
+            "services/origami/scripts/lib/wrangler.ts": 'import "../../../../packages/release/src/index";\n',
+            "scripts/publish/publish.ts": 'import "../../services/origami/scripts/lib/publish";\n',
+        };
+        expect(targets(files, ["services/origami/scripts/lib/wrangler.ts"])).toContain("scripts");
+        expect(targets(files, ["packages/release/src/index.ts"])).toContain("scripts");
+        // origami's other tooling stays out of it
+        expect(targets({ ...files, "services/origami/scripts/other.ts": "export {};\n" }, ["services/origami/scripts/other.ts"])).toEqual(["global", "origami"]);
+    });
+});
+
 describe("joins from the repo root", () => {
     const REPO_DIR = { "packages/testkit/src/root.ts": 'export const REPO_DIR = path.resolve(import.meta.dir, "../../..");\n' };
 
@@ -199,8 +238,8 @@ describe("joins from the repo root", () => {
         };
         expect(targets(files, ["panels/dev.paperboard.terminal/src/App.tsx"])).toContain("daemon");
         expect(targets(files, ["panels/dev.paperboard.terminal/package.json"])).toContain("daemon");
-        // what the test never joins to stays out of it
-        expect(targets(files, ["panels/dev.paperboard.terminal/README.md"])).not.toContain("daemon");
+        // the panel's own tests stay out of it
+        expect(targets({ ...files, "panels/dev.paperboard.terminal/test/unit.test.ts": "export {};\n" }, ["panels/dev.paperboard.terminal/test/unit.test.ts"])).not.toContain("daemon");
     });
 
     test("one that goes on past a folder of parts with a variable reaches every part in it", () => {
@@ -249,9 +288,8 @@ describe("what else a scope turns on", () => {
         // a part's suite tests that part's code
         expect(scope(files, ["apps/paperboard/src/main/index.ts"]).platform).toBe(true);
         expect(scope(files, ["panels/dev.paperboard.terminal/src/App.tsx"]).platform).toBe(true);
-        // its README and its other tests aren't what the suite runs
-        expect(scope(files, ["panels/dev.paperboard.terminal/README.md"])).toEqual({ targets: ["global", "terminal"], platform: false });
-        expect(scope({ ...files, "panels/dev.paperboard.terminal/test/unit.test.ts": "export {};\n" }, ["panels/dev.paperboard.terminal/test/unit.test.ts"]).platform).toBe(false);
+        // its other tests aren't what the suite runs
+        expect(scope({ ...files, "panels/dev.paperboard.terminal/test/unit.test.ts": "export {};\n" }, ["panels/dev.paperboard.terminal/test/unit.test.ts"])).toEqual({ targets: ["global", "terminal"], platform: false });
         // the suite itself reruns its part, where Linux runs it, and the runners
         expect(scope(files, ["panels/dev.paperboard.terminal/test/platform/pty.test.ts"])).toEqual({ targets: ["global", "terminal"], platform: true });
         expect(scope(files, ["services/origami/src/index.ts"]).platform).toBe(false);

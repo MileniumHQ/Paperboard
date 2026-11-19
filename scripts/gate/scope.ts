@@ -77,8 +77,8 @@ const SCANNED = /\.(ts|tsx|mts|cts|js|mjs|cjs|json|jsonc|toml|ya?ml|sh|html|css)
 const RELATIVE = /["'`](\.{1,2}\/[^"'`\s$]*)["'`]/g;
 const REPO_PATH = /["'`]((?:apps|packages|panels|services|scripts)\/[^"'`\s$]+)["'`]/g;
 const SEGMENTED = /["'`](?:apps|packages|panels|services|scripts)["'`](?:\s*,\s*["'`][\w.@-]+["'`])+/g;
-/** a package specifier's name: `@scope/name` or `name`, before any subpath */
-const PACKAGE = /["'`]((?:@[\w.-]+\/)?[\w.-]+)(?:\/[^"'`\s]*)?["'`]/g;
+/** an imported package's name (`@scope/name` or `name`, before any subpath): `from "x"`, `import "x"`, `import("x")`, `require("x")` */
+const PACKAGE = /(?:\bfrom|\bimport|\bimport\s*\(|\brequire\s*\()\s*["'`]((?:@[\w.-]+\/)?[\w.-]+)(?:\/[^"'`\s]*)?["'`]/g;
 
 export interface Scope {
     /** gate targets, sorted; empty when nothing a target owns changed */
@@ -99,13 +99,29 @@ export interface Node {
     target: string;
     /** a test/platform folder: reaching it also starts the cross-platform runners */
     platform?: true;
+    /** the files the part's own build runs (package.json's build, prepare, prepack), which ship wherever they sit */
+    builds?: Set<string>;
+}
+
+const BUILD_SCRIPTS = ["build", "prepare", "prepack", "prepublishOnly"];
+
+/** the files a part's package.json has its build run: `bun scripts/x.ts`, `node ./y.mjs`, `bash z.sh` */
+function buildsOf(repo: Repo, dir: string): Set<string> | undefined {
+    const manifest = `${dir}/package.json`;
+    if (!repo.files.includes(manifest)) return undefined;
+    const { scripts = {} } = JSON.parse(repo.read(manifest)) as { scripts?: Record<string, string> };
+    const run = new Set<string>();
+    for (const name of BUILD_SCRIPTS) {
+        for (const m of String(scripts[name] ?? "").matchAll(/(?:^|\s)(?:\.\/)?([\w./-]+\.(?:ts|mts|js|mjs|cjs|sh))(?=\s|$)/g)) run.add(posix.join(dir, m[1]!));
+    }
+    return run;
 }
 
 export function nodesOf(repo: Repo): Node[] {
-    const nodes: Node[] = Object.entries(TARGET_DIRS).map(([target, dir]) => ({ dir, target }));
+    const nodes: Node[] = Object.entries(TARGET_DIRS).map(([target, dir]) => ({ dir, target, builds: buildsOf(repo, dir) }));
     for (const f of repo.files) if (isScriptFile(f)) nodes.push({ dir: f, target: "scripts" });
     const panels = new Set(repo.files.filter((f) => /^panels\/[^/]+\/package\.json$/.test(f)).map((f) => f.split("/")[1]!));
-    for (const panel of panels) nodes.push({ dir: `panels/${panel}`, target: panel.replace(/^dev\.paperboard\./, "") });
+    for (const panel of panels) nodes.push({ dir: `panels/${panel}`, target: panel.replace(/^dev\.paperboard\./, ""), builds: buildsOf(repo, `panels/${panel}`) });
     // the longest folder wins, so services/library is not services/
     nodes.sort((a, b) => b.dir.length - a.dir.length);
     const suites = new Set(repo.files.map((f) => f.match(/^(.+?\/tests?\/platform)\//)?.[1]).filter((d): d is string => d !== undefined));
@@ -124,17 +140,24 @@ function ownerOf(nodes: Node[], path: string): Node | undefined {
 }
 
 /**
- * A file is private to its part when only that part's own checks run it: its
- * tests and fixtures, its configs, its scripts, its docs. The rest is what
- * other parts consume. A private reference reruns the part that makes it; a
- * public one also reruns every part that consumes that part's code.
+ * A file is private to its part when only that part's own checks and tools
+ * use it: its tests, their fixtures and configs, its scripts/ and dev/
+ * tooling (but a script its build runs). Everything else can shape what
+ * other parts get (a build config, a README that is a store listing or ships
+ * in the package), so it is public unless it is surely not: a wrong
+ * private skips a target a change can break, a wrong public only runs one
+ * more. A private reference reruns the part that makes it; a public one also
+ * reruns every part that consumes that part's code.
  */
 export function isPrivate(node: Node, file: string): boolean {
     if (node.platform) return true;
-    if (isScriptFile(node.dir)) return /\.test\.[a-z]+$/.test(file);
-    const inside = file.slice(node.dir.length + 1);
-    if (!inside.includes("/")) return !/^(index|main)\.[a-z]+$/.test(inside) && inside !== "package.json";
-    return /(^|\/)(tests?|__tests__|fixtures|scripts|dev)\//.test(inside) || /\.(test|spec)\.[a-z]+$/.test(inside);
+    if (node.builds?.has(file)) return false;
+    const inside = file.slice(node.dir.length + 1) || posix.basename(file);
+    return (
+        /(^|\/)(tests?|__tests__|fixtures|scripts|dev)\//.test(inside) ||
+        /\.(test|spec)\.[a-z]+$/.test(inside) ||
+        /(^|\/)(vitest|playwright)\.config\.[a-z]+$/.test(inside)
+    );
 }
 
 /** a value a join can be built from: a repo path ("" is the root), a literal segment, or nothing known */
@@ -265,9 +288,13 @@ export function incomingEdges(repo: Repo, nodes: Node[]): Map<Node, Edge[]> {
     const intoFolder = (from: Node, fromPublic: boolean, dir: string) => {
         for (const n of nodes) if (!n.platform && under(n.dir, dir)) add(from, fromPublic, n, false, dir);
     };
+    /** each file's references to other files, for what an edge to a file covers */
+    const refs = new Map<string, Set<string>>();
+    let scanning = "";
     const point = (from: Node, fromPublic: boolean, path: string) => {
         const found = resolve(path);
         if (found === undefined || isGateTooling(found)) return;
+        if (tracked.has(found)) refs.set(scanning, (refs.get(scanning) ?? new Set()).add(found));
         const to = ownerOf(nodes, found);
         if (!to) return dirs.has(found) ? intoFolder(from, fromPublic, found) : undefined;
         // a part's own folder named whole is a place (a cwd, an output folder), not its code
@@ -336,10 +363,33 @@ export function incomingEdges(repo: Repo, nodes: Node[]): Map<Node, Edge[]> {
         const from = ownerOf(nodes, file)!;
         const fromPublic = !isPrivate(from, file);
         const dir = posix.dirname(file);
+        scanning = file;
         for (const j of joinsIn(file, text, exported)) (j.rest ? pointUnder : point)(from, fromPublic, j.path);
         for (const m of text.matchAll(RELATIVE)) point(from, fromPublic, posix.normalize(posix.join(dir, m[1]!)).replace(/\/$/, ""));
         for (const m of text.matchAll(REPO_PATH)) point(from, fromPublic, m[1]!.replace(/\/$/, ""));
         for (const m of text.matchAll(SEGMENTED)) point(from, fromPublic, [...m[0].matchAll(/["'`]([\w.@-]+)["'`]/g)].map((q) => q[1]).join("/"));
+    }
+
+    // An edge to one private file covers what that file uses, transitively:
+    // a consumer that compiles a part's test helper compiles its imports too,
+    // in that part or another, by path or by package.
+    for (const edges of [...incoming.values()]) {
+        for (const e of [...edges]) {
+            if (e.toPublic || !e.at || !tracked.has(e.at)) continue;
+            const seen = new Set([e.at]);
+            const queue = [e.at];
+            while (queue.length) {
+                const f = queue.shift()!;
+                for (const name of imported.get(f) ?? []) add(e.from, e.fromPublic, byName.get(name)!, true);
+                for (const g of refs.get(f) ?? []) {
+                    if (seen.has(g)) continue;
+                    seen.add(g);
+                    queue.push(g);
+                    const owner = ownerOf(nodes, g);
+                    if (owner) add(e.from, e.fromPublic, owner, !isPrivate(owner, g), g);
+                }
+            }
+        }
     }
     return incoming;
 }
@@ -408,7 +458,11 @@ export function routesOf(repo: Repo, changed: string[], base: Repo = repo): Map<
 }
 
 export function scopeOf(repo: Repo, changed: string[], base: Repo = repo): Scope {
-    const routes = routesOf(repo, changed, base);
+    return scopeOfRoutes(routesOf(repo, changed, base));
+}
+
+/** the scope that routes make: their targets, and whether one reaches a cross-platform suite */
+function scopeOfRoutes(routes: Map<string, string[]>): Scope {
     return { targets: [...routes.keys()].filter((t) => t !== PLATFORM).sort(), platform: routes.has(PLATFORM) };
 }
 
@@ -482,9 +536,10 @@ if (import.meta.main) {
         process.exit(2);
     }
     const repo = workingRepo();
-    const scope: Scope = all ? { targets: allTargets(repo), platform: true } : scopeOf(repo, changedSince(base), baseRepo(repo, base));
+    const routes = all ? undefined : routesOf(repo, changedSince(base), baseRepo(repo, base));
+    const scope: Scope = routes ? scopeOfRoutes(routes) : { targets: allTargets(repo), platform: true };
     if (why) {
-        const route = routesOf(repo, changedSince(base), baseRepo(repo, base)).get(why);
+        const route = routes!.get(why);
         if (!route) {
             console.log(`Nothing changed since ${base} reaches ${why}.`);
         } else {

@@ -25,7 +25,8 @@ terminal runs because:
 - **A join that goes on with something unknown** (a loop over panel ids) reaches everything under the folder it got to: `join(REPO_DIR, "panels", id)` reaches every panel. A join from a folder that isn't the repo (a data or temp folder) is no reference.
 - **A package is public or private by who imports it.** Imported from a part's shipped code, its changes go on to that part's consumers, whichever list in `package.json` names it. Imported only from tests, or from no file, it reruns only that part.
 - **Both sides count.** The graph is read from the branch and from the `main` it left, so deleting or moving a file still reruns the parts that used it.
-- **Tests stay home.** A part's tests, fixtures, scripts and configs are its own. Changing them reruns only that part (plus another part whose tests point at that exact file, or at its folder).
+- **Tests stay home.** A part's tests, their fixtures and configs, and its `scripts/` and `dev/` tooling are its own: changing them reruns only that part, plus another part that points at that file (and so at everything the file uses) or at its folder. A script the part's `build` runs is no tool: it ships.
+- **Everything else ships**, build configs and READMEs included: a README can be the store listing, and configs shape what consumers get. When in doubt a file is public, since a wrong private skips a target a change can break.
 - **The cross-platform runners start only when a change reaches a `test/platform` suite:** the part's own code, or what the suite points at. The app's boot test builds every panel from `panels/`, so any panel change starts them, its README included.
 - **Each file in `scripts/` counts on its own**, so using one script doesn't tie you to all of them.
 - **Some files rerun everything:** `bun.lock`, the root `package.json`, `scripts/gate/` and the gate workflow.
