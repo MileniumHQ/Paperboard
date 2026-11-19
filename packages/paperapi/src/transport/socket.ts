@@ -47,6 +47,11 @@ const adapt: { [E in keyof SocketEvents]: (cb: SocketEvents[E], url: string) => 
 };
 
 export async function webSocketImpl(withHeaders = false): Promise<SocketConstructor> {
+    const Socket = await runtimeWebSocket(withHeaders);
+    return "Bun" in globalThis ? afterEachRead(Socket) : Socket;
+}
+
+async function runtimeWebSocket(withHeaders: boolean): Promise<SocketConstructor> {
     if (!withHeaders && typeof globalThis.WebSocket !== "undefined") {
         // Adapt native events to the ws-package shape
         return class NativeAdapter implements TransportSocket {
@@ -78,4 +83,32 @@ export async function webSocketImpl(withHeaders = false): Promise<SocketConstruc
     }
     const mod = await import(/* @vite-ignore */ "ws");
     return mod.default ?? mod.WebSocket ?? mod;
+}
+
+// Bun's WebSocket client (its own and the "ws" module it stands in with)
+// parses a read with its place in it on the stack. A listener that runs the
+// event loop meanwhile (bun:test's expect().rejects, Bun.build with a plugin)
+// has it read the socket again from a stale place, and it drops a healthy
+// connection with 1002 (oven-sh/bun#48524). So each event is heard once the
+// read that brought it is done; setImmediate keeps them in the order they came.
+function afterEachRead(Socket: SocketConstructor): SocketConstructor {
+    return class AfterEachRead implements TransportSocket {
+        private _socket: TransportSocket;
+        constructor(url: string, options?: { headers?: Record<string, string> }) {
+            this._socket = options ? new Socket(url, options) : new Socket(url);
+        }
+        get readyState() {
+            return this._socket.readyState;
+        }
+        send(data: string) {
+            this._socket.send(data);
+        }
+        close() {
+            this._socket.close();
+        }
+        on<E extends keyof SocketEvents>(event: E, cb: SocketEvents[E]) {
+            const heard = cb as (...args: unknown[]) => void;
+            this._socket.on(event, ((...args: unknown[]) => setImmediate(() => heard(...args))) as SocketEvents[E]);
+        }
+    };
 }
