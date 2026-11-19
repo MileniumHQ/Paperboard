@@ -252,6 +252,20 @@ describe("a running server's Overview at the narrowest window", () => {
         }
     }, 90_000);
 
+    test("at the narrowest window the setup wizard's Server Software step scrolls in one place, not two side by side", async () => {
+        const served = await setUp(await freePort());
+        const page = await openPage(`${served.url}/?server=${NEW}`, NARROWEST);
+        try {
+            await page.waitFor(`${text("Server Software")} && ${text("Forge")}`, "the wizard's first step");
+            await page.settled();
+            const scrollers = await page.evaluate<number>(`[...document.querySelectorAll("*")].filter((el) => { const y = getComputedStyle(el).overflowY; return (y === "auto" || y === "scroll") && el.scrollHeight > el.clientHeight + 1; }).length`);
+            expect(scrollers).toBe(1);
+        } finally {
+            await page.close();
+            served.stop();
+        }
+    }, 90_000);
+
     test("on a phone the setup wizard starts at the top and its list is whole, in one scroll", async () => {
         const served = await setUp(await freePort());
         const page = await openPage(`${served.url}/?server=${NEW}`);
