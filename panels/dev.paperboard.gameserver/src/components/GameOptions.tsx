@@ -56,8 +56,8 @@ export function GameOptionControl(props: {
             const shown = () => draft() ?? String(props.value ?? "");
             const valid = (raw: string) => raw.trim() !== "" && fitsNumber(field("number"), Number(raw));
             return (
-                // every number field is as wide as a menu, whatever its range
-                <PaperFlex width="field">
+                // every field typed into shares one width, whatever it holds
+                <PaperFlex width="field-wide">
                     <PaperInput
                         fullWidth
                         type="number"
@@ -108,20 +108,23 @@ export function GameOptionControl(props: {
             const [draft, setDraft] = createSignal("");
             return (
                 <PaperFlex direction="row" gap="half" align="center">
-                    <PaperInput
-                        type="password"
-                        placeholder={secretPlaceholder(field("secret").noun ?? "password", props.secretStored)}
-                        disabled={props.disabled}
-                        value={draft()}
-                        onInput={(e) => setDraft(e.currentTarget.value)}
-                        onKeyDown={commitOnEnter}
-                        onBlur={() => {
-                            const typed = draft();
-                            if (!typed) return;
-                            setDraft("");
-                            props.onChange(typed);
-                        }}
-                    />
+                    <PaperFlex width="field-wide">
+                        <PaperInput
+                            fullWidth
+                            type="password"
+                            placeholder={secretPlaceholder(field("secret").noun ?? "password", props.secretStored)}
+                            disabled={props.disabled}
+                            value={draft()}
+                            onInput={(e) => setDraft(e.currentTarget.value)}
+                            onKeyDown={commitOnEnter}
+                            onBlur={() => {
+                                const typed = draft();
+                                if (!typed) return;
+                                setDraft("");
+                                props.onChange(typed);
+                            }}
+                        />
+                    </PaperFlex>
                     <Show when={props.secretStored}>
                         <PaperButton size="tiny" disabled={props.disabled} onClick={() => props.onChange("")}>Remove</PaperButton>
                     </Show>

@@ -87,7 +87,8 @@ export function FieldControl(props: {
                 return false;
             };
             return (
-                <PaperFlex width="field">
+                // every field typed into shares one width, whatever it holds
+                <PaperFlex width="field-wide">
                     <PaperInput
                         fullWidth
                         type="number"
