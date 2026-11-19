@@ -69,6 +69,12 @@ export function relayEvents(on: On, session: RelayTarget): void {
         session.emit("on-guild-left", { guildId: guild.id, guildName: guild.name ?? "" });
     });
     on("guildUpdate", () => session.changed());
+    // the bot's own new name or picture: what the home screen keeps of it
+    // (an avatar's address carries its hash, so a new picture is a new
+    // address and is fetched afresh). Other users' updates aren't the bot's
+    on("userUpdate", (_old, user) => {
+        if (user.id === user.client.user?.id) session.changed();
+    });
 
     on("channelCreate", (channel) => {
         session.changed();
