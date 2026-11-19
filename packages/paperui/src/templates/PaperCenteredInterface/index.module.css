@@ -6,11 +6,18 @@
     justify-content: center;
 }
 
+/* never taller than the space it is centred in: it scrolls its own content.
+   Taller, centring would push its top above the space, where no scroll
+   reaches it, so a short window would open it partway down. */
 .interfaceWrapper {
     width: var(--paper-size-panel);
     height: var(--paper-size-panel-height);
+    max-height: 100%;
     overflow: auto;
     padding: var(--paper-uigap);
+    /* its padding is inside its size: a wrapper as tall as its parent fits
+       it, and scrolls alone, instead of overflowing into a second scroll */
+    box-sizing: border-box;
 }
 
 .small > .interfaceWrapper,

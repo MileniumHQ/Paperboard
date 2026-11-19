@@ -34,7 +34,9 @@
 
 /* standalone: the list is its own card beside other content. Its border
    frames every row and label, its corners are rounded, and it clips the rows'
-   square surfaces and their outlines to that edge. It sizes to its rows and
+   square surfaces and their outlines to that edge. Its labels sit on a card's
+   surface, not the inset well a sidebar list is: in dark the well is below
+   the canvas, a black band inside a card. It sizes to its rows and
    keeps that size in a column: the clipping zeroes its auto min-size, so
    without flex-shrink: 0 a scrolling column would crush it. */
 .PaperList.standalone {
@@ -45,6 +47,7 @@
     border: var(--paper-border-width) solid var(--paper-border);
     border-radius: var(--paper-border-radius);
     overflow: hidden;
+    background: var(--paper-surface);
 }
 
 /* A scrollable list owns the overflow on its own axis and scrolls; it must

@@ -150,7 +150,8 @@ export function Example() {
                 <li>The outer element is 100% wide and tall and centers the box on both axes. In a parent with no height it collapses to its content.</li>
                 <li>The box has <PaperCode>12px</PaperCode> padding (<PaperCode>--paper-uigap</PaperCode>), no surface and no border. Draw the surface yourself, such as a <PaperLink href="/docs/paperui/papercard/">PaperCard</PaperLink> with <PaperCode>fullHeight</PaperCode>.</li>
                 <li>The box content scrolls (<PaperCode>overflow: auto</PaperCode>) when it is taller or wider than the box.</li>
-                <li>Fixed presets do not shrink below their size. In a window narrower than the box, the box overflows the parent. Use <PaperCode>full</PaperCode> or <PaperCode>auto</PaperCode> where the window can be narrow.</li>
+                <li>A fixed preset is never taller than its parent: in a shorter window the box takes the parent's height and scrolls, so its top always shows.</li>
+                <li>Fixed presets do not shrink below their width. In a window narrower than the box, the box overflows the parent. Use <PaperCode>full</PaperCode> or <PaperCode>auto</PaperCode> where the window can be narrow.</li>
                 <li>The chosen preset is written to <PaperCode>data-preset</PaperCode> on the outer element.</li>
             </PaperTextList>
 

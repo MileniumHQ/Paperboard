@@ -69,6 +69,31 @@ describe("the setup guide", () => {
             served.stop();
         }
     });
+    test("opens at its top in a short window, with the first step's title in view", async () => {
+        await savedBots([]);
+        await startService({ discordApi: discord.api });
+        const served = await servePanel();
+        const page = await browser.open(served.url);
+        try {
+            await page.resize(680, 510);
+            await page.waitFor(`document.body.innerText.includes("Make an application") && [...document.querySelectorAll("img")].every((img) => img.complete)`, "the guide");
+            await page.motionSettled();
+            // the title is below the guide's own header, not cut off above where any scroll reaches
+            const placed = await page.evaluate<{ title: number; header: number; hidden: boolean }>(`(() => {
+                const title = [...document.querySelectorAll("[data-preset=title]")].find((el) => el.innerText === "Make an application");
+                const header = [...document.querySelectorAll("[data-preset=subheader]")].find((el) => el.innerText === "Set up your first bot");
+                const box = title.getBoundingClientRect();
+                return { title: Math.round(box.top), header: Math.round(header.getBoundingClientRect().bottom), hidden: document.elementFromPoint(box.left + 4, box.top + box.height / 2) !== title && !title.contains(document.elementFromPoint(box.left + 4, box.top + box.height / 2)) };
+            })()`);
+            expect(placed.title).toBeGreaterThanOrEqual(placed.header);
+            expect(placed.hidden).toBe(false);
+            expect(page.exceptions).toEqual([]);
+        } finally {
+            await page.close();
+            served.stop();
+        }
+    });
+
     test("sits in a centred column, not edge to edge, on a wide panel and on a phone", async () => {
         await savedBots([]);
         await startService({ discordApi: discord.api });

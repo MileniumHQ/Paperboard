@@ -180,7 +180,7 @@ export function Example() {
                         <td><PaperCode>standalone</PaperCode></td>
                         <td><PaperCode>boolean</PaperCode></td>
                         <td>No default (off)</td>
-                        <td>The list is its own card: full width, as tall as its rows, with a border on every side, rounded corners, and its labels and rows clipped to them. Use it for a list that shares its container with other content.</td>
+                        <td>The list is its own card: full width, as tall as its rows, with a border on every side, rounded corners, and its labels and rows clipped to them. Its labels sit on the card surface, not the inset well of a sidebar list. Use it for a list that shares its container with other content.</td>
                     </tr>
                     <tr>
                         <td><PaperCode>fullWidth</PaperCode></td>
