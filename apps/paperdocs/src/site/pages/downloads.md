@@ -8,6 +8,12 @@ The desktop app. Includes the server daemon for this computer.
 - Linux deb (Debian, Ubuntu): [x64](https://i.paperboard.dev/pb/latest/paperboard-linux-x64.deb) · [ARM64](https://i.paperboard.dev/pb/latest/paperboard-linux-arm64.deb)
 - Linux rpm (Fedora, openSUSE): [x64](https://i.paperboard.dev/pb/latest/paperboard-linux-x64.rpm) · [ARM64](https://i.paperboard.dev/pb/latest/paperboard-linux-arm64.rpm)
 
+Installed from the deb or rpm, Paperboard updates itself like any other install.
+
+## From a terminal
+
+On Linux and macOS, run `curl -fsSL https://i.paperboard.dev | sh`. On Windows, run `irm https://i.paperboard.dev | iex` in PowerShell. With Node, run `npx @mileniumhq/paperboard`, which opens Paperboard and asks first if it isn't installed yet. The install script checks the download against the release's checksums before it installs.
+
 ## Paperboard server daemon
 
 For a headless computer you want to manage from Paperboard on another device.

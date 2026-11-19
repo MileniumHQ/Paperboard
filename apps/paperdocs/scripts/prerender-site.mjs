@@ -213,7 +213,7 @@ for (const path of paths) {
     if (page.landing) {
         // The landing's link contents come from the shared nav source; a build
         // that drops them means the Solid port drifted from src/site/links.ts.
-        for (const href of ["/actions", "/docs/paperapi/", "/downloads"]) {
+        for (const href of ["/blocks", "/docs/paperapi/", "/downloads"]) {
             if (!page.html.includes(`href="${href}"`)) {
                 throw new Error(
                     `paperdocs: landing is missing the ${href} link`,

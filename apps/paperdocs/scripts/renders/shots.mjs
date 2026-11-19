@@ -20,7 +20,7 @@ export const SHOTS = [
         height: 1700,
         yaw: 22,
         pitch: 16,
-        items: [{ model: "laptop", screen: "/public/screens/agents-1.png" }],
+        items: [{ model: "laptop", screen: "/public/screens/agents-5.png" }],
     },
     {
         name: "mini-pc",
@@ -47,6 +47,6 @@ export const SHOTS = [
         height: 1700,
         yaw: 22,
         pitch: 12,
-        items: [{ model: "battlestation", screen: "/public/screens/gameserver-1.png" }],
+        items: [{ model: "battlestation", screen: "/public/screens/gameserver-servers.png" }],
     },
 ];

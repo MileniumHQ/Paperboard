@@ -16,23 +16,25 @@ const notice = (html) => {
 };
 function assertNotice(name, html, { owners, absent = [] }) {
     const legal = notice(html);
+    // A page that names no third-party product carries no notice at all.
+    if (!owners.length) return assert.equal(legal, "", `${name} names no third-party product, so it has no notice`);
     assert.ok(!legal.includes(".."), `${name}'s notice must not double a full stop`);
     assert.ok(legal.includes(INDEPENDENT), `${name} must say Paperboard is independent`);
     for (const owner of owners) assert.ok(legal.includes(owner), `${name} must disclaim ${owner}`);
     for (const owner of absent) assert.ok(!legal.includes(owner), `${name} names no ${owner} product, so it must not disclaim one`);
 }
 const NOTICES = {
-    landing: { owners: ["Mojang Studios, Microsoft, Re-Logic, Pocketpair, Valve, or Discord Inc."], absent: ["Anthropic", "Rinth, Inc."] },
-    "game-server": { owners: ["Mojang Studios", "Re-Logic", "Pocketpair", "Valve", "Rinth, Inc."], absent: ["Discord Inc.", "Anthropic"] },
+    landing: { owners: ["Mojang Studios, Microsoft, Re-Logic, Pocketpair, Valve, Facepunch Studios, or Discord Inc."], absent: ["Anthropic", "Rinth, Inc."] },
+    "game-server": { owners: ["Mojang Studios", "Re-Logic", "Pocketpair", "Valve", "Facepunch Studios", "Rinth, Inc."], absent: ["Discord Inc.", "Anthropic"] },
     "bot-creator": { owners: ["Discord Inc."], absent: ["Mojang Studios", "Valve"] },
     agents: { owners: ["OpenAI", "Anthropic", "Anomaly"], absent: ["Valve", "Discord Inc."] },
-    actions: { owners: ["Discord Inc."], absent: ["Mojang Studios", "Valve"] },
+    blocks: { owners: [] },
 };
 
 const landing = flatten(await read("index.html"));
 assertNotice("the landing page", landing, NOTICES.landing);
 assert.ok(
-    landing.includes("Minecraft, Terraria, Palworld, Team Fortress 2, and Discord are trademarks of their respective owners."),
+    landing.includes("Minecraft, Terraria, Palworld, Team Fortress 2, Counter-Strike 2, Garry's Mod, Rust, and Discord are trademarks of their respective owners."),
     "the landing page must name the trademarks it disclaims",
 );
 
@@ -111,7 +113,7 @@ await assertImages("the landing", await read("index.html"));
     assert.ok(!sitemap.includes("https://paperboard.dev/ai/"), "/ai/ is not in the sitemap");
 }
 
-for (const slug of ["actions", "game-server", "bot-creator", "agents"]) {
+for (const slug of ["blocks", "game-server", "bot-creator", "agents"]) {
     const raw = await read(`${slug}/index.html`);
     assertElementsInHead(slug, raw);
     await assertImages(slug, raw);

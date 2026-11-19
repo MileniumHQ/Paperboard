@@ -34,7 +34,7 @@ function learnPanel(slug: string) {
     if (!panel) throw new Error(`paperdocs: the landing features ${slug}, which has no learn page`);
     return panel;
 }
-const LANDING_PANELS = ["agents", "game-server", "bot-creator", "actions"].map(learnPanel);
+const LANDING_PANELS = ["agents", "game-server", "bot-creator", "blocks"].map(learnPanel);
 
 // A panel's window spans three quarters of the column (see .panel-row in
 // style.css); on phones it takes the full width, its copy under it.
@@ -373,7 +373,8 @@ export function Landing() {
                             Paperboard is 100% compatible with macOS, Windows, and Linux on x86, and
                             macOS and Linux on ARM. You can run Paperboard on a VPS, an old laptop, or a
                             Raspberry Pi and control it as if it were running locally on your primary
-                            desktop.
+                            desktop. It works on your phone too, and it updates itself in the
+                            background.
                         </p>
                     </div>
                     <div class="device-map">

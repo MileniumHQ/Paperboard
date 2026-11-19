@@ -67,10 +67,10 @@ try {
             failures.push(`${response.status()} ${response.url()}`);
     });
     // each learn page's feature count, as src/site/learn/panels.ts lists them
-    const FEATURES = { "game-server": 5, "bot-creator": 4, agents: 4, actions: 3 };
+    const FEATURES = { "game-server": 6, "bot-creator": 4, agents: 6, blocks: 4 };
     const logoColors = new Set();
     const buttonShadows = new Set();
-    for (const slug of ["actions", "game-server", "bot-creator", "agents"]) {
+    for (const slug of ["blocks", "game-server", "bot-creator", "agents"]) {
         assert.equal((await page.goto(`${origin}/${slug}/`)).status(), 200);
         assert.equal(await page.locator("h1").count(), 1);
         assert.equal(await page.locator('link[rel="icon"]').getAttribute('href'), '/paperboard.png');
@@ -81,7 +81,7 @@ try {
         assert.equal(await page.locator("h1.marketing-heading, .learn-feature h2.marketing-heading, .learn-outro h2.marketing-heading").count(), FEATURES[slug] + 2, "a headline, one per feature, and the outro");
         assert.ok(!(await page.locator("main").innerText()).includes("—"));
         assert.ok(await page.locator(".learn-outro h2").evaluate(element => element.classList.contains("marketing-heading")));
-        assert.equal(await page.locator(".learn-outro h2 .marketing-heading-label").innerText(), `Get ${slug === "agents" ? "Agent" : slug === "game-server" ? "Game Server" : slug === "bot-creator" ? "Bot Creator" : "Actions"}`);
+        assert.equal(await page.locator(".learn-outro h2 .marketing-heading-label").innerText(), `Get ${slug === "agents" ? "Agent" : slug === "game-server" ? "Game Server" : slug === "bot-creator" ? "Bot Creator" : "Blocks"}`);
         assert.ok(await page.locator(".learn-feature-copy").evaluateAll(elements => elements.every(element => getComputedStyle(element).textAlign === "center")));
         assert.ok(await page.locator(".site-topbar__trigger, .site-topbar__link").evaluateAll(elements => elements.every(element => {
             const canvas = document.createElement("canvas"); canvas.width = canvas.height = 1;
@@ -278,7 +278,7 @@ try {
     assert.equal(await page.locator("canvas").count(), 0, "The landing must not draw with WebGL");
     assert.deepEqual(
         await page.locator(".panel-row-button paper-button").evaluateAll(links => links.map(link => link.getAttribute("href"))),
-        ["/agents/", "/game-server/", "/bot-creator/", "/actions/"],
+        ["/agents/", "/game-server/", "/bot-creator/", "/blocks/"],
         "The landing walks through three panels, then the one that connects them, each linking to its page",
     );
     assert.deepEqual(
@@ -418,7 +418,7 @@ try {
     } finally { await calm.close(); }
     console.log("verified reduced motion keeps the outro icons still");
     await page.setViewportSize({ width: 390, height: 844 });
-    for (const slug of ["actions", "game-server", "bot-creator", "agents"]) {
+    for (const slug of ["blocks", "game-server", "bot-creator", "agents"]) {
         await page.goto(`${origin}/${slug}/`);
         assert.equal(
             await page.evaluate(() => document.documentElement.scrollWidth > innerWidth),
@@ -563,7 +563,7 @@ try {
     }
     console.log("verified marketing pages download each font face once");
     await page.emulateMedia({ reducedMotion: "reduce" });
-    await page.goto(`${origin}/actions/`);
+    await page.goto(`${origin}/blocks/`);
     assert.ok(
         await page.locator("[data-reveal]").evaluateAll(elements => elements.every(element => getComputedStyle(element).animationName === "none" && getComputedStyle(element).opacity === "1")),
         "Reduced motion shows every section without a reveal",

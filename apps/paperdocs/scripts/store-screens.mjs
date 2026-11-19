@@ -14,8 +14,8 @@ import { fileURLToPath } from "node:url";
 const PANELS = {
     "dev.paperboard.gameserver": "gameserver",
     "dev.paperboard.botcreator": "botcreator",
-    "dev.paperboard.actions": "actions",
     "dev.paperboard.agents": "agents",
+    "dev.paperboard.blocks": "blocks",
 };
 
 const site = resolve(dirname(fileURLToPath(import.meta.url)), "..");
