@@ -10,11 +10,23 @@ Almost all code here is written in TypeScript, CSS and SolidJS. I'll explain eve
 
 ## Definitions
 
-- **Paperboard** (`apps/paperboard`) is comprised of two parts internally: the server component/backend (which the code likes to call PaperCrane), and the frontend. The frontend displays the interfaces of any panels, while the backend runs their persistent code and lets them integrate deeper into the user's device through a WebSocket.
+The repo has four kinds of parts:
+
+- `apps/` are the programs Paperboard ships: the desktop app, the server daemon and the docs site.
+- `services/` are the Cloudflare Workers behind them.
+- `packages/` are the libraries, both published (PaperAPI, PaperUI, create-panel, the npx launcher) and internal (release, testkit).
+- `panels/` are the first-party panels. `scripts/` at the root holds the gate (`scripts/gate`), the release tooling (`scripts/publish`), the supervisor build (`scripts/build`) and setup (`scripts/dev`).
+
+- **Paperboard** (`apps/paperboard`) is the desktop app: the frontend that displays the interfaces of any panels. It runs the server daemon for its own computer inside it.
+- **The server daemon** (`apps/daemon`, which the code likes to call PaperCrane) runs panels' persistent code and lets them integrate deeper into the user's device through a WebSocket. It is built into the app, and compiled on its own for other computers. Its workload supervisor (`apps/daemon/supervisor`) is the one part written in Go.
 - **PaperAPI** (`packages/paperapi`) abstracts the WebSocket calls into basic functions that panels can use.
 - **PaperUI** (`packages/paperui`) provides a distinctive and unified design language for Paperboard UI. It's primarily components, with over 40 of them. It also includes tokens for spacing, fonts, and colors.
-- **Origami** (`services/origami`) is a Cloudflare Worker with a few jobs, as the backend server for Paperboard downloads. It currently includes the CDN for distributing Paperboard packaged binaries, the CDN and registry for distributing panels, and the URL index for external packages like Java.
 - **PaperDocs** (`apps/paperdocs`) is a Cloudflare Worker that serves the landing pages for Paperboard as well as the official docs and blog (soon). It contains the entire documentation for PaperAPI and PaperUI.
+- **Origami** (`services/origami`) is a Cloudflare Worker with a few jobs, as the backend server for Paperboard downloads. It currently includes the CDN for distributing Paperboard packaged binaries, the CDN and registry for distributing panels, and the URL index for external packages like Java.
+- **Library** (`services/library`) is the panel store, served by Origami as a web page and inside the app.
+- **Arilink** (`services/arilink`) is the pbd.lc short-link Worker, and **Panel APIs** (`services/panelapis`) the Worker for server-side APIs panels use (like mod search).
+- **npx** (`packages/npx`) is `npx @mileniumhq/paperboard`, which installs Paperboard or runs its server daemon.
+- **testkit** (`packages/testkit`) is the shared test harness: headless Chrome, a real compiled daemon, signed fixture releases.
 
 And of course, the panels:
 
@@ -34,7 +46,7 @@ cd Paperboard
 bun run setup
 ```
 
-`setup` installs every workspace's dependencies, fetches the Electron runtime binary (a one-time download of roughly 100 MB), builds the shared libraries, the workload supervisor (the one part written in Go) and the panels, and links the panels into your Paperboard install. After that, each project has its own README with dev and build instructions. For the app, that's [apps/paperboard](apps/paperboard/README.md).
+`setup` installs every workspace's dependencies, fetches the Electron runtime binary (a one-time download of roughly 100 MB), builds the shared libraries, the workload supervisor and the panels, and links the panels into your Paperboard install. After that, each project has its own README with dev and build instructions. For the app, that's [apps/paperboard](apps/paperboard/README.md).
 
 ## Agents & Contributing
 
