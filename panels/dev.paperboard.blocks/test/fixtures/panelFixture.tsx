@@ -230,6 +230,141 @@ async function layoutChecks() {
     return { alpha: alpha ?? 1, backdrop: getComputedStyle(panel).backdropFilter, wide, narrow, narrowOpened, back, collapsedNarrow, collapsedWide, reopened: look() };
 }
 
+/** The Paperboard window the bugs were seen in: narrow enough that the Library starts collapsed. */
+const SMALL = { width: 680, height: 510 };
+
+/** The fill an SVG element is painted with, as the page computes it. */
+const fillOf = (el: Element | null | undefined) => (el ? getComputedStyle(el).fill : "none");
+/** PaperUI's colour token, as the page computes it. */
+function tokenColour(name: string): string {
+    const probe = document.createElement("div");
+    probe.style.color = `var(${name})`;
+    document.body.append(probe);
+    const colour = getComputedStyle(probe).color;
+    probe.remove();
+    return colour;
+}
+
+/**
+ * A typed-in value's field and a value block's icon, in the theme shown: the
+ * field is PaperUI's field colour behind the theme's text, and an icon never
+ * takes the colour of what it sits on.
+ */
+function lookOfValues() {
+    const ws = canvas()!;
+    const fieldOf = (id: string) => {
+        const block = ws.getBlockById(id)!;
+        const field = block.getField(block.type === "math_number" ? "NUM" : "TEXT")!;
+        const group = field.getSvgRoot()!;
+        const rect = group.querySelector(":scope > rect");
+        return { fill: rect ? fillOf(rect) : fillOf(block.getSvgRoot().querySelector(":scope > .blocklyPath")), text: fillOf(group.querySelector("text")) };
+    };
+    const iconOf = (id: string) => {
+        const root = ws.getBlockById(id)!.getSvgRoot();
+        const icon = root.querySelector(":scope > g > text.paperBlockSymbol");
+        return { icon: fillOf(icon), behind: fillOf(root.querySelector(":scope > .blocklyPath")) };
+    };
+    return {
+        field: tokenColour("--paper-field"),
+        text: tokenColour("--paper-text"),
+        socket: fieldOf("look-socket"),
+        textBlock: { ...fieldOf("look-text"), ...iconOf("look-text") },
+        numberBlock: { ...fieldOf("look-number"), ...iconOf("look-number") },
+    };
+}
+
+/**
+ * Opening a project in a window narrow enough that the Library starts
+ * collapsed, with older runs in the console: the list stays hidden with the
+ * Library, the console opens with its newest lines whole under its header,
+ * values read in either theme and follow a switch, and the Section menu says
+ * the section chosen.
+ */
+async function lookChecks() {
+    await viewport(SMALL);
+    backButton()!.click();
+    await home();
+    (await until("the project's card", () => byText("*", "Serviced project")))!.click();
+    await until("the canvas", () => canvas());
+    // the Library's blocks have come in from the registry: the list has been filled
+    await until("the Library's list filled", () => canvas()!.getFlyout()!.getContents().length > 0);
+    await settle();
+    const flyout = canvas()!.getFlyout()!;
+    const libraryButton = byText("button", "Library")!.getBoundingClientRect();
+    const list = flyout.getWorkspace().getParentSvg();
+    const listBox = list.getBoundingClientRect();
+    const opened = {
+        listVisible: flyout.isVisible(),
+        listDisplay: getComputedStyle(list).display,
+        coversButton: getComputedStyle(list).display !== "none" && listBox.right > libraryButton.left && listBox.bottom > libraryButton.top,
+    };
+    // the console, scrolled to its newest line: the oldest row shown is whole under its header
+    const panel = document.querySelector('[title="Clear Console"]')!.closest<HTMLElement>('[class*="_panel_"]')!;
+    const header = panel.querySelector<HTMLElement>('[class*="_header_"]')!.getBoundingClientRect();
+    const body = panel.querySelector<HTMLElement>('[class*="_body_"]')!;
+    const shownTop = body.getBoundingClientRect().top;
+    const row = parseFloat(getComputedStyle(body).lineHeight);
+    const firstShown = [...body.querySelectorAll<HTMLElement>('[class*="_line_"]')].map((l) => l.getBoundingClientRect()).find((l) => l.bottom > shownTop)!;
+    const hidden = (shownTop - firstShown.top) % row;
+    const consoleLook = {
+        // how much of the row at the top is hidden, under the header or the body's edge
+        cutRow: Math.round(Math.min(hidden, row - hidden) * 10) / 10,
+        underHeader: Math.round(shownTop - header.bottom),
+        atEnd: Math.round(body.scrollHeight - body.scrollTop - body.clientHeight),
+    };
+    await fetch("/screenshot", { method: "POST", body: JSON.stringify({ name: "opened-small", ...SMALL }) });
+
+    // a value of each kind on the canvas: a text and a number block, and a socket's typed-in text
+    const ws = canvas()!;
+    Blockly.serialization.blocks.append({ type: "text", id: "look-text", x: 40, y: 200, fields: { TEXT: "" } }, ws);
+    Blockly.serialization.blocks.append({ type: "math_number", id: "look-number", x: 40, y: 260, fields: { NUM: 7 } }, ws);
+    Blockly.serialization.blocks.append({ type: BUILTIN.log, id: "look-log", x: 40, y: 320, inputs: { TEXT: { shadow: { type: "text", id: "look-socket", fields: { TEXT: "hi" } } } } }, ws);
+    await settle();
+    ws.centerOnBlock("look-number");
+    const themes: Record<string, unknown> = {};
+    for (const theme of ["light", "dark", "light"]) {
+        // switched while the project is open
+        document.documentElement.setAttribute("data-paperui-theme", theme);
+        await settle();
+        themes[`${Object.keys(themes).length}-${theme}`] = lookOfValues();
+        await fetch("/screenshot", { method: "POST", body: JSON.stringify({ name: `values-small-${Object.keys(themes).length}-${theme}`, ...SMALL }) });
+        await viewport(SMALL);
+        await settle();
+    }
+    document.documentElement.removeAttribute("data-paperui-theme");
+    for (const id of ["look-text", "look-number", "look-log"]) ws.getBlockById(id)!.dispose(false);
+
+    // the person opens the Library and jumps to a section: the menu says which
+    byText("button", "Library")!.click();
+    (await railItem("dev.paperboard.blocks")).click();
+    await settle();
+    const input = await until("the Section menu", () => document.querySelector<HTMLInputElement>('input[name="librarySectionJump"]'));
+    const trigger = input.parentElement!.querySelector<HTMLElement>("button")!;
+    const before = trigger.textContent ?? "";
+    trigger.click();
+    const options = await until("the sections", () => {
+        const all = [...document.querySelectorAll<HTMLElement>('[role="option"]')];
+        return all.length > 1 && all;
+    });
+    const chosen = options.at(-1)!.textContent!.trim();
+    options.at(-1)!.click();
+    await settle();
+    const section = { before, chosen, after: trigger.textContent ?? "", scrolled: canvas()!.getFlyout()!.getWorkspace().getMetricsManager().getViewMetrics(true).top > 0 };
+    // another category's list: the menu starts from no section again
+    (await railItem("Logic")).click();
+    await settle();
+    (await railItem("dev.paperboard.blocks")).click();
+    await settle();
+    const fresh = document.querySelector<HTMLInputElement>('input[name="librarySectionJump"]')!.parentElement!.querySelector("button")!.textContent ?? "";
+    // opened again as it was before, the Library as the window has it
+    await viewport(null);
+    backButton()!.click();
+    await home();
+    (await until("the project's card", () => byText("*", "Serviced project")))!.click();
+    await editing("Serviced project");
+    return { opened, console: consoleLook, themes, section: { ...section, fresh } };
+}
+
 /** The project list changes under the editor's Rename and Delete dialogs. */
 async function dialogChecks() {
     const menu = async (item: string) => {
@@ -674,6 +809,7 @@ async function run(): Promise<Record<string, unknown>> {
     await railItem("Flow");
     await settle();
     const consoleResult = await consoleChecks();
+    const look = await lookChecks();
     const layout = await layoutChecks();
     const dialogs = await dialogChecks();
     const library = await libraryChecks();
@@ -685,7 +821,7 @@ async function run(): Promise<Record<string, unknown>> {
     const opening = await openChecks();
     const unsavedWork = await unsavedChecks();
     const homeScreen = await homeChecks();
-    return { console: consoleResult, layout, dialogs, library, createVariable, toggle, refresh, loadFailure, leaving, opening, unsavedWork, home: homeScreen, uncaught: [...errors] };
+    return { console: consoleResult, look, layout, dialogs, library, createVariable, toggle, refresh, loadFailure, leaving, opening, unsavedWork, home: homeScreen, uncaught: [...errors] };
 }
 
 run()
