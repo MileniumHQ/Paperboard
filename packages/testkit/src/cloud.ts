@@ -58,6 +58,10 @@ export function fakeS3(bucket: string): FakeS3 {
 	return fake;
 }
 
+/** what a Drive upload request body says about the file; a folder create may leave out its parents */
+type DriveFileMeta = Pick<DriveFile, "name" | "mimeType" | "description" | "parents" | "appProperties">;
+type DriveCreateMeta = Omit<DriveFileMeta, "parents"> & Partial<Pick<DriveFile, "parents">>;
+
 interface DriveFile {
 	id: string;
 	account: string;
@@ -117,7 +121,7 @@ export function fakeDrive(): FakeDrive {
 		if (!who) return new Response("unauthorized", { status: 401 });
 		if (url.pathname === "/api/about") return Response.json({ storageQuota: { limit: "1000000000", usage: "1000" } });
 		if (url.pathname === "/api/files" && req.method === "POST") {
-			const meta = await req.json();
+			const meta = (await req.json()) as DriveCreateMeta;
 			const id = `f${next++}`;
 			files.set(id, { id, account: who, name: meta.name, mimeType: meta.mimeType, parents: meta.parents ?? [], appProperties: {}, trashed: false });
 			return Response.json({ id });
@@ -128,7 +132,7 @@ export function fakeDrive(): FakeDrive {
 			return Response.json({ files: found.map((f) => ({ id: f.id, description: f.description, size: String(f.content?.length ?? 0) })) });
 		}
 		if (url.pathname === "/upload/files" && req.method === "POST") {
-			const meta = await req.json();
+			const meta = (await req.json()) as DriveFileMeta;
 			const session = `s${next++}`;
 			sessions.set(session, { id: `f${next++}`, account: who, name: meta.name, mimeType: meta.mimeType, parents: meta.parents, description: meta.description, appProperties: meta.appProperties, trashed: false });
 			return new Response("", { headers: { location: `${server.url}/upload/session/${session}` } });

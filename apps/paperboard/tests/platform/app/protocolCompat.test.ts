@@ -8,7 +8,7 @@ import { DAEMON_CHALLENGE_HEADER, DAEMON_PROOF_TYPE, daemonProof } from "../../.
 import { PaperCraneClient } from "../../../src/main/communication/papercrane/PaperCraneClient";
 import { BUILD_TIMEOUT_MS, compileCrane, type BuiltCrane } from "./support/build";
 import { CraneSocket, startCrane, WAIT_MS } from "./support/crane";
-import { restoreEnv } from "../../daemon/support/fs";
+import { restoreEnv } from "testkit/fs";
 import { tempDataDir } from "./support/temp";
 
 // The previous release's wire contract, pinned. A new contract file is

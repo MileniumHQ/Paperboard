@@ -1,4 +1,4 @@
-// A real Paperboard daemon for the suite (scripts/testing/crane.ts), built
+// A real Paperboard daemon for the suite (packages/testkit/src/craneBinary.ts), built
 // from this checkout into a temp dir and started on a free loopback port with
 // the test process's throwaway PAPERBOARD_DIR (test/hermetic.ts) as its data
 // directory. paperapi in the test process then reads that directory's
@@ -8,7 +8,7 @@ import { setDefaultTimeout } from "bun:test";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { buildCrane, startCrane } from "../../../../scripts/testing/crane";
+import { buildCrane, startCrane } from "testkit/craneBinary";
 
 const ALLOWED = Symbol.for("paperboard.gameserver.test.daemonPorts");
 const DAEMON_BUILDS = Symbol.for("paperboard.gameserver.test.daemonBuilds");

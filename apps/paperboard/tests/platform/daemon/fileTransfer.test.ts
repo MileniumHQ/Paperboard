@@ -4,9 +4,9 @@ import * as net from "node:net";
 import * as path from "node:path";
 import { type DaemonEndpoint, type PanelFileTransferDeps, runPanelExport, runPanelImport } from "../../../src/main/panelFileTransfer";
 import { runPanelFileTransfer } from "../../../src/renderer/src/lib/panelFileTransfer";
-import { tempDir } from "../../daemon/support/fs";
+import { tempDir } from "testkit/fs";
 import { type InProcessDaemon, startDaemon } from "../../daemon/support/inproc";
-import { TEST_TIMEOUT_MS } from "../../daemon/support/wait";
+import { TEST_TIMEOUT_MS } from "testkit/wait";
 
 setDefaultTimeout(TEST_TIMEOUT_MS);
 

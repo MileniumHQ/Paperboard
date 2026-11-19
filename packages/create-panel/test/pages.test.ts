@@ -1,13 +1,13 @@
-// The starter's pages in a real browser (scripts/testing/chrome.ts), built
+// The starter's pages in a real browser (packages/testkit/src/chrome.ts), built
 // with the scaffolded panel's own vite config and served the way the shell
-// serves a panel (scripts/testing/panelUi.ts), over the real daemon. What a
+// serves a panel (packages/testkit/src/panelUi.ts), over the real daemon. What a
 // page couldn't load stays where the page is, with a way to try again,
 // never only in a toast that goes by itself.
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { rmSync } from "node:fs";
 import { getTransport } from "@mileniumhq/paperapi";
-import { launchChrome, type Chrome, type Page } from "../../../scripts/testing/chrome";
-import { PANEL_DOC, panelHostUrl, servePanelUi } from "../../../scripts/testing/panelUi";
+import { launchChrome, type Chrome, type Page } from "testkit/chrome";
+import { PANEL_DOC, panelHostUrl, servePanelUi } from "testkit/panelUi";
 import { scaffoldPanel } from "../src/scaffold";
 import { startDaemon, type Daemon } from "./helpers/daemon";
 import { linkDependencies, tempDir } from "./helpers/panel";

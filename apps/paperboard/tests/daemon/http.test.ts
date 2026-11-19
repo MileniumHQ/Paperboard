@@ -4,10 +4,10 @@ import * as http from "node:http";
 import * as net from "node:net";
 import * as path from "node:path";
 import { PANEL_TRAVERSAL_VECTORS, resolveLocalPanelFile } from "../../papercrane/panelAssets";
-import { listTree, tempDir } from "./support/fs";
+import { listTree, tempDir } from "testkit/fs";
 import { type InProcessDaemon, request, startDaemon, stopDaemon } from "./support/inproc";
-import { installPanelFiles } from "./support/panels";
-import { TEST_TIMEOUT_MS, waitFor } from "./support/wait";
+import { installPanelFiles } from "testkit/panels";
+import { TEST_TIMEOUT_MS, waitFor } from "testkit/wait";
 
 setDefaultTimeout(TEST_TIMEOUT_MS);
 

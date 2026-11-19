@@ -7,11 +7,11 @@ import { supervisorLaunch } from "../../../papercrane/supervisorLaunch";
 import { PaperCraneAuth } from "../../../papercrane/auth";
 import { PanelServicesManager } from "../../../papercrane/panelServices";
 import { WorkloadRegistry } from "../../../papercrane/engineWorkloads";
-import { killWorkloads, startCrane, workloadRecords, type CraneProcess } from "../../daemon/support/crane";
-import { dataDir, restoreEnv, tempDir } from "../../daemon/support/fs";
-import { installPanelFiles, serviceCall, serviceSource, stateRead } from "../../daemon/support/panels";
-import { Rpc } from "../../daemon/support/rpc";
-import { isAlive, TEST_TIMEOUT_MS, waitFor } from "../../daemon/support/wait";
+import { killWorkloads, startCrane, workloadRecords, type CraneProcess } from "testkit/crane";
+import { dataDir, restoreEnv, tempDir } from "testkit/fs";
+import { installPanelFiles, serviceCall, serviceSource, stateRead } from "testkit/panels";
+import { Rpc } from "testkit/rpc";
+import { isAlive, TEST_TIMEOUT_MS, waitFor } from "testkit/wait";
 
 setDefaultTimeout(TEST_TIMEOUT_MS);
 

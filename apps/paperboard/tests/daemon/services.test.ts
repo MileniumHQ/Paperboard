@@ -1,10 +1,10 @@
 import { afterAll, describe, expect, setDefaultTimeout, test } from "bun:test";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { dataDir, tempDir } from "./support/fs";
+import { dataDir, tempDir } from "testkit/fs";
 import { startDaemon, type InProcessDaemon } from "./support/inproc";
-import { installPanelFiles, serviceSource } from "./support/panels";
-import { TEST_TIMEOUT_MS, waitFor } from "./support/wait";
+import { installPanelFiles, serviceSource } from "testkit/panels";
+import { TEST_TIMEOUT_MS, waitFor } from "testkit/wait";
 
 setDefaultTimeout(TEST_TIMEOUT_MS);
 

@@ -7,9 +7,9 @@ import * as path from "node:path";
 import worker from "origami";
 import { type PanelStorage, publishPanel } from "origami/panelPublish";
 import { packPanel } from "@mileniumhq/paperapi/pack";
-import { bundleService } from "./panels";
-import { signPanel } from "./release";
-import { tempDir } from "./fs";
+import { bundleService } from "testkit/panels";
+import { signPanel } from "testkit/release";
+import { tempDir } from "testkit/fs";
 
 export interface Origami {
 	url: string;

@@ -2,9 +2,9 @@ import { describe, expect, setDefaultTimeout, test } from "bun:test";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { getLogsDir, ensureDir } from "../../papercrane/paths";
-import { tempDir } from "./support/fs";
+import { tempDir } from "testkit/fs";
 import { startDaemon } from "./support/inproc";
-import { TEST_TIMEOUT_MS, waitFor } from "./support/wait";
+import { TEST_TIMEOUT_MS, waitFor } from "testkit/wait";
 
 setDefaultTimeout(TEST_TIMEOUT_MS);
 

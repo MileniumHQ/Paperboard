@@ -2,9 +2,9 @@ import { afterAll, describe, expect, setDefaultTimeout, test } from "bun:test";
 import * as crypto from "node:crypto";
 import { PaperCraneEngine } from "../../papercrane/engine";
 import { cancelGoogleSignIn, DRIVE_FILE_SCOPE, signInToGoogleDrive } from "../../src/main/googleOAuth";
-import { dataDir } from "./support/fs";
-import { serve } from "./support/release";
-import { TEST_TIMEOUT_MS } from "./support/wait";
+import { dataDir } from "testkit/fs";
+import { serve } from "testkit/release";
+import { TEST_TIMEOUT_MS } from "testkit/wait";
 
 setDefaultTimeout(TEST_TIMEOUT_MS);
 

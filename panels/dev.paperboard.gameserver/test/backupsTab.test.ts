@@ -7,7 +7,7 @@ import * as path from "node:path";
 import { backupApi, backupLocationsApi } from "@mileniumhq/paperapi";
 import { startTestDaemon, type TestDaemon } from "./helpers/crane";
 import { installPanel, restartService } from "./helpers/installedPanel";
-import { panelHostUrl, PANEL_DOC } from "../../../scripts/testing/panelUi";
+import { panelHostUrl, PANEL_DOC } from "testkit/panelUi";
 import { openPage, servePanel } from "./helpers/browser";
 import { writeTree } from "./helpers/tmp";
 import { PANEL_ID } from "../src/servers";

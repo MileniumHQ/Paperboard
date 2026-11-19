@@ -5,7 +5,7 @@
 import { afterAll, afterEach, beforeAll, describe, expect, setDefaultTimeout, test } from "bun:test";
 import { secretsApi } from "@mileniumhq/paperapi";
 import { tokenName, type BotsServiceState } from "../src/bots";
-import { widgetUrl } from "../../../scripts/testing/panelUi";
+import { widgetUrl } from "testkit/panelUi";
 import { panelBrowser, servePanel, type Page } from "./helpers/browser";
 import { guild, startFakeDiscord, type FakeDiscord } from "./helpers/discord";
 import { call, PANEL_ID, savedBots, startService, stopServices, storedBot } from "./helpers/service";

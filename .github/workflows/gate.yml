@@ -72,7 +72,7 @@ jobs:
           PAPERBOARD_GATE_PREBUILT: ${{ steps.libs.outputs.cache-hit == 'true' && 'paperapi paperui' || '' }}
         run: |
           case "${{ matrix.group }}" in
-            libraries) targets="packages paperapi paperui create-panel release npx scripts" ;;
+            libraries) targets="packages paperapi paperui create-panel release testkit npx scripts" ;;
             app) targets="paperboard" ;;
             panels) targets="agents blocks botcreator gameserver terminal" ;;
             web) targets="paperdocs origami library arilink panelapis global" ;;

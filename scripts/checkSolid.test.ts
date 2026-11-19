@@ -173,7 +173,7 @@ describe("the house rules flag each break, honour a reasoned quiet marker, and p
     });
 
     test("a relative import into another package, and the near misses: its own files, the repo root, a package by name", () => {
-        // a file of crane-launcher, by its place in this repository (the packages around it are real)
+        // a file of the npx launcher, by its place in this repository (the packages around it are real)
         const file = join(import.meta.dir, "..", "packages/npx/src/fixture.ts");
         const hits = (src: string) => checkSource(file, src).map((h) => `${h.line}:${h.rule}`);
         expect(
@@ -183,7 +183,7 @@ describe("the house rules flag each break, honour a reasoned quiet marker, and p
         ).toEqual(["1:cross-package-import", "2:cross-package-import", "3:cross-package-import", "4:cross-package-import"]);
         expect(
             hits(
-                `import { ensureCrane } from "./launcher";\nimport pkg from "../package.json";\nimport { openChrome } from "../../../scripts/testing/chrome";\nimport { semverGt } from "@mileniumhq/release";\n`,
+                `import { ensureCrane } from "./launcher";\nimport pkg from "../package.json";\nimport { ALL_TARGETS } from "../../../scripts/publishLib";\nimport { semverGt } from "@mileniumhq/release";\n`,
             ),
         ).toEqual([]);
     });

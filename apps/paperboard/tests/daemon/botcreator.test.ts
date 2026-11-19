@@ -1,12 +1,12 @@
 import { afterAll, beforeAll, describe, expect, setDefaultTimeout, test } from "bun:test";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { REPO_DIR } from "./support/crane";
-import { dataDir } from "./support/fs";
+import { REPO_DIR } from "testkit/crane";
+import { dataDir } from "testkit/fs";
 import { type InProcessDaemon, startDaemon } from "./support/inproc";
-import { serviceCall } from "./support/panels";
-import type { Rpc } from "./support/rpc";
-import { TEST_TIMEOUT_MS, waitFor } from "./support/wait";
+import { serviceCall } from "testkit/panels";
+import type { Rpc } from "testkit/rpc";
+import { TEST_TIMEOUT_MS, waitFor } from "testkit/wait";
 
 setDefaultTimeout(TEST_TIMEOUT_MS);
 

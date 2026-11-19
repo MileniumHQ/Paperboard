@@ -1,13 +1,13 @@
 // Runs one of the panel's browser fixtures (test/fixtures/*.html): a page of
 // the panel's own components, mounted with what they are handed in the page.
 // It bundles the page with Vite, serves it, opens it in headless Chrome
-// (scripts/testing/chrome.ts, which finds Chrome and says how to install it
+// (packages/testkit/src/chrome.ts, which finds Chrome and says how to install it
 // when there is none) and waits for the JSON the fixture posts back to
 // /result (fixtures/chatPage.tsx `report`).
 import { existsSync, mkdtempSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { openChrome, type Page } from "../../../scripts/testing/chrome";
+import { openChrome, type Page } from "testkit/chrome";
 import { allowTestPort } from "./hermetic";
 
 const panelDir = resolve(import.meta.dir, "..");

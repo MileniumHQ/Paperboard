@@ -7,11 +7,11 @@ import { S3BackupStore } from "../../papercrane/backups/s3Store";
 import { BACKUP_ARCHIVE_MAX_BYTES, newBackupId } from "../../papercrane/backups/types";
 import { CONFIG_MAX_BYTES, FILE_READ_MAX_BYTES } from "../../papercrane/engine";
 import { MAX_LIVE_CLIENTS, spawnSupervisedClient } from "../../papercrane/engineSupervisor";
-import { fakeDrive, fakeS3 } from "./support/cloud";
-import { tempDir } from "./support/fs";
+import { fakeDrive, fakeS3 } from "testkit/cloud";
+import { tempDir } from "testkit/fs";
 import { type InProcessDaemon, request, startDaemon } from "./support/inproc";
-import type { Rpc } from "./support/rpc";
-import { TEST_TIMEOUT_MS, waitFor } from "./support/wait";
+import type { Rpc } from "testkit/rpc";
+import { TEST_TIMEOUT_MS, waitFor } from "testkit/wait";
 
 setDefaultTimeout(TEST_TIMEOUT_MS);
 

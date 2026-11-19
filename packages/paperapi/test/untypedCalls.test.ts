@@ -14,7 +14,7 @@ const STILL_UNTYPED = [
     "apps/paperboard/dev/api-demo/src/panel.ts",
     "apps/paperboard/dev/widget-demo/src/panel.ts",
     "apps/paperboard/dev/widget-demo/src/widgets.ts",
-    "apps/paperboard/tests/daemon/support/panels.ts",
+    "packages/testkit/src/panels.ts",
     "apps/paperboard/tests/shell/support/problems-panel/src/panel.ts",
     "apps/paperboard/tests/shell/support/problems-panel/src/service.ts",
     "panels/dev.paperboard.actions/src/projects/state.ts",

@@ -1,5 +1,5 @@
 // The Agent panel as a person uses it: its real page, built with the panel's
-// own vite config, in headless Chrome (scripts/testing/chrome.ts), talking
+// own vite config, in headless Chrome (packages/testkit/src/chrome.ts), talking
 // to its real service (src/service.ts, in a process of its own) through a
 // real daemon in this test process, on the throwaway PAPERBOARD_DIR
 // test/hermetic.ts made. The service's PATH and HOME hold only what the test
@@ -17,7 +17,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { buildSupervisor } from "../../../../scripts/supervisor";
-import { openChrome, type Page } from "../../../../scripts/testing/chrome";
+import { openChrome, type Page } from "testkit/chrome";
 import { PANEL_ID, type ChatEntry, type Harness, type Settings } from "../../src/contract";
 import { History } from "../../src/service/history";
 import { TRANSCRIPT, Transcript } from "../../src/service/transcript";

@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, setDefaultTimeout, test } from "bun:test";
-import { TEST_TIMEOUT_MS } from "./support/wait";
+import { TEST_TIMEOUT_MS } from "testkit/wait";
 import { startDaemon, type InProcessDaemon } from "./support/inproc";
-import { Rpc } from "./support/rpc";
+import { Rpc } from "testkit/rpc";
 
 setDefaultTimeout(TEST_TIMEOUT_MS);
 

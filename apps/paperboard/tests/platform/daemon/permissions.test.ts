@@ -1,9 +1,9 @@
 import { afterAll, describe, expect, setDefaultTimeout, test } from "bun:test";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { killWorkloads, startCrane, workloadRecords, type CraneProcess } from "../../daemon/support/crane";
-import { dataDir, modeOf } from "../../daemon/support/fs";
-import { TEST_TIMEOUT_MS, waitFor } from "../../daemon/support/wait";
+import { killWorkloads, startCrane, workloadRecords, type CraneProcess } from "testkit/crane";
+import { dataDir, modeOf } from "testkit/fs";
+import { TEST_TIMEOUT_MS, waitFor } from "testkit/wait";
 
 setDefaultTimeout(TEST_TIMEOUT_MS);
 

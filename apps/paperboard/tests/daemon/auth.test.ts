@@ -3,11 +3,11 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { PaperCraneAuth, MAX_PAIRING_FAILURES } from "../../papercrane/auth";
 import { isPanelId } from "@mileniumhq/paperapi/panelIdentity";
-import { dataDir } from "./support/fs";
+import { dataDir } from "testkit/fs";
 import { request, startDaemon, stopDaemon } from "./support/inproc";
-import { installPanelFiles, serviceSource } from "./support/panels";
-import { Rpc } from "./support/rpc";
-import { TEST_TIMEOUT_MS, waitFor } from "./support/wait";
+import { installPanelFiles, serviceSource } from "testkit/panels";
+import { Rpc } from "testkit/rpc";
+import { TEST_TIMEOUT_MS, waitFor } from "testkit/wait";
 
 setDefaultTimeout(TEST_TIMEOUT_MS);
 

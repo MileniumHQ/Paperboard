@@ -1,4 +1,4 @@
-// The real Paperboard daemon for the suite (scripts/testing/crane.ts): the
+// The real Paperboard daemon for the suite (packages/testkit/src/craneBinary.ts): the
 // crane compiled from this checkout, in its own process, on a free loopback
 // port, over the throwaway PAPERBOARD_DIR test/hermetic.ts made. paperapi in
 // the test process finds it through that directory's crane.json and talks to
@@ -16,7 +16,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { getTransport } from "@mileniumhq/paperapi";
-import { buildCrane, startCrane } from "../../../../scripts/testing/crane";
+import { buildCrane, startCrane } from "testkit/craneBinary";
 
 const ALLOWED = Symbol.for("paperboard.botcreator.test.ports");
 const TEARDOWN = Symbol.for("paperboard.botcreator.test.teardown");

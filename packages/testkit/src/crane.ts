@@ -8,13 +8,13 @@
 import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { buildCrane } from "../../../../../scripts/testing/crane";
+import { buildCrane } from "./craneBinary";
 import { registerTestCleanup, tempDir } from "./fs";
 import { Rpc } from "./rpc";
 import { isAlive, waitFor, within } from "./wait";
 
-export const APP_DIR = path.resolve(import.meta.dir, "../../..");
-export const REPO_DIR = path.resolve(APP_DIR, "../..");
+export const APP_DIR = path.resolve(import.meta.dir, "../../../apps/paperboard");
+export const REPO_DIR = path.resolve(import.meta.dir, "../../..");
 
 let compiled: Promise<string> | null = null;
 

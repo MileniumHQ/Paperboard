@@ -20,6 +20,7 @@
         "@solidjs/testing-library": "^0.8.10",
         "@types/node": "^24.19.2",
         "jsdom": "^31.0.1",
+        "testkit": "workspace:*",
         "typescript": "~6.0.3",
         "vite": "^8.3.8",
         "vite-plugin-solid": "^2.11.16",

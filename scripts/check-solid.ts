@@ -88,9 +88,8 @@
 //  cross-package-import (packages talk through their entry points)
 //    A relative import, export, import() or require() whose target lies in
 //    another workspace package than the file: a package is the nearest
-//    folder with a package.json, and the repository root (its scripts and
-//    the shared test harness in scripts/testing) belongs to none, so reaching
-//    it, or reaching from it, is not flagged. Import the package by name, and
+//    folder with a package.json, and the repository root (its scripts)
+//    belongs to none, so reaching it, or reaching from it, is not flagged. Import the package by name, and
 //    add a real public need to its package.json "exports". The files that
 //    still cross, outside the parts already moved, are KNOWN_CROSSINGS below;
 //    one that no longer crosses is a hit too, so the list only shrinks.

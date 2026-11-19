@@ -5,12 +5,12 @@ import { PaperCraneEngine } from "../../papercrane/engine";
 import { streamToFileWithProgress } from "../../papercrane/download";
 import { parsePackageRecipe, recipeDigest } from "@mileniumhq/release";
 import { RECORD_MAX_BYTES } from "../../papercrane/registryRecord";
-import { tar, tarGz, zip, type TarMember } from "./support/archive";
-import { killWorkloads, startCrane, workloadRecords } from "./support/crane";
-import { dataDir, listTree, modeOf, restoreEnv, tempDir } from "./support/fs";
+import { tar, tarGz, zip, type TarMember } from "testkit/archive";
+import { killWorkloads, startCrane, workloadRecords } from "testkit/crane";
+import { dataDir, listTree, modeOf, restoreEnv, tempDir } from "testkit/fs";
 import { startDaemon, stopDaemon } from "./support/inproc";
-import { FIXTURE_PUBLIC_KEY, serve, sha256, signPackage, type LoopbackServer } from "./support/release";
-import { TEST_TIMEOUT_MS, waitFor } from "./support/wait";
+import { FIXTURE_PUBLIC_KEY, serve, sha256, signPackage, type LoopbackServer } from "testkit/release";
+import { TEST_TIMEOUT_MS, waitFor } from "testkit/wait";
 
 setDefaultTimeout(TEST_TIMEOUT_MS);
 

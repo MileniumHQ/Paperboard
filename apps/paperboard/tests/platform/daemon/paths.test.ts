@@ -1,11 +1,11 @@
 import { afterAll, beforeAll, describe, expect, setDefaultTimeout, test } from "bun:test";
-import { TEST_TIMEOUT_MS } from "../../daemon/support/wait";
+import { TEST_TIMEOUT_MS } from "testkit/wait";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { PaperCraneEngine } from "../../../papercrane/engine";
-import { dataDir, listTree, tempDir } from "../../daemon/support/fs";
+import { dataDir, listTree, tempDir } from "testkit/fs";
 import { startDaemon, type InProcessDaemon } from "../../daemon/support/inproc";
-import type { Rpc } from "../../daemon/support/rpc";
+import type { Rpc } from "testkit/rpc";
 
 setDefaultTimeout(TEST_TIMEOUT_MS);
 

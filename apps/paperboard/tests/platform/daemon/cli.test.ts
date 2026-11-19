@@ -2,10 +2,10 @@ import { describe, expect, setDefaultTimeout, test } from "bun:test";
 import * as fs from "node:fs";
 import * as net from "node:net";
 import * as path from "node:path";
-import { APP_DIR, childEnv, craneBinary, runCrane, spawnChild, startCrane } from "../../daemon/support/crane";
-import { dataDir, tempDir } from "../../daemon/support/fs";
-import { Rpc } from "../../daemon/support/rpc";
-import { isAlive, TEST_TIMEOUT_MS, waitFor, within } from "../../daemon/support/wait";
+import { APP_DIR, childEnv, craneBinary, runCrane, spawnChild, startCrane } from "testkit/crane";
+import { dataDir, tempDir } from "testkit/fs";
+import { Rpc } from "testkit/rpc";
+import { isAlive, TEST_TIMEOUT_MS, waitFor, within } from "testkit/wait";
 
 setDefaultTimeout(TEST_TIMEOUT_MS);
 

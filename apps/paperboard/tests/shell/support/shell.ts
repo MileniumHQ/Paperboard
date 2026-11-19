@@ -23,8 +23,8 @@ import * as path from "node:path";
 import { createInterface } from "node:readline";
 import { setDefaultTimeout } from "bun:test";
 import { build } from "vite";
-import { openChrome, type Page } from "../../../../../scripts/testing/chrome";
-import { buildCrane, startCrane, type Crane } from "../../../../../scripts/testing/crane";
+import { openChrome, type Page } from "testkit/chrome";
+import { buildCrane, startCrane, type Crane } from "testkit/craneBinary";
 import { installDevPanelInto, type DevPanel } from "../../../scripts/devPanel";
 import { IPHONE_16_PRO } from "../../../src/main/mobileMock";
 import viteConfig from "../../../electron.vite.config";
@@ -32,7 +32,7 @@ import { ANSWER } from "./protocol";
 import { reapOnExit, type Reaper } from "./reaper";
 
 export { API_DEMO, WIDGET_DEMO, type DevPanel } from "../../../scripts/devPanel";
-export type { Page } from "../../../../../scripts/testing/chrome";
+export type { Page } from "testkit/chrome";
 
 const APP = path.resolve(import.meta.dir, "../../..");
 const HOST_MAIN = path.join(import.meta.dir, "host.main.ts");

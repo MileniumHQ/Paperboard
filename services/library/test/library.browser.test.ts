@@ -7,7 +7,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { build } from "vite";
-import { launchChrome, type Chrome, type Page } from "../../../scripts/testing/chrome";
+import { launchChrome, type Chrome, type Page } from "testkit/chrome";
 
 // The production build of the library in a real Chrome, embedded the way
 // Paperboard embeds it. This loopback server is the registry

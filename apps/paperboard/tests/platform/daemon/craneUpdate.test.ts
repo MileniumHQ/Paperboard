@@ -4,12 +4,12 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { confirmCraneUpdate, installCraneRelease } from "../../../papercrane/craneUpdate";
 import { PAPERCRANE_VERSION } from "../../../papercrane/discovery";
-import { tarGz } from "../../daemon/support/archive";
-import { childEnv, craneBinary, startCrane } from "../../daemon/support/crane";
-import { dataDir, tempDir } from "../../daemon/support/fs";
-import { FIXTURE_PUBLIC_KEY, serve, sha256, signCrane } from "../../daemon/support/release";
-import { Rpc } from "../../daemon/support/rpc";
-import { TEST_TIMEOUT_MS } from "../../daemon/support/wait";
+import { tarGz } from "testkit/archive";
+import { childEnv, craneBinary, startCrane } from "testkit/crane";
+import { dataDir, tempDir } from "testkit/fs";
+import { FIXTURE_PUBLIC_KEY, serve, sha256, signCrane } from "testkit/release";
+import { Rpc } from "testkit/rpc";
+import { TEST_TIMEOUT_MS } from "testkit/wait";
 import { compileCrane } from "../app/support/build";
 
 setDefaultTimeout(TEST_TIMEOUT_MS);

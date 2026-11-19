@@ -12,7 +12,7 @@ import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { craneCompileCommand } from "../supervisor";
+import { craneCompileCommand } from "../../../scripts/supervisor";
 import { undoOnExit } from "./cleanup";
 
 const START_TIMEOUT_MS = 30_000;

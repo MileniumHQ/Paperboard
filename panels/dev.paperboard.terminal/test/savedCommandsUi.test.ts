@@ -4,7 +4,7 @@ import { afterEach, describe, expect, setDefaultTimeout, test } from "bun:test";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { clearWorkloads } from "./helpers/crane";
-import { widgetUrl } from "../../../scripts/testing/panelUi";
+import { widgetUrl } from "testkit/panelUi";
 import { panelBrowser, toastShows, servePanel, type Page } from "./helpers/browser";
 import { call, panelFiles, startService, stopServices } from "./helpers/service";
 

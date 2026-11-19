@@ -4,12 +4,12 @@
 // (openChrome) or pages sharing one (launchChrome). Each case is a real test
 // process driving a real headless Chrome, with a TMPDIR of its own to inspect.
 import { describe, expect, test } from "bun:test";
-import { launchChrome } from "./chrome";
+import { launchChrome } from "../src/chrome";
 import { mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-const DRIVER = join(import.meta.dir, "chrome.ts");
+const DRIVER = join(import.meta.dir, "..", "src", "chrome.ts");
 
 type Ending = "closes" | "fails" | "is stopped";
 type Driver = "openChrome" | "launchChrome";

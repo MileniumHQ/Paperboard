@@ -4,7 +4,7 @@
 // server does it (window.__PAPERBOARD_CRANE, a panel token the daemon
 // issued), and framed the way the shell frames it: as a Home widget
 // (/widget-host.html) or as a panel page (/panel-host.html). Open the
-// addresses in headless Chrome (scripts/testing/chrome.ts).
+// addresses in headless Chrome (packages/testkit/src/chrome.ts).
 import { spawnSync } from "node:child_process";
 import * as fs from "node:fs";
 import * as os from "node:os";

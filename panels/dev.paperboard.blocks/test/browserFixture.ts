@@ -1,6 +1,6 @@
 // The panel's browser fixtures: pages of the panel's own code (test/fixtures/
 // *Fixture.html) over the real SDK, the real Blocks service and a real
-// daemon (test/helpers/crane.ts), in headless Chrome (scripts/testing/
+// daemon (test/helpers/crane.ts), in headless Chrome (packages/testkit/src/
 // chrome.ts). The pages are bundled with Vite in one build and opened
 // together, each in a browser context of its own, over a daemon and service
 // started for it with the projects it needs; each posts the JSON of what it
@@ -27,7 +27,7 @@
 // first file to ask starts them all, and every file shares their results.
 import { existsSync, mkdirSync, mkdtempSync, rmSync, statSync, writeFileSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { launchChrome, type Chrome, type Page } from "../../../scripts/testing/chrome";
+import { launchChrome, type Chrome, type Page } from "testkit/chrome";
 import { BUILTIN, registryBlockType } from "../src/lib/names";
 import { PANEL_ID, type SavedFlows } from "../src/panel";
 import { PROJECTS_FILE, PROJECTS_VERSION } from "../src/lib/projects";

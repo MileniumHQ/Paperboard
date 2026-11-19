@@ -14,10 +14,10 @@ import { createTlsIdentity } from "../../papercrane/tlsIdentity";
 import { setupWebSocketServer } from "../../papercrane/ws";
 import { ConnectionPool } from "../../src/main/communication/papercrane/ConnectionPool";
 import { PaperCraneClient } from "../../src/main/communication/papercrane/PaperCraneClient";
-import { dataDir, modeOf, restoreEnv, tempDir } from "./support/fs";
+import { dataDir, modeOf, restoreEnv, tempDir } from "testkit/fs";
 import { type InProcessDaemon, request, startDaemon, stopDaemon } from "./support/inproc";
-import { Rpc } from "./support/rpc";
-import { TEST_TIMEOUT_MS, waitFor } from "./support/wait";
+import { Rpc } from "testkit/rpc";
+import { TEST_TIMEOUT_MS, waitFor } from "testkit/wait";
 
 setDefaultTimeout(TEST_TIMEOUT_MS);
 

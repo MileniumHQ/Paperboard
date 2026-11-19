@@ -10,8 +10,8 @@ import { exe } from "./helpers/standIn";
 import { writeTree } from "./helpers/tmp";
 import { PANEL_ID } from "../src/servers";
 import { javaPackageFor } from "../src/lib/versionProfile";
-import { FIXTURE_PUBLIC_KEY, serve, sha256, signPackage, type LoopbackServer } from "paperboard/tests/daemon/support/release";
-import { tarGz } from "paperboard/tests/daemon/support/archive";
+import { FIXTURE_PUBLIC_KEY, serve, sha256, signPackage, type LoopbackServer } from "testkit/release";
+import { tarGz } from "testkit/archive";
 
 const SERVERS = "servers-0123456789ab";
 const ID = "s-up";

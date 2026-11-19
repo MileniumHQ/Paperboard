@@ -20,6 +20,8 @@
 #     create-panel   panel scaffolder: build, tests, silent-catches
 #     release        @mileniumhq/release (release key, signed messages, package
 #                    recipes, version order): typecheck, tests, silent-catches
+#     testkit        the shared test harness (packages/testkit): typecheck,
+#                    tests, silent-catches
 #     npx            @mileniumhq/paperboard (npx launcher for the daemon):
 #                    build, tests, silent-catches
 #     paperboard     desktop app: typechecks, tests, lint, silent-catches, and
@@ -88,7 +90,7 @@ supervisor_vet() {
 # Every selectable target. The *-build names are prerequisites, not
 # user-facing: they exist so a filtered run can pull in the shared library
 # artifact a consumer needs without running that library's whole suite.
-KNOWN_TARGETS="global platform packages paperapi paperui create-panel release npx paperapi-build paperui-build create-panel-build paperboard paperdocs origami library arilink panelapis scripts actions agents ai blocks botcreator gameserver terminal"
+KNOWN_TARGETS="global platform packages paperapi paperui create-panel release testkit npx paperapi-build paperui-build create-panel-build paperboard paperdocs origami library arilink panelapis scripts actions agents ai blocks botcreator gameserver terminal"
 
 # Prerequisites per target, expanded transitively. A panel (and any app that
 # bundles the SDK/design system) needs paperapi/paperui dist present; the
@@ -242,6 +244,10 @@ gstep release "release typecheck" run_in "$ROOT/packages/release" bunx tsc --noE
 gstep release "release tests" run_in "$ROOT/packages/release" bun run test
 gstep release "release silent-catches" run_in "$ROOT/packages/release" bash "$CATCH" src test
 gstep release "release code check" run_in "$ROOT" bun scripts/check-solid.ts packages/release/src packages/release/test
+gstep testkit "testkit typecheck" run_in "$ROOT/packages/testkit" bun run typecheck
+gstep testkit "testkit tests" run_in "$ROOT/packages/testkit" bun run test
+gstep testkit "testkit silent-catches" run_in "$ROOT/packages/testkit" bash "$CATCH" src test
+gstep testkit "testkit code check" run_in "$ROOT" bun scripts/check-solid.ts packages/testkit/src packages/testkit/test
 gstep npx "npx tests" run_in "$ROOT/packages/npx" bun run test
 gstep npx "npx silent-catches" run_in "$ROOT/packages/npx" bash "$CATCH" src test
 gstep npx "npx code check" run_in "$ROOT" bun scripts/check-solid.ts packages/npx/src packages/npx/test

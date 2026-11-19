@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, setDefaultTimeout, test } from "bun:test";
-import { TEST_TIMEOUT_MS } from "./support/wait";
+import { TEST_TIMEOUT_MS } from "testkit/wait";
 import * as fs from "node:fs";
 import * as net from "node:net";
 import * as path from "node:path";
@@ -10,10 +10,10 @@ import { readRemotes } from "../../papercrane/remotes";
 import { getPaperboardDir } from "../../papercrane/paths";
 import { parseBackupLocationRequest } from "../../src/renderer/src/lib/backupLocationRequest";
 import { CraneTransport } from "@mileniumhq/paperapi/ws";
-import { dataDir, listTree, restoreEnv } from "./support/fs";
+import { dataDir, listTree, restoreEnv } from "testkit/fs";
 import { startDaemon, stopDaemon, type InProcessDaemon } from "./support/inproc";
-import { installPanelFiles } from "./support/panels";
-import type { Rpc } from "./support/rpc";
+import { installPanelFiles } from "testkit/panels";
+import type { Rpc } from "testkit/rpc";
 
 setDefaultTimeout(TEST_TIMEOUT_MS);
 

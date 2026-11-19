@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, setDefaultTimeout, test } from "bun:test";
-import { TEST_TIMEOUT_MS } from "./support/wait";
+import { TEST_TIMEOUT_MS } from "testkit/wait";
 import * as fs from "node:fs";
 import * as https from "node:https";
 import * as os from "node:os";
@@ -7,10 +7,10 @@ import * as path from "node:path";
 import { WebSocket } from "ws";
 import { isAllowedOrigin } from "../../papercrane/ws";
 import { pinnedTlsOptions } from "../../papercrane/pinnedTls";
-import { dataDir } from "./support/fs";
-import { startCrane } from "./support/crane";
+import { dataDir } from "testkit/fs";
+import { startCrane } from "testkit/crane";
 import { request, startDaemon, stopDaemon } from "./support/inproc";
-import { Rpc, UpgradeRefused } from "./support/rpc";
+import { Rpc, UpgradeRefused } from "testkit/rpc";
 
 setDefaultTimeout(TEST_TIMEOUT_MS);
 

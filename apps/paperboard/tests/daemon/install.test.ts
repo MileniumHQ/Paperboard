@@ -6,14 +6,14 @@ import { semverGt } from "@mileniumhq/release";
 import { resolveRegistryUrl } from "../../papercrane/util";
 import { fetchRegistryJson } from "@mileniumhq/paperapi/config";
 import { planUpdateTasks, withInstalledRecords, type ComputerUpdateState } from "../../src/main/updatePlan";
-import { killWorkloads, startCrane } from "./support/crane";
-import { dataDir, listTree } from "./support/fs";
+import { killWorkloads, startCrane } from "testkit/crane";
+import { dataDir, listTree } from "testkit/fs";
 import { type InProcessDaemon, startDaemon, stopDaemon } from "./support/inproc";
 import { release, startOrigami } from "./support/origami";
-import { serviceSource } from "./support/panels";
-import { FIXTURE_PUBLIC_KEY, serve, sha256, signPanel } from "./support/release";
-import { Rpc } from "./support/rpc";
-import { TEST_TIMEOUT_MS, waitFor } from "./support/wait";
+import { serviceSource } from "testkit/panels";
+import { FIXTURE_PUBLIC_KEY, serve, sha256, signPanel } from "testkit/release";
+import { Rpc } from "testkit/rpc";
+import { TEST_TIMEOUT_MS, waitFor } from "testkit/wait";
 
 setDefaultTimeout(TEST_TIMEOUT_MS);
 

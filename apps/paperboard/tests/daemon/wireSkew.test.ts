@@ -6,9 +6,9 @@ import { WebSocketServer } from "ws";
 import { PaperCraneClient } from "../../src/main/communication/papercrane/PaperCraneClient";
 import { DAEMON_CHALLENGE_HEADER, DAEMON_PROOF_TYPE, daemonProof } from "../../papercrane/handshake";
 import { PROTOCOL_VERSION } from "../../papercrane/protocol";
-import { dataDir, restoreEnv } from "./support/fs";
+import { dataDir, restoreEnv } from "testkit/fs";
 import { startDaemon, stopDaemon } from "./support/inproc";
-import { TEST_TIMEOUT_MS } from "./support/wait";
+import { TEST_TIMEOUT_MS } from "testkit/wait";
 
 setDefaultTimeout(TEST_TIMEOUT_MS);
 afterEach(stopDaemon);

@@ -1,9 +1,9 @@
 import { afterAll, beforeAll, describe, expect, setDefaultTimeout, test } from "bun:test";
-import { dataDir } from "./support/fs";
+import { dataDir } from "testkit/fs";
 import { startDaemon, type InProcessDaemon } from "./support/inproc";
-import { installPanelFiles, serviceCall, serviceSource } from "./support/panels";
-import type { Rpc } from "./support/rpc";
-import { TEST_TIMEOUT_MS, waitFor } from "./support/wait";
+import { installPanelFiles, serviceCall, serviceSource } from "testkit/panels";
+import type { Rpc } from "testkit/rpc";
+import { TEST_TIMEOUT_MS, waitFor } from "testkit/wait";
 
 setDefaultTimeout(TEST_TIMEOUT_MS);
 

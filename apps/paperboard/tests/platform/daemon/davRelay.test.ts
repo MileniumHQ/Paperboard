@@ -11,7 +11,7 @@ import { createTlsIdentity } from "../../../papercrane/tlsIdentity";
 import { type DavRelay, type DavRelayOptions, startDavRelay } from "../../../src/main/davRelay";
 import { buildMacMountArgs, buildWindowsMountCommand, macFolderHasWindow, macMountCredentials, mountMacFolder, windowsDavRoot } from "../../../src/main/remoteFolderMount";
 import { type InProcessDaemon, startDaemon } from "../../daemon/support/inproc";
-import { TEST_TIMEOUT_MS, waitFor } from "../../daemon/support/wait";
+import { TEST_TIMEOUT_MS, waitFor } from "testkit/wait";
 
 setDefaultTimeout(TEST_TIMEOUT_MS);
 

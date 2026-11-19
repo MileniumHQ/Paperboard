@@ -11,9 +11,9 @@
 // binary is not a crane. Workload tests use the compiled crane.
 import * as http from "node:http";
 import { startPaperCraneServer, type ServerInstance, type ServerOptions } from "../../../papercrane/index";
-import { dataDir as makeDataDir, restoreEnv } from "./fs";
-import { Rpc } from "./rpc";
-import { within } from "./wait";
+import { dataDir as makeDataDir, restoreEnv } from "testkit/fs";
+import { Rpc } from "testkit/rpc";
+import { within } from "testkit/wait";
 
 export interface InProcessDaemon {
 	instance: ServerInstance;

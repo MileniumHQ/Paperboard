@@ -1,4 +1,4 @@
-// The real Paperboard daemon (scripts/testing/crane.ts): the crane compiled
+// The real Paperboard daemon (packages/testkit/src/craneBinary.ts): the crane compiled
 // from this checkout, in its own process, on a free loopback port, over the
 // throwaway PAPERBOARD_DIR the preload set. Panel services of the panels
 // linked into that folder start with it, and PaperAPI in this process finds
@@ -7,7 +7,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { blocksApi, closeTransport, getTransport, STATE_VALUE } from "@mileniumhq/paperapi";
-import { buildCrane, startCrane, type Crane } from "../../../../scripts/testing/crane";
+import { buildCrane, startCrane, type Crane } from "testkit/craneBinary";
 
 const SERVICE_DEADLINE_MS = 30_000;
 

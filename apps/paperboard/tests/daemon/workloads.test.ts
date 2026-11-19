@@ -2,10 +2,10 @@ import { afterAll, beforeAll, describe, expect, setDefaultTimeout, test } from "
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { supervisorEndpointName } from "../../papercrane/supervisor";
-import { killWorkloads, startCrane, workloadRecords, type CraneProcess } from "./support/crane";
-import { dataDir } from "./support/fs";
-import { Rpc } from "./support/rpc";
-import { isAlive, TEST_TIMEOUT_MS, waitFor } from "./support/wait";
+import { killWorkloads, startCrane, workloadRecords, type CraneProcess } from "testkit/crane";
+import { dataDir } from "testkit/fs";
+import { Rpc } from "testkit/rpc";
+import { isAlive, TEST_TIMEOUT_MS, waitFor } from "testkit/wait";
 
 setDefaultTimeout(TEST_TIMEOUT_MS);
 

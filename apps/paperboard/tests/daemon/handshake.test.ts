@@ -8,12 +8,12 @@ import { CraneTransport } from "@mileniumhq/paperapi/ws";
 import { PROTOCOL_VERSION as SDK_PROTOCOL_VERSION } from "@mileniumhq/paperapi/protocol";
 import { PROTOCOL_VERSION } from "../../papercrane/protocol";
 import { DAEMON_CHALLENGE_HEADER, DAEMON_PROOF_TYPE, daemonProof } from "../../papercrane/handshake";
-import { childEnv, readHandshake, runCrane, startCrane } from "./support/crane";
-import { dataDir, restoreEnv } from "./support/fs";
+import { childEnv, readHandshake, runCrane, startCrane } from "testkit/crane";
+import { dataDir, restoreEnv } from "testkit/fs";
 import { startDaemon, stopDaemon } from "./support/inproc";
-import { installPanelFiles } from "./support/panels";
-import { Rpc } from "./support/rpc";
-import { TEST_TIMEOUT_MS, within } from "./support/wait";
+import { installPanelFiles } from "testkit/panels";
+import { Rpc } from "testkit/rpc";
+import { TEST_TIMEOUT_MS, within } from "testkit/wait";
 
 setDefaultTimeout(TEST_TIMEOUT_MS);
 

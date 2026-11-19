@@ -11,14 +11,14 @@ import { DriveBackupStore } from "../../papercrane/backups/driveStore";
 import { BUSY_RETRY_MS } from "../../papercrane/backups/schedules";
 import { backupTransferDeadlineMs, newBackupId, type BackupRecord } from "../../papercrane/backups/types";
 import { ROUTINE_BACKUP_LABEL } from "@mileniumhq/paperapi/backups";
-import { tarGz } from "./support/archive";
-import { fakeDrive, fakeS3 } from "./support/cloud";
-import { killWorkloads, startCrane } from "./support/crane";
-import { dataDir, listTree, tempDir } from "./support/fs";
+import { tarGz } from "testkit/archive";
+import { fakeDrive, fakeS3 } from "testkit/cloud";
+import { killWorkloads, startCrane } from "testkit/crane";
+import { dataDir, listTree, tempDir } from "testkit/fs";
 import { startDaemon, stopDaemon, type InProcessDaemon } from "./support/inproc";
-import { installPanelFiles, PAPERAPI, serviceSource } from "./support/panels";
-import type { Rpc } from "./support/rpc";
-import { TEST_TIMEOUT_MS, waitFor } from "./support/wait";
+import { installPanelFiles, PAPERAPI, serviceSource } from "testkit/panels";
+import type { Rpc } from "testkit/rpc";
+import { TEST_TIMEOUT_MS, waitFor } from "testkit/wait";
 
 setDefaultTimeout(TEST_TIMEOUT_MS);
 

@@ -1,11 +1,11 @@
 import { describe, expect, setDefaultTimeout, test } from "bun:test";
-import { TEST_TIMEOUT_MS } from "../../daemon/support/wait";
+import { TEST_TIMEOUT_MS } from "testkit/wait";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { extractTarSafely } from "../../../papercrane/tarSafety";
 import { applyPackageRecipe, extractArchive, extractPackageArchive } from "../../../papercrane/engineArchives";
-import { tar, tarGz, zip, type TarMember } from "../../daemon/support/archive";
-import { listTree, tempDir } from "../../daemon/support/fs";
+import { tar, tarGz, zip, type TarMember } from "testkit/archive";
+import { listTree, tempDir } from "testkit/fs";
 
 setDefaultTimeout(TEST_TIMEOUT_MS);
 
