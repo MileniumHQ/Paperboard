@@ -2,9 +2,10 @@
 // here lets a broken change merge green. Each case is a reference the graph
 // must follow next to the near miss it must not.
 import { describe, expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
-import { allTargets, jobsOf, type Repo, routesOf, scopeOf, workingRepo } from "./scope";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, join } from "node:path";
+import { allTargets, baseRepo, changedSince, jobsOf, type Repo, routesOf, scopeOf, workingRepo } from "./scope";
 
 /** an in-memory repo: path → content */
 function repo(files: Record<string, string>): Repo {
@@ -67,6 +68,17 @@ describe("ownership", () => {
 
     test("a deleted file is still owned by its folder", () => {
         expect(targets({}, ["services/origami/src/gone.ts"])).toEqual(["global", "origami"]);
+    });
+
+    test("a deleted file still reaches the parts that used it, through the base the branch left", () => {
+        // the release library's sign.ts is gone, and the daemon still imports it: a break only the daemon's checks see
+        const before = { ...BASE, "packages/release/src/sign.ts": "export const sign = 1;\n", "apps/daemon/src/main.ts": 'import "../../../packages/release/src/sign";\n' };
+        const after = { ...before };
+        delete (after as Record<string, string>)["packages/release/src/sign.ts"];
+        const changed = ["packages/release/src/sign.ts"];
+        expect(scopeOf(repo(after), changed).targets).not.toContain("daemon");
+        const reached = scopeOf(repo(after), changed, repo(before)).targets;
+        for (const t of ["release", "daemon", "testkit", "terminal"]) expect(reached).toContain(t);
     });
 
     test("the gate's tooling, the lockfile and the root manifest rerun everything", () => {
@@ -183,6 +195,41 @@ describe("what else a scope turns on", () => {
         expect(scope({}, ["apps/paperboard/src/main/index.ts"]).platform).toBe(true);
         expect(scope({}, ["services/origami/src/index.ts"]).platform).toBe(false);
         expect(scope({}, ["README.md"]).platform).toBe(false);
+    });
+});
+
+describe("a branch in git", () => {
+    test("deleting a file a part imports reaches that part, from git's own record of the branch", () => {
+        const root = mkdtempSync(join(tmpdir(), "scope-"));
+        try {
+            const git = (...args: string[]) => {
+                const out = Bun.spawnSync(["git", "-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false", ...args], { cwd: root, stderr: "pipe" });
+                if (out.exitCode !== 0) throw new Error(out.stderr.toString());
+            };
+            const files = { ...BASE, "packages/release/src/sign.ts": "export const sign = 1;\n", "apps/daemon/src/main.ts": 'import "../../../packages/release/src/sign";\n' };
+            for (const [f, text] of Object.entries(files)) {
+                mkdirSync(dirname(join(root, f)), { recursive: true });
+                writeFileSync(join(root, f), text);
+            }
+            git("init", "-q", "-b", "main");
+            git("add", "-A");
+            git("commit", "-qm", "base");
+            git("switch", "-qc", "drop-sign");
+            git("rm", "-q", "packages/release/src/sign.ts");
+            writeFileSync(join(root, "packages/release/src/index.ts"), "export const signed = 1;\n");
+            git("commit", "-qam", "drop sign");
+
+            const head = workingRepo(root);
+            const changed = changedSince("main", root);
+            expect(changed.sort()).toEqual(["packages/release/src/index.ts", "packages/release/src/sign.ts"]);
+            const base = baseRepo(head, "main", root);
+            // the base has the deleted file back, and the changed one as it was
+            expect(base.files).toContain("packages/release/src/sign.ts");
+            expect(base.read("packages/release/src/index.ts")).toBe("export const sign = 1;\n");
+            expect(scopeOf(head, changed, base).targets).toContain("daemon");
+        } finally {
+            rmSync(root, { recursive: true, force: true });
+        }
     });
 });
 

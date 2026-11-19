@@ -22,6 +22,7 @@ terminal runs because:
 
 - **Every target owns a folder.** A changed file reruns its owner. Panels are found in `panels/` on their own; any other part is listed in `TARGET_DIRS`.
 - **Parts use each other** through a workspace dependency in `package.json`, or a path written in a string: `"../x"`, `"apps/daemon/src/main.ts"` or `"apps", "daemon", "src"`. A path only counts if it exists.
+- **Both sides count.** The graph is read from the branch and from the `main` it left, so deleting or moving a file still reruns the parts that used it.
 - **Tests stay home.** A part's tests, fixtures, scripts and configs are its own. Changing them reruns only that part (plus another part whose tests point at that exact file).
 - **Each file in `scripts/` counts on its own**, so using one script doesn't tie you to all of them.
 - **Some files rerun everything:** `bun.lock`, the root `package.json`, `scripts/gate/` and the gate workflow.

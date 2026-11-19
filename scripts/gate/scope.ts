@@ -228,17 +228,25 @@ function platformTargets(repo: Repo, nodes: Node[]): Set<string> {
     return found;
 }
 
-/** each target a change reruns, and why: the route of files and parts that reached it */
-export function routesOf(repo: Repo, changed: string[]): Map<string, string[]> {
+/**
+ * Each target a change reruns, and why: the route of files and parts that
+ * reached it. The graph is walked in the head and in the `base` the branch
+ * left: a deleted or moved file has no importer left in the head, but the
+ * ones in the base still reach the parts that used it.
+ */
+export function routesOf(repo: Repo, changed: string[], base: Repo = repo): Map<string, string[]> {
+    const trees = base === repo ? [repo] : [repo, base];
     const gate = changed.find(isGateTooling);
-    if (gate) return new Map(allTargets(repo).map((t) => [t, [gate, "(a change here reruns every target)"]]));
-    const nodes = nodesOf(repo);
-    const incoming = incomingEdges(repo, nodes);
+    if (gate) return new Map([...new Set(trees.flatMap(allTargets))].sort().map((t) => [t, [gate, "(a change here reruns every target)"]]));
     const routes = new Map<string, string[]>();
-    for (const path of changed) {
-        const owner = ownerOf(nodes, path);
-        if (!owner) continue;
-        for (const [t, route] of reachedBy(incoming, owner, path)) if (!routes.has(t)) routes.set(t, route);
+    for (const tree of trees) {
+        const nodes = nodesOf(tree);
+        const incoming = incomingEdges(tree, nodes);
+        for (const path of changed) {
+            const owner = ownerOf(nodes, path);
+            if (!owner) continue;
+            for (const [t, route] of reachedBy(incoming, owner, path)) if (!routes.has(t)) routes.set(t, route);
+        }
     }
     const packed = PACKED.find((t) => routes.has(t));
     if (packed && !routes.has("packages")) routes.set("packages", [...routes.get(packed)!, "(a packed library: the consumer check)"]);
@@ -247,25 +255,50 @@ export function routesOf(repo: Repo, changed: string[]): Map<string, string[]> {
     return routes;
 }
 
-export function scopeOf(repo: Repo, changed: string[]): Scope {
-    const targets = [...routesOf(repo, changed).keys()].sort();
-    const platforms = platformTargets(repo, nodesOf(repo));
+export function scopeOf(repo: Repo, changed: string[], base: Repo = repo): Scope {
+    const targets = [...routesOf(repo, changed, base).keys()].sort();
+    const platforms = new Set([repo, base].flatMap((tree) => [...platformTargets(tree, nodesOf(tree))]));
     return { targets, platform: targets.some((t) => platforms.has(t)) };
+}
+
+function git(args: string[], root: string): string {
+    const out = Bun.spawnSync(["git", ...args], { cwd: root, stdout: "pipe", stderr: "pipe" });
+    if (out.exitCode !== 0) throw new Error(`git ${args[0]} failed: ${out.stderr.toString().trim()}`);
+    return out.stdout.toString();
 }
 
 /** this checkout as a Repo: tracked files that are on disk (a deletion leaves none) */
 export function workingRepo(root = ROOT): Repo {
-    const out = Bun.spawnSync(["git", "ls-files", "-z"], { cwd: root, stdout: "pipe", stderr: "pipe" });
-    if (out.exitCode !== 0) throw new Error(`git ls-files failed: ${out.stderr.toString().trim()}`);
-    const files = out.stdout.toString().split("\0").filter((f) => f && existsSync(join(root, f)) && !statSync(join(root, f)).isDirectory());
+    const files = git(["ls-files", "-z"], root)
+        .split("\0")
+        .filter((f) => f && existsSync(join(root, f)) && !statSync(join(root, f)).isDirectory());
     return { files, read: (f) => readFileSync(join(root, f), "utf8") };
+}
+
+/** what the branch did to each file since it left `base`: A, M, D or T, by path */
+function statusSince(base: string, root: string): Map<string, string> {
+    const fields = git(["diff", "--name-status", "--no-renames", "-z", `${base}...HEAD`], root).split("\0").filter(Boolean);
+    const status = new Map<string, string>();
+    for (let i = 0; i < fields.length; i += 2) status.set(fields[i + 1]!, fields[i]!);
+    return status;
 }
 
 /** the files a branch changed since it left `base` (deletions and both sides of a rename included) */
 export function changedSince(base: string, root = ROOT): string[] {
-    const out = Bun.spawnSync(["git", "diff", "--name-only", "--no-renames", "-z", `${base}...HEAD`], { cwd: root, stdout: "pipe", stderr: "pipe" });
-    if (out.exitCode !== 0) throw new Error(`git diff against ${base} failed: ${out.stderr.toString().trim()}`);
-    return out.stdout.toString().split("\0").filter(Boolean);
+    return [...statusSince(base, root).keys()];
+}
+
+/**
+ * The tree the branch left `base` at, made from `head`: the files the branch
+ * added are gone, and the ones it changed or deleted read as they were. Every
+ * other file is the same in both.
+ */
+export function baseRepo(head: Repo, base: string, root = ROOT): Repo {
+    const fork = git(["merge-base", base, "HEAD"], root).trim();
+    const status = statusSince(base, root);
+    const before = (f: string) => status.has(f) && status.get(f) !== "A";
+    const files = [...new Set([...head.files.filter((f) => status.get(f) !== "A"), ...[...status.keys()].filter(before)])];
+    return { files, read: (f) => (before(f) ? git(["show", `${fork}:${f}`], root) : head.read(f)) };
 }
 
 /**
@@ -298,9 +331,9 @@ if (import.meta.main) {
         process.exit(2);
     }
     const repo = workingRepo();
-    const scope: Scope = all ? { targets: allTargets(repo), platform: true } : scopeOf(repo, changedSince(base));
+    const scope: Scope = all ? { targets: allTargets(repo), platform: true } : scopeOf(repo, changedSince(base), baseRepo(repo, base));
     if (why) {
-        const route = routesOf(repo, changedSince(base)).get(why);
+        const route = routesOf(repo, changedSince(base), baseRepo(repo, base)).get(why);
         if (!route) {
             console.log(`Nothing changed since ${base} reaches ${why}.`);
         } else {
