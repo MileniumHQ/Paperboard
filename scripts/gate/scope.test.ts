@@ -108,11 +108,22 @@ describe("package dependencies", () => {
         expect(targets({}, ["packages/paperapi/src/index.ts"])).toEqual(["daemon", "global", "packages", "paperapi", "paperboard", "terminal", "testkit"]);
     });
 
-    test("a devDependency reruns the consumer but stops there", () => {
+    test("a dependency no shipped file imports reruns the consumer but stops there", () => {
         // gameserver builds against the app; the app changing reruns gameserver, gameserver's consumers (none) aside
         expect(targets({}, ["apps/paperboard/src/main/index.ts"])).toEqual(["gameserver", "global", "paperboard"]);
         // the app consumes the daemon only to test with it: the daemon's change doesn't reach gameserver through it
         expect(targets({}, ["apps/daemon/src/main.ts"])).not.toContain("gameserver");
+    });
+
+    test("a devDependency the shipped code imports is shipped: its change goes on to the consumer's consumers", () => {
+        // the app's main process bundles the daemon, whichever list in package.json names it
+        const files = { "apps/paperboard/src/main/index.ts": 'import { start } from "daemon/src/main";\n' };
+        expect(targets(files, ["apps/daemon/src/main.ts"])).toContain("gameserver");
+        // and a runtime dependency only the tests import is a test dependency
+        const testOnly = { "packages/testkit/src/crane.ts": "export {};\n", "packages/testkit/test/crane.test.ts": 'import "daemon";\n' };
+        const reached = targets(testOnly, ["apps/daemon/src/main.ts"]);
+        expect(reached).toContain("testkit");
+        expect(reached).not.toContain("terminal");
     });
 
     test("a library's own test reruns only that library", () => {
@@ -172,6 +183,48 @@ describe("paths in strings", () => {
     });
 });
 
+describe("joins from the repo root", () => {
+    const REPO_DIR = { "packages/testkit/src/root.ts": 'export const REPO_DIR = path.resolve(import.meta.dir, "../../..");\n' };
+
+    test("follow the constants that name the root and the segments, here and imported", () => {
+        const files = {
+            ...REPO_DIR,
+            "apps/daemon/test/terminal.test.ts": [
+                'import { REPO_DIR } from "testkit/root";',
+                'const PANEL = "dev.paperboard.terminal";',
+                'const SOURCE = path.join(REPO_DIR, "panels", PANEL);',
+                'build(path.join(SOURCE, "src", "App.tsx"));',
+                'read(path.join(SOURCE, "package.json"));',
+            ].join("\n"),
+        };
+        expect(targets(files, ["panels/dev.paperboard.terminal/src/App.tsx"])).toContain("daemon");
+        expect(targets(files, ["panels/dev.paperboard.terminal/package.json"])).toContain("daemon");
+        // what the test never joins to stays out of it
+        expect(targets(files, ["panels/dev.paperboard.terminal/README.md"])).not.toContain("daemon");
+    });
+
+    test("one that goes on past a folder of parts with a variable reaches every part in it", () => {
+        const files = {
+            ...REPO_DIR,
+            "apps/daemon/test/panels.test.ts": 'import { REPO_DIR } from "testkit/root";\nfor (const id of ids) build(path.join(REPO_DIR, "panels", id));\n',
+        };
+        expect(targets(files, ["panels/dev.paperboard.terminal/README.md"])).toContain("daemon");
+        expect(targets(files, ["panels/dev.paperboard.gameserver/src/App.tsx"])).toContain("daemon");
+        expect(targets(files, ["services/origami/src/index.ts"])).not.toContain("daemon");
+    });
+
+    test("one relative to the file reaches the folder it names", () => {
+        const files = { "scripts/publish/panels.test.ts": 'const PANELS = join(import.meta.dir, "..", "..", "panels");\n' };
+        expect(targets(files, ["panels/dev.paperboard.terminal/README.md"])).toContain("scripts");
+    });
+
+    test("one from a folder that isn't the repo is no reference", () => {
+        // a data folder has a panels/ of its own
+        const files = { "packages/testkit/src/fs.ts": 'export const panelDir = (dataDir, id) => path.join(dataDir, "panels", id);\n' };
+        expect(targets(files, ["panels/dev.paperboard.terminal/src/App.tsx"])).toEqual(["global", "terminal"]);
+    });
+});
+
 describe("root scripts", () => {
     test("each script is its own node: a reference to one doesn't tie in the rest", () => {
         const files = { "services/origami/src/link.ts": 'import "../../../scripts/publish/publish";\n' };
@@ -191,10 +244,18 @@ describe("what else a scope turns on", () => {
         expect(targets({}, ["services/origami/src/index.ts"])).not.toContain("packages");
     });
 
-    test("the cross-platform suites run only when a target that has one is reached", () => {
-        expect(scope({}, ["apps/paperboard/src/main/index.ts"]).platform).toBe(true);
-        expect(scope({}, ["services/origami/src/index.ts"]).platform).toBe(false);
-        expect(scope({}, ["README.md"]).platform).toBe(false);
+    test("the cross-platform suites run only when a change reaches one", () => {
+        const files = { "panels/dev.paperboard.terminal/test/platform/pty.test.ts": 'import "../../src/App";\n' };
+        // a part's suite tests that part's code
+        expect(scope(files, ["apps/paperboard/src/main/index.ts"]).platform).toBe(true);
+        expect(scope(files, ["panels/dev.paperboard.terminal/src/App.tsx"]).platform).toBe(true);
+        // its README and its other tests aren't what the suite runs
+        expect(scope(files, ["panels/dev.paperboard.terminal/README.md"])).toEqual({ targets: ["global", "terminal"], platform: false });
+        expect(scope({ ...files, "panels/dev.paperboard.terminal/test/unit.test.ts": "export {};\n" }, ["panels/dev.paperboard.terminal/test/unit.test.ts"]).platform).toBe(false);
+        // the suite itself reruns its part, where Linux runs it, and the runners
+        expect(scope(files, ["panels/dev.paperboard.terminal/test/platform/pty.test.ts"])).toEqual({ targets: ["global", "terminal"], platform: true });
+        expect(scope(files, ["services/origami/src/index.ts"]).platform).toBe(false);
+        expect(scope(files, ["README.md"]).platform).toBe(false);
     });
 });
 
@@ -272,10 +333,27 @@ describe("this repository", () => {
         expect(jobs.flatMap((j) => j.targets.split(" ")).sort()).toEqual([...known].sort());
     });
 
-    test("a panel's README, the root README and a release script stay small", () => {
-        expect(scopeOf(here, ["panels/dev.paperboard.terminal/README.md"]).targets).toEqual(["global", "terminal"]);
+    test("the root README and a release script stay small", () => {
         expect(scopeOf(here, ["README.md"])).toEqual({ targets: ["global"], platform: false });
         expect(scopeOf(here, ["scripts/publish/releaseSmoke.ts"]).targets).toEqual(["global", "scripts"]);
+    });
+
+    test("a panel reruns the suites that read every panel: the app's, the boot test's runners, the store's", () => {
+        // a README can be the store listing, so the store's checks read it too
+        const readme = scopeOf(here, ["panels/dev.paperboard.terminal/README.md"]);
+        for (const t of ["terminal", "paperboard", "scripts"]) expect(readme.targets).toContain(t);
+        expect(readme.platform).toBe(true);
+        expect(readme.targets).not.toContain("daemon");
+    });
+
+    test("Bot Creator's service reaches the daemon test that builds and runs it", () => {
+        for (const change of ["panels/dev.paperboard.botcreator/src/service.ts", "panels/dev.paperboard.botcreator/manifest.json"]) {
+            const reached = scopeOf(here, [change]);
+            for (const t of ["botcreator", "daemon", "paperboard", "scripts"]) expect({ change, t, reached: reached.targets.includes(t) }).toEqual({ change, t, reached: true });
+            expect(reached.platform).toBe(true);
+        }
+        // and another panel doesn't reach that test
+        expect(scopeOf(here, ["panels/dev.paperboard.terminal/src/App.tsx"]).targets).not.toContain("daemon");
     });
 
     test("the daemon reaches every panel through the test harness", () => {
