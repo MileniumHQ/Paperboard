@@ -249,7 +249,13 @@ export class CraneTransport {
 
             ws.on("error", (err: Error) => fail(err));
 
+            // once connected, a socket the transport has let go of (a refused
+            // sign-in, a replaced connection) still hears its closing
+            // handshake out; what it hears then is no longer the transport's
+            const dropped = () => settled && this.ws !== ws;
+
             ws.on("message", (raw) => {
+                if (dropped()) return;
                 // a Buffer from the ws package is its text in UTF-8
                 const text = String(raw);
                 if (awaitingProof) {
@@ -270,6 +276,7 @@ export class CraneTransport {
             });
 
             ws.on("close", (code, reason) => {
+                if (dropped()) return;
                 // the daemon names why it closed a socket (an auth timeout, a slow consumer): say it
                 const why = `${code}${String(reason) ? ` ${String(reason)}` : ""}`;
                 fail(new Error(`PaperCrane closed before connecting (${why})`));
