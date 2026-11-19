@@ -22,8 +22,9 @@ export type Answers = { [K in keyof typeof SHELL_CALLS]: CallAnswer<K> };
 export type Pushes = { [K in keyof typeof SHELL_PUSHES]: PushPayload<K> };
 `;
 
-// every field path that crosses, through lists, unions and nullables; an
-// answer typed as any JSON could carry anything, so it fails the audit
+// every field path that crosses, through lists, unions and nullables, once
+// each however many of a union's members carry it; an answer typed as any
+// JSON could carry anything, so it fails the audit
 function fieldPaths(): { paths: string[]; opaque: string[] } {
     const options: ts.CompilerOptions = { strict: true, noEmit: true, skipLibCheck: true, target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext, moduleResolution: ts.ModuleResolutionKind.Bundler };
     const host = ts.createCompilerHost(options);
@@ -45,7 +46,7 @@ function fieldPaths(): { paths: string[]; opaque: string[] } {
         const next = new Set(seen).add(type);
         for (const prop of checker.getPropertiesOfType(type)) {
             const child = `${at}.${prop.name}`;
-            paths.push(child);
+            if (!paths.includes(child)) paths.push(child);
             walk(checker.getTypeOfSymbol(prop), child, next);
         }
         const index = checker.getIndexInfosOfType(type);

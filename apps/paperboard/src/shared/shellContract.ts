@@ -131,8 +131,16 @@ interface CallDefinition {
 export const SHELL_CALLS = {
     // throws until the local daemon is verified: why it isn't, once known.
     // token is a secret the renderer needs: the shell is a PaperAPI host and
-    // dials this computer's daemon itself, on loopback, with this token
-    "crane-credentials": { args: none, answer: shape.object({ port: shape.number(), token: shape.text(), computerId: shape.text() }), browser: true },
+    // dials its daemon itself with this token, on loopback by port, or at a
+    // URL where a host reaches it some other way (Paperboard web's relay)
+    "crane-credentials": {
+        args: none,
+        answer: shape.either(
+            shape.object({ port: shape.number(), token: shape.text(), computerId: shape.text() }),
+            shape.object({ url: shape.text(), token: shape.text(), computerId: shape.text() }),
+        ),
+        browser: true,
+    },
     "computers-list": { args: none, answer: computerList, browser: true },
     "computer-probe": { args: shape.object({ host: filled(), port }), answer: probeResult, browser: true },
     "computer-pair": {
