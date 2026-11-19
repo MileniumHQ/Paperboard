@@ -2,15 +2,15 @@ import { afterAll, describe, expect, setDefaultTimeout, test } from "bun:test";
 import { spawnSync } from "node:child_process";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { confirmCraneUpdate, installCraneRelease } from "../../src/craneUpdate";
-import { PAPERCRANE_VERSION } from "../../src/discovery";
+import { confirmCraneUpdate, installCraneRelease } from "daemon/craneUpdate";
+import { PAPERCRANE_VERSION } from "daemon/discovery";
 import { tarGz } from "testkit/archive";
 import { childEnv, craneBinary, startCrane } from "testkit/crane";
 import { dataDir, tempDir } from "testkit/fs";
 import { FIXTURE_PUBLIC_KEY, serve, sha256, signCrane } from "testkit/release";
 import { Rpc } from "testkit/rpc";
 import { TEST_TIMEOUT_MS } from "testkit/wait";
-import { compileCrane } from "../../../paperboard/tests/platform/app/support/build";
+import { compileCrane } from "./support/build";
 
 setDefaultTimeout(TEST_TIMEOUT_MS);
 

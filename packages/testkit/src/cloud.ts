@@ -41,7 +41,7 @@ export function fakeS3(bucket: string): FakeS3 {
 		}
 		if (req.method === "GET") {
 			const body = objects.get(key);
-			return body ? new Response(body) : new Response("NoSuchKey", { status: 404 });
+			return body ? new Response(new Uint8Array(body)) : new Response("NoSuchKey", { status: 404 });
 		}
 		if (req.method === "DELETE") {
 			objects.delete(key);
@@ -145,7 +145,7 @@ export function fakeDrive(): FakeDrive {
 				files.delete(file.id);
 				return new Response(null, { status: 204 });
 			}
-			if (url.searchParams.get("alt") === "media") return new Response(file.content ?? Buffer.alloc(0));
+			if (url.searchParams.get("alt") === "media") return new Response(new Uint8Array(file.content ?? Buffer.alloc(0)));
 			return Response.json({ id: file.id, trashed: file.trashed });
 		}
 		return new Response("unsupported", { status: 400 });

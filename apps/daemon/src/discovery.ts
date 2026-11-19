@@ -6,11 +6,11 @@ import * as crypto from "crypto";
 import { Bonjour } from "bonjour-service";
 import { logger } from "./logger";
 import { getPaperboardDir } from "./paths";
-import pkg from "../../paperboard/package.json";
+import pkg from "../package.json";
 import { errorCode, errorMessage } from "@mileniumhq/paperapi/errors";
 
 export const PAPERCRANE_MDNS_TYPE = "papercrane";
-// version travels with the app package.json — one source, never a drift
+// the daemon's package.json version, which sync-versions keeps equal to the app's
 export const PAPERCRANE_VERSION = pkg.version;
 
 export interface AdvertiseOptions {

@@ -9,7 +9,7 @@
 // it stays out of the help.
 import * as path from "path";
 import { Command, CommanderError, Help, InvalidArgumentError, Option } from "commander";
-import pkg from "../../paperboard/package.json";
+import pkg from "../package.json";
 
 export const CLI_VERSION: string = pkg.version;
 export const DEFAULT_LISTEN_PORT = 45464;

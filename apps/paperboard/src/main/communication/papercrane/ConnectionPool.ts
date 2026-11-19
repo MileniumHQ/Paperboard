@@ -1,7 +1,7 @@
 import { EventEmitter } from "events";
 import * as os from "os";
 import * as path from "path";
-import { DEFAULT_PORT, getDetailedOsInfo, getNetworkIp } from "../../../../../daemon/src";
+import { DEFAULT_PORT, getDetailedOsInfo, getNetworkIp } from "daemon";
 import {
     readStateFileSync,
     writeJsonAtomicSync,

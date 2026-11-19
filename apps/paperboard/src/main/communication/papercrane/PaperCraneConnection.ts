@@ -7,7 +7,7 @@ import { logger } from "daemon/logger";
 import { EventEmitter } from "events";
 import * as path from "path";
 import * as crypto from "crypto";
-import { startPaperCraneServer, ServerInstance, DEFAULT_PORT } from "../../../../../daemon/src";
+import { startPaperCraneServer, ServerInstance, DEFAULT_PORT } from "daemon";
 import { PROTOCOL_VERSION } from "daemon/protocol";
 import { readEvent, readResult, type ProgressEvent, type RpcAction, type RpcParams, type RpcResult } from "@mileniumhq/paperapi/protocol";
 import {

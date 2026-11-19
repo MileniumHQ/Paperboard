@@ -52,7 +52,8 @@ export function serve(initial: Record<string, Route> = {}): LoopbackServer {
 			const route = routes.get(url.pathname + url.search) ?? routes.get(url.pathname);
 			if (route === undefined) return new Response("not found", { status: 404 });
 			if (typeof route === "function") return route(req);
-			if (Buffer.isBuffer(route) || typeof route === "string") return new Response(route);
+			if (typeof route === "string") return new Response(route);
+			if (Buffer.isBuffer(route)) return new Response(new Uint8Array(route));
 			return Response.json(route);
 		},
 	});
