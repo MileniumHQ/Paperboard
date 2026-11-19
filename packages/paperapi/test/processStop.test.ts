@@ -77,6 +77,22 @@ describe("processApi.stop", () => {
     });
 });
 
+describe("an exit listener from before the process started", () => {
+    test("doesn't make a later stop think nothing is running, and hears the exit itself", async () => {
+        // a service listens for its process's exit before it starts it: the daemon has nothing to attach to yet
+        supervise({ running: false, ends: ["SIGTERM"] });
+        let heard = 0;
+        const off = processApi.onExit("p", () => heard++);
+        expect(await off.attached).toBe(false);
+        // then it starts, and a stop must find it and end it
+        supervise({ running: true, ends: ["SIGTERM"] });
+        await processApi.stop("p");
+        expect(signals()).toEqual(["SIGTERM"]);
+        expect(heard).toBe(1);
+        off();
+    });
+});
+
 describe("stopProcess with a host of its own", () => {
     test("stops what the host runs, the same way: SIGTERM, then SIGKILL past the grace", async () => {
         let running = true;

@@ -14,6 +14,8 @@ export type Resource = "terminal" | "process";
 interface Attachment {
     count: number;
     attached: Promise<boolean>;
+    /** the daemon answered that nothing had the id then: the next subscriber asks again, as it may be there now */
+    refused: boolean;
 }
 const attachRefs = new WeakMap<CraneTransport, Map<string, Attachment>>();
 
@@ -30,7 +32,7 @@ export function attachShared(tracked: Resource, id: string, t: CraneTransport): 
     const ledger = ledgerFor(t);
     const key = `${tracked}:${id}`;
     const live = ledger.get(key);
-    if (live) {
+    if (live && !live.refused) {
         live.count++;
         return live.attached;
     }
@@ -43,11 +45,16 @@ export function attachShared(tracked: Resource, id: string, t: CraneTransport): 
     // a subscriber that left before the answer took the entry with it
     const current = () => ledger.get(key) === entry;
     const entry: Attachment = {
-        count: 1,
+        // the subscribers of a refused attachment stay counted: they leave through releaseAttachment like any other
+        count: (live?.count ?? 0) + 1,
+        refused: false,
         attached: t.call(action, { id }).then(
             (res: { success?: boolean } | undefined) => {
                 const success = res?.success === true;
-                if (!success && current()) track(false);
+                if (!success && current()) {
+                    entry.refused = true;
+                    track(false);
+                }
                 return success;
             },
             (err) => {
