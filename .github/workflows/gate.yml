@@ -11,16 +11,48 @@ concurrency:
   group: gate-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 jobs:
-  # The whole gate, once, on Linux x64, split into parallel jobs: each group
-  # is a set of `bun run gate` targets, so a job proves exactly what it names
+  # Which gate targets this change can reach (scripts/gate/scope.ts), as the
+  # matrix of the jobs below: a pull request runs only those. A push to main
+  # and a manual run take everything.
+  scope:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      jobs: ${{ steps.scope.outputs.jobs }}
+      platform: ${{ steps.scope.outputs.platform }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          # the merge base with the pull request's base branch
+          fetch-depth: 0
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.4
+      - name: Scope
+        id: scope
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          if [ "$EVENT" = pull_request ]; then
+            bun scripts/gate/scope.ts --base "origin/$BASE_REF" --github
+          else
+            bun scripts/gate/scope.ts --all --github
+          fi
+          cat "$GITHUB_OUTPUT" >> "$GITHUB_STEP_SUMMARY"
+
+  # The reached targets, once, on Linux x64, split into parallel jobs: each is
+  # a set of `bun run gate` targets, so a job proves exactly what it names
   gate:
-    name: ${{ matrix.group }}
+    name: ${{ matrix.name }}
+    needs: scope
+    if: needs.scope.outputs.jobs != '[]'
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
-        group: [libraries, app, panels, web]
+        include: ${{ fromJSON(needs.scope.outputs.jobs) }}
     steps:
       - uses: actions/checkout@v5
       - uses: oven-sh/setup-bun@v2
@@ -47,7 +79,7 @@ jobs:
       # match is a different build.
       - name: Restore the PaperAPI and PaperUI builds of these sources
         id: libs
-        if: matrix.group != 'libraries'
+        if: matrix.name != 'libraries'
         uses: actions/cache@v4
         with:
           path: |
@@ -64,28 +96,23 @@ jobs:
       - run: bun install --frozen-lockfile
       # Electron fetches its binary only when its install script runs
       - name: Fetch Electron
-        if: matrix.group != 'web'
+        if: matrix.name != 'web'
         run: |
           node "$(node -p "require.resolve('electron/install.js', { paths: ['apps/paperboard'] })")"
       - name: Gate
         env:
           PAPERBOARD_GATE_PREBUILT: ${{ steps.libs.outputs.cache-hit == 'true' && 'paperapi paperui' || '' }}
-        run: |
-          case "${{ matrix.group }}" in
-            libraries) targets="packages paperapi paperui create-panel release testkit npx scripts" ;;
-            app) targets="daemon paperboard" ;;
-            panels) targets="agents blocks botcreator gameserver terminal" ;;
-            web) targets="paperdocs origami library arilink panelapis global" ;;
-            *) echo "unknown gate group ${{ matrix.group }}" >&2; exit 2 ;;
-          esac
-          dbus-run-session -- xvfb-run -a bun run gate $targets
+        run: dbus-run-session -- xvfb-run -a bun run gate ${{ matrix.targets }}
 
   # The other release targets run only the cross-platform suite: the tests
   # whose outcome depends on the OS or CPU (booting and updating the built
   # app and daemon, processes and signals, paths, archives, file modes).
   # Logic that's the same everywhere is proven once by the Linux gate above.
+  # A change that reaches no target with such a suite skips them.
   platform:
     name: platform (${{ matrix.target.name }})
+    needs: scope
+    if: needs.scope.outputs.platform == 'true'
     runs-on: ${{ matrix.target.runner }}
     timeout-minutes: 30
     strategy:
@@ -102,61 +129,26 @@ jobs:
         shell: bash
     steps:
       - uses: actions/checkout@v5
-      # The docs site, the services and the root's markdown can't reach a cross-platform
-      # suite, so a change made only of those skips it. Anything else, or a
-      # run with nothing to compare against, runs it.
-      - name: Does this change reach the cross-platform suite
-        id: scope
-        env:
-          EVENT: ${{ github.event_name }}
-          PUSH_BEFORE: ${{ github.event.before }}
-          PR_BASE: ${{ github.event.pull_request.base.sha }}
-        run: |
-          case "$EVENT" in
-            push) base="$PUSH_BEFORE" ;;
-            pull_request) base="$PR_BASE" ;;
-            *) base="" ;;
-          esac
-          run=true
-          if [ -z "$base" ] || [ "$base" = 0000000000000000000000000000000000000000 ]; then
-            echo "A $EVENT run has no earlier commit to compare with: running the suite"
-          elif ! git fetch --no-tags --depth=1 origin "$base"; then
-            echo "Couldn't fetch $base to compare with: running the suite"
-          else
-            changed="$(git diff --name-only "$base" HEAD)"
-            echo "Changed since $base:"
-            echo "$changed"
-            reach="$(echo "$changed" | grep -vE '^(apps/paperdocs/|services/|[^/]+\.md$)' || true)"
-            if [ -n "$changed" ] && [ -z "$reach" ]; then
-              run=false
-              echo "Only web apps, services and root markdown changed: skipping the cross-platform suite" | tee -a "$GITHUB_STEP_SUMMARY"
-            fi
-          fi
-          echo "run=$run" >> "$GITHUB_OUTPUT"
       - uses: oven-sh/setup-bun@v2
-        if: steps.scope.outputs.run == 'true'
         with:
           bun-version: 1.4.4
       - uses: actions/setup-node@v5
-        if: steps.scope.outputs.run == 'true'
         with:
           node-version: 24
       - uses: actions/setup-go@v5
-        if: steps.scope.outputs.run == 'true'
         with:
           go-version-file: apps/daemon/supervisor/go.mod
           cache-dependency-path: apps/daemon/supervisor/go.sum
       # On macOS and Windows, restoring Bun's package cache takes longer than
       # a cold install, so only Linux keeps it
       - name: Cache Bun packages (Linux)
-        if: steps.scope.outputs.run == 'true' && matrix.target.os == 'linux'
+        if: matrix.target.os == 'linux'
         uses: actions/cache@v4
         with:
           path: ~/.bun/install/cache
           key: bun-${{ matrix.target.name }}-${{ hashFiles('bun.lock') }}
           restore-keys: bun-${{ matrix.target.name }}-
       - name: Cache the Electron binary
-        if: steps.scope.outputs.run == 'true'
         uses: actions/cache@v4
         with:
           path: |
@@ -167,7 +159,6 @@ jobs:
           restore-keys: electron-${{ matrix.target.name }}-
       - name: Restore the PaperAPI and PaperUI builds of these sources
         id: libs
-        if: steps.scope.outputs.run == 'true'
         uses: actions/cache@v4
         with:
           path: |
@@ -175,19 +166,16 @@ jobs:
             packages/paperui/dist
           key: libs-${{ matrix.target.name }}-${{ hashFiles('packages/paperapi/**', 'packages/paperui/**', 'bun.lock', 'package.json', 'patches/**') }}
       - name: Display and session bus for Electron (Linux)
-        if: steps.scope.outputs.run == 'true' && matrix.target.os == 'linux'
+        if: matrix.target.os == 'linux'
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends xvfb dbus
           sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
       - run: bun install --frozen-lockfile
-        if: steps.scope.outputs.run == 'true'
       - name: Fetch Electron
-        if: steps.scope.outputs.run == 'true'
         run: |
           node "$(node -p "require.resolve('electron/install.js', { paths: ['apps/paperboard'] })")"
       - name: Cross-platform suite
-        if: steps.scope.outputs.run == 'true'
         env:
           PAPERBOARD_GATE_PREBUILT: ${{ steps.libs.outputs.cache-hit == 'true' && 'paperapi paperui' || '' }}
         run: |
@@ -197,16 +185,22 @@ jobs:
             bun run gate platform
           fi
 
-  # One stable check to require in branch protection, whatever the matrix is
+  # One stable check to require in branch protection, whatever the matrix is:
+  # a job the scope left out is skipped, and that passes
   gate-green:
     name: Gate
     if: always()
-    needs: [gate, platform]
+    needs: [scope, gate, platform]
     runs-on: ubuntu-24.04
     steps:
       - name: Every gate job passed
+        env:
+          SCOPE: ${{ needs.scope.result }}
+          GATE: ${{ needs.gate.result }}
+          PLATFORM: ${{ needs.platform.result }}
         run: |
-          if [ "${{ needs.gate.result }}" != success ] || [ "${{ needs.platform.result }}" != success ]; then
-            echo "gate: ${{ needs.gate.result }}, platform: ${{ needs.platform.result }}" >&2
+          ok() { [ "$1" = success ] || [ "$1" = skipped ]; }
+          if [ "$SCOPE" != success ] || ! ok "$GATE" || ! ok "$PLATFORM"; then
+            echo "scope: $SCOPE, gate: $GATE, platform: $PLATFORM" >&2
             exit 1
           fi

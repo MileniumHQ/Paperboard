@@ -41,6 +41,8 @@
 #                    release target other than linux-x64, which runs it as
 #                    part of the full suites (the full gate skips it).
 #   e.g. `bun run gate terminal`, `bun run gate paperapi paperui`
+#   `bun scripts/gate/scope.ts` names the targets a branch's changes can
+#   reach; a pull request's CI runs only those.
 #
 # Repo-wide checks (changelog-existence, todo-expiry) run in the full gate or
 # when `global` is named; any other filtered run is about the named targets.
