@@ -1,8 +1,6 @@
 /* The run log: a card in the dock under the canvas. */
 
 .panel {
-    /* a quarter of the editor at most, so the canvas keeps the most of it */
-    max-height: min(var(--paper-size-panel-height-small), 25cqh);
     border-radius: var(--paper-border-radius);
     background: var(--paper-surface);
     border: var(--paper-border-width) solid var(--paper-border);
@@ -35,22 +33,28 @@
     height: var(--paper-icon-size-small);
 }
 
+/* The lines, on a grid of whole rows: the body is a whole number of rows
+   tall, a quarter of the editor at most so the canvas keeps the most of it,
+   and its rows sit edge to edge, so scrolled to the newest line the oldest
+   one shown is whole under the header. Its space above and below lies
+   outside what scrolls, so no row shows cut in it. */
 .body {
-    padding: var(--paper-uigap-half);
+    font-size: var(--paper-text-size-1);
+    line-height: var(--paper-leading-normal);
+    max-height: round(down, min(var(--paper-size-panel-height-small), 25cqh), 1lh);
+    margin: var(--paper-uigap-half) 0;
+    padding: 0 var(--paper-uigap-half);
     overflow-y: auto;
     flex: 1 1 auto;
     min-height: 0;
     display: flex;
     flex-direction: column;
-    gap: var(--paper-uigap-onefourth);
 }
 
 .line {
     display: flex;
     align-items: flex-start;
     gap: var(--paper-uigap-half);
-    font-size: var(--paper-text-size-1);
-    line-height: var(--paper-leading-normal);
     word-break: break-word;
 }
 
