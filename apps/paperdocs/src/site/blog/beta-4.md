@@ -1,6 +1,6 @@
 ---
 title: Beta 4 is shipped!
-date: 2026-11-18
+date: 2026-11-19
 author: pxlkt
 image: /pictures/blog/beta-4/cover.jpg
 summary: Paperboard's biggest release ever. The brand new Blocks panel, an Agent that can work on your computer, and big upgrades to Terminal, Game Server and Paperboard itself.
@@ -8,7 +8,7 @@ summary: Paperboard's biggest release ever. The brand new Blocks panel, an Agent
 
 I was going to say we got Paperboard Beta 4 before GTA VI, but I postponed the release. It's too late now.
 
-Nevertheless, this is once again Paperboard's biggest release ever! Hundreds of bugs were squashed, another brand new panel, and many new features to the panels you already use. We've been working hard to improve the overall Paperboard experience so it's more intuitive than ever!
+Nevertheless, this is once again Paperboard's biggest release ever! Hundreds of bugs were squashed, another brand new panel has been released, and we've added many new features to the panels you already use. We've been working hard to improve the overall Paperboard experience so it's more intuitive than ever!
 
 Without further ado, let's get into it. Starting with the brand new panel:
 
@@ -67,7 +67,7 @@ Major quality of life updates have shipped to Paperboard as well.
 ## Other Panels
 
 - **Game Server:** Garry's Mod, Rust, and Counter-Strike 2 have been added. Rust gets a map of your world, every game's overview shows four live readouts, and setup tells you the download size and how much has arrived.
-- **Bot Creator:** New Blocks are now available in the Blocks panel.
+- **Bot Creator:** New Blocks are now available in the Blocks panel, so your bots can react when a member joins or a message arrives.
 
 :::carousel
 ![Choosing a game](/pictures/blog/beta-4/gameserver-choose-game.png "Three new games to choose from.")
@@ -87,7 +87,7 @@ This update brings Paperboard even further forward towards its goal of becoming 
 
 As we continue improving our agentic workflows and processes for developing Paperboard, stability, release cadence, and performance will continue getting better!
 
-I've also said "we" a lot during this post, and that's because I'd like to thank [Rerro](https://github.com/rerrorate777) for being Paperboard's first major contributor! His work has gone a long way in fixing and finding bugs, improving Paperboard's overall experience.
+I've also said "we" a lot during this post, and that's because I'd like to thank [Rerro](https://github.com/rerrorate777) for being Paperboard's first major contributor! Their work has gone a long way in fixing and finding bugs, improving Paperboard's overall experience.
 
 I'm thrilled to see what happens next with these powerful new tools. We haven't scratched the surface of what's possible with this app, and this is its biggest step yet.
 
