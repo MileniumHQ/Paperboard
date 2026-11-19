@@ -153,13 +153,14 @@ test("Add Computer: a pairing answered without the computer says so", async () =
     expect(page.exceptions).toEqual([]);
 });
 
-// Inventory: Core contracts — the can't-reach dialog checks once per opening and once per Try Again, and shows its last answer alone.
+// Inventory: Core contracts — the can't-reach dialog checks once per opening and once per Try Again, and shows its last answer alone, at the address it looked.
 test("the can't-reach dialog checks the computer once when it opens and once per Try Again", async () => {
     const { page } = shell;
     await workshop.daemon.stop();
     const before = await shell.host<number>({ cmd: "probes" });
     await page.click(SHED);
-    await page.waitFor(`document.body.innerText.includes("Can't reach Shed") && ${errorShown("Couldn't reach this computer")} && !!document.querySelector("[role=dialog] [data-paper-error]")`, "the can't-reach dialog with its answer, in the dialog");
+    // the answer is titled with the address it was looked for at, which the probe's answers never name
+    await page.waitFor(`document.body.innerText.includes("Can't reach Shed") && ${errorShown(`Couldn't reach 127.0.0.2:${workshop.daemon.port}`)} && !!document.querySelector("[role=dialog] [data-paper-error]")`, "the can't-reach dialog with its answer, in the dialog");
     expect(await shell.host<number>({ cmd: "probes" })).toBe(before + 1);
     // the answer is the whole body: no paragraph repeating it beside the error
     expect(await page.evaluate<boolean>(`document.querySelector("[role=dialog]").innerText.includes("Nothing responded")`)).toBe(false);

@@ -21,7 +21,10 @@ export function createReachCheck() {
         try {
             const probe = await computersApi.probe(computer.host, computer.port);
             if (!current()) return false;
-            if (probe?.reachable) return true;
+            if (probe?.reachable) {
+                setError(null);
+                return true;
+            }
             setError(probe?.error || "Unreachable");
         } catch (err) {
             logToMain("error", "Checking a computer failed:", err);
