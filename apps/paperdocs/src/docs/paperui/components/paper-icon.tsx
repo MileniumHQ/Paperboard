@@ -163,7 +163,7 @@ export function OnlineMark(props: { online: boolean }) {
 
             <PaperText preset="subheader" as="h3" id="image">An image icon</PaperText>
             <PaperText preset="body" as="p">
-                The actions panel draws a category's image icon with <PaperCode>src</PaperCode>.
+                The Blocks panel draws a category's image icon with <PaperCode>src</PaperCode>.
                 Use <PaperCode>tint</PaperCode> for a single-color logo that should follow the text color, and <PaperCode>pixelated</PaperCode> for pixel art.
                 A PaperSelectorItem draws its icon in the primary color. A maker's logo there names <PaperCode>tint="text"</PaperCode> so it stays one neutral color.
             </PaperText>

@@ -17,11 +17,6 @@ const STILL_UNTYPED = [
     "packages/testkit/src/panels.ts",
     "apps/paperboard/tests/shell/support/problems-panel/src/panel.ts",
     "apps/paperboard/tests/shell/support/problems-panel/src/service.ts",
-    "panels/dev.paperboard.actions/src/projects/state.ts",
-    "panels/dev.paperboard.actions/src/widgets.tsx",
-    "panels/dev.paperboard.actions/test/fixtures/canvasSyncApi.ts",
-    "panels/dev.paperboard.ai/src/lib/state.ts",
-    "panels/dev.paperboard.ai/src/widget/state.ts",
 ];
 
 // PaperAPI itself and its docs name them to define and deprecate them

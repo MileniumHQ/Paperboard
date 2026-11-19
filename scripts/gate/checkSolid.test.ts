@@ -146,8 +146,6 @@ describe("the house rules flag each break, honour a reasoned quiet marker, and p
         // a red line of text says a failure in place too; a color a condition picks does not
         expect(quotes(`export const E = () => <><PaperText preset="error">Not renamed</PaperText><PaperText size={2} color={"danger"}>Taken</PaperText></>;\n`)).toEqual(["1:error-quote", "1:error-quote"]);
         expect(quotes(`export const F = (p: { left: boolean }) => <PaperText color={p.left ? "danger" : "success"}>Steve</PaperText>;\n`)).toEqual([]);
-        // the deprecated panels keep theirs until they go
-        expect(checkSource(join(root, "panels/dev.paperboard.ai/src/A.tsx"), danger, { errorQuotes: {} })).toEqual([]);
 
         // an entry for a file that is gone, under a scanned folder
         const dir = mkdtempSync(join(tmpdir(), "check-solid-"));
@@ -168,9 +166,6 @@ describe("the house rules flag each break, honour a reasoned quiet marker, and p
         expect(rules(`showToast({ title: "Saved", duration: 20000 });\nconst fade = { duration: null, easing: "linear" };\n`)).toEqual([]);
     });
 
-    test("--solid-only leaves the house rules out", () => {
-        expect(checkSource("a.test.ts", `void run().catch(() => ${EMPTY});\nawait Bun.sleep(5);\n`, { solidOnly: true })).toEqual([]);
-    });
 
     test("a relative import into another package, and the near misses: its own files, the repo root, a package by name", () => {
         // a file of the npx launcher, by its place in this repository (the packages around it are real)

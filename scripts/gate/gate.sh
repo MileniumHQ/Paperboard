@@ -13,7 +13,7 @@
 #   its sources and tests: the mechanical Solid mistakes AGENTS.md's "Solid:"
 #   section names, and the house rules that kept coming back (a catch that
 #   only logs, an effect without on(), <For> fed fresh rows, fixed sleeps in
-#   tests). The deprecated panels (actions, ai) get the Solid rules alone.
+#   tests).
 #   paperboard, library and the panels also run an advisory styling
 #   check (scripts/gate/check-app-styling.sh): literal sizes, colors, motion,
 #   z-index and the like that have a PaperUI token. It warns, never fails.
@@ -34,7 +34,7 @@
 #     arilink        pbd.lc short-link worker: typecheck, tests, silent-catches
 #     panelapis      third-party API proxy worker: typecheck, tests, silent-catches
 #     scripts        root dev/publish scripts: typecheck, tests, silent-catches
-#     actions agents ai blocks botcreator gameserver terminal   first-party panels
+#     agents blocks botcreator gameserver terminal   first-party panels
 #     global         repo-wide checks (changelog-existence, todo-expiry)
 #     platform       the cross-platform suites only: each `tests/platform` or
 #                    `test/platform` directory below. CI runs this on every
@@ -92,7 +92,7 @@ supervisor_vet() {
 # Every selectable target. The *-build names are prerequisites, not
 # user-facing: they exist so a filtered run can pull in the shared library
 # artifact a consumer needs without running that library's whole suite.
-KNOWN_TARGETS="global platform packages paperapi paperui create-panel release testkit npx paperapi-build paperui-build create-panel-build daemon paperboard paperdocs origami library arilink panelapis scripts actions agents ai blocks botcreator gameserver terminal"
+KNOWN_TARGETS="global platform packages paperapi paperui create-panel release testkit npx paperapi-build paperui-build create-panel-build daemon paperboard paperdocs origami library arilink panelapis scripts agents blocks botcreator gameserver terminal"
 
 # Prerequisites per target, expanded transitively. A panel (and any app that
 # bundles the SDK/design system) needs paperapi/paperui dist present; the
@@ -104,7 +104,7 @@ target_deps() {
         create-panel) echo "paperapi-build paperui-build create-panel-build" ;;
         packages) echo "paperapi-build paperui-build create-panel-build" ;;
         daemon | paperboard | paperdocs | library | platform) echo "paperapi-build paperui-build" ;;
-        actions | agents | ai | blocks | botcreator | gameserver | terminal) echo "paperapi-build paperui-build" ;;
+        agents | blocks | botcreator | gameserver | terminal) echo "paperapi-build paperui-build" ;;
         *) echo "" ;;
     esac
 }
@@ -293,17 +293,13 @@ gwarn library "library styling literals" bash "$ROOT/scripts/gate/check-app-styl
 # The daemon runs the built dist/service.js, not the TypeScript source, so the
 # gate rebuilds every panel: tests and typechecks prove the source, the build
 # proves the artifact that actually ships. ───────────────────────────────────
-for short in actions agents ai blocks botcreator gameserver terminal; do
+for short in agents blocks botcreator gameserver terminal; do
     panel="panels/dev.paperboard.$short"
     gstep "$short" "$panel tests" run_in "$ROOT/$panel" bun run test
     gstep "$short" "$panel typecheck" run_in "$ROOT/$panel" bunx tsc --noEmit
     gstep "$short" "$panel build" run_in "$ROOT/$panel" bun run build
     gstep "$short" "$panel silent-catches" run_in "$ROOT/$panel" bash "$CATCH" src test
-    case "$short" in
-        # deprecated: nobody changes them, so only the Solid rules hold
-        actions | ai) gstep "$short" "$panel solid check" run_in "$ROOT" bun scripts/gate/check-solid.ts --solid-only "$panel" ;;
-        *) gstep "$short" "$panel code check" run_in "$ROOT" bun scripts/gate/check-solid.ts "$panel" ;;
-    esac
+    gstep "$short" "$panel code check" run_in "$ROOT" bun scripts/gate/check-solid.ts "$panel"
     gwarn "$short" "$panel styling literals" bash "$ROOT/scripts/gate/check-app-styling.sh" "$panel"
 done
 

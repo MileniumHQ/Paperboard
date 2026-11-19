@@ -2,10 +2,9 @@
 // Backstop for AGENTS.md "Solid:" and the house rules that keep coming back —
 // catches the mechanical mistakes a parser can decide on its own, with no
 // type checker, so a whole target scans in well under a second.
-// Usage: bun scripts/gate/check-solid.ts [--solid-only] <dir>...
+// Usage: bun scripts/gate/check-solid.ts <dir>...
 // Prints `path:line: <rule>: <why and what to do instead>` per hit and exits
-// 1 on any hit, 0 when clean, 2 when the scan could not run. --solid-only
-// runs the Solid rules alone (the deprecated panels, which nobody changes).
+// 1 on any hit, 0 when clean, 2 when the scan could not run.
 //
 // Scanned: .ts/.tsx under the given dirs, skipping node_modules, dist, out,
 // build, release, coverage, dot-dirs and .d.ts files. Tests and their
@@ -103,8 +102,6 @@
 //    them are scripts/gate/errorQuotes.json, each with how many, until the
 //    migration takes them out: a file over its count is a hit, and so is one
 //    under it or an entry for a file that is gone, so the list only shrinks.
-//    The deprecated panels (dev.paperboard.ai, dev.paperboard.actions) are
-//    left out, as nobody changes them.
 //  static-toast (PaperToast's docs: every toast goes by itself)
 //    An object literal with `duration: null` handed to showToast, or one
 //    that has a `title` too (toast options built ahead). A failure that
@@ -135,7 +132,6 @@ const EFFECTS = new Set(["createEffect", "createRenderEffect", "createComputed",
 
 export type Hit = { file: string; line: number; rule: string; message: string };
 export type Options = {
-    solidOnly?: boolean;
     /** the files allowed error quotes, and how many: scripts/gate/errorQuotes.json unless given */
     errorQuotes?: Record<string, number>;
 };
@@ -389,7 +385,7 @@ export function checkSource(file: string, text: string, options: Options = {}): 
     }
 
     visit(sf, false);
-    if (!options.solidOnly) checkHouseRules(sf, file, hit, options);
+    checkHouseRules(sf, file, hit, options);
     return hits;
 }
 
@@ -583,7 +579,6 @@ function checkPackageBoundary(sf: TS.SourceFile, file: string, report: (node: TS
 
 const ERROR_QUOTES_FILE = join(ROOT, "scripts/gate/errorQuotes.json");
 // the panels nobody changes: their error quotes go when they do
-const DEPRECATED_PANELS = ["panels/dev.paperboard.ai/", "panels/dev.paperboard.actions/"];
 let errorQuotesListed: Record<string, number> | undefined;
 function errorQuotesAllowed(options: Options): Record<string, number> {
     if (options.errorQuotes) return options.errorQuotes;
@@ -638,7 +633,6 @@ function isStaticToast(n: TS.Node): n is TS.PropertyAssignment {
 
 function checkErrorQuotes(sf: TS.SourceFile, file: string, hit: (node: TS.Node, rule: string, message: string) => void, options: Options): void {
     const path = relative(ROOT, resolve(file));
-    if (DEPRECATED_PANELS.some((dir) => path.startsWith(dir))) return;
     const sites: TS.Node[] = [];
     const visit = (n: TS.Node): void => {
         if (isErrorQuote(n)) sites.push(n);
@@ -762,7 +756,6 @@ export function checkDirs(dirs: string[], options: Options = {}): Hit[] {
     const files: string[] = [];
     for (const d of dirs) listFiles(d, files);
     const hits = files.flatMap((f) => checkSource(f, readFileSync(f, "utf8"), options));
-    if (options.solidOnly) return hits;
     // an entry for a file that is gone, under what was scanned
     const scanned = dirs.map((d) => resolve(d) + "/");
     for (const listed of Object.keys(errorQuotesAllowed(options))) {
@@ -775,10 +768,9 @@ export function checkDirs(dirs: string[], options: Options = {}): Hit[] {
 
 if (import.meta.main) {
     const args = process.argv.slice(2);
-    const solidOnly = args.includes("--solid-only");
-    const dirs = args.filter((a) => a !== "--solid-only");
+    const dirs = args;
     if (dirs.length === 0) {
-        console.error("usage: bun scripts/gate/check-solid.ts [--solid-only] <dir>...");
+        console.error("usage: bun scripts/gate/check-solid.ts <dir>...");
         process.exit(2);
     }
     for (const d of dirs) {
@@ -789,7 +781,7 @@ if (import.meta.main) {
             process.exit(2);
         }
     }
-    const hits = checkDirs(dirs, { solidOnly });
+    const hits = checkDirs(dirs);
     for (const h of hits) console.log(`${relative(process.cwd(), h.file)}:${h.line}: ${h.rule}: ${h.message}`);
     if (hits.length > 0) {
         console.error(`FAIL: ${hits.length} AGENTS.md rule break(s) found above`);

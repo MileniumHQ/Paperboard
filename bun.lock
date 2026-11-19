@@ -89,7 +89,6 @@
       "devDependencies": {
         "@mileniumhq/paperapi": "workspace:*",
         "@types/node": "^24.19.2",
-        "dev.paperboard.actions": "workspace:*",
         "node-html-parser": "^9.0.7",
         "playwright": "1.65.1",
         "sharp": "0.35.5",
@@ -207,19 +206,6 @@
         "typescript": "~6.0.3",
       },
     },
-    "panels/dev.paperboard.actions": {
-      "name": "dev.paperboard.actions",
-      "dependencies": {
-        "@mileniumhq/paperapi": "workspace:*",
-        "@mileniumhq/paperui": "workspace:*",
-        "solid-js": "^1.9.19",
-      },
-      "devDependencies": {
-        "typescript": "~6.0.3",
-        "vite": "^8.3.8",
-        "vite-plugin-solid": "^2.11.16",
-      },
-    },
     "panels/dev.paperboard.agents": {
       "name": "dev.paperboard.agents",
       "dependencies": {
@@ -234,20 +220,6 @@
         "@types/node": "^24.19.2",
         "@types/semver": "^7.8.0",
         "testkit": "workspace:*",
-        "typescript": "~6.0.3",
-        "vite": "^8.3.8",
-        "vite-plugin-solid": "^2.11.16",
-      },
-    },
-    "panels/dev.paperboard.ai": {
-      "name": "dev.paperboard.ai",
-      "dependencies": {
-        "@mileniumhq/paperapi": "workspace:*",
-        "@mileniumhq/paperui": "workspace:*",
-        "solid-js": "^1.9.19",
-      },
-      "devDependencies": {
-        "@types/node": "^24.19.2",
         "typescript": "~6.0.3",
         "vite": "^8.3.8",
         "vite-plugin-solid": "^2.11.16",
@@ -1016,11 +988,7 @@
 
     "detect-node": ["detect-node@2.1.0", "", {}, "sha512-T0NIuQpnTvFDATNuHN5roPwSBG83rFsuO+MXXH9/3N1eFbn4wcPjttvjMLEPWJ0RGUYgQE7cGgS3tNxbqCGM7g=="],
 
-    "dev.paperboard.actions": ["dev.paperboard.actions@workspace:panels/dev.paperboard.actions"],
-
     "dev.paperboard.agents": ["dev.paperboard.agents@workspace:panels/dev.paperboard.agents"],
-
-    "dev.paperboard.ai": ["dev.paperboard.ai@workspace:panels/dev.paperboard.ai"],
 
     "dev.paperboard.blocks": ["dev.paperboard.blocks@workspace:panels/dev.paperboard.blocks"],
 
