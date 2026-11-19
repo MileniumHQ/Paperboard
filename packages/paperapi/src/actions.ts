@@ -1,5 +1,4 @@
 import { getTransport, getPanelId } from "./ipc";
-import { debugErr } from "./debug";
 import {
     type ActionDefinition,
     type ActionSchema,
@@ -315,7 +314,7 @@ export const actionsApi = {
     onRegistryChange: (callback: (data?: any) => void): (() => void) => {
         const transport = getTransport();
         const off = transport.subscribeEvent("actions:registry-updated", (change) => callback(change));
-        transport.ensureConnected().catch((err) => debugErr("ensure connected on subscribe", err));
+        transport.keepConnected();
         return off;
     },
 
@@ -410,7 +409,7 @@ export const actionsApi = {
 
         const source = `actions:${targetPanel}:${targetEvent}`;
         const off = transport.subscribeEvent(source, (payload) => callback(payload));
-        transport.ensureConnected().catch((err) => debugErr("ensure connected on subscribe", err));
+        transport.keepConnected();
         return off;
     },
 
@@ -464,7 +463,7 @@ export const actionsApi = {
             const output = fired as T;
             callback(output, { panelId: targetPanel, trigger: targetTrigger, output });
         });
-        transport.ensureConnected().catch((err) => debugErr("ensure connected on subscribe", err));
+        transport.keepConnected();
         return off;
     },
 };

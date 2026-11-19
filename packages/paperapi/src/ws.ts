@@ -249,9 +249,11 @@ export class CraneTransport {
 
             ws.on("error", (err: Error) => fail(err));
 
-            // once connected, a socket the transport has let go of (a refused
-            // sign-in, a replaced connection) still hears its closing
-            // handshake out; what it hears then is no longer the transport's
+            // a socket that failed to connect, or that the transport let go
+            // of after (a refused sign-in), still hears its closing handshake
+            // out, maybe after the next socket is up; what it hears then is no
+            // longer the transport's. Whoever wants the connection back calls
+            // keepConnected(), which tries again until it connects.
             const dropped = () => settled && this.ws !== ws;
 
             ws.on("message", (raw) => {

@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, jest, setDefaultTimeout, test } from "bun:test";
 import { actionsApi } from "../src/actions";
 import { backupApi } from "../src/backups";
+import { blocksApi } from "../src/blocks";
+import net from "node:net";
 import { createPanelBridge } from "../src/bridge";
 import { fileApi } from "../src/file";
 import { terminalApi } from "../src/index";
@@ -693,6 +695,50 @@ describe("a backup progress listener that can't connect yet", () => {
         }
         expect(errors.some((l) => l.includes("the host has no credential yet"))).toBe(true);
     });
+});
+
+// A subscription is what no caller waits on: made while the daemon is
+// down, it keeps trying and hears events once the daemon is back.
+describe("a subscription made while the daemon is down", () => {
+    const subscriptions = [
+        { name: "Blocks' registry", event: "blocks:registry-updated", payload: { type: "registered", panelId: "dev.a" }, listen: (cb: (p: unknown) => void) => blocksApi.onRegistryChange(cb) },
+        { name: "Actions' registry", event: "actions:registry-updated", payload: { type: "registered", panelId: "dev.a" }, listen: (cb: (p: unknown) => void) => actionsApi.onRegistryChange(cb) },
+        { name: "a process's output", event: "process:data", payload: { id: "p1", data: "up", stream: "stdout" }, listen: (cb: (p: unknown) => void) => on("process-data:p1", (_e: unknown, data: unknown) => cb({ id: "p1", data, stream: "stdout" })) },
+    ];
+    for (const sub of subscriptions) {
+        test(`hears ${sub.name} once the daemon is up`, async () => {
+            const { port, token } = server;
+            await server.close();
+            // the daemon is down: its port drops every connection, and says when
+            const turnedAway: (() => void)[] = [];
+            const refusing = net.createServer((socket) => {
+                socket.destroy();
+                turnedAway.shift()?.();
+            });
+            await new Promise<void>((ok) => refusing.listen(port, "127.0.0.1", ok));
+            const refused = () => new Promise<void>((ok) => turnedAway.push(ok));
+            let attempt = refused();
+            const down = await initPaperApi({ port, token }).then(() => null, (err: Error) => err.message);
+            await attempt;
+            expect(down).not.toBeNull();
+            const heard = deferred<unknown>();
+            attempt = refused();
+            const off = sub.listen((p) => heard.resolve(p));
+            try {
+                // the subscription's own try is turned away too
+                await attempt;
+                await new Promise<void>((ok) => refusing.close(() => ok()));
+                server = await startWireServer(token, port);
+                server.answer = (action) => (action === "process:attach" ? { success: true } : {});
+                await server.next("the announcement", (f) => f.msg?.action === "events:subscribe" && f.msg.params.events.includes(sub.event));
+                await getTransport().subscriptionsSettled();
+                server.emit(sub.event, sub.payload);
+                expect(await heard.promise).toEqual(sub.payload);
+            } finally {
+                off();
+            }
+        });
+    }
 });
 
 // A bridge's first read has no button waiting for it: a failure is shown as the panel's problem.

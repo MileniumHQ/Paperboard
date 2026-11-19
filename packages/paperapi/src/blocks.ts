@@ -4,7 +4,6 @@
 // It is its own registry: Actions (v1, actionsApi) keeps working untouched.
 import { getTransport, getPanelId } from "./ipc";
 import type { EventPayload } from "./protocol";
-import { debugErr } from "./debug";
 import {
     blockEntry,
     blockSchema,
@@ -358,7 +357,7 @@ async function callEntry<T>(panelId: string, entry: string, request: unknown, op
 function subscribe<E extends string>(source: E, callback: (payload: EventPayload<E>) => void): () => void {
     const transport = getTransport();
     const off = transport.subscribeEvent(source, callback);
-    transport.ensureConnected().catch((err) => debugErr(`ensure connected on subscribe ${source}`, err));
+    transport.keepConnected();
     return off;
 }
 
