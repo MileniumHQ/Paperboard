@@ -140,6 +140,22 @@ function placeIcon(block: Blockly.BlockSvg): void {
     if (icon) first!.insertFieldAt(0, iconField(icon), ICON_FIELD);
 }
 
+/**
+ * A value block that is only its field (a text or a number) is drawn by
+ * zelos as the field itself, painted once in the field's colour, when the
+ * field is first drawn. Here only a shadow, the value typed into a socket,
+ * is just its field: every other block shows its icon (placeIcon), which is
+ * added after the field decided, so a text or number block would paint
+ * itself white with a white icon on it, and keep the first theme's colour.
+ * Such a block is its colour with PaperUI's field in it, as any block is.
+ */
+// Blockly's FieldInput, which its text and number fields extend, isn't exported on its own
+const fieldInput: Blockly.Field = Object.getPrototypeOf(Blockly.FieldTextInput.prototype);
+const isFullBlockField = fieldInput.isFullBlockField;
+fieldInput.isFullBlockField = function (this: Blockly.Field): boolean {
+    return isFullBlockField.call(this) && this.getSourceBlock()!.isShadow();
+};
+
 class PaperConstants extends Blockly.zelos.ConstantProvider {
     constructor() {
         // zelos measures in grid units: a sixth of PaperUI's gap, so its
