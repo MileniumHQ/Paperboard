@@ -73,6 +73,19 @@ describe("the server issue repairs", () => {
             expect(await page.evaluate<string>(`${failure}.innerText`)).toContain("EEXIST");
             expect(await page.evaluate<number>(`document.querySelectorAll("[data-paper-toasts] [role=alert]").length`)).toBe(0);
             expect(await page.evaluate<string>("document.body.innerText")).not.toContain("Couldn't clean up the server folder");
+            // a retry that fails again keeps the notice up the whole time: it never
+            // goes as though the server were set up, and comes back
+            await page.evaluate(`(() => {
+                window.noticeGone = false;
+                new MutationObserver(() => { if (!document.querySelector("[data-paper-error]")) window.noticeGone = true; })
+                    .observe(document.body, { childList: true, subtree: true });
+                return true;
+            })()`);
+            await page.evaluate(`[...${failure}.querySelectorAll("button")].find((b) => b.innerText.trim() === "Try again").click()`);
+            await page.waitFor(`[...document.querySelectorAll("[data-paper-toasts] [role=alert]")].some((t) => t.innerText.includes("Couldn't retry the setup"))`, "the failed retry to be shown");
+            await page.settled();
+            expect(await page.evaluate<boolean>("window.noticeGone")).toBe(false);
+            expect(await page.evaluate<string>(`${failure}.innerText`)).toContain("EEXIST");
             fs.rmSync(path.join(daemon.dataDir, "files", PANEL_ID, SERVERS, "s-bad"));
             await page.evaluate(`[...${failure}.querySelectorAll("button")].find((b) => b.innerText.trim() === "Try again").click()`);
             await page.waitFor(`!document.querySelector("[data-paper-error]")`, "the failure to go once it is set up");
