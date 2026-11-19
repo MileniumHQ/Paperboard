@@ -1,8 +1,8 @@
 import type { RpcContext } from "./context";
 import { claimClient, checkClientOwnership, checkSpawnEnv } from "./ownership";
 import { rpcModule } from "./dispatch";
-import { offeredShells } from "../shellIntegration";
-import type { TerminalStreams } from "../engine";
+import { offeredShells } from "../workloads/shellIntegration";
+import type { TerminalStreams } from "../engine/index";
 
 // every stream a terminal has, as events for the socket that asked
 function terminalEvents(termId: string, sendEvent: RpcContext["sendEvent"]): TerminalStreams {

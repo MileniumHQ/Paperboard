@@ -61,7 +61,7 @@ func listen(address string) (net.Listener, error) {
 	// A socket's path has a kernel limit (103 bytes on macOS, 107 on Linux)
 	// that a deep data folder passes, so the socket is bound by its name from
 	// inside its own folder; the daemon connects the same way
-	// (apps/daemon/src/supervisor.ts: connectEndpoint), and unlink takes the full
+	// (apps/daemon/src/workloads/supervisor.ts: connectEndpoint), and unlink takes the full
 	// path as usual. The workload has its own folder already, and nothing
 	// else here uses a relative path meanwhile.
 	previous, err := os.Getwd()

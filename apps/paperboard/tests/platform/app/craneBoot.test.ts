@@ -1,7 +1,7 @@
 import { beforeAll, describe, expect, test } from "bun:test";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { verifyDaemonProof, DAEMON_CHALLENGE_HEADER, DAEMON_PROOF_TYPE } from "daemon/handshake";
+import { verifyDaemonProof, DAEMON_CHALLENGE_HEADER, DAEMON_PROOF_TYPE } from "daemon/security/handshake";
 import { APP_PACKAGE, BUILD_TIMEOUT_MS, buildCrane, type BuiltCrane } from "./support/build";
 import { CraneSocket, randomChallenge, startCrane, WAIT_MS } from "./support/crane";
 import { tempDir } from "./support/temp";

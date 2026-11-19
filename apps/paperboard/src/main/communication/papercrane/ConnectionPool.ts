@@ -6,11 +6,11 @@ import {
     readStateFileSync,
     writeJsonAtomicSync,
     sanitizeId,
-} from "daemon/storage";
-import { getLocalDir } from "daemon/paths";
-import { logger } from "daemon/logger";
-import { certFingerprint, pinnedRequest } from "daemon/pinnedTls";
-import { readTlsCert } from "daemon/tlsIdentity";
+} from "daemon/core/storage";
+import { getLocalDir } from "daemon/core/paths";
+import { logger } from "daemon/core/logger";
+import { certFingerprint, pinnedRequest } from "daemon/security/pinnedTls";
+import { readTlsCert } from "daemon/security/tlsIdentity";
 import { bareHost, bracketHost, checkProbeTarget, isLoopback } from "./probeTarget";
 import { PaperCraneClient } from "./PaperCraneClient";
 import { errorMessage } from "@mileniumhq/paperapi/errors";

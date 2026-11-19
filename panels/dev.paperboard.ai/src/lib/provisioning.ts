@@ -7,7 +7,7 @@ import { OLLAMA_PROVIDER } from "../core/providers";
 import { call, state } from "./state";
 
 const STEP_MS = 300;
-// The daemon bounds an install download at 30 minutes (apps/daemon/src/storage.ts)
+// The daemon bounds an install download at 30 minutes (apps/daemon/src/core/storage.ts)
 // and a runtime boot at 60 s; this UI wait only needs to outlast both, and
 // exists so a stuck state can't spin forever.
 const SETUP_WAIT_MS = 31 * 60_000;

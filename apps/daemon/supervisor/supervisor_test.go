@@ -12,7 +12,7 @@ import (
 	"time"
 )
 
-// apps/daemon/src/supervisor.ts computes the same names to connect
+// apps/daemon/src/workloads/supervisor.ts computes the same names to connect
 func TestEndpointNamesMatchTheDaemon(t *testing.T) {
 	for _, id := range []string{"survivor", "a.b", strings.Repeat("y", 128)} {
 		if got := endpointName(id); len(got) != 32 {

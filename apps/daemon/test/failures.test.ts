@@ -1,7 +1,7 @@
 import { describe, expect, setDefaultTimeout, test } from "bun:test";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { getLogsDir, ensureDir } from "../src/paths";
+import { getLogsDir, ensureDir } from "../src/core/paths";
 import { tempDir } from "testkit/fs";
 import { startDaemon } from "testkit/inproc";
 import { TEST_TIMEOUT_MS, waitFor } from "testkit/wait";

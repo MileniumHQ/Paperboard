@@ -4,7 +4,7 @@
 // index it, a hash of the panel id (property values are short) and the
 // backup id. Access tokens come from the stored refresh token.
 import * as crypto from "crypto";
-import { logger } from "../logger";
+import { logger } from "../core/logger";
 import { assertSecureUrl, expectOk, httpRequest } from "./http";
 import { BACKUP_ARCHIVE_MAX_BYTES, BackupListingError, backupArchiveDownloadCap, MAX_LISTED_BACKUPS, newestFirst, parseBackupRecord, type BackupRecord, type BackupStore, type BackupUsage, type BytesProgress } from "./types";
 

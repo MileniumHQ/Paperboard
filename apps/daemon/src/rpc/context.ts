@@ -1,6 +1,6 @@
 import type { WebSocket, WebSocketServer } from "ws";
-import type { PaperCraneEngine } from "../engine";
-import type { PaperCraneAuth } from "../auth";
+import type { PaperCraneEngine } from "../engine/index";
+import type { PaperCraneAuth } from "../security/auth";
 import type { EventPayload } from "@mileniumhq/paperapi/protocol";
 
 // per-connection context for all RPC handlers

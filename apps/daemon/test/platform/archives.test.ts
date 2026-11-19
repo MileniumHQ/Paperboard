@@ -2,8 +2,8 @@ import { describe, expect, setDefaultTimeout, test } from "bun:test";
 import { TEST_TIMEOUT_MS } from "testkit/wait";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { extractTarSafely } from "../../src/tarSafety";
-import { applyPackageRecipe, extractArchive, extractPackageArchive } from "../../src/engineArchives";
+import { extractTarSafely } from "../../src/packages/tarSafety";
+import { applyPackageRecipe, extractArchive, extractPackageArchive } from "../../src/engine/archives";
 import { tar, tarGz, zip, type TarMember } from "testkit/archive";
 import { listTree, tempDir } from "testkit/fs";
 

@@ -8,7 +8,7 @@ import * as https from "https";
 import { pipeline } from "stream/promises";
 import { Transform, type Readable } from "stream";
 import { BACKUP_ARCHIVE_MAX_BYTES, backupTransferDeadlineMs } from "./types";
-import { PAPERBOARD_USER_AGENT } from "../userAgent";
+import { PAPERBOARD_USER_AGENT } from "../core/userAgent";
 
 export interface HttpResult {
     status: number;

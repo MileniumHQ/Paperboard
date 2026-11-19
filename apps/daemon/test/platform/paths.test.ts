@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, setDefaultTimeout, test } from "
 import { TEST_TIMEOUT_MS } from "testkit/wait";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { PaperCraneEngine } from "../../src/engine";
+import { PaperCraneEngine } from "../../src/engine/index";
 import { dataDir, listTree, tempDir } from "testkit/fs";
 import { startDaemon, type InProcessDaemon } from "testkit/inproc";
 import type { Rpc } from "testkit/rpc";

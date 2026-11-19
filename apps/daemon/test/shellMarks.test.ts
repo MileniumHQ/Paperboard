@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { ShellMarks, type ShellCommand } from "../src/shellIntegration";
+import { ShellMarks, type ShellCommand } from "../src/workloads/shellIntegration";
 
 const ESC = "\u001b";
 const BEL = "\u0007";

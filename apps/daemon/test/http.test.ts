@@ -3,7 +3,7 @@ import * as fs from "node:fs";
 import * as http from "node:http";
 import * as net from "node:net";
 import * as path from "node:path";
-import { PANEL_TRAVERSAL_VECTORS, resolveLocalPanelFile } from "../src/panelAssets";
+import { PANEL_TRAVERSAL_VECTORS, resolveLocalPanelFile } from "../src/panels/panelAssets";
 import { listTree, tempDir } from "testkit/fs";
 import { type InProcessDaemon, request, startDaemon, stopDaemon } from "testkit/inproc";
 import { installPanelFiles } from "testkit/panels";

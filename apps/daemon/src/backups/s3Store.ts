@@ -3,8 +3,8 @@
 // Requests are signed with AWS Signature Version 4; an upload streams the
 // archive with an unsigned payload hash over TLS.
 import * as crypto from "crypto";
-import { panelFilesDirName } from "../storage";
-import { logger } from "../logger";
+import { panelFilesDirName } from "../core/storage";
+import { logger } from "../core/logger";
 import { assertSecureUrl, expectOk, httpRequest, type HttpRequestInit } from "./http";
 import { backupArchiveDownloadCap, BACKUP_ARCHIVE_MAX_BYTES, BackupListingError, MAX_LISTED_BACKUPS, newestFirst, parseBackupRecord, type BackupRecord, type BackupStore, type BackupUsage, type BytesProgress } from "./types";
 

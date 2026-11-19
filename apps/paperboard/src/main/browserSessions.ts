@@ -9,8 +9,8 @@
 // only: a restart throws away the ones nobody followed.
 import * as crypto from "crypto";
 import * as path from "path";
-import { readStateFileSync, writeJsonAtomicSync } from "daemon/storage";
-import { ensurePrivateDir } from "daemon/paths";
+import { readStateFileSync, writeJsonAtomicSync } from "daemon/core/storage";
+import { ensurePrivateDir } from "daemon/core/paths";
 
 export const SIGN_IN_LINK_TTL_MS = 5 * 60_000;
 export const SESSION_TTL_MS = 30 * 24 * 60 * 60_000;

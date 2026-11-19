@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, setDefaultTimeout, test } from "bun:test";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { PaperCraneAuth, MAX_PAIRING_FAILURES } from "../src/auth";
+import { PaperCraneAuth, MAX_PAIRING_FAILURES } from "../src/security/auth";
 import { isPanelId } from "@mileniumhq/paperapi/panelIdentity";
 import { dataDir } from "testkit/fs";
 import { request, startDaemon, stopDaemon } from "testkit/inproc";

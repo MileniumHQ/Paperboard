@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, setDefaultTimeout, test } from "bun:test";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { supervisorEndpointName } from "../src/supervisor";
+import { supervisorEndpointName } from "../src/workloads/supervisor";
 import { killWorkloads, startCrane, workloadRecords, type CraneProcess } from "testkit/crane";
 import { dataDir } from "testkit/fs";
 import { Rpc } from "testkit/rpc";

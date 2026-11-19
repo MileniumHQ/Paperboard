@@ -29,7 +29,7 @@ export { PANEL_ID };
 
 const PANEL = path.resolve(import.meta.dir, "../..");
 const DAEMON_ENTRY = path.resolve(PANEL, "../../apps/daemon/src/index.ts");
-const SUPERVISOR_ENTRY = path.resolve(PANEL, "../../apps/daemon/src/supervisorBinary.ts");
+const SUPERVISOR_ENTRY = path.resolve(PANEL, "../../apps/daemon/src/workloads/supervisorBinary.ts");
 const SERVICE_ENTRY = path.join(PANEL, "src/service.ts");
 const WAIT_MS = 20_000;
 

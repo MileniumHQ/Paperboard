@@ -8,11 +8,11 @@
 // never shadow the embedded daemon and a test import can never boot a server.
 import { fileURLToPath, pathToFileURL } from "url";
 import { startPaperCraneServer } from "./index";
-import { CliHandledExit, CliUsageError, EXIT, parseCli } from "./cli";
+import { CliHandledExit, CliUsageError, EXIT, parseCli } from "./cli/cli";
 import * as fs from "fs";
 import * as path from "path";
-import { setSupervisorBinary } from "./supervisorBinary";
-import { getPaperboardDir } from "./paths";
+import { setSupervisorBinary } from "./workloads/supervisorBinary";
+import { getPaperboardDir } from "./core/paths";
 import { errorCode } from "@mileniumhq/paperapi/errors";
 
 // clean one-line startup failures instead of raw stacks
@@ -82,19 +82,19 @@ async function main(): Promise<void> {
             await import(pathToFileURL(command.module).href);
             return;
         case "status": {
-            const { runStatus } = await import("./localControl");
+            const { runStatus } = await import("./cli/localControl");
             return finish(() => runStatus(command.json));
         }
         case "pair": {
-            const { runPair } = await import("./localControl");
+            const { runPair } = await import("./cli/localControl");
             return finish(runPair);
         }
         case "install-service": {
-            const { installService } = await import("./serviceInstall");
+            const { installService } = await import("./cli/serviceInstall");
             return finish(() => installService(command));
         }
         case "uninstall-service": {
-            const { uninstallService } = await import("./serviceInstall");
+            const { uninstallService } = await import("./cli/serviceInstall");
             return finish(() => uninstallService(command.target));
         }
         case "serve":

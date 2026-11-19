@@ -11,7 +11,7 @@ import (
 )
 
 // What to run, as the daemon wrote it on stdin (SupervisorSpawnConfig in
-// apps/daemon/src/supervisor.ts). raw is the config exactly as it arrived: the
+// apps/daemon/src/workloads/supervisor.ts). raw is the config exactly as it arrived: the
 // metadata file repeats it, so fields this supervisor does not act on
 // (important, appId) reach the daemon that adopts the workload.
 type spawnConfig struct {

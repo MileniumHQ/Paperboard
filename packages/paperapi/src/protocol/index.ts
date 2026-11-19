@@ -6,7 +6,7 @@ export * from "./fields";
 export * from "./rpc";
 export * from "./events";
 
-// Must equal apps/daemon/src/protocol.ts PROTOCOL_VERSION (pinned by the
+// Must equal apps/daemon/src/core/protocol.ts PROTOCOL_VERSION (pinned by the
 // cross-repo version parity test and tests/clientParity.test.ts in
 // Paperboard). One constant per repo until the monorepo makes it one
 // package — never a second hardcoded literal at a call site.

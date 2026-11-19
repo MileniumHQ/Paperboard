@@ -1,6 +1,6 @@
 import type { RpcContext } from "./context";
 import { rpcModule } from "./dispatch";
-import { resourcePanelId } from "../principal";
+import { resourcePanelId } from "../security/principal";
 
 // file space is per-panel like the vault: a panel-scoped caller naming any
 // other panel's appId is refused outright. An omitted appId defaults to the

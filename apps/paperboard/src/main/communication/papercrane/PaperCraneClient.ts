@@ -1,7 +1,7 @@
 // What a computer's Paperboard Server can be asked: pairing, packages,
 // panel installs, Stop and update, config, its own update and system info.
 // The connection under it is PaperCraneConnection.ts.
-import { logger } from "daemon/logger";
+import { logger } from "daemon/core/logger";
 import type { PanelManifest, RpcResult } from "@mileniumhq/paperapi/protocol";
 import { PaperCraneConnection, type ProgressPayload } from "./PaperCraneConnection";
 

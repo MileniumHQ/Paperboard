@@ -22,7 +22,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { spawn } from "node:child_process";
 import { WebSocket } from "ws";
-import { loadOrCreateTlsIdentity } from "daemon/tlsIdentity";
+import { loadOrCreateTlsIdentity } from "daemon/security/tlsIdentity";
 import { defaultHomeItems } from "../src/renderer/src/components/home/builtins/defaults";
 import { HOME_LAYOUT_ID, serializeHomeLayout } from "../src/renderer/src/lib/homeLayout";
 

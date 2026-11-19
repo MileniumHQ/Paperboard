@@ -7,7 +7,7 @@ import * as net from "node:net";
 import * as os from "node:os";
 import * as path from "node:path";
 import { promisify } from "node:util";
-import { createTlsIdentity } from "daemon/tlsIdentity";
+import { createTlsIdentity } from "daemon/security/tlsIdentity";
 import { type DavRelay, type DavRelayOptions, startDavRelay } from "../../../src/main/davRelay";
 import { buildMacMountArgs, buildWindowsMountCommand, macFolderHasWindow, macMountCredentials, mountMacFolder, windowsDavRoot } from "../../../src/main/remoteFolderMount";
 import { type InProcessDaemon, startDaemon } from "testkit/inproc";

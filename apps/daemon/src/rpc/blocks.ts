@@ -3,14 +3,14 @@
 // "kind.id" (or "project/kind.id"), and the Blocks panel lists and calls
 // them. It is the Actions registry's machinery as a separate registry, so
 // v1 actions and v2 blocks never see each other's names.
-import { blocksRegistry } from "../actions";
-import { ErrorCode } from "../protocol";
+import { blocksRegistry } from "../server/actions";
+import { ErrorCode } from "../core/protocol";
 import type { RpcContext } from "./context";
 import { rpcModule } from "./dispatch";
 import { Refusal } from "./errors";
 import { InvalidParamsError } from "@mileniumhq/paperapi/protocol";
 import { rpcErrorCode } from "./errors";
-import { resourcePanelId } from "../principal";
+import { resourcePanelId } from "../security/principal";
 import { errorMessage } from "@mileniumhq/paperapi/errors";
 
 // The namespace a socket writes to is the token claim: a scoped caller

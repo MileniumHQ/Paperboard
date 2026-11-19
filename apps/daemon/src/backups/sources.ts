@@ -3,8 +3,8 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { createHash, randomUUID } from "node:crypto";
-import type { PaperCraneEngine } from "../engine";
-import { writeFileAtomicSync } from "../storage";
+import type { PaperCraneEngine } from "../engine/index";
+import { writeFileAtomicSync } from "../core/storage";
 import { requirePanelId } from "@mileniumhq/paperapi/panelIdentity";
 import { errorMessage } from "@mileniumhq/paperapi/errors";
 

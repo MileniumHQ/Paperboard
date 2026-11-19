@@ -4,7 +4,7 @@
 import type { RpcContext } from "./context";
 import { isRpcAction, readParams, RPC, type RpcAction, type RpcParams, type RpcResult } from "@mileniumhq/paperapi/protocol";
 import { Refusal, rpcErrorCode } from "./errors";
-import { requireHost } from "../principal";
+import { requireHost } from "../security/principal";
 
 export type RpcHandler<A extends RpcAction> = (params: RpcParams<A>, ctx: RpcContext, action: A) => Promise<RpcResult<A>> | RpcResult<A>;
 export type RpcHandlers<A extends RpcAction> = { readonly [K in A]: RpcHandler<K> };

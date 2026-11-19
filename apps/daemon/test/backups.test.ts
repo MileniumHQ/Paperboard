@@ -2,7 +2,7 @@ import { afterAll, afterEach, describe, expect, setDefaultTimeout, test } from "
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as tarLib from "tar";
-import { PaperCraneEngine } from "../src/engine";
+import { PaperCraneEngine } from "../src/engine/index";
 import { BackupService } from "../src/backups/service";
 import { createPanelArchive, extractPanelArchive } from "../src/backups/archive";
 import { LocalBackupStore } from "../src/backups/localStore";

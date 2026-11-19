@@ -15,7 +15,7 @@ const targets: Array<{ file: string; pattern: RegExp }> = [
   { file: "package.json", pattern: JSON_VERSION },
   { file: "apps/paperboard/package.json", pattern: JSON_VERSION },
   { file: "apps/daemon/package.json", pattern: JSON_VERSION },
-  { file: "apps/daemon/src/userAgent.ts", pattern: USER_AGENT },
+  { file: "apps/daemon/src/core/userAgent.ts", pattern: USER_AGENT },
   { file: "apps/paperdocs/package.json", pattern: JSON_VERSION },
   { file: "services/origami/package.json", pattern: JSON_VERSION },
   { file: "services/library/package.json", pattern: JSON_VERSION },

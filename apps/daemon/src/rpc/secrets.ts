@@ -1,7 +1,7 @@
-import { logger } from "../logger";
+import { logger } from "../core/logger";
 import type { RpcContext } from "./context";
 import { rpcModule } from "./dispatch";
-import { resourcePanelId } from "../principal";
+import { resourcePanelId } from "../security/principal";
 
 // Every secrets call names its panel explicitly, and the socket's token
 // claim is the identity: a panel-scoped caller naming any other panel is

@@ -1,16 +1,16 @@
 import * as os from "os";
-import { computerHostname } from "../hostname";
-import { getDetailedOsInfo } from "../osInfo";
-import { getNetworkIp } from "../util";
-import { PAPERCRANE_VERSION } from "../discovery";
-import { logger } from "../logger";
+import { computerHostname } from "../server/hostname";
+import { getDetailedOsInfo } from "../system/osInfo";
+import { getNetworkIp } from "../core/util";
+import { PAPERCRANE_VERSION } from "../system/discovery";
+import { logger } from "../core/logger";
 import type { RpcContext } from "./context";
 import { forbidden, Refusal } from "./errors";
 import { rpcModule } from "./dispatch";
-import { getGpuReport } from "../gpu";
-import { usageSampler, type UsageRoots } from "../usage";
-import { requireReleaseOrder } from "../releasePolicy";
-import { installCraneRelease, confirmCraneUpdate } from "../craneUpdate";
+import { getGpuReport } from "../system/gpu";
+import { usageSampler, type UsageRoots } from "../system/usage";
+import { requireReleaseOrder } from "../packages/releasePolicy";
+import { installCraneRelease, confirmCraneUpdate } from "../packages/craneUpdate";
 import { daemonReleaseKey } from "@mileniumhq/release";
 
 // self-update URL must be https or loopback http

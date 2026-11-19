@@ -134,10 +134,10 @@ export async function compileCrane(options: { version?: string; bootFailure?: bo
                 });
                 if (options.protocolVersion !== undefined) {
                     const wanted = options.protocolVersion;
-                    build.onLoad({ filter: /[\\/]apps[\\/]daemon[\\/]src[\\/]protocol\.ts$/ }, async (args) => {
+                    build.onLoad({ filter: /[\\/]apps[\\/]daemon[\\/]src[\\/]core[\\/]protocol\.ts$/ }, async (args) => {
                         const source = await Bun.file(args.path).text();
                         const pinned = /export const PROTOCOL_VERSION = \d+;/;
-                        if (!pinned.test(source)) throw new Error("apps/daemon/src/protocol.ts no longer declares PROTOCOL_VERSION as a number");
+                        if (!pinned.test(source)) throw new Error("apps/daemon/src/core/protocol.ts no longer declares PROTOCOL_VERSION as a number");
                         return { contents: source.replace(pinned, `export const PROTOCOL_VERSION = ${wanted};`), loader: "ts" };
                     });
                 }

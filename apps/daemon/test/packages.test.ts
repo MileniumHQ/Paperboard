@@ -1,10 +1,10 @@
 import { afterAll, afterEach, beforeAll, describe, expect, setDefaultTimeout, test } from "bun:test";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { PaperCraneEngine } from "../src/engine";
-import { streamToFileWithProgress } from "../src/download";
+import { PaperCraneEngine } from "../src/engine/index";
+import { streamToFileWithProgress } from "../src/packages/download";
 import { parsePackageRecipe, recipeDigest } from "@mileniumhq/release";
-import { RECORD_MAX_BYTES } from "../src/registryRecord";
+import { RECORD_MAX_BYTES } from "../src/packages/registryRecord";
 import { tar, tarGz, zip, type TarMember } from "testkit/archive";
 import { killWorkloads, startCrane, workloadRecords } from "testkit/crane";
 import { dataDir, listTree, modeOf, restoreEnv, tempDir } from "testkit/fs";

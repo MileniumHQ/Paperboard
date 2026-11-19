@@ -5,8 +5,8 @@ import * as fs from "fs";
 import * as path from "path";
 import { Transform } from "stream";
 import { pipeline } from "stream/promises";
-import { panelFilesDirName, writeFileAtomic } from "../storage";
-import { logger } from "../logger";
+import { panelFilesDirName, writeFileAtomic } from "../core/storage";
+import { logger } from "../core/logger";
 import { BACKUP_ID_RE, BackupListingError, newestFirst, parseBackupRecord, type BackupRecord, type BackupStore, type BackupUsage, type BytesProgress } from "./types";
 
 /** a file copy that reports the bytes copied so far */

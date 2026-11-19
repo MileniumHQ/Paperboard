@@ -1,7 +1,7 @@
-import { requireHost } from "../principal";
+import { requireHost } from "../security/principal";
 import type { RpcContext } from "./context";
 import { rpcModule } from "./dispatch";
-import { resolvePackageSha256 } from "../packageChecksum";
+import { resolvePackageSha256 } from "../packages/packageChecksum";
 
 // a panel that asks for a package uses it: the package stays while the panel is installed
 function used(packageName: string, ctx: RpcContext): string {

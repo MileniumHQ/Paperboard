@@ -7,10 +7,10 @@
 import * as fs from "fs";
 import * as path from "path";
 import { isPanelId } from "@mileniumhq/paperapi/panelIdentity";
-import { writeFileAtomic } from "../storage";
-import { ErrorCode } from "../protocol";
+import { writeFileAtomic } from "../core/storage";
+import { ErrorCode } from "../core/protocol";
 import { RpcError } from "../rpc/errors";
-import { computerHostname } from "../hostname";
+import { computerHostname } from "../server/hostname";
 import type { S3Settings } from "./s3Store";
 import type { DriveSettings } from "./driveStore";
 import { errorCode } from "@mileniumhq/paperapi/errors";

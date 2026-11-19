@@ -6,7 +6,7 @@
 // (panels-unsaved), so a quit with nothing unsaved never waits.
 import { app, BrowserWindow, dialog, type WebContents } from "electron";
 import { askShell } from "./shellAsk";
-import { logger } from "daemon/logger";
+import { logger } from "daemon/core/logger";
 import { errorMessage } from "@mileniumhq/paperapi/errors";
 
 // each window holding unsaved work, with what drops it once the window is gone

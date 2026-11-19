@@ -1,10 +1,10 @@
 import type { RpcContext } from "./context";
 import { Refusal } from "./errors";
 import { rpcModule } from "./dispatch";
-import { resourcePanelId } from "../principal";
+import { resourcePanelId } from "../security/principal";
 import { problemsFor } from "./problems";
 import { errorMessage } from "@mileniumhq/paperapi/errors";
-import type { DownloadProgressPayload } from "../download";
+import type { DownloadProgressPayload } from "../packages/download";
 
 // a scoped caller reaches only its own panel
 function ownPanel(requested: string, action: string, ctx: RpcContext): string {

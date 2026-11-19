@@ -12,7 +12,7 @@ import (
 
 // Endpoint names are one-to-one with ids: a fixed-length digest, so no two
 // ids share a socket and a unix socket path stays under its length limit for
-// any id. apps/daemon/src/supervisor.ts computes the same name to connect.
+// any id. apps/daemon/src/workloads/supervisor.ts computes the same name to connect.
 func endpointName(id string) string {
 	sum := sha256.Sum256([]byte(id))
 	return hex.EncodeToString(sum[:])[:32]

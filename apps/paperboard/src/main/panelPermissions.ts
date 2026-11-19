@@ -10,8 +10,8 @@
 // Chromium release; readText checks "clipboard-read".
 
 import * as fs from "fs";
-import { logger } from "daemon/logger";
-import { writeJsonAtomicSync } from "daemon/storage";
+import { logger } from "daemon/core/logger";
+import { writeJsonAtomicSync } from "daemon/core/storage";
 import { parsePanelHost } from "./panelAssets";
 
 import { PANEL_PERMISSIONS, isPanelPermission, type PanelPermission, type PanelPermissionEntry, type PermissionAnswer } from "../shared/panelPermissions";

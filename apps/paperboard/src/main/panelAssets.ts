@@ -1,5 +1,5 @@
 // Local panel:// asset serving for the Electron shell. The resolver itself
-// lives in apps/daemon/src/panelAssets.ts (one implementation shared with the
+// lives in apps/daemon/src/panels/panelAssets.ts (one implementation shared with the
 // daemon /panel/ route), and the document helpers live in
 // shared/panelDocument.ts for every host; this module re-exports the
 // resolver and adds the panel:// host split and the nonce.
@@ -9,7 +9,7 @@ export {
     resolveLocalPanelFile,
     type PanelAssetResolution,
     PANEL_TRAVERSAL_VECTORS,
-} from "daemon/panelAssets";
+} from "daemon/panels/panelAssets";
 
 // panel://<computerId>.<panelId>/<path> — scope is part of the origin.
 // Browser mode serves panels by path instead (PaperAPI's parsePanelPath).

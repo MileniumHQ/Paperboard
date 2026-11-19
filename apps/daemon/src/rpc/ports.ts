@@ -1,8 +1,8 @@
-import type { PaperCraneEngine } from "../engine";
+import type { PaperCraneEngine } from "../engine/index";
 import type { RpcContext } from "./context";
 import { rpcModule } from "./dispatch";
-import { resourcePanelId } from "../principal";
-import { PortRegistry } from "../ports";
+import { resourcePanelId } from "../security/principal";
+import { PortRegistry } from "../system/ports";
 
 // one registry per engine, living as long as the engine; a panel's claims
 // go when its data does

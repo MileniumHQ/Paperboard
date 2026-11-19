@@ -3,28 +3,28 @@
 // with backoff, the heartbeat and the RPC framing. What the daemon can be
 // asked is PaperCraneClient.ts.
 import { WebSocket, type RawData } from "ws";
-import { logger } from "daemon/logger";
+import { logger } from "daemon/core/logger";
 import { EventEmitter } from "events";
 import * as path from "path";
 import * as crypto from "crypto";
 import { startPaperCraneServer, ServerInstance, DEFAULT_PORT } from "daemon";
-import { PROTOCOL_VERSION } from "daemon/protocol";
+import { PROTOCOL_VERSION } from "daemon/core/protocol";
 import { readEvent, readResult, type ProgressEvent, type RpcAction, type RpcParams, type RpcResult } from "@mileniumhq/paperapi/protocol";
 import {
     readCraneHandshake, verifyDaemonProof,
     DAEMON_CHALLENGE_HEADER, DAEMON_PROOF_TYPE,
     type CraneHandshakeFile,
-} from "daemon/handshake";
-import { getLocalDir } from "daemon/paths";
+} from "daemon/security/handshake";
+import { getLocalDir } from "daemon/core/paths";
 import {
     peerCertPem,
     pinnedRequest,
     pinnedTlsOptions,
     type PinnedRequestInit,
     type PinnedResponse,
-} from "daemon/pinnedTls";
+} from "daemon/security/pinnedTls";
 import type { TLSSocket } from "tls";
-import { pinnableWebSocket } from "daemon/pinnableWebSocket";
+import { pinnableWebSocket } from "daemon/security/pinnableWebSocket";
 import { bracketHost } from "./probeTarget";
 import { errorMessage } from "@mileniumhq/paperapi/errors";
 

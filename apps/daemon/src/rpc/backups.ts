@@ -1,9 +1,9 @@
-import type { PaperCraneEngine } from "../engine";
+import type { PaperCraneEngine } from "../engine/index";
 import type { RpcContext } from "./context";
 import { rpcModule } from "./dispatch";
-import { resourcePanelId } from "../principal";
+import { resourcePanelId } from "../security/principal";
 import { BackupService } from "../backups/service";
-import { actionsRegistry, blocksRegistry } from "../actions";
+import { actionsRegistry, blocksRegistry } from "../server/actions";
 import { errorMessage } from "@mileniumhq/paperapi/errors";
 
 // one service per engine; it lives as long as the engine does

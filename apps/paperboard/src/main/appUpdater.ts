@@ -15,7 +15,7 @@ import { pushToShells } from "./communication/shellPush";
 import { updateQueue } from "./updateQueue";
 import { TASK_TIMEOUT_MS } from "./updateTasks";
 import { agreeToQuit, confirmQuit } from "./quitGate";
-import { getLogger, logger } from "daemon/logger";
+import { getLogger, logger } from "daemon/core/logger";
 import type { AppUpdateState } from "../shared/appUpdate";
 import type { UpdateItem } from "../shared/updateQueue";
 

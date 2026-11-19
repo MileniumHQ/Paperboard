@@ -1,4 +1,4 @@
-import { actionsRegistry } from "../actions";
+import { actionsRegistry } from "../server/actions";
 import { rpcModule, type RpcHandler } from "./dispatch";
 import { InvalidParamsError } from "@mileniumhq/paperapi/protocol";
 import { answeredAs, ownNamespace, ownedElsewhere } from "./blocks";

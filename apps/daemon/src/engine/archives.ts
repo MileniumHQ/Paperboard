@@ -1,0 +1,260 @@
+// archive extraction via bundled libs, no system tools
+import path from "path";
+import { logger } from "../core/logger";
+import fs from "fs";
+import AdmZip from "adm-zip";
+import { spawn } from "child_process";
+import { extractMsi } from "../packages/msiArchive";
+import { moveFileSafe } from "../core/storage";
+import { extractTarSafely, validateExtractedLinks, TAR_BUDGET } from "../packages/tarSafety";
+import type { PackageRecipe } from "@mileniumhq/release";
+
+// Extracts .tar.gz, .tgz, .zip or single files
+export async function extractArchive(
+    archivePath: string,
+    destDir: string,
+): Promise<void> {
+    if (!fs.existsSync(destDir)) fs.mkdirSync(destDir, { recursive: true });
+
+    const isTar =
+        archivePath.endsWith(".tar.gz") ||
+        archivePath.endsWith(".tgz") ||
+        archivePath.endsWith(".tar");
+    const isZip = archivePath.endsWith(".zip");
+
+    if (isTar) {
+        await extractTarSafely(archivePath, destDir);
+    } else if (isZip) {
+        // pure-JS unzip with zip-slip guard
+        const dest = path.resolve(destDir);
+        const destWithSep = dest.endsWith(path.sep) ? dest : dest + path.sep;
+        const zip = new AdmZip(archivePath);
+        let extractedBytes = 0;
+        if (zip.getEntries().length > 100_000) throw new Error("Archive exceeds entry budget");
+        for (const entry of zip.getEntries()) {
+            extractedBytes += entry.header.size;
+            if (extractedBytes > 4 * 1024 * 1024 * 1024) throw new Error("Archive exceeds extraction budget");
+            const name = entry.entryName;
+            if (!name || typeof name !== "string") {
+                throw new Error(`Unsafe zip entry name in ${path.basename(archivePath)}`);
+            }
+            const normalized = path.normalize(name);
+            if (path.isAbsolute(normalized)) {
+                throw new Error(`Zip entry escapes archive: ${name}`);
+            }
+            const resolved = path.resolve(dest, normalized);
+            if (resolved !== dest && !resolved.startsWith(destWithSep)) {
+                throw new Error(`Zip entry escapes archive: ${name}`);
+            }
+        }
+        // keeping each entry's Unix mode keeps a zipped program runnable;
+        // entries without one (zips made on Windows) still come out 0666
+        zip.extractAllTo(dest, true, true);
+    } else {
+        // raw binary
+        const destFile = path.join(destDir, path.basename(archivePath));
+        await moveFileSafe(archivePath, destFile);
+        if (process.platform !== "win32") fs.chmodSync(destFile, 0o755);
+    }
+}
+
+// find a dir containing bin/, up to maxDepth levels
+export function findBinDir(dir: string, maxDepth: number): string | null {
+    if (!fs.existsSync(dir) || maxDepth < 0) return null;
+    if (fs.existsSync(path.join(dir, "bin"))) return dir;
+    for (const entry of fs.readdirSync(dir)) {
+        if (entry.startsWith(".")) continue;
+        const sub = path.join(dir, entry);
+        // a link to nothing is not a directory to look in
+        if (fs.statSync(sub, { throwIfNoEntry: false })?.isDirectory()) {
+            const result = findBinDir(sub, maxDepth - 1);
+            if (result) return result;
+        }
+    }
+    return null;
+}
+
+// ─── Package archive layouts ─────────────────────────────────────────────────
+// A registry package record may declare how its archive maps onto the
+// installed package directory (Origami writes these; see
+// services/origami/scripts/lib/records.ts). The installed package always ends
+// up with a bin/ directory at its root, which is what getPackagePath and
+// every consumer (`${path}/bin/<program>`) relies on.
+//
+// - wrapped (default): one top-level wrapper dir around bin/ (JDKs); a
+//   wrapper-less archive is re-extracted flat
+// - root: the archive root is the package root and already holds bin/
+// - bin: the archive root is the package's bin/ (flat builds whose files
+//   must stay side by side, e.g. an executable next to its lib/ tree)
+export const PACKAGE_LAYOUTS = ["wrapped", "root", "bin"] as const;
+export type PackageLayout = (typeof PACKAGE_LAYOUTS)[number];
+
+// An unrecognized layout is refused, never guessed: extracting with the
+// wrong mapping installs a package whose binaries are not where callers
+// will look for them.
+export function parsePackageLayout(value: unknown): PackageLayout {
+    if (value === undefined || value === null) return "wrapped";
+    if (typeof value === "string" && (PACKAGE_LAYOUTS as readonly string[]).includes(value)) {
+        return value as PackageLayout;
+    }
+    throw new Error(`Unsupported package layout ${JSON.stringify(value)}`);
+}
+
+// archive suffix from the download URL; tar variants (gzip, zstd, plain)
+// share one extractor that detects compression from the bytes
+export function packageArchiveSuffix(url: string): string {
+    let base = "";
+    try {
+        base = path.basename(new URL(url).pathname).toLowerCase();
+    } catch (err) {
+        logger.debug("[engineArchives.ts] unparseable package url:", err);
+        return "";
+    }
+    for (const ext of [".zip", ".tar.gz", ".tgz", ".tar.zst", ".tar"]) {
+        if (base.endsWith(ext)) return ext;
+    }
+    return "";
+}
+
+export async function extractPackageArchive(
+    archivePath: string,
+    pkgDir: string,
+    layout: PackageLayout,
+    suffix: string,
+): Promise<void> {
+    const dest = layout === "bin" ? path.join(pkgDir, "bin") : pkgDir;
+    fs.mkdirSync(dest, { recursive: true });
+    if (suffix === ".zip") {
+        await extractArchive(archivePath, dest);
+        return;
+    }
+    if (layout !== "wrapped") {
+        await extractTarSafely(archivePath, dest);
+        return;
+    }
+    // wrapped: strip the wrapper dir; a wrapper-less archive leaves no bin/
+    // behind, so it is re-extracted flat
+    await extractTarSafely(archivePath, pkgDir, 1);
+    if (fs.existsSync(path.join(pkgDir, "bin"))) return;
+    await fs.promises.rm(pkgDir, { recursive: true, force: true });
+    fs.mkdirSync(pkgDir, { recursive: true });
+    await extractTarSafely(archivePath, pkgDir);
+}
+
+// ─── Package recipes ─────────────────────────────────────────────────────────
+// See @mileniumhq/release (packages/release/src/recipe.ts). The archive is unpacked into a hidden scratch dir
+// inside the staging dir, each take moves one path out of it, and the
+// scratch dir goes. Nothing in the archive runs.
+
+/** archive file suffix for a recipe's unpack step (extractArchive dispatches on it) */
+export const RECIPE_SUFFIX: Record<PackageRecipe["unpack"], string> = {
+    zip: ".zip",
+    tar: ".tar",
+    "tar.xz": ".tar.xz",
+    dmg: ".dmg",
+    msi: ".msi",
+};
+
+// a system tool, with its stderr in the error when it fails
+function runTool(command: string, args: string[], stdout?: fs.WriteStream, limit?: number): Promise<void> {
+    return new Promise((resolve, reject) => {
+        const child = spawn(command, args, { stdio: ["ignore", stdout ? "pipe" : "ignore", "pipe"] });
+        let stderr = "";
+        let written = 0;
+        let refused: Error | null = null;
+        child.stderr!.on("data", (chunk: Buffer) => {
+            if (stderr.length < 4000) stderr += chunk.toString();
+        });
+        if (stdout) {
+            child.stdout!.on("data", (chunk: Buffer) => {
+                written += chunk.length;
+                if (limit !== undefined && written > limit && !refused) {
+                    refused = new Error("Archive exceeds extraction budget");
+                    child.kill();
+                }
+            });
+            child.stdout!.pipe(stdout);
+            // a write that fails (a full disk) ends the tool and is the reason
+            stdout.on("error", (err) => {
+                refused ??= new Error(`${command} output could not be written: ${err.message}`);
+                child.kill();
+            });
+        }
+        child.on("error", (err: NodeJS.ErrnoException) => {
+            reject(err.code === "ENOENT" ? new Error(`${command} is needed to unpack this package but was not found on this computer`) : err);
+        });
+        child.on("close", (code) => {
+            const finish = () => {
+                if (refused) reject(refused);
+                else if (code === 0) resolve();
+                else reject(new Error(`${command} failed (exit ${code}): ${stderr.trim() || "no output"}`));
+            };
+            if (stdout && !stdout.writableFinished && !stdout.errored) stdout.once("error", finish).once("finish", finish).end();
+            else finish();
+        });
+    });
+}
+
+async function extractTar(archivePath: string, dest: string): Promise<void> {
+    await extractTarSafely(archivePath, dest);
+}
+
+// a take's source must be inside the unpacked tree after symlinks resolve
+function insideTree(tree: string, source: string): string {
+    const full = path.join(tree, ...source.split("/"));
+    if (!fs.existsSync(full)) throw new Error(`Package recipe source ${source} is not in the archive`);
+    const root = fs.realpathSync(tree);
+    const real = fs.realpathSync(full);
+    if (real !== root && !real.startsWith(root + path.sep)) throw new Error(`Package recipe source ${source} leaves the archive`);
+    return full;
+}
+
+export async function applyPackageRecipe(archivePath: string, pkgDir: string, recipe: PackageRecipe): Promise<void> {
+    const scratch = path.join(pkgDir, ".unpack");
+    fs.mkdirSync(scratch, { recursive: true });
+    let mounted: string | null = null;
+    try {
+        let tree = scratch;
+        if (recipe.unpack === "zip") {
+            await extractArchive(archivePath, scratch);
+        } else if (recipe.unpack === "tar") {
+            await extractTar(archivePath, scratch);
+        } else if (recipe.unpack === "tar.xz") {
+            const plain = path.join(pkgDir, ".unpack.tar");
+            try {
+                await runTool("xz", ["-dc", "--", archivePath], fs.createWriteStream(plain), TAR_BUDGET.maxBytes);
+                await extractTar(plain, scratch);
+            } finally {
+                await fs.promises.rm(plain, { force: true });
+            }
+        } else if (recipe.unpack === "msi") {
+            await extractMsi(archivePath, scratch);
+        } else {
+            if (process.platform !== "darwin") throw new Error("This package unpacks a macOS disk image, which only macOS can open");
+            tree = path.join(scratch, "volume");
+            fs.mkdirSync(tree);
+            await runTool("hdiutil", ["attach", "-readonly", "-nobrowse", "-noautoopen", "-mountpoint", tree, archivePath]);
+            mounted = tree;
+        }
+        for (const [dest, source] of Object.entries(recipe.take)) {
+            const from = insideTree(tree, source);
+            const to = path.join(pkgDir, ...dest.split("/"));
+            if (fs.existsSync(to)) throw new Error(`Package recipe writes ${dest} twice`);
+            fs.mkdirSync(path.dirname(to), { recursive: true });
+            // a mounted image is read-only: ditto copies it out with its
+            // signatures and attributes intact
+            if (mounted) await runTool("ditto", [from, to]);
+            else await fs.promises.rename(from, to);
+        }
+    } finally {
+        if (mounted) {
+            await runTool("hdiutil", ["detach", mounted]).catch(async (err) => {
+                logger.warn("[engineArchives.ts] disk image detach failed; forcing:", err);
+                await runTool("hdiutil", ["detach", "-force", mounted!]);
+            });
+        }
+        await fs.promises.rm(scratch, { recursive: true, force: true });
+    }
+    validateExtractedLinks(pkgDir);
+    if (!fs.existsSync(path.join(pkgDir, "bin"))) throw new Error("Package recipe left no bin/ directory");
+}

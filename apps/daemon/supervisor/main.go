@@ -7,7 +7,7 @@
 //
 // The spawn config arrives as JSON on stdin. The supervisor serves the
 // workload's output and takes its input over a unix socket (a named pipe on
-// Windows) in <data dir>/sockets, as JSON lines; apps/daemon/src/supervisor.ts
+// Windows) in <data dir>/sockets, as JSON lines; apps/daemon/src/workloads/supervisor.ts
 // holds the client. It is its own binary so a workload costs a few megabytes
 // to supervise instead of a whole JavaScript runtime.
 package main

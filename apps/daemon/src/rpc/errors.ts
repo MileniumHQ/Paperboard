@@ -3,7 +3,7 @@
 // brittle — one reworded message breaks the mapping — so codes travel on
 // the error object, never inside the message.
 import { InvalidParamsError } from "@mileniumhq/paperapi/protocol";
-import { ErrorCode } from "../protocol";
+import { ErrorCode } from "../core/protocol";
 
 export class RpcError extends Error {
     readonly code: string;

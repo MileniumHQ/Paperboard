@@ -21,7 +21,7 @@ import * as http from "http";
 import type { Duplex, Readable } from "stream";
 import { pipeline } from "stream/promises";
 import { PANEL_PATH_ROOT, parsePanelPath } from "@mileniumhq/paperapi/panelPath";
-import { logger } from "daemon/logger";
+import { logger } from "daemon/core/logger";
 import type { BrowserSessions } from "./browserSessions";
 import { readShellFile } from "./shellAssets";
 import type { ShellServer } from "./communication/shellServer";

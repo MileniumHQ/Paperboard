@@ -12,8 +12,8 @@ import * as https from "https";
 import * as path from "path";
 import { Transform, type Readable } from "stream";
 import { pipeline } from "stream/promises";
-import { pinnedTlsOptions } from "daemon/pinnedTls";
-import { logger } from "daemon/logger";
+import { pinnedTlsOptions } from "daemon/security/pinnedTls";
+import { logger } from "daemon/core/logger";
 import {
     failedResult,
     isImportableName,

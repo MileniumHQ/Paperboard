@@ -3,7 +3,7 @@
 // The schedules have their own file (backups/schedules.json) and one
 // owner, BackupService; this module holds the rules and the file format.
 import * as fs from "fs";
-import { writeFileAtomic } from "../storage";
+import { writeFileAtomic } from "../core/storage";
 import { invalidParams } from "../rpc/errors";
 import { isPanelId } from "@mileniumhq/paperapi/panelIdentity";
 import { MAX_ROUTINE_BACKUPS_KEPT, ROUTINE_BACKUP_HOURS, ROUTINE_BACKUP_LABEL, type BackupSchedule, type BackupScheduleResult } from "@mileniumhq/paperapi/backups";

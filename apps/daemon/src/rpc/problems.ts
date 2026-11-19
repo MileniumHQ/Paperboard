@@ -1,9 +1,9 @@
-import type { PaperCraneEngine } from "../engine";
+import type { PaperCraneEngine } from "../engine/index";
 import type { RpcContext } from "./context";
 import { rpcModule } from "./dispatch";
 import { invalidParams } from "./errors";
-import { resourcePanelId } from "../principal";
-import { PanelProblems } from "../problems";
+import { resourcePanelId } from "../security/principal";
+import { PanelProblems } from "../panels/problems";
 import { problemKey, readProblemReport } from "@mileniumhq/paperapi/problemShape";
 import { errorMessage } from "@mileniumhq/paperapi/errors";
 

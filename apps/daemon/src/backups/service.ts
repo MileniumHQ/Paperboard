@@ -14,12 +14,12 @@ import { BackupSources } from "./sources";
 import * as crypto from "crypto";
 import * as fs from "fs";
 import * as path from "path";
-import type { PaperCraneEngine } from "../engine";
-import { ErrorCode } from "../protocol";
+import type { PaperCraneEngine } from "../engine/index";
+import { ErrorCode } from "../core/protocol";
 import { RpcError, invalidParams } from "../rpc/errors";
-import { logger } from "../logger";
+import { logger } from "../core/logger";
 import { createPanelArchive, extractPanelArchive } from "./archive";
-import { hashFile } from "../storage";
+import { hashFile } from "../core/storage";
 import { SerialQueue } from "@mileniumhq/paperapi/serialQueue";
 import {
     BACKUP_VAULT_OWNER,

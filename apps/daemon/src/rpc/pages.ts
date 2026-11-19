@@ -1,5 +1,5 @@
 import { rpcModule } from "./dispatch";
-import { resourcePanelId } from "../principal";
+import { resourcePanelId } from "../security/principal";
 
 // A panel's page says it is open on its own connection, which counts until
 // it closes; the panel's service hears how many are (onPagesChanged).

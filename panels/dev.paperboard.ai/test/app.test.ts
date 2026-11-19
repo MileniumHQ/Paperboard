@@ -1,7 +1,7 @@
 // Regression: the service reports ready without waiting for Ollama to boot.
 //
 // The daemon gives a panel service 20 s to send `paperboard:service-ready`
-// (apps/daemon/src/panelServices.ts) and abandons it after five failed restarts.
+// (apps/daemon/src/panels/panelServices.ts) and abandons it after five failed restarts.
 // `AiApp.init` used to await `startIfInstalled()`, so a slow or crashed
 // Ollama (the Windows GTX 1650 report: a model load took the GPU down) kept
 // onInit pending past that deadline and the panel never came back while the

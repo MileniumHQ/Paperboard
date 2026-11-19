@@ -1,12 +1,12 @@
 import { afterAll, beforeAll, describe, expect, setDefaultTimeout, test } from "bun:test";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { MAX_ACTION_SCHEMA_BYTES, MAX_ACTIONS_PER_SOCKET, MAX_PENDING_CALLS, MAX_PENDING_CALLS_PER_SOCKET } from "../src/actions";
+import { MAX_ACTION_SCHEMA_BYTES, MAX_ACTIONS_PER_SOCKET, MAX_PENDING_CALLS, MAX_PENDING_CALLS_PER_SOCKET } from "../src/server/actions";
 import { DriveBackupStore } from "../src/backups/driveStore";
 import { S3BackupStore } from "../src/backups/s3Store";
 import { BACKUP_ARCHIVE_MAX_BYTES, newBackupId } from "../src/backups/types";
-import { CONFIG_MAX_BYTES, FILE_READ_MAX_BYTES } from "../src/engine";
-import { MAX_LIVE_CLIENTS, spawnSupervisedClient } from "../src/engineSupervisor";
+import { CONFIG_MAX_BYTES, FILE_READ_MAX_BYTES } from "../src/engine/index";
+import { MAX_LIVE_CLIENTS, spawnSupervisedClient } from "../src/engine/supervisor";
 import { fakeDrive, fakeS3 } from "testkit/cloud";
 import { tempDir } from "testkit/fs";
 import { type InProcessDaemon, request, startDaemon } from "testkit/inproc";
