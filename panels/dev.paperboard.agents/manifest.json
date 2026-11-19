@@ -13,31 +13,36 @@
             {
                 "light": "./store/1-light.png",
                 "dark": "./store/1-dark.png",
-                "alt": "Texting your agent, with an app it made for you"
+                "alt": "An app the agent made, open beside the chat"
             },
             {
                 "light": "./store/2-light.png",
                 "dark": "./store/2-dark.png",
-                "alt": "An app the agent made, open beside the chat"
+                "alt": "The agent's computer: a web browser you can watch and use"
             },
             {
                 "light": "./store/3-light.png",
                 "dark": "./store/3-dark.png",
-                "alt": "The agent's computer, a web browser you can watch and use"
+                "alt": "The agent asking before it uses a folder and a command on your computer"
             },
             {
                 "light": "./store/4-light.png",
                 "dark": "./store/4-dark.png",
-                "alt": "The apps the agent made, to open or delete"
+                "alt": "The Access page: every folder and command the agent may use"
             },
             {
                 "light": "./store/5-light.png",
                 "dark": "./store/5-dark.png",
-                "alt": "What the agent remembers: short facts and longer notes"
+                "alt": "Texting your agent, and the map it sends back"
             },
             {
                 "light": "./store/6-light.png",
                 "dark": "./store/6-dark.png",
+                "alt": "What the agent remembers: short facts and longer notes"
+            },
+            {
+                "light": "./store/7-light.png",
+                "dark": "./store/7-dark.png",
                 "alt": "Routines: what the agent does on a schedule"
             }
         ],
@@ -45,10 +50,6 @@
             {
                 "name": "Codex, Claude or OpenCode",
                 "detail": "The brain you pick, the one already on your computer or else downloaded from its maker, and signed in with your own account. Your conversations go to it"
-            },
-            {
-                "name": "Helium",
-                "detail": "The agent's web browser, downloaded from its maker"
             },
             {
                 "name": "The web",
