@@ -1,5 +1,5 @@
 import { type Component, createEffect, on, Show } from "solid-js";
-import { PaperError, PaperFlex, PaperText, PaperButton, PaperIcon, PaperModal } from "@mileniumhq/paperui";
+import { PaperError, PaperButton, PaperIcon, PaperModal } from "@mileniumhq/paperui";
 import type { ComputerInfo } from "../../lib/shell";
 import { createReachCheck } from "../../lib/reachCheck";
 
@@ -55,22 +55,10 @@ export const OfflineComputerModal: Component<OfflineComputerModalProps> = (
                 </>
             }
         >
-            <PaperFlex direction="column" gap="full">
-                {/* why the last look found nothing; Try Again looks again */}
-                <Show when={reach.error()}>
-                    {(why) => <PaperError title="Couldn't reach this computer" error={why()} />}
-                </Show>
-                <Show when={props.computer}>
-                    {(comp) => (
-                        <PaperText preset="text">
-                            Nothing responded at {comp().host}:
-                            {comp().port}. Make sure the Paperboard Server
-                            daemon is running on that computer and its
-                            port is reachable from this device.
-                        </PaperText>
-                    )}
-                </Show>
-            </PaperFlex>
+            {/* why the last look found nothing; Try Again looks again */}
+            <Show when={reach.error()}>
+                {(why) => <PaperError title="Couldn't reach this computer" error={why()} />}
+            </Show>
         </PaperModal>
     );
 };

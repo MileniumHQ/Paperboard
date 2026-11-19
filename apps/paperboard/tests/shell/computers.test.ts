@@ -153,7 +153,7 @@ test("Add Computer: a pairing answered without the computer says so", async () =
     expect(page.exceptions).toEqual([]);
 });
 
-// Inventory: Core contracts — the can't-reach dialog checks once per opening and once per Try Again.
+// Inventory: Core contracts — the can't-reach dialog checks once per opening and once per Try Again, and shows its last answer alone.
 test("the can't-reach dialog checks the computer once when it opens and once per Try Again", async () => {
     const { page } = shell;
     await workshop.daemon.stop();
@@ -161,8 +161,16 @@ test("the can't-reach dialog checks the computer once when it opens and once per
     await page.click(SHED);
     await page.waitFor(`document.body.innerText.includes("Can't reach Shed") && ${errorShown("Couldn't reach this computer")} && !!document.querySelector("[role=dialog] [data-paper-error]")`, "the can't-reach dialog with its answer, in the dialog");
     expect(await shell.host<number>({ cmd: "probes" })).toBe(before + 1);
+    // the answer is the whole body: no paragraph repeating it beside the error
+    expect(await page.evaluate<boolean>(`document.querySelector("[role=dialog]").innerText.includes("Nothing responded")`)).toBe(false);
 
-    await clickText(page, "button", "Try Again");
+    // pressing Try Again keeps the last answer up while it checks, so the dialog never goes blank
+    const keptWhileChecking = await page.evaluate<boolean>(`(() => {
+        const button = [...document.querySelectorAll("[role=dialog] button")].find((b) => b.textContent.includes("Try Again"));
+        button.click();
+        return [...document.querySelectorAll("[role=dialog] button")].some((b) => b.textContent.includes("Checking")) && !!document.querySelector("[role=dialog] [data-paper-error]");
+    })()`);
+    expect(keptWhileChecking).toBe(true);
     await page.waitFor(`[...document.querySelectorAll("button")].some((b) => b.textContent.includes("Try Again") && !b.disabled)`, "Try Again to answer");
     expect(await shell.host<number>({ cmd: "probes" })).toBe(before + 2);
     expect(page.exceptions).toEqual([]);
