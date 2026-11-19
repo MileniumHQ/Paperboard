@@ -226,6 +226,14 @@ describe("this repository", () => {
         expect(reached.platform).toBe(true);
     });
 
+    test("the services and the launcher don't reach the panels: the daemon's build reads only the target table", () => {
+        for (const change of ["services/origami/src/index.ts", "packages/npx/src/cli.ts", "scripts/publish/publishLib.ts", "apps/paperboard/src/renderer/src/App.tsx"]) {
+            const reached = scopeOf(here, [change]).targets;
+            for (const t of ["agents", "blocks", "botcreator", "gameserver", "terminal", "testkit", "daemon"]) expect({ change, reached: reached.includes(t) }).toEqual({ change, reached: false });
+        }
+        expect(scopeOf(here, ["scripts/build/targets.ts"]).targets).toContain("terminal");
+    });
+
     test("PaperAPI's source reaches every panel and the app", () => {
         const reached = scopeOf(here, ["packages/paperapi/src/index.ts"]).targets;
         for (const t of ["agents", "blocks", "botcreator", "gameserver", "terminal", "paperboard", "packages"]) expect(reached).toContain(t);

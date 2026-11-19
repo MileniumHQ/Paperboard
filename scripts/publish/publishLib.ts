@@ -18,9 +18,12 @@ import {
     STORE_IMAGE_TYPES,
     STORE_MAX_SCREENSHOT_BYTES,
 } from "../../packages/paperapi/src/internal";
+import { ALL_TARGETS, type Arch, archOf, BUN_TARGET_MAP, type Os, osOf, type Target } from "../build/targets";
 import { DOWNLOAD_HOST, FILE_SEGMENT, GH_REPO, VERSION_SEGMENT } from "../../services/origami/src/downloadUrl";
 
 export { GH_REPO };
+export { ALL_TARGETS, BUN_TARGET_MAP, archOf, osOf };
+export type { Arch, Os, Target };
 export const ORIGAMI_HOST = "origami.ariapis.com";
 
 // Deploy targets. PAPERDL_R2_BUCKET and KV_PACKAGES_BINDING must match
@@ -33,46 +36,6 @@ export const PAPERDL_R2_BUCKET = "paperboard-paperdl";
 export const KV_PACKAGES_BINDING = "PACKAGES";
 
 export type DlApp = "pb" | "crane";
-
-export type Target =
-    | "linux-x64"
-    | "linux-arm64"
-    | "macos-x64"
-    | "macos-arm64"
-    | "windows-x64";
-
-// Every shipped target, including linux-arm64 (untested but non-negotiable).
-export const ALL_TARGETS: Target[] = [
-    "linux-x64",
-    "linux-arm64",
-    "macos-x64",
-    "macos-arm64",
-    "windows-x64",
-];
-
-export type Os = "macos" | "windows" | "linux";
-
-export function osOf(t: Target): Os {
-    return t.startsWith("macos")
-        ? "macos"
-        : t.startsWith("windows")
-          ? "windows"
-          : "linux";
-}
-
-export type Arch = "x64" | "arm64";
-
-export function archOf(t: Target): Arch {
-    return t.endsWith("arm64") ? "arm64" : "x64";
-}
-
-export const BUN_TARGET_MAP: Record<Target, string> = {
-    "linux-x64": "bun-linux-x64",
-    "linux-arm64": "bun-linux-arm64",
-    "macos-x64": "bun-darwin-x64",
-    "macos-arm64": "bun-darwin-arm64",
-    "windows-x64": "bun-windows-x64",
-};
 
 // `bun build --compile` embeds the runtime of the Bun that runs it, so a
 // release ships whatever Bun the publisher has installed. The root

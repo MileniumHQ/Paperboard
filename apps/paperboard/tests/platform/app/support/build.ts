@@ -4,7 +4,7 @@
 // from the repo. Never whatever an earlier developer left in out/ or dist/.
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { BUN_TARGET_MAP, type Target } from "../../../../../../scripts/publish/publishLib";
+import { BUN_TARGET_MAP, type Target } from "../../../../../../scripts/build/targets";
 import { buildSupervisor } from "../../../../../../scripts/build/supervisor";
 import { tempDir } from "./temp";
 

@@ -16,7 +16,7 @@ import { spawnSync } from "node:child_process";
 import { mkdirSync, rmSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { BUN_TARGET_MAP } from "../publish/publishLib";
+import { BUN_TARGET_MAP } from "./targets";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const APP_DIR = join(ROOT, "apps", "paperboard");
