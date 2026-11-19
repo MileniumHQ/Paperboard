@@ -75,7 +75,7 @@ export async function launchElectron(options: {
         const timer = setTimeout(() => reject(new Error(`electron harness never connected:\n${watched.output()}`)), WAIT_MS);
         void watched.exited.then(() => {
             clearTimeout(timer);
-            reject(new Error(`electron exited before its harness connected:\n${watched.output()}`));
+            reject(new Error(`electron exited ${watched.howExited()} before its harness connected:\n${watched.output()}`));
         });
         server.once("connection", (socket) => {
             clearTimeout(timer);
@@ -102,7 +102,7 @@ export async function launchElectron(options: {
     });
     await connected;
     void watched.exited.then(() => {
-        for (const settle of replies.values()) settle({ error: `electron exited:\n${watched.output()}` });
+        for (const settle of replies.values()) settle({ error: `electron exited ${watched.howExited()}:\n${watched.output()}` });
         replies.clear();
         for (const w of [...waiters]) w();
     });
@@ -139,7 +139,7 @@ export async function launchElectron(options: {
                     } else if (child.exitCode !== null || child.signalCode !== null) {
                         clearTimeout(timer);
                         waiters.delete(test);
-                        reject(new Error(`electron exited before ${what}:\n${watched.output()}`));
+                        reject(new Error(`electron exited ${watched.howExited()} before ${what}:\n${watched.output()}`));
                     }
                 };
                 const timer = setTimeout(() => {

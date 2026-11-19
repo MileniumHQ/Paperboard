@@ -15,6 +15,8 @@ export const WAIT_MS = 60_000;
 export interface Watched {
     child: ChildProcess;
     output(): string;
+    // how it ended, "with code 1" or "from SIGSEGV", once it has
+    howExited(): string;
     waitFor(what: string, check: (output: string) => boolean, ms?: number): Promise<void>;
     exited: Promise<{ code: number | null; signal: NodeJS.Signals | null }>;
 }
@@ -26,12 +28,19 @@ export function watch(child: ChildProcess, label: string): Watched {
     child.stdout?.on("data", (chunk: Buffer) => { text += chunk.toString("utf8"); poke(); });
     child.stderr?.on("data", (chunk: Buffer) => { text += chunk.toString("utf8"); poke(); });
     let done = false;
+    let how = "";
     const exited = new Promise<{ code: number | null; signal: NodeJS.Signals | null }>((resolve) => {
-        child.once("exit", (code, signal) => { done = true; resolve({ code, signal }); poke(); });
+        child.once("exit", (code, signal) => {
+            done = true;
+            how = signal ? `from ${signal}` : `with code ${code}`;
+            resolve({ code, signal });
+            poke();
+        });
     });
     return {
         child,
         output: () => text,
+        howExited: () => how,
         exited,
         waitFor(what, check, ms = WAIT_MS) {
             return new Promise<void>((resolve, reject) => {
@@ -43,7 +52,7 @@ export function watch(child: ChildProcess, label: string): Watched {
                 };
                 const test = () => {
                     if (check(text)) finish();
-                    else if (done) finish(new Error(`${label} exited before ${what}:\n${text}`));
+                    else if (done) finish(new Error(`${label} exited ${how} before ${what}:\n${text}`));
                 };
                 const timer = setTimeout(() => finish(new Error(`${label}: no ${what} within ${ms} ms:\n${text}`)), ms);
                 waiters.add(test);
