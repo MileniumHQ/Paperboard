@@ -121,7 +121,8 @@ describe("Rust", () => {
         expect(await call(server, "rustMapPicture")).toBe(drawn);
         await stop(server);
 
-        await call(server, "rustWipe", { blueprints: false });
+        // the picture alone is a map to trash, and the wipe says it moved one
+        expect(await call(server, "rustWipe", { blueprints: false })).toMatchObject({ trashed: true });
         expect(await call(server, "rustMapPicture")).toBeNull();
         const trash = fs.readdirSync(server.dir).filter((name) => name.startsWith(".trash-"));
         expect(fs.readdirSync(path.join(server.dir, trash[0]!, "server", "paperboard"))).toContain("proceduralmap.1000.12345.png");
@@ -138,8 +139,8 @@ describe("Rust", () => {
         expect(await call(server, "rustMap")).toEqual({ size: 1000, seed: 12345, made: true, blueprints: true });
         await expect(call(server, "rustWipe", {})).rejects.toThrow("Choose whether blueprints are wiped too");
 
-        const wiped = await call(server, "rustWipe", { blueprints: false }) as { seed: number; made: boolean; blueprints: boolean };
-        expect(wiped).toMatchObject({ size: 1000, made: false, blueprints: true });
+        const wiped = await call(server, "rustWipe", { blueprints: false }) as { seed: number; made: boolean; blueprints: boolean; trashed: boolean };
+        expect(wiped).toMatchObject({ size: 1000, made: false, blueprints: true, trashed: true });
         expect(wiped.seed).not.toBe(12345);
         expect(server.server.settings.seed).toBe(wiped.seed);
         const left = () => fs.readdirSync(identity).filter((name) => name !== "cfg").sort();
@@ -152,7 +153,8 @@ describe("Rust", () => {
         // nothing was deleted: the old map is whole in the trash
         expect(fs.readFileSync(path.join(server.dir, trash[0]!, "server", "paperboard", "proceduralmap.1000.12345.290.map"), "utf8")).toBe("proceduralmap.1000.12345.290.map");
 
-        expect(await call(server, "rustWipe", { blueprints: true })).toMatchObject({ made: false, blueprints: false });
+        // a map never made on the new seed is nothing to trash, though the blueprints move
+        expect(await call(server, "rustWipe", { blueprints: true })).toMatchObject({ made: false, blueprints: false, trashed: false });
         expect(left()).toEqual(["player.identities.19.db", "player.tokens.db"]);
         // the next start is on the new seed
         await online(server);

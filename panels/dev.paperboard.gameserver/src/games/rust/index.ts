@@ -43,6 +43,11 @@ export interface RustMapView {
     blueprints: boolean;
 }
 
+/** What a wipe leaves: the new map, and whether there was an old one to move to the trash. */
+export interface RustWipeResult extends RustMapView {
+    trashed: boolean;
+}
+
 export const rust: GameDefinition = {
     id: "rust", name: "Rust", icon: "forest", art: gameArt("rust"),
     softwareLabel: ({ version }) => (version ? `Rust ${version}` : "Rust"),

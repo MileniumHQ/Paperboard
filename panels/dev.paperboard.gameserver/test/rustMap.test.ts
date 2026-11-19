@@ -32,7 +32,7 @@ const button = (label: string, within = "document") => `[...${within}.querySelec
 const dialog = `document.querySelector("[role=dialog]")`;
 
 describe("Rust's Map tab", () => {
-    test("draws the running server's map, shows a draw Rust refused with its reason, and a stopped server's wipe asks and reports", async () => {
+    test("draws the running server's map, shows a draw Rust refused with its reason, and a stopped server's wipe asks and reports what it moved", async () => {
         fs.mkdirSync(path.dirname(config()), { recursive: true });
         const ports = { port: await freePort(), queryPort: await freePort(), rconPort: await freePort(), appPort: await freePort() };
         fs.writeFileSync(config(), JSON.stringify({ version: 2, serversDirectory: SERVERS, servers: [{ id: ID, name: "Wasteland", game: "rust", directory: `${SERVERS}/${ID}`, createdAt: 0, settings: { configured: true, ...ports, worldsize: 1000, seed: 12345 } }] }));
@@ -82,6 +82,18 @@ describe("Rust's Map tab", () => {
             // the picture of the wiped map is gone from the tab, and the new seed is shown
             expect(await page.evaluate(`!!document.querySelector("img[alt^='The map from above']")`)).toBe(false);
             await page.waitFor(`document.body.innerText.includes(${JSON.stringify(String(settings().seed))})`, "the new seed");
+
+            // the report comes from the wipe, not the page's copy: the tab still
+            // says the new map isn't made when one appears, and wiping it says it moved
+            await page.evaluate(`${button("close")}.click()`);
+            await page.waitFor(`!document.body.innerText.includes("Wiped")`, "the report dismissed");
+            const made = `proceduralmap.1000.${settings().seed}.290.map`;
+            fs.writeFileSync(path.join(identity, made), made);
+            await page.evaluate(`${button("Wipe")}.click()`);
+            await page.waitFor(`${dialog}?.innerText.includes("Wipe the server")`, "the second wipe's confirmation");
+            await page.evaluate(`${button("Wipe", dialog)}.click()`);
+            await page.waitFor(`document.body.innerText.includes("Wiped") && document.body.innerText.includes("The old one is in a .trash folder in Files.")`, "the second wipe's report");
+            expect(fs.existsSync(path.join(identity, made))).toBe(false);
             expect(page.exceptions).toEqual([]);
         } finally {
             await page.close();

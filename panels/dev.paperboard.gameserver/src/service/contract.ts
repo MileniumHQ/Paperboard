@@ -711,7 +711,7 @@ const rustCalls = {
     rustMap: { output: rustMapView },
     rustMapPicture: { output: shape.nullable(text) },
     rustMapDraw: { output: text },
-    rustWipe: { input: shape.object({ blueprints: shape.boolean() }), output: rustMapView },
+    rustWipe: { input: shape.object({ blueprints: shape.boolean() }), output: shape.object({ size: shape.number(), seed: shape.number(), made: shape.boolean(), blueprints: shape.boolean(), trashed: shape.boolean() }) },
     rustPlayers: {
         output: shape.object({
             seen: shape.list(shape.object({ steamId: shape.text(), name: shape.text(), lastSeen: shape.number() })),
