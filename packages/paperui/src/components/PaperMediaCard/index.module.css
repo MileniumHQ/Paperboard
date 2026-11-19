@@ -95,8 +95,10 @@
     height: var(--paper-control-size-large);
     border-radius: var(--paper-border-radius);
     background: var(--paper-surface-raised);
+    /* the ring is the card's own paper, cut into the banner; its edge is the
+       card's edge, or in a dark theme the ring melts into the card below */
     border: var(--paper-thick-border-width) solid var(--paper-surface-raised);
-    box-shadow: var(--paper-element-shadow);
+    box-shadow: 0 0 0 var(--paper-border-width) var(--paper-border), var(--paper-element-shadow);
     display: flex;
     align-items: center;
     justify-content: center;

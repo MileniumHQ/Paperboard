@@ -53,6 +53,53 @@ describe("the panel's pictures", () => {
         }
     }, 60_000);
 
+    test("in the dark theme each card's game icon is a whole tile, set off from the card by an edge", async () => {
+        const served = await setUp();
+        const page = await openPage(`${served.url}/`, "620,520");
+        try {
+            await page.waitFor(`document.body.textContent.includes("Fresh") && document.body.textContent.includes("Island")`, "both servers' cards");
+            // the theme's colours are read once they land, not as they fade
+            await page.evaluate(`document.head.append(Object.assign(document.createElement("style"), { textContent: "* { transition: none !important; }" }))`);
+            await page.send("Emulation.setEmulatedMedia", { features: [{ name: "prefers-color-scheme", value: "dark" }] });
+            await page.waitFor(`getComputedStyle(document.querySelector("[class*=_card_]")).backgroundColor !== "rgb(255, 255, 255)"`, "the dark theme");
+            await page.settled();
+            // every game's icon fills its tile: none leaves the card's paper showing through it
+            const games = fs.readdirSync(path.join(import.meta.dir, "..", "public", "assets", "games"));
+            const seeThrough = await page.evaluate<string[]>(`(async () => {
+                const out = [];
+                for (const game of ${JSON.stringify(games)}) {
+                    const img = new Image();
+                    img.src = "assets/games/" + game + "/icon.webp";
+                    await img.decode();
+                    const canvas = document.createElement("canvas");
+                    canvas.width = img.naturalWidth;
+                    canvas.height = img.naturalHeight;
+                    const ctx = canvas.getContext("2d");
+                    ctx.drawImage(img, 0, 0);
+                    const alpha = ctx.getImageData(0, 0, canvas.width, canvas.height).data.filter((_, i) => i % 4 === 3);
+                    if (alpha.some((a) => a < 255)) out.push(game);
+                }
+                return out;
+            })()`);
+            expect(seeThrough).toEqual([]);
+            // the ring around each icon is the card's paper; an edge outside it keeps it from melting into the card
+            const edges = await page.evaluate<{ shadow: string; card: string; border: string }[]>(`[...document.querySelectorAll("img[src*='/icon.webp']")].map((img) => {
+                const tile = img.closest("[class*=iconWrapper]");
+                const card = tile.closest("[class*=_card_]");
+                return { shadow: getComputedStyle(tile).boxShadow, card: getComputedStyle(card).backgroundColor, border: getComputedStyle(card).borderTopColor };
+            })`);
+            expect(edges.length).toBe(2);
+            for (const { shadow, card, border } of edges) {
+                // its first shadow is a ring in the card's own border colour
+                expect(shadow.startsWith(`${border} 0px 0px 0px`)).toBe(true);
+                expect(border).not.toBe(card);
+            }
+        } finally {
+            await page.close();
+            served.stop();
+        }
+    }, 60_000);
+
     test("a new Minecraft server's setup shows every server software's logo", async () => {
         const served = await setUp();
         const page = await openPage(`${served.url}/?server=s-new`, "620,520");
