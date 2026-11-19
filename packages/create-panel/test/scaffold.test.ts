@@ -5,7 +5,7 @@ import { join } from "node:path";
 import * as tar from "tar";
 import paperapiPackage from "@mileniumhq/paperapi/package.json";
 import paperuiPackage from "@mileniumhq/paperui/package.json";
-import { assertRelativePanelBuild } from "../../../scripts/publishManifest";
+import { assertRelativePanelBuild } from "../../../scripts/publish/publishManifest";
 import { libraryDependencies, scaffoldPanel, type PanelFeatures } from "../src/scaffold";
 import { startDaemon } from "./helpers/daemon";
 import { linkDependencies, ok, paperapi, panelTestFolders, readJson, tempDir, writtenFiles } from "./helpers/panel";

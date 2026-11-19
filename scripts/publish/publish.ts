@@ -2,9 +2,9 @@
 /**
  * publish.ts: interactive build & publish console for Paperboard.
  *
- *   bun scripts/publish.ts                            # interactive menu (needs a TTY)
- *   bun scripts/publish.ts ci-build --target <t>      # the release workflow's build
- *   bun scripts/publish.ts republish-index [--yes]    # re-index a public release
+ *   bun scripts/publish/publish.ts                            # interactive menu (needs a TTY)
+ *   bun scripts/publish/publish.ts ci-build --target <t>      # the release workflow's build
+ *   bun scripts/publish/publish.ts republish-index [--yes]    # re-index a public release
  *
  * Nothing leaves the machine except through the publish flows, and each one
  * asks before anything uploads: Publish binaries asks twice (build in the
@@ -27,16 +27,16 @@ import * as p from "@clack/prompts";
 import { readFileSync } from "fs";
 import { join } from "path";
 import { bunPinMismatch } from "./publishLib";
-import { flowBuildBinaries, flowCiBuild } from "./publish/binaries";
-import { cancelled, checkCancel } from "./publish/common";
-import { flowPublishPackages } from "./publish/packages";
-import { flowPublishPanels, flowUnlistPanels } from "./publish/panels";
-import { flowPublishBinaries, flowRepublishIndex } from "./publish/release";
+import { flowBuildBinaries, flowCiBuild } from "./binaries";
+import { cancelled, checkCancel } from "./common";
+import { flowPublishPackages } from "./packages";
+import { flowPublishPanels, flowUnlistPanels } from "./panels";
+import { flowPublishBinaries, flowRepublishIndex } from "./release";
 
 async function main(): Promise<void> {
     const argv = process.argv.slice(2);
     const rootPackage = JSON.parse(
-        readFileSync(join(import.meta.dir, "..", "package.json"), "utf8"),
+        readFileSync(join(import.meta.dir, "..", "..", "package.json"), "utf8"),
     ) as { packageManager?: unknown };
     const bunMismatch = bunPinMismatch(rootPackage.packageManager, Bun.version);
     if (bunMismatch) {
@@ -56,7 +56,7 @@ async function main(): Promise<void> {
         process.exit(2);
     }
     if (!process.stdin.isTTY || !process.stdout.isTTY) {
-        console.error("publish.ts is interactive — run it in a terminal (or `bun scripts/publish.ts republish-index --yes` headless).");
+        console.error("publish.ts is interactive — run it in a terminal (or `bun scripts/publish/publish.ts republish-index --yes` headless).");
         process.exit(1);
     }
 

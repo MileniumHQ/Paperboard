@@ -2,7 +2,7 @@
 // Backstop for AGENTS.md "Solid:" and the house rules that keep coming back —
 // catches the mechanical mistakes a parser can decide on its own, with no
 // type checker, so a whole target scans in well under a second.
-// Usage: bun scripts/check-solid.ts [--solid-only] <dir>...
+// Usage: bun scripts/gate/check-solid.ts [--solid-only] <dir>...
 // Prints `path:line: <rule>: <why and what to do instead>` per hit and exits
 // 1 on any hit, 0 when clean, 2 when the scan could not run. --solid-only
 // runs the Solid rules alone (the deprecated panels, which nobody changes).
@@ -100,7 +100,7 @@
 //    not one). A failure that stands (a view that won't load, a setup that
 //    failed) is said in place with PaperError, a one-off one (an action or a
 //    save) with showError's toast, and a field's with the field's error. The files that still have
-//    them are scripts/errorQuotes.json, each with how many, until the
+//    them are scripts/gate/errorQuotes.json, each with how many, until the
 //    migration takes them out: a file over its count is a hit, and so is one
 //    under it or an entry for a file that is gone, so the list only shrinks.
 //    The deprecated panels (dev.paperboard.ai, dev.paperboard.actions) are
@@ -121,7 +121,7 @@ import { createRequire } from "node:module";
 import { dirname, join, relative, resolve } from "node:path";
 import type * as TS from "typescript";
 
-const ROOT = join(import.meta.dir, "..");
+const ROOT = join(import.meta.dir, "..", "..");
 let ts: typeof TS;
 try {
     ts = createRequire(join(ROOT, "packages/paperui/package.json"))("typescript");
@@ -136,7 +136,7 @@ const EFFECTS = new Set(["createEffect", "createRenderEffect", "createComputed",
 export type Hit = { file: string; line: number; rule: string; message: string };
 export type Options = {
     solidOnly?: boolean;
-    /** the files allowed error quotes, and how many: scripts/errorQuotes.json unless given */
+    /** the files allowed error quotes, and how many: scripts/gate/errorQuotes.json unless given */
     errorQuotes?: Record<string, number>;
 };
 
@@ -570,7 +570,7 @@ function checkPackageBoundary(sf: TS.SourceFile, file: string, report: (node: TS
     });
     const known = KNOWN_CROSSINGS[relative(ROOT, path)];
     if (known !== undefined) {
-        if (crossings.length === 0) hit(sf, "cross-package-import", `this file no longer reaches into another package: take it off KNOWN_CROSSINGS in scripts/check-solid.ts`);
+        if (crossings.length === 0) hit(sf, "cross-package-import", `this file no longer reaches into another package: take it off KNOWN_CROSSINGS in scripts/gate/check-solid.ts`);
         return;
     }
     for (const spec of crossings)
@@ -581,7 +581,7 @@ function checkPackageBoundary(sf: TS.SourceFile, file: string, report: (node: TS
         );
 }
 
-const ERROR_QUOTES_FILE = join(ROOT, "scripts/errorQuotes.json");
+const ERROR_QUOTES_FILE = join(ROOT, "scripts/gate/errorQuotes.json");
 // the panels nobody changes: their error quotes go when they do
 const DEPRECATED_PANELS = ["panels/dev.paperboard.ai/", "panels/dev.paperboard.actions/"];
 let errorQuotesListed: Record<string, number> | undefined;
@@ -648,14 +648,14 @@ function checkErrorQuotes(sf: TS.SourceFile, file: string, hit: (node: TS.Node, 
     const allowed = errorQuotesAllowed(options)[path] ?? 0;
     if (sites.length > allowed) {
         for (const site of sites)
-            hit(site, "error-quote", allowed === 0 ? ERROR_QUOTE_WHY : `${ERROR_QUOTE_WHY}; this file has ${sites.length} and scripts/errorQuotes.json allows ${allowed}, which only goes down`);
+            hit(site, "error-quote", allowed === 0 ? ERROR_QUOTE_WHY : `${ERROR_QUOTE_WHY}; this file has ${sites.length} and scripts/gate/errorQuotes.json allows ${allowed}, which only goes down`);
     } else if (sites.length < allowed) {
         hit(
             sf,
             "error-quote",
             sites.length === 0
-                ? "this file has no error quotes left: take it off scripts/errorQuotes.json"
-                : `this file has ${sites.length} error quotes and scripts/errorQuotes.json allows ${allowed}: lower its entry to ${sites.length}`,
+                ? "this file has no error quotes left: take it off scripts/gate/errorQuotes.json"
+                : `this file has ${sites.length} error quotes and scripts/gate/errorQuotes.json allows ${allowed}: lower its entry to ${sites.length}`,
         );
     }
 }
@@ -768,7 +768,7 @@ export function checkDirs(dirs: string[], options: Options = {}): Hit[] {
     for (const listed of Object.keys(errorQuotesAllowed(options))) {
         const path = join(ROOT, listed);
         if (scanned.some((dir) => path.startsWith(dir)) && !existsSync(path))
-            hits.push({ file: ERROR_QUOTES_FILE, line: 1, rule: "error-quote", message: `${listed} is gone: take it off scripts/errorQuotes.json` });
+            hits.push({ file: ERROR_QUOTES_FILE, line: 1, rule: "error-quote", message: `${listed} is gone: take it off scripts/gate/errorQuotes.json` });
     }
     return hits;
 }
@@ -778,7 +778,7 @@ if (import.meta.main) {
     const solidOnly = args.includes("--solid-only");
     const dirs = args.filter((a) => a !== "--solid-only");
     if (dirs.length === 0) {
-        console.error("usage: bun scripts/check-solid.ts [--solid-only] <dir>...");
+        console.error("usage: bun scripts/gate/check-solid.ts [--solid-only] <dir>...");
         process.exit(2);
     }
     for (const d of dirs) {

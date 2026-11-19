@@ -9,9 +9,9 @@ import { basename, join } from "path";
 import * as tar from "tar";
 import { createWranglerStorage, publishPanel, unlistPanel, type PanelUpload } from "../../services/origami/scripts/lib/panelPublish";
 import { PANELS_INDEX_KEY, type PanelRecord } from "../../services/origami/src/panels";
-import { ORIGAMI_HOST, storeUploadParts } from "../publishLib";
-import { assertRelativePanelBuild, discoverPanels, PANELS_ROOT, type DiscoveredPanel } from "../publishManifest";
-import { loadReleaseSigningKey, releaseMessage } from "../releaseSigning";
+import { ORIGAMI_HOST, storeUploadParts } from "./publishLib";
+import { assertRelativePanelBuild, discoverPanels, PANELS_ROOT, type DiscoveredPanel } from "./publishManifest";
+import { loadReleaseSigningKey, releaseMessage } from "./releaseSigning";
 import { bar, cancelled, checkCancel, fail, hex, mb, ORIGAMI_URL, printTable, sh, signVerified } from "./common";
 
 function listPanels(): DiscoveredPanel[] {

@@ -4,7 +4,7 @@ import * as crypto from "node:crypto";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { spawn } from "node:child_process";
-import { assetFileName, feedOf, ymlKeyFor } from "../../../../../../../scripts/publishLib";
+import { assetFileName, feedOf, ymlKeyFor } from "../../../../../../../scripts/publish/publishLib";
 import { APP_PACKAGE, hostTarget, linkDependencies } from "../build";
 import { watch, WAIT_MS } from "../crane";
 import { electronBinary } from "../electron";

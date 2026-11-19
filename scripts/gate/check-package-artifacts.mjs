@@ -13,7 +13,7 @@ import crypto from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { execFileSync, spawnSync } from "node:child_process";
 
-const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "paperboard-package-consumer-"));
 const cache = path.join(tmp, "cache");
 function run(command, args, cwd = tmp) {

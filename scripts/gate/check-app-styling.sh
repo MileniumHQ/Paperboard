@@ -17,7 +17,7 @@
 # Usage: check-app-styling.sh [path...]   (default: apps and panels)
 set -u
 
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT" || exit 1
 
 if [ "$#" -gt 0 ]; then
@@ -42,7 +42,7 @@ if [ -z "$FILES" ]; then
 fi
 
 # shellcheck disable=SC2086
-if ! OUT="$(printf '%s\n' $FILES | python3 -I "$ROOT/scripts/check-app-styling.py")"; then
+if ! OUT="$(printf '%s\n' $FILES | python3 -I "$ROOT/scripts/gate/check-app-styling.py")"; then
     echo "FAIL: app styling: the scanner (check-app-styling.py) did not finish" >&2
     exit 1
 fi

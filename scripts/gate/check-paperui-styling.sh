@@ -11,7 +11,7 @@
 # Exits 0 only when all hold.
 set -u
 
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 SRC="$ROOT/packages/paperui/src"
 
 # Files each check exempts, with reasons. Paths are relative to $SRC.

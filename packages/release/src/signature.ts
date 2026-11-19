@@ -17,7 +17,7 @@
 //
 // The private key never touches the registry or this repository: publish.ts
 // and the origami package scripts read it from PAPERBOARD_RELEASE_KEY or
-// ~/.config/paperboard/release-signing.pem (see scripts/releaseSigning.ts).
+// ~/.config/paperboard/release-signing.pem (see scripts/publish/releaseSigning.ts).
 import * as crypto from "crypto";
 
 export const RELEASE_PUBLIC_KEY = `-----BEGIN PUBLIC KEY-----

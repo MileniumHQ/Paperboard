@@ -25,7 +25,7 @@ function panel(dirName: string, manifest: string | object): string {
 // Panel publishing finds every panel and refuses incomplete ones.
 describe("panel publishing finds every panel and refuses incomplete ones", () => {
     test("PANELS_ROOT is <repo>/panels and finds the real first-party panels", () => {
-        expect(PANELS_ROOT).toBe(join(import.meta.dir, "..", "panels"));
+        expect(PANELS_ROOT).toBe(join(import.meta.dir, "..", "..", "panels"));
         const skipped: string[] = [];
         const found = discoverPanels(PANELS_ROOT, (dir, err) => skipped.push(`${dir}: ${String(err)}`));
         expect(skipped).toEqual([]);

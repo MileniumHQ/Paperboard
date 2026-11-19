@@ -2,7 +2,7 @@
 /**
  * snapshot-acp-registry.ts — Captures the ACP agent registry for the AI panel
  *
- * Usage: bun scripts/snapshot-acp-registry.ts
+ * Usage: bun panels/dev.paperboard.ai/scripts/snapshot-acp-registry.ts
  * Output: panels/dev.paperboard.ai/src/data/acp-agents.json
  *
  * This only serves the deprecated AI panel (dev.paperboard.ai), whose
@@ -19,7 +19,7 @@ import { join } from "node:path";
 
 const REGISTRY_URL = "https://cdn.agentclientprotocol.com/registry/v1/latest/registry.json";
 const NPM_URL = "https://registry.npmjs.org";
-const OUT_FILE = join(import.meta.dir, "..", "panels", "dev.paperboard.ai", "src", "data", "acp-agents.json");
+const OUT_FILE = join(import.meta.dir, "..", "src", "data", "acp-agents.json");
 const MAX_AGENTS = 200;
 
 interface RegistryAgent {

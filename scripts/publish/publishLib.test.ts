@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import * as crypto from "node:crypto";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { RELEASE_PUBLIC_KEY, releaseMessage, verifyRelease } from "../packages/release/src";
+import { RELEASE_PUBLIC_KEY, releaseMessage, verifyRelease } from "../../packages/release/src";
 import {
     ALL_TARGETS,
     assetFileName,
@@ -28,7 +28,7 @@ import {
 } from "./publishLib";
 import { signRelease } from "./releaseSigning";
 
-const ROOT = join(import.meta.dir, "..");
+const ROOT = join(import.meta.dir, "..", "..");
 
 // every file a release ships, by canonical name
 function shippedFiles(version: string): string[] {

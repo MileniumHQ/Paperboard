@@ -91,7 +91,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # with linux-x64 above, every target in scripts/publishLib.ts ALL_TARGETS
+        # with linux-x64 above, every target in scripts/publish/publishLib.ts ALL_TARGETS
         target:
           - { name: linux-arm64, runner: ubuntu-24.04-arm, os: linux }
           - { name: macos-x64, runner: macos-15-intel, os: macos }

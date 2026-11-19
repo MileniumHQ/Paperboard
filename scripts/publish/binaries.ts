@@ -5,7 +5,7 @@ import AdmZip from "adm-zip";
 import { chmodSync, cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "fs";
 import { basename, extname, join } from "path";
 import * as tar from "tar";
-import { craneCompileCommand } from "../supervisor";
+import { craneCompileCommand } from "../build/supervisor";
 import {
     ALL_TARGETS,
     assetFileName,
@@ -17,8 +17,8 @@ import {
     paperboardPackages,
     type DlApp,
     type Target,
-} from "../publishLib";
-import { applyWindowsIcon } from "../windowsIcon";
+} from "./publishLib";
+import { applyWindowsIcon } from "./windowsIcon";
 import { APP_DIR, bar, checkCancel, hashFile, mb, printTable, REPO_ROOT, sh, version } from "./common";
 
 const PB_BUILD_SCRIPT: Record<Target, string> = {

@@ -3,7 +3,7 @@
 // The panel never downloads agent code: an agent is something the user
 // installed, found on PATH (or at an absolute path for a custom one). The
 // shipped snapshot of the ACP registry (src/data/acp-agents.json, refreshed
-// by scripts/snapshot-acp-registry.ts) names each agent's command and how to
+// by panels/dev.paperboard.ai/scripts/snapshot-acp-registry.ts) names each agent's command and how to
 // install it.
 
 import snapshot from "../data/acp-agents.json";

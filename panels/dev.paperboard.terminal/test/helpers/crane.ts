@@ -18,7 +18,7 @@ import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { buildSupervisor } from "../../../../scripts/supervisor";
+import { buildSupervisor } from "../../../../scripts/build/supervisor";
 import { processApi, terminalApi } from "@mileniumhq/paperapi";
 import { within } from "./wait";
 

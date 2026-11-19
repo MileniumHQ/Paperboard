@@ -17,12 +17,12 @@ import { existsSync, readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { linkAllPanels, unlinkPanel, listLinkedPanels } from "../packages/paperapi/src/link";
+import { linkAllPanels, unlinkPanel, listLinkedPanels } from "../../packages/paperapi/src/link";
 import { ensureElectron } from "./ensureElectron";
-import { discoverPanels, PANELS_ROOT, type DiscoveredPanel } from "./publishManifest";
-import { buildSupervisor } from "./supervisor";
+import { discoverPanels, PANELS_ROOT, type DiscoveredPanel } from "../publish/publishManifest";
+import { buildSupervisor } from "../build/supervisor";
 
-const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const SHARED_PACKAGES = ["packages/paperapi", "packages/paperui"];
 const APP_DIR = join(ROOT, "apps/paperboard");
 
@@ -97,7 +97,7 @@ function unlinkPanels(): void {
 }
 
 function usage(): never {
-    console.log(`Usage: bun scripts/dev.ts <command>
+    console.log(`Usage: bun scripts/dev/dev.ts <command>
 
 Commands:
   setup      install, fetch the Electron binary, build shared packages + panels, then link panels

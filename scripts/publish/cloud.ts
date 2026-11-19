@@ -5,7 +5,7 @@ import * as p from "@clack/prompts";
 import { mkdtempSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { basename, join } from "path";
-import { KV_PACKAGES_BINDING, PAPERDL_R2_BUCKET, kvKeyFor, type DlApp, type DlAppRecord } from "../publishLib";
+import { KV_PACKAGES_BINDING, PAPERDL_R2_BUCKET, kvKeyFor, type DlApp, type DlAppRecord } from "./publishLib";
 import { cmdOk, fail, ORIGAMI_DIR, sh } from "./common";
 
 let wranglerBin: string[] | null = null;

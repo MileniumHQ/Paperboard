@@ -19,11 +19,11 @@ Is this really dumb and confusing? Yes. Why is it this way? I don't know. I don'
 ## Building it
 The release build (`bun run publish` from the repo root) compiles it for every target. To compile it yourself, from `apps/daemon`, with the workload supervisor (Go) embedded:
 ```zsh
-bun build --compile --target=bun-linux-x64 ./src/main.ts "$(bun ../../scripts/supervisor.ts --path linux-x64)" --outfile ./dist/papercrane-linux-x64
-bun build --compile --target=bun-linux-arm64 ./src/main.ts "$(bun ../../scripts/supervisor.ts --path linux-arm64)" --outfile ./dist/papercrane-linux-arm64
-bun build --compile --target=bun-darwin-x64 ./src/main.ts "$(bun ../../scripts/supervisor.ts --path macos-x64)" --outfile ./dist/papercrane-macos-x64
-bun build --compile --target=bun-darwin-arm64 ./src/main.ts "$(bun ../../scripts/supervisor.ts --path macos-arm64)" --outfile ./dist/papercrane-macos-arm64
-bun build --compile --target=bun-windows-x64 ./src/main.ts "$(bun ../../scripts/supervisor.ts --path windows-x64)" --outfile ./dist/papercrane-windows-x64.exe
+bun build --compile --target=bun-linux-x64 ./src/main.ts "$(bun ../../scripts/build/supervisor.ts --path linux-x64)" --outfile ./dist/papercrane-linux-x64
+bun build --compile --target=bun-linux-arm64 ./src/main.ts "$(bun ../../scripts/build/supervisor.ts --path linux-arm64)" --outfile ./dist/papercrane-linux-arm64
+bun build --compile --target=bun-darwin-x64 ./src/main.ts "$(bun ../../scripts/build/supervisor.ts --path macos-x64)" --outfile ./dist/papercrane-macos-x64
+bun build --compile --target=bun-darwin-arm64 ./src/main.ts "$(bun ../../scripts/build/supervisor.ts --path macos-arm64)" --outfile ./dist/papercrane-macos-arm64
+bun build --compile --target=bun-windows-x64 ./src/main.ts "$(bun ../../scripts/build/supervisor.ts --path windows-x64)" --outfile ./dist/papercrane-windows-x64.exe
 ```
 
 ## Running it

@@ -1,7 +1,7 @@
 name: Release
-# The title is how scripts/publish.ts finds the run it started
+# The title is how scripts/publish/publish.ts finds the run it started
 run-name: Release v${{ inputs.version }} from ${{ inputs.commit }}
-# Started by Publish binaries in scripts/publish.ts, which then hashes and
+# Started by Publish binaries in scripts/publish/publish.ts, which then hashes and
 # signs what this leaves on the draft release, makes it public and moves the
 # download index. The release signing key never comes here.
 on:
@@ -102,7 +102,7 @@ jobs:
           echo "DEVELOPER_DIR=$xcode/Contents/Developer" >> "$GITHUB_ENV"
           DEVELOPER_DIR="$xcode/Contents/Developer" actool --version
       - name: Build
-        run: bun scripts/publish.ts ci-build --target ${{ matrix.target.name }}
+        run: bun scripts/publish/publish.ts ci-build --target ${{ matrix.target.name }}
       - uses: actions/upload-artifact@v4
         with:
           name: release-${{ matrix.target.name }}
@@ -111,7 +111,7 @@ jobs:
           retention-days: 7
 
   # What each target ships, run on that target the way a download is
-  # (scripts/releaseSmoke.ts): signatures, the server, and the app's shell
+  # (scripts/publish/releaseSmoke.ts): signatures, the server, and the app's shell
   smoke:
     name: smoke (${{ matrix.target.name }})
     needs: build
@@ -156,9 +156,9 @@ jobs:
       - name: Smoke
         run: |
           if [ "${{ matrix.target.os }}" = linux ]; then
-            dbus-run-session -- xvfb-run -a bun scripts/releaseSmoke.ts --target ${{ matrix.target.name }} --dir release
+            dbus-run-session -- xvfb-run -a bun scripts/publish/releaseSmoke.ts --target ${{ matrix.target.name }} --dir release
           else
-            bun scripts/releaseSmoke.ts --target ${{ matrix.target.name }} --dir release
+            bun scripts/publish/releaseSmoke.ts --target ${{ matrix.target.name }} --dir release
           fi
 
   # Every target's files on one draft release, tagged at the built commit

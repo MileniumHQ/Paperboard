@@ -47,7 +47,7 @@ async function finish(command: () => Promise<number>): Promise<void> {
 
 // The workload supervisor this server starts (supervisorBinary.ts). The
 // compiled binary carries it inside itself (`bun build --compile` is given
-// the file); run from source, it is the one scripts/supervisor.ts built.
+// the file); run from source, it is the one scripts/build/supervisor.ts built.
 async function readSupervisor(): Promise<Uint8Array> {
     const embedded = ((globalThis as { Bun?: { embeddedFiles?: Array<Blob & { name: string }> } }).Bun?.embeddedFiles ?? [])
         .find((file) => file.name.startsWith("paperboard-supervisor"));
@@ -58,7 +58,7 @@ async function readSupervisor(): Promise<Uint8Array> {
         return await fs.promises.readFile(built);
     } catch (err) {
         if (errorCode(err) !== "ENOENT") throw err;
-        throw new Error("This Paperboard Server was built without its workload supervisor, so it cannot start anything. Build it with `bun scripts/supervisor.ts`, and compile the server with the built file beside main.ts.");
+        throw new Error("This Paperboard Server was built without its workload supervisor, so it cannot start anything. Build it with `bun scripts/build/supervisor.ts`, and compile the server with the built file beside main.ts.");
     }
 }
 

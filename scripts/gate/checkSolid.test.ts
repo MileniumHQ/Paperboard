@@ -128,7 +128,7 @@ describe("the house rules flag each break, honour a reasoned quiet marker, and p
     });
 
     test("an error quote (failures are toasts), the allowlist that only shrinks, and the near misses", () => {
-        const root = join(import.meta.dir, "..");
+        const root = join(import.meta.dir, "..", "..");
         const file = join(root, "panels/dev.paperboard.fixture/src/A.tsx");
         const listed = { "panels/dev.paperboard.fixture/src/A.tsx": 2 };
         const quotes = (src: string, errorQuotes: Record<string, number> = {}) => checkSource(file, src, { errorQuotes }).map((h) => `${h.line}:${h.rule}`);
@@ -153,7 +153,7 @@ describe("the house rules flag each break, honour a reasoned quiet marker, and p
         const dir = mkdtempSync(join(tmpdir(), "check-solid-"));
         try {
             const entry = relative(root, join(dir, "Gone.tsx"));
-            expect(checkDirs([dir], { errorQuotes: { [entry]: 1, "packages/elsewhere/Gone.tsx": 1 } }).map((h) => h.message)).toEqual([`${entry} is gone: take it off scripts/errorQuotes.json`]);
+            expect(checkDirs([dir], { errorQuotes: { [entry]: 1, "packages/elsewhere/Gone.tsx": 1 } }).map((h) => h.message)).toEqual([`${entry} is gone: take it off scripts/gate/errorQuotes.json`]);
         } finally {
             rmSync(dir, { recursive: true, force: true });
         }
@@ -174,7 +174,7 @@ describe("the house rules flag each break, honour a reasoned quiet marker, and p
 
     test("a relative import into another package, and the near misses: its own files, the repo root, a package by name", () => {
         // a file of the npx launcher, by its place in this repository (the packages around it are real)
-        const file = join(import.meta.dir, "..", "packages/npx/src/fixture.ts");
+        const file = join(import.meta.dir, "..", "..", "packages/npx/src/fixture.ts");
         const hits = (src: string) => checkSource(file, src).map((h) => `${h.line}:${h.rule}`);
         expect(
             hits(
@@ -183,7 +183,7 @@ describe("the house rules flag each break, honour a reasoned quiet marker, and p
         ).toEqual(["1:cross-package-import", "2:cross-package-import", "3:cross-package-import", "4:cross-package-import"]);
         expect(
             hits(
-                `import { ensureCrane } from "./launcher";\nimport pkg from "../package.json";\nimport { ALL_TARGETS } from "../../../scripts/publishLib";\nimport { semverGt } from "@mileniumhq/release";\n`,
+                `import { ensureCrane } from "./launcher";\nimport pkg from "../package.json";\nimport { ALL_TARGETS } from "../../../scripts/publish/publishLib";\nimport { semverGt } from "@mileniumhq/release";\n`,
             ),
         ).toEqual([]);
     });

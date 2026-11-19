@@ -5,13 +5,13 @@
 // packages/release/src/signature.ts (one implementation of the
 // canonical messages, shared by signer and verifier).
 //
-//   bun scripts/releaseSigning.ts keygen   # new key; prints the public key
+//   bun scripts/publish/releaseSigning.ts keygen   # new key; prints the public key
 import * as crypto from "node:crypto";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 
-export { releaseMessage } from "../packages/release/src";
+export { releaseMessage } from "../../packages/release/src";
 
 export function releaseKeyPath(): string {
     return process.env.PAPERBOARD_RELEASE_KEY || path.join(os.homedir(), ".config", "paperboard", "release-signing.pem");

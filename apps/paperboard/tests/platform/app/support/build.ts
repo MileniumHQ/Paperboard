@@ -4,8 +4,8 @@
 // from the repo. Never whatever an earlier developer left in out/ or dist/.
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { BUN_TARGET_MAP, type Target } from "../../../../../../scripts/publishLib";
-import { buildSupervisor } from "../../../../../../scripts/supervisor";
+import { BUN_TARGET_MAP, type Target } from "../../../../../../scripts/publish/publishLib";
+import { buildSupervisor } from "../../../../../../scripts/build/supervisor";
 import { tempDir } from "./temp";
 
 export const APP_DIR = path.resolve(import.meta.dir, "../../../..");
@@ -98,7 +98,7 @@ export interface BuiltCrane {
 }
 
 // `bun build --compile` of apps/daemon/src/main.ts for the host target, as
-// scripts/publish.ts compiles it. `version` stamps a different release
+// scripts/publish/publish.ts compiles it. `version` stamps a different release
 // number into the binary (the update entries need a newer release);
 // `bootFailure` compiles a release whose daemon exits before it serves;
 // `protocolVersion` one that speaks another wire protocol version.

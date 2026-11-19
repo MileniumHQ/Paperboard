@@ -25,8 +25,8 @@ import {
     type Feed,
     type VersionFileEntry,
     type YmlEntry,
-} from "../publishLib";
-import { loadReleaseSigningKey, releaseMessage } from "../releaseSigning";
+} from "./publishLib";
+import { loadReleaseSigningKey, releaseMessage } from "./releaseSigning";
 import type { BuiltBinary } from "./binaries";
 import { ensureCloudflareAuth, ensureGithubAuth, kvReadRecord, kvWriteRecord, r2PutText } from "./cloud";
 import { bar, cancelled, checkCancel, cmdOk, fail, hashFile, mb, printTable, REPO_ROOT, sh, signVerified, version } from "./common";

@@ -54,7 +54,7 @@ function daemonExecutable(): string {
     const main = (globalThis as { Bun?: { main?: string } }).Bun?.main ?? "";
     const compiled = main.startsWith("/$bunfs/") || /^[A-Za-z]:[\\/]~BUN[\\/]/.test(main);
     if (!compiled) {
-        throw new Error("install-service needs the compiled papercrane binary (this is a source checkout). Build it in apps/daemon with `bun build --compile ./src/main.ts \`bun ../../scripts/supervisor.ts --path\` --outfile papercrane` and run that.");
+        throw new Error("install-service needs the compiled papercrane binary (this is a source checkout). Build it in apps/daemon with `bun build --compile ./src/main.ts \`bun ../../scripts/build/supervisor.ts --path\` --outfile papercrane` and run that.");
     }
     return process.execPath;
 }

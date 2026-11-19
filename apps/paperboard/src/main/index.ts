@@ -45,7 +45,7 @@ import { setSupervisorBinary } from "daemon/supervisorBinary";
 import { errorMessage } from "@mileniumhq/paperapi/errors";
 
 const log = logger;
-// the workload supervisor ships in the app's resources (scripts/supervisor.ts
+// the workload supervisor ships in the app's resources (scripts/build/supervisor.ts
 // builds it); supervisorBinary.ts copies it out before anything runs from it
 setSupervisorBinary(() =>
     fs.promises.readFile(

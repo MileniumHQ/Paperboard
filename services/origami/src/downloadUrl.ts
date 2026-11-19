@@ -1,6 +1,6 @@
 // The URL shape of i.paperboard.dev's downloads, shared by the worker that
 // serves them (routes/paperdl.ts) and the publisher that writes the
-// records behind them (scripts/publishLib.ts). Binaries live on GitHub
+// records behind them (scripts/publish/publishLib.ts). Binaries live on GitHub
 // Releases under the v<version> tag (one release holds both apps' assets);
 // <host>/<app>/<version|latest>/<file> 302s to them.
 export const DOWNLOAD_HOST = "i.paperboard.dev";

@@ -3,7 +3,7 @@
 // write package records: the only writer is someone holding the account.
 import type { KeyObject } from "node:crypto";
 import { assertValidRecord, type PackageRecord, type PlatformKey } from "./records";
-import { releaseMessage, signRelease } from "../../../../scripts/releaseSigning";
+import { releaseMessage, signRelease } from "../../../../scripts/publish/releaseSigning";
 import { parsePackageRecipe, recipeDigest, RELEASE_PUBLIC_KEY, verifyRelease } from "@mileniumhq/release";
 import { kvPut, runCommand, type CommandRunner } from "./wrangler";
 import { errorMessage } from "@mileniumhq/paperapi/errors";

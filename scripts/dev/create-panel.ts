@@ -2,19 +2,19 @@
 // In-repo entry for the panel scaffolder (packages/create-panel): writes
 // panels/<panel-id>/ wired to the workspace libraries.
 //
-// Usage: bun scripts/create-panel.ts [panel-id] [Display Name]
-//   bun scripts/create-panel.ts dev.paperboard.my-panel "My Panel"
-//   bun scripts/create-panel.ts            # prompts for everything
+// Usage: bun scripts/dev/create-panel.ts [panel-id] [Display Name]
+//   bun scripts/dev/create-panel.ts dev.paperboard.my-panel "My Panel"
+//   bun scripts/dev/create-panel.ts            # prompts for everything
 import { dirname, join, resolve } from "path";
 import { fileURLToPath } from "url";
-import { runCli } from "../packages/create-panel/src/scaffold";
+import { runCli } from "../../packages/create-panel/src/scaffold";
 
-const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 
 runCli({
     mode: "workspace",
     parentDir: join(ROOT, "panels"),
-    command: "bun scripts/create-panel.ts",
+    command: "bun scripts/dev/create-panel.ts",
     argv: process.argv.slice(2),
 }).then(
     (code) => {

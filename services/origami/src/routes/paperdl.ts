@@ -6,11 +6,11 @@ import { DOWNLOAD_HOST, FILE_SEGMENT, GH_REPO, VERSION_SEGMENT } from "../downlo
 // only 302-redirects to them and serves the small metadata (latest.yml
 // feeds) from R2. It never proxies bytes. The URL shape is shared with the
 // publisher (../downloadUrl.ts); the canonical asset names below are
-// scripts/publishLib.ts's too.
+// scripts/publish/publishLib.ts's too.
 
 // URL path segments: "pb" is the Paperboard app, "crane" the server.
 const DL_APPS = new Set(["pb", "crane"]);
-// electron-updater channel files, one per scripts/publishLib.ts ymlKeyFor
+// electron-updater channel files, one per scripts/publish/publishLib.ts ymlKeyFor
 // feed. Linux arm64 AppImages request latest-linux-arm64.yml.
 const PB_FEEDS = new Set(["latest.yml", "latest-mac.yml", "latest-linux.yml", "latest-linux-arm64.yml"]);
 
@@ -136,7 +136,7 @@ async function serveR2Yml(env: Env, name: string): Promise<Response> {
     });
 }
 
-// the install scripts' checksums (scripts/publishLib.ts SHA256SUMS_KEY);
+// the install scripts' checksums (scripts/publish/publishLib.ts SHA256SUMS_KEY);
 // missing means nothing was published with them yet, which they must say
 async function serveR2Sums(env: Env): Promise<Response> {
     const dl = env.PAPERDL_BUCKET;

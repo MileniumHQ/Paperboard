@@ -9,13 +9,13 @@
 #     packages       shared library builds + packed external consumer check
 #     paperapi       SDK: build, typecheck, tests, silent-catches
 #     paperui        design system: build, tests, styling, silent-catches
-#   Every target with code runs the code check (scripts/check-solid.ts) over
+#   Every target with code runs the code check (scripts/gate/check-solid.ts) over
 #   its sources and tests: the mechanical Solid mistakes AGENTS.md's "Solid:"
 #   section names, and the house rules that kept coming back (a catch that
 #   only logs, an effect without on(), <For> fed fresh rows, fixed sleeps in
 #   tests). The deprecated panels (actions, ai) get the Solid rules alone.
 #   paperboard, library and the panels also run an advisory styling
-#   check (scripts/check-app-styling.sh): literal sizes, colors, motion,
+#   check (scripts/gate/check-app-styling.sh): literal sizes, colors, motion,
 #   z-index and the like that have a PaperUI token. It warns, never fails.
 #     create-panel   panel scaffolder: build, tests, silent-catches
 #     release        @mileniumhq/release (release key, signed messages, package
@@ -46,7 +46,7 @@
 # when `global` is named; any other filtered run is about the named targets.
 set -u
 
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 CATCH="$ROOT/apps/paperboard/scripts/check-no-silent-catches.sh"
 FAIL=0
 TEST_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/paperboard-gate-XXXXXX")"
@@ -203,7 +203,7 @@ lib_build() {
 want paperapi-build && lib_build paperapi
 want paperui-build && lib_build paperui
 gstep create-panel-build "create-panel build" run_in "$ROOT/packages/create-panel" bun run build
-gstep packages "packed external consumers" bun "$ROOT/scripts/check-package-artifacts.mjs"
+gstep packages "packed external consumers" bun "$ROOT/scripts/gate/check-package-artifacts.mjs"
 
 # ── server daemon: typecheck, full suite, lint, silent-catches, and the Go
 # workload supervisor it launches ───────────────────────────────────────────
@@ -213,7 +213,7 @@ gstep daemon "daemon lint" run_in "$ROOT/apps/daemon" bunx biome lint
 gstep daemon "supervisor format and vet (linux, macOS, Windows)" supervisor_vet
 gstep daemon "supervisor tests" run_in "$ROOT/apps/daemon/supervisor" go test -count=1 ./...
 gstep daemon "daemon silent-catches" run_in "$ROOT/apps/daemon" bash "$CATCH" src test
-gstep daemon "daemon code check" run_in "$ROOT" bun scripts/check-solid.ts apps/daemon/src apps/daemon/test
+gstep daemon "daemon code check" run_in "$ROOT" bun scripts/gate/check-solid.ts apps/daemon/src apps/daemon/test
 
 # ── Paperboard app: node + web typechecks, full suite, lint, silent-catches ──
 gstep paperboard "paperboard typecheck:node" run_in "$ROOT/apps/paperboard" bun run typecheck:node
@@ -221,8 +221,8 @@ gstep paperboard "paperboard typecheck:web" run_in "$ROOT/apps/paperboard" bun r
 gstep paperboard "paperboard tests" run_in "$ROOT/apps/paperboard" bun test
 gstep paperboard "paperboard lint" run_in "$ROOT/apps/paperboard" bunx biome lint
 gstep paperboard "paperboard silent-catches" run_in "$ROOT/apps/paperboard" bash "$CATCH"
-gstep paperboard "paperboard code check" run_in "$ROOT" bun scripts/check-solid.ts apps/paperboard/src apps/paperboard/tests apps/paperboard/scripts
-gwarn paperboard "paperboard styling literals" bash "$ROOT/scripts/check-app-styling.sh" apps/paperboard
+gstep paperboard "paperboard code check" run_in "$ROOT" bun scripts/gate/check-solid.ts apps/paperboard/src apps/paperboard/tests apps/paperboard/scripts
+gwarn paperboard "paperboard styling literals" bash "$ROOT/scripts/gate/check-app-styling.sh" apps/paperboard
 
 # ── root dev scripts: typecheck, publisher release-math proofs, the browser
 # test drivers, silent-catch backstop. The compiler is packages/paperui's, the
@@ -230,64 +230,64 @@ gwarn paperboard "paperboard styling literals" bash "$ROOT/scripts/check-app-sty
 gstep scripts "root scripts typecheck" run_in "$ROOT" bun packages/paperui/node_modules/typescript/bin/tsc -p scripts/tsconfig.json
 gstep scripts "root scripts tests" run_in "$ROOT" bun test scripts
 gstep scripts "root scripts silent-catches" run_in "$ROOT" bash "$CATCH" scripts
-gstep scripts "root scripts code check" run_in "$ROOT" bun scripts/check-solid.ts scripts
+gstep scripts "root scripts code check" run_in "$ROOT" bun scripts/gate/check-solid.ts scripts
 
 # ── paperdocs: tests plus the static site build (typecheck, site + docs
 # prerender, alias files, shared 404) ────────────────────────────────────────
 gstep paperdocs "paperdocs tests" run_in "$ROOT/apps/paperdocs" bun test
 gstep paperdocs "paperdocs build" run_in "$ROOT/apps/paperdocs" bun run build
-gstep paperdocs "paperdocs code check" run_in "$ROOT" bun scripts/check-solid.ts apps/paperdocs/src apps/paperdocs/test apps/paperdocs/scripts
+gstep paperdocs "paperdocs code check" run_in "$ROOT" bun scripts/gate/check-solid.ts apps/paperdocs/src apps/paperdocs/test apps/paperdocs/scripts
 
 # ── shared libraries ─────────────────────────────────────────────────────────
 gstep paperapi "paperapi typecheck" run_in "$ROOT/packages/paperapi" bunx tsc --noEmit
 gstep paperapi "paperapi tests" run_in "$ROOT/packages/paperapi" bun test
 gstep paperapi "paperapi silent-catches" run_in "$ROOT/packages/paperapi" bash "$CATCH" src test
-gstep paperapi "paperapi code check" run_in "$ROOT" bun scripts/check-solid.ts packages/paperapi/src packages/paperapi/test
+gstep paperapi "paperapi code check" run_in "$ROOT" bun scripts/gate/check-solid.ts packages/paperapi/src packages/paperapi/test
 gstep paperui "paperui tests" run_in "$ROOT/packages/paperui" bun run test
-gstep paperui "paperui styling invariant" bash "$ROOT/scripts/check-paperui-styling.sh"
+gstep paperui "paperui styling invariant" bash "$ROOT/scripts/gate/check-paperui-styling.sh"
 gstep paperui "paperui silent-catches" run_in "$ROOT/packages/paperui" bash "$CATCH" src
-gstep paperui "paperui code check" run_in "$ROOT" bun scripts/check-solid.ts packages/paperui/src packages/paperui/test
+gstep paperui "paperui code check" run_in "$ROOT" bun scripts/gate/check-solid.ts packages/paperui/src packages/paperui/test
 gstep create-panel "create-panel tests" run_in "$ROOT/packages/create-panel" bun run test
 gstep create-panel "create-panel silent-catches" run_in "$ROOT/packages/create-panel" bash "$CATCH" src bin test template
-gstep create-panel "create-panel code check" run_in "$ROOT" bun scripts/check-solid.ts packages/create-panel/src packages/create-panel/bin packages/create-panel/test packages/create-panel/template
+gstep create-panel "create-panel code check" run_in "$ROOT" bun scripts/gate/check-solid.ts packages/create-panel/src packages/create-panel/bin packages/create-panel/test packages/create-panel/template
 gstep release "release typecheck" run_in "$ROOT/packages/release" bunx tsc --noEmit
 gstep release "release tests" run_in "$ROOT/packages/release" bun run test
 gstep release "release silent-catches" run_in "$ROOT/packages/release" bash "$CATCH" src test
-gstep release "release code check" run_in "$ROOT" bun scripts/check-solid.ts packages/release/src packages/release/test
+gstep release "release code check" run_in "$ROOT" bun scripts/gate/check-solid.ts packages/release/src packages/release/test
 gstep testkit "testkit typecheck" run_in "$ROOT/packages/testkit" bun run typecheck
 gstep testkit "testkit tests" run_in "$ROOT/packages/testkit" bun run test
 gstep testkit "testkit silent-catches" run_in "$ROOT/packages/testkit" bash "$CATCH" src test
-gstep testkit "testkit code check" run_in "$ROOT" bun scripts/check-solid.ts packages/testkit/src packages/testkit/test
+gstep testkit "testkit code check" run_in "$ROOT" bun scripts/gate/check-solid.ts packages/testkit/src packages/testkit/test
 gstep npx "npx tests" run_in "$ROOT/packages/npx" bun run test
 gstep npx "npx silent-catches" run_in "$ROOT/packages/npx" bash "$CATCH" src test
-gstep npx "npx code check" run_in "$ROOT" bun scripts/check-solid.ts packages/npx/src packages/npx/test
+gstep npx "npx code check" run_in "$ROOT" bun scripts/gate/check-solid.ts packages/npx/src packages/npx/test
 
 # ── registry service: typecheck plus its worker suite (the library division
 # has its own vitest suite below; `bun test ./test` scopes bun to the worker) ─
 gstep origami "origami typecheck" run_in "$ROOT/services/origami" bun run typecheck
 gstep origami "origami tests" run_in "$ROOT/services/origami" bun run test
 gstep origami "origami silent-catches" run_in "$ROOT/services/origami" bash "$CATCH" src test
-gstep origami "origami code check" run_in "$ROOT" bun scripts/check-solid.ts services/origami/src services/origami/test services/origami/scripts
+gstep origami "origami code check" run_in "$ROOT" bun scripts/gate/check-solid.ts services/origami/src services/origami/test services/origami/scripts
 
 # ── arilink: the pbd.lc short-link worker ───────────────────────────────────
 gstep arilink "arilink typecheck" run_in "$ROOT/services/arilink" bun run typecheck
 gstep arilink "arilink tests" run_in "$ROOT/services/arilink" bun run test
 gstep arilink "arilink silent-catches" run_in "$ROOT/services/arilink" bash "$CATCH" src test
-gstep arilink "arilink code check" run_in "$ROOT" bun scripts/check-solid.ts services/arilink/src services/arilink/test
+gstep arilink "arilink code check" run_in "$ROOT" bun scripts/gate/check-solid.ts services/arilink/src services/arilink/test
 
 # ── panelapis: third-party API proxy worker ─────────────────────────────────
 gstep panelapis "panelapis typecheck" run_in "$ROOT/services/panelapis" bun run typecheck
 gstep panelapis "panelapis tests" run_in "$ROOT/services/panelapis" bun run test
 gstep panelapis "panelapis silent-catches" run_in "$ROOT/services/panelapis" bash "$CATCH" src test
-gstep panelapis "panelapis code check" run_in "$ROOT" bun scripts/check-solid.ts services/panelapis/src services/panelapis/test
+gstep panelapis "panelapis code check" run_in "$ROOT" bun scripts/gate/check-solid.ts services/panelapis/src services/panelapis/test
 
 # ── the panel library division of origami: browser-logic suite and the
 # production build that static assets serve (typecheck rides origami's) ──────
 gstep library "library tests" run_in "$ROOT/services/library" bun run test
 gstep library "library build" run_in "$ROOT/services/library" bun run build
 gstep library "library silent-catches" run_in "$ROOT/services/library" bash "$CATCH" src test
-gstep library "library code check" run_in "$ROOT" bun scripts/check-solid.ts services/library/src services/library/test
-gwarn library "library styling literals" bash "$ROOT/scripts/check-app-styling.sh" services/library
+gstep library "library code check" run_in "$ROOT" bun scripts/gate/check-solid.ts services/library/src services/library/test
+gwarn library "library styling literals" bash "$ROOT/scripts/gate/check-app-styling.sh" services/library
 
 # ── first-party panels: suite, typecheck, production build, silent-catch gate.
 # The daemon runs the built dist/service.js, not the TypeScript source, so the
@@ -301,10 +301,10 @@ for short in actions agents ai blocks botcreator gameserver terminal; do
     gstep "$short" "$panel silent-catches" run_in "$ROOT/$panel" bash "$CATCH" src test
     case "$short" in
         # deprecated: nobody changes them, so only the Solid rules hold
-        actions | ai) gstep "$short" "$panel solid check" run_in "$ROOT" bun scripts/check-solid.ts --solid-only "$panel" ;;
-        *) gstep "$short" "$panel code check" run_in "$ROOT" bun scripts/check-solid.ts "$panel" ;;
+        actions | ai) gstep "$short" "$panel solid check" run_in "$ROOT" bun scripts/gate/check-solid.ts --solid-only "$panel" ;;
+        *) gstep "$short" "$panel code check" run_in "$ROOT" bun scripts/gate/check-solid.ts "$panel" ;;
     esac
-    gwarn "$short" "$panel styling literals" bash "$ROOT/scripts/check-app-styling.sh" "$panel"
+    gwarn "$short" "$panel styling literals" bash "$ROOT/scripts/gate/check-app-styling.sh" "$panel"
 done
 
 # ── cross-platform suites: what depends on the OS or CPU (booting and
@@ -336,7 +336,7 @@ if want global; then
 
     # deprecation-expiry gate: TODO(remove|deny after vX) must die on schedule
     echo "--- gate: todo-expiry"
-    if bash "$ROOT/scripts/check-todo-expiry.sh"; then
+    if bash "$ROOT/scripts/gate/check-todo-expiry.sh"; then
         echo "ok: todo-expiry"
     else
         echo "FAIL: todo-expiry" >&2

@@ -8,7 +8,7 @@
 // silently finds zero panels.
 import { existsSync, readdirSync, readFileSync } from "fs";
 import { basename, join, relative } from "path";
-import { requirePanelId } from "../packages/paperapi/src/panelIdentity";
+import { requirePanelId } from "../../packages/paperapi/src/panelIdentity";
 
 export interface PublishTarget {
     id: string;
@@ -18,7 +18,7 @@ export interface PublishTarget {
 
 // The one canonical panel source: <repo>/panels. publishManifest.ts lives in
 // scripts/, so its parent is the repo root.
-export const PANELS_ROOT = join(import.meta.dir, "..", "panels");
+export const PANELS_ROOT = join(import.meta.dir, "..", "..", "panels");
 
 export interface DiscoveredPanel extends PublishTarget {
     dir: string;

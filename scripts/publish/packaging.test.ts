@@ -5,10 +5,10 @@ import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { delimiter, dirname, join } from "node:path";
 import { Data, Format, NtExecutable, NtExecutableResource, Resource } from "resedit";
-import { buildSupervisor, SUPERVISOR_TARGETS, type SupervisorTarget } from "./supervisor";
+import { buildSupervisor, SUPERVISOR_TARGETS, type SupervisorTarget } from "../build/supervisor";
 import { patchPeIcon } from "./windowsIcon";
 
-const ROOT = join(import.meta.dir, "..");
+const ROOT = join(import.meta.dir, "..", "..");
 const APP = join(ROOT, "apps", "paperboard");
 const appRequire = createRequire(join(APP, "package.json"));
 

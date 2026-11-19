@@ -16,7 +16,7 @@ import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { buildSupervisor } from "../../../../scripts/supervisor";
+import { buildSupervisor } from "../../../../scripts/build/supervisor";
 import { openChrome, type Page } from "testkit/chrome";
 import { PANEL_ID, type ChatEntry, type Harness, type Settings } from "../../src/contract";
 import { History } from "../../src/service/history";

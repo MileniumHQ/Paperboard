@@ -3,12 +3,12 @@
 // apps/paperboard/resources/supervisor/<platform>-<arch>/, where the desktop
 // app reads it and the server compile embeds it.
 //
-//   bun scripts/supervisor.ts                 this computer's target
-//   bun scripts/supervisor.ts linux-arm64 …   the named release targets
-//   bun scripts/supervisor.ts --all           every release target
-//   bun scripts/supervisor.ts --only …        the same, removing every other
+//   bun scripts/build/supervisor.ts                 this computer's target
+//   bun scripts/build/supervisor.ts linux-arm64 …   the named release targets
+//   bun scripts/build/supervisor.ts --all           every release target
+//   bun scripts/build/supervisor.ts --only …        the same, removing every other
 //                                             target's build first (packaging)
-//   bun scripts/supervisor.ts --path …        builds, and prints only the path
+//   bun scripts/build/supervisor.ts --path …        builds, and prints only the path
 //                                             (to hand to `bun build --compile`)
 //
 // Go cross-compiles every target from any host, so one machine builds all.
@@ -16,9 +16,9 @@ import { spawnSync } from "node:child_process";
 import { mkdirSync, rmSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { BUN_TARGET_MAP } from "./publishLib";
+import { BUN_TARGET_MAP } from "../publish/publishLib";
 
-const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const APP_DIR = join(ROOT, "apps", "paperboard");
 const DAEMON_DIR = join(ROOT, "apps", "daemon");
 const SOURCE_DIR = join(DAEMON_DIR, "supervisor");

@@ -6,7 +6,7 @@ import { Presets, SingleBar } from "cli-progress";
 import { readFileSync } from "fs";
 import { join } from "path";
 import type { KeyObject } from "node:crypto";
-import { signRelease } from "../releaseSigning";
+import { signRelease } from "./releaseSigning";
 import { RELEASE_PUBLIC_KEY, verifyRelease } from "../../packages/release/src";
 
 export const REPO_ROOT = join(import.meta.dir, "..", "..");

@@ -3,7 +3,7 @@
 // target the way someone who downloaded them would. The release workflow
 // runs it on each target's own runner before anything reaches a release.
 //
-//   bun scripts/releaseSmoke.ts --target macos-arm64 --dir <staged release dir>
+//   bun scripts/publish/releaseSmoke.ts --target macos-arm64 --dir <staged release dir>
 //
 // For the server: unpack its archive, check its signature (macOS), boot it
 // headless, prove its identity and answer as the release's version.
@@ -18,12 +18,12 @@ import { spawn } from "node:child_process";
 import AdmZip from "adm-zip";
 import * as tar from "tar";
 import { WebSocket } from "ws";
-import { verifyDaemonProof, DAEMON_CHALLENGE_HEADER, DAEMON_PROOF_TYPE } from "../apps/daemon/src/handshake";
-import { CraneSocket, randomChallenge, readHandshake, startCrane, watch, WAIT_MS } from "../apps/paperboard/tests/platform/app/support/crane";
-import { cleanupSuite, ownChild, tempDir } from "../apps/paperboard/tests/platform/app/support/temp";
+import { verifyDaemonProof, DAEMON_CHALLENGE_HEADER, DAEMON_PROOF_TYPE } from "../../apps/daemon/src/handshake";
+import { CraneSocket, randomChallenge, readHandshake, startCrane, watch, WAIT_MS } from "../../apps/paperboard/tests/platform/app/support/crane";
+import { cleanupSuite, ownChild, tempDir } from "../../apps/paperboard/tests/platform/app/support/temp";
 import { ALL_TARGETS, archOf, assetFileName, osOf, type Target } from "./publishLib";
 
-const APP_DIR = path.join(import.meta.dir, "..", "apps", "paperboard");
+const APP_DIR = path.join(import.meta.dir, "..", "..", "apps", "paperboard");
 const VERSION = (JSON.parse(fs.readFileSync(path.join(APP_DIR, "package.json"), "utf8")) as { version: string }).version;
 const OS_NAME = { linux: "linux", darwin: "macos", win32: "windows" } as Record<string, string>;
 const SHELL = "paperboard://shell/";

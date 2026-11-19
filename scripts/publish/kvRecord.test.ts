@@ -7,7 +7,7 @@ import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-const CLOUD = join(import.meta.dir, "publish", "cloud.ts");
+const CLOUD = join(import.meta.dir, "cloud.ts");
 const LIB = join(import.meta.dir, "publishLib.ts");
 
 // list/get answer from files; put records its args and the value file it was handed

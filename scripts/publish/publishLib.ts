@@ -17,8 +17,8 @@ import {
     storeScreenshotField,
     STORE_IMAGE_TYPES,
     STORE_MAX_SCREENSHOT_BYTES,
-} from "../packages/paperapi/src/internal";
-import { DOWNLOAD_HOST, FILE_SEGMENT, GH_REPO, VERSION_SEGMENT } from "../services/origami/src/downloadUrl";
+} from "../../packages/paperapi/src/internal";
+import { DOWNLOAD_HOST, FILE_SEGMENT, GH_REPO, VERSION_SEGMENT } from "../../services/origami/src/downloadUrl";
 
 export { GH_REPO };
 export const ORIGAMI_HOST = "origami.ariapis.com";

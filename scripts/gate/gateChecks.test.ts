@@ -11,11 +11,11 @@ afterEach(() => {
     for (const d of dirs.splice(0)) rmSync(d, { recursive: true, force: true });
 });
 
-// A repo root holding copies of `scripts` and `files` (path → content).
+// A repo root holding copies of `scripts` (in scripts/gate) and `files` (path → content).
 function tree(scripts: string[], files: Record<string, string>): string {
     const root = mkdtempSync(join(tmpdir(), "paperboard-gatecheck-"));
     dirs.push(root);
-    for (const s of scripts) cpSync(join(import.meta.dir, s), join(root, "scripts", s));
+    for (const s of scripts) cpSync(join(import.meta.dir, s), join(root, "scripts", "gate", s));
     for (const [rel, text] of Object.entries(files)) {
         mkdirSync(dirname(join(root, rel)), { recursive: true });
         writeFileSync(join(root, rel), text);
@@ -35,7 +35,7 @@ describe("check-paperui-styling.sh: literal units in component CSS", () => {
                 "packages/paperui/src/components/PaperX/index.module.css": css,
                 "packages/paperui/src/templates/PaperT/index.module.css": ".t {}\n",
             }),
-            ["bash", "scripts/check-paperui-styling.sh"],
+            ["bash", "scripts/gate/check-paperui-styling.sh"],
         );
 
     test.each([".a { padding: 10px; }", ".a { width: 120px; }", ".a { margin: 0px 12px; }"])(
@@ -59,7 +59,7 @@ describe("check-todo-expiry.sh: due removals", () => {
                 "apps/paperboard/package.json": JSON.stringify({ version: appVersion }),
                 "src/a.ts": `// ${todo}\n`,
             }),
-            ["bash", "scripts/check-todo-expiry.sh"],
+            ["bash", "scripts/gate/check-todo-expiry.sh"],
         );
 
     // versions compare as numbers: v0.9 is due at v0.10, and v0.11 is not
@@ -85,7 +85,7 @@ describe("check-app-styling: hairlines are exempt, sizes are not", () => {
     const check = (css: string) => {
         const root = tree(["check-app-styling.sh", "check-app-styling.py"], { "panels/p/src/a.module.css": css });
         for (const cmd of [["git", "init", "-q"], ["git", "add", "panels"]]) expect(run(root, cmd).code).toBe(0);
-        return run(root, ["bash", "scripts/check-app-styling.sh", "panels/p"]);
+        return run(root, ["bash", "scripts/gate/check-app-styling.sh", "panels/p"]);
     };
 
     test.each([".a { padding: 10px; }", ".a { margin: 1px 12px; }", ".a { width: 1.5px; }"])("warns on %s", (css) => {
@@ -100,7 +100,7 @@ describe("check-app-styling: hairlines are exempt, sizes are not", () => {
 });
 
 describe("check-no-silent-catches.sh: a catch that returns with no trace", () => {
-    const CATCH = join(import.meta.dir, "../apps/paperboard/scripts/check-no-silent-catches.sh");
+    const CATCH = join(import.meta.dir, "../../apps/paperboard/scripts/check-no-silent-catches.sh");
     const check = (src: string) => run(tree([], { "src/a.ts": src }), ["bash", CATCH, "src"]);
 
     test("flags a catch that returns a fallback and says nothing", () => {

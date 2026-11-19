@@ -5,7 +5,7 @@
 # excluded (docs discuss TODOs in prose).
 set -u
 
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 
 VERSION="$(grep -m1 '"version"' "$ROOT/apps/paperboard/package.json" | grep -o '[0-9][0-9]*\.[0-9][0-9]*' | head -1)"
 CUR_MAJOR="${VERSION%%.*}"

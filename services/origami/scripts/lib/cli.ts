@@ -1,7 +1,7 @@
 import type { KeyObject } from "node:crypto";
 import { putRecord, readPublished, type PublishedReader } from "./kv";
 import type { CommandRunner } from "./wrangler";
-import { loadReleaseSigningKey } from "../../../../scripts/releaseSigning";
+import { loadReleaseSigningKey } from "../../../../scripts/publish/releaseSigning";
 import type { PackageRecord } from "./records";
 import { errorMessage } from "@mileniumhq/paperapi/errors";
 
