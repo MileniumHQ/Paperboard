@@ -57,6 +57,8 @@ Paperboard has gates relevant to each individual part of the codebase. `bun run 
 
 Run them before pushing code. No need to run the full gate unless you're so inclined!
 
+A pull request's CI runs only the targets its changes can reach. `bun scripts/gate/scope.ts` lists them for your branch, and `scripts/gate/README.md` explains how it decides.
+
 Browser mode:
 
 - It's a dev tool, not for being shipped to users.
