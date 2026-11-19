@@ -183,7 +183,7 @@ src/                    your source, never shipped`}
     "name": "Terminal",
     "id": "dev.paperboard.terminal",
     "version": "0.3.2",
-    "description": "Interactive shell & multi-tab terminal console",
+    "description": "Your computer's command line, in tabs",
     "publisher": "Paperboard",
     "base": "./dist/index.html",
     "service": "./dist/service.js",

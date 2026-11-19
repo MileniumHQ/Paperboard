@@ -1,7 +1,8 @@
-The Terminal panel brings the command line to Paperboard. Interact with your system shell just as you would anywhere else.
+Your computer's command line, right in Paperboard.
 
-- **Persists across sessions** - A terminal tab isn't closed until you close it. Start a process and leave it be for as long as you need.
-- **Copy and paste** - Copy and paste aren't hidden in some random UI, it's just a right click menu.
-- **Pick up across computers** - Start a terminal session and tap into it from any other computer connected if you're using the Paperboard server daemon.
-- **Saved commands** - Save the commands you run all the time and launch them from the tab bar, or pin one to your Home tab and run it in a click.
-- **On your phone** - Tap the screen to type. A row above the keyboard has Esc, Tab, Ctrl, the arrow keys, copy and paste.
+- **Tabs and splits** - Open as many tabs as you need, split one into two shells, or move the tabs to the side.
+- **Find** - Search everything a terminal has printed.
+- **Keeps running** - A tab runs until you close it, so leave a process going as long as you need.
+- **Any computer** - Start a session on one computer and pick it up from another.
+- **Saved commands** - Save the commands you run often, and run them from the tab bar or your Home tab.
+- **Blocks** - Run a saved command or any shell command from the Blocks panel.

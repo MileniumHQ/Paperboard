@@ -2,7 +2,7 @@
     "name": "Game Server",
     "id": "dev.paperboard.gameserver",
     "version": "0.4.0",
-    "description": "Host and manage dedicated servers for your games",
+    "description": "Run servers for your favorite games",
     "publisher": "Paperboard",
     "base": "./dist/index.html",
     "service": "./dist/service.js",

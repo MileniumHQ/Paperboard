@@ -1,8 +1,7 @@
-Create fully functional Discord bots without writing a single line of code. The Bot Creator panel exposes many blocks to the Paperboard ecosystem, and all you need to do to get started is provide a valid Discord bot token.
+Make Discord bots without writing code. Add your bot's token, then build what it does in the Blocks panel.
 
-- **Code visually** - Use the Blocks panel to build custom logic with ease in minutes. Using the Blocks panel, you can create a bot that triggers events and behavior in other installed panels and services.
-- **Interactions** - Create custom interactions with buttons and slash commands. You're not just limited to text; the panel supports working with a variety of Discord features from reactions to roles.
-- **As many bots as you like** - Run several bots side by side, each with its own token, slash commands and project in the Blocks panel.
-- **View everything at a glance** - View a summary of all the servers your bot is in, including their roles and members. Create invite links that let the bot join new servers in-app.
-- **Menus and modals** - Go beyond buttons with select menus and pop-up forms. The panel acknowledges every interaction for you, so your bot never shows "This interaction failed."
-- **Home widgets** - See whether your bot is online and how its commands are being used right from your Home tab.
+- **Built with Blocks** - Reply to messages, answer slash commands, and work with your other panels.
+- **Interactions** - Buttons, select menus, pop-up forms, reactions and roles. Your bot never shows "This interaction failed."
+- **As many bots as you like** - Each one gets its own token, commands and Blocks project.
+- **Overview** - See whether your bot is online, its recent messages, and the servers it's in.
+- **Home widgets** - Keep an eye on your bot and its commands from your Home tab.

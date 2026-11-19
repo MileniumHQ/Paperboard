@@ -1,21 +1,22 @@
-Host your own game servers without learning a terminal. Game Server runs Minecraft, Terraria, Palworld, Team Fortress 2, Counter-Strike 2, Garry's Mod and Rust servers on your computer, and brings their console, players, worlds and settings into one place.
+Run game servers on your own computer, no terminal needed. Game Server runs Minecraft, Terraria, Palworld, Team Fortress 2, Counter-Strike 2, Garry's Mod and Rust, with their console, players, worlds and settings in one place.
 
-- **All your servers** - Run several servers side by side, of any game. The Servers home takes you to each one, and each has its own blocks, backup schedule and widgets.
-- **No setup required** - Paperboard downloads the server and everything it runs on. Pick a game and a version and you're good to go.
-- **Always up to date** - Switch Minecraft versions in a click. Steam servers update themselves, and Updates tells you when a newer build is out.
-- **Back on its feet** - A server that crashes starts again, and servers can restart once a day.
-- **Backups** - Back up to your computer, Google Drive or an S3 bucket, on a schedule or whenever you want.
+- **All your servers** - Run as many as you like, of any game, side by side.
+- **No setup** - Pick a game and a version, and Paperboard downloads the rest.
+- **Always up to date** - Switch Minecraft versions in a click. Steam servers update themselves.
+- **Back on its feet** - A server that crashes starts again on its own.
+- **Backups** - Back up to your computer, Google Drive or an S3 bucket, on a schedule or any time.
+- **Blocks** - Welcome a player who joins, or restart a server every night, from the Blocks panel.
 
-**Minecraft** - Run Vanilla, Paper, Fabric, NeoForge or Forge, and switch between them at any time. Install plugins, mods and whole modpacks from Modrinth by searching their name. Manage players, game rules and worlds, view a live map, and let Bedrock players join with Geyser.
+**Minecraft** - Vanilla, Paper, Fabric, NeoForge or Forge. Install plugins, mods and modpacks from Modrinth, see a live map, and let Bedrock players join with Geyser.
 
-**Terraria** - Run the vanilla server, or pick tModLoader to play with mods: search the Steam Workshop and install a mod, with what it needs, in one click.
+**Terraria** - Vanilla, or tModLoader with mods from the Steam Workshop.
 
-**Palworld** - Set up a dedicated server and change its settings without editing files.
+**Palworld** - Change its settings without editing a file.
 
-**Team Fortress 2** - Choose how the server plays, pick maps from pictures, set the map rotation, add maps from the Steam Workshop, and turn on SourceMod for plugins.
+**Team Fortress 2** - Pick maps by picture, set the rotation, add Workshop maps, and turn on SourceMod.
 
-**Counter-Strike 2** - Pick Competitive, Casual, Wingman, Deathmatch or Arms Race, change maps from their pictures, and set bots and their difficulty.
+**Counter-Strike 2** - Pick a game mode, change maps by picture, and add bots.
 
-**Garry's Mod** - Run Sandbox or any other game mode, change maps from their pictures, and give the server a Steam Workshop collection to download its add-ons from.
+**Garry's Mod** - Any game mode, maps by picture, and add-ons from a Workshop collection.
 
-**Rust** - Set the map's size and seed and see the map from above, pick the game mode, watch the server's health while it runs, and wipe it in one click when it's time for a fresh map.
+**Rust** - Set the map's size and seed, see it from above, and wipe in one click.
