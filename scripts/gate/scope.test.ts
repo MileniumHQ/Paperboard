@@ -4,7 +4,7 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { allTargets, jobsOf, type Repo, scopeOf, workingRepo } from "./scope";
+import { allTargets, jobsOf, type Repo, routesOf, scopeOf, workingRepo } from "./scope";
 
 /** an in-memory repo: path → content */
 function repo(files: Record<string, string>): Repo {
@@ -183,6 +183,17 @@ describe("what else a scope turns on", () => {
         expect(scope({}, ["apps/paperboard/src/main/index.ts"]).platform).toBe(true);
         expect(scope({}, ["services/origami/src/index.ts"]).platform).toBe(false);
         expect(scope({}, ["README.md"]).platform).toBe(false);
+    });
+});
+
+describe("routesOf", () => {
+    test("each target carries the route that reached it, nearest part first", () => {
+        const routes = routesOf(repo(BASE), ["packages/paperapi/src/index.ts"]);
+        expect(routes.get("paperapi")).toEqual(["packages/paperapi/src/index.ts"]);
+        expect(routes.get("terminal")).toEqual(["packages/paperapi/src/index.ts", "apps/daemon", "packages/testkit", "panels/dev.paperboard.terminal"]);
+        expect(routes.get("packages")?.at(-1)).toContain("consumer check");
+        expect(routes.get("global")?.at(-1)).toContain("repo-wide");
+        expect(routesOf(repo(BASE), ["bun.lock"]).get("terminal")).toEqual(["bun.lock", "(a change here reruns every target)"]);
     });
 });
 

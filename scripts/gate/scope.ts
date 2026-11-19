@@ -3,10 +3,11 @@
 // others: a typo in a panel's README runs that panel's gate, not the whole
 // repository's.
 //
-// Usage: bun scripts/gate/scope.ts [--base <ref> | --all] [--github]
+// Usage: bun scripts/gate/scope.ts [--base <ref> | --all] [--github | --why <target>]
 //   Compares HEAD with --base (default origin/main) and prints the targets,
 //   one per line; --all picks every target. --github writes the CI job matrix
-//   and the platform switch to $GITHUB_OUTPUT instead.
+//   and the platform switch to $GITHUB_OUTPUT instead; --why prints the route
+//   that made a target run. How it decides: README.md beside this file.
 //
 // Each target owns a folder (a panel's is found under panels/, so a new panel
 // needs no entry here), and a target reaches another when its files point
@@ -182,25 +183,33 @@ export function incomingEdges(repo: Repo, nodes: Node[]): Map<Node, Edge[]> {
     return incoming;
 }
 
-/** the targets a change to `file` reruns: its own, and every part whose checks can reach it */
-function reachedBy(incoming: Map<Node, Edge[]>, owner: Node, file: string): Set<string> {
-    const targets = new Set([owner.target]);
+/**
+ * The targets a change to `file` reruns: its own, and every part whose checks
+ * can reach it, each with the route that reached it (the parts, nearest first).
+ */
+function reachedBy(incoming: Map<Node, Edge[]>, owner: Node, file: string): Map<string, string[]> {
+    const routes = new Map<string, string[]>([[owner.target, [file]]]);
+    const note = (target: string, route: string[]) => {
+        if (!routes.has(target)) routes.set(target, route);
+    };
     // parts whose public side the change reaches: their consumers rerun too
-    const reached = new Set<Node>();
+    const reached = new Map<Node, string[]>();
     const queue: Node[] = [];
-    const reach = (n: Node) => {
-        targets.add(n.target);
+    const reach = (n: Node, route: string[]) => {
+        note(n.target, route);
         if (!reached.has(n)) {
-            reached.add(n);
+            reached.set(n, route);
             queue.push(n);
         }
     };
-    if (!isPrivate(owner, file)) reach(owner);
-    else for (const e of incoming.get(owner)!) if (!e.toPublic && e.at && under(file, e.at)) e.fromPublic ? reach(e.from) : targets.add(e.from.target);
+    const follow = (e: Edge, route: string[]) => (e.fromPublic ? reach(e.from, [...route, e.from.dir]) : note(e.from.target, [...route, e.from.dir]));
+    if (!isPrivate(owner, file)) reach(owner, [file]);
+    else for (const e of incoming.get(owner)!) if (!e.toPublic && e.at && under(file, e.at)) follow(e, [file]);
     while (queue.length) {
-        for (const e of incoming.get(queue.shift()!)!) e.fromPublic ? reach(e.from) : targets.add(e.from.target);
+        const n = queue.shift()!;
+        for (const e of incoming.get(n)!) follow(e, reached.get(n)!);
     }
-    return targets;
+    return routes;
 }
 
 /** every gate target, for a full run */
@@ -219,22 +228,29 @@ function platformTargets(repo: Repo, nodes: Node[]): Set<string> {
     return found;
 }
 
-export function scopeOf(repo: Repo, changed: string[]): Scope {
+/** each target a change reruns, and why: the route of files and parts that reached it */
+export function routesOf(repo: Repo, changed: string[]): Map<string, string[]> {
+    const gate = changed.find(isGateTooling);
+    if (gate) return new Map(allTargets(repo).map((t) => [t, [gate, "(a change here reruns every target)"]]));
     const nodes = nodesOf(repo);
-    const platforms = platformTargets(repo, nodes);
-    if (changed.some(isGateTooling)) {
-        return { targets: allTargets(repo), platform: true };
-    }
     const incoming = incomingEdges(repo, nodes);
-    const targets = new Set<string>();
+    const routes = new Map<string, string[]>();
     for (const path of changed) {
         const owner = ownerOf(nodes, path);
-        if (owner) for (const t of reachedBy(incoming, owner, path)) targets.add(t);
+        if (!owner) continue;
+        for (const [t, route] of reachedBy(incoming, owner, path)) if (!routes.has(t)) routes.set(t, route);
     }
-    if (PACKED.some((t) => targets.has(t))) targets.add("packages");
+    const packed = PACKED.find((t) => routes.has(t));
+    if (packed && !routes.has("packages")) routes.set("packages", [...routes.get(packed)!, "(a packed library: the consumer check)"]);
     // the repo-wide checks are cheap, and a deleted CHANGELOG or a TODO falls due anywhere
-    if (changed.length > 0) targets.add("global");
-    return { targets: [...targets].sort(), platform: [...targets].some((t) => platforms.has(t)) };
+    if (changed.length > 0 && !routes.has("global")) routes.set("global", ["(any change runs the repo-wide checks)"]);
+    return routes;
+}
+
+export function scopeOf(repo: Repo, changed: string[]): Scope {
+    const targets = [...routesOf(repo, changed).keys()].sort();
+    const platforms = platformTargets(repo, nodesOf(repo));
+    return { targets, platform: targets.some((t) => platforms.has(t)) };
 }
 
 /** this checkout as a Repo: tracked files that are on disk (a deletion leaves none) */
@@ -272,17 +288,26 @@ export function jobsOf(targets: string[]): Array<{ name: string; targets: string
 
 if (import.meta.main) {
     const args = process.argv.slice(2);
-    const at = args.indexOf("--base");
-    const base = at >= 0 ? args[at + 1] : "origin/main";
+    const value = (flag: string) => (args.includes(flag) ? args[args.indexOf(flag) + 1] : undefined);
+    const base = value("--base") ?? "origin/main";
+    const why = value("--why");
     const all = args.includes("--all");
-    const usage = !base || (all && at >= 0) || args.some((a, i) => a !== "--base" && a !== "--github" && a !== "--all" && args[i - 1] !== "--base");
-    if (usage) {
-        console.error("usage: bun scripts/gate/scope.ts [--base <ref> | --all] [--github]");
+    const known = (a: string, i: number) => ["--github", "--all"].includes(a) || ["--base", "--why"].includes(a) || ["--base", "--why"].includes(args[i - 1]!);
+    if ((args.includes("--base") && !value("--base")) || (args.includes("--why") && !why) || (all && (args.includes("--base") || why)) || !args.every(known)) {
+        console.error("usage: bun scripts/gate/scope.ts [--base <ref> | --all] [--github | --why <target>]");
         process.exit(2);
     }
     const repo = workingRepo();
     const scope: Scope = all ? { targets: allTargets(repo), platform: true } : scopeOf(repo, changedSince(base));
-    if (args.includes("--github")) {
+    if (why) {
+        const route = routesOf(repo, changedSince(base)).get(why);
+        if (!route) {
+            console.log(`Nothing changed since ${base} reaches ${why}.`);
+        } else {
+            console.log(`${why} runs because:`);
+            for (const [i, step] of route.entries()) console.log(step.startsWith("(") ? `  ${step}` : i === 0 ? `  ${step} changed` : `  which ${step} uses`);
+        }
+    } else if (args.includes("--github")) {
         const output = process.env.GITHUB_OUTPUT;
         if (!output) throw new Error("--github writes to $GITHUB_OUTPUT, which is not set");
         appendFileSync(output, `jobs=${JSON.stringify(jobsOf(scope.targets))}\nplatform=${scope.platform}\n`);
