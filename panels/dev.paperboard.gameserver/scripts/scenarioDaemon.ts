@@ -11,7 +11,7 @@
  * (manifest.json and dist/); the script itself is bundled with
  * `bun build --target=bun` and run by a bare bun.
  */
-import { spawn, spawnSync } from "node:child_process";
+import { spawn } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -20,7 +20,6 @@ import type { GameServerState } from "../src/service/types";
 import type { gameServerContract } from "../src/service/contract";
 
 export const PANEL = "dev.paperboard.gameserver";
-const REPO = path.resolve(import.meta.dir, "../../..");
 
 export async function until(check: () => boolean | Promise<boolean>, label: string, timeout = 15_000) {
     const deadline = Date.now() + timeout;
@@ -49,10 +48,8 @@ export async function withScenarioDaemon(prefix: string, work: (scenario: Scenar
     process.env.PAPERBOARD_DIR = root;
     let binary = process.env.SMOKE_CRANE;
     if (!binary) {
-        const { buildSupervisor } = await import("../../../scripts/build/supervisor");
-        binary = path.join(root, "bin", process.platform === "win32" ? "papercrane.exe" : "papercrane");
-        const build = spawnSync(process.execPath, ["build", "--compile", path.join(REPO, "apps/daemon/src/main.ts"), buildSupervisor(), "--outfile", binary], { cwd: path.join(REPO, "apps/paperboard"), encoding: "utf8" });
-        if (build.status !== 0 || !fs.existsSync(binary)) throw new Error(`Building the crane daemon failed (exit ${build.status}):\n${build.stdout}\n${build.stderr}`);
+        const { buildCrane } = await import("testkit/craneBinary");
+        binary = buildCrane(path.join(root, "bin"));
     }
     if (process.env.SMOKE_PANEL) fs.cpSync(process.env.SMOKE_PANEL, path.join(root, "panels", PANEL), { recursive: true });
     else (await import("../test/helpers/installedPanel")).installPanel(root);
