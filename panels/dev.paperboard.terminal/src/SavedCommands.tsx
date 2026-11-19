@@ -128,7 +128,44 @@ function SavedCommandsModal(props: {
     };
 
     return (
-        <PaperModal open={props.open} onClose={props.onClose} title="Saved commands" size="medium">
+        // the form to add one is the modal's footer: it stays in view while a long list scrolls
+        <PaperModal
+            open={props.open}
+            onClose={props.onClose}
+            title="Saved commands"
+            size="medium"
+            footer={
+                <PaperFlex direction="column" gap="half" fullWidth>
+                    <PaperInput
+                        fullWidth
+                        label="Name (optional)"
+                        autofocus
+                        maxLength={MAX_LABEL_LENGTH}
+                        value={label()}
+                        onInput={(e) => setLabel(e.currentTarget.value)}
+                    />
+                    <PaperFlex direction="row" gap="half" align="end" fullWidth>
+                        <PaperInput
+                            fullWidth
+                            label="Command"
+                            value={command()}
+                            onInput={(e) => setCommand(e.currentTarget.value)}
+                            onKeyDown={(e) => {
+                                if (e.key === "Enter") void save();
+                            }}
+                        />
+                        <PaperButton variant="primary" disabled={!canSave()} onClick={() => void save()}>
+                            <PaperIcon>bookmark_add</PaperIcon> Save
+                        </PaperButton>
+                    </PaperFlex>
+                    <Show when={full()}>
+                        <PaperText preset="hint">
+                            Terminal keeps {MAX_SAVED_COMMANDS} saved commands at most. Remove one to save another.
+                        </PaperText>
+                    </Show>
+                </PaperFlex>
+            }
+        >
             <PaperFlex direction="column" gap="full" fullWidth>
                 <PaperText preset="text">
                     Run these from here, or pin one to Home with the Pinned command widget.
@@ -211,35 +248,6 @@ function SavedCommandsModal(props: {
                         </For>
                     </PaperList>
                 </Show>
-                <PaperFlex direction="column" gap="half" fullWidth>
-                    <PaperInput
-                        fullWidth
-                        label="Name (optional)"
-                        autofocus
-                        maxLength={MAX_LABEL_LENGTH}
-                        value={label()}
-                        onInput={(e) => setLabel(e.currentTarget.value)}
-                    />
-                    <PaperFlex direction="row" gap="half" align="end" fullWidth>
-                        <PaperInput
-                            fullWidth
-                            label="Command"
-                            value={command()}
-                            onInput={(e) => setCommand(e.currentTarget.value)}
-                            onKeyDown={(e) => {
-                                if (e.key === "Enter") void save();
-                            }}
-                        />
-                        <PaperButton variant="primary" disabled={!canSave()} onClick={() => void save()}>
-                            <PaperIcon>bookmark_add</PaperIcon> Save
-                        </PaperButton>
-                    </PaperFlex>
-                    <Show when={full()}>
-                        <PaperText preset="hint">
-                            Terminal keeps {MAX_SAVED_COMMANDS} saved commands at most. Remove one to save another.
-                        </PaperText>
-                    </Show>
-                </PaperFlex>
             </PaperFlex>
         </PaperModal>
     );

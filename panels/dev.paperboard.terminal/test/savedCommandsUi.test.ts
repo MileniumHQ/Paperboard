@@ -43,6 +43,37 @@ async function fill(page: Page, label: string, text: string) {
 }
 
 describe("saved commands in the panel", () => {
+    // a small window: the list scrolls under a form that stays in view
+    test("at 680 by 510, with a full list, the form to add one is in view beside the list", async () => {
+        const commands = ["Disk use", "Sync log", "Backups", "Ports"].map((label, i) => ({ id: `cmd_${i}`, label, command: `du -sh ~/data${i}` }));
+        const lastRuns = Object.fromEntries(
+            commands.map((c, i) => [c.id, { state: "exited", startedAt: 1000, endedAt: 2000, exitCode: 0, output: Array.from({ length: 4 }, (_, n) => `${n + 1}.${i}G\t/home/ada/data${i}/part${n}`).join("\n") }]),
+        );
+        await panelFiles({ "tabs.json": TABS, "saved-commands.json": { version: 1, commands, lastRuns, running: [] } });
+        await startService();
+        const served = await servePanel();
+        const page = await browser.open(served.url);
+        try {
+            await page.resize(680, 510);
+            await page.waitFor(`document.querySelectorAll(".xterm").length === 1`, "the shell");
+            await openManager(page);
+            await page.waitFor(rowShowing("Ports", "part3"), "the last command's output");
+            const inView = (selector: string) =>
+                `(() => { const r = ${dialog}.querySelector(${JSON.stringify(selector)}).getBoundingClientRect(); return r.height > 0 && r.top >= 0 && r.bottom <= innerHeight; })()`;
+            const saveButton = `[...${dialog}.querySelectorAll("button")].find((b) => b.innerText.includes("Save"))`;
+            await page.evaluate(`${saveButton}.dataset.test = "save"`);
+            expect(await page.evaluate<boolean>(inView("input"))).toBe(true);
+            expect(await page.evaluate<boolean>(inView('[data-test="save"]'))).toBe(true);
+            // every row is still there to reach, by scrolling the list
+            await page.evaluate(`${dialog}.querySelector('[data-value="cmd_3"]').scrollIntoView()`);
+            expect(await page.evaluate<boolean>(inView('[data-value="cmd_3"]'))).toBe(true);
+            expect(await page.evaluate<boolean>(inView('[data-test="save"]'))).toBe(true);
+        } finally {
+            await page.close();
+            served.stop();
+        }
+    });
+
     test("are added, run and removed in the modal, and a run the menu couldn't start is said in a toast", async () => {
         await panelFiles({ "tabs.json": TABS });
         const service = await startService();
