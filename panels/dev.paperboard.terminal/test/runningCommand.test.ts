@@ -24,8 +24,9 @@ const TABS = {
     activeTabId: "tab1",
 };
 const LOOP = "for i in 1 2 3; do sleep 300; done";
-// what a tab is called: its tooltip's first line (the tab itself cuts a long one short)
-const tabText = (id: string) => `(() => { const el = document.querySelector('label[data-value="${id}"]'); return (el?.title || el?.querySelector('[title]')?.title || '').split(String.fromCharCode(10))[0]; })()`;
+// a tab's tooltip: what it is called (the tab itself cuts a long one short), then its folder
+const tooltip = (id: string) => `(() => { const el = document.querySelector('label[data-value="${id}"]'); return (el?.title || el?.querySelector('[title]')?.title || '').split(String.fromCharCode(10)); })()`;
+const tabText = (id: string) => `${tooltip(id)}[0]`;
 const dialog = `document.querySelector("[role=dialog]")`;
 
 async function opened(): Promise<{ page: Page; stop: () => Promise<void> }> {
@@ -45,17 +46,29 @@ async function opened(): Promise<{ page: Page; stop: () => Promise<void> }> {
 }
 
 describe("a command running in a tab", () => {
-    // what is running is the loop typed, not whichever program the loop has in front this moment
-    test("names the tab while it runs, as typed, and the tab goes back to its shell's name after", async () => {
+    // what runs is the program in front, not the command line that started it
+    test("names the tab by the program it runs, not the line typed, and the tab goes back to its shell's name after", async () => {
         const { page, stop } = await opened();
         try {
-            await runBlock("type-in-tab", { tab: "tab1", text: `${LOOP}\n` });
-            await page.waitFor(`${tabText("tab1")} === ${JSON.stringify(LOOP)}`, "the tab named by the loop");
+            await runBlock("type-in-tab", { tab: "tab1", text: `clear; ${LOOP}\n` });
             await stateWhere<any>(PANEL_ID, (s) => s.live?.tab1?.program === "sleep", "sleep in front of the loop");
-            expect(await page.evaluate<string>(tabText("tab1"))).toBe(LOOP);
+            await page.waitFor(`${tabText("tab1")} === "sleep"`, "the tab named by the program in front");
 
             await runBlock("type-in-tab", { tab: "tab1", text: "\x03" });
             await page.waitFor(`${tabText("tab1")} === "bash"`, "the tab named by its shell again");
+            expect(page.exceptions).toEqual([]);
+        } finally {
+            await stop();
+        }
+    });
+
+    test("a tab's folder in the home folder shows from ~", async () => {
+        const { page, stop } = await opened();
+        try {
+            await runBlock("type-in-tab", { tab: "tab1", text: "mkdir -p logs && cd logs\n" });
+            await page.waitFor(`${tooltip("tab1")}[1] === "~/logs"`, "the folder from ~");
+            await runBlock("type-in-tab", { tab: "tab1", text: "cd\n" });
+            await page.waitFor(`${tooltip("tab1")}[1] === "~"`, "the home folder as ~");
             expect(page.exceptions).toEqual([]);
         } finally {
             await stop();
@@ -66,8 +79,8 @@ describe("a command running in a tab", () => {
         const { page, stop } = await opened();
         try {
             await runBlock("type-in-tab", { tab: "tab1", text: "sleep 300\n" });
-            await page.waitFor(`${tabText("tab1")} === "sleep 300"`, "the command running");
             await stateWhere<any>(PANEL_ID, (s) => s.live?.tab1?.program === "sleep", "sleep in front");
+            await page.waitFor(`${tabText("tab1")} === "sleep"`, "the program running");
 
             await page.click('label[data-value="tab1"] button[aria-label="Close"]');
             await page.waitFor(`${dialog}?.innerText.includes("Stop sleep 300?")`, "the close, asked about by the command");

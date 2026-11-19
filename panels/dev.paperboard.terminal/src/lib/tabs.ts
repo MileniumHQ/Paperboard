@@ -27,26 +27,29 @@ export function findSession(tabs: TerminalTab[], id: string): { tab: TerminalTab
 }
 
 /**
- * What a tab is called: its name when it was given one, with what is
- * running in it ("Server — java"); otherwise what is running alone, as a
- * terminal's title shows it. What is running is the command line the shell
- * marked as running, as typed, or else the program in front. A tab whose
- * shell hasn't started yet goes by its label.
+ * What a tab is called: its name when it was given one, with the program
+ * running in it ("Server — java"); otherwise the program alone, as a
+ * terminal's title shows it. The program is the one in front, not the
+ * command line that started it: `cd logs && tail -f sync.log` is tail. A
+ * tab whose shell hasn't started yet goes by its label.
  */
-export function tabTitle(
-    tab: TerminalTab,
-    live: Record<string, LiveSession>,
-    running: Record<string, string | null> = {},
-    focused: string = tab.id,
-): string {
-    const program = sessionTitle(focused, live, running) || sessionTitle(tab.id, live, running);
+export function tabTitle(tab: TerminalTab, live: Record<string, LiveSession>, focused: string = tab.id): string {
+    const program = sessionTitle(focused, live) || sessionTitle(tab.id, live);
     if (!program) return tab.label;
     return tab.named ? `${tab.label} — ${program}` : program;
 }
 
-/** what is running in one shell: the command line it marked, or the program in front; "" before it starts */
-export function sessionTitle(session: string, live: Record<string, LiveSession>, running: Record<string, string | null>): string {
-    return running[session] || live[session]?.program || "";
+/** the program in front of one shell; "" before it starts */
+export function sessionTitle(session: string, live: Record<string, LiveSession>): string {
+    return live[session]?.program || "";
+}
+
+/** a folder as a shell's prompt shows it: in the home folder, from ~ */
+export function shownFolder(folder: string, home: string): string {
+    if (!home || !folder) return folder;
+    if (folder === home) return "~";
+    const rest = folder.slice(home.length);
+    return folder.startsWith(home) && (rest[0] === "/" || rest[0] === "\\") ? `~${rest}` : folder;
 }
 
 /** the most characters a tab along the top shows of its title; a longer one ends in an ellipsis */

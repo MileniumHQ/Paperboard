@@ -94,8 +94,7 @@ export default function App() {
     const find = createFind(currentSession);
     const pasteConfirm = createPasteConfirm();
     const closeConfirm = createCloseConfirm();
-    // the command each shell marked as running now, by session: what its tab
-    // is called while it runs, and what closing it would stop
+    // the command each shell marked as running now, by session: what closing it would stop
     const [running, setRunning] = createStore<Record<string, string | null>>({});
     /** the commands running in these shells, as typed (or the program, when the shell didn't say the line) */
     const runningIn = (sessions: string[]) =>
@@ -300,7 +299,7 @@ export default function App() {
         const tab = contextTab();
         setContextTabId(null);
         // what the tab shows: a tab that was never named is called by its program, and that is the name to start from
-        if (tab) rename.open(tab.id, tab.named ? tab.label : tabTitle(tab, live(), running));
+        if (tab) rename.open(tab.id, tab.named ? tab.label : tabTitle(tab, live()));
     };
 
     // a split's shells sit side by side, or stack when asked to or when the
@@ -350,7 +349,7 @@ export default function App() {
                             <TabBar
                                 tabs={tabs()}
                                 live={live()}
-                                running={running}
+                                home={service.value()?.home ?? ""}
                                 vertical={vertical()}
                                 value={currentSession()}
                                 status={attention.status}

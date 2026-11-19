@@ -4,15 +4,15 @@
 import { For, Show } from "solid-js";
 import { PaperButton, PaperFlex, PaperIcon, PaperList, PaperListItem, type LoaderStatus } from "@mileniumhq/paperui";
 import type { MenuState } from "./Menus";
-import { sessionTitle, shortTitle, tabTitle } from "./lib/tabs";
+import { sessionTitle, shortTitle, shownFolder, tabTitle } from "./lib/tabs";
 import styles from "./Terminal.module.css";
 import type { LiveSession, TerminalSession, TerminalTab } from "./lib/contract";
 
 export function TabBar(props: {
     tabs: TerminalTab[];
     live: Record<string, LiveSession>;
-    /** the command each shell is running now, by session */
-    running: Record<string, string | null>;
+    /** the home folder of the computer the shells run on */
+    home: string;
     vertical: boolean;
     /** the session picked: the focused shell of the tab in front */
     value: string;
@@ -24,7 +24,7 @@ export function TabBar(props: {
     onUnsplit: (tabId: string) => void;
     onMenu: (e: MouseEvent, tabId: string) => void;
 }) {
-    const folderOf = (session: TerminalSession) => props.live[session.id]?.cwd || session.cwd || "";
+    const folderOf = (session: TerminalSession) => shownFolder(props.live[session.id]?.cwd || session.cwd || "", props.home);
     return (
         <PaperList
             reorderable
@@ -43,11 +43,11 @@ export function TabBar(props: {
                             icon={props.rang(tab.id) ? "notifications_active" : "terminal"}
                             loaderStatus={props.status(tab.id)}
                             value={tab.id}
-                            title={props.vertical ? folderOf(tab) : [tabTitle(tab, props.live, props.running), folderOf(tab)].filter(Boolean).join("\n")}
+                            title={props.vertical ? folderOf(tab) : [tabTitle(tab, props.live), folderOf(tab)].filter(Boolean).join("\n")}
                             onClosed={(closedId) => props.onCloseTab(String(closedId))}
                             onContextMenu={(e: MouseEvent) => props.onMenu(e, tab.id)}
                         >
-                            {props.vertical ? tabTitle(tab, props.live, props.running) : shortTitle(tabTitle(tab, props.live, props.running))}
+                            {props.vertical ? tabTitle(tab, props.live) : shortTitle(tabTitle(tab, props.live))}
                         </PaperListItem>
                         <Show when={tab.split}>
                             {(shown) => {
@@ -63,7 +63,7 @@ export function TabBar(props: {
                                         onClosed={() => props.onUnsplit(tab.id)}
                                         onContextMenu={(e: MouseEvent) => props.onMenu(e, tab.id)}
                                     >
-                                        {shortTitle(sessionTitle(session.id, props.live, props.running) || tab.label)}
+                                        {shortTitle(sessionTitle(session.id, props.live) || tab.label)}
                                     </PaperListItem>
                                 );
                             }}

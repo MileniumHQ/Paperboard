@@ -60,6 +60,8 @@ export async function startService(): Promise<ServiceProcess> {
     const env: Record<string, string | undefined> = {
         ...process.env,
         PAPERBOARD_DIR: daemon.dataDir,
+        // the daemon starts the service with the env its shells get
+        HOME: daemon.home,
         PAPERBOARD_PANEL_ID: PANEL_ID,
         PAPERCRANE_PANEL_TOKEN: granted.token,
         PAPERCRANE_PORT: String(daemon.port),
