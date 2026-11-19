@@ -2,12 +2,12 @@
 // own vite config into a temp dir, served on loopback with the crane
 // credentials injected the way the shell's panel server does it
 // (window.__PAPERBOARD_CRANE, a panel token the daemon issued), and opened in
-// headless Chrome (scripts/testing/chrome.ts). Its calls reach the panel
+// headless Chrome (packages/testkit/src/chrome.ts). Its calls reach the panel
 // service through the test daemon.
 import { afterAll } from "bun:test";
 import * as path from "node:path";
-import { launchChrome, type Chrome, type Page as ChromePage } from "../../../../scripts/testing/chrome";
-import { servePanelUi } from "../../../../scripts/testing/panelUi";
+import { launchChrome, type Chrome, type Page as ChromePage } from "testkit/chrome";
+import { servePanelUi } from "testkit/panelUi";
 import { PANEL_ID } from "../../src/bots";
 import { testDaemon } from "./daemon";
 
@@ -15,7 +15,7 @@ const PANEL = path.resolve(import.meta.dir, "../..");
 const ALLOWED = Symbol.for("paperboard.botcreator.test.ports");
 const allowedPorts: Set<number> = ((globalThis as any)[ALLOWED] ??= new Set<number>());
 
-/** serves the built UI with a panel credential the test daemon issued; widgetUrl() (scripts/testing/panelUi.ts) addresses a Home widget under it */
+/** serves the built UI with a panel credential the test daemon issued; widgetUrl() (packages/testkit/src/panelUi.ts) addresses a Home widget under it */
 export async function servePanel(): Promise<{ url: string; stop: () => void }> {
     const daemon = await testDaemon();
     return servePanelUi({ panelDir: PANEL, panelId: PANEL_ID, port: daemon.port, token: await daemon.panelToken(PANEL_ID) });

@@ -10,7 +10,7 @@
 // Authority: this is the panel service's own scoped credential calling the
 // daemon's action registry, exactly as any panel's flows do. The daemon lists
 // every registered action and refuses another panel's `internal` ones
-// (papercrane/actions.ts, ActionsRegistry.call); this module hides the same
+// (apps/daemon/src/server/actions.ts, ActionsRegistry.call); this module hides the same
 // set up front and refuses it again at run time, plus its own panel's actions
 // (the agent has no business rewriting itself) and every action of the panels
 // in WITHHELD_PANELS. Events are listed, with the fields they carry, because

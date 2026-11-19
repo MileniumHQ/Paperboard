@@ -4,8 +4,8 @@
 // from the repo. Never whatever an earlier developer left in out/ or dist/.
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { BUN_TARGET_MAP, type Target } from "../../../../../../scripts/publishLib";
-import { buildSupervisor } from "../../../../../../scripts/supervisor";
+import { BUN_TARGET_MAP, type Target } from "../../../../../../scripts/publish/publishLib";
+import { buildSupervisor } from "../../../../../../scripts/build/supervisor";
 import { tempDir } from "./temp";
 
 export const APP_DIR = path.resolve(import.meta.dir, "../../../..");
@@ -97,8 +97,8 @@ export interface BuiltCrane {
     target: Target;
 }
 
-// `bun build --compile` of papercrane/main.ts for the host target, as
-// scripts/publish.ts compiles it. `version` stamps a different release
+// `bun build --compile` of apps/daemon/src/main.ts for the host target, as
+// scripts/publish/publish.ts compiles it. `version` stamps a different release
 // number into the binary (the update entries need a newer release);
 // `bootFailure` compiles a release whose daemon exits before it serves;
 // `protocolVersion` one that speaks another wire protocol version.
@@ -113,11 +113,11 @@ export async function compileCrane(options: { version?: string; bootFailure?: bo
     const dir = tempDir("crane");
     const file = path.join(dir, target.startsWith("windows") ? `papercrane-${target}.exe` : `papercrane-${target}`);
     const version = options.version ?? APP_PACKAGE.version;
-    const entry = options.bootFailure ? path.join(dir, "broken.ts") : path.join(APP_DIR, "papercrane", "main.ts");
+    const entry = options.bootFailure ? path.join(dir, "broken.ts") : path.join(REPO_DIR, "apps", "daemon", "src", "main.ts");
     if (options.bootFailure) {
         fs.writeFileSync(entry, `console.error("this release cannot start");\nprocess.exit(70);\n`);
     }
-    const pkgFilter = /[\\/]apps[\\/]paperboard[\\/]package\.json$/;
+    const pkgFilter = /[\\/]apps[\\/]daemon[\\/]package\.json$/;
     const bundleDir = tempDir("crane-bundle");
     const result = await Bun.build({
         entrypoints: [entry],
@@ -134,10 +134,10 @@ export async function compileCrane(options: { version?: string; bootFailure?: bo
                 });
                 if (options.protocolVersion !== undefined) {
                     const wanted = options.protocolVersion;
-                    build.onLoad({ filter: /[\\/]papercrane[\\/]protocol\.ts$/ }, async (args) => {
+                    build.onLoad({ filter: /[\\/]apps[\\/]daemon[\\/]src[\\/]core[\\/]protocol\.ts$/ }, async (args) => {
                         const source = await Bun.file(args.path).text();
                         const pinned = /export const PROTOCOL_VERSION = \d+;/;
-                        if (!pinned.test(source)) throw new Error("papercrane/protocol.ts no longer declares PROTOCOL_VERSION as a number");
+                        if (!pinned.test(source)) throw new Error("apps/daemon/src/core/protocol.ts no longer declares PROTOCOL_VERSION as a number");
                         return { contents: source.replace(pinned, `export const PROTOCOL_VERSION = ${wanted};`), loader: "ts" };
                     });
                 }

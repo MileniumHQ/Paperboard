@@ -3,12 +3,12 @@ import * as crypto from "node:crypto";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { WebSocketServer, type WebSocket } from "ws";
-import { PROTOCOL_VERSION } from "../../../papercrane/protocol";
-import { DAEMON_CHALLENGE_HEADER, DAEMON_PROOF_TYPE, daemonProof } from "../../../papercrane/handshake";
+import { PROTOCOL_VERSION } from "daemon/core/protocol";
+import { DAEMON_CHALLENGE_HEADER, DAEMON_PROOF_TYPE, daemonProof } from "daemon/security/handshake";
 import { PaperCraneClient } from "../../../src/main/communication/papercrane/PaperCraneClient";
 import { BUILD_TIMEOUT_MS, compileCrane, type BuiltCrane } from "./support/build";
 import { CraneSocket, startCrane, WAIT_MS } from "./support/crane";
-import { restoreEnv } from "../../daemon/support/fs";
+import { restoreEnv } from "testkit/fs";
 import { tempDataDir } from "./support/temp";
 
 // The previous release's wire contract, pinned. A new contract file is

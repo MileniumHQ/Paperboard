@@ -3,7 +3,7 @@
 // surprises — a registry entry without a sha256 never becomes a task, and
 // each update refused that way is returned with its reason, to be shown.
 import { semverGt } from "@mileniumhq/release";
-import { logger } from "../../papercrane/logger";
+import { logger } from "daemon/core/logger";
 import { errorMessage } from "@mileniumhq/paperapi/errors";
 import type { RpcResult } from "@mileniumhq/paperapi/protocol";
 

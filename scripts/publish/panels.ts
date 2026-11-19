@@ -7,11 +7,11 @@ import { existsSync, mkdtempSync, readFileSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import { basename, join } from "path";
 import * as tar from "tar";
-import { createWranglerStorage, publishPanel, unlistPanel, type PanelUpload } from "../../apps/origami/scripts/lib/panelPublish";
-import { PANELS_INDEX_KEY, type PanelRecord } from "../../apps/origami/src/panels";
-import { ORIGAMI_HOST, storeUploadParts } from "../publishLib";
-import { assertRelativePanelBuild, discoverPanels, PANELS_ROOT, type DiscoveredPanel } from "../publishManifest";
-import { loadReleaseSigningKey, releaseMessage } from "../releaseSigning";
+import { createWranglerStorage, publishPanel, unlistPanel, type PanelUpload } from "../../services/origami/scripts/lib/panelPublish";
+import { PANELS_INDEX_KEY, type PanelRecord } from "../../services/origami/src/panels";
+import { ORIGAMI_HOST, storeUploadParts } from "./publishLib";
+import { assertRelativePanelBuild, discoverPanels, PANELS_ROOT, type DiscoveredPanel } from "./publishManifest";
+import { loadReleaseSigningKey, releaseMessage } from "./releaseSigning";
 import { bar, cancelled, checkCancel, fail, hex, mb, ORIGAMI_URL, printTable, sh, signVerified } from "./common";
 
 function listPanels(): DiscoveredPanel[] {

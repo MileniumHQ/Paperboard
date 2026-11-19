@@ -1,7 +1,7 @@
 // The look/zoom overlay is drawn into every page the agent screenshots. Pages that enforce Trusted Types
 // (Google sign-in, Gmail) reject HTML strings, and a throwing overlay fails the whole screenshot.
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { openChrome, type Page } from "../../../scripts/testing/chrome";
+import { openChrome, type Page } from "testkit/chrome";
 import { REMOVE_OVERLAY_JS, overlayJs } from "../src/service/pageScripts";
 import { allowTestPort } from "./hermetic";
 

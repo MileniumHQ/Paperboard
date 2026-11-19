@@ -20,6 +20,7 @@
         "@mileniumhq/paperui": "workspace:*",
         "@types/node": "^24.19.2",
         "solid-js": "^1.9.19",
+        "testkit": "workspace:*",
         "typescript": "~6.0.3",
         "vite": "^8.3.8",
         "vite-plugin-solid": "^2.11.16"

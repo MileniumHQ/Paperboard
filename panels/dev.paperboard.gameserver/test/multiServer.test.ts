@@ -7,7 +7,7 @@ import * as path from "node:path";
 import { processApi } from "@mileniumhq/paperapi";
 import { serverCalls } from "./helpers/serverCall";
 import { startTestDaemon, type TestDaemon } from "./helpers/crane";
-import { waitForWidget, widgetUrl, WIDGET_DOC, WIDGET_TEXT } from "../../../scripts/testing/panelUi";
+import { waitForWidget, widgetUrl, WIDGET_DOC, WIDGET_TEXT } from "testkit/panelUi";
 import { openPage, servePanel, type Page } from "./helpers/browser";
 import { installFakeJava } from "./helpers/fakeJava";
 import { servicesState } from "./helpers/installedPanel";

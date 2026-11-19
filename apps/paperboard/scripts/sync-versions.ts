@@ -14,16 +14,18 @@ const USER_AGENT = /(MileniumHQ\/Paperboard\/)([^ "]+)( )/;
 const targets: Array<{ file: string; pattern: RegExp }> = [
   { file: "package.json", pattern: JSON_VERSION },
   { file: "apps/paperboard/package.json", pattern: JSON_VERSION },
-  { file: "apps/paperboard/papercrane/userAgent.ts", pattern: USER_AGENT },
+  { file: "apps/daemon/package.json", pattern: JSON_VERSION },
+  { file: "apps/daemon/src/core/userAgent.ts", pattern: USER_AGENT },
   { file: "apps/paperdocs/package.json", pattern: JSON_VERSION },
-  { file: "apps/origami/package.json", pattern: JSON_VERSION },
-  { file: "apps/origami/library/package.json", pattern: JSON_VERSION },
-  { file: "apps/pbd/package.json", pattern: JSON_VERSION },
+  { file: "services/origami/package.json", pattern: JSON_VERSION },
+  { file: "services/library/package.json", pattern: JSON_VERSION },
+  { file: "services/arilink/package.json", pattern: JSON_VERSION },
   { file: "packages/paperapi/package.json", pattern: JSON_VERSION },
   { file: "packages/paperui/package.json", pattern: JSON_VERSION },
   { file: "packages/create-panel/package.json", pattern: JSON_VERSION },
   // the npx launcher runs daemons this version or newer
-  { file: "packages/crane-launcher/package.json", pattern: JSON_VERSION },
+  { file: "packages/npx/package.json", pattern: JSON_VERSION },
+  { file: "packages/testkit/package.json", pattern: JSON_VERSION },
   { file: "panels/dev.paperboard.gameserver/src/lib/userAgent.ts", pattern: USER_AGENT },
 ];
 

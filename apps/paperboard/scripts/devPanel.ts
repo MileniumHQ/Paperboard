@@ -81,7 +81,7 @@ export async function installDevPanelInto(panel: DevPanel, dataDir: string): Pro
     // build against the SDK's packed dist, the artifact real panels bundle;
     // rebuild it first when this checkout's source is newer. A dist the gate
     // names in PAPERBOARD_GATE_PREBUILT was restored by CI from a cache of
-    // these exact sources (scripts/gate.sh): it is current, though its files
+    // these exact sources (scripts/gate/gate.sh): it is current, though its files
     // are older than the checkout's
     const SDK = resolve(import.meta.dir, "../../../packages/paperapi");
     const sdkDist = join(SDK, "dist/paperapi.es.js");

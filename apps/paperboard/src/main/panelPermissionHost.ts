@@ -7,8 +7,8 @@
 // Paperboard, the window says so and opens the right system settings.
 import { desktopCapturer, shell, systemPreferences, webContents as allWebContents, type Session, type WebContents } from "electron";
 import * as path from "path";
-import { logger } from "../../papercrane/logger";
-import { getLocalDir } from "../../papercrane/paths";
+import { logger } from "daemon/core/logger";
+import { getLocalDir } from "daemon/core/paths";
 import { pushToShells, pushToWindow } from "./communication/shellPush";
 import { answerShellAsk, askShell } from "./shellAsk";
 import {

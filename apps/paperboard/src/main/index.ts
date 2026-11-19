@@ -20,13 +20,13 @@ import { startBackgroundUpdates, stopBackgroundUpdates } from "./updater";
 import { disposeAppUpdater } from "./appUpdater";
 import { agreeToQuit, holdQuit, quitWithoutAsking } from "./quitGate";
 import { initAppSettingsSync } from "./appSettings";
-import { logger } from "../../papercrane/logger";
+import { logger } from "daemon/core/logger";
 import {
     TITLEBAR_HEIGHT,
     TITLEBAR_OVERLAY_COLORS,
     TITLEBAR_SYMBOL_COLORS,
     WINDOW_BACKGROUND_COLORS,
-} from "../../papercrane/themeConstants";
+} from "daemon/core/themeConstants";
 import { installPanelPermissions, panelPermissionStore } from "./panelPermissionHost";
 import { SHELL_ORIGIN } from "./shellAssets";
 import { handleAppProtocols, registerAppSchemes } from "./protocols";
@@ -41,11 +41,11 @@ import { installScreenshotTool } from "./screenshotTool";
 import { installTextEditContextMenu } from "./contextMenu";
 import { relocateElectronData } from "./electronData";
 import { relaunchOnX11IfNeeded } from "./displayBackend";
-import { setSupervisorBinary } from "../../papercrane/supervisorBinary";
+import { setSupervisorBinary } from "daemon/workloads/supervisorBinary";
 import { errorMessage } from "@mileniumhq/paperapi/errors";
 
 const log = logger;
-// the workload supervisor ships in the app's resources (scripts/supervisor.ts
+// the workload supervisor ships in the app's resources (scripts/build/supervisor.ts
 // builds it); supervisorBinary.ts copies it out before anything runs from it
 setSupervisorBinary(() =>
     fs.promises.readFile(

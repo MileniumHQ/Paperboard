@@ -1,0 +1,28 @@
+{
+    "name": "testkit",
+    "version": "0.4.0",
+    "private": true,
+    "type": "module",
+    "description": "The shared test harness: headless Chrome, a real compiled daemon, panel UIs served like the shell serves them, signed fixture releases and archives, and waits with deadlines.",
+    "exports": {
+        "./*": "./src/*.ts"
+    },
+    "scripts": {
+        "typecheck": "tsc --noEmit",
+        "test": "bun test ./test"
+    },
+    "dependencies": {
+        "@mileniumhq/release": "workspace:*",
+        "adm-zip": "^0.6.1",
+        "daemon": "workspace:*",
+        "ws": "^8.23.0"
+    },
+    "devDependencies": {
+        "@types/adm-zip": "^0.5.7",
+        "@types/bun": "1.4.4",
+        "@types/node": "^24.19.2",
+        "@types/ws": "^8.18.2",
+        "typescript": "~6.0.3"
+    },
+    "license": "PolyForm-Noncommercial-1.0.0"
+}

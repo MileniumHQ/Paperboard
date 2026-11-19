@@ -29,11 +29,11 @@ jobs:
       - uses: actions/setup-node@v5
         with:
           node-version: 24
-      # the workload supervisor (apps/paperboard/supervisor) is Go
+      # the workload supervisor (apps/daemon/supervisor) is Go
       - uses: actions/setup-go@v5
         with:
-          go-version-file: apps/paperboard/supervisor/go.mod
-          cache-dependency-path: apps/paperboard/supervisor/go.sum
+          go-version-file: apps/daemon/supervisor/go.mod
+          cache-dependency-path: apps/daemon/supervisor/go.sum
       - name: Cache Bun packages and the Electron binary
         uses: actions/cache@v4
         with:
@@ -72,10 +72,10 @@ jobs:
           PAPERBOARD_GATE_PREBUILT: ${{ steps.libs.outputs.cache-hit == 'true' && 'paperapi paperui' || '' }}
         run: |
           case "${{ matrix.group }}" in
-            libraries) targets="packages paperapi paperui create-panel release crane-launcher scripts" ;;
-            app) targets="paperboard" ;;
+            libraries) targets="packages paperapi paperui create-panel release testkit npx scripts" ;;
+            app) targets="daemon paperboard" ;;
             panels) targets="agents blocks botcreator gameserver terminal" ;;
-            web) targets="paperdocs origami origami-library pbd panelapis global" ;;
+            web) targets="paperdocs origami library arilink panelapis global" ;;
             *) echo "unknown gate group ${{ matrix.group }}" >&2; exit 2 ;;
           esac
           dbus-run-session -- xvfb-run -a bun run gate $targets
@@ -91,7 +91,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # with linux-x64 above, every target in scripts/publishLib.ts ALL_TARGETS
+        # with linux-x64 above, every target in scripts/publish/publishLib.ts ALL_TARGETS
         target:
           - { name: linux-arm64, runner: ubuntu-24.04-arm, os: linux }
           - { name: macos-x64, runner: macos-15-intel, os: macos }
@@ -102,7 +102,7 @@ jobs:
         shell: bash
     steps:
       - uses: actions/checkout@v5
-      # The web apps and the root's markdown can't reach a cross-platform
+      # The docs site, the services and the root's markdown can't reach a cross-platform
       # suite, so a change made only of those skips it. Anything else, or a
       # run with nothing to compare against, runs it.
       - name: Does this change reach the cross-platform suite
@@ -126,10 +126,10 @@ jobs:
             changed="$(git diff --name-only "$base" HEAD)"
             echo "Changed since $base:"
             echo "$changed"
-            reach="$(echo "$changed" | grep -vE '^(apps/(paperdocs|origami|pbd|panelapis)/|[^/]+\.md$)' || true)"
+            reach="$(echo "$changed" | grep -vE '^(apps/paperdocs/|services/|[^/]+\.md$)' || true)"
             if [ -n "$changed" ] && [ -z "$reach" ]; then
               run=false
-              echo "Only web apps and root markdown changed: skipping the cross-platform suite" | tee -a "$GITHUB_STEP_SUMMARY"
+              echo "Only web apps, services and root markdown changed: skipping the cross-platform suite" | tee -a "$GITHUB_STEP_SUMMARY"
             fi
           fi
           echo "run=$run" >> "$GITHUB_OUTPUT"
@@ -144,8 +144,8 @@ jobs:
       - uses: actions/setup-go@v5
         if: steps.scope.outputs.run == 'true'
         with:
-          go-version-file: apps/paperboard/supervisor/go.mod
-          cache-dependency-path: apps/paperboard/supervisor/go.sum
+          go-version-file: apps/daemon/supervisor/go.mod
+          cache-dependency-path: apps/daemon/supervisor/go.sum
       # On macOS and Windows, restoring Bun's package cache takes longer than
       # a cold install, so only Linux keeps it
       - name: Cache Bun packages (Linux)

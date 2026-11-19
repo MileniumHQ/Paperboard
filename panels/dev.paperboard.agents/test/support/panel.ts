@@ -1,5 +1,5 @@
 // The Agent panel as a person uses it: its real page, built with the panel's
-// own vite config, in headless Chrome (scripts/testing/chrome.ts), talking
+// own vite config, in headless Chrome (packages/testkit/src/chrome.ts), talking
 // to its real service (src/service.ts, in a process of its own) through a
 // real daemon in this test process, on the throwaway PAPERBOARD_DIR
 // test/hermetic.ts made. The service's PATH and HOME hold only what the test
@@ -16,8 +16,8 @@ import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { buildSupervisor } from "../../../../scripts/supervisor";
-import { openChrome, type Page } from "../../../../scripts/testing/chrome";
+import { buildSupervisor } from "../../../../scripts/build/supervisor";
+import { openChrome, type Page } from "testkit/chrome";
 import { PANEL_ID, type ChatEntry, type Harness, type Settings } from "../../src/contract";
 import { History } from "../../src/service/history";
 import { TRANSCRIPT, Transcript } from "../../src/service/transcript";
@@ -28,8 +28,8 @@ export type { Page };
 export { PANEL_ID };
 
 const PANEL = path.resolve(import.meta.dir, "../..");
-const DAEMON_ENTRY = path.resolve(PANEL, "../../apps/paperboard/papercrane/index.ts");
-const SUPERVISOR_ENTRY = path.resolve(PANEL, "../../apps/paperboard/papercrane/supervisorBinary.ts");
+const DAEMON_ENTRY = path.resolve(PANEL, "../../apps/daemon/src/index.ts");
+const SUPERVISOR_ENTRY = path.resolve(PANEL, "../../apps/daemon/src/workloads/supervisorBinary.ts");
 const SERVICE_ENTRY = path.join(PANEL, "src/service.ts");
 const WAIT_MS = 20_000;
 

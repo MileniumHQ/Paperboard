@@ -1,2 +1,0 @@
-/* Panel-level layout only; components carry their own CSS modules. Every
- * value is a --paper-* token, and nothing escapes .paperui-root. */

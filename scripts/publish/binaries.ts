@@ -5,7 +5,7 @@ import AdmZip from "adm-zip";
 import { chmodSync, cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "fs";
 import { basename, extname, join } from "path";
 import * as tar from "tar";
-import { craneCompileCommand } from "../supervisor";
+import { craneCompileCommand } from "../build/supervisor";
 import {
     ALL_TARGETS,
     assetFileName,
@@ -17,8 +17,8 @@ import {
     paperboardPackages,
     type DlApp,
     type Target,
-} from "../publishLib";
-import { applyWindowsIcon } from "../windowsIcon";
+} from "./publishLib";
+import { applyWindowsIcon } from "./windowsIcon";
 import { APP_DIR, bar, checkCancel, hashFile, mb, printTable, REPO_ROOT, sh, version } from "./common";
 
 const PB_BUILD_SCRIPT: Record<Target, string> = {
@@ -36,7 +36,7 @@ export const distDir = join(APP_DIR, "dist");
 // hosts reject them), so elsewhere the exe keeps default version info. The
 // icon is NOT set here: Bun also refuses `--windows-icon` in a cross-compile,
 // so it is applied to every build by applyCraneWindowsIcon below, from
-// papercrane/branding/icon.ico.
+// apps/daemon/src/branding/icon.ico.
 function craneCompileFlags(target: Target): string[] {
     if (osOf(target) !== "windows" || process.platform !== "win32") return [];
     return ["--windows-title=Paperboard Server", "--windows-publisher=Paperboard"];
@@ -45,7 +45,7 @@ function craneCompileFlags(target: Target): string[] {
 // Stamp the Crane icon onto a freshly built Windows crane binary. Runs on
 // every host so a Linux/macOS cross-build never ships Bun's default logo.
 function applyCraneWindowsIcon(filePath: string): void {
-    const icon = join(APP_DIR, "papercrane", "branding", "icon.ico");
+    const icon = join(REPO_ROOT, "apps", "daemon", "src", "branding", "icon.ico");
     if (!existsSync(icon)) {
         throw new Error(`The Windows server's icon is missing (${icon}); it would ship with Bun's default logo.`);
     }

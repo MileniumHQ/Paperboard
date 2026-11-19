@@ -18,12 +18,12 @@ import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { buildSupervisor } from "../../../../scripts/supervisor";
+import { buildSupervisor } from "../../../../scripts/build/supervisor";
 import { processApi, terminalApi } from "@mileniumhq/paperapi";
 import { within } from "./wait";
 
 const REPO = path.resolve(import.meta.dir, "../../../..");
-const CRANE_ENTRY = path.join(REPO, "apps/paperboard/papercrane/main.ts");
+const CRANE_ENTRY = path.join(REPO, "apps/daemon/src/main.ts");
 const START_TIMEOUT_MS = 30_000;
 const ALLOWED = Symbol.for("paperboard.terminal.test.ports");
 const TEARDOWN = Symbol.for("paperboard.terminal.test.teardown");

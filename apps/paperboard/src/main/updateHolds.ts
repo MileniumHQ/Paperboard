@@ -3,7 +3,7 @@
 // processes were running. They are looked at again while any are held, and
 // Stop and update releases them.
 import connectionPool from "./communication/papercrane/ConnectionPool";
-import { logger } from "../../papercrane/logger";
+import { logger } from "daemon/core/logger";
 import { collectPackageUpdates } from "./packageUpdates";
 import { updateQueue } from "./updateQueue";
 import { failedItem, heldPanels, inUseJob, taskJob } from "./updateTasks";

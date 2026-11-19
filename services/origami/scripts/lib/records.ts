@@ -1,0 +1,94 @@
+// Package records for the PACKAGES namespace, written by the operator's
+// updater scripts (never by a worker route). The daemon consumes these in
+// apps/daemon/src/engine/index.ts: it installs platforms[<os>-<arch>] and refuses any
+// entry without a sha256.
+import { parsePackageRecipe, type PackageRecipe } from "@mileniumhq/release";
+import { errorMessage } from "@mileniumhq/paperapi/errors";
+
+export type { PackageRecipe };
+
+export const PLATFORM_KEYS = [
+    "linux-x64",
+    "linux-arm64",
+    "macos-x64",
+    "macos-arm64",
+    "windows-x64",
+    "windows-arm64",
+] as const;
+
+export type PlatformKey = (typeof PLATFORM_KEYS)[number];
+
+/**
+ * How the archive maps onto the installed package directory. Must match
+ * PACKAGE_LAYOUTS in apps/daemon/src/engine/archives.ts.
+ * - wrapped (default): one top-level wrapper dir around bin/ (JDKs)
+ * - root: the archive root is the package root and holds bin/
+ * - bin: the archive root is the package's bin/ directory
+ */
+export type PackageLayout = "wrapped" | "root" | "bin";
+
+export interface PlatformDownload {
+    url: string;
+    sha256: string;
+    size?: number;
+    layout?: PackageLayout;
+    /**
+     * Steps the daemon runs on the user's computer to turn a vendor's own
+     * release into the package (packages/release/src/recipe.ts). Replaces
+     * layout; the signature covers it.
+     */
+    recipe?: PackageRecipe;
+    // offline release-key signature over (name, version, platform, sha256,
+    // and the recipe's digest when there is one);
+    // added at write time by kv.putRecord, verified by every daemon
+    signature?: string;
+}
+
+export interface PackageRecord {
+    name: string;
+    version: string;
+    platforms: Partial<Record<PlatformKey, PlatformDownload>>;
+}
+
+const SHA256_RE = /^[a-f0-9]{64}$/;
+const NAME_RE = /^[a-z0-9][a-z0-9._-]{0,63}$/;
+
+/** Throws on the first defect; a record that fails here is never written. */
+export function assertValidRecord(record: PackageRecord): void {
+    if (!NAME_RE.test(record.name)) {
+        throw new Error(`invalid package name ${JSON.stringify(record.name)}`);
+    }
+    if (typeof record.version !== "string" || !record.version.trim()) {
+        throw new Error(`${record.name}: missing version`);
+    }
+    const entries = Object.entries(record.platforms);
+    if (entries.length === 0) {
+        throw new Error(`${record.name}: no platforms`);
+    }
+    for (const [key, dl] of entries) {
+        if (!(PLATFORM_KEYS as readonly string[]).includes(key)) {
+            throw new Error(`${record.name}: unknown platform key ${key}`);
+        }
+        if (!dl) continue;
+        let url: URL;
+        try {
+            url = new URL(dl.url);
+        } catch {
+            throw new Error(`${record.name}/${key}: unparseable url ${JSON.stringify(dl.url)}`);
+        }
+        if (url.protocol !== "https:") {
+            throw new Error(`${record.name}/${key}: url must be https`);
+        }
+        if (!SHA256_RE.test(dl.sha256)) {
+            throw new Error(`${record.name}/${key}: missing or malformed sha256`);
+        }
+        if (dl.recipe !== undefined) {
+            if (dl.layout !== undefined) throw new Error(`${record.name}/${key}: a recipe replaces the layout; declare one or the other`);
+            try {
+                parsePackageRecipe(dl.recipe);
+            } catch (err) {
+                throw new Error(`${record.name}/${key}: ${errorMessage(err)}`);
+            }
+        }
+    }
+}

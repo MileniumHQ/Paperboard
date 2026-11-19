@@ -9,7 +9,7 @@ import { existsSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { electronChildEnv, electronViteArgs } from "./launchEnv";
-import { buildSupervisor } from "../../../scripts/supervisor";
+import { buildSupervisor } from "../../../scripts/build/supervisor";
 
 const appDir = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const isWindows = process.platform === "win32";

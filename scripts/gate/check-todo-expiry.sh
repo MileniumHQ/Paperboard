@@ -1,0 +1,55 @@
+#!/usr/bin/env bash
+# Fails when a TODO(remove after vX) or TODO(deny after vX) names a version
+# at or below the current app version: a dated removal that is due is a
+# broken promise, so the gate holds the code to it. Markdown files are
+# excluded (docs discuss TODOs in prose).
+set -u
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+
+VERSION="$(grep -m1 '"version"' "$ROOT/apps/paperboard/package.json" | grep -o '[0-9][0-9]*\.[0-9][0-9]*' | head -1)"
+CUR_MAJOR="${VERSION%%.*}"
+CUR_MINOR="${VERSION#*.}"
+if [ -z "$CUR_MAJOR" ] || [ -z "$CUR_MINOR" ]; then
+    echo "FAIL: could not parse current version from apps/paperboard/package.json" >&2
+    exit 1
+fi
+# base 10: a leading zero would otherwise read as octal (08 is an error)
+CUR_MAJOR=$((10#$CUR_MAJOR))
+CUR_MINOR=$((10#$CUR_MINOR))
+
+# rg exits 1 when nothing matches; anything above means the scan never
+# ran, which must fail rather than read as "zero expired TODOs"
+MATCHES="$(rg -n --pcre2 -g '!node_modules' -g '!dist' -g '!build' -g '!out' -g '!*.md' -g '!.git' 'TODO\((remove|deny) after v[0-9]+\.[0-9]+' "$ROOT")"
+RG_STATUS=$?
+if [ "$RG_STATUS" -gt 1 ]; then
+    echo "FAIL: ripgrep could not run the scan (exit $RG_STATUS); install ripgrep" >&2
+    exit 2
+fi
+
+FAIL=0
+while IFS= read -r line; do
+    # line shape: path:lineno: ... TODO(remove|deny after vMAJOR.MINOR) ...
+    loc="${line%%:*}"
+    rest="${line#*:}"
+    lineno="${rest%%:*}"
+    text="${rest#*:}"
+    if [[ "$text" =~ TODO\((remove|deny)\ after\ v([0-9]+)\.([0-9]+) ]]; then
+        kind="${BASH_REMATCH[1]}"
+        # base 10: a leading zero would otherwise read as octal
+        major=$((10#${BASH_REMATCH[2]}))
+        minor=$((10#${BASH_REMATCH[3]}))
+        if [ "$major" -lt "$CUR_MAJOR" ] || { [ "$major" -eq "$CUR_MAJOR" ] && [ "$minor" -le "$CUR_MINOR" ]; }; then
+            echo "FAIL: expired TODO($kind after v$major.$minor) at $loc:$lineno (current v$CUR_MAJOR.$CUR_MINOR)" >&2
+            echo "      $text" | head -c 300 >&2
+            echo >&2
+            FAIL=1
+        fi
+    fi
+done < <(printf '%s\n' "$MATCHES" | grep -v '^$')
+
+if [ "$FAIL" -ne 0 ]; then
+    exit 1
+else
+    echo "zero expired TODOs (current v$CUR_MAJOR.$CUR_MINOR)"
+fi

@@ -12,7 +12,7 @@
 // marker comments.
 //
 // Two modes share this one implementation:
-//   workspace  - `bun scripts/create-panel.ts` inside the Paperboard repo:
+//   workspace  - `bun scripts/dev/create-panel.ts` inside the Paperboard repo:
 //                writes panels/<id>/, depends on the libraries via workspace:*
 //   standalone - `npm create @mileniumhq/panel`: writes ./<id>/ in the
 //                caller's directory, depends on the published libraries

@@ -15,7 +15,7 @@ tmp/
 *.lcov
 .eslintcache
 coverage/
-# the workload supervisor, built from apps/paperboard/supervisor by scripts/supervisor.ts
+# the workload supervisor, built from apps/daemon/supervisor by scripts/build/supervisor.ts
 apps/paperboard/resources/supervisor/
 logs/
 report.[0-9]*.json

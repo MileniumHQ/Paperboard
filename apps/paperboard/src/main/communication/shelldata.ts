@@ -5,7 +5,7 @@
 import { type IpcMain, type IpcMainInvokeEvent, type WebContents, BrowserWindow, app, dialog, nativeTheme, shell } from "electron";
 import { broadcastAppSettings, syncTitleBarOverlays, applyNativeTheme, applyRunOnStartup, currentGraphics, readAppSettings } from "../appSettings";
 import * as path from "path";
-import { logger } from "../../../papercrane/logger";
+import { logger } from "daemon/core/logger";
 import { getAppUpdateState } from "../appUpdateSession";
 import { checkForUpdatesNow } from "../updater";
 import { appUpdateDownloadUrl, restartToUpdate } from "../appUpdater";

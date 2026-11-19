@@ -9,7 +9,7 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import { join } from "node:path";
 
-const DAEMON_ENTRY = join(import.meta.dir, "..", "..", "..", "..", "apps", "paperboard", "papercrane", "index.ts");
+const DAEMON_ENTRY = join(import.meta.dir, "..", "..", "..", "..", "apps", "daemon", "src", "index.ts");
 export const SERVICE_SCRIPT = join(import.meta.dir, "panelService.ts");
 const READY_TIMEOUT_MS = 20_000;
 

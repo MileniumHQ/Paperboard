@@ -1,0 +1,388 @@
+// The daemon's side of a supervised workload: where a supervisor's endpoint
+// is, what it is told to run, and the client that talks to it. The supervisor
+// itself is its own small binary (apps/daemon/supervisor), so a workload
+// costs a few megabytes to keep running instead of a whole JavaScript runtime.
+import * as net from "net";
+import * as fs from "fs";
+import * as path from "path";
+import * as crypto from "crypto";
+import { logger } from "../core/logger";
+import { ShellMarks } from "./shellIntegration";
+import { unrefTimer } from "../core/storage";
+
+import type { InputEncoding } from "./supervisorTypes";
+
+export type { InputEncoding } from "./supervisorTypes";
+
+export interface SupervisorSpawnConfig {
+    command?: string;
+    args?: string[];
+    cwd?: string;
+    env?: Record<string, string | undefined>;
+    isPty?: boolean;
+    cols?: number;
+    rows?: number;
+    appId?: string;
+    /** the child's input is closed from the start: a program that reads to its end (codex exec) is not left waiting */
+    noStdin?: boolean;
+    /**
+     * how input text is encoded for the child; default UTF-8. A .NET
+     * program on Windows that sets Console.InputEncoding to Unicode reads
+     * UTF-16, where UTF-8 text never forms a line
+     */
+    inputEncoding?: InputEncoding;
+    /**
+     * Windows: the child's input is an empty console instead of a pipe, for
+     * a program that reads a console and fails on a pipe (a Source dedicated
+     * server in -console mode); the supervisor runs it behind its console
+     * relay. Nothing can
+     * be written to it. Elsewhere a pipe is a program's console, so this
+     * changes nothing there.
+     */
+    consoleInput?: boolean;
+    /**
+     * people rely on it while it runs (a game server): an update of what it
+     * runs from waits for it instead of stopping it (engine holdsUpdates)
+     */
+    important?: boolean;
+    /**
+     * set by earlier builds, whose supervisors ran from an AppImage mount of
+     * their own: the runtime holding that mount (supervisorLaunch.ts)
+     */
+    mountHolderPid?: number;
+}
+
+export interface SupervisorMetadata {
+    id: string;
+    pid: number;
+    childPid: number;
+    isPty: boolean;
+    startedAt: string;
+    config: SupervisorSpawnConfig;
+}
+
+export { getPaperboardDir } from "../core/paths";
+import { ensurePrivateDir, getSocketsDir } from "../core/paths";
+import { errorMessage } from "@mileniumhq/paperapi/errors";
+
+// Endpoint names are one-to-one with ids. The old scheme replaced every
+// character outside [a-zA-Z0-9_-] with "_", so "a.b" and "a_b" shared one
+// socket: a second spawn unlinked the first's live socket (orphaning its
+// workload) and an id another panel owned could be reached under a sibling
+// spelling. A fixed-length digest also keeps unix socket paths under the
+// 104/108-byte limit for any 128-character id.
+export function supervisorEndpointName(procId: string): string {
+    if (!procId || typeof procId !== "string") {
+        throw new Error("supervisor id is required");
+    }
+    return crypto.createHash("sha256").update(procId, "utf8").digest("hex").slice(0, 32);
+}
+
+// socket/pipe path for an endpoint name (not an id)
+export function supervisorSocketPathForName(name: string): string {
+    if (process.platform === "win32") {
+        return `\\\\.\\pipe\\papercrane-${name}`;
+    }
+    const socketsDir = ensurePrivateDir(getSocketsDir());
+    return path.join(socketsDir, `${name}.sock`);
+}
+
+export function getSupervisorSocketPath(procId: string): string {
+    return supervisorSocketPathForName(supervisorEndpointName(procId));
+}
+
+export function getSupervisorMetadataPath(procId: string): string {
+    const socketsDir = ensurePrivateDir(getSocketsDir());
+    return path.join(socketsDir, `${supervisorEndpointName(procId)}.json`);
+}
+
+/**
+ * Whether a supervisor endpoint is present enough to attempt a connect.
+ * On Windows the endpoint is a named pipe; `fs.existsSync` cannot see a
+ * live pipe, so a check against the pipe path is always false and an
+ * orphaned supervisor is never found. The metadata file written beside the
+ * pipe is the on-disk presence fact there; the connect remains the actual
+ * liveness probe (a stale metadata file simply fails to connect).
+ */
+export function supervisorPresent(
+    procId: string,
+    platform: NodeJS.Platform = process.platform,
+): boolean {
+    return platform === "win32"
+        ? fs.existsSync(getSupervisorMetadataPath(procId))
+        : fs.existsSync(getSupervisorSocketPath(procId));
+}
+
+// The longest unix socket path a connect takes, in bytes: the kernel's
+// address field less its closing zero.
+const SOCKET_PATH_MAX = process.platform === "darwin" ? 103 : 107;
+
+// Opens the connection to an endpoint. A data folder can be deeper than a
+// socket path may be long (macOS's temporary folders, a long home folder),
+// and the desktop app's runtime refuses such a path outright. The supervisor
+// binds by the socket's name from inside its folder (supervisor/proc_unix.go:
+// listen); this connects the same way. The connect itself is made before
+// net.connect returns, so the working folder is only changed for that call.
+function connectEndpoint(socketPath: string): net.Socket {
+    if (process.platform === "win32" || Buffer.byteLength(socketPath) <= SOCKET_PATH_MAX) return net.connect(socketPath);
+    const previous = process.cwd();
+    process.chdir(path.dirname(socketPath));
+    try {
+        return net.connect(path.basename(socketPath));
+    } finally {
+        process.chdir(previous);
+    }
+}
+
+// client for a detached supervisor over IPC socket
+export class SupervisedProcessClient {
+    private socket: net.Socket | null = null;
+    private buffer = "";
+    private isConnectedState = false;
+    private hasConnectedOnce = false;
+    private isManuallyClosed = false;
+    private messageQueue: string[] = [];
+    private hasExited = false;
+    // null until the supervisor announces an exit: a hangup without one (it
+    // crashed or was killed) is reported as an unknown code, never a clean 0
+    private exitCode: number | null = null;
+    private listeners = new Map<string, Function[]>();
+    private status: { error?: string } | null = null;
+    // why input can no longer reach the workload, as the supervisor said:
+    // later writes are refused instead of disappearing
+    private inputError: string | null = null;
+
+    /** why the last connect did not succeed; null once one has */
+    public connectError: string | null = null;
+    public pid = 0;
+    public childPid = 0;
+    public isPty = false;
+    /** a terminal's foreground program, as the supervisor last named it */
+    public foreground = "";
+    // a terminal's shell marks its commands and folder in its output
+    private marks = new ShellMarks({
+        command: (finished) => this.emit("command", finished),
+        cwd: (cwd) => this.emit("cwd", cwd),
+    });
+    /** the folder a terminal's shell last said it is in */
+    public get cwd(): string {
+        return this.marks.cwd;
+    }
+
+    constructor(
+        public readonly id: string,
+        private readonly socketPath: string = getSupervisorSocketPath(id),
+    ) {}
+
+    public isConnected(): boolean {
+        return this.isConnectedState;
+    }
+
+    public on(event: string, callback: Function) {
+        if (!this.listeners.has(event)) this.listeners.set(event, []);
+        this.listeners.get(event)!.push(callback);
+        return this;
+    }
+
+    public off(event: string, callback: Function) {
+        const list = this.listeners.get(event);
+        if (!list) return;
+        const index = list.indexOf(callback);
+        if (index !== -1) list.splice(index, 1);
+    }
+
+    // one listener that throws (persisting an exit, say) is reported and
+    // does not keep the others, or the rest of the frame, from running
+    private emit(event: string, ...args: any[]) {
+        for (const cb of [...(this.listeners.get(event) ?? [])]) {
+            try {
+                cb(...args);
+            } catch (err) {
+                logger.error(`[supervisor] a "${event}" listener for ${this.id} failed:`, err);
+            }
+        }
+    }
+
+    public connect(): Promise<boolean> {
+        return new Promise((resolve) => {
+            let socket: net.Socket;
+            try {
+                socket = connectEndpoint(this.socketPath);
+            } catch (err) {
+                logger.debug(`[supervisor] could not open a connection to ${this.socketPath}:`, err);
+                this.connectError = errorMessage(err);
+                resolve(false);
+                return;
+            }
+            this.socket = socket;
+
+            // connected is answered: the supervisor's first frame on every
+            // connection is its status, which says its pid and its workload's,
+            // so a workload is never taken on before it is known
+            let answered = false;
+            const settle = (connected: boolean, error: string | null) => {
+                if (answered) return;
+                answered = true;
+                clearTimeout(connectTimeout);
+                this.off("status", onStatus);
+                this.connectError = error;
+                resolve(connected);
+            };
+            const onStatus = () => settle(true, null);
+            this.on("status", onStatus);
+            const connectTimeout = setTimeout(() => {
+                if (answered) return;
+                settle(false, `no answer on ${this.socketPath} within 1.5 s`);
+                socket.destroy();
+            }, 1500);
+            // a pending connect must never hold the client process open
+            unrefTimer(connectTimeout);
+
+            socket.on("connect", () => {
+                this.isConnectedState = true;
+                this.hasConnectedOnce = true;
+                this.send({ type: "attach" });
+                while (this.messageQueue.length > 0) {
+                    socket.write(this.messageQueue.shift()!);
+                }
+            });
+
+            // a decoding stream keeps a character split across reads whole
+            socket.setEncoding("utf8");
+            socket.on("data", (chunk: string) => {
+                this.buffer += chunk;
+                const lines = this.buffer.split("\n");
+                this.buffer = lines.pop() || "";
+
+                for (const line of lines) {
+                    if (!line.trim()) continue;
+                    let msg: unknown;
+                    try {
+                        msg = JSON.parse(line);
+                    } catch (err) {
+                        logger.error(`[supervisor] ${this.id} sent a frame that is not JSON, dropped: ${line.slice(0, 200)}`, err);
+                        continue;
+                    }
+                    this.handleMessage(msg);
+                }
+            });
+
+            socket.on("error", (err) => settle(false, err.message));
+
+            socket.on("close", () => {
+                settle(false, `${this.socketPath} closed before the supervisor said its status`);
+                this.isConnectedState = false;
+                if (this.hasConnectedOnce && !this.hasExited && !this.isManuallyClosed) {
+                    this.hasExited = true;
+                    this.emit("exit", this.exitCode);
+                }
+            });
+        });
+    }
+
+    private handleMessage(msg: any) {
+        switch (msg.type) {
+            case "status":
+                this.pid = msg.pid;
+                this.childPid = msg.childPid;
+                this.isPty = Boolean(msg.isPty);
+                this.status = { error: typeof msg.error === "string" ? msg.error : undefined };
+                if (typeof msg.inputError === "string") this.inputError = msg.inputError;
+                this.emit("status", this.status);
+                break;
+            case "history":
+                // a replay repeats commands already reported; only the folder
+                // it ends in is news to a daemon that just connected
+                if (this.isPty && typeof msg.data === "string") this.marks.replay(msg.data);
+                this.emit("history", msg.data);
+                this.emit("data", msg.data);
+                break;
+            case "data":
+                if (this.isPty && typeof msg.data === "string") this.marks.feed(msg.data);
+                this.emit("data", msg.data);
+                if (msg.stream === "stdout") this.emit("stdout", msg.data);
+                if (msg.stream === "stderr") this.emit("stderr", msg.data);
+                break;
+            case "foreground":
+                if (typeof msg.name === "string" && msg.name) {
+                    this.foreground = msg.name;
+                    this.emit("foreground", msg.name);
+                }
+                break;
+            case "input-closed":
+                this.inputError = String(msg.error);
+                break;
+            case "exit":
+                this.exitCode = typeof msg.code === "number" ? msg.code : null;
+                if (!this.hasExited && !this.isManuallyClosed) {
+                    this.hasExited = true;
+                    this.emit("exit", this.exitCode);
+                }
+                break;
+        }
+    }
+
+    /**
+     * Resolves once the supervisor has reported whether its workload
+     * started. An open pipe only proves the supervisor is listening; the
+     * spawn behind it can still have failed (a missing pty backend, a bad
+     * cwd), and that failure is the caller's error, not a later exit.
+     */
+    public awaitStarted(timeoutMs = 5000): Promise<void> {
+        return new Promise((resolve, reject) => {
+            const settle = (status: { error?: string }) => {
+                clearTimeout(timer);
+                this.off("status", settle);
+                this.off("exit", onExit);
+                if (status.error) reject(new Error(status.error));
+                else resolve();
+            };
+            const onExit = () => settle(this.status ?? { error: `Supervisor ${this.id} exited before reporting a start` });
+            const timer = setTimeout(
+                () => settle({ error: `Supervisor ${this.id} did not report a start within ${timeoutMs}ms` }),
+                timeoutMs,
+            );
+            unrefTimer(timer);
+            if (this.status) return settle(this.status);
+            this.on("status", settle);
+            this.on("exit", onExit);
+        });
+    }
+
+    public write(data: string) {
+        if (this.inputError !== null) throw new Error(`"${this.id}" takes no more input: ${this.inputError}`);
+        this.send({ type: "stdin", data });
+    }
+
+    /** ends the workload's input once what was written before reaches it */
+    public closeInput() {
+        this.send({ type: "stdin-close" });
+    }
+
+    public resize(cols: number, rows: number) {
+        this.send({ type: "resize", cols, rows });
+    }
+
+    public kill(signal: string = "SIGTERM") {
+        this.send({ type: "kill", signal });
+    }
+
+    private send(obj: Record<string, any>) {
+        const payload = JSON.stringify(obj) + "\n";
+        if (this.isConnectedState && this.socket && !this.socket.destroyed) {
+            this.socket.write(payload);
+        } else {
+            this.messageQueue.push(payload);
+        }
+    }
+
+    public destroy() {
+        this.isManuallyClosed = true;
+        if (this.socket && !this.socket.destroyed) {
+            this.socket.destroy();
+        }
+        this.socket = null;
+        this.isConnectedState = false;
+        this.listeners.clear();
+    }
+}

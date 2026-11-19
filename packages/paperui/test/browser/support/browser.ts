@@ -1,12 +1,12 @@
 // PaperUI's view of a page in headless Chrome, for behaviour jsdom cannot
 // show: layout, hit testing, CSS animation, real input. Chrome itself (its
 // launch, its DevTools connection, and removing it and its profile on every
-// way out) is scripts/testing/chrome.ts; this adds the fixture page
+// way out) is packages/testkit/src/chrome.ts; this adds the fixture page
 // (test/browser/fixture), real pointer, touch and key input, and the page's
 // errors in the order it reported them. A test file starts one Chrome, and
 // each scenario opens in a browser context of its own.
 import { afterAll, afterEach, inject } from "vitest";
-import { type Chrome, type Page as ChromePage, launchChrome } from "../../../../../scripts/testing/chrome.ts";
+import { type Chrome, type Page as ChromePage, launchChrome } from "testkit/chrome";
 
 const WAIT_TIMEOUT_MS = 10_000;
 

@@ -26,6 +26,7 @@
         "@types/pngjs": "^6.0.5",
         "@types/semver": "^7.8.0",
         "paperboard": "workspace:*",
+        "testkit": "workspace:*",
         "typescript": "~6.0.3",
         "vite": "^8.3.8",
         "vite-plugin-solid": "^2.11.16"

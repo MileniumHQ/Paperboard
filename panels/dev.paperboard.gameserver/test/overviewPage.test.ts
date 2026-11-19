@@ -8,7 +8,7 @@ import * as net from "node:net";
 import * as path from "node:path";
 import { portSettingsApi, processApi } from "@mileniumhq/paperapi";
 import { startTestDaemon, type TestDaemon } from "./helpers/crane";
-import { waitForWidget, widgetUrl, WIDGET_DOC, WIDGET_TEXT } from "../../../scripts/testing/panelUi";
+import { waitForWidget, widgetUrl, WIDGET_DOC, WIDGET_TEXT } from "testkit/panelUi";
 import { openPage, servePanel, type Page } from "./helpers/browser";
 import { freePort } from "./helpers/palworld";
 import { placeStandIn } from "./helpers/standIn";

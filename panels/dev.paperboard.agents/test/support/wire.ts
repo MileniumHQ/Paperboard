@@ -13,7 +13,7 @@
 // One call can instead be answered at the socket (answerHeld): for an answer
 // the real service could only get from the internet, which a test never
 // reaches.
-import type { Page } from "../../../../scripts/testing/chrome";
+import type { Page } from "testkit/chrome";
 
 export const WIRE = `(() => {
     const send = WebSocket.prototype.send;

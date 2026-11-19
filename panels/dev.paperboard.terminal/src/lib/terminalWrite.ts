@@ -1,7 +1,7 @@
 import { terminalApi } from "@mileniumhq/paperapi";
 
 // the most characters (UTF-16 units) one term:write may carry; the daemon
-// refuses a longer one (papercrane/rpc/terminal.ts)
+// refuses a longer one (apps/daemon/src/rpc/terminal.ts)
 const TERMINAL_WRITE_MAX = 64 * 1024;
 
 // the most one write to a terminal may hold in all. Its pieces are all in

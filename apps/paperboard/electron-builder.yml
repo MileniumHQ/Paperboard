@@ -6,8 +6,6 @@ directories:
 files:
     - "!**/.vscode/*"
     - "!src/*"
-    - "!papercrane/*"
-    - "!supervisor/**"
     - "!tests/**"
     - "!dev/**"
     - "!electron.vite.config.{js,ts,mjs,cjs}"
