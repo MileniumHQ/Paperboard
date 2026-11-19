@@ -405,7 +405,7 @@ export function on(
     });
 
     // eager connect so streams flow before first invoke
-    t.ensureConnected().catch((err) => debugErr("stream eager connect", err));
+    t.keepConnected();
 
     // Exit counts too: the daemon sends a resource's exit only to
     // connections attached to it, so an exit listener on a connection that

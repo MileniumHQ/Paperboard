@@ -45,8 +45,9 @@ export interface WireServer {
     close(): Promise<void>;
 }
 
-export async function startWireServer(token = "test-token"): Promise<WireServer> {
-    const wss = new WebSocketServer({ host: "127.0.0.1", port: 0 });
+// on `port` when given, as a daemon that comes back up does
+export async function startWireServer(token = "test-token", port = 0): Promise<WireServer> {
+    const wss = new WebSocketServer({ host: "127.0.0.1", port });
     await new Promise<void>((resolve, reject) => {
         wss.once("listening", () => resolve());
         wss.once("error", reject);
