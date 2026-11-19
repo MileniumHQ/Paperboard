@@ -11,6 +11,7 @@ import {
     assetFileName,
     isUpdatePayload,
     isValidVersionSegment,
+    missingAppKeys,
     missingLinuxPackageTools,
     osOf,
     paperboardArtifacts,
@@ -80,6 +81,15 @@ function assertMacHost(target: Target): void {
 // host without it fails only after the AppImage and deb are built
 function assertLinuxPackageTools(): void {
     const missing = missingLinuxPackageTools(Bun.which);
+    if (missing) throw new Error(missing);
+}
+
+// The app's keys as its build reads them: electron-vite's own loadEnv over
+// apps/paperboard (its .env files, then MAIN_VITE_ variables in the
+// environment), loaded from there since only the app depends on vite.
+async function assertAppKeys(): Promise<void> {
+    const { loadEnv } = (await import(Bun.resolveSync("vite", APP_DIR))) as { loadEnv: (mode: string, envDir: string, prefixes: string) => Record<string, string> };
+    const missing = missingAppKeys(loadEnv("production", APP_DIR, "MAIN_VITE_"));
     if (missing) throw new Error(missing);
 }
 
@@ -186,6 +196,7 @@ async function buildWorkspacePackages(): Promise<void> {
 // stages the canonical release assets with stageReleaseAssets.
 async function buildSelected(jobs: { app: DlApp; target: Target }[]): Promise<BuiltBinary[]> {
     if (jobs.some((j) => j.app === "pb" && osOf(j.target) === "linux")) assertLinuxPackageTools();
+    if (jobs.some((j) => j.app === "pb")) await assertAppKeys();
     if (jobs.some((j) => j.app === "pb")) await buildWorkspacePackages();
     const progress = bar(jobs.length);
     const built: BuiltBinary[] = [];

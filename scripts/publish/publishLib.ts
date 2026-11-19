@@ -196,6 +196,20 @@ export function missingLinuxPackageTools(which: (cmd: string) => string | null):
         : "Building the Linux rpm needs rpmbuild: install rpm (Debian, Ubuntu), rpm-tools (Arch) or rpm-build (Fedora).";
 }
 
+// The app keys a release build carries (apps/paperboard/src/main/env.d.ts),
+// from apps/paperboard/.env.local on a computer or the release workflow's
+// secrets. A build without one would ship a feature that can't work, such as
+// Google Drive backups with no client to sign in with.
+export const APP_KEYS = ["MAIN_VITE_GOOGLE_CLIENT_ID", "MAIN_VITE_GOOGLE_CLIENT_SECRET"] as const;
+
+// What a release build is missing of APP_KEYS, named before it starts.
+export function missingAppKeys(env: Record<string, string | undefined>): string | null {
+    const missing = APP_KEYS.filter((key) => !env[key]?.trim());
+    return missing.length === 0
+        ? null
+        : `A release build needs ${missing.join(" and ")}: put ${missing.length === 1 ? "it" : "them"} in apps/paperboard/.env.local, or in the repository's Actions secrets for the release workflow.`;
+}
+
 // Public download URL. versionOrLatest is a real version ("3.0.0-alpha")
 // or the literal "latest", which Origami resolves from the KV record.
 export function dlFileUrl(
