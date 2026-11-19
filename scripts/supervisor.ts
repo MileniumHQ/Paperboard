@@ -1,5 +1,5 @@
 #!/usr/bin/env bun
-// Builds the workload supervisor (apps/paperboard/supervisor, Go) into
+// Builds the workload supervisor (apps/daemon/supervisor, Go) into
 // apps/paperboard/resources/supervisor/<platform>-<arch>/, where the desktop
 // app reads it and the server compile embeds it.
 //
@@ -20,7 +20,8 @@ import { BUN_TARGET_MAP } from "./publishLib";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const APP_DIR = join(ROOT, "apps", "paperboard");
-const SOURCE_DIR = join(APP_DIR, "supervisor");
+const DAEMON_DIR = join(ROOT, "apps", "daemon");
+const SOURCE_DIR = join(DAEMON_DIR, "supervisor");
 export const SUPERVISOR_OUT_DIR = join(APP_DIR, "resources", "supervisor");
 
 // release target -> how Go and Node each name it
@@ -71,7 +72,7 @@ export function buildSupervisor(target: SupervisorTarget = hostSupervisorTarget(
 /**
  * The one `bun build --compile` command for the server, used by releases and
  * by test daemons alike, so a test runs the binary that ships. It embeds the
- * target's supervisor (built here) and runs from apps/paperboard (`cwd`).
+ * target's supervisor (built here) and runs from apps/daemon (`cwd`).
  * Without a target it builds for this computer with the running Bun.
  */
 export function craneCompileCommand(outfile: string, target?: SupervisorTarget, flags: string[] = []): { cmd: string[]; cwd: string } {
@@ -82,12 +83,12 @@ export function craneCompileCommand(outfile: string, target?: SupervisorTarget, 
             "--compile",
             ...(target ? [`--target=${BUN_TARGET_MAP[target]}`] : []),
             ...flags,
-            "./papercrane/main.ts",
+            "./src/main.ts",
             buildSupervisor(target),
             "--outfile",
             outfile,
         ],
-        cwd: APP_DIR,
+        cwd: DAEMON_DIR,
     };
 }
 

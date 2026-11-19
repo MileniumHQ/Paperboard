@@ -30,7 +30,7 @@ export function tempDir(label: string, near?: string): string {
     return dir;
 }
 
-// A data dir laid out the way tests/setup.ts lays out the shared one.
+// A data dir laid out the way testkit/setup lays out the shared one.
 export function tempDataDir(label = "data"): string {
     const dir = tempDir(label);
     for (const sub of ["packages", "panels", "configs", "files", "local", "logs", "sockets"]) {

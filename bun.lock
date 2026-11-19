@@ -17,6 +17,29 @@
         "tar": "^7.5.23",
       },
     },
+    "apps/daemon": {
+      "name": "daemon",
+      "version": "0.4.0",
+      "dependencies": {
+        "@mileniumhq/paperapi": "workspace:*",
+        "@mileniumhq/release": "workspace:*",
+        "adm-zip": "^0.6.1",
+        "bonjour-service": "^1.4.4",
+        "commander": "^15.1.0",
+        "mime-types": "^3.0.2",
+        "tar": "^7.5.23",
+        "ws": "^8.23.0",
+      },
+      "devDependencies": {
+        "@biomejs/biome": "^2.6.8",
+        "@types/mime-types": "^3.0.1",
+        "@types/node": "^24.19.2",
+        "@types/tar": "^7.0.87",
+        "@types/ws": "^8.18.2",
+        "testkit": "workspace:*",
+        "typescript": "~6.0.3",
+      },
+    },
     "apps/paperboard": {
       "name": "paperboard",
       "version": "0.4.0",
@@ -44,6 +67,7 @@
         "@types/semver": "^7.8.0",
         "@types/tar": "^7.0.87",
         "@types/ws": "^8.18.2",
+        "daemon": "workspace:*",
         "electron": "^45.3.4",
         "electron-builder": "^26.18.0",
         "electron-vite": "^6.0.0",
@@ -172,6 +196,7 @@
       "dependencies": {
         "@mileniumhq/release": "workspace:*",
         "adm-zip": "^0.6.1",
+        "daemon": "workspace:*",
         "ws": "^8.23.0",
       },
       "devDependencies": {
@@ -964,6 +989,8 @@
     "css-what": ["css-what@6.2.2", "", {}, "sha512-u/O3vwbptzhMs3L1fQE82ZSLHQQfto5gyZzwteVIEyeaY5Fc7R4dapF/BvRoSYFeqfBk4m0V1Vafq5Pjv25wvA=="],
 
     "csstype": ["csstype@3.2.4", "", {}, "sha512-PoKaoPzQapnEoqUSnHx1u6W6ku8CVEgKsnpmmzU3m1nwkidpPBQ8V/Zq2+bWNrsOKoKLwTGdbx6xF7BXP1zLVQ=="],
+
+    "daemon": ["daemon@workspace:apps/daemon"],
 
     "data-urls": ["data-urls@8.0.0", "", { "dependencies": { "whatwg-mimetype": "^5.0.0", "whatwg-url": "^17.1.2" } }, "sha512-JQUCCK+/CAGbGGx618PlFZMXH81Jtj7t73CHv9dd/zVWvxgGT2zLFRjnKb+Ng46GIwcy+f7f88qd4duqllK+WQ=="],
 

@@ -1,0 +1,5 @@
+# Hermetic tests: testkit/setup (packages/testkit/src/setup.ts) gives the
+# whole test process a throwaway PAPERBOARD_DIR, so no suite reads or writes
+# the developer's real ~/.paperboard.
+[test]
+preload = ["testkit/setup"]

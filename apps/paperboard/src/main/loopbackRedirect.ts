@@ -7,7 +7,7 @@
 // [::1] too where this device has it, since a browser may resolve localhost
 // to either. Electron-free so it can be tested with real HTTP.
 import * as http from "http";
-import { logger } from "../../papercrane/logger";
+import { logger } from "daemon/logger";
 import { LOOPBACK_REDIRECT_TIMEOUT_MS, parseLoopbackRedirectUri, type LoopbackRedirectFailureCode } from "../shared/loopbackRedirect";
 import { errorCode } from "@mileniumhq/paperapi/errors";
 

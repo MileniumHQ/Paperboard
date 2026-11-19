@@ -29,11 +29,11 @@ jobs:
       - uses: actions/setup-node@v5
         with:
           node-version: 24
-      # the workload supervisor (apps/paperboard/supervisor) is Go
+      # the workload supervisor (apps/daemon/supervisor) is Go
       - uses: actions/setup-go@v5
         with:
-          go-version-file: apps/paperboard/supervisor/go.mod
-          cache-dependency-path: apps/paperboard/supervisor/go.sum
+          go-version-file: apps/daemon/supervisor/go.mod
+          cache-dependency-path: apps/daemon/supervisor/go.sum
       - name: Cache Bun packages and the Electron binary
         uses: actions/cache@v4
         with:
@@ -73,7 +73,7 @@ jobs:
         run: |
           case "${{ matrix.group }}" in
             libraries) targets="packages paperapi paperui create-panel release testkit npx scripts" ;;
-            app) targets="paperboard" ;;
+            app) targets="daemon paperboard" ;;
             panels) targets="agents blocks botcreator gameserver terminal" ;;
             web) targets="paperdocs origami library arilink panelapis global" ;;
             *) echo "unknown gate group ${{ matrix.group }}" >&2; exit 2 ;;
@@ -144,8 +144,8 @@ jobs:
       - uses: actions/setup-go@v5
         if: steps.scope.outputs.run == 'true'
         with:
-          go-version-file: apps/paperboard/supervisor/go.mod
-          cache-dependency-path: apps/paperboard/supervisor/go.sum
+          go-version-file: apps/daemon/supervisor/go.mod
+          cache-dependency-path: apps/daemon/supervisor/go.sum
       # On macOS and Windows, restoring Bun's package cache takes longer than
       # a cold install, so only Linux keeps it
       - name: Cache Bun packages (Linux)

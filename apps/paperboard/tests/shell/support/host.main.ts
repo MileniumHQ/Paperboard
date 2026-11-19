@@ -26,7 +26,7 @@ import connectionPool from "../../../src/main/communication/papercrane/Connectio
 import discovery from "../../../src/main/communication/discovery";
 import { failMdns } from "./mdns";
 import { servePanelAsset } from "../../../src/main/panelServe";
-import { getLocalDir } from "../../../papercrane/paths";
+import { getLocalDir } from "daemon/paths";
 import { launchOptionsFromArgv } from "../../../src/shared/launchOptions";
 import { PanelPermissionStore } from "../../../src/main/panelPermissions";
 import type { PanelPermission, PermissionAnswer } from "../../../src/shared/panelPermissions";

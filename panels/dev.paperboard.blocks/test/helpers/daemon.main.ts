@@ -14,7 +14,7 @@ interface ServerInstance {
     stop(): void;
 }
 
-const entry: string = path.resolve(import.meta.dir, "../../../../apps/paperboard/papercrane/index.ts");
+const entry: string = path.resolve(import.meta.dir, "../../../../apps/daemon/src/index.ts");
 const { startPaperCraneServer } = (await import(entry)) as { startPaperCraneServer(options: Record<string, unknown>): Promise<ServerInstance> };
 const instance = await startPaperCraneServer({ host: "127.0.0.1", port: 0, headless: true, advertise: false });
 

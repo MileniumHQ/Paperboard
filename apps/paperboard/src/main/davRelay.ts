@@ -28,10 +28,10 @@ import * as http from "http";
 import * as https from "https";
 import * as net from "net";
 import { randomBytes } from "crypto";
-import { logger } from "../../papercrane/logger";
+import { logger } from "daemon/logger";
 import { bareHost } from "./communication/papercrane/probeTarget";
-import { pinnedTlsOptions } from "../../papercrane/pinnedTls";
-import { secretsMatch } from "../../papercrane/secretCompare";
+import { pinnedTlsOptions } from "daemon/pinnedTls";
+import { secretsMatch } from "daemon/secretCompare";
 
 // bounds: open client connections, and how long a quiet relay lives
 export const MAX_RELAY_CONNECTIONS = 32;

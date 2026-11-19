@@ -22,7 +22,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { spawn } from "node:child_process";
 import { WebSocket } from "ws";
-import { loadOrCreateTlsIdentity } from "../papercrane/tlsIdentity";
+import { loadOrCreateTlsIdentity } from "daemon/tlsIdentity";
 import { defaultHomeItems } from "../src/renderer/src/components/home/builtins/defaults";
 import { HOME_LAYOUT_ID, serializeHomeLayout } from "../src/renderer/src/lib/homeLayout";
 
@@ -46,7 +46,7 @@ async function compileCrane(): Promise<string> {
     const target = `${process.platform === "darwin" ? "darwin" : process.platform === "win32" ? "windows" : "linux"}-${process.arch}`;
     const file = path.join(work, process.platform === "win32" ? "papercrane.exe" : "papercrane");
     const result = await Bun.build({
-        entrypoints: [path.join(APP_DIR, "papercrane", "main.ts")],
+        entrypoints: [path.join(APP_DIR, "..", "daemon", "src", "main.ts")],
         compile: { target: `bun-${target}` as Bun.Build.Target, outfile: file },
     });
     if (!result.success) fail(`crane compile failed:\n${result.logs.map(String).join("\n")}`);

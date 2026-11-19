@@ -9,7 +9,7 @@
 // own local server.
 import * as fs from "fs";
 import * as path from "path";
-import { lookupMime } from "../../papercrane/mime";
+import { lookupMime } from "daemon/mime";
 
 export const SHELL_SCHEME = "paperboard";
 export const SHELL_HOST = "shell";

@@ -8,9 +8,9 @@
 import * as path from "path";
 import connectionPool from "./papercrane/ConnectionPool";
 import discovery from "./discovery";
-import { getPaperboardDir, getFilesDir, ensureDir } from "../../../papercrane/paths";
-import { sanitizeId } from "../../../papercrane/storage";
-import { logger } from "../../../papercrane/logger";
+import { getPaperboardDir, getFilesDir, ensureDir } from "daemon/paths";
+import { sanitizeId } from "daemon/storage";
+import { logger } from "daemon/logger";
 import { openRemoteFolder } from "../remoteFolder";
 import { servePanelAsset } from "../panelServe";
 import type { LaunchOptions } from "../../shared/launchOptions";

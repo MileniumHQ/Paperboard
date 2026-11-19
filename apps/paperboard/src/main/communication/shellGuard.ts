@@ -12,7 +12,7 @@
 // content, a dropped file) was answered as the shell — including
 // crane-credentials, which returns the master token.
 import { SHELL_ORIGIN } from "../shellAssets";
-import { logger } from "../../../papercrane/logger";
+import { logger } from "daemon/logger";
 
 let devShellOrigin: string | null = null;
 

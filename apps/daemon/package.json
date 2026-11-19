@@ -1,0 +1,35 @@
+{
+    "name": "daemon",
+    "version": "0.4.0",
+    "private": true,
+    "description": "The Paperboard server daemon: runs panels, their services and workloads on a computer, and serves the computers paired with it. Built into the desktop app and compiled on its own for remote machines.",
+    "exports": {
+        ".": "./src/index.ts",
+        "./*": "./src/*.ts",
+        "./package.json": "./package.json"
+    },
+    "scripts": {
+        "typecheck": "tsc --noEmit",
+        "test": "bun test ./test"
+    },
+    "dependencies": {
+        "@mileniumhq/paperapi": "workspace:*",
+        "@mileniumhq/release": "workspace:*",
+        "adm-zip": "^0.6.1",
+        "bonjour-service": "^1.4.4",
+        "commander": "^15.1.0",
+        "mime-types": "^3.0.2",
+        "tar": "^7.5.23",
+        "ws": "^8.23.0"
+    },
+    "devDependencies": {
+        "@biomejs/biome": "^2.6.8",
+        "@types/mime-types": "^3.0.1",
+        "@types/node": "^24.19.2",
+        "@types/tar": "^7.0.87",
+        "@types/ws": "^8.18.2",
+        "testkit": "workspace:*",
+        "typescript": "~6.0.3"
+    },
+    "license": "PolyForm-Noncommercial-1.0.0"
+}

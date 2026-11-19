@@ -181,7 +181,7 @@ describe("server binaries ship working", () => {
         const { bytes, payload } = bunShapedPe();
         const before = sections(bytes);
         expect(before.map((s) => s.name)).toEqual([".rsrc", ".bun"]);
-        const icon = readFileSync(join(APP, "papercrane", "branding", "icon.ico"));
+        const icon = readFileSync(join(APP, "..", "daemon", "src", "branding", "icon.ico"));
 
         const patched = patchPeIcon(bytes, icon);
 

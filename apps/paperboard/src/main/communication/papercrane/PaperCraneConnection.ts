@@ -3,28 +3,28 @@
 // with backoff, the heartbeat and the RPC framing. What the daemon can be
 // asked is PaperCraneClient.ts.
 import { WebSocket, type RawData } from "ws";
-import { logger } from "../../../../papercrane/logger";
+import { logger } from "daemon/logger";
 import { EventEmitter } from "events";
 import * as path from "path";
 import * as crypto from "crypto";
-import { startPaperCraneServer, ServerInstance, DEFAULT_PORT } from "../../../../papercrane";
-import { PROTOCOL_VERSION } from "../../../../papercrane/protocol";
+import { startPaperCraneServer, ServerInstance, DEFAULT_PORT } from "../../../../../daemon/src";
+import { PROTOCOL_VERSION } from "daemon/protocol";
 import { readEvent, readResult, type ProgressEvent, type RpcAction, type RpcParams, type RpcResult } from "@mileniumhq/paperapi/protocol";
 import {
     readCraneHandshake, verifyDaemonProof,
     DAEMON_CHALLENGE_HEADER, DAEMON_PROOF_TYPE,
     type CraneHandshakeFile,
-} from "../../../../papercrane/handshake";
-import { getLocalDir } from "../../../../papercrane/paths";
+} from "daemon/handshake";
+import { getLocalDir } from "daemon/paths";
 import {
     peerCertPem,
     pinnedRequest,
     pinnedTlsOptions,
     type PinnedRequestInit,
     type PinnedResponse,
-} from "../../../../papercrane/pinnedTls";
+} from "daemon/pinnedTls";
 import type { TLSSocket } from "tls";
-import { pinnableWebSocket } from "../../../../papercrane/pinnableWebSocket";
+import { pinnableWebSocket } from "daemon/pinnableWebSocket";
 import { bracketHost } from "./probeTarget";
 import { errorMessage } from "@mileniumhq/paperapi/errors";
 

@@ -2,8 +2,8 @@
 // next look(), which starts browsing again.
 import { EventEmitter } from "events";
 import { Bonjour } from "bonjour-service";
-import { logger } from "../../../papercrane/logger";
-import { PAPERCRANE_MDNS_TYPE } from "../../../papercrane/discovery";
+import { logger } from "daemon/logger";
+import { PAPERCRANE_MDNS_TYPE } from "daemon/discovery";
 import { errorMessage } from "@mileniumhq/paperapi/errors";
 import type { DiscoveredComputer } from "../../shared/shellContract";
 

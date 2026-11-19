@@ -3,7 +3,7 @@
 // is using them (then the job ends held), and Paperboard Server replaces
 // itself and must report the new version back.
 import connectionPool from "./communication/papercrane/ConnectionPool";
-import { logger } from "../../papercrane/logger";
+import { logger } from "daemon/logger";
 import { validSha256, type UpdateTask } from "./updatePlan";
 import { packageHolderNames } from "./packageUpdates";
 import { PartialUpdateError, type UpdateJob, type UpdateProgress } from "./updateQueue";

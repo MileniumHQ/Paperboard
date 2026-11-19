@@ -51,7 +51,7 @@ export async function withScenarioDaemon(prefix: string, work: (scenario: Scenar
     if (!binary) {
         const { buildSupervisor } = await import("../../../scripts/supervisor");
         binary = path.join(root, "bin", process.platform === "win32" ? "papercrane.exe" : "papercrane");
-        const build = spawnSync(process.execPath, ["build", "--compile", path.join(REPO, "apps/paperboard/papercrane/main.ts"), buildSupervisor(), "--outfile", binary], { cwd: path.join(REPO, "apps/paperboard"), encoding: "utf8" });
+        const build = spawnSync(process.execPath, ["build", "--compile", path.join(REPO, "apps/daemon/src/main.ts"), buildSupervisor(), "--outfile", binary], { cwd: path.join(REPO, "apps/paperboard"), encoding: "utf8" });
         if (build.status !== 0 || !fs.existsSync(binary)) throw new Error(`Building the crane daemon failed (exit ${build.status}):\n${build.stdout}\n${build.stderr}`);
     }
     if (process.env.SMOKE_PANEL) fs.cpSync(process.env.SMOKE_PANEL, path.join(root, "panels", PANEL), { recursive: true });

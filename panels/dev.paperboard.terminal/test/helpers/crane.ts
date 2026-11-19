@@ -23,7 +23,7 @@ import { processApi, terminalApi } from "@mileniumhq/paperapi";
 import { within } from "./wait";
 
 const REPO = path.resolve(import.meta.dir, "../../../..");
-const CRANE_ENTRY = path.join(REPO, "apps/paperboard/papercrane/main.ts");
+const CRANE_ENTRY = path.join(REPO, "apps/daemon/src/main.ts");
 const START_TIMEOUT_MS = 30_000;
 const ALLOWED = Symbol.for("paperboard.terminal.test.ports");
 const TEARDOWN = Symbol.for("paperboard.terminal.test.teardown");

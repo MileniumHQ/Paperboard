@@ -1,4 +1,4 @@
-// The daemon as it ships: `bun build --compile ./papercrane/main.ts`, run as
+// The daemon as it ships: `bun build --compile apps/daemon/src/main.ts`, run as
 // a child process with its own throwaway data directory and a port the OS
 // picks. The binary is compiled once per test process and shared.
 //
@@ -13,7 +13,7 @@ import { registerTestCleanup, tempDir } from "./fs";
 import { Rpc } from "./rpc";
 import { isAlive, waitFor, within } from "./wait";
 
-export const APP_DIR = path.resolve(import.meta.dir, "../../../apps/paperboard");
+export const DAEMON_DIR = path.resolve(import.meta.dir, "../../../apps/daemon");
 export const REPO_DIR = path.resolve(import.meta.dir, "../../..");
 
 let compiled: Promise<string> | null = null;

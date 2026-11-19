@@ -2,7 +2,7 @@
  * PaperUI scopes everything under .paperui-root; the app's own document
  * reset lives here so removing the library never shifts app layout. */
 /* Footprints particular to the shell. The title bar height is also the
- * native titleBarOverlay height: papercrane/themeConstants.ts owns the
+ * native titleBarOverlay height: apps/daemon/src/themeConstants.ts owns the
  * number and tests/themeConstants.test.ts fails if this copy drifts. */
 :root {
     --paperboard-titlebar-height: 38px;

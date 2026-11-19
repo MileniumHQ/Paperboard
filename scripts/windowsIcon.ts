@@ -3,7 +3,7 @@
 // Bun's `--windows-icon` flag is rejected unless the build runs ON Windows,
 // so a cross-built `papercrane-windows-*.exe` otherwise keeps Bun's default
 // logo. This replaces the PE icon resources in place after compilation,
-// using the `papercrane/branding/icon.ico` artwork, on any host.
+// using the `apps/daemon/src/branding/icon.ico` artwork, on any host.
 //
 // It never moves sections: only the bytes inside the existing `.rsrc`
 // allocation and the Resource data-directory size are rewritten. That is

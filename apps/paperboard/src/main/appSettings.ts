@@ -2,16 +2,16 @@ import { BrowserWindow, app, nativeTheme, webContents, webFrameMain } from "elec
 import * as path from "path";
 import * as fs from "fs";
 import type { WebFrameMain } from "electron";
-import { logger } from "../../papercrane/logger";
+import { logger } from "daemon/logger";
 import { setRunOnStartup } from "./loginItem";
 import { withAppSettingsDefaults } from "../shared/appSettingsDefaults";
 import { effectiveLook, graphicsFrom, type Graphics } from "../shared/graphics";
 import { pushToShells } from "./communication/shellPush";
-import { getLocalDir } from "../../papercrane/paths";
+import { getLocalDir } from "daemon/paths";
 import {
     TITLEBAR_OVERLAY_COLORS,
     TITLEBAR_SYMBOL_COLORS,
-} from "../../papercrane/themeConstants";
+} from "daemon/themeConstants";
 
 // theme via nativeTheme; reduced motion, blur AND the resolved theme are injected
 // into panel frames. <html data-paperui-theme> is what PaperProvider reads

@@ -5,7 +5,7 @@
 // goes from here to the daemon's vault and never passes through a renderer.
 // Electron-free so it can be tested.
 import * as crypto from "crypto";
-import { logger } from "../../papercrane/logger";
+import { logger } from "daemon/logger";
 import { listenForRedirect } from "./loopbackRedirect";
 
 export const DRIVE_FILE_SCOPE = "https://www.googleapis.com/auth/drive.file";

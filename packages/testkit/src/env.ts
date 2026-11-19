@@ -1,6 +1,6 @@
 // Kept apart from crane.ts so scripts outside the daemon suite (the platform
 // launcher, scripts/releaseSmoke.ts) can use it without importing ./fs, which
-// needs the suite's tests/setup.ts preload.
+// needs the suite's testkit/setup preload.
 
 // An environment for a child daemon: the parent's, minus anything that would
 // point it at a real daemon or change how Electron behaves.

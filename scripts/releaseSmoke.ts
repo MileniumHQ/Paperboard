@@ -18,7 +18,7 @@ import { spawn } from "node:child_process";
 import AdmZip from "adm-zip";
 import * as tar from "tar";
 import { WebSocket } from "ws";
-import { verifyDaemonProof, DAEMON_CHALLENGE_HEADER, DAEMON_PROOF_TYPE } from "../apps/paperboard/papercrane/handshake";
+import { verifyDaemonProof, DAEMON_CHALLENGE_HEADER, DAEMON_PROOF_TYPE } from "../apps/daemon/src/handshake";
 import { CraneSocket, randomChallenge, readHandshake, startCrane, watch, WAIT_MS } from "../apps/paperboard/tests/platform/app/support/crane";
 import { cleanupSuite, ownChild, tempDir } from "../apps/paperboard/tests/platform/app/support/temp";
 import { ALL_TARGETS, archOf, assetFileName, osOf, type Target } from "./publishLib";

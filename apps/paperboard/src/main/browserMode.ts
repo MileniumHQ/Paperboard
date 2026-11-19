@@ -10,14 +10,14 @@ import { readPanelFileForBrowser, statPanelFileForBrowser, writePanelFileFromBro
 import { poolEndpoint } from "./panelFileEndpoint";
 import { startBrowserHost, type BrowserHost } from "./browserHost";
 import { BrowserSessions } from "./browserSessions";
-import { getLocalDir } from "../../papercrane/paths";
-import { portRefusal } from "../../papercrane/ports";
+import { getLocalDir } from "daemon/paths";
+import { portRefusal } from "daemon/ports";
 import { createShellInvokeHandlers } from "./communication/shellHandlers";
 import { shellServer } from "./communication/shellServer";
 import { launchOptionsFromArgv } from "../shared/launchOptions";
 import { applySavedAppSettings, logRendererMessage } from "./communication/shelldata";
 import { addShellPushSink } from "./communication/shellPush";
-import { logger as log } from "../../papercrane/logger";
+import { logger as log } from "daemon/logger";
 
 export const webLaunch = app.commandLine.hasSwitch("web");
 export const browserMode = webLaunch || app.commandLine.hasSwitch("browser");

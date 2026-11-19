@@ -1,16 +1,16 @@
 import { EventEmitter } from "events";
 import * as os from "os";
 import * as path from "path";
-import { DEFAULT_PORT, getDetailedOsInfo, getNetworkIp } from "../../../../papercrane";
+import { DEFAULT_PORT, getDetailedOsInfo, getNetworkIp } from "../../../../../daemon/src";
 import {
     readStateFileSync,
     writeJsonAtomicSync,
     sanitizeId,
-} from "../../../../papercrane/storage";
-import { getLocalDir } from "../../../../papercrane/paths";
-import { logger } from "../../../../papercrane/logger";
-import { certFingerprint, pinnedRequest } from "../../../../papercrane/pinnedTls";
-import { readTlsCert } from "../../../../papercrane/tlsIdentity";
+} from "daemon/storage";
+import { getLocalDir } from "daemon/paths";
+import { logger } from "daemon/logger";
+import { certFingerprint, pinnedRequest } from "daemon/pinnedTls";
+import { readTlsCert } from "daemon/tlsIdentity";
 import { bareHost, bracketHost, checkProbeTarget, isLoopback } from "./probeTarget";
 import { PaperCraneClient } from "./PaperCraneClient";
 import { errorMessage } from "@mileniumhq/paperapi/errors";

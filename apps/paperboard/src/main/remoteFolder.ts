@@ -4,8 +4,8 @@ import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
 import connectionPool from "./communication/papercrane/ConnectionPool";
-import { logger } from "../../papercrane/logger";
-import { panelFilesDirName } from "../../papercrane/storage";
+import { logger } from "daemon/logger";
+import { panelFilesDirName } from "daemon/storage";
 import {
     buildWindowsMountCommand,
     macFolderHasWindow,
@@ -15,7 +15,7 @@ import {
     remoteFolderSupported,
 } from "./remoteFolderMount";
 import { startDavRelay, relayFolderUrl, type DavRelay } from "./davRelay";
-import { pinnedRequest } from "../../papercrane/pinnedTls";
+import { pinnedRequest } from "daemon/pinnedTls";
 import { bracketHost } from "./communication/papercrane/probeTarget";
 
 // remote data dir over WebDAV with ephemeral session; teardown on explorer

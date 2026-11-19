@@ -178,7 +178,7 @@ describe("the house rules flag each break, honour a reasoned quiet marker, and p
         const hits = (src: string) => checkSource(file, src).map((h) => `${h.line}:${h.rule}`);
         expect(
             hits(
-                `import { semverGt } from "../../../apps/paperboard/papercrane/util";\nexport { errorMessage } from "../../paperapi/src/errors";\nconst ui = await import("../../paperui/src/index");\ntype T = typeof import("../../paperapi/src/ws");\n`,
+                `import { semverGt } from "../../../apps/daemon/src/util";\nexport { errorMessage } from "../../paperapi/src/errors";\nconst ui = await import("../../paperui/src/index");\ntype T = typeof import("../../paperapi/src/ws");\n`,
             ),
         ).toEqual(["1:cross-package-import", "2:cross-package-import", "3:cross-package-import", "4:cross-package-import"]);
         expect(

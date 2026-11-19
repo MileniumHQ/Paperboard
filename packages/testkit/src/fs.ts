@@ -7,10 +7,10 @@ import * as path from "node:path";
 
 const created: string[] = [];
 
-// Runs after every test file (tests/setup.ts); bun test fires no exit handlers.
+// Runs after every test file (testkit/setup); bun test fires no exit handlers.
 export function registerTestCleanup(cleanup: () => void | Promise<void>): void {
 	const cleanups = (globalThis as { __paperboardTestCleanup?: Array<() => void | Promise<void>> }).__paperboardTestCleanup;
-	if (!cleanups) throw new Error("tests/setup.ts is not preloaded: run the suite with bun test from apps/paperboard");
+	if (!cleanups) throw new Error("testkit/setup is not preloaded: add it to the suite's bunfig.toml [test] preload");
 	cleanups.push(cleanup);
 }
 

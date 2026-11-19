@@ -5,7 +5,7 @@ import { isRefusedFrame, PANEL_IPC_REFUSED } from "../../src/main/communication/
 import { readShellFile } from "../../src/main/shellAssets";
 import { isListingFilePath } from "../../src/shared/listingFile";
 import { buildCraneCredentialPayload, buildPanelCsp, remotePanelHtmlCsp, resolveLocalPanelFile, PANEL_TRAVERSAL_VECTORS } from "../../src/main/panelAssets";
-import { buildPanelCsp as daemonPanelCsp } from "../../papercrane/panelNet";
+import { buildPanelCsp as daemonPanelCsp } from "daemon/panelNet";
 import { parseLibraryMessage } from "../../src/renderer/src/lib/libraryFrame";
 import { PanelPermissionStore } from "../../src/main/panelPermissions";
 import { SHELL_CALLS } from "../../src/shared/shellContract";

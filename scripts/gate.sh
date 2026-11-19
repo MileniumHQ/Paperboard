@@ -24,8 +24,10 @@
 #                    tests, silent-catches
 #     npx            @mileniumhq/paperboard (npx launcher for the daemon):
 #                    build, tests, silent-catches
-#     paperboard     desktop app: typechecks, tests, lint, silent-catches, and
-#                    the workload supervisor's (Go) format, vet and tests
+#     daemon         server daemon (apps/daemon): typecheck, tests, lint,
+#                    silent-catches, and the workload supervisor's (Go)
+#                    format, vet and tests
+#     paperboard     desktop app: typechecks, tests, lint, silent-catches
 #     paperdocs      docs site: tests, build
 #     origami        registry worker: typecheck, tests, silent-catches
 #     library        panel library (store) web app: tests, build, silent-catches
@@ -74,7 +76,7 @@ run_in() {
 # platform target), so a mistake there has to be caught by the compiler here.
 supervisor_vet() {
     (
-        cd "$ROOT/apps/paperboard/supervisor" || exit 1
+        cd "$ROOT/apps/daemon/supervisor" || exit 1
         unformatted="$(gofmt -l .)" || exit 1
         if [ -n "$unformatted" ]; then
             echo "not gofmt-formatted: $unformatted" >&2
@@ -90,7 +92,7 @@ supervisor_vet() {
 # Every selectable target. The *-build names are prerequisites, not
 # user-facing: they exist so a filtered run can pull in the shared library
 # artifact a consumer needs without running that library's whole suite.
-KNOWN_TARGETS="global platform packages paperapi paperui create-panel release testkit npx paperapi-build paperui-build create-panel-build paperboard paperdocs origami library arilink panelapis scripts actions agents ai blocks botcreator gameserver terminal"
+KNOWN_TARGETS="global platform packages paperapi paperui create-panel release testkit npx paperapi-build paperui-build create-panel-build daemon paperboard paperdocs origami library arilink panelapis scripts actions agents ai blocks botcreator gameserver terminal"
 
 # Prerequisites per target, expanded transitively. A panel (and any app that
 # bundles the SDK/design system) needs paperapi/paperui dist present; the
@@ -101,7 +103,7 @@ target_deps() {
         paperui) echo "paperui-build" ;;
         create-panel) echo "paperapi-build paperui-build create-panel-build" ;;
         packages) echo "paperapi-build paperui-build create-panel-build" ;;
-        paperboard | paperdocs | library | platform) echo "paperapi-build paperui-build" ;;
+        daemon | paperboard | paperdocs | library | platform) echo "paperapi-build paperui-build" ;;
         actions | agents | ai | blocks | botcreator | gameserver | terminal) echo "paperapi-build paperui-build" ;;
         *) echo "" ;;
     esac
@@ -203,15 +205,23 @@ want paperui-build && lib_build paperui
 gstep create-panel-build "create-panel build" run_in "$ROOT/packages/create-panel" bun run build
 gstep packages "packed external consumers" bun "$ROOT/scripts/check-package-artifacts.mjs"
 
+# ── server daemon: typecheck, full suite, lint, silent-catches, and the Go
+# workload supervisor it launches ───────────────────────────────────────────
+gstep daemon "daemon typecheck" run_in "$ROOT/apps/daemon" bun run typecheck
+gstep daemon "daemon tests" run_in "$ROOT/apps/daemon" bun run test
+gstep daemon "daemon lint" run_in "$ROOT/apps/daemon" bunx biome lint
+gstep daemon "supervisor format and vet (linux, macOS, Windows)" supervisor_vet
+gstep daemon "supervisor tests" run_in "$ROOT/apps/daemon/supervisor" go test -count=1 ./...
+gstep daemon "daemon silent-catches" run_in "$ROOT/apps/daemon" bash "$CATCH" src test
+gstep daemon "daemon code check" run_in "$ROOT" bun scripts/check-solid.ts apps/daemon/src apps/daemon/test
+
 # ── Paperboard app: node + web typechecks, full suite, lint, silent-catches ──
 gstep paperboard "paperboard typecheck:node" run_in "$ROOT/apps/paperboard" bun run typecheck:node
 gstep paperboard "paperboard typecheck:web" run_in "$ROOT/apps/paperboard" bun run typecheck:web
 gstep paperboard "paperboard tests" run_in "$ROOT/apps/paperboard" bun test
 gstep paperboard "paperboard lint" run_in "$ROOT/apps/paperboard" bunx biome lint
-gstep paperboard "supervisor format and vet (linux, macOS, Windows)" supervisor_vet
-gstep paperboard "supervisor tests" run_in "$ROOT/apps/paperboard/supervisor" go test -count=1 ./...
 gstep paperboard "paperboard silent-catches" run_in "$ROOT/apps/paperboard" bash "$CATCH"
-gstep paperboard "paperboard code check" run_in "$ROOT" bun scripts/check-solid.ts apps/paperboard/papercrane apps/paperboard/src apps/paperboard/tests apps/paperboard/scripts
+gstep paperboard "paperboard code check" run_in "$ROOT" bun scripts/check-solid.ts apps/paperboard/src apps/paperboard/tests apps/paperboard/scripts
 gwarn paperboard "paperboard styling literals" bash "$ROOT/scripts/check-app-styling.sh" apps/paperboard
 
 # ── root dev scripts: typecheck, publisher release-math proofs, the browser
@@ -302,7 +312,8 @@ done
 # file modes). The full suites above already include these directories, so
 # the full gate skips them: they run only when `platform` is named. ─────────
 if [ "${#SELECTED[@]}" -gt 0 ]; then
-    gstep platform "supervisor tests" run_in "$ROOT/apps/paperboard/supervisor" go test -count=1 ./...
+    gstep platform "supervisor tests" run_in "$ROOT/apps/daemon/supervisor" go test -count=1 ./...
+    gstep platform "daemon platform tests" run_in "$ROOT/apps/daemon" bun test ./test/platform
     gstep platform "paperboard platform tests" run_in "$ROOT/apps/paperboard" bun test ./tests/platform
     gstep platform "gameserver platform tests" run_in "$ROOT/panels/dev.paperboard.gameserver" bun test --isolate --conditions browser ./test/platform
     gstep platform "agents platform tests" run_in "$ROOT/panels/dev.paperboard.agents" bun test ./test/platform

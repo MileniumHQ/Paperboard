@@ -3,8 +3,8 @@
 // them as held, with Stop and update; the daemon installs each update
 // itself once those processes stop.
 import connectionPool from "./communication/papercrane/ConnectionPool";
-import { withTimeout } from "../../papercrane/util";
-import { logger } from "../../papercrane/logger";
+import { withTimeout } from "daemon/util";
+import { logger } from "daemon/logger";
 import { errorMessage } from "@mileniumhq/paperapi/errors";
 
 // a runtime package update that is downloaded and verified on a computer

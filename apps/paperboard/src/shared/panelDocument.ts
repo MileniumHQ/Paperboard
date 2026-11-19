@@ -2,7 +2,7 @@
 // the panel's credential, a per-response script nonce, the CSP and the
 // no-select baseline. Pure string work with no Node or Electron imports, so
 // every host (Electron, browser mode, Paperboard web's Worker) shares it.
-import { buildPanelCsp as fixedPanelCsp } from "../../papercrane/panelNet";
+import { buildPanelCsp as fixedPanelCsp } from "daemon/panelNet";
 
 // add the script nonce to any CSP — a daemon-built CSP gets the same
 // treatment as a locally-built one

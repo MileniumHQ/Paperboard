@@ -8,7 +8,7 @@
 //   { "unpack": "dmg", "take": { "bin/Helium.app": "Helium.app" } }
 //
 // Origami writes recipes (services/origami/scripts/lib/records.ts validates
-// them with parsePackageRecipe); the daemon's papercrane/engineArchives.ts
+// them with parsePackageRecipe); the daemon's apps/daemon/src/engineArchives.ts
 // runs them.
 import crypto from "crypto";
 
@@ -18,7 +18,7 @@ import crypto from "crypto";
  * - tar.xz: the system's xz decompresses, the bundled reader extracts
  * - dmg: macOS only; hdiutil mounts the image read-only and ditto copies out
  * - msi: the cabinets inside a Windows Installer package, read on any
- *   computer (papercrane/msiArchive.ts); members are the MSI's File keys
+ *   computer (apps/daemon/src/msiArchive.ts); members are the MSI's File keys
  */
 export const RECIPE_UNPACKS = ["zip", "tar", "tar.xz", "dmg", "msi"] as const;
 export type RecipeUnpack = (typeof RECIPE_UNPACKS)[number];

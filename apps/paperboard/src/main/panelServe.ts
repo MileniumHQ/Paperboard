@@ -6,10 +6,10 @@ import * as fs from "fs";
 import * as path from "path";
 import { STATUS_CODES } from "http";
 import connectionPool, { classifyProbeError } from "./communication/papercrane/ConnectionPool";
-import { logger } from "../../papercrane/logger";
-import { getPanelsDir } from "../../papercrane/paths";
-import { sanitizeId } from "../../papercrane/storage";
-import { lookupMime } from "../../papercrane/mime";
+import { logger } from "daemon/logger";
+import { getPanelsDir } from "daemon/paths";
+import { sanitizeId } from "daemon/storage";
+import { lookupMime } from "daemon/mime";
 import {
     resolveLocalPanelFile,
     buildCraneCredentialPayload,

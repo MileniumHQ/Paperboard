@@ -1,6 +1,6 @@
 // Package records for the PACKAGES namespace, written by the operator's
 // updater scripts (never by a worker route). The daemon consumes these in
-// papercrane/engine.ts: it installs platforms[<os>-<arch>] and refuses any
+// apps/daemon/src/engine.ts: it installs platforms[<os>-<arch>] and refuses any
 // entry without a sha256.
 import { parsePackageRecipe, type PackageRecipe } from "@mileniumhq/release";
 import { errorMessage } from "@mileniumhq/paperapi/errors";
@@ -20,7 +20,7 @@ export type PlatformKey = (typeof PLATFORM_KEYS)[number];
 
 /**
  * How the archive maps onto the installed package directory. Must match
- * PACKAGE_LAYOUTS in apps/paperboard/papercrane/engineArchives.ts.
+ * PACKAGE_LAYOUTS in apps/daemon/src/engineArchives.ts.
  * - wrapped (default): one top-level wrapper dir around bin/ (JDKs)
  * - root: the archive root is the package root and holds bin/
  * - bin: the archive root is the package's bin/ directory
