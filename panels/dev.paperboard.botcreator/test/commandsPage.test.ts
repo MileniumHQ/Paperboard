@@ -76,6 +76,16 @@ describe("the Commands tab", () => {
         const page = await browser.open(served.url);
         try {
             await openCommands(page, "Former");
+            // the page's action is filled like every panel's primary page action (New bot, New server): success
+            expect(await page.evaluate<boolean>(`(() => {
+                const probe = document.createElement("span");
+                probe.style.color = getComputedStyle(document.documentElement).getPropertyValue("--paper-success");
+                document.body.append(probe);
+                const success = getComputedStyle(probe).color;
+                probe.remove();
+                const create = [...document.querySelectorAll("button")].find((b) => b.innerText.includes("Create command"));
+                return getComputedStyle(create).backgroundColor === success;
+            })()`)).toBe(true);
             await page.evaluate(`[...document.querySelectorAll("button")].find((b) => b.innerText.includes("Create command")).dataset.test = "new"`);
             await page.click(`[data-test="new"]`);
             await page.waitFor(`${field("Command")} !== null`, "the Create Slash Command form");

@@ -48,6 +48,11 @@ describe("the server explorer", () => {
             await page.waitFor(`document.body.innerText.includes("Home")`, "the server list");
             await clickText(page, "[class*=card], [class*=Card]", "Home");
             await page.waitFor(`document.body.innerText.includes("Send a message")`, "the server's page");
+            // the field starts empty, its placeholder naming what goes in it
+            const MESSAGE = `document.querySelector('input[placeholder="Message"]')`;
+            expect(await page.evaluate<string>(`${MESSAGE}.value`)).toBe("");
+            await page.evaluate(`${MESSAGE}.focus()`);
+            await page.send("Input.insertText", { text: "Hello from Paperboard!" });
             await clickText(page, "button", "Send");
             const sent = await discord.request((r) => r.method === "POST" && r.path === `/channels/${home.channels[0]!.id}/messages`, "the message to reach Discord");
             expect(sent.bot).toBe(fake.token);
@@ -185,6 +190,16 @@ describe("lists that share a card with a title", () => {
             await page.waitFor(`document.body.innerText.includes("@everyone")`, "the server's page");
             await clickText(page, "button", "Search");
             await page.waitFor(`document.body.innerText.includes("@Framer")`, "the member search");
+            // a category title sits on the card the list is in, in either theme: never a darker well
+            for (const theme of ["light", "dark"]) {
+                await page.send("Emulation.setEmulatedMedia", { features: [{ name: "prefers-color-scheme", value: theme }] });
+                const tones = await page.evaluate<{ list: string; card: string }>(`(() => {
+                    const label = [...document.querySelectorAll("[class*=PaperListLabel]")].find((el) => el.innerText.toLowerCase() === "text channels");
+                    const list = label.parentElement;
+                    return { list: getComputedStyle(list).backgroundColor, card: getComputedStyle(list.closest("[class*=PaperCard]")).backgroundColor };
+                })()`);
+                expect(tones.list, theme).toBe(tones.card);
+            }
             for (const [text, inside] of [["lobby", ["Text Channels", "No category"]], ["@everyone", []], ["@Framer", []]] as const) {
                 const framed = await frame(text, [...inside]);
                 expect(framed, text).not.toBeNull();
@@ -224,6 +239,8 @@ describe("a test message's answer", () => {
 
             const homeMessages = `/channels/${home.channels[0]!.id}/messages`;
             const release = discord.hold((r) => r.method === "POST" && r.path === homeMessages);
+            await page.evaluate(`document.querySelector('input[placeholder="Message"]').focus()`);
+            await page.send("Input.insertText", { text: "hi" });
             await clickText(page, "button", "Send");
             await discord.request((r) => r.method === "POST" && r.path === homeMessages, "Home's message to reach Discord");
 

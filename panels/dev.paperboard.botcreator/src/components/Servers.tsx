@@ -104,7 +104,7 @@ export default function Servers(props: { bot: () => BotSummary }) {
 
     // the channel picked to send to; the server's first until one is picked
     const [pickedChannel, setPickedChannel] = createSignal("");
-    const [content, setContent] = createSignal("Hello from Paperboard!");
+    const [content, setContent] = createSignal("");
     const [sending, setSending] = createSignal(false);
     // what is wrong with the message to send: said under the message field
     const [missing, setMissing] = createSignal("");
@@ -463,7 +463,7 @@ export default function Servers(props: { bot: () => BotSummary }) {
                                             />
                                         </PaperFlex>
                                         <PaperButton
-                                                variant="success"
+                                            variant="success"
                                             disabled={sending()}
                                             onClick={() => void sendTest()}>
                                             <PaperIcon>send</PaperIcon>

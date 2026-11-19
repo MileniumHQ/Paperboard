@@ -228,8 +228,8 @@ export default function Commands(props: { bot: () => BotSummary }) {
                 title="Commands"
                 subtitle="Slash commands this bot registers with Discord"
             >
-                <PaperEffect>
-                    <PaperButton onClick={openCreate}>
+                <PaperEffect variant="success">
+                    <PaperButton variant="success" onClick={openCreate}>
                         <PaperIcon>add</PaperIcon>
                         Create command
                     </PaperButton>
