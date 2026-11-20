@@ -110,6 +110,8 @@ describe("each trigger a session fires is one of the bot's Blocks events, with a
 
 describe("a bot is a Blocks project, used through the daemon", () => {
     let discord: FakeDiscord;
+    /** resolves once the bot has answered interaction `id` (its automatic "thinking…", when no flow answers) */
+    const acknowledged = (id: string) => discord.request((r) => r.method === "POST" && r.path.startsWith(`/interactions/${id}/`), `the bot's answer to interaction ${id}`);
     let fake: FakeBot;
     let home: FakeGuild;
     beforeAll(async () => {
@@ -223,6 +225,8 @@ describe("a bot is a Blocks project, used through the daemon", () => {
         const interaction = slashCommand(fake, { guild: home, name: "roll", options: [{ name: "sides", type: 4, value: 20 }] });
         discord.dispatch(fake, "INTERACTION_CREATE", interaction);
         expect(await used.payload).toMatchObject({ interaction: interaction.id, channel: home.channels[0].id, server: home.id, "option-sides": 20 });
+        // the bot says "thinking…" for a flow that doesn't answer; it lands here, not in a later test's count
+        await acknowledged(interaction.id);
 
         await call.deleteCommand({ bot: BOT, id: created.command.id });
         expect((await blocksApi.list(PANEL_ID)).some((b) => b.entry === `${BOT}/event.${event}`)).toBe(false);
@@ -244,8 +248,10 @@ describe("a bot is a Blocks project, used through the daemon", () => {
             const used = nextEvent(event);
             await used.ready;
             const before = Date.now();
-            discord.dispatch(fake, "INTERACTION_CREATE", slashCommand(fake, { guild: home, name: "ping" }));
+            const ping = slashCommand(fake, { guild: home, name: "ping" });
+            discord.dispatch(fake, "INTERACTION_CREATE", ping);
             await used.payload;
+            await acknowledged(ping.id);
             expect(await read("command-uses", { command: event })).toBe(1);
             const last = await read<number>("command-last-used", { command: event });
             expect(last).toBeGreaterThanOrEqual(before);
