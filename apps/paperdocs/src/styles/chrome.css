@@ -21,8 +21,9 @@
     font-size: 20px;
     font-weight: 800;
     letter-spacing: -0.02em;
-    /* Only shows before the script upgrades the texture; blue keeps it
-       readable on the light frosted bar, then the white glyphs take over. */
+    /* On a dark bar it only shows before the script upgrades the texture,
+       then the white glyphs take over. The light topbar shows it as a plain
+       title instead (below). */
     color: var(--paper-primary);
 }
 
@@ -44,6 +45,23 @@
 .paper-wordmark .styled-text-host {
     display: inline-flex;
     line-height: 0;
+}
+
+/* The texture's white glyphs are for dark bars. In light mode the topbar's
+   wordmark is a plain title, like every other heading. The landing pages'
+   own chrome stays dark and keeps the texture. */
+:root[data-paperui-theme="light"] .topbar-brand .paper-wordmark .styled-text-host {
+    display: none;
+}
+
+:root[data-paperui-theme="light"] .topbar-brand .paper-wordmark .paper-wordmark-label {
+    position: static;
+    width: auto;
+    height: auto;
+    overflow: visible;
+    clip-path: none;
+    color: var(--paper-text);
+    font-family: var(--paper-font-family-rounded);
 }
 
 .paperui-root .topbar {
