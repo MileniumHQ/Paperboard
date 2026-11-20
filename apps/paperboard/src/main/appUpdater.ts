@@ -1,14 +1,18 @@
 // Paperboard's own update: electron-updater where it can replace the app
-// (AppImage, macOS, Windows), Paperboard's deb or rpm where this computer
-// can install one itself, and otherwise a notice with where to download it.
+// (AppImage, macOS, Windows installer), Paperboard's deb or rpm where this
+// computer can install one itself, and otherwise a notice with where to
+// download it (another package manager), or for an MSI install, that its
+// administrator updates it.
 // One AppUpdateSession owns the state every window shows.
 import * as path from "path";
 import { app, autoUpdater as electronAutoUpdater } from "electron";
 import type { AppUpdater } from "electron-updater";
 import { AppUpdateSession, getAppUpdateState, retainAppUpdateState } from "./appUpdateSession";
 import { ManualAppUpdater } from "./manualAppUpdater";
-import { DOWNLOAD_BASE, linuxPackageInstall } from "./linuxPackageInstall";
+import { DOWNLOAD_BASE } from "./downloadBase";
+import { linuxPackageInstall } from "./linuxPackageInstall";
 import { LinuxPackageUpdater, onPath } from "./linuxPackageUpdater";
+import { windowsMsiInstall } from "./windowsPackageInstall";
 import { createPlatformUpdater } from "./platformUpdater";
 import { electronDataDir } from "./electronData";
 import { pushToShells } from "./communication/shellPush";
@@ -56,9 +60,24 @@ function platformUpdater(): AppUpdater {
     return updater;
 }
 
+// an MSI install says so by having no uninstaller; any other OS has none
+let msi: ReturnType<typeof windowsMsiInstall> | undefined;
+function windowsInstall(): ReturnType<typeof windowsMsiInstall> {
+    if (msi === undefined) {
+        msi = process.platform === "win32" && app.isPackaged
+            ? windowsMsiInstall(path.dirname(process.execPath), process.arch)
+            : null;
+    }
+    return msi;
+}
+
 /** The app's update session, made on first use. */
 export function appUpdater(): AppUpdateSession {
     if (session) return session;
+    const fromMsi = windowsInstall();
+    if (fromMsi) {
+        return startSession(new ManualAppUpdater(app.getVersion(), fromMsi.feedUrl), "administrator");
+    }
     const found = linuxInstall();
     if (found?.packageType) {
         const candidate = new LinuxPackageUpdater({
@@ -76,6 +95,10 @@ export function appUpdater(): AppUpdateSession {
     }
     const updater = packageUpdater ?? (found ? new ManualAppUpdater(app.getVersion(), found.feedUrl) : platformUpdater());
     const mode: AppUpdateState["installMode"] = !found || packageUpdater ? "automatic" : found.download ? "package-download" : "package-manager";
+    return startSession(updater, mode);
+}
+
+function startSession(updater: ConstructorParameters<typeof AppUpdateSession>[0], mode: AppUpdateState["installMode"]): AppUpdateSession {
     session = new AppUpdateSession(updater, (state) => {
         retainAppUpdateState(state);
         updateQueue.upsertItem(appUpdateItem(state));

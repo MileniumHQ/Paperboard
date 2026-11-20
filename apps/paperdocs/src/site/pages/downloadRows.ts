@@ -17,6 +17,7 @@ export interface DownloadRow {
 
 export const APP: DownloadRow[] = [
     { id: "windows", platform: "windows", title: "Windows", description: "Installer", files: [{ label: "x64", path: "pb/latest/paperboard-windows-x64-setup.exe" }] },
+    { id: "msi", platform: "windows", title: "Windows MSI", description: "For Group Policy, Intune and other managed installs", files: [{ label: "x64", path: "pb/latest/paperboard-windows-x64.msi" }] },
     {
         id: "macos", platform: "macos", title: "macOS", description: "App in a zip",
         files: [{ label: "Apple Silicon", path: "pb/latest/paperboard-macos-arm64.zip" }, { label: "Intel", path: "pb/latest/paperboard-macos-x64.zip" }],

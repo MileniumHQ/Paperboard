@@ -1,6 +1,7 @@
 // One policy for every download entry point, including links inside shadow DOM.
 const files = new Map([
     ['paperboard-windows-x64-setup.exe', ['pb', 'windows']],
+    ['paperboard-windows-x64.msi', ['pb', 'windows']],
     ['paperboard-macos-arm64.zip', ['pb', 'macos']],
     ['paperboard-macos-x64.zip', ['pb', 'macos']],
     ['crane-windows-x64.zip', ['crane', 'windows']],

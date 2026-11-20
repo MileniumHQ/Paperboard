@@ -68,6 +68,10 @@ export default function InstallDoc() {
                         <td><PaperLink href="https://i.paperboard.dev/pb/latest/paperboard-windows-x64-setup.exe">paperboard-windows-x64-setup.exe</PaperLink></td>
                     </tr>
                     <tr>
+                        <td>Windows, x64 (MSI)</td>
+                        <td><PaperLink href="https://i.paperboard.dev/pb/latest/paperboard-windows-x64.msi">paperboard-windows-x64.msi</PaperLink></td>
+                    </tr>
+                    <tr>
                         <td>Mac with Apple silicon (M1 and later)</td>
                         <td><PaperLink href="https://i.paperboard.dev/pb/latest/paperboard-macos-arm64.zip">paperboard-macos-arm64.zip</PaperLink></td>
                     </tr>
@@ -115,6 +119,12 @@ export default function InstallDoc() {
             <PaperText preset="body" as="p">
                 Smart App Control or a managed work computer can block the installer without offering <b>Run anyway</b>.
                 In that case, ask your administrator or use another computer.
+            </PaperText>
+
+            <PaperText preset="body" as="p">
+                The MSI is for computers an administrator manages, such as through Group Policy or Intune.
+                It installs Paperboard for everyone on the computer, and <PaperCode>msiexec /i paperboard-windows-x64.msi /qn</PaperCode> installs it silently.
+                Paperboard from the MSI doesn't replace itself: it tells you when a new version is out, and your administrator installs the new MSI over the old one.
             </PaperText>
 
             <PaperText preset="subheader" as="h2" id="macos">macOS</PaperText>

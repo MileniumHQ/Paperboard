@@ -6,6 +6,7 @@ import { EventEmitter } from "node:events";
 import { AppUpdateSession } from "../../src/main/appUpdateSession";
 import { ManualAppUpdater } from "../../src/main/manualAppUpdater";
 import { linuxPackageInstall } from "../../src/main/linuxPackageInstall";
+import { windowsMsiInstall } from "../../src/main/windowsPackageInstall";
 import { APP_PACKAGE, BUILD_TIMEOUT_MS } from "../platform/app/support/build";
 import { WAIT_MS } from "../platform/app/support/crane";
 import { buildUpdaterApp, Feed, FEED_FILE, PAYLOAD_FILE, runUpdater } from "../platform/app/support/updater/run";
@@ -157,5 +158,13 @@ describe("desktop app update checks", () => {
         expect(await session.check()).toMatchObject({ status: "manual", installMode: "package-download", version: NEWER, error: null });
         expect(feed.requests).toEqual([FEED_FILE]);
         session.dispose();
+    });
+
+    test("a Windows install without the installer's uninstaller leaves its update to an administrator, not a second copy", () => {
+        const nsis = tempDir("nsis");
+        fs.writeFileSync(path.join(nsis, "Uninstall Paperboard.exe"), "");
+        expect(windowsMsiInstall(nsis, "x64")).toBeNull();
+        expect(windowsMsiInstall(tempDir("msi"), "x64")).toEqual({ feedUrl: "https://i.paperboard.dev/pb/latest.yml" });
+        expect(() => windowsMsiInstall(tempDir("msi"), "arm64")).toThrow("Windows arm64");
     });
 });

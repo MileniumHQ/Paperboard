@@ -5,8 +5,8 @@
 // boundary is the harness's: the network mDNS discovery browses (mdns.ts,
 // which finds nothing) and the system work main does after a settings save. A
 // test can push the update queue's states, as main's queue does while it
-// runs. A Google Drive sign-in is main's own, its browser a tab the person
-// closed.
+// runs, and the app's own update state. A Google Drive sign-in is main's own,
+// its browser a tab the person closed.
 //
 // The test drives it over stdin, one JSON command per line, and reads each
 // answer as one stdout line starting with ANSWER (the daemon client logs to
@@ -24,7 +24,7 @@ import discovery from "../../../src/main/communication/discovery";
 import { servePanelAsset } from "../../../src/main/panelServe";
 import { getLocalDir } from "daemon/core/paths";
 import { launchOptionsFromArgv } from "../../../src/shared/launchOptions";
-import { initialAppUpdateState } from "../../../src/shared/appUpdate";
+import { initialAppUpdateState, type AppUpdateState } from "../../../src/shared/appUpdate";
 import { initialUpdateQueueState, type UpdateQueueState } from "../../../src/shared/updateQueue";
 import { cancelGoogleSignIn, signInToGoogleDrive } from "../../../src/main/googleOAuth";
 import { ANSWER, type Command, type HostCommands } from "./protocol";
@@ -47,6 +47,7 @@ const shared = createShellInvokeHandlers({
 // the update queue is the test's: it pushes each state, as main's queue does
 // while it runs
 let updateQueue: UpdateQueueState = { ...initialUpdateQueueState };
+let appUpdate: AppUpdateState = { ...initialAppUpdateState };
 // a Google Drive sign-in runs as main runs it; the browser it opens is
 // counted and never comes back, and nothing past it is reachable
 let googleSignIns = 0;
@@ -61,7 +62,7 @@ const notHere = (channel: string) => () => {
 const calls: CallHandlers<ShellCall, unknown> = {
     ...shared,
     // an Electron window also asks for its updates: there are none here
-    "app-update-state": () => initialAppUpdateState,
+    "app-update-state": () => appUpdate,
     "update-queue": () => updateQueue,
     "backup-gdrive-connect": () =>
         signInToGoogleDrive(
@@ -117,6 +118,11 @@ const handlers: { [K in keyof HostCommands]: (command: HostCommands[K]["command"
     "push-update-queue": async (command) => {
         updateQueue = command.state;
         pushToShells("update-queue", updateQueue);
+        return true;
+    },
+    "push-app-update": async (command) => {
+        appUpdate = command.state;
+        pushToShells("app-update-state", appUpdate);
         return true;
     },
     // resolves with how many Google sign-ins opened a browser, once at least that many have

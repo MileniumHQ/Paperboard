@@ -4,7 +4,9 @@ export const appUpdateState = shape.object({
     revision: shape.number(),
     status: shape.oneOf("idle", "checking", "current", "downloading", "ready", "failed", "manual"),
     // package-download: a deb or rpm from Paperboard; the user installs the new one
-    installMode: shape.oneOf("automatic", "package-manager", "package-download"),
+    // package-manager: another package manager owns the install, which updates through it
+    // administrator: an MSI; whoever deployed it installs the new one
+    installMode: shape.oneOf("automatic", "package-manager", "package-download", "administrator"),
     version: shape.nullable(shape.text()),
     percent: shape.nullable(shape.number()),
     error: shape.nullable(shape.text()),

@@ -55,6 +55,7 @@ describe("one tag and canonical asset names per release", () => {
                 "paperboard-macos-x64.zip",
                 "paperboard-macos-arm64.zip",
                 "paperboard-windows-x64-setup.exe",
+                "paperboard-windows-x64.msi",
                 "crane-linux-x64.tar.gz",
                 "crane-linux-arm64.tar.gz",
                 "crane-macos-x64.tar.gz",
@@ -76,10 +77,11 @@ describe("one tag and canonical asset names per release", () => {
             "paperboard-0.3.0-x64.zip": "paperboard-macos-x64.zip",
             "paperboard-0.3.0-arm64.zip": "paperboard-macos-arm64.zip",
             "paperboard-0.3.0-windows-x64-setup.exe": "paperboard-windows-x64-setup.exe",
+            "paperboard-0.3.0-windows-x64.msi": "paperboard-windows-x64.msi",
         });
     });
 
-    test("re-indexing a release made before deb and rpm expects only what it shipped", () => {
+    test("re-indexing a release expects only the packages it shipped", () => {
         const pre = new Set(ALL_TARGETS.flatMap((t) => [assetFileName("pb", t), assetFileName("crane", t)]));
         const expected = expectedReleaseAssets(pre, "0.2.2").map((a) => a.file);
         expect(expected.sort()).toEqual([...pre].sort());
@@ -87,7 +89,15 @@ describe("one tag and canonical asset names per release", () => {
         // a release that ships some packages is expected to ship them all
         const partial = new Set([...pre, "paperboard-linux-x64.deb"]);
         const withPackages = expectedReleaseAssets(partial, "0.3.0").map((a) => a.file);
-        expect(withPackages.sort()).toEqual(shippedFiles("0.3.0").sort());
+        expect(withPackages.sort()).toEqual(shippedFiles("0.3.0").filter((f) => !f.endsWith(".msi")).sort());
+
+        // a release with the deb and rpm but no MSI (v0.4.0) still re-indexes
+        const linuxOnly = new Set([...pre, ...shippedFiles("0.4.0").filter((f) => f.endsWith(".deb") || f.endsWith(".rpm"))]);
+        expect(expectedReleaseAssets(linuxOnly, "0.4.0").map((a) => a.file).sort()).toEqual([...linuxOnly].sort());
+
+        // one that ships the MSI is expected to ship all of them
+        const withMsi = new Set([...linuxOnly, "paperboard-windows-x64.msi"]);
+        expect(expectedReleaseAssets(withMsi, "0.5.0").map((a) => a.file).sort()).toEqual([...withMsi].sort());
     });
 });
 
@@ -133,7 +143,7 @@ describe("each target gets the update feed electron-updater requests", () => {
         expect(() => buildLatestYml("linux", "0.3.0", [], "2026-11-09T00:00:00.000Z")).toThrow("No update artifacts for linux");
     });
 
-    test("deb and rpm are never update payloads", () => {
+    test("deb, rpm and msi are never update payloads", () => {
         for (const t of ALL_TARGETS) {
             expect(isUpdatePayload(assetFileName("pb", t))).toBe(true);
             for (const pkg of paperboardPackages(t, "0.3.0")) expect(isUpdatePayload(pkg.releaseFile)).toBe(false);

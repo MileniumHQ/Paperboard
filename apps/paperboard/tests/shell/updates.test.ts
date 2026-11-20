@@ -5,7 +5,7 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
 import type { UpdateHold, UpdateItem, UpdateQueueState } from "../../src/shared/updateQueue";
 import { ELECTRON_PRELOAD } from "./support/electronPreload";
-import { bootShell, WIDGET_DEMO, type Shell } from "./support/shell";
+import { bootShell, clickText, WIDGET_DEMO, type Shell } from "./support/shell";
 
 const PANEL = "dev.paperboard.widgetdemo";
 const KEY = `local::${PANEL}`;
@@ -94,5 +94,20 @@ test("an update held back by what is using it leaves the open page as it was", a
     await page.waitFor(`!${updating} && [...document.querySelectorAll("button")].some((b) => b.textContent.includes("Stop and update"))`, "the held update in the update list");
     expect(await page.evaluate(`${frame}.src`)).toBe(src);
     expect(await page.evaluate(`${frame}.contentWindow.kept`)).toBe(true);
+    expect(page.exceptions).toEqual([]);
+});
+
+// Inventory: Updates — an MSI install says its administrator updates it, and offers no download of its own.
+test("an MSI install is told its administrator installs the update, with nothing to download", async () => {
+    const { page } = shell;
+    await shell.host({
+        cmd: "push-app-update",
+        state: { revision: 3000, status: "manual", installMode: "administrator", version: "1.6.0", percent: null, error: null },
+    });
+    const dialog = `[...document.querySelectorAll("[role=dialog]")].find((d) => d.innerText.includes("Paperboard update available"))`;
+    await page.waitFor(`!!${dialog} && ${dialog}.innerText.includes("Paperboard 1.6.0 is available. Your administrator installs updates to this copy of Paperboard.")`, "the administrator notice");
+    expect(await page.evaluate(`${dialog}.innerText.includes("Download")`)).toBe(false);
+    await clickText(page, "button", "Later");
+    await page.waitFor(`!${dialog}`, "the dialog closed");
     expect(page.exceptions).toEqual([]);
 });

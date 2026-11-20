@@ -7,6 +7,7 @@ const pageLinks = new Set(releaseUrls());
 
 const UNSIGNED = [
     ["pb", "paperboard-windows-x64-setup.exe", "windows", "Paperboard"],
+    ["pb", "paperboard-windows-x64.msi", "windows", "Paperboard"],
     ["pb", "paperboard-macos-arm64.zip", "macos", "Paperboard"],
     ["pb", "paperboard-macos-x64.zip", "macos", "Paperboard"],
     ["crane", "crane-windows-x64.zip", "windows", "Paperboard server daemon"],
