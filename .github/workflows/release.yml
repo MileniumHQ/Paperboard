@@ -41,7 +41,10 @@ jobs:
           - { name: linux-x64, runner: ubuntu-24.04, os: linux }
           - { name: linux-arm64, runner: ubuntu-24.04, os: linux }
           - { name: macos-x64, runner: macos-15-intel, os: macos }
-          - { name: macos-arm64, runner: macos-15, os: macos }
+          # every Xcode 26 actool crashes in dyld on the macos-15 arm64 image
+          # (macOS 15.8), so the icon can't compile there; its smoke test
+          # still runs on macos-15
+          - { name: macos-arm64, runner: macos-26, os: macos }
           - { name: windows-x64, runner: windows-2025, os: windows }
     defaults:
       run:
