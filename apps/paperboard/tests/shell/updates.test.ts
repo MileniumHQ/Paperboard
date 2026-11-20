@@ -101,9 +101,8 @@ test("an update held back by what is using it leaves the open page as it was", a
 test("an MSI install is told its administrator installs the update, with nothing to download", async () => {
     const { page } = shell;
     await shell.host({
-        cmd: "push",
-        channel: "app-update-state",
-        payload: { revision: 3000, status: "manual", installMode: "administrator", version: "1.6.0", percent: null, error: null },
+        cmd: "push-app-update",
+        state: { revision: 3000, status: "manual", installMode: "administrator", version: "1.6.0", percent: null, error: null },
     });
     const dialog = `[...document.querySelectorAll("[role=dialog]")].find((d) => d.innerText.includes("Paperboard update available"))`;
     await page.waitFor(`!!${dialog} && ${dialog}.innerText.includes("Paperboard 1.6.0 is available. Your administrator installs updates to this copy of Paperboard.")`, "the administrator notice");
