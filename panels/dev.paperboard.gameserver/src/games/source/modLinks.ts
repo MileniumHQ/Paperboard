@@ -104,7 +104,6 @@ export function modCalls(game: SourceGame): ServerCalls {
             if (typeof admin !== "boolean") throw new Error("Choose admin or not");
             if (!(await modsOn(game))) throw new Error("Turn SourceMod on in Mods first");
             const id = game.steamId(raw);
-            if (!game.isPlayer(id)) throw new Error("Only a Steam player can be an admin");
             await sm.setAdmin(id, admin);
             await smLive(game, "sm_reloadadmins");
         }),
