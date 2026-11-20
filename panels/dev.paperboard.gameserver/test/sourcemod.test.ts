@@ -1,15 +1,30 @@
-// SourceMod on a Source server (TF2 is the game that has it): what Paperboard
-// keeps in the server folder, over the real filesystem. Installing from the
-// Metamod and SourceMod packages, the plugins turned on and off, uploaded and
-// removed, and the admins file.
-import { describe, expect, test } from "bun:test";
+// SourceMod on a Source server (TF2 is the game that has it). First what
+// Paperboard keeps in the server folder, over the real filesystem: installing
+// from the Metamod and SourceMod packages, the plugins turned on and off,
+// uploaded and removed, and the admins file. Then the calls the Mods and
+// Players tabs make, on a TF2 server of the test daemon with SourceMod already
+// in its folder (no package is downloaded): the links into the game's folder,
+// uploads and admins.
+import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { BUNDLED_PLUGINS, pluginFile, SourceMod } from "../src/games/source/sourcemod";
-import { TF2 } from "../src/games/tf2";
-import { SOURCEMOD_PACKAGES } from "../src/games/source";
-import { isLinked, linkFolder, unlinkFolder } from "../src/games/serviceKit";
+import { BUNDLED_PLUGINS, pluginFile, SourceMod, SOURCEMOD_MISSING } from "../src/games/source/sourcemod";
+import { SourceGame } from "../src/games/source/instance";
+import { placeMods } from "../src/games/source/modLinks";
+import { SOURCE_CALLS as ids } from "../src/games/source";
+import { TF2, tf2 } from "../src/games/tf2";
+import { startTestDaemon, type TestDaemon } from "./helpers/crane";
+import { gameServer } from "./helpers/game";
+import { pickCall } from "./helpers/serverCall";
 import { readTree, tempDir, writeTree } from "./helpers/tmp";
+
+let daemon: TestDaemon;
+beforeAll(async () => {
+    daemon = await startTestDaemon();
+});
+afterAll(async () => {
+    await daemon?.stop();
+});
 
 // what a compiled SourcePawn plugin starts with, little-endian
 const SMX = Buffer.from([0x46, 0x46, 0x50, 0x53, 1, 2, 3]);
@@ -52,11 +67,6 @@ const stage = (files: Record<string, string | Uint8Array>) => {
 };
 
 describe("SourceMod on Team Fortress 2", () => {
-    test("TF2 is the Source game that turns SourceMod on, and asks Origami for both of its packages", () => {
-        expect(TF2.sourcemod).toBe(true);
-        expect(SOURCEMOD_PACKAGES.map((p) => p.id)).toEqual(["metamod-source", "sourcemod"]);
-    });
-
     test("install puts Metamod's 64-bit loader, SourceMod and its configs in the server folder, and leaves the 32-bit loader out", async () => {
         const { root, sm } = await installed();
         const files = Object.keys(readTree(root)).filter((f) => !f.endsWith("/"));
@@ -204,18 +214,6 @@ describe("SourceMod on Team Fortress 2", () => {
         expect(fs.readFileSync(file, "utf8")).toContain('"STEAM_0:1:111" "abc"');
     });
 
-    test("a TF2 player's Steam id as the server prints it, [U:1:n], is an admin the way SourceMod reads it", async () => {
-        const { root, sm } = await installed();
-        const file = path.join(root, "addons", "sourcemod", "configs", "admins_simple.ini");
-        await sm.setAdmin("[U:1:1408246345]", true);
-        // measured on a live TF2 server: sm_who lists this id as root
-        expect(fs.readFileSync(file, "utf8")).toBe('// admins\n"[U:1:1408246345]" "99:z"\n');
-        expect(await sm.admins()).toEqual(["[U:1:1408246345]"]);
-        await sm.setAdmin("[U:1:1408246345]", false);
-        expect(await sm.admins()).toEqual([]);
-        expect(fs.readFileSync(file, "utf8")).toBe("// admins\n");
-    });
-
     test("admins are read as none, and the file made, when the server has none yet", async () => {
         const root = tempDir("gameserver-sm-server-");
         const sm = new SourceMod(root);
@@ -223,25 +221,114 @@ describe("SourceMod on Team Fortress 2", () => {
         await sm.setAdmin("STEAM_0:1:7", true);
         expect(await sm.admins()).toEqual(["STEAM_0:1:7"]);
     });
+});
 
-    test("turned on, the game's folder sees the server folder's addons and cfg/sourcemod; turned off, the links go and the files stay", async () => {
-        const { root, sm } = await installed();
-        // TF2's game folder is tf/, and the server's copy of Valve's own files is in it
-        const game = path.join(root, "install", "tf");
-        writeTree(game, { "cfg/server.cfg": "hostname x\n" });
-        const links = [[path.join(game, "addons"), sm.addons], [path.join(game, "cfg", "sourcemod"), sm.cfg]] as const;
-        for (const [link, target] of links) await linkFolder(link, target);
-        expect(fs.readFileSync(path.join(game, "addons", "metamod_x64.vdf"), "utf8")).toBe("64-bit loader");
-        expect(fs.existsSync(path.join(game, "addons", "sourcemod", "plugins", "rockthevote.smx"))).toBe(true);
-        expect(fs.readFileSync(path.join(game, "cfg", "sourcemod", "sourcemod.cfg"), "utf8")).toBe("sm_advertisement_interval 30\n");
-        // a plugin turned off in Mods is out of plugins/ where the game reads
-        await sm.setEnabled("rockthevote.smx", false);
-        expect(fs.existsSync(path.join(game, "addons", "sourcemod", "plugins", "rockthevote.smx"))).toBe(false);
-        for (const [link] of links) await unlinkFolder(link);
-        for (const [link] of links) expect(await isLinked(link)).toBe(false);
-        expect(fs.existsSync(path.join(game, "addons"))).toBe(false);
-        expect(fs.readFileSync(path.join(game, "cfg", "server.cfg"), "utf8")).toBe("hostname x\n");
-        expect(await sm.installed()).toBe(true);
-        expect(fs.existsSync(path.join(plugins(root), "disabled", "rockthevote.smx"))).toBe(true);
+const STAGE = "0f8fad5b-d9cb-469f-a165-70867728950e";
+const ID = "[U:1:1408246345]";
+
+/**
+ * A TF2 server the way the page sees it, and its calls: SourceMod already in
+ * the server folder (`installed`), so turning it on downloads nothing. `game`
+ * is the game's own view of that server, for what only a start runs.
+ */
+async function tf2Server(installed = true) {
+    const server = gameServer("team-fortress-2", { files: { "install/tf/maps/ctf_2fort.bsp": "bsp", "install/tf/cfg/server.cfg": "// the game's own\n" } });
+    if (installed) {
+        const pkg = packages();
+        await new SourceMod(server.dir).install(pkg.metamod, pkg.sourcemod);
+    }
+    await server.server.game.initialize(false);
+    const calls = await server.server.game.calls();
+    const call = (id: string, input: unknown = {}) => pickCall(calls, id)(server.server, input) as Promise<any>;
+    const tf = path.join(server.dir, "install", "tf");
+    return { server, call, tf, game: new SourceGame(TF2, tf2, server.server) };
+}
+/** where a link points, resolved */
+const target = (link: string) => path.resolve(path.dirname(link), fs.readlinkSync(link));
+const isLink = (link: string) => fs.lstatSync(link, { throwIfNoEntry: false })?.isSymbolicLink() ?? false;
+
+describe("SourceMod's calls on a TF2 server", () => {
+    test("turning SourceMod on links its folders into tf/, so the game reads what Mods changes; turning it off takes the links out and keeps every file", async () => {
+        const { server, call, tf } = await tf2Server();
+        expect(await call(ids.sourcemodSet, { on: true })).toMatchObject({ on: true, missing: false, active: false });
+        expect(server.server.settings.sourcemod).toBe(true);
+        expect(target(path.join(tf, "addons"))).toBe(path.join(server.dir, "addons"));
+        expect(target(path.join(tf, "cfg", "sourcemod"))).toBe(path.join(server.dir, "cfg", "sourcemod"));
+        expect(fs.readFileSync(path.join(tf, "addons", "metamod_x64.vdf"), "utf8")).toBe("64-bit loader");
+        expect(fs.readFileSync(path.join(tf, "cfg", "sourcemod", "sourcemod.cfg"), "utf8")).toBe("sm_advertisement_interval 30\n");
+        // the game's own cfg is not the link
+        expect(fs.readFileSync(path.join(tf, "cfg", "server.cfg"), "utf8")).toBe("// the game's own\n");
+
+        // a plugin turned off in Mods is out of the plugins/ the game reads
+        await call(ids.plugin, { file: "rockthevote.smx", on: false });
+        expect(fs.existsSync(path.join(tf, "addons", "sourcemod", "plugins", "rockthevote.smx"))).toBe(false);
+        expect(fs.existsSync(path.join(tf, "addons", "sourcemod", "plugins", "disabled", "rockthevote.smx"))).toBe(true);
+
+        expect(await call(ids.sourcemodSet, { on: false })).toMatchObject({ on: false, missing: false });
+        expect(server.server.settings.sourcemod).toBe(false);
+        expect(isLink(path.join(tf, "addons"))).toBe(false);
+        expect(isLink(path.join(tf, "cfg", "sourcemod"))).toBe(false);
+        expect(fs.existsSync(path.join(tf, "addons"))).toBe(false);
+        // nothing of it is deleted: Mods still lists the plugins, and the user's own files are as they were
+        expect((await call(ids.sourcemod)).plugins.length).toBe(3);
+        expect(fs.existsSync(path.join(server.dir, "addons", "sourcemod", "plugins", "disabled", "rockthevote.smx"))).toBe(true);
+        expect(fs.readFileSync(path.join(tf, "cfg", "server.cfg"), "utf8")).toBe("// the game's own\n");
+    });
+
+    test("a start with SourceMod on and its files gone is refused, saying how to put them back, and Mods shows it as missing", async () => {
+        const { server, call, tf, game } = await tf2Server();
+        await call(ids.sourcemodSet, { on: true });
+        expect(await placeMods(game)).toBe(true);
+        fs.rmSync(path.join(server.dir, "addons"), { recursive: true });
+        expect(await call(ids.sourcemod)).toMatchObject({ on: true, missing: true, plugins: [] });
+        await expect(placeMods(game)).rejects.toThrow(SOURCEMOD_MISSING);
+        expect(SOURCEMOD_MISSING).toContain("Turn it off and on again in Mods");
+        // and the same server with SourceMod off starts: no links, and nothing refused
+        await call(ids.sourcemodSet, { on: false });
+        expect(await placeMods(game)).toBe(false);
+        expect(isLink(path.join(tf, "addons"))).toBe(false);
+    });
+
+    test("plugins are added only while SourceMod is on; the upload's staging folder goes either way", async () => {
+        const { server, call } = await tf2Server();
+        const stageDir = path.join(server.dir, ".paperboard-transfer", `addon-${STAGE}`);
+        const stage = () => writeTree(stageDir, { "mine.smx": SMX });
+        stage();
+        await expect(call(ids.pluginUpload, { stage: STAGE })).rejects.toThrow("Turn SourceMod on before adding plugins");
+        expect(fs.existsSync(stageDir)).toBe(false);
+        await expect(call(ids.pluginUpload, { stage: "../../etc" })).rejects.toThrow("That is not an upload Paperboard started");
+
+        await call(ids.sourcemodSet, { on: true });
+        stage();
+        const { added, view } = await call(ids.pluginUpload, { stage: STAGE });
+        expect(added).toEqual(["mine.smx"]);
+        expect(view.plugins.find((p: { file: string }) => p.file === "mine.smx")).toMatchObject({ enabled: true, bundled: false });
+        expect(fs.existsSync(stageDir)).toBe(false);
+        await expect(call(ids.pluginRemove, { file: "basecommands.smx" })).rejects.toThrow("comes with SourceMod");
+        await call(ids.pluginRemove, { file: "mine.smx" });
+        expect((await call(ids.sourcemod)).plugins.some((p: { file: string }) => p.file === "mine.smx")).toBe(false);
+    });
+
+    test("the Players tab's admin switch: refused while SourceMod is off and for an id that is no Steam player, and a TF2 [U:1:n] id is written for SourceMod and listed back", async () => {
+        const { server, call } = await tf2Server();
+        const file = path.join(server.dir, "addons", "sourcemod", "configs", "admins_simple.ini");
+        // the Players tab gets no admins at all while SourceMod is off, which is when it shows no switch
+        expect((await call(ids.players)).admins).toBeNull();
+        await expect(call(ids.admin, { steamId: ID, admin: true })).rejects.toThrow("Turn SourceMod on in Mods first");
+
+        await call(ids.sourcemodSet, { on: true });
+        expect((await call(ids.players)).admins).toEqual([]);
+        for (const steamId of ["[U:1:1]; quit", "BOT", "", 7]) await expect(call(ids.admin, { steamId, admin: true })).rejects.toThrow();
+        await expect(call(ids.admin, { steamId: ID, admin: "yes" })).rejects.toThrow("Choose admin or not");
+        expect(fs.readFileSync(file, "utf8")).toBe("// admins\n");
+
+        // measured on a live TF2 server: sm_who lists this id as root
+        await call(ids.admin, { steamId: ID, admin: true });
+        expect(fs.readFileSync(file, "utf8")).toBe(`// admins\n"${ID}" "99:z"\n`);
+        expect((await call(ids.players)).admins).toEqual([ID]);
+        await call(ids.admin, { steamId: ID, admin: false });
+        expect(fs.readFileSync(file, "utf8")).toBe("// admins\n");
+        expect((await call(ids.players)).admins).toEqual([]);
+        expect(server.server.settings.sourcemod).toBe(true);
     });
 });
