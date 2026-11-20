@@ -1,9 +1,13 @@
 // The look/zoom overlay is drawn into every page the agent screenshots. Pages that enforce Trusted Types
 // (Google sign-in, Gmail) reject HTML strings, and a throwing overlay fails the whole screenshot.
-import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { afterAll, beforeAll, describe, expect, setDefaultTimeout, test } from "bun:test";
 import { openChrome, type Page } from "testkit/chrome";
+import { TEST_TIMEOUT_MS } from "testkit/wait";
 import { REMOVE_OVERLAY_JS, overlayJs } from "../src/service/pageScripts";
 import { allowTestPort } from "./hermetic";
+
+// run by itself, the file starts a Chrome of its own, which can wait its turn behind other starts
+setDefaultTimeout(TEST_TIMEOUT_MS);
 
 let server: ReturnType<typeof Bun.serve>;
 let chrome: Page;
