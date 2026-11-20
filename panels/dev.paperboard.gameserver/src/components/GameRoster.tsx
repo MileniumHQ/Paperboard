@@ -159,6 +159,11 @@ export default function GameRoster<T extends RosterPlayer>(props: {
     pickHint: string;
     /** badges after the status in the open player's identity; `player` is the open one as it is now */
     badges?(player: () => T): JSX.Element;
+    /**
+     * tags on a player's row in the list, after Banned. Built once per row, so
+     * a tag that comes and goes reads what it follows inside a `Show`.
+     */
+    rowBadges?(player: T): JSX.Element;
     moderation: RosterModeration<T>;
     /**
      * sections between the buttons and Details, each opening with a separator.
@@ -251,9 +256,12 @@ export default function GameRoster<T extends RosterPlayer>(props: {
                     icon={(player) => props.avatar(player, "medium")}
                     description={(player) => (player.online ? props.playing(player) : lastSeenText(player.lastSeen))}
                     badges={(player) => (
-                        <Show when={player.banned}>
-                            <PaperBadge variant="danger">Banned</PaperBadge>
-                        </Show>
+                        <>
+                            <Show when={player.banned}>
+                                <PaperBadge variant="danger">Banned</PaperBadge>
+                            </Show>
+                            {props.rowBadges?.(player)}
+                        </>
                     )}
                     status={(player) => statusColor(player.online, player.banned)}
                     open={open()?.name}

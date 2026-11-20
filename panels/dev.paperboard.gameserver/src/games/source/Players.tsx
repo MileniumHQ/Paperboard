@@ -43,6 +43,8 @@ export default function SourcePlayers(props: { spec: SourceGameSpec }) {
     const online = () => state.roster()?.online ?? [];
     /** Steam ids SourceMod makes admins; null while SourceMod is off */
     const admins = () => state.roster()?.admins ?? null;
+    // the Admin tag on a row; the Permissions switch reads the same list
+    const isAdmin = (player: Player) => !player.bot && !!admins()?.includes(player.steamId);
 
     // a clash between names gets the Steam id
     const players = createMemo(() => {
@@ -81,6 +83,11 @@ export default function SourcePlayers(props: { spec: SourceGameSpec }) {
                         <PaperBadge>Bot</PaperBadge>
                     </Show>
                 </>
+            )}
+            rowBadges={(player) => (
+                <Show when={isAdmin(player)}>
+                    <PaperBadge variant="primary">Admin</PaperBadge>
+                </Show>
             )}
             moderation={{
                 kick: (player) => {
