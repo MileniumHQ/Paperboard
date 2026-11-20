@@ -137,6 +137,8 @@ export class PublicFetchError extends Error {
     constructor(
         readonly code: PublicFetchErrorCode,
         message: string,
+        /** the HTTP status of the answer that failed it; set for a "bad-response" that is an error answer, otherwise undefined */
+        readonly status?: number,
     ) {
         super(message);
         this.name = "PublicFetchError";
@@ -248,7 +250,7 @@ export async function fetchPublic(raw: unknown, options: PublicFetchOptions): Pr
                     url = webAddress(new URL(to, url).href, httpsOnly);
                     continue;
                 }
-                if (status < 200 || status > 299) throw new PublicFetchError("bad-response", `${url.host} answered ${status}${res.statusText ? ` ${res.statusText}` : ""}`);
+                if (status < 200 || status > 299) throw new PublicFetchError("bad-response", `${url.host} answered ${status}${res.statusText ? ` ${res.statusText}` : ""}`, status);
                 const declared = Number(header(res, "content-length") ?? NaN);
                 if (declared > maxBytes) throw tooLarge(url, maxBytes);
                 const body = await inTime(readCapped(res.body, url, maxBytes));
@@ -437,7 +439,8 @@ export function createPictureFetch(options: PictureFetchOptions): PictureFetch {
                 accept: "image/*",
             });
         } catch (err) {
-            throw new Error(`Couldn't load the picture from ${request.from}: ${errorMessage(err)}`);
+            // the fetch's own error stays as the cause, so a caller can tell a missing picture (status 404) from a failure
+            throw new Error(`Couldn't load the picture from ${request.from}: ${errorMessage(err)}`, { cause: err });
         }
         const declared = answer.contentType.split(";")[0]!.trim().toLowerCase();
         const type = pictureType(answer.body, declared);

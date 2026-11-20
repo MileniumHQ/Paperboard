@@ -80,6 +80,8 @@ interface PublicFetchResponse {
 
 class PublicFetchError extends Error {
     readonly code: "invalid-url" | "refused" | "unreachable" | "bad-response" | "too-large" | "timeout";
+    /** the HTTP status of the answer that failed the fetch; set for an error answer, otherwise undefined */
+    readonly status?: number;
 }`}
             </PaperCode>
             <PaperText preset="body" as="p">
@@ -117,7 +119,7 @@ class PublicFetchError extends Error {
                     <tr><td><PaperCode>invalid-url</PaperCode></td><td>Not an <PaperCode>http</PaperCode> or <PaperCode>https</PaperCode> address (not <PaperCode>https</PaperCode> with <PaperCode>requireHttps</PaperCode>), or one with a user name or password. A redirect to one fails the same way.</td></tr>
                     <tr><td><PaperCode>refused</PaperCode></td><td>The address, or one it redirected to, is on this computer or its local network.</td></tr>
                     <tr><td><PaperCode>unreachable</PaperCode></td><td>The name didn't resolve, or the server couldn't be reached.</td></tr>
-                    <tr><td><PaperCode>bad-response</PaperCode></td><td>An answer other than 2xx, a redirect with nowhere to go, or more redirects than <PaperCode>maxRedirects</PaperCode>.</td></tr>
+                    <tr><td><PaperCode>bad-response</PaperCode></td><td>An answer other than 2xx, a redirect with nowhere to go, or more redirects than <PaperCode>maxRedirects</PaperCode>. An answer other than 2xx carries its HTTP status as <PaperCode>status</PaperCode>, so a caller can tell a 404 from a 429 without reading the message.</td></tr>
                     <tr><td><PaperCode>too-large</PaperCode></td><td>The body is over <PaperCode>maxBytes</PaperCode>.</td></tr>
                     <tr><td><PaperCode>timeout</PaperCode></td><td>The whole fetch took longer than <PaperCode>timeoutMs</PaperCode>.</td></tr>
                 </tbody>
@@ -161,7 +163,7 @@ getPicture: (_ctx, input) => {
             <PaperTextList>
                 <li>Each picture is fetched with fetchPublic, asking for <PaperCode>image/*</PaperCode>, under every rule above.</li>
                 <li>Its type is read from its bytes: PNG, JPEG, GIF, WebP and AVIF, whatever the server called it. SVG has no signature and is taken when the server names it <PaperCode>image/svg+xml</PaperCode>; an <PaperCode>{"<img>"}</PaperCode> draws it without running anything in it. Anything else is refused: <PaperCode>&lt;from&gt; sent text/html where a picture should be, and it isn't one</PaperCode>.</li>
-                <li>A fetch that fails throws <PaperCode>Couldn't load the picture from &lt;from&gt;: &lt;why&gt;</PaperCode>.</li>
+                <li>A fetch that fails throws <PaperCode>Couldn't load the picture from &lt;from&gt;: &lt;why&gt;</PaperCode>, with the PublicFetchError it failed with as its <PaperCode>cause</PaperCode>, so <PaperCode>err.cause.status === 404</PaperCode> says the source has no such picture.</li>
                 <li>Pictures are kept by address, the oldest going first past <PaperCode>keepChars</PaperCode>. Asks for a picture being fetched share its fetch. A failure isn't kept, so the next ask tries again.</li>
                 <li>At most <PaperCode>atOnce</PaperCode> fetches run at a time, so a page of a hundred pictures asks no harder than a browser would.</li>
             </PaperTextList>
