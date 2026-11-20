@@ -9,7 +9,7 @@ const AUTH = 3;
 async function rconPeer(answer: (command: string) => { reply: string; end: boolean }) {
     const commands: string[] = [];
     const server = net.createServer((socket) => {
-        let buffer = Buffer.alloc(0);
+        let buffer: Buffer = Buffer.alloc(0);
         let ended = true;
         socket.on("data", (chunk) => {
             const decoded = decodePackets(Buffer.concat([buffer, chunk]));

@@ -194,7 +194,7 @@ async function run(): Promise<Record<string, unknown>> {
         canvas()!,
     ) as Blockly.BlockSvg;
     await savedWith(7);
-    const duplicate = Blockly.ContextMenuRegistry.registry.getItem("blockDuplicate") as Blockly.ContextMenuRegistry.ActionRegistryItem;
+    const duplicate = Blockly.ContextMenuRegistry.registry.getItem("blockDuplicate") as Extract<Blockly.ContextMenuRegistry.RegistryItem, { callback: unknown }>;
     duplicate.callback({ block: original, focusedNode: original } as Blockly.ContextMenuRegistry.Scope, new PointerEvent("pointerdown"), {} as never, { x: 0, y: 0 } as never);
     const duplicated = { originalHat: original.id, ...(await savedWith(11)) };
 

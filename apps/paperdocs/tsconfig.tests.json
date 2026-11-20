@@ -1,0 +1,9 @@
+{
+  "extends": "./tsconfig.app.json",
+  "compilerOptions": {
+    "types": ["node", "bun"],
+    "allowJs": true,
+    "allowImportingTsExtensions": true
+  },
+  "include": ["test/**/*"]
+}

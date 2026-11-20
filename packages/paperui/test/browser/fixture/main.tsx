@@ -523,7 +523,7 @@ const scenarios: Record<string, () => JSX.Element> = {
         return shell(() => (
             <div style={{ padding: "24px" }}>
                 <label id="free" style={row}>
-                    <PaperToggle name="notify" onChange={(v) => t.changes.push(v)} />
+                    <PaperToggle name="notify" onChange={(v) => void t.changes.push(v)} />
                     <span id="free-text">Notifications</span>
                 </label>
                 <label id="controlled" style={row}>
@@ -537,7 +537,7 @@ const scenarios: Record<string, () => JSX.Element> = {
                     <span id="controlled-text">Controlled</span>
                 </label>
                 <label id="disabled" style={row}>
-                    <PaperToggle disabled onChange={(v) => t.disabledChanges.push(v)} />
+                    <PaperToggle disabled onChange={(v) => void t.disabledChanges.push(v)} />
                     <span id="disabled-text">Disabled</span>
                 </label>
             </div>

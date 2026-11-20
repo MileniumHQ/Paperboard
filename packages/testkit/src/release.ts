@@ -26,7 +26,7 @@ export function sha256(bytes: Buffer | string): string {
 	return crypto.createHash("sha256").update(bytes).digest("hex");
 }
 
-type Route = Buffer | string | object | ((req: Request) => Response | Promise<Response>);
+type Route = Uint8Array | string | object | ((req: Request) => Response | Promise<Response>);
 
 export interface LoopbackServer {
 	url: string;
@@ -39,7 +39,7 @@ export interface LoopbackServer {
 }
 
 // A loopback HTTP server answering from a route table (exact path match).
-// Buffers and strings are served as bytes, objects as JSON, functions as-is.
+// Byte arrays and strings are served as bytes, objects as JSON, functions as-is.
 export function serve(initial: Record<string, Route> = {}): LoopbackServer {
 	const routes = new Map<string, Route>(Object.entries(initial));
 	const hits: string[] = [];
@@ -53,7 +53,7 @@ export function serve(initial: Record<string, Route> = {}): LoopbackServer {
 			if (route === undefined) return new Response("not found", { status: 404 });
 			if (typeof route === "function") return route(req);
 			if (typeof route === "string") return new Response(route);
-			if (Buffer.isBuffer(route)) return new Response(new Uint8Array(route));
+			if (route instanceof Uint8Array) return new Response(new Uint8Array(route));
 			return Response.json(route);
 		},
 	});

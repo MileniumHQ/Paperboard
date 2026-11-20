@@ -21,11 +21,23 @@ const systemTemp = os.tmpdir();
 // by the next run, once the process that owned it is gone, and so are the
 // daemon, supervisors and stand-ins still running from it (a test daemon
 // outlives a killed run: it was never told to stop).
+// Each test file of a parallel run does this as it starts, so another may
+// remove a folder while this one looks at it: one gone is one cleaned.
+const unlessGone = <T>(read: () => T): T | null => {
+    try {
+        return read();
+    } catch (err) {
+        // quiet: another test file of this run removed the folder first
+        if ((err as NodeJS.ErrnoException).code === "ENOENT") return null;
+        throw err;
+    }
+};
 for (const name of fs.readdirSync(systemTemp).filter((n) => n.startsWith(RUN_PREFIX))) {
     const stale = path.join(systemTemp, name);
-    const owner = Number(fs.existsSync(path.join(stale, "owner.pid")) ? fs.readFileSync(path.join(stale, "owner.pid"), "utf8") : NaN);
+    const owner = Number(unlessGone(() => fs.readFileSync(path.join(stale, "owner.pid"), "utf8")) ?? NaN);
     if (!Number.isInteger(owner) || alive(owner)) continue;
-    const pids = runningFrom(stale);
+    const pids = unlessGone(() => runningFrom(stale));
+    if (!pids) continue;
     for (const pid of pids) if (alive(pid)) process.kill(pid, "SIGKILL");
     const deadline = Date.now() + 10_000;
     while (pids.some(alive)) {

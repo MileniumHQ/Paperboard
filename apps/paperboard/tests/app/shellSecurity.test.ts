@@ -6,7 +6,7 @@ import { readShellFile } from "../../src/main/shellAssets";
 import { isListingFilePath } from "../../src/shared/listingFile";
 import { buildCraneCredentialPayload, buildPanelCsp, remotePanelHtmlCsp, resolveLocalPanelFile, PANEL_TRAVERSAL_VECTORS } from "../../src/main/panelAssets";
 import { buildPanelCsp as daemonPanelCsp } from "daemon/panels/panelNet";
-import { parseLibraryMessage } from "../../src/renderer/src/lib/libraryFrame";
+import { type LibraryToShellMessage, parseLibraryMessage } from "../../src/renderer/src/lib/libraryFrame";
 import { PanelPermissionStore } from "../../src/main/panelPermissions";
 import { SHELL_CALLS } from "../../src/shared/shellContract";
 import { BUILD_TIMEOUT_MS, buildApp, buildCrane, installBuiltPanel, type BuiltApp } from "../platform/app/support/build";
@@ -171,7 +171,7 @@ describe("panel frames", () => {
     test("the library frame's messages count only from its own window and origin, with valid panel ids", () => {
         const frame = {};
         const identity = { sourceWindow: frame as Window, origin: "https://origami.ariapis.com" };
-        const install = { type: "paperboard:library-install", requestId: "r1", panelId: "dev.paperboard.terminal" };
+        const install = { type: "paperboard:library-install", requestId: "r1", panelId: "dev.paperboard.terminal" } satisfies LibraryToShellMessage;
         expect(parseLibraryMessage({ source: frame, origin: identity.origin, data: install }, identity)).toEqual(install);
         expect(parseLibraryMessage({ source: {}, origin: identity.origin, data: install }, identity)).toBeNull();
         expect(parseLibraryMessage({ source: frame, origin: "https://evil.example", data: install }, identity)).toBeNull();

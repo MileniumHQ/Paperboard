@@ -7,7 +7,7 @@ import type { SavedFlows } from "../src/panel";
 
 const saved: SavedFlows = {
     workspace: { blocks: { languageVersion: 0, blocks: [{ type: "pb_game_join", id: "hat", x: 10, y: 20, fields: { PLAYER: "alice" } }] } },
-    schemas: { pb_game_join: { panelId: "dev.paperboard.game", entry: "event.joined", schema: { name: "When a Player Joins" } } },
+    schemas: { pb_game_join: { panelId: "dev.paperboard.game", entry: "event.joined", schema: { kind: "event", id: "joined", name: "When a Player Joins" } } },
 };
 const file = (fields: Record<string, unknown>) => JSON.stringify({ format: FLOW_FILE_FORMAT, version: FLOW_FILE_VERSION, ...saved, ...fields });
 

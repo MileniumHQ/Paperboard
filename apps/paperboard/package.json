@@ -15,9 +15,10 @@
   "scripts": {
     "typecheck:node": "tsc --noEmit -p tsconfig.node.json --composite false",
     "typecheck:web": "tsc --noEmit -p tsconfig.web.json --composite false",
+    "typecheck:tests": "tsc --noEmit -p tsconfig.tests.json",
     "typecheck": "bun run typecheck:node && bun run typecheck:web",
     "test": "bun ../../packages/testkit/src/withChrome.ts bun test --parallel",
-    "gates": "bun run typecheck && bun test && bunx biome lint && bash scripts/check-no-silent-catches.sh",
+    "gates": "bun run typecheck && bun run typecheck:tests && bun test && bunx biome lint && bash scripts/check-no-silent-catches.sh",
     "start": "bun scripts/launch.ts preview",
     "dev": "bun scripts/launch.ts dev",
     "dev:browser": "bun scripts/launch.ts dev -- --browser",

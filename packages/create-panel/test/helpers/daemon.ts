@@ -43,7 +43,7 @@ export async function startDaemon(): Promise<Daemon> {
                     if (done) return;
                     done = true;
                     clearTimeout(deadline);
-                    transport.unsubscribeEvent("blocks:registry-updated", check);
+                    unsubscribe();
                     if (err) reject(err);
                     else resolve();
                 };
@@ -55,7 +55,7 @@ export async function startDaemon(): Promise<Daemon> {
                         },
                     );
                 const deadline = setTimeout(() => finish(new Error(`${panelId}'s service did not answer within ${SERVICE_DEADLINE_MS} ms: ${lastError}`)), SERVICE_DEADLINE_MS);
-                transport.subscribeEvent("blocks:registry-updated", check);
+                const unsubscribe = transport.subscribeEvent("blocks:registry-updated", check);
                 check();
             }),
         stop: async () => {

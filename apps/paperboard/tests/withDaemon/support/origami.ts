@@ -47,7 +47,7 @@ export function startOrigami(): Origami {
 			const bytes = objects.get(key);
 			if (!bytes) return null;
 			return {
-				body: new Blob([bytes]).stream(),
+				body: new Blob([new Uint8Array(bytes)]).stream(),
 				httpEtag: `"${bytes.length}"`,
 				writeHttpMetadata() {
 					// objects carry no stored HTTP metadata here

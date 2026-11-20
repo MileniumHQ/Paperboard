@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, setDefaultTimeout, test } from "bun:test";
 import fs from "node:fs";
 import http from "node:http";
 import type { AddressInfo } from "node:net";
@@ -11,6 +11,9 @@ import { startProxy } from "../src/service/proxy";
 import { shellToolset } from "../src/service/shell";
 import type { ComputerState } from "../src/contract";
 import { fakeEnv, packageHost, Recorder, SLOW, tempDir, TestHost } from "./support/host";
+
+// the shell test loads just-bash and runs js-exec in WebAssembly, which a loaded runner takes seconds over
+setDefaultTimeout(SLOW);
 
 const cleanups: (() => unknown)[] = [];
 afterEach(async () => {
@@ -173,5 +176,5 @@ describe("the browser's sandbox", () => {
         }
         expect(states.last()).toMatchObject({ phase: "failed" });
         expect(states.last()!.error).toContain("doesn't run without one");
-    }, SLOW);
+    });
 });

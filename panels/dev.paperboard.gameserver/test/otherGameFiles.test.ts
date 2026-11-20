@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { startTestDaemon, type TestDaemon } from "./helpers/crane";
+import { pickCall } from "./helpers/serverCall";
 import { gameServer } from "./helpers/game";
 import { readTree, tempDir, writeTree } from "./helpers/tmp";
 import { keptFile, linkFolder } from "../src/games/serviceKit";
@@ -101,7 +102,7 @@ describe("other games' files", () => {
         });
         await server.server.game.initialize(false);
         const calls = await server.server.game.calls();
-        const call = (id: string, input: unknown) => calls[id]!(server.server, input);
+        const call = (id: string, input: unknown) => pickCall(calls, id)(server.server, input);
         const cfg = (name: string) => path.join(server.dir, "install", "tf", "cfg", name);
 
         expect(await call("sourceMapCycle", {})).toMatchObject({ maps: ["ctf_2fort", "cp_dustbowl"], custom: false, file: "cfg/mapcycle.txt" });

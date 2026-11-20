@@ -72,7 +72,7 @@ describe("notices", () => {
         const prompts = new Prompts({ hasServer: () => false, checkSecretName: (n) => n, saveSecret: async () => {}, post: (e) => conversation.post(e), tell: (t) => conversation.tell(t) });
         rig.conversation.send("busy [[hold]]");
         await rig.host.printed(turnId, "fake.holding");
-        const asked = await prompts.toolset().call("ask_user", { title: "Where to", reason: "To book the table.", fields: [{ label: "Address" }] }, {});
+        const asked = await prompts.toolset().call("ask_user", { title: "Where to", reason: "To book the table.", fields: [{ label: "Address" }] }, { fromFlow: false });
         expect(asked.isError).toBeFalsy();
         for (let i = 0; i < 10; i++) rig.conversation.notice(`routine ${i} is due`);
         const card = rig.conversation.history().find((e) => e.kind === "prompt")!;
