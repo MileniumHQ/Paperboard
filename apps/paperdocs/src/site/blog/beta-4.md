@@ -14,9 +14,11 @@ Without further ado, let's get into it. Starting with the brand new panel:
 
 ## Blocks
 
-Replacing the Actions panel is the brand new **Blocks** panel!
+Replacing the Actions panel is the brand new **Blocks** panel! This panel replaces the Actions panel with an interface derived from Scratch, and it's a far easier way to connect your panels!
 
-With the same familiar interface as Scratch, this panel makes it even more intuitive to create full automations and scripts without writing a single line of code, connecting all your panels. It's the most powerful panel in terms of capability that we've ever shipped!
+- **Drive the whole app programmatically:** Create servers, configure panels, send messages, and more without writing code.
+- **Multiple projects:** Run various projects at once, organized and separated.
+- **Back up your work and save it to a file:** Continue working from anywhere.
 
 :::carousel
 ![Building a Blocks project](/pictures/blog/beta-4/blocks-library.png "Snap together blocks from every panel.")
@@ -25,7 +27,11 @@ With the same familiar interface as Scratch, this panel makes it even more intui
 
 ## Agent
 
-We've upgraded the Agent panel to be smarter and more capable. Now, it can access your primary computer (with your permission), interact with other apps you use, and send files like audio and video in the chat! I look forward to seeing what you all do with the Agent panel, and it will continue to get even better over time!
+The Agent panel has been given an update to make it even more useful and powerful. It already could sign into your accounts in a browser and connect to other services, but now those capabilities are more accessible than ever.
+
+- **Access your computer, conditionally:** Agent can now run commands on your computer, asking before it touches folders or files.
+- **Recieve files inline:** Recieve and preview audio, video, markdown, and more in the app.
+- **Connect to apps and services:** Agent now has deeper support for MCP, and it can request to connect to an app just by being asked.
 
 :::carousel
 ![Chatting with an agent](/pictures/blog/beta-4/agents-chat.png "Text your agent like you'd text a friend.")
@@ -66,8 +72,8 @@ Major quality of life updates have shipped to Paperboard as well.
 
 ## Other Panels
 
-- **Game Server:** Garry's Mod, Rust, and Counter-Strike 2 have been added. Rust gets a map of your world, every game's overview shows four live readouts, and setup tells you the download size and how much has arrived.
-- **Bot Creator:** New Blocks are now available in the Blocks panel, so your bots can react when a member joins or a message arrives.
+- **Game Server:** Garry's Mod, Rust, and Counter-Strike 2 have been added. Rust gets a map of your world. Plus, every game's overview shows four live readouts.
+- **Bot Creator:** New Blocks are now available in the Blocks panel, to use for building.
 
 :::carousel
 ![Choosing a game](/pictures/blog/beta-4/gameserver-choose-game.png "Three new games to choose from.")
