@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import AdmZip from "adm-zip";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { delimiter, dirname, join } from "node:path";
@@ -175,6 +175,16 @@ describe("server binaries ship working", () => {
             const expected = magic[SUPERVISOR_TARGETS[target].platform]!;
             expect({ target, magic: [...built.subarray(0, expected.length)] }).toEqual({ target, magic: expected });
         }
+    }, 300_000);
+
+    test("building the supervisor again never writes the built one in place, which a crane compile may be reading", () => {
+        const out = buildSupervisor();
+        const before = statSync(out);
+        // every test file that starts a daemon builds it, many at once
+        expect(buildSupervisor()).toBe(out);
+        const after = statSync(out);
+        expect({ ino: after.ino, mtime: after.mtimeMs }).toEqual({ ino: before.ino, mtime: before.mtimeMs });
+        expect(readdirSync(dirname(out)).filter((name) => name.endsWith(".partial"))).toEqual([]);
     }, 300_000);
 
     test("stamping the icon onto a Bun-shaped PE keeps the sections after .rsrc where they were", () => {

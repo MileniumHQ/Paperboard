@@ -13,7 +13,7 @@
 //
 // Go cross-compiles every target from any host, so one machine builds all.
 import { spawnSync } from "node:child_process";
-import { mkdirSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, renameSync, rmSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { BUN_TARGET_MAP } from "../publish/publishLib";
@@ -49,11 +49,28 @@ export function supervisorBinaryPath(target: SupervisorTarget): string {
     return join(SUPERVISOR_OUT_DIR, `${platform}-${arch}`, platform === "win32" ? "paperboard-supervisor.exe" : "paperboard-supervisor");
 }
 
-/** Builds one target's supervisor and returns where it is. */
+/**
+ * Builds one target's supervisor and returns where it is. Test suites build
+ * it from many processes at once while others embed it, so a build never
+ * writes the file in place: it lands beside it, is dropped when the file
+ * already holds the same build, and otherwise replaces it whole.
+ */
 export function buildSupervisor(target: SupervisorTarget = hostSupervisorTarget()): string {
     const { goos, goarch } = SUPERVISOR_TARGETS[target];
     const out = supervisorBinaryPath(target);
     mkdirSync(dirname(out), { recursive: true });
+    const built = `${out}.${process.pid}.partial`;
+    try {
+        goBuild(target, goos, goarch, built);
+        if (existsSync(out) && readFileSync(out).equals(readFileSync(built))) rmSync(built);
+        else renameSync(built, out);
+    } finally {
+        rmSync(built, { force: true });
+    }
+    return out;
+}
+
+function goBuild(target: SupervisorTarget, goos: string, goarch: string, out: string): void {
     const result = spawnSync("go", ["build", "-trimpath", "-ldflags", "-s -w", "-o", out, "."], {
         cwd: SOURCE_DIR,
         stdio: ["ignore", "inherit", "inherit"],
@@ -66,7 +83,6 @@ export function buildSupervisor(target: SupervisorTarget = hostSupervisorTarget(
         throw result.error;
     }
     if (result.status !== 0) throw new Error(`go build of the workload supervisor for ${target} failed (exit ${result.status ?? "signal"})`);
-    return out;
 }
 
 /**
