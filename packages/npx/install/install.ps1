@@ -1,18 +1,17 @@
-# Installs Paperboard on Windows. In PowerShell:
-#
-#   irm https://i.paperboard.dev | iex
+# Installs Paperboard on Windows. It is not served for piping into PowerShell
+# (that looks like a ClickFix attack); it ships in the npm package.
 #
 # `npx @mileniumhq/paperboard install` and `npm install -g @mileniumhq/paperboard`
-# run this same file (packages/npx/install/install.ps1; Origami
-# serves it at i.paperboard.dev). install.sh is the Linux and macOS half.
+# run this same file (packages/npx/install/install.ps1).
+# install.sh is the Linux and macOS half.
 #
 # It runs Paperboard's own installer silently, for this account only, into
 # %LOCALAPPDATA%\Programs\paperboard\paperboard.exe (where the launcher,
 # packages/npx/src/app.ts, looks for it). The download is checked
 # against the release's SHA256SUMS before it runs.
 #
-# Errors are thrown, never `exit`: piped into iex, exit would close the
-# person's PowerShell window along with the message.
+# Errors are thrown, never `exit`, so a failure leaves the person's
+# PowerShell window open along with the message.
 
 & {
     $ErrorActionPreference = 'Stop'

@@ -24,7 +24,7 @@ When it runs inside Paperboard's iframe, the shell completes a postMessage hands
 
 Binaries live on GitHub Releases; Origami only 302-redirects to them, and serves the small updater feeds and checksums from R2. A KV version database (`dl/pb`, `dl/crane` in the `PACKAGES` namespace) is the source of truth: unknown versions and unrecorded files are 404s.
 
-- **`GET /`**: the install script. `curl -fsSL https://i.paperboard.dev | sh` gets `install.sh`, PowerShell's `irm https://i.paperboard.dev | iex` gets `install.ps1`, and a browser is sent to the downloads page. **`/install.sh`** and **`/install.ps1`** name them directly; both come from `packages/npx/install`.
+- **`GET /`**: the install script. `curl -fsSL https://i.paperboard.dev | sh` gets `install.sh`, and a browser or PowerShell is sent to the downloads page (there is no pipe-to-PowerShell install, which looks like a ClickFix attack). **`/install.sh`** names the script directly; it comes from `packages/npx/install`.
 - **`GET /pb/SHA256SUMS`**: the checksums the install scripts verify against.
 - **`GET /pb/latest/:file`** and **`GET /crane/latest/:file`**: redirect to the current release asset (not cached).
 - **`GET /pb/:version/:file`** and **`GET /crane/:version/:file`**: redirect to that version's asset (immutable, cached). Previous versions keep working.

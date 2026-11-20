@@ -144,28 +144,27 @@ describe("update feeds and the crane index are served where updaters ask", () =>
     });
 });
 
-// curl -fsSL https://i.paperboard.dev | sh, and irm https://i.paperboard.dev | iex
+// curl -fsSL https://i.paperboard.dev | sh
 describe("the base of the download host installs Paperboard", () => {
     const sh = readFileSync(join(import.meta.dir, "../../../packages/npx/install/install.sh"), "utf8");
-    const ps1 = readFileSync(join(import.meta.dir, "../../../packages/npx/install/install.ps1"), "utf8");
 
-    test("curl gets install.sh and PowerShell gets install.ps1, byte for byte the files npx runs", async () => {
+    test("curl gets install.sh, byte for byte the file npx runs", async () => {
         const curl = await get("https://i.paperboard.dev/", { headers: { "user-agent": "curl/8.10.1", accept: "*/*" } });
         expect(curl.status).toBe(200);
         expect(curl.headers.get("content-type")).toBe("text/plain; charset=utf-8");
         expect(await curl.text()).toBe(sh);
-        const pwsh = await get("https://i.paperboard.dev/", {
-            headers: { "user-agent": "Mozilla/5.0 (Windows NT; Windows NT 10.0; en-US) WindowsPowerShell/5.1.26100.1", accept: "*/*" },
-        });
-        expect(await pwsh.text()).toBe(ps1);
         expect(await (await get("https://i.paperboard.dev/install.sh")).text()).toBe(sh);
-        expect(await (await get("https://i.paperboard.dev/install.ps1")).text()).toBe(ps1);
+        expect((await get("https://i.paperboard.dev/install.ps1")).status).toBe(404);
     });
 
     test("a browser is sent to the downloads page, and the registry host serves no scripts", async () => {
         const browser = await get("https://i.paperboard.dev/", { headers: { accept: "text/html,application/xhtml+xml" } });
         expect(browser.status).toBe(302);
         expect(browser.headers.get("location")).toBe("https://paperboard.dev/downloads/");
+        const pwsh = await get("https://i.paperboard.dev/", {
+            headers: { "user-agent": "Mozilla/5.0 (Windows NT; Windows NT 10.0; en-US) WindowsPowerShell/5.1.26100.1", accept: "*/*" },
+        });
+        expect(pwsh.status).toBe(302);
         expect((await get("https://origami.ariapis.com/install.sh")).status).toBe(404);
     });
 
