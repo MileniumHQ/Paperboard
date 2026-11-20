@@ -110,7 +110,9 @@ describe("Counter-Strike 2", () => {
         await server.server.waitFor((s) => s.serverStatus === "online", "Counter-Strike 2 to say its map is running");
         await command(server, "fake_connect 5 [U:1:2] Bob");
         const seenFile = path.join(server.dir, "players.json");
-        await server.server.waitFor(() => fs.existsSync(seenFile) && fs.readFileSync(seenFile, "utf8").includes("[U:1:2]"), "Bob recorded");
+        await server.server.waitFor((s) => s.onlinePlayers.includes("Bob"), "Bob online");
+        // the roster writes one at a time, so the Players tab reads it after his join record
+        expect(((await call(server, ids.players)) as { seen: { steamId: string }[] }).seen.map((p) => p.steamId)).toContain("[U:1:2]");
         fs.chmodSync(server.dir, 0o555);
         try {
             await command(server, "fake_connect 6 [U:1:1] Ann");
