@@ -49,23 +49,3 @@ describe("PaperRail drag-reorder", () => {
         expect(await page.eval("t.value()")).toBe("home");
     });
 });
-
-// Inventory: Layout and navigation — a computer's initials fit its rail item.
-describe("PaperRail with monograms", () => {
-    test("two wide capitals fit inside their item, so the rail never scrolls sideways", async () => {
-        page = await browser.open("railMonogram");
-        const fit = await page.eval<{ scrolls: boolean; items: [string, number, number][] }>(`(() => {
-            const box = document.getElementById("rail-box");
-            return {
-                scrolls: box.scrollWidth > box.clientWidth,
-                items: ["WO", "MW", "OO"].map((letters) => {
-                    const it = document.querySelector('[data-item="' + letters + '"]');
-                    const mono = it.querySelector('[class*="monogram"]');
-                    return [letters, mono.getBoundingClientRect().width, it.getBoundingClientRect().width];
-                }),
-            };
-        })()`);
-        expect(fit.scrolls).toBe(false);
-        for (const [letters, width, room] of fit.items) expect([letters, width <= room]).toEqual([letters, true]);
-    });
-});

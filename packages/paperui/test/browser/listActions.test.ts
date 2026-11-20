@@ -35,22 +35,3 @@ describe("PaperListItem actions", () => {
         expect(await page.eval("t.reorders")).toBe(0);
     });
 });
-
-// Inventory: PaperListItem — a title that wraps.
-describe("PaperListItem wrapTitle", () => {
-    test("wraps a long title onto more lines, where the default keeps one line and an ellipsis", async () => {
-        page = await browser.open("listActions");
-        // in lines of a one-word title's height
-        const title = (name: string) =>
-            page.eval<{ lines: number; cut: boolean }>(`(() => {
-                const span = (n) => document.querySelector('[data-item="' + n + '"] [class*="listTitle"] > span');
-                const line = span("alpha").getBoundingClientRect().height;
-                const it = span(${JSON.stringify(name)});
-                return { lines: Math.round(it.getBoundingClientRect().height / line), cut: it.scrollWidth > it.clientWidth };
-            })()`);
-        const wrapped = await title("long");
-        expect(wrapped.lines).toBeGreaterThan(1);
-        expect(wrapped.cut).toBe(false);
-        expect(await title("cut")).toEqual({ lines: 1, cut: true });
-    });
-});

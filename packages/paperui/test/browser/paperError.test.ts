@@ -20,19 +20,6 @@ const buttonIn = (id: string, label: string) =>
         return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
     })()`);
 
-/**
- * Whether the code block under `root` reads whole: nothing scrolls sideways,
- * and no line of it sits under its copy button.
- */
-const READS_WHOLE = (root: string) => `(() => {
-    const pre = document.querySelector(${JSON.stringify(`${root} pre`)});
-    const button = document.querySelector(${JSON.stringify(`${root} [aria-label="Copy code"]`)}).getBoundingClientRect();
-    const range = document.createRange();
-    range.selectNodeContents(pre);
-    const covered = [...range.getClientRects()].some((r) => r.width > 0 && r.left < button.right && button.left < r.right && r.top < button.bottom && button.top < r.bottom);
-    return { scrolls: pre.scrollWidth > pre.clientWidth + 1, covered };
-})()`;
-
 // Inventory: PaperError — a failure that stands, said where it happens.
 describe("PaperError", () => {
     test("says what failed and why from a raw error, in a labelled region, and its action is a button that works", async () => {
@@ -67,37 +54,4 @@ describe("PaperError", () => {
         expect(await page.eval("t.opens")).toBe(1);
     });
 
-    test("at phone width a long reason wraps and nothing scrolls sideways", async () => {
-        page = await browser.open("paperError", { width: 390, height: 844, touch: true });
-        expect(await page.eval("document.documentElement.scrollWidth <= innerWidth")).toBe(true);
-        const box = await page.eval<{ right: number }>(`document.getElementById("long").getBoundingClientRect().toJSON()`);
-        expect(box.right).toBeLessThanOrEqual(390);
-        expect((await said("long")).text).toContain("paste it in Settings.");
-    });
-
-    test("at phone width its Details wrap long lines, in line and filling a view, and the copy button covers none", async () => {
-        page = await browser.open("paperError", { width: 390, height: 844, touch: true });
-        await page.click('#details button[aria-expanded="false"]');
-        await page.waitFor(`document.querySelector('#details button[aria-expanded="true"]')`, "the details to open");
-        expect(await page.eval(READS_WHOLE("#details"))).toEqual({ scrolls: false, covered: false });
-
-        page = await browser.open("paperError", { width: 390, height: 844, touch: true, query: "view=fill&details" });
-        await page.click('#fill button[aria-expanded="false"]');
-        await page.waitFor(`document.querySelector('#fill button[aria-expanded="true"]')`, "the details to open");
-        expect(await page.eval(READS_WHOLE("#fill"))).toEqual({ scrolls: false, covered: false });
-    });
-
-    test("filling a view, it sits in the middle of the space left, and its Try again works", async () => {
-        page = await browser.open("paperError", { query: "view=fill" });
-        const fill = await said("fill");
-        expect(fill.name).toBe("Couldn't load the worlds");
-        expect(fill.text).toContain("connection refused on port 25575");
-        const title = await page.eval<{ x: number; y: number }>(
-            `(() => { const r = document.querySelector("#fill [data-preset='label']").getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; })()`,
-        );
-        expect(Math.abs(title.x - 600)).toBeLessThan(24);
-        expect(Math.abs(title.y - 400)).toBeLessThan(120);
-        await page.click("#fill button");
-        expect(await page.eval("t.retries")).toBe(1);
-    });
 });

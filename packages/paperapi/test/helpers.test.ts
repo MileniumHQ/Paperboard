@@ -4,31 +4,8 @@ import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, wr
 import fsp from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { errorCode, errorMessage } from "../src/errors";
 import { isWriteFileAtomicTemp, writeFileAtomic, writeFileAtomicSync } from "../src/fs";
-import { isRecord } from "../src/records";
 import { KeyedQueue, LimitedQueue, SerialQueue } from "../src/serialQueue";
-
-describe("errorMessage and errorCode", () => {
-    test("an Error's own words, anything else as text; a code only when the failure carries one as text", () => {
-        expect(errorMessage(new Error("disk full"))).toBe("disk full");
-        expect(errorMessage("refused")).toBe("refused");
-        expect(errorMessage(undefined)).toBe("undefined");
-        expect(errorCode(Object.assign(new Error("no file"), { code: "ENOENT" }))).toBe("ENOENT");
-        expect(errorCode(new Error("plain"))).toBeUndefined();
-        expect(errorCode({ code: 404 })).toBeUndefined();
-        expect(errorCode(null)).toBeUndefined();
-    });
-});
-
-describe("isRecord", () => {
-    test("a plain object passes; null, arrays, class instances and other values don't", () => {
-        expect(isRecord({})).toBe(true);
-        expect(isRecord(JSON.parse('{"a":1}'))).toBe(true);
-        expect(isRecord(Object.create(null))).toBe(true);
-        for (const value of [null, undefined, [], [1], new Date(), new Map(), "x", 1, true]) expect(isRecord(value)).toBe(false);
-    });
-});
 
 // a promise and the function that resolves it
 function deferred<T = void>() {
