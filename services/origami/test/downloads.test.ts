@@ -146,6 +146,7 @@ describe("update feeds and the crane index are served where updaters ask", () =>
 
 // curl -fsSL https://i.paperboard.dev | sh
 describe("the base of the download host installs Paperboard", () => {
+    const gone = "Paperboard no longer installs by piping into PowerShell. Download the Windows installer: https://paperboard.dev/downloads/\n";
     const sh = readFileSync(join(import.meta.dir, "../../../packages/npx/install/install.sh"), "utf8");
 
     test("curl gets install.sh, byte for byte the file npx runs", async () => {
@@ -154,7 +155,9 @@ describe("the base of the download host installs Paperboard", () => {
         expect(curl.headers.get("content-type")).toBe("text/plain; charset=utf-8");
         expect(await curl.text()).toBe(sh);
         expect(await (await get("https://i.paperboard.dev/install.sh")).text()).toBe(sh);
-        expect((await get("https://i.paperboard.dev/install.ps1")).status).toBe(404);
+        const ps1 = await get("https://i.paperboard.dev/install.ps1");
+        expect(ps1.status).toBe(410);
+        expect(await ps1.text()).toBe(gone);
     });
 
     test("a browser is sent to the downloads page, and the registry host serves no scripts", async () => {
@@ -164,7 +167,8 @@ describe("the base of the download host installs Paperboard", () => {
         const pwsh = await get("https://i.paperboard.dev/", {
             headers: { "user-agent": "Mozilla/5.0 (Windows NT; Windows NT 10.0; en-US) WindowsPowerShell/5.1.26100.1", accept: "*/*" },
         });
-        expect(pwsh.status).toBe(302);
+        expect(pwsh.status).toBe(410);
+        expect(await pwsh.text()).toBe(gone);
         expect((await get("https://origami.ariapis.com/install.sh")).status).toBe(404);
     });
 
