@@ -3,7 +3,7 @@ import AdmZip from "adm-zip";
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
-import { delimiter, dirname, join } from "node:path";
+import { basename, delimiter, dirname, join } from "node:path";
 import { Data, Format, NtExecutable, NtExecutableResource, Resource } from "resedit";
 import { buildSupervisor, SUPERVISOR_TARGETS, type SupervisorTarget } from "../build/supervisor";
 import { patchPeIcon } from "./windowsIcon";
@@ -184,7 +184,8 @@ describe("server binaries ship working", () => {
         expect(buildSupervisor()).toBe(out);
         const after = statSync(out);
         expect({ ino: after.ino, mtime: after.mtimeMs }).toEqual({ ino: before.ino, mtime: before.mtimeMs });
-        expect(readdirSync(dirname(out)).filter((name) => name.endsWith(".partial"))).toEqual([]);
+        // another build under way may have its own beside it; this one's is gone
+        expect(readdirSync(dirname(out))).not.toContain(`${basename(out)}.${process.pid}.partial`);
     }, 300_000);
 
     test("stamping the icon onto a Bun-shaped PE keeps the sections after .rsrc where they were", () => {

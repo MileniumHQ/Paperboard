@@ -62,8 +62,7 @@ export function buildSupervisor(target: SupervisorTarget = hostSupervisorTarget(
     const built = `${out}.${process.pid}.partial`;
     try {
         goBuild(target, goos, goarch, built);
-        if (existsSync(out) && readFileSync(out).equals(readFileSync(built))) rmSync(built);
-        else renameSync(built, out);
+        if (!existsSync(out) || !readFileSync(out).equals(readFileSync(built))) renameSync(built, out);
     } finally {
         rmSync(built, { force: true });
     }
