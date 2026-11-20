@@ -191,7 +191,8 @@ describe("Rust", () => {
         });
         try {
             await online(server);
-            expect(server.server.state.portMoves).toEqual([{ label: "Rust remote console", from: saved, to: server.rconPort, primary: false }]);
+            // its move, among any: another test's server can take one of this server's other free ports meanwhile, and that one moves too
+            expect(server.server.state.portMoves).toContainEqual({ label: "Rust remote console", from: saved, to: server.rconPort, primary: false });
             expect(server.rconPort).not.toBe(saved);
             await call(server, "saveWorld");
             await stop(server);
