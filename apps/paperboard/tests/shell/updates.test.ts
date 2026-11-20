@@ -48,7 +48,7 @@ const HOLD: UpdateHold = {
     users: ["Widget Demo"],
 };
 
-function push(items: UpdateItem[], holds: UpdateHold[] = [], holdsError: string | null = null): Promise<unknown> {
+function push(items: UpdateItem[], holds: UpdateHold[] = [], holdsError: string | null = null): Promise<true> {
     const state: UpdateQueueState = { revision: ++revision, checking: false, items, holds, checkError: null, holdsError };
     return shell.host({ cmd: "push-update-queue", state });
 }
