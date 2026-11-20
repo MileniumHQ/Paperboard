@@ -96,7 +96,7 @@ interface GpuInfo {
 
             <PaperText preset="subheader" as="h2" id="behavior">Behavior</PaperText>
             <PaperTextList>
-                <li><PaperCode>getLocalIP</PaperCode> returns the computer's first private IPv4 address, such as <PaperCode>192.168.1.20</PaperCode>. Without one, it returns the first other external IPv4 address, and without that, <PaperCode>127.0.0.1</PaperCode>.</li>
+                <li><PaperCode>getLocalIP</PaperCode> returns the IPv4 address other computers on the network reach this one at, such as <PaperCode>192.168.1.20</PaperCode>: the address of the network card the default route leaves from, never a container or virtual machine bridge. With no default route, it returns the first private IPv4 address, then the first other external one, and without either, <PaperCode>127.0.0.1</PaperCode>.</li>
                 <li>Other devices on the same network reach the computer at that address. Devices outside it need the router's public address and a forwarded port.</li>
                 <li><PaperCode>getGpus</PaperCode> asks the system each time. A probe that fails, such as a missing <PaperCode>nvidia-smi</PaperCode>, adds to <PaperCode>errors</PaperCode> instead of failing the call.</li>
                 <li><PaperCode>getUsage</PaperCode> reports CPU, memory, disk and network use split by panel, for Paperboard's computer page. A panel's call is refused with <PaperCode>system:usage is host-only</PaperCode> (<PaperCode>FORBIDDEN</PaperCode>).</li>
