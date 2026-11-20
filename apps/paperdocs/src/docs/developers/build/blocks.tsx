@@ -214,7 +214,7 @@ export default function BlocksGuideDoc() {
             <PaperText preset="body" as="p">
                 An event has no <PaperCode>run</PaperCode>. It describes something that happens, and a flow built on it starts each time the service fires it.
                 Weather's <PaperCode>freezing</PaperCode>, declared above, fires when a followed city drops to 0 °C (32 °F) or below.
-                The service fires it with <PaperCode>fire</PaperCode>, where it learns the temperature.
+                The service fires it with <PaperCode>fire</PaperCode>, where it learns the temperature.{" "}
                 <PaperCode>dropsToFreezing</PaperCode> in <PaperCode>src/lib/openWeather.ts</PaperCode> compares the new reading with the last one:
             </PaperText>
             <PaperCode block language="tsx">{DROPS_TO_FREEZING}</PaperCode>

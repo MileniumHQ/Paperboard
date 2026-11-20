@@ -18,7 +18,7 @@ export default function PaperAudioDoc() {
             <PaperText preset="body" as="p">
                 PaperAudio is a compact audio player that draws the clip's waveform as its seek bar.
                 Use it when a panel plays back a recording, a voice message, or a generated clip.
-                It brings its own play button, time readout, volume, playback speed, and loop.
+                It brings its own play button, time readout, volume, playback speed, and loop.{" "}
                 <PaperLink href="/docs/paperui/papervideo/">PaperVideo</PaperLink> shares these controls.
             </PaperText>
 
@@ -200,7 +200,7 @@ const PAPER_AUDIO_RATES: readonly [0.5, 0.75, 1, 1.25, 1.5, 2];`}
 
             <PaperText preset="subheader" as="h3" id="errors">Errors</PaperText>
             <PaperText preset="body" as="p">
-                When loading or playback fails, the track is replaced by the message and a <PaperCode>Retry</PaperCode> button, in an element with <PaperCode>role="alert"</PaperCode>.
+                When loading or playback fails, the track is replaced by the message and a <PaperCode>Retry</PaperCode> button, in an element with <PaperCode>role="alert"</PaperCode>.{" "}
                 <PaperCode>onError</PaperCode> receives the same message. Retry clears the message and reloads the source.
             </PaperText>
             <PaperTable>

@@ -155,7 +155,7 @@ export default function ManifestDoc() {
             </PaperTable>
             <PaperText preset="body" as="p">
                 When the service starts, a <PaperCode>service</PaperCode> path that is not a file fails with <PaperCode>Service entry is not a file: &lt;id&gt;</PaperCode>.
-                The packer refuses a missing <PaperCode>name</PaperCode> (<PaperCode>Panel manifest must specify a 'name'</PaperCode>), a missing <PaperCode>version</PaperCode>, and a non-boolean <PaperCode>unlisted</PaperCode>.
+                The packer refuses a missing <PaperCode>name</PaperCode> (<PaperCode>Panel manifest must specify a 'name'</PaperCode>), a missing <PaperCode>version</PaperCode>, and a non-boolean <PaperCode>unlisted</PaperCode>.{" "}
                 <PaperCode>paperapi doctor</PaperCode> runs the same checks and reports them all at once.
             </PaperText>
 

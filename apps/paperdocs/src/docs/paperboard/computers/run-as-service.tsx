@@ -84,7 +84,7 @@ It is running (PID 48211) on https://192.168.1.50:45464.
                 A macOS user service runs while you are signed in to the Mac.
             </PaperText>
             <PaperText preset="body" as="p">
-                On Linux, a user service stops when your last session ends, which on a headless server is when you close SSH.
+                On Linux, a user service stops when your last session ends, which on a headless server is when you close SSH.{" "}
                 <PaperCode>install-service</PaperCode> tells you when this applies. Turn on lingering to keep it running, putting your user name in place of <PaperCode>ada</PaperCode>:
             </PaperText>
             <PaperCode block language="sh">

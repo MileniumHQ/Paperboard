@@ -21,7 +21,7 @@ errorCode(err: unknown): string | undefined;`}
             </PaperCode>
             <PaperText preset="body" as="p">
                 <PaperCode>errorMessage</PaperCode> is what a caught failure says, for the person to read: an Error's own message, and anything else thrown turned into text.
-                Show it as it is, never a generic "something went wrong".
+                Show it as it is, never a generic "something went wrong".{" "}
                 <PaperCode>errorCode</PaperCode> is the system's code for a failure, such as <PaperCode>ENOENT</PaperCode> or <PaperCode>EACCES</PaperCode>, when the error carries one as text, and <PaperCode>undefined</PaperCode> otherwise.
             </PaperText>
             <PaperCode block language="tsx">

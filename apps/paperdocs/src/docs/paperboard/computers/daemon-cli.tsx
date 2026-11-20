@@ -136,8 +136,8 @@ papercrane --host 127.0.0.1             # only accept this computer`}
 }`}
             </PaperCode>
             <PaperText preset="body" as="p">
-                When no daemon is running, the JSON is <PaperCode>{`{ "running": false, "dataDir": "/home/ada/.paperboard" }`}</PaperCode> and nothing else.
-                <PaperCode>auth</PaperCode> is false for a daemon started with <PaperCode>--no-auth</PaperCode>, and then <PaperCode>pairing</PaperCode> is left out.
+                When no daemon is running, the JSON is <PaperCode>{`{ "running": false, "dataDir": "/home/ada/.paperboard" }`}</PaperCode> and nothing else.{" "}
+                <PaperCode>auth</PaperCode> is false for a daemon started with <PaperCode>--no-auth</PaperCode>, and then <PaperCode>pairing</PaperCode> is left out.{" "}
                 <PaperCode>pairing.active</PaperCode> is true while a code is waiting to be entered.
             </PaperText>
 
