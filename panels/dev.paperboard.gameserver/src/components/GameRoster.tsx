@@ -151,6 +151,8 @@ export default function GameRoster<T extends RosterPlayer>(props: {
     /** more than the name that the search matches, such as an account id */
     searchTerms?(player: T): readonly string[];
     avatar(player: T, size: PaperAvatarSize): JSX.Element;
+    /** something to say above the players, such as why their pictures are missing; the list stays usable under it */
+    notice?: JSX.Element;
     /** the row under an online player's name */
     playing(player: T): string;
     /** what the empty detail pane says a player shows */
@@ -235,6 +237,7 @@ export default function GameRoster<T extends RosterPlayer>(props: {
                     />
                 )}
             </Show>
+            {props.notice}
             <Show when={!props.state.failed()}>
                 <PlayerRoster
                     search={search()}

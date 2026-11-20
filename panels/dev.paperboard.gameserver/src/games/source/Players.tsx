@@ -12,6 +12,8 @@ import {
 import GameRoster, { CopyRow, createRosterState, type RosterPlayer } from "../../components/GameRoster";
 import { byName, withUniqueNames } from "../rosterNames";
 import PlayerAvatar from "../../components/PlayerAvatar";
+import PlayerPicturesFailure from "../../components/PlayerPicturesFailure";
+import { createSteamPictures } from "../../lib/steamAvatars";
 import { type SourceGameSpec } from "./index";
 import { noStats, type SourceBan, type SourceSeen, type SourceStats } from "./roster";
 import type { SourceOnline } from "./people";
@@ -35,6 +37,7 @@ interface Player extends RosterPlayer {
 export default function SourcePlayers(props: { spec: SourceGameSpec }) {
     const { calls } = useServer();
     const state = createRosterState(() => calls.sourcePlayers());
+    const pictures = createSteamPictures();
     const seen = () => state.roster()?.seen ?? [];
     const bans = () => state.roster()?.bans ?? [];
     const online = () => state.roster()?.online ?? [];
@@ -62,7 +65,8 @@ export default function SourcePlayers(props: { spec: SourceGameSpec }) {
             players={players()}
             playerId={(player) => player.key}
             searchTerms={(player) => [player.steamId]}
-            avatar={(player, size) => <PlayerAvatar name={player.name} size={size} bot={player.bot} />}
+            avatar={(player, size) => <PlayerAvatar name={player.name} size={size} bot={player.bot} picture={pictures.of(player.bot ? undefined : player.steamId)} />}
+            notice={<PlayerPicturesFailure pictures={pictures} />}
             playing={(player) => [player.team, player.role, player.bot ? "Bot" : `Playing for ${duration(player.since)}`].filter(Boolean).join(" · ")}
             pickHint="Players appear here once they join. Pick one to see their stats, or to kick or ban them."
             badges={(player) => (
