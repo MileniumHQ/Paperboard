@@ -3,7 +3,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { BUILD_TIMEOUT_MS, buildApp, buildCrane, type BuiltApp, type BuiltCrane } from "../platform/app/support/build";
 import { CraneSocket, startCrane, WAIT_MS, type RunningCrane } from "../platform/app/support/crane";
-import { domCondition, launchElectron, SHELL, shellReady } from "../platform/app/support/electron";
+import { domCondition, launchElectron, SHELL, shellLoaded, shellReady } from "../platform/app/support/electron";
 import { tempDataDir, tempDir } from "../platform/app/support/temp";
 import { installDevPanelInto } from "../../scripts/devPanel";
 
@@ -50,10 +50,13 @@ describe("failures reach the caller", () => {
         fs.mkdirSync(path.dirname(autostart), { recursive: true });
         fs.writeFileSync(autostart, "[Desktop Entry]\n");
         const electron = await launchElectron({ appDir: app.dir, dataDir, args: ["--skip-update"] });
-        await shellReady(electron);
+        // said at start, before anyone opens App Settings. The toast goes after
+        // 10 s, so it is watched for from the moment the page loads: a busy
+        // computer can take longer than that to list itself
+        await shellLoaded(electron);
         const toasts = `[...document.querySelectorAll('[aria-label=Notifications] [role=alert]')].map((a) => a.innerText)`;
-        // said at start, before anyone opens App Settings
-        const loadToast = await electron.evalIn(SHELL, domCondition(`${toasts}.find((t) => t.includes("Couldn't load your settings"))`));
+        const loadToastShown = electron.evalIn<string>(SHELL, domCondition(`${toasts}.find((t) => t.includes("Couldn't load your settings"))`));
+        const [loadToast] = await Promise.all([loadToastShown, shellReady(electron)]);
         expect(loadToast).toContain("Paperboard is showing the defaults, and changes aren't saved: ");
         expect(loadToast).toMatch(/JSON/);
         // the defaults aren't the user's settings: App Settings shows none of them, so none can be saved over the file

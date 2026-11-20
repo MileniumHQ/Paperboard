@@ -196,9 +196,15 @@ export function domCondition(expression: string, ms = WAIT_MS - 5_000): string {
 
 export const SHELL = "paperboard://shell/";
 
-// The shell is up when its page loaded from the packaged origin and it has
-// listed this computer from what the daemon answered.
-export async function shellReady(electron: ElectronApp): Promise<void> {
+// The shell's page loaded from the packaged origin: its scripts run, and
+// what it says at start (a toast, gone after 10 s) can be watched for from here.
+export async function shellLoaded(electron: ElectronApp): Promise<void> {
     await electron.waitEvent("shell page", (e) => e.event === "loaded" && e.url === `${SHELL}index.html`);
+}
+
+// The shell is up when its page loaded and it has listed this computer
+// from what the daemon answered.
+export async function shellReady(electron: ElectronApp): Promise<void> {
+    await shellLoaded(electron);
     await electron.evalIn(SHELL, domCondition(`document.body.innerText.includes("This Computer")`));
 }
