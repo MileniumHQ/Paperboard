@@ -21,8 +21,9 @@
     font-size: 20px;
     font-weight: 800;
     letter-spacing: -0.02em;
-    /* Only shows before the script upgrades the texture; blue keeps it
-       readable on the light frosted bar, then the white glyphs take over. */
+    /* On a dark bar it only shows before the script upgrades the texture,
+       then the white glyphs take over. The light topbar shows it as a plain
+       title instead (below). */
     color: var(--paper-primary);
 }
 
