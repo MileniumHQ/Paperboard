@@ -32,6 +32,18 @@ html:has(.learn-page) {
             color-mix(in srgb, var(--paper-site-accent) 10%, var(--paper-marketing-ink))
         );
 }
+/* A panel that stands for several others (LearnPanel.blend): its field is
+   their colours, each a soft pool down the page, over the accent's deepest stop. */
+.learn-page[data-blend] {
+    --learn-pool: 48%;
+    background:
+        radial-gradient(ellipse 70% 26% at 12% 4%, color-mix(in oklab, var(--learn-blend-1) var(--learn-pool), var(--paper-marketing-ink)), transparent),
+        radial-gradient(ellipse 70% 26% at 88% 10%, color-mix(in oklab, var(--learn-blend-4) var(--learn-pool), var(--paper-marketing-ink)), transparent),
+        radial-gradient(ellipse 80% 28% at 50% 30%, color-mix(in oklab, var(--learn-blend-3) var(--learn-pool), var(--paper-marketing-ink)), transparent),
+        radial-gradient(ellipse 70% 26% at 10% 56%, color-mix(in oklab, var(--learn-blend-2) var(--learn-pool), var(--paper-marketing-ink)), transparent),
+        radial-gradient(ellipse 70% 26% at 90% 78%, color-mix(in oklab, var(--learn-blend-5) var(--learn-pool), var(--paper-marketing-ink)), transparent),
+        color-mix(in srgb, var(--paper-site-accent) 10%, var(--paper-marketing-ink));
+}
 .learn-main {
     position: relative;
     z-index: 2;

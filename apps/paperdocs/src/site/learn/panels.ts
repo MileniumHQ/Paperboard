@@ -19,6 +19,8 @@ export interface LearnPanel {
     alt: string;
     features: PanelFeature[];
     note?: string;
+    /** colours the page's field blends, for a panel that stands for several others; without it the field is the accent alone */
+    blend?: string[];
 }
 
 // Editorial summaries of each panel's store/about.md. Keep claims aligned with
@@ -195,6 +197,13 @@ export const LEARN_PANELS: LearnPanel[] = [
             "Snap blocks together to automate every panel. Welcome a player who joins your server, and start it again if it crashes.",
         image: "/screens/blocks-2.png",
         alt: "Blocks that welcome players and restart a game server that crashed",
+        blend: [
+            "var(--paper-panel-gameserver)",
+            "var(--paper-panel-ai)",
+            "var(--paper-panel-actions)",
+            "var(--paper-panel-botcreator)",
+            "var(--paper-panel-agents)",
+        ],
         features: [
             {
                 title: "Use any panel's blocks",

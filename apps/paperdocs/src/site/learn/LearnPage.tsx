@@ -30,7 +30,11 @@ function ZoomableScreenshot(props: { src: string; alt: string; sizes: string; pr
 
 export function LearnPage(props: { panel: LearnPanel }) {
     return (
-        <div class="learn-page">
+        <div
+            class="learn-page"
+            data-blend={props.panel.blend ? "" : undefined}
+            style={Object.fromEntries((props.panel.blend ?? []).map((color, index) => [`--learn-blend-${index + 1}`, color]))}
+        >
             <MarketingChrome text={learnPageText(props.panel)}>
                 <main class="learn-main">
                     <section class="learn-hero">
