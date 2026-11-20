@@ -308,8 +308,9 @@ function retryInitialize(id: unknown): Promise<void> {
         const server = requireServer(id);
         if (server.state.initFailure === null) throw new Error(`${server.name} is already set up`);
         await dispose(server);
-        server.setState({ initFailure: null });
+        // the failure stands until the setup is done: the notice says Retrying…, and Start stays blocked
         await initialize(server);
+        server.setState({ initFailure: null });
         publish();
     });
 }
