@@ -92,7 +92,7 @@ case "$os" in
         as=app
         file="paperboard-macos-$arch.zip"
         ;;
-    *) fail "this installs Paperboard on Linux and macOS. On Windows, run in PowerShell: irm https://i.paperboard.dev | iex" ;;
+    *) fail "this installs Paperboard on Linux and macOS. On Windows, download the installer from https://paperboard.dev/downloads/" ;;
 esac
 
 tmp=$(mktemp -d)

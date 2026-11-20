@@ -25,11 +25,8 @@ export default function InstallDoc() {
 {`curl -fsSL https://i.paperboard.dev | sh`}
             </PaperCode>
             <PaperText preset="body" as="p">
-                On Windows, in PowerShell:
+                On Windows, use the <PaperLink href="/downloads/">installer</PaperLink>.
             </PaperText>
-            <PaperCode block language="text">
-{`irm https://i.paperboard.dev | iex`}
-            </PaperCode>
             <PaperText preset="body" as="p">
                 With Node.js 18 or newer, <PaperCode>npx @mileniumhq/paperboard install</PaperCode> and <PaperCode>npm install -g @mileniumhq/paperboard</PaperCode> run the same installer.
                 <PaperCode>npx @mileniumhq/paperboard</PaperCode> opens Paperboard, and asks to install it first if it isn't installed. <PaperCode>npx @mileniumhq/paperboard web</PaperCode> opens it in your browser.

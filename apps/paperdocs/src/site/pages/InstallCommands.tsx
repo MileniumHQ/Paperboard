@@ -6,7 +6,6 @@ import { PaperCode, PaperFlex, PaperText } from "@mileniumhq/paperui";
 // each one's copy button works.
 const COMMANDS = [
     { title: "Linux and macOS", command: "curl -fsSL https://i.paperboard.dev | sh", language: "bash" },
-    { title: "Windows (PowerShell)", command: "irm https://i.paperboard.dev | iex", language: "powershell" },
     { title: "With Node", command: "npx @mileniumhq/paperboard", language: "bash" },
 ];
 

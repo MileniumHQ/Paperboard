@@ -1,7 +1,6 @@
-# the install scripts are imported as text, as wrangler.jsonc's rules bundle them
+# the install script is imported as text, as wrangler.jsonc's rules bundle them
 [loader]
 ".sh" = "text"
-".ps1" = "text"
 
 # test/setup.ts gives the test process a throwaway PAPERBOARD_DIR: the
 # publisher scripts import modules whose logger writes under it,
