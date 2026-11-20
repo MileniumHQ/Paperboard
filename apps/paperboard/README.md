@@ -38,7 +38,7 @@ Paperboard serves the app at `http://localhost:<port>` and prints a sign-in link
 - It only listens on `127.0.0.1`. The desktop-only parts don't exist here: no auto-update pass (updates apply on the next windowed launch) and no title-bar integration.
 
 ### Compiling
-Compiling for all platforms for GitHub Releases is done on Linux x64. However, you can still compile it yourself.
+GitHub Releases are compiled by [the release workflow](../../.github/workflows/release.yml), each target on a runner of its own OS (macOS builds are signed on macOS, Windows builds carry their version info); only Linux ARM64 is cross-built on x64. You can still compile it yourself.
 
 Paperboard (Electron app)
 ```zsh
