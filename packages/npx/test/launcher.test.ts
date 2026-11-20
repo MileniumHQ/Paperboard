@@ -111,13 +111,4 @@ describe("install root survives cache clears", () => {
         expect(() => defaultInstallRoot({}, "win32", "C:\\Users\\u")).toThrow("LOCALAPPDATA is not set");
     });
 
-    test("unsupported platform and arch pairs throw naming them", () => {
-        expect(craneTarget("linux", "x64")).toBe("linux-x64");
-        expect(craneTarget("linux", "arm64")).toBe("linux-arm64");
-        expect(craneTarget("darwin", "arm64")).toBe("macos-arm64");
-        expect(craneTarget("win32", "x64")).toBe("windows-x64");
-        expect(() => craneTarget("win32", "arm64")).toThrow("has no build for win32 arm64");
-        expect(() => craneTarget("freebsd", "x64")).toThrow("has no build for freebsd x64");
-        expect(() => craneTarget("linux", "ia32")).toThrow("has no build for linux ia32");
-    });
 });

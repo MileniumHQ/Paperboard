@@ -58,7 +58,7 @@ export default function AnatomyDoc() {
                 </tbody>
             </PaperTable>
             <PaperText preset="body" as="p">
-                The pages get their connection from Paperboard when it serves them. The service gets it from the environment the daemon starts it with.
+                The pages get their connection from Paperboard when it serves them. The service gets it from the environment the daemon starts it with.{" "}
                 <PaperLink href="/docs/paperapi/overview/#contexts">Where code runs</PaperLink> has the details.
             </PaperText>
 

@@ -22,6 +22,7 @@ export default function PaperTextDoc() {
             <PaperText preset="body" as="p">
                 Without <PaperCode>as</PaperCode> the text is a <PaperCode>span</PaperCode>.
                 Set <PaperCode>as</PaperCode> to the element the content is, so the page has a heading outline and real paragraphs.
+                Whatever the element, the text has no margin: the browser's margins on a heading or paragraph are removed, and the layout it sits in, such as a PaperFlex gap, spaces it. A margin set by a class of your own still applies.
             </PaperText>
             <PaperCard data-docs-demo padding="double" surface="front">
                 <PaperFlex direction="column" gap="half">

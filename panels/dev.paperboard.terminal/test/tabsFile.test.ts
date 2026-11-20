@@ -6,7 +6,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { clearWorkloads } from "./helpers/crane";
 import { PANEL_ID, call, panelFiles, readBlock, runBlock, serviceState, startService, stopServices } from "./helpers/service";
-import { stateWhere, until, within } from "./helpers/wait";
+import { stateWhere, until } from "./helpers/wait";
 
 // each wait below has its own bound; a test as a whole may take longer than bun's 5 s default
 setDefaultTimeout(60_000);
@@ -25,21 +25,9 @@ afterEach(async () => {
 const TABS = { tabs: [{ id: "tab1", label: "One" }, { id: "tab2", label: "Two" }], activeTabId: "tab1" };
 const scrollback = (dir: string) => path.join(dir, "terminal-scrollback");
 
-/** Resolves once `file` exists holding `needle`, checked on every change to its folder. */
-function fileHolds(file: string, needle: string): Promise<void> {
-    const holds = () => fs.existsSync(file) && fs.readFileSync(file, "utf8").includes(needle);
-    fs.mkdirSync(path.dirname(file), { recursive: true });
-    return within(
-        `${path.basename(file)} to hold ${needle}`,
-        new Promise<void>((resolve) => {
-            if (holds()) return resolve();
-            const watcher = fs.watch(path.dirname(file), () => {
-                if (!holds()) return;
-                watcher.close();
-                resolve();
-            });
-        }),
-    );
+/** Resolves once `file` exists holding `needle`. Read again and again: the folder's watcher (fs.watch) misses writes under Bun. */
+async function fileHolds(file: string, needle: string): Promise<void> {
+    await until(`${path.basename(file)} to hold ${needle}`, async () => (fs.existsSync(file) ? fs.readFileSync(file, "utf8") : ""), (text) => text.includes(needle));
 }
 
 describe("tabs.json", () => {

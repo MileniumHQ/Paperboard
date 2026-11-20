@@ -170,6 +170,10 @@ nothing but the prerequisites. Every step is tested by following it.
   `data-docs-demo` keeps the demo's rendered markup out of the Markdown
   export, so every demo is followed by its sample: the sample is what agents
   see. The sample matches the demo exactly.
+- JSX drops a line break next to an element, so a sentence that ends a
+  line and an element that starts the next run together
+  (`installer.npx`). End that line with `{" "}`. The build fails on it
+  (`scripts/check-prose-spacing.mjs`).
 - Tables, lists (`PaperTextList`), links (`PaperLink`), and code export
   cleanly. Content drawn on a canvas or only shown on hover does not export;
   say it in text too.

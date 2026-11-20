@@ -13,7 +13,7 @@ import type { App } from "electron";
 const CROSTINI_MARKER = "/dev/.cros_milestone";
 
 /** Either sign is enough: the marker file, or the variable Sommelier exports into its sessions. */
-export function isCrostini(
+function isCrostini(
     env: NodeJS.ProcessEnv,
     platform: NodeJS.Platform,
     fileExists: (file: string) => boolean = fs.existsSync,

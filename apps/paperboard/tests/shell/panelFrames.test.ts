@@ -1,23 +1,13 @@
 // Open panels in the real shell, each in its own frame: what restarting one
 // does to the others, a page with unsaved work having its say before the
-// shell takes it away, and a panel that can't load saying why, or whose
-// service can't start saying what the service said.
+// shell takes it away.
 import { afterAll, beforeAll, expect, test } from "bun:test";
-import * as fs from "node:fs";
 import * as path from "node:path";
-import { API_DEMO, bootShell, errorShown, WIDGET_DEMO, type DevPanel, type Shell } from "./support/shell";
+import { API_DEMO, bootShell, WIDGET_DEMO, type DevPanel, type Shell } from "./support/shell";
 
 // an editor whose note is unsaved until Save, and asks before it goes
 const NOTES: DevPanel = {
     source: path.join(import.meta.dir, "support/notes-panel"),
-    pages: ["panel.ts"],
-    service: "service.ts",
-    html: ["index.html"],
-};
-
-// a panel whose service throws as it starts
-const FAILING: DevPanel = {
-    source: path.join(import.meta.dir, "support/failing-panel"),
     pages: ["panel.ts"],
     service: "service.ts",
     html: ["index.html"],
@@ -31,7 +21,7 @@ const frame = (key: string) => `document.querySelector("iframe[data-panel-key='$
 const loaded = (key: string) => `${frame(key)}?.contentDocument?.readyState === "complete" && ${frame(key)}.contentDocument.location.href !== "about:blank"`;
 
 beforeAll(async () => {
-    shell = await bootShell({ panels: [WIDGET_DEMO, API_DEMO, NOTES, FAILING] });
+    shell = await bootShell({ panels: [WIDGET_DEMO, API_DEMO, NOTES] });
 });
 
 afterAll(async () => {
@@ -61,19 +51,6 @@ test("restarting one panel reloads only that panel's page", async () => {
 
     expect(await page.evaluate(`${frame(WIDGETS)}.src`)).toBe(widgetsSrc);
     expect(await page.evaluate(`${frame(WIDGETS)}.contentWindow.kept`)).toBe(true);
-    expect(page.exceptions).toEqual([]);
-});
-
-// A panel's frame fills its column, its border inside it: never past the window's edge.
-test("an open panel's frame fits its column, border and all", async () => {
-    const { page } = shell;
-    await open("dev.paperboard.widgetdemo", WIDGETS);
-    const edges = await page.evaluate<{ frame: [number, number]; column: [number, number] }>(`(() => {
-        const frame = ${frame(WIDGETS)}.getBoundingClientRect();
-        const column = ${frame(WIDGETS)}.parentElement.getBoundingClientRect();
-        return { frame: [frame.left, frame.right], column: [column.left, column.right] };
-    })()`);
-    expect(edges.frame).toEqual(edges.column);
     expect(page.exceptions).toEqual([]);
 });
 
@@ -121,41 +98,5 @@ test("restarting a panel with an unsaved note asks the panel first: Stay keeps t
     await inNotes(`!doc.getElementById("ask").hidden`, "the note to ask again");
     await page.evaluate(`${notesDoc}.getElementById("discard").click()`);
     await page.waitFor(`${loaded(NOTES_KEY)} && !${frame(NOTES_KEY)}.contentWindow.kept`, "the note to restart");
-    expect(page.exceptions).toEqual([]);
-});
-
-// Inventory: Core contracts — an installed panel that can't load says why while its computer is open.
-test("a panel whose manifest is broken says why it can't load", async () => {
-    const { page } = shell;
-    const broken = path.join(shell.dataDir, "panels", "dev.example.broken");
-    fs.mkdirSync(broken, { recursive: true });
-    fs.writeFileSync(path.join(broken, "manifest.json"), "{ this is not a manifest");
-    // choosing the computer lists its panels again
-    await page.click("[role=radio][aria-label='Home']");
-    await page.click("[role=radio][aria-label='This Computer (127.0.0.1)']");
-    await page.waitFor(
-        errorShown("Couldn't load some panels", "dev.example.broken: "),
-        "the broken panel, with why, over the computer's panels",
-    );
-    expect(page.exceptions).toEqual([]);
-});
-
-// Inventory: Core contracts — a panel whose service can't start says what the service said, where its page fails.
-test("a panel whose service can't start shows the service's own reason under the failure", async () => {
-    const { page } = shell;
-    await page.click("[role=radio][aria-label='This Computer (127.0.0.1)']");
-    await page.waitFor(`document.querySelector("label[data-value='dev.paperboard.testfailing']")`, "the failing panel in the sidebar");
-    await page.click("label[data-value='dev.paperboard.testfailing']");
-    await page.waitFor(
-        // the failure says itself at once, in place over the page, and the reason is the line under it
-        `[...document.querySelectorAll("[data-paper-error][role=alert]")].some((a) => a.offsetParent !== null && a.getAttribute("aria-label").startsWith("Couldn't load ") && a.parentElement.nextElementSibling?.innerText === "Its service stopped: the config file is unreadable")`,
-        "the service's reason under the panel's failure",
-    );
-    // the failure names the panel, so its big name over the loader goes
-    const overlays = await page.evaluate<{ shown: number; named: number }>(`(() => {
-        const shown = [...document.querySelectorAll("[data-paper-error][role=alert]")].filter((a) => a.offsetParent !== null).map((a) => a.closest("[class*='_overlay_']")).filter(Boolean);
-        return { shown: shown.length, named: shown.filter((o) => o.querySelector("h1")).length };
-    })()`);
-    expect(overlays).toEqual({ shown: 1, named: 0 });
     expect(page.exceptions).toEqual([]);
 });

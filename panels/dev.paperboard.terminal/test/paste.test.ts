@@ -13,7 +13,8 @@ afterEach(async () => {
 });
 
 const TABS = { tabs: [{ id: "tab1", label: "One" }], activeTabId: "tab1" };
-const screen = `document.querySelector(".xterm-rows").innerText`;
+// "" until the terminal has drawn its screen
+const screen = `(document.querySelector(".xterm-rows")?.innerText ?? "")`;
 const screenShows = (text: string) => `${screen}.includes(${JSON.stringify(text)})`;
 const dialog = `document.querySelector("[role=dialog]")`;
 const textarea = `document.querySelector(".xterm-helper-textarea")`;

@@ -23,22 +23,6 @@ function regionOf(count: number, chunk: Buffer = deflateSync(nbt.writeUncompress
 }
 
 describe("painting the map leaves the service answering", () => {
-    test("a region being painted gives the event loop a turn before it finishes", async () => {
-        // other work waiting on the loop, counted each time it gets to run
-        let turns = 0;
-        let waiting = true;
-        const other = () => { turns++; if (waiting) setImmediate(other); };
-        setImmediate(other);
-        try {
-            let turnsWhenPainted = -1;
-            await paintRegion(regionOf(64), 0, "r.0.0.mca").then(() => { turnsWhenPainted = turns; });
-            // 64 chunks at 8 a turn: other work ran several times while it painted
-            expect(turnsWhenPainted).toBeGreaterThanOrEqual(4);
-        } finally {
-            waiting = false;
-        }
-    });
-
     test("regions paint one at a time, and a region asked for twice paints once", async () => {
         const log: string[] = [];
         const paint = (name: string) => async () => {

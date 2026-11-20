@@ -331,7 +331,7 @@ export function Example() {
 
             <PaperText preset="subheader" as="h3" id="state-hook">useContextMenuState</PaperText>
             <PaperText preset="body" as="p">
-                <PaperCode>useContextMenuState(initialPlacement?)</PaperCode> returns the state to wire into a menu.
+                <PaperCode>useContextMenuState(initialPlacement?)</PaperCode> returns the state to wire into a menu.{" "}
                 <PaperCode>initialPlacement</PaperCode> is a <PaperCode>ContextMenuPlacement</PaperCode> and defaults to <PaperCode>"mouse"</PaperCode>.
             </PaperText>
             <PaperCode block language="ts">

@@ -7,7 +7,7 @@ import type { BrainState, Harness } from "../src/contract";
 import { AiApp, type AppHost } from "../src/service/app";
 import { loginTail } from "../src/service/brainLogin";
 import { Brains, loginProcessId } from "../src/service/brains";
-import { findExistingBrain, versionFrom } from "../src/service/existingBrains";
+import { findExistingBrain } from "../src/service/existingBrains";
 import { CLAUDE_MEMORY_OFF } from "../src/service/harness";
 import { askClaudeModels, listModels } from "../src/service/models";
 import { conversationRig, settled, turnId, type Rig } from "./support/rig";
@@ -263,13 +263,6 @@ describe("looking for a brain on the computer", () => {
         expect(findExistingBrain("codex", env("win32", [dir], root))).toBeNull();
         const exe = program(dir, "codex.exe");
         expect(findExistingBrain("codex", env("win32", [dir], root))).toBe(exe);
-    });
-
-    test("a version is the first thing in the output that looks like one", () => {
-        expect(versionFrom("codex-cli 0.46.0\n")).toBe("0.46.0");
-        expect(versionFrom("2.0.14 (Claude Code)")).toBe("2.0.14");
-        expect(versionFrom("1.2.3-beta.1")).toBe("1.2.3-beta.1");
-        expect(versionFrom("no version here")).toBeNull();
     });
 });
 

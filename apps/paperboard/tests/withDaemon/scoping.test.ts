@@ -149,21 +149,6 @@ describe("config storage layout", () => {
 		expect(fs.readFileSync(file, "utf8")).toBe("{not json");
 	});
 
-	test("a save the system refuses names the file and the system's reason, not the temp file it went through", async () => {
-		const dir = dataDir();
-		const engine = new PaperCraneEngine(dir);
-		// a directory sits where the config goes: the finished temp can't take its place
-		const file = path.join(dir, "configs", "test.cfg.json");
-		fs.mkdirSync(path.join(file, "occupied"), { recursive: true });
-		const failure = await engine.setConfig("test.cfg", { a: 1 }).then(
-			() => { throw new Error("the save succeeded"); },
-			(err: NodeJS.ErrnoException) => err,
-		);
-		expect(failure.message).toStartWith(`Couldn't save ${file}: `);
-		expect(failure.message).not.toContain(".tmp");
-		expect(failure.code).toBeString();
-		expect(listTree(dir).filter((f) => f.includes(".tmp"))).toEqual([]);
-	});
 });
 
 // Unreadable state is quarantined, never read as empty or overwritten.

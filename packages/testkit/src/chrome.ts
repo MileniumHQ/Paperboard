@@ -12,6 +12,12 @@
 // context of its own, so pages share no cookies, storage or cache, and
 // Chrome starts once instead of once per page.
 //
+// A whole suite run under withChrome.ts (a package's `test` script) has one
+// Chrome for every test file: starting Chrome is the slowest and least sure
+// step on a busy CI runner, and a dozen files each starting their own is how
+// one of them times out. There openChrome() and launchChrome() open their
+// pages in the suite's Chrome. A file run by itself starts its own.
+//
 // Chrome leaves nothing behind: its profile is its temp dir too (Chrome
 // puts its singleton socket under TMPDIR), and the profile is removed and
 // Chrome killed on every way out: close(), a failed start, and the test
@@ -76,7 +82,7 @@ export interface Page {
 }
 
 export interface LaunchOptions {
-    /** "width,height" */
+    /** "width,height" of each page it opens */
     windowSize?: string;
     /** told Chrome's DevTools port, for a suite that only lets known ports through */
     onPort?: (port: number) => void;
@@ -137,11 +143,11 @@ async function reaper(group: number, profile: string): Promise<Reaper> {
     };
 }
 
-/** a headless Chrome of its own, with a throwaway profile, that pages open in */
+/** a headless Chrome that pages open in: the suite's under withChrome.ts, else one of its own with a throwaway profile */
 export interface Chrome {
     /** loads `url` in a new page of its own browser context: no cookies, storage or cache shared with the browser's other pages */
     open(url: string, options?: PageOptions): Promise<Page>;
-    /** stops Chrome and removes its profile; pages still open fail with why */
+    /** closes the pages it still has open; a Chrome of its own is stopped and its profile removed, the suite's is left running */
     close(): Promise<void>;
 }
 
@@ -152,7 +158,7 @@ export interface PageOptions {
     init?: string;
 }
 
-/** opens `url` in a fresh headless Chrome with a throwaway profile; closing the page stops that Chrome */
+/** opens `url` in a page of its own; run alone, that is a fresh headless Chrome with a throwaway profile, which closing the page stops */
 export async function openChrome(url: string, options: ChromeOptions = {}): Promise<Page> {
     const chrome = await launchChrome(options);
     let page: Page;
@@ -171,8 +177,21 @@ export async function openChrome(url: string, options: ChromeOptions = {}): Prom
     return page;
 }
 
-/** starts a headless Chrome with a throwaway profile, for a suite to open many pages in */
-export async function launchChrome(options: LaunchOptions = {}): Promise<Chrome> {
+/** a Chrome that is up: where its DevTools are, and how to stop it */
+export interface RunningChrome {
+    port: number;
+    /** the switches it was started with, after the ones every Chrome gets */
+    args: string[];
+    /** the process, when this process started it */
+    process: ChildProcess | null;
+    /** everything Chrome printed so far, for failure messages */
+    stderr(): string;
+    /** stops Chrome and removes its profile */
+    stop(): Promise<void>;
+}
+
+/** starts a headless Chrome with a throwaway profile and waits for its DevTools port */
+export async function startChrome(args: string[] = []): Promise<RunningChrome> {
     // short: the singleton socket's path (<profile>/com.google.Chrome.XXXXXX/
     // SingletonSocket) must fit in 108 bytes, under a suite's own TMPDIR too
     const profile = fs.mkdtempSync(path.join(os.tmpdir(), "pb-chrome-"));
@@ -188,7 +207,7 @@ export async function launchChrome(options: LaunchOptions = {}): Promise<Chrome>
     };
     let exited: Promise<void> = Promise.resolve();
     let stopping: Promise<void> | null = null;
-    const shutdown = () => {
+    const stop = () => {
         stopping ??= (async () => {
             kill();
             await exited;
@@ -201,7 +220,7 @@ export async function launchChrome(options: LaunchOptions = {}): Promise<Chrome>
         chrome = spawn(chromeBinary(), [
             "--headless=new", "--remote-debugging-port=0", `--user-data-dir=${profile}`, "--no-first-run", "--no-default-browser-check",
             "--disable-background-networking", "--disable-component-update", "--disable-sync", "--metrics-recording-only",
-            `--window-size=${options.windowSize ?? "1400,900"}`, ...(options.args ?? []), "about:blank",
+            ...args, "about:blank",
         ], { stdio: ["ignore", "ignore", "pipe"], env: { ...process.env, TMPDIR: profile }, detached: true });
         const started = chrome;
         exited = new Promise<void>((resolve) => {
@@ -212,20 +231,49 @@ export async function launchChrome(options: LaunchOptions = {}): Promise<Chrome>
         if (started.pid) reap = await reaper(started.pid, profile);
         const port = await start.port;
         if (port instanceof Error) throw port;
+        return { port, args, process: started, stderr: () => start.stderr().trim(), stop };
+    } catch (err) {
+        await stop();
+        throw err;
+    }
+}
+
+/** the variable withChrome.ts tells a suite's test files its Chrome in: {"port", "args"} */
+export const SUITE_CHROME = "TESTKIT_CHROME";
+
+/** the suite's Chrome, when this file runs in a suite that has one; it is the suite's to stop */
+function suiteChrome(options: LaunchOptions): RunningChrome | null {
+    const told = process.env[SUITE_CHROME];
+    if (!told) return null;
+    const { port, args } = JSON.parse(told) as { port: number; args: string[] };
+    const missing = (options.args ?? []).filter((arg) => !args.includes(arg));
+    if (missing.length > 0) throw new Error(`This suite's Chrome was started without ${missing.join(" ")}. Add ${missing.length === 1 ? "it" : "them"} to withChrome.ts in the package's test script.`);
+    return { port, args, process: null, stderr: () => "", stop: async () => {} };
+}
+
+/** a headless Chrome for a suite to open many pages in: the suite's own when it runs under withChrome.ts, else a new one with a throwaway profile */
+export async function launchChrome(options: LaunchOptions = {}): Promise<Chrome> {
+    const running = suiteChrome(options) ?? (await startChrome(options.args));
+    try {
+        const { port } = running;
         options.onPort?.(port);
-        const stderr = () => start.stderr().trim();
+        const [width, height] = (options.windowSize ?? "1400,900").split(",").map(Number);
         const version = (await (await fetch(`http://127.0.0.1:${port}/json/version`)).json()) as { webSocketDebuggerUrl: string };
-        const browser = await connect(version.webSocketDebuggerUrl, started, stderr);
+        const browser = await connect(version.webSocketDebuggerUrl, running.process, running.stderr);
+        /** the browser contexts of the pages still open */
+        const contexts = new Set<string>();
         return {
             async open(url, pageOptions = {}) {
                 const { browserContextId } = await browser.send<{ browserContextId: string }>("Target.createBrowserContext");
+                contexts.add(browserContextId);
                 // its pages go with it
                 const dispose = async () => {
+                    if (!contexts.delete(browserContextId)) return;
                     if (!browser.gone()) await browser.send("Target.disposeBrowserContext", { browserContextId });
                 };
                 try {
-                    const { targetId } = await browser.send<{ targetId: string }>("Target.createTarget", { url: "about:blank", browserContextId });
-                    const connection = await connect(`ws://127.0.0.1:${port}/devtools/page/${targetId}`, started, stderr);
+                    const { targetId } = await browser.send<{ targetId: string }>("Target.createTarget", { url: "about:blank", browserContextId, width, height, newWindow: true });
+                    const connection = await connect(`ws://127.0.0.1:${port}/devtools/page/${targetId}`, running.process, running.stderr);
                     return await drive(connection, url, pageOptions, dispose);
                 } catch (err) {
                     await dispose();
@@ -233,12 +281,14 @@ export async function launchChrome(options: LaunchOptions = {}): Promise<Chrome>
                 }
             },
             async close() {
+                // in the suite's Chrome, the pages this file left open go here
+                if (!browser.gone()) for (const browserContextId of [...contexts]) await browser.send("Target.disposeBrowserContext", { browserContextId }).finally(() => contexts.delete(browserContextId));
                 browser.close();
-                await shutdown();
+                await running.stop();
             },
         };
     } catch (err) {
-        await shutdown();
+        await running.stop();
         throw err;
     }
 }
@@ -290,7 +340,7 @@ interface Connection {
 
 // once the connection to Chrome is gone, every call and wait still pending
 // fails with why, instead of hanging until a timeout
-async function connect(url: string, chrome: ChildProcess, stderr: () => string): Promise<Connection> {
+async function connect(url: string, chrome: ChildProcess | null, stderr: () => string): Promise<Connection> {
     const socket = new WebSocket(url);
     await new Promise<void>((resolve, reject) => {
         socket.onopen = () => resolve();
@@ -311,10 +361,10 @@ async function connect(url: string, chrome: ChildProcess, stderr: () => string):
     };
     const exit = (code: number | null, signal: NodeJS.Signals | null) => lose(new Error(`Chrome exited (${code ?? signal})${stderr() ? `:\n${stderr()}` : ""}`));
     socket.onclose = () => {
-        chrome.off("exit", exit);
+        chrome?.off("exit", exit);
         lose(new Error(`Chrome's DevTools connection closed${stderr() ? `:\n${stderr()}` : ""}`));
     };
-    chrome.once("exit", exit);
+    chrome?.once("exit", exit);
     socket.onmessage = (message) => {
         const data = JSON.parse(String(message.data));
         if (data.id && pending.has(data.id)) {

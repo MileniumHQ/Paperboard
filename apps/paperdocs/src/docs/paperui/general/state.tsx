@@ -195,7 +195,7 @@ interface SavedValue<T> {
 type SaveQueue = <R>(task: () => Promise<R>) => Promise<R>;`}
             </PaperCode>
             <PaperText preset="body" as="p">
-                The one way a control saves: it flips at once, saves in order, and falls back with an error. A control is never disabled for its own save.
+                The one way a control saves: it flips at once, saves in order, and falls back with an error. A control is never disabled for its own save.{" "}
                 <PaperCode>stored</PaperCode> is what is saved, as the view last read it or the service pushed it.
             </PaperText>
             <PaperCode block language="tsx">
@@ -225,7 +225,7 @@ sameData(a: unknown, b: unknown): boolean;
 createStateSignal<T>(initial: T): [Accessor<T>, (next: T | ((prev: T) => T)) => void];`}
             </PaperCode>
             <PaperText preset="body" as="p">
-                A service pushes a fresh copy of its state each time. Handed to a <PaperCode>{"<For>"}</PaperCode> as it is, every row would be rebuilt, and a switch that is rebuilt doesn't animate.
+                A service pushes a fresh copy of its state each time. Handed to a <PaperCode>{"<For>"}</PaperCode> as it is, every row would be rebuilt, and a switch that is rebuilt doesn't animate.{" "}
                 <PaperCode>keepUnchanged</PaperCode> returns <PaperCode>next</PaperCode> with every part that equals <PaperCode>prev</PaperCode> replaced by the very object <PaperCode>prev</PaperCode> held, and <PaperCode>prev</PaperCode> itself when nothing changed.
             </PaperText>
             <PaperTextList>

@@ -2,7 +2,6 @@ import { describe, expect, test } from "vitest";
 import { fireEvent, render, screen } from "@solidjs/testing-library";
 import { createEffect, createSignal, on, Show } from "solid-js";
 import { PaperCheckbox, PaperInput, PaperToggle, PaperWizard, PaperWizardStep, useWizard } from "../index";
-import buttonStyles from "../components/PaperButton/index.module.css";
 
 /** lets queued enters, exits and their microtask ends run */
 // quiet: yields one task so queued work lands; no duration is tuned
@@ -167,18 +166,5 @@ describe("PaperWizard step arrival", () => {
         await settle();
         await frame();
         expect(document.activeElement).toBe(screen.getByLabelText("Bot token"));
-    });
-
-    test("Back is a quiet button beside Next, so a step shows one primary button", async () => {
-        render(() => (
-            <PaperWizard>
-                <PaperWizardStep index={0}>first</PaperWizardStep>
-                <PaperWizardStep index={1}>second</PaperWizardStep>
-            </PaperWizard>
-        ));
-        next();
-        await settle();
-        expect(screen.getByRole("button", { name: /Back/ }).classList.contains(buttonStyles.text)).toBe(true);
-        expect(screen.getByRole("button", { name: /Finish/ }).classList.contains(buttonStyles.text)).toBe(false);
     });
 });

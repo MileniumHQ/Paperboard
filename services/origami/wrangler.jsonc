@@ -39,12 +39,12 @@
             "bucket_name": "paperboard-paperdl"
         }
     ],
-    // the install scripts i.paperboard.dev serves at its base, bundled as
+    // the install script i.paperboard.dev serves at its base, bundled as
     // text from packages/npx/install (src/routes/install.ts)
     "rules": [
         {
             "type": "Text",
-            "globs": ["**/*.sh", "**/*.ps1"],
+            "globs": ["**/*.sh"],
             "fallthrough": true
         }
     ],

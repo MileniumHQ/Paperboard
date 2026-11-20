@@ -18,9 +18,7 @@ import os from "node:os";
 import path from "node:path";
 import { buildSupervisor } from "../../../../scripts/build/supervisor";
 import { openChrome, type Page } from "testkit/chrome";
-import { PANEL_ID, type ChatEntry, type Harness, type Settings } from "../../src/contract";
-import { History } from "../../src/service/history";
-import { TRANSCRIPT, Transcript } from "../../src/service/transcript";
+import { PANEL_ID, type Harness, type Settings } from "../../src/contract";
 import { allowTestPort, atSuiteEnd } from "../hermetic";
 import { FAKE_BRAIN, fakeEnv, plan } from "./host";
 
@@ -90,11 +88,8 @@ export interface BootedPanel {
     storage: string;
     /** the fake brains' folder: their log and plan (test/support/host.ts fakeLog, plan, release) */
     fake: string;
-    /**
-     * opens the page in a fresh headless Chrome; `init` runs in it before the page's own code (test/support/wire.ts).
-     * With `shell`, the page is a frame (#panel) of a page standing in for Paperboard's shell (SHELL_PAGE), which runs `shell`.
-     */
-    open(o?: { init?: string; shell?: string }): Promise<Page>;
+    /** opens the page in a fresh headless Chrome */
+    open(): Promise<Page>;
     /** the settings the service has saved, as the next window would read them */
     savedSettings(): Settings | null;
     /** resolves once the saved settings are `expected`; fails saying what they were */
@@ -132,30 +127,7 @@ export interface BootOptions {
     codexOnPath?: FakeBrain;
     /** more brains on the computer, the same way: the fake brain on PATH as each harness's program */
     brainsOnPath?: Partial<Record<Harness, FakeBrain>>;
-    /** writes more of the panel's storage before the service starts, with the service's own code */
-    seed?: (storage: string) => Promise<void>;
 }
-
-const SHELL_PATH = "/shell.html";
-/**
- * Paperboard's side of the panel's frame, as the shell does it: the page in a frame (#panel) the size of the
- * window, told its generation (paperboard:initialize) once it loads, then `script`, which answers what the frame
- * asks its shell. A wait in this page wakes on this page's changes, so every change in the frame is one here
- * too: read the frame through PANEL_DOC.
- */
-const shellPage = (script: string) => `<!doctype html><html><head><meta charset="utf-8"></head><body style="margin:0">
-<iframe id="panel" src="/" style="border:0;width:100vw;height:100vh"></iframe>
-<script>
-const frame = document.getElementById("panel");
-let changes = 0;
-frame.addEventListener("load", () => {
-    new MutationObserver(() => (document.body.dataset.changes = String(++changes))).observe(frame.contentDocument, { subtree: true, childList: true, attributes: true, characterData: true });
-    frame.contentWindow.postMessage({ type: "paperboard:initialize", generation: "g1" }, "*");
-});
-${script}
-</script></body></html>`;
-/** a page expression, in a page opened with a shell: the panel's own document, in its frame */
-export const PANEL_DOC = `document.getElementById("panel").contentDocument`;
 
 /** Starts the service on the test daemon, with `settings` saved, and serves its page. */
 export async function bootPanel(o: BootOptions = {}): Promise<BootedPanel> {
@@ -194,7 +166,6 @@ export async function bootPanel(o: BootOptions = {}): Promise<BootedPanel> {
         if (brain.chosen) choices[harness] = path.join(bin, program);
     }
     if (Object.keys(choices).length) fs.writeFileSync(path.join(storage, "brains", "choices.json"), JSON.stringify(choices));
-    await o.seed?.(storage);
     const nowhere = "http://127.0.0.1:9";
     const env: Record<string, string | undefined> = {
         ...process.env,
@@ -234,7 +205,6 @@ export async function bootPanel(o: BootOptions = {}): Promise<BootedPanel> {
         hostname: "127.0.0.1",
         async fetch(req) {
             const pathname = new URL(req.url).pathname;
-            if (pathname === SHELL_PATH && shell !== null) return new Response(shellPage(shell), { headers: { "content-type": "text/html; charset=utf-8" } });
             const file = path.join(dist, pathname === "/" ? "index.html" : pathname);
             if (!file.startsWith(dist) || !fs.existsSync(file) || fs.statSync(file).isDirectory()) return new Response("Not found", { status: 404 });
             if (file.endsWith(".html")) {
@@ -246,8 +216,6 @@ export async function bootPanel(o: BootOptions = {}): Promise<BootedPanel> {
             return new Response(Bun.file(file));
         },
     });
-    // what the shell page standing in for Paperboard's runs, once a page is opened in it
-    let shell: string | null = null;
     const savedSettings = () => (fs.existsSync(settingsFile) ? (JSON.parse(fs.readFileSync(settingsFile, "utf8")) as Settings) : null);
     const pages = new Set<Page>();
     const disallow: (() => void)[] = [];
@@ -265,12 +233,10 @@ export async function bootPanel(o: BootOptions = {}): Promise<BootedPanel> {
                 await new Promise((resolve) => setTimeout(resolve, 20));
             }
         },
-        async open(opened = {}) {
-            if (opened.shell !== undefined) shell = opened.shell;
-            const page = await openChrome(`http://127.0.0.1:${server.port}${opened.shell === undefined ? "/" : SHELL_PATH}`, {
+        async open() {
+            const page = await openChrome(`http://127.0.0.1:${server.port}/`, {
                 onPort: (port) => disallow.push(allowTestPort(port)),
                 isCall: (frame) => frame.includes('"action":"blocks:call"'),
-                init: opened.init,
             });
             pages.add(page);
             return page;
@@ -300,35 +266,3 @@ export async function openSection(page: Page, name: string, section: string): Pr
     await page.waitFor(`document.querySelector('${item}').checked`, `the ${section} page`);
     await page.motionSettled();
 }
-
-
-/** Marks the nodes `selector` finds now, to ask later whether they are the same nodes (kept) or new ones (rebuilt). */
-export function markNodes(page: Page, selector: string, mark: string): Promise<number> {
-    return page.evaluate<number>(`(() => { const all = [...document.querySelectorAll(${JSON.stringify(selector)})]; all.forEach((el) => (el.dataset.testMark = ${JSON.stringify(mark)})); return all.length; })()`);
-}
-
-/** How many of the nodes `selector` finds now carry `mark`, and how many there are. */
-export function marked(page: Page, selector: string, mark: string): Promise<{ kept: number; all: number }> {
-    return page.evaluate(`(() => { const all = [...document.querySelectorAll(${JSON.stringify(selector)})]; return { kept: all.filter((el) => el.dataset.testMark === ${JSON.stringify(mark)}).length, all: all.length }; })()`);
-}
-
-/**
- * Writes a conversation into the panel's storage with the service's own code (for BootOptions.seed): the
- * current one, or one put away in the history. Returns the id a put-away one has there.
- */
-export function seedConversation(storage: string, entries: ChatEntry[], o: { putAway?: boolean } = {}): string | null {
-    const dir = path.join(storage, "conversation");
-    fs.mkdirSync(dir, { recursive: true });
-    const transcript = new Transcript(path.join(dir, TRANSCRIPT));
-    transcript.load();
-    for (const entry of entries) transcript.put(entry);
-    if (!o.putAway) return null;
-    const history = new History(dir);
-    const id = history.currentId();
-    history.putAway(entries);
-    return id;
-}
-
-/** Resolves once the page has drawn `frames` frames: what an answer set has landed by then. */
-export const frames = (page: Page, frames = 2) =>
-    page.evaluate(`new Promise((done) => { let left = ${frames}; const next = () => (left-- === 0 ? done() : requestAnimationFrame(next)); next(); })`);

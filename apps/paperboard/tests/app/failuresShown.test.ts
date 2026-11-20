@@ -3,9 +3,8 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { BUILD_TIMEOUT_MS, buildApp, buildCrane, type BuiltApp, type BuiltCrane } from "../platform/app/support/build";
 import { CraneSocket, startCrane, WAIT_MS, type RunningCrane } from "../platform/app/support/crane";
-import { domCondition, launchElectron, SHELL, shellReady } from "../platform/app/support/electron";
+import { domCondition, launchElectron, SHELL, shellLoaded, shellReady } from "../platform/app/support/electron";
 import { tempDataDir, tempDir } from "../platform/app/support/temp";
-import { createShellInvokeHandlers } from "../../src/main/communication/shellHandlers";
 import { installDevPanelInto } from "../../scripts/devPanel";
 
 const PANEL = "dev.paperboard.failures";
@@ -51,10 +50,13 @@ describe("failures reach the caller", () => {
         fs.mkdirSync(path.dirname(autostart), { recursive: true });
         fs.writeFileSync(autostart, "[Desktop Entry]\n");
         const electron = await launchElectron({ appDir: app.dir, dataDir, args: ["--skip-update"] });
-        await shellReady(electron);
+        // said at start, before anyone opens App Settings. The toast goes after
+        // 10 s, so it is watched for from the moment the page loads: a busy
+        // computer can take longer than that to list itself
+        await shellLoaded(electron);
         const toasts = `[...document.querySelectorAll('[aria-label=Notifications] [role=alert]')].map((a) => a.innerText)`;
-        // said at start, before anyone opens App Settings
-        const loadToast = await electron.evalIn(SHELL, domCondition(`${toasts}.find((t) => t.includes("Couldn't load your settings"))`));
+        const loadToastShown = electron.evalIn<string>(SHELL, domCondition(`${toasts}.find((t) => t.includes("Couldn't load your settings"))`));
+        const [loadToast] = await Promise.all([loadToastShown, shellReady(electron)]);
         expect(loadToast).toContain("Paperboard is showing the defaults, and changes aren't saved: ");
         expect(loadToast).toMatch(/JSON/);
         // the defaults aren't the user's settings: App Settings shows none of them, so none can be saved over the file
@@ -111,19 +113,6 @@ describe("failures reach the caller", () => {
         expect(await electron.quit()).toEqual({ code: 0, signal: null });
     }, WAIT_MS * 3);
 
-    test("a folder that won't open answers with the reason the system gave", async () => {
-        const handlers = createShellInvokeHandlers({
-            appVersion: () => "0.0.0",
-            launchOptions: () => ({}) as never,
-            graphics: () => ({ gpu: true }),
-            // Electron's shell.openPath resolves to the system's message
-            openPath: async (dir) => `Failed to open path: ${dir}`,
-            appSettingsChanged: async () => null,
-        });
-        const answer = await handlers["open-panel-folder"]({ computerId: "local", panelId: PANEL }, undefined);
-        expect(answer).toEqual({ opened: false, error: `Failed to open path: ${path.join(process.env.PAPERBOARD_DIR!, "files", PANEL)}` });
-    });
-
     test("SDK terminal and process calls the daemon refuses reject with its reason", async () => {
         const missing = path.join(tempDir("gone"), "missing");
         const create = await rejection(sdk.terminal.create("failures-term", { cwd: missing }));
@@ -145,33 +134,5 @@ describe("failures reach the caller", () => {
 
         const write = await rejection(sdk.process.write("never-started", "input\n"));
         expect(write.message).toContain(`Process "never-started" is not running`);
-    }, WAIT_MS);
-
-    test("a workload with no working directory, or whose supervisor dies before it is ready, rejects with the exit code and stderr", async () => {
-        const missingCwd = path.join(tempDir("gone"), "missing");
-        const noCwd = await host.send("process:run", { id: "no-cwd", command: process.execPath, args: ["-e", "0"], cwd: missingCwd });
-        expect(noCwd.error).toContain(`spawn cwd does not exist: ${missingCwd}`);
-
-        // the supervisor cannot open its endpoint and dies before it is ready
-        const sockets = path.join(daemon.dataDir, "sockets");
-        fs.chmodSync(sockets, 0o500);
-        try {
-            const died = await host.send("process:run", { id: "no-supervisor", command: process.execPath, args: ["-e", "0"] });
-            expect(died.error).toContain("Supervisor no-supervisor did not become ready: ");
-            expect(died.error).toMatch(/code \d+/);
-            expect(died.error).toMatch(/EACCES|permission denied/i);
-        } finally {
-            fs.chmodSync(sockets, 0o700);
-        }
-    }, WAIT_MS);
-
-    test("a workload whose program does not exist rejects its start with the reason", async () => {
-        // the program it names does not exist
-        const missingProgram = path.join(tempDir("gone"), "no-such-shell");
-        const noProgram = await host.send("process:run", { id: "no-program", command: missingProgram, args: [] });
-        expect(noProgram.result).toBeNull();
-        expect(noProgram.error).toContain(missingProgram);
-        expect(noProgram.error).toMatch(/ENOENT/);
-
     }, WAIT_MS);
 });

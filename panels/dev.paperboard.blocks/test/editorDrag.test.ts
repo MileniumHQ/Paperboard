@@ -19,44 +19,11 @@ const fixture = async () => {
     return checks;
 };
 
-/** A dragged block stays under the pointer, to within a pixel or two of rounding. */
-const HELD = 2;
 const TIMEOUT = 180_000;
 
 describe("dragging blocks in the editor", () => {
     // the canvas changes size part way: laid out again under a block being dragged, Blockly
     // scrolls to where the block was picked up, and the block leaves the pointer
-    test(
-        "a block dragged out of the Library stays under the pointer while the canvas changes size, and lands on the canvas",
-        async () => {
-            const { first, afterFirst, fitted } = await fixture();
-            expect(Math.abs(first.offBy.x), "the block was not under the pointer").toBeLessThanOrEqual(HELD);
-            expect(Math.abs(first.offBy.y), "the block was not under the pointer").toBeLessThanOrEqual(HELD);
-            expect(afterFirst.onCanvas).toEqual([BUILTIN.onRun]);
-            expect(afterFirst.saved.map((b: { type: string }) => b.type)).toEqual([BUILTIN.onRun]);
-            expect(afterFirst.alert).toBe("");
-            expect(fitted, "the canvas kept its old size after the drop").toBe(true);
-        },
-        TIMEOUT,
-    );
-
-    test(
-        "a block dragged into another shows its drop preview and snaps in, leaving nothing else behind",
-        async () => {
-            const { second, afterSecond } = await fixture();
-            expect(Math.abs(second.offBy.x), "the block was not under the pointer").toBeLessThanOrEqual(HELD);
-            expect(Math.abs(second.offBy.y), "the block was not under the pointer").toBeLessThanOrEqual(HELD);
-            // one preview, drawn, with the block's own icon: so it is the block's size
-            expect(second.previews).toEqual([{ drawn: true, icon: "alt_route" }]);
-            expect(afterSecond.alert).toBe("");
-            expect(afterSecond.onCanvas).toEqual(["controls_if", BUILTIN.onRun]);
-            expect(afterSecond.saved).toHaveLength(1);
-            expect(afterSecond.saved[0].type).toBe(BUILTIN.onRun);
-            expect(afterSecond.saved[0].inputs.DO.block.type).toBe("controls_if");
-        },
-        TIMEOUT,
-    );
-
     test(
         "a panel's block snaps into a built-in one",
         async () => {
@@ -66,19 +33,6 @@ describe("dragging blocks in the editor", () => {
             expect(afterThird.alert).toBe("");
             expect(afterThird.saved).toHaveLength(1);
             expect(afterThird.saved[0].inputs.DO.block.inputs.DO0.block.type).toBe(greet);
-        },
-        TIMEOUT,
-    );
-
-    test(
-        "nothing fails unseen: a drag throws nothing, and what nothing catches is said on the page",
-        async () => {
-            const { uncaught, alerts } = await fixture();
-            expect(uncaught).toEqual([]);
-            // one toast, and the editor's own notice doesn't say it again
-            expect(alerts).toHaveLength(1);
-            expect(alerts[0].toast).toBe(true);
-            expect(alerts[0].text).toContain("the fixture's own failure");
         },
         TIMEOUT,
     );

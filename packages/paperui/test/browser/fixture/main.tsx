@@ -7,7 +7,6 @@ import { createSignal, For, Show, type JSX } from "solid-js";
 import { render } from "solid-js/web";
 import {
     PaperAudio,
-    PaperBadge,
     PaperButton,
     PaperConsole,
     PaperError,
@@ -16,16 +15,13 @@ import {
     PaperContextMenuItem,
     PaperContextMenuSub,
     PaperFileBrowser,
-    PaperIcon,
     PaperInput,
     PaperInterfaceGroup,
     PaperInterfaceItem,
     PaperList,
     PaperListItem,
-    PaperListLabel,
     PaperMarkdown,
     PaperMenu,
-    PaperMediaCard,
     PaperMenuItem,
     PaperModal,
     PaperPanel,
@@ -33,18 +29,14 @@ import {
     PaperRail,
     PaperRailItem,
     PaperSelectMenu,
-    PaperSelector,
-    PaperSelectorItem,
     PaperSelectMenuItem,
     PaperSlidePage,
     PaperSplit,
     PaperText,
     PaperToggle,
-    createPaperCompact,
     createPolling,
     showError,
     showToast,
-    setHapticPlayer,
     useContextMenuState,
     type PaperFileBrowserRef,
     type ThemeMode,
@@ -72,12 +64,6 @@ const shell = (content: () => JSX.Element) => (
 const lines = (from: number, count: number) => Array.from({ length: count }, (_, i) => `line ${from + i}`);
 
 const scenarios: Record<string, () => JSX.Element> = {
-    compact() {
-        return shell(() => {
-            const compact = createPaperCompact();
-            return <span id="compact">{compact() ? "phone" : "wide"}</span>;
-        });
-    },
     modalLeave() {
         const [open, setOpen] = createSignal(true);
         const t = (window.t = { presses: 0, close: () => setOpen(false) });
@@ -98,22 +84,6 @@ const scenarios: Record<string, () => JSX.Element> = {
         ));
     },
 
-    railMonogram() {
-        return shell(() => (
-            <div style={{ padding: "24px", height: "400px", display: "flex" }}>
-                <div id="rail-box" style={{ height: "100%", "overflow-y": "auto" }}>
-                    <PaperRail name="rail" value="wo">
-                        <PaperRailItem value="home" icon="home" label="Home" />
-                        <For each={["WO", "MW", "OO"]}>
-                            {(letters) => (
-                                <PaperRailItem value={letters.toLowerCase()} data-item={letters} icon={<PaperIcon monogram>{letters}</PaperIcon>} label={letters} />
-                            )}
-                        </For>
-                    </PaperRail>
-                </div>
-            </div>
-        ));
-    },
 
     railReorder() {
         const [order, setOrder] = createSignal(["home", "games", "files"]);
@@ -195,34 +165,6 @@ const scenarios: Record<string, () => JSX.Element> = {
         });
     },
 
-    // toasts that go by themselves: t.show(options) shows one and returns
-    // its id; t.line() reads its time line's animation
-    toastTime() {
-        window.t = {
-            show: (options: Parameters<typeof showToast>[0]) => showToast(options),
-            fail: (title: string, why: string) => showError(title, new Error(why)),
-            line: () => {
-                const line = document.querySelector<HTMLElement>("[data-paper-toast-time]");
-                const animation = line?.getAnimations()[0];
-                if (!line || !animation) return null;
-                return {
-                    duration: getComputedStyle(line).animationDuration,
-                    state: animation.playState,
-                    time: Number(animation.currentTime),
-                    // the share of the line still drawn: what its clip leaves of it from the start
-                    scale: 1 - Number(/inset\([^ ]+ ([\d.]+)%/.exec(getComputedStyle(line).clipPath)?.[1] ?? 0) / 100,
-                    color: getComputedStyle(line).borderBottomColor,
-                    line: line.getBoundingClientRect().toJSON(),
-                    toast: line.parentElement!.getBoundingClientRect().toJSON(),
-                };
-            },
-        };
-        return shell(() => (
-            <div style={{ padding: "24px" }}>
-                <PaperButton id="elsewhere">Elsewhere</PaperButton>
-            </div>
-        ));
-    },
 
     // failures that stand, said in place: ?view=fill is a view with nothing
     // else to show; without it, a page with each inline kind
@@ -280,65 +222,8 @@ const scenarios: Record<string, () => JSX.Element> = {
         ));
     },
 
-    fieldError() {
-        const [error, setError] = createSignal<string | undefined>(undefined);
-        window.t = { setError };
-        return shell(() => (
-            <div style={{ display: "flex", "align-items": "center", "justify-content": "space-between", gap: "24px", padding: "24px", width: "520px" }}>
-                <span>Server name</span>
-                <PaperInput id="name" label="Name" aria-describedby="name-hint" error={error()} />
-                <span id="name-hint">Shown in the server list</span>
-            </div>
-        ));
-    },
 
-    controlHeights() {
-        const sizes = ["small", "medium", "large"] as const;
-        return shell(() => (
-            <div style={{ padding: "24px", display: "flex", "flex-direction": "column", gap: "8px", "align-items": "flex-start" }}>
-                <For each={sizes}>
-                    {(size) => (
-                        <div data-size={size} style={{ display: "flex", gap: "8px", "align-items": "flex-start" }}>
-                            <PaperInput data-control="input" size={size} placeholder="Member" />
-                            <PaperInput data-control="labelled" size={size} label="Name" />
-                            <PaperInput data-control="icon-input" size={size} icon="search" placeholder="Member" />
-                            <PaperButton data-control="button" size={size}>
-                                Send
-                            </PaperButton>
-                            <PaperButton data-control="icon-label-button" size={size} variant="primary">
-                                <PaperIcon>send</PaperIcon>
-                                Send
-                            </PaperButton>
-                            <PaperButton data-control="icon-button" size={size} icon title="Send">
-                                send
-                            </PaperButton>
-                        </div>
-                    )}
-                </For>
-                <div data-size="menu" style={{ display: "flex", gap: "8px", width: "400px" }}>
-                    <PaperSelectMenu name="channel" value="general">
-                        <PaperSelectMenuItem value="general">#general</PaperSelectMenuItem>
-                    </PaperSelectMenu>
-                    <PaperInput data-row="input" placeholder="Message" />
-                    <PaperButton data-row="button">Send</PaperButton>
-                </div>
-            </div>
-        ));
-    },
 
-    standaloneList() {
-        return shell(() => (
-            <div id="column" style={{ padding: "24px", width: "360px", height: "400px", display: "flex", "flex-direction": "column", gap: "8px", overflow: "auto" }}>
-                <span>Roles</span>
-                <PaperList id="list" standalone selectable={false}>
-                    <PaperListLabel id="label">Staff</PaperListLabel>
-                    <PaperListItem value="admin" data-item="admin">Admin</PaperListItem>
-                    <PaperListItem value="helper" data-item="helper">Helper</PaperListItem>
-                </PaperList>
-                <span>Below</span>
-            </div>
-        ));
-    },
 
     listActions() {
         const [value, setValue] = createSignal("alpha");
@@ -379,20 +264,6 @@ const scenarios: Record<string, () => JSX.Element> = {
         ));
     },
 
-    modalFocus() {
-        const [open, setOpen] = createSignal(false);
-        window.t = { isOpen: () => open() };
-        return shell(() => (
-            <div style={{ padding: "24px" }}>
-                <PaperButton id="opener" onClick={() => setOpen(true)}>
-                    Rename
-                </PaperButton>
-                <PaperModal open={open()} onClose={() => setOpen(false)} title="Rename">
-                    <input id="name" aria-label="Name" autofocus />
-                </PaperModal>
-            </div>
-        ));
-    },
 
     selectMenu() {
         const [size, setSize] = createSignal("s");
@@ -504,6 +375,25 @@ const scenarios: Record<string, () => JSX.Element> = {
         ));
     },
 
+    textMargins() {
+        window.t = {};
+        // the caller's rule comes before PaperUI's stylesheet, as a panel's
+        // can in its bundle, so only specificity decides between them
+        const own = document.createElement("style");
+        own.textContent = ".own-margin { margin-top: 12px; }";
+        document.head.prepend(own);
+        return shell(() => (
+            <div id="column" style={{ display: "flex", "flex-direction": "column", gap: "8px" }}>
+                <PaperText preset="header" as="h1">Header</PaperText>
+                <PaperText preset="title" as="h2">Title</PaperText>
+                <PaperText preset="label" as="h3">Label</PaperText>
+                <PaperText preset="body" as="p">Body</PaperText>
+                <PaperText preset="caption" as="figcaption">Caption</PaperText>
+                <PaperText preset="body" as="p" class="own-margin">Own margin</PaperText>
+            </div>
+        ));
+    },
+
     markdownAnchors() {
         window.t = {};
         const filler = lines(1, 40).join("\n\n");
@@ -594,46 +484,14 @@ const scenarios: Record<string, () => JSX.Element> = {
         ));
     },
 
-    selector() {
-        return shell(() => (
-            <div style={{ padding: "24px", width: "360px" }}>
-                <PaperSelector name="pick" value="two">
-                    <PaperSelectorItem value="one" icon="tune" description="A symbol icon.">
-                        Symbol
-                    </PaperSelectorItem>
-                    <PaperSelectorItem value="two" icon={<PaperIcon src="/pictures/mark.svg" tint="text" />} description="A logo, as a panel passes it.">
-                        Logo
-                    </PaperSelectorItem>
-                </PaperSelector>
-            </div>
-        ));
-    },
 
     toggle() {
         const [on, setOn] = createSignal(false);
-        const [refusing, setRefusing] = createSignal(false);
-        const [saved, setSaved] = createSignal(false);
-        let save: ((keep: boolean) => void) | undefined;
         const t = (window.t = {
             changes: [] as boolean[],
             controlledChanges: [] as boolean[],
             disabledChanges: [] as boolean[],
-            haptics: [] as string[],
             setControlled: setOn,
-            setRefusing,
-            setSaved,
-            /** the pending save answers: kept (the state changes) or refused */
-            answerSave: async (keep: boolean) => {
-                save?.(keep);
-                save = undefined;
-                // let the toggle hear the save settle
-                await Promise.resolve();
-                await Promise.resolve();
-            },
-        });
-        setHapticPlayer((kind) => {
-            t.haptics.push(kind);
-            return true;
         });
         const row = { display: "flex", gap: "12px", "align-items": "center", padding: "12px" } as const;
         return shell(() => (
@@ -652,40 +510,10 @@ const scenarios: Record<string, () => JSX.Element> = {
                     />
                     <span id="controlled-text">Controlled</span>
                 </label>
-                <label id="refusing" style={row}>
-                    {/* its parent never takes the flip */}
-                    <PaperToggle checked={refusing()} onChange={() => {}} />
-                    <span id="refusing-text">Refusing</span>
-                </label>
-                <label id="saving" style={row}>
-                    {/* changes only once its save answers */}
-                    <PaperToggle
-                        checked={saved()}
-                        onChange={(v) =>
-                            new Promise<void>((resolve) => {
-                                save = (keep) => {
-                                    if (keep) setSaved(v);
-                                    resolve();
-                                };
-                            })
-                        }
-                    />
-                    <span id="saving-text">Saving</span>
-                </label>
                 <label id="disabled" style={row}>
                     <PaperToggle disabled onChange={(v) => t.disabledChanges.push(v)} />
                     <span id="disabled-text">Disabled</span>
                 </label>
-            </div>
-        ));
-    },
-
-    button() {
-        const [disabled, setDisabled] = createSignal(true);
-        window.t = { setDisabled };
-        return shell(() => (
-            <div style={{ padding: "24px" }}>
-                <PaperButton id="saving" disabled={disabled()}>Use this location</PaperButton>
             </div>
         ));
     },
@@ -735,32 +563,6 @@ const scenarios: Record<string, () => JSX.Element> = {
         ));
     },
 
-    listOverflow() {
-        const long = "SuperLongPluginNameForTestingOverflowBehaviour";
-        const rows = (compact: boolean) => (
-            <PaperList id={compact ? "compact" : "regular"} selectable={false} compact={compact} fullWidth>
-                <PaperListItem
-                    value="long"
-                    icon="extension"
-                    description={`${long}.jar · v1.0.0`}
-                    actions={
-                        <>
-                            <PaperBadge variant="primary">OP</PaperBadge>
-                            <PaperBadge variant="danger">Banned</PaperBadge>
-                        </>
-                    }
-                >
-                    {long}
-                </PaperListItem>
-            </PaperList>
-        );
-        return shell(() => (
-            <div style={{ width: "400px" }}>
-                {rows(false)}
-                {rows(true)}
-            </div>
-        ));
-    },
 
     fileBrowser() {
         // a.txt on a disk the test can change, and a host that asks the
@@ -838,50 +640,6 @@ const scenarios: Record<string, () => JSX.Element> = {
         ));
     },
 
-    // a phone-width panel whose entry is a master-detail split: two pages,
-    // one inside the other, as Game Server's player roster is
-    nestedPages() {
-        const [page, setPage] = createSignal("players");
-        const [open, setOpen] = createSignal<string | undefined>();
-        const t = (window.t = { serverBacks: 0 });
-        return shell(() => {
-            // as Game Server: on a phone the server is an app-level page
-            const compact = createPaperCompact();
-            return (
-            <PaperSlidePage enabled={compact()} open position="fixed" title="My Server" onBack={() => t.serverBacks++}>
-            <PaperPanel>
-                <PaperMenu name="nav" value={page()} onValueChange={(v) => setPage(String(v))}>
-                    <PaperMenuItem value="players" icon="group">
-                        Players
-                    </PaperMenuItem>
-                    <PaperMenuItem value="settings" icon="settings">
-                        Settings
-                    </PaperMenuItem>
-                </PaperMenu>
-                <PaperInterfaceGroup value={page()}>
-                    <PaperInterfaceItem value="players" variant="fill">
-                        <PaperSplit
-                            detailActive={open() !== undefined}
-                            detailTitle={open()}
-                            onDetailClose={() => setOpen(undefined)}
-                            side={
-                                <PaperList name="players" value={open()} onValueChange={(v) => setOpen(String(v))}>
-                                    <For each={["Alex", "Sam", "Kai"]}>{(name) => <PaperListItem value={name}>{name}</PaperListItem>}</For>
-                                </PaperList>
-                            }
-                        >
-                            <p id="detail">{open() ?? "nobody"}</p>
-                        </PaperSplit>
-                    </PaperInterfaceItem>
-                    <PaperInterfaceItem value="settings">
-                        <p id="settings-page">Settings page</p>
-                    </PaperInterfaceItem>
-                </PaperInterfaceGroup>
-            </PaperPanel>
-            </PaperSlidePage>
-            );
-        });
-    },
 
     slidePage() {
         const [open, setOpen] = createSignal(true);
@@ -965,26 +723,6 @@ const scenarios: Record<string, () => JSX.Element> = {
         return shell(() => <Poller />);
     },
 
-    // pictures named by a relative address or any URL scheme, and a glyph;
-    // the page lives at the root and its stylesheet under /assets
-    pictures() {
-        return shell(() => (
-            <div style={{ padding: "24px", display: "flex", "flex-direction": "column", gap: "16px", width: "320px" }}>
-                <span id="tinted" style={{ "font-size": "48px" }}>
-                    <PaperIcon src="pictures/mark.svg" tint />
-                </span>
-                <div id="scheme">
-                    <PaperMediaCard title="Scheme" icon="panel://dev.example/icon.png" />
-                </div>
-                <div id="relative">
-                    <PaperMediaCard title="Relative" icon="pictures/card.svg" />
-                </div>
-                <div id="glyph">
-                    <PaperMediaCard title="Glyph" icon="dns" />
-                </div>
-            </div>
-        ));
-    },
 
     provider() {
         const [theme, setTheme] = createSignal<ThemeMode | undefined>((query.get("theme") as ThemeMode | null) ?? undefined);

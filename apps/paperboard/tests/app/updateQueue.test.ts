@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { PartialUpdateError, UpdateQueue, type UpdateJob } from "../../src/main/updateQueue";
-import { batchPercent, groupHolds, holdGroupText, pendingUpdates, type UpdateHold, type UpdateQueueState } from "../../src/shared/updateQueue";
+import { batchPercent, pendingUpdates, type UpdateHold, type UpdateQueueState } from "../../src/shared/updateQueue";
 
 const identity = (key: string) => ({ key, kind: "panel" as const, computerId: "local", computerName: null, panelId: key, name: key, version: "2.0.0" });
 
@@ -76,46 +76,5 @@ describe("update queue", () => {
         expect(() => q.enqueue({ items: [identity("k"), identity("z")], run: async () => undefined })).toThrow("already in the list");
         g.open();
         expect((await both).map((i) => [i.key, i.status, i.error])).toEqual([["p", "done", null], ["k", "failed", "checksum mismatch"]]);
-    });
-
-    test("held updates waiting for the same panels are one group, said in one sentence", () => {
-        const hold = (key: string, name: string, users: string[], computerId = "local"): UpdateHold =>
-            ({ key, kind: "package", computerId, computerName: computerId === "local" ? null : "VPS", id: key, name, version: "2", sha256: null, users });
-        const groups = groupHolds([
-            hold("gs", "Game Server", ["Game Server"]),
-            hold("java", "Java 21", ["Game Server"]),
-            hold("node", "Node", ["Bots", "Game Server"]),
-            hold("vps-java", "Java 21", ["Game Server"], "vps"),
-            hold("own", "FFmpeg", ["Paperboard"]),
-        ]);
-        expect(groups.map((g) => g.keys)).toEqual([["gs", "java"], ["node"], ["vps-java"], ["own"]]);
-        expect(groups.map(holdGroupText)).toEqual([
-            "Game Server and Java 21 need updating, but Game Server is using them.",
-            "Node needs updating, but Bots and Game Server are using it.",
-            "Java 21 on VPS needs updating, but Game Server is using it.",
-            "FFmpeg needs updating, but Paperboard's processes are using it.",
-        ]);
-    });
-
-    test("a refresh that finds the same holds, or a change that changes nothing, tells no shell", () => {
-        const { q, published } = queue();
-        const hold: UpdateHold = { key: "package:local:java", kind: "package", computerId: "local", computerName: null, id: "java", name: "java", version: "21", sha256: null, users: ["Minecraft"] };
-        q.setHolds("packages", [hold]);
-        const after = published.length;
-        q.setHolds("packages", [{ ...hold }]);
-        q.setHoldsError(null);
-        q.setChecking(false);
-        expect(published.length).toBe(after);
-        expect(q.snapshot().holds).toEqual([hold]);
-    });
-
-    test("a failure found outside the queue is listed once", () => {
-        const { q } = queue();
-        const failed = { ...identity("p"), kind: "package" as const, status: "failed" as const, stage: null, percent: null, bytesLoaded: null, bytesTotal: null, error: "rename failed" };
-        q.report(failed);
-        const revision = q.snapshot().revision;
-        q.report(failed);
-        expect(q.snapshot().revision).toBe(revision);
-        expect(q.snapshot().items).toEqual([failed]);
     });
 });

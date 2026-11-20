@@ -1,6 +1,12 @@
 .PaperText {
     font-family: var(--paper-font-family);
 }
+/* a heading or paragraph passed as `as` drops the browser's margins: the
+   layout it sits in spaces it. :where() keeps this at zero specificity, so
+   a caller's own class can still set a margin */
+:where(.PaperText) {
+    margin: 0;
+}
 .PaperText.rounded {
     font-family: var(--paper-font-family-rounded);
 }

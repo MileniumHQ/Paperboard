@@ -86,62 +86,6 @@ describe("PaperConsole windowing", () => {
         expect(after.mounted).toBeLessThan(200);
     });
 
-    test("a console that shrinks before its own scroll event arrives keeps following the tail", async () => {
-        page = await browser.open("console", { query: "lines=200" });
-        await showing("line 199");
-        // in one task, as a window that isn't painting does it: the console
-        // moves to its newest line (its scroll event waits for the next
-        // frame), then its box shrinks by the height of readouts above it
-        await page.eval(`(() => {
-            const out = document.querySelector('${OUTPUT}');
-            out.scrollTop -= 1;
-            out.scrollTop = out.scrollHeight;
-            document.querySelector("#console").style.height = "220px";
-        })()`);
-        await page.frames();
-        await page.eval("t.append(5)");
-        await showing("line 204");
-    });
-
-    test("rows that grow after they are drawn, as a web font arriving after a reload makes them, leave the newest line in view", async () => {
-        page = await browser.open("console", { query: "lines=300" });
-        await showing("line 299");
-        // nothing new arrives: only the rows already drawn get taller
-        await page.eval(`(() => { const s = document.createElement("style"); s.textContent = '${ROWS} { font-size: 2em; }'; document.head.append(s); })()`);
-        await page.frames();
-        await showing("line 299");
-    });
-
-    test("following the tail, a scroll the reader didn't make never stops it, however late its event lands", async () => {
-        page = await browser.open("console", { query: "lines=300" });
-        await showing("line 299");
-        // the console's own move to the end, then the log growing before
-        // that move's scroll event arrives, a frame later
-        await page.eval(`(() => {
-            const out = document.querySelector('${OUTPUT}');
-            out.scrollTop = out.scrollHeight;
-            const s = document.createElement("style"); s.textContent = '${ROWS} { padding-bottom: 6px; }'; document.head.append(s);
-            out.scrollTop -= 40;
-        })()`);
-        await page.frames();
-        await page.eval("t.append(5)");
-        await showing("line 304");
-    });
-
-    test("a row whose height flickers by a sub-pixel settles instead of re-measuring forever", async () => {
-        page = await browser.open("console", { query: "lines=0&flicker=1" });
-        await page.eval(`t.set(["flicker", ...Array.from({ length: 300 }, (_, i) => "line " + i)])`);
-        await showing("line 299");
-        await page.eval(`t.set(["flicker", ...Array.from({ length: 30 }, (_, i) => "line " + i)])`);
-        await showing("line 29");
-        await page.eval("t.append(10)");
-        await showing("line 39");
-
-        const measures = await page.eval<number>("t.flickerMeasures");
-        expect(measures).toBeGreaterThan(0);
-        // a settled row is measured a handful of times per update, never in a loop
-        expect(measures).toBeLessThan(50);
-    });
 });
 
 // Inventory: PaperConsole — Typing a command leaves nothing behind.

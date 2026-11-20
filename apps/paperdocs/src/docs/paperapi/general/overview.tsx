@@ -93,7 +93,7 @@ import { RPC, readResult } from "@mileniumhq/paperapi/protocol";`}
             </PaperTable>
             <PaperText preset="body" as="p">
                 The panel page and the widget page find their identity without any setup.
-                A service does too, as long as it is started by the daemon.
+                A service does too, as long as it is started by the daemon.{" "}
                 <PaperLink href="/docs/paperapi/connection/">Connection and identity</PaperLink> covers the rare case of connecting by hand.
             </PaperText>
 
@@ -134,7 +134,7 @@ import { RPC, readResult } from "@mileniumhq/paperapi/protocol";`}
             <PaperText preset="body" as="p">
                 Panels are reviewed and first-party, and they are not sandboxed.
                 A panel can start any program and reach any HTTPS address.
-                What the daemon does enforce is ownership: a panel's credential reads and writes only that panel's config, files, secrets, ports, backups and processes.
+                What the daemon does enforce is ownership: a panel's credential reads and writes only that panel's config, files, secrets, ports, backups and processes.{" "}
                 <PaperLink href="/docs/paperapi/permissions/">Permissions</PaperLink> lists exactly what a panel credential can and cannot do.
             </PaperText>
 

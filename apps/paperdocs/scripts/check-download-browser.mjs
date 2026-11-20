@@ -33,7 +33,7 @@ export async function checkDownloads(browser, origin) {
         assert.equal(await page.getByLabel('Paperboard server daemon downloads', { exact: true }).locator('a[href^="https://i.paperboard.dev/"]').count(), 5);
         // the terminal installs: the island renders them again so each copy
         // button copies its command (the prerendered ones do nothing)
-        const commands = ['curl -fsSL https://i.paperboard.dev | sh', 'irm https://i.paperboard.dev | iex', 'npx @mileniumhq/paperboard'];
+        const commands = ['curl -fsSL https://i.paperboard.dev | sh', 'npx @mileniumhq/paperboard'];
         const copyButtons = page.locator('#site-install button');
         assert.equal(await copyButtons.count(), commands.length, 'Each install command has its copy button');
         for (const [i, command] of commands.entries()) {
@@ -42,6 +42,7 @@ export async function checkDownloads(browser, origin) {
             await page.waitForFunction(i => document.querySelectorAll('#site-install button')[i]?.getAttribute('aria-label') === 'Copied', i);
             assert.equal(await page.evaluate(() => navigator.clipboard.readText()), command, `Copy puts ${command} on the clipboard`);
         }
+        assert.equal(await page.locator('#site-install pre').filter({ hasText: /\b(irm|iex)\b/ }).count(), 0, 'No pipe-to-PowerShell install is offered');
         assert.equal(await page.locator('main a[href^="https://i.paperboard.dev/"]').count(), 14, 'Both products retain every architecture and Linux format');
         assert.equal(await page.locator('main a[href^="https://i.paperboard.dev/"]').filter({ hasText: /^Download$/ }).count(), 0, 'Links identify the architecture rather than repeating Download');
 

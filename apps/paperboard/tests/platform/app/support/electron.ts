@@ -108,12 +108,12 @@ export async function launchElectron(options: {
     });
 
     let nextId = 1;
-    const command = <T>(op: string, fields: Record<string, unknown>, ms = WAIT_MS): Promise<T> => {
+    const send = <T>(op: string, fields: Record<string, unknown>, ms: number, stalled: (id: number) => Promise<string>): Promise<T> => {
         const id = nextId++;
         return new Promise<T>((resolve, reject) => {
             const timer = setTimeout(() => {
                 replies.delete(id);
-                reject(new Error(`electron: ${op} got no answer within ${ms} ms`));
+                void stalled(id).then((why) => reject(new Error(why)));
             }, ms);
             replies.set(id, (reply) => {
                 clearTimeout(timer);
@@ -123,6 +123,19 @@ export async function launchElectron(options: {
             link!.write(`${JSON.stringify({ id, op, ...fields })}\n`);
         });
     };
+    // A command with no answer says what it was, and what the main process
+    // says it is doing: still running in a page, waiting for one to load, or
+    // nothing, if main itself doesn't answer.
+    const STATUS_MS = 5_000;
+    const command = <T>(op: string, fields: Record<string, unknown>, ms = WAIT_MS): Promise<T> =>
+        send<T>(op, fields, ms, async (id) => {
+            const what = `electron: ${op}${typeof fields.match === "string" ? ` in ${fields.match}` : ""} got no answer within ${ms} ms` +
+                (typeof fields.code === "string" ? `:\n${fields.code.slice(0, 1000)}` : "");
+            const status = await send("status", { of: id }, STATUS_MS, async () => `the main process didn't answer either within ${STATUS_MS} ms`)
+                .then((s) => `the main process says: ${JSON.stringify(s)}`, (err: Error) => err.message);
+            const recent = JSON.stringify(events.slice(-20)).slice(0, 4000);
+            return `${what}\n${status}\nlast events: ${recent}\n${watched.output().slice(-4000)}`;
+        });
 
     return {
         ...watched,
@@ -167,8 +180,10 @@ export async function launchElectron(options: {
 
 // Resolves inside a page with the value of `expression` once it is truthy,
 // watching the DOM rather than polling a clock. A found element answers
-// true: Electron can't send a DOM node back from the page.
-export function domCondition(expression: string, ms = WAIT_MS): string {
+// true: Electron can't send a DOM node back from the page. It gives up a
+// little before the command that carries it does, so a wait that never ends
+// fails saying what it waited for and what the page showed.
+export function domCondition(expression: string, ms = WAIT_MS - 5_000): string {
     return `new Promise((resolve, reject) => {
         const check = () => { const value = (${expression}); return value instanceof Node ? true : value; };
         const first = check();
@@ -181,9 +196,15 @@ export function domCondition(expression: string, ms = WAIT_MS): string {
 
 export const SHELL = "paperboard://shell/";
 
-// The shell is up when its page loaded from the packaged origin and it has
-// listed this computer from what the daemon answered.
-export async function shellReady(electron: ElectronApp): Promise<void> {
+// The shell's page loaded from the packaged origin: its scripts run, and
+// what it says at start (a toast, gone after 10 s) can be watched for from here.
+export async function shellLoaded(electron: ElectronApp): Promise<void> {
     await electron.waitEvent("shell page", (e) => e.event === "loaded" && e.url === `${SHELL}index.html`);
+}
+
+// The shell is up when its page loaded and it has listed this computer
+// from what the daemon answered.
+export async function shellReady(electron: ElectronApp): Promise<void> {
+    await shellLoaded(electron);
     await electron.evalIn(SHELL, domCondition(`document.body.innerText.includes("This Computer")`));
 }

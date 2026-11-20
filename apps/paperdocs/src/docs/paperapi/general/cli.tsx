@@ -354,7 +354,7 @@ $ bunx paperapi restart dev.example.nothing
             <PaperText preset="subheader" as="h2" id="monitor">monitor</PaperText>
             <PaperText preset="body" as="p">
                 Prints one line per call the daemon answers, per event it broadcasts, and per change of a service or a supervised process.
-                The first column is the time, the second the panel that made the call, or <PaperCode>host</PaperCode> for Paperboard itself and this command.
+                The first column is the time, the second the panel that made the call, or <PaperCode>host</PaperCode> for Paperboard itself and this command.{" "}
                 <PaperCode>--panel</PaperCode> keeps records the panel made, and calls that name it as their target.
             </PaperText>
             <PaperCode block language="sh">
@@ -385,7 +385,7 @@ stdin consoleInput inputEncoding allowDowngrade deleteData targetPath path cwd c
             </PaperCode>
             <PaperText preset="body" as="p">
                 Every other argument is shown by shape only: a string as <PaperCode>‹15 chars›</PaperCode>, an array as <PaperCode>[3]</PaperCode>, an object as its first 16 keys <PaperCode>{"{city,units}"}</PaperCode>.
-                The credential and protocol version are left out. A record shows at most 32 arguments, and an error message at most 500 characters.
+                The credential and protocol version are left out. A record shows at most 32 arguments, and an error message at most 500 characters.{" "}
                 <PaperCode>command</PaperCode> and <PaperCode>cwd</PaperCode> are shown by value, while the <PaperCode>args</PaperCode> and <PaperCode>env</PaperCode> of a process are not.
             </PaperText>
 

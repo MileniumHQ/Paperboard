@@ -294,9 +294,14 @@ try {
     assert.ok(!(await page.locator("main").innerText()).toLowerCase().includes("all-in-one"), "The landing must not call Paperboard an all-in-one toolkit");
     // Scroll the whole page so every lazy image loads, then prove each one
     // decoded, and that nothing fetched a model or the 3D engine.
+    // An image picks its source (currentSrc) once it starts loading, so
+    // each stop waits until every image on screen has started.
     for (let y = 0; y < await page.evaluate(() => document.documentElement.scrollHeight); y += 600) {
         await page.evaluate(top => scrollTo(0, top), y);
-        await page.waitForTimeout(60);
+        await page.waitForFunction(() => [...document.querySelectorAll("main img")].every(image => {
+            const box = image.getBoundingClientRect();
+            return box.bottom < 0 || box.top > innerHeight || image.currentSrc !== "";
+        }));
     }
     await page.locator("main img").evaluateAll(images => Promise.all(images.map(image => image.decode())));
     assert.deepEqual(
@@ -366,9 +371,8 @@ try {
             assert.ok(link && Math.max(link.width, link.height) >= 24, `The dash between hosts and desktop needs a legible run at ${width} × ${height}`);
             await shapePage.locator("[data-play-field]").scrollIntoViewIfNeeded();
             const still = width <= 600;
-            if (!still) {
-                await shapePage.waitForFunction(() => [...document.querySelectorAll(".play-icon")].every(icon => icon.style.transform.includes("translate3d")));
-            }
+            if (still) await shapePage.locator('[data-play-field][data-play-state="still"]').waitFor({ state: "attached" });
+            else await shapePage.waitForFunction(() => [...document.querySelectorAll(".play-icon")].every(icon => icon.style.transform.includes("translate3d")));
             const outro = await shapePage.evaluate(() => ({
                 copy: [...document.querySelectorAll(".outro-copy .styled-text-host, .outro-copy .download-cta")].map(element => element.getBoundingClientRect().toJSON()),
                 icons: [...document.querySelectorAll(".play-icon")].map(element => ({ box: element.getBoundingClientRect().toJSON(), transform: element.style.transform })),
@@ -388,6 +392,21 @@ try {
     await page.locator("[data-play-field]").scrollIntoViewIfNeeded();
     await page.waitForFunction(() => [...document.querySelectorAll(".play-icon")].every(icon => icon.style.transform.includes("translate3d")));
     assert.equal(await page.locator('[data-play-state="unavailable"]').count(), 0);
+    // Watch every frame from the first push until the icons come to rest:
+    // none may cover the copy on any frame, not only where it lands.
+    await page.evaluate(() => {
+        window.__overCopy = [];
+        const sample = () => {
+            const copy = [...document.querySelectorAll(".outro-copy .styled-text-host, .outro-copy .download-cta")].map(element => element.getBoundingClientRect());
+            for (const [index, icon] of [...document.querySelectorAll(".play-icon")].entries()) {
+                const box = icon.getBoundingClientRect();
+                if (copy.some(part => box.left < part.right - 1 && part.left < box.right - 1 && box.top < part.bottom - 1 && part.top < box.bottom - 1))
+                    window.__overCopy.push(`icon ${index}: ${icon.style.transform}`);
+            }
+            requestAnimationFrame(sample);
+        };
+        requestAnimationFrame(sample);
+    });
     const icons = page.locator(".play-icon");
     const a = await icons.nth(0).boundingBox(), b = await icons.nth(1).boundingBox();
     assert.ok(a && b);
@@ -403,7 +422,11 @@ try {
     await page.mouse.down();
     await page.mouse.move(heading.x + heading.width / 2, heading.y + heading.height / 2, { steps: 16 });
     await page.mouse.up();
-    await page.waitForTimeout(1500);
+    // Friction acts once per frame, so a glide lasts about 1,600 frames: half
+    // a minute at 60 fps, up to a minute in headless Chromium. The deadline
+    // fails below roughly 18 fps. Damping by elapsed time is tracked in #48.
+    await page.locator('[data-play-field][data-play-state="resting"]').waitFor({ state: "attached", timeout: 90_000 });
+    assert.deepEqual(await page.evaluate(() => [...new Set(window.__overCopy)]), [], "No frame may show an icon over the copy");
     const outroCopy = await page.evaluate(() => [...document.querySelectorAll(".outro-copy .styled-text-host, .outro-copy .download-cta")].map(element => element.getBoundingClientRect().toJSON()));
     const landed = await icons.evaluateAll(elements => elements.map(element => element.getBoundingClientRect().toJSON()));
     assert.ok(landed.every(icon => outroCopy.every(copy => !overlaps(icon, copy))), "An icon dragged onto the heading must end up beside it, not over it");
@@ -414,7 +437,7 @@ try {
     try {
         await calm.goto(`${origin}/`);
         await calm.locator("[data-play-field]").scrollIntoViewIfNeeded();
-        await calm.waitForTimeout(400);
+        await calm.locator('[data-play-field][data-play-state="still"]').waitFor({ state: "attached" });
         assert.ok(await calm.locator(".play-icon").evaluateAll(elements => elements.every(element => element.style.transform === "" && getComputedStyle(element).position === "static")), "Reduced motion leaves the icons still");
     } finally { await calm.close(); }
     console.log("verified reduced motion keeps the outro icons still");
@@ -466,10 +489,10 @@ try {
     const shot = page.locator(".learn-feature-shot").first();
     await shot.scrollIntoViewIfNeeded();
     const restingTilt = await shot.evaluate(element => new DOMMatrix(getComputedStyle(element).transform).m13);
+    assert.ok(Math.abs(restingTilt) > 0.05, `The screenshot rests tilted (${restingTilt})`);
     await shot.hover();
-    await page.waitForTimeout(700);
-    const hoverTilt = await shot.evaluate(element => new DOMMatrix(getComputedStyle(element).transform).m13);
-    assert.ok(Math.abs(hoverTilt) < 0.01 && Math.abs(restingTilt) > 0.05, `Hover must turn the screenshot to face the camera (${restingTilt} -> ${hoverTilt})`);
+    // Hover turns the screenshot to face the camera once its transition ends.
+    await page.waitForFunction(element => Math.abs(new DOMMatrix(getComputedStyle(element).transform).m13) < 0.01, await shot.elementHandle(), { polling: "raf" });
     const shotLink = shot.locator(".learn-shot-link");
     const shotAlt = await shotLink.locator("img").getAttribute("alt");
     await shotLink.click();
@@ -524,10 +547,20 @@ try {
         });
         await slowPage.addInitScript(() => {
             window.__blankHeadings = [];
+            // The heading the parser is still inside has no lines yet; that is
+            // the page streaming in, not a blank effect, so it waits its turn.
+            const parsing = () => {
+                if (document.readyState !== "loading") return null;
+                let node = document.documentElement;
+                while (node.lastElementChild) node = node.lastElementChild;
+                return node;
+            };
             const sample = () => {
                 const main = document.querySelector("main");
                 if (main && main.getBoundingClientRect().height > 0) {
+                    const open = parsing();
                     for (const heading of document.querySelectorAll(".marketing-heading")) {
+                        if (open && heading.contains(open)) continue;
                         if (heading.getBoundingClientRect().height < 1) window.__blankHeadings.push(heading.textContent.trim());
                     }
                 }
@@ -540,7 +573,9 @@ try {
             const onRequest = (request) => { if (/\/html\/|\/css\/(styled-text|paper-button|bg-overlay)\.css/.test(request.url())) templateFetches.push(request.url()); };
             slowPage.on("request", onRequest);
             await slowPage.goto(`${origin}${path}`, { waitUntil: "load" });
-            await slowPage.waitForTimeout(400);
+            // Sample until every heading has drawn, so the frames cover first
+            // paint through the finished page.
+            await slowPage.waitForFunction(() => [...document.querySelectorAll(".marketing-heading")].every(heading => heading.getBoundingClientRect().height >= 1));
             slowPage.off("request", onRequest);
             assert.deepEqual(await slowPage.evaluate(() => [...new Set(window.__blankHeadings)]), [], `No heading on ${path} may paint blank before its effect renders`);
             assert.deepEqual(templateFetches, [], `Decorative elements on ${path} must not fetch their templates`);
@@ -596,11 +631,13 @@ try {
     // The reveal is scroll-driven CSS, so without JavaScript a section still
     // appears once the reader scrolls to it.
     await staticPage.locator(".learn-feature").first().scrollIntoViewIfNeeded();
-    await staticPage.waitForTimeout(300);
-    assert.equal(
-        await staticPage.locator(".learn-feature").first().evaluate((element) => getComputedStyle(element).opacity),
-        "1",
-    );
+    // Page scripts are off here, so poll from outside until the next frame
+    // applies the scroll position.
+    const revealDeadline = Date.now() + 10_000;
+    while (await staticPage.locator(".learn-feature").first().evaluate((element) => getComputedStyle(element).opacity) !== "1") {
+        assert.ok(Date.now() < revealDeadline, "Without JavaScript a section must appear once it scrolls into view");
+        await new Promise((resolve) => setTimeout(resolve, 50));
+    }
     await staticPage.close();
     assert.deepEqual(failures, []);
     await checkDownloads(browser, origin);

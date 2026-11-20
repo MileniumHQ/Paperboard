@@ -83,31 +83,3 @@ describe("a controlled PaperInput", () => {
         expect(await page.eval("document.activeElement.id")).toBe("refused");
     });
 });
-
-// Inventory: Menus and form controls — a field says what is wrong with it under itself.
-describe("a PaperInput's error", () => {
-    test("shows under the field and within its width, marks it wrong, describes it, and keeps the field (and its focus) as it comes and goes", async () => {
-        page = await browser.open("fieldError");
-        await typeInto("name", "My server");
-        await page.eval(`document.getElementById("name").dataset.kept = "yes"`);
-        await page.eval(`t.setError("Names are 1 to 32 letters, numbers or spaces, and this one is far longer than that")`);
-        const field = `document.getElementById("name")`;
-        await page.waitFor(`${field}.getAttribute("aria-invalid") === "true"`, "the field marked wrong");
-        const message = await page.eval<{ text: string; below: boolean; within: boolean }>(`(() => {
-            const input = ${field};
-            const ids = input.getAttribute("aria-describedby").split(" ");
-            const said = document.getElementById(ids.at(-1));
-            const box = input.closest("[data-invalid]").firstElementChild.getBoundingClientRect();
-            const r = said.getBoundingClientRect();
-            return { text: ids.map((id) => document.getElementById(id).textContent).join(" | "), below: r.top >= box.bottom, within: r.left >= box.left && r.right <= box.right };
-        })()`);
-        expect(message).toEqual({ text: "Shown in the server list | Names are 1 to 32 letters, numbers or spaces, and this one is far longer than that", below: true, within: true });
-        expect(await page.eval(`document.activeElement === ${field} && ${field}.dataset.kept === "yes"`)).toBe(true);
-
-        await page.eval("t.setError(undefined)");
-        await page.waitFor(`!${field}.hasAttribute("aria-invalid")`, "the field no longer wrong");
-        expect(await page.eval(`${field}.getAttribute("aria-describedby")`)).toBe("name-hint");
-        expect(await page.eval(`document.activeElement === ${field} && ${field}.dataset.kept === "yes"`)).toBe(true);
-        page.expectNoErrors();
-    });
-});

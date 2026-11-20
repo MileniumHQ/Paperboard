@@ -13,7 +13,7 @@ npx @mileniumhq/paperboard serve      # run the server daemon in this terminal, 
 
 ## Installing Paperboard
 
-`install` runs the same installer as `curl -fsSL https://i.paperboard.dev | sh` (Linux, macOS) and `irm https://i.paperboard.dev | iex` (Windows). Both ship in this package, in `install/`, and Origami serves these same files. The installer downloads the latest release's file for your computer, checks it against the release's `SHA256SUMS`, and installs it:
+`install` runs the same installer as `curl -fsSL https://i.paperboard.dev | sh` (Linux, macOS). On Windows it runs the installer script that ships in this package, in `install/`. Origami serves `install.sh`, not the Windows script. The installer downloads the latest release's file for your computer, checks it against the release's `SHA256SUMS`, and installs it:
 
 | Computer | Installs | Where |
 | --- | --- | --- |

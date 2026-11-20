@@ -119,7 +119,7 @@ export default function TroubleshootingDoc() {
 
             <PaperText preset="title" as="h3" id="invalid-code">That code didn't match. Try again in 5 seconds</PaperText>
             <PaperText preset="body" as="p">
-                The code was wrong. Wait the number of seconds shown, then type the code the daemon shows now. Until then, Paperboard says <PaperCode>Pairing is locked after a wrong code.</PaperCode>
+                The code was wrong. Wait the number of seconds shown, then type the code the daemon shows now. Until then, Paperboard says <PaperCode>Pairing is locked after a wrong code.</PaperCode>{" "}
                 After the third wrong code, the wait is 30 seconds.
             </PaperText>
 
@@ -167,8 +167,8 @@ export default function TroubleshootingDoc() {
 
             <PaperText preset="title" as="h3" id="couldnt-install">Couldn't install</PaperText>
             <PaperText preset="body" as="p">
-                The reason follows the panel's name.
-                <PaperCode>Install refused</PaperCode> means the download failed the signature or checksum check, or the Panel Library could not be reached. Nothing was installed. Try again later, and if it repeats, <PaperLink href="/contact/">contact us</PaperLink> with the message.
+                The reason follows the panel's name.{" "}
+                <PaperCode>Install refused</PaperCode> means the download failed the signature or checksum check, or the Panel Library could not be reached. Nothing was installed. Try again later, and if it repeats, <PaperLink href="/contact/">contact us</PaperLink> with the message.{" "}
                 <PaperCode>An operation on</PaperCode> the panel <PaperCode>is already running</PaperCode> means it is being installed or removed already. Wait for that to finish.
             </PaperText>
 

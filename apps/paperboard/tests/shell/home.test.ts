@@ -5,6 +5,7 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { waitFor } from "testkit/wait";
 import { bootShell, clickText, errorGone, errorShown, type Shell } from "./support/shell";
 
 let shell: Shell;
@@ -24,30 +25,16 @@ afterAll(async () => {
 
 type Saved = { items: { widgetId: string; x: number; y: number }[] };
 
-/** resolves once the layout file satisfies `ready`, checked on every change to its folder */
+/** resolves once the layout file satisfies `ready`; read again and again, since a folder's watcher (fs.watch) misses writes under Bun */
 function savedLayout(ready: (saved: Saved) => boolean, what: string): Promise<Saved> {
     const file = layoutFile();
-    return new Promise((resolve, reject) => {
-        const read = (): Saved | null => {
-            if (!fs.existsSync(file) || !fs.statSync(file).isFile()) return null;
-            const text = fs.readFileSync(file, "utf8");
-            // the daemon replaces the file whole; a read can't see half of it
-            return text ? (JSON.parse(text) as Saved) : null;
-        };
-        const check = () => {
-            const saved = read();
-            if (!saved || !ready(saved)) return;
-            watcher.close();
-            clearTimeout(timer);
-            resolve(saved);
-        };
-        const watcher = fs.watch(path.dirname(file), check);
-        const timer = setTimeout(() => {
-            watcher.close();
-            reject(new Error(`Timed out waiting for ${what}; ${file} holds ${fs.existsSync(file) ? fs.readFileSync(file, "utf8") : "nothing"}`));
-        }, 20_000);
-        check();
-    });
+    return waitFor(what, () => {
+        if (!fs.existsSync(file) || !fs.statSync(file).isFile()) return null;
+        const text = fs.readFileSync(file, "utf8");
+        // the daemon replaces the file whole; a read can't see half of it
+        const saved = text ? (JSON.parse(text) as Saved) : null;
+        return saved && ready(saved) ? saved : null;
+    }, { timeoutMs: 20_000 });
 }
 
 const tile = (name: string) => `[role=button][aria-roledescription='movable widget'][aria-label^='${name},']`;
@@ -83,6 +70,8 @@ test("a widget added from the gallery, dragged and moved with the keyboard, is s
     const added = await savedLayout((saved) => saved.items.some((item) => item.widgetId === "uptime"), "the added Uptime");
     const at = added.items.find((item) => item.widgetId === "uptime")!;
 
+    // the new tile has come to rest, so the drag starts on it and not where it was a frame ago
+    await page.motionSettled();
     // dragged one cell to the right and one down, as a mouse would
     const box = await page.evaluate<{ x: number; y: number; cell: number }>(`(() => {
         const rect = document.querySelector(${JSON.stringify(tile("Uptime"))}).getBoundingClientRect();

@@ -176,7 +176,7 @@ export default function ContractApiDoc() {
 
             <PaperText preset="subheader" as="h2" id="shapes">Shapes</PaperText>
             <PaperText preset="body" as="p">
-                A value travels as JSON, so a shape is one of JSON's: text, numbers, true or false, lists, objects and nothing.
+                A value travels as JSON, so a shape is one of JSON's: text, numbers, true or false, lists, objects and nothing.{" "}
                 <PaperCode>{"Infer<typeof s>"}</PaperCode> is the TypeScript type a shape describes. Write a shape once and take its type from it, as the sample does with <PaperCode>Forecast</PaperCode>.
             </PaperText>
             <PaperTable>

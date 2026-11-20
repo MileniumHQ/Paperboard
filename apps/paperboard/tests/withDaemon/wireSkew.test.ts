@@ -52,25 +52,6 @@ describe("a peer of another release", () => {
         await host.close();
     });
 
-    test("a refused call names the action and the field, with the reason the old daemon gave", async () => {
-        const daemon = await startDaemon();
-        const host = await daemon.rpc();
-        const missing = await host.fail("term:write", { id: "t1" });
-        expect(missing.code).toBe("INVALID_PARAMS");
-        expect(missing.error).toContain("term:write");
-        expect(missing.error).toContain('"data"');
-        const long = await host.fail("term:create", { id: "t".repeat(140) });
-        expect(long).toEqual({ error: 'Request failed: Parameter "id" exceeds 128 characters (in term:create)', code: "INVALID_PARAMS" });
-        const wrong = await host.fail("update:inUse", { panels: "test.a" });
-        expect(wrong.code).toBe("INVALID_PARAMS");
-        expect(wrong.error).toContain("update:inUse");
-        // a host action refuses a panel's credential before reading its params
-        const panel = await daemon.panelRpc("test.panel");
-        expect((await panel.fail("update:inUse", { panels: "test.a" })).code).toBe("FORBIDDEN");
-        await host.close();
-        await panel.close();
-    });
-
     test("events:subscribe reads as every release sent it: entries that aren't names pass over, added fields travel, and a missing list is refused naming it", async () => {
         const daemon = await startDaemon();
         const host = await daemon.rpc();

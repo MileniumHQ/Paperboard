@@ -250,7 +250,7 @@ export default function WidgetsGuideDoc() {
                 </tbody>
             </PaperTable>
             <PaperText preset="body" as="p">
-                <PaperCode>PaperWidgetMessage</PaperCode> takes the reason twice: <PaperCode>description</PaperCode> shows it in the tile, cut to fit, and <PaperCode>hint</PaperCode> shows all of it as a tooltip.
+                <PaperCode>PaperWidgetMessage</PaperCode> takes the reason twice: <PaperCode>description</PaperCode> shows it in the tile, cut to fit, and <PaperCode>hint</PaperCode> shows all of it as a tooltip.{" "}
                 <PaperCode>tone="danger"</PaperCode> marks a failure and makes a screen reader read it out.
             </PaperText>
 

@@ -59,7 +59,7 @@ export function Example() {
             <PaperText preset="subheader" as="h2" id="props">Props</PaperText>
             <PaperText preset="body" as="p">
                 PaperInputProps extends <PaperCode>JSX.InputHTMLAttributes&lt;HTMLInputElement&gt;</PaperCode> without <PaperCode>ref</PaperCode>.
-                Props not listed here, such as <PaperCode>placeholder</PaperCode>, <PaperCode>name</PaperCode>, <PaperCode>autocomplete</PaperCode>, <PaperCode>required</PaperCode>, <PaperCode>maxlength</PaperCode>, and <PaperCode>onKeyDown</PaperCode>, land on the <PaperCode>input</PaperCode> or <PaperCode>textarea</PaperCode> itself.
+                Props not listed here, such as <PaperCode>placeholder</PaperCode>, <PaperCode>name</PaperCode>, <PaperCode>autocomplete</PaperCode>, <PaperCode>required</PaperCode>, <PaperCode>maxlength</PaperCode>, and <PaperCode>onKeyDown</PaperCode>, land on the <PaperCode>input</PaperCode> or <PaperCode>textarea</PaperCode> itself.{" "}
                 <PaperCode>class</PaperCode> and <PaperCode>classList</PaperCode> land on the wrapper.
             </PaperText>
             <PaperTable>
@@ -231,7 +231,7 @@ export function Example() {
             <PaperText preset="subheader" as="h3" id="validation">Validation</PaperText>
             <PaperText preset="body" as="p">
                 Say what is wrong with <PaperCode>error</PaperCode>: a rule the text breaks, or the reason a save of this field was refused.
-                Never write the reason as red text of your own next to the field.
+                Never write the reason as red text of your own next to the field.{" "}
                 <PaperCode>validate</PaperCode> marks a rule on the text with no words, and <PaperCode>invalid</PaperCode> a verdict you already hold.
             </PaperText>
             <PaperCard data-docs-demo padding="double" surface="front">

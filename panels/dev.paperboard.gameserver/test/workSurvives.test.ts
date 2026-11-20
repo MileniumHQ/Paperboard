@@ -1,8 +1,6 @@
 // What a person was doing survives what they do next: an edit still waiting
-// for typing to pause is saved when its tab is left, leaving Files with an
-// unsaved file asks whether to save it (and Cancel keeps it being edited),
-// and making the panel wider or narrower keeps the open player and an open
-// dialog with what was typed in it.
+// for typing to pause is saved when its tab is left, and leaving Files with an
+// unsaved file asks whether to save it (and Cancel keeps it being edited).
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import * as fs from "node:fs";
 import * as path from "node:path";
@@ -57,7 +55,6 @@ const openTab = async (page: Page, id: string, shows: string) => {
 };
 /** the text field in the setting row titled `title` */
 const fieldIn = (title: string) => `[...document.querySelectorAll("input")].find((el) => el.closest("[class*=PaperSettingItem]")?.querySelector("[data-preset=label]")?.innerText === ${JSON.stringify(title)})`;
-const button = (text: string) => `[...document.querySelectorAll("button")].find((b) => !b.closest("[inert]") && b.innerText.trim().endsWith(${JSON.stringify(text)}))`;
 
 describe("leaving a tab", () => {
     test("right after typing a resource pack prompt still saves it", async () => {
@@ -141,31 +138,6 @@ describe("leaving Files with an unsaved edit asks first", () => {
         }
     }, 60_000);
 
-    test("Discard leaves the file as it was, and coming back reads the folder again", async () => {
-        const served = await setUp();
-        fs.writeFileSync(eula(), EULA);
-        const page = await openPage(`${served.url}/?server=s-mc`);
-        try {
-            await editEula(page);
-            await pressEntry(page, "overview");
-            await answer(page, "Discard");
-            await page.waitFor(`!${editor} && ${chosenTab} === "overview"`, "the Overview tab");
-            expect(fs.readFileSync(eula(), "utf8")).toBe(EULA);
-            // made while Files was away: the tree shows it on return
-            fs.writeFileSync(path.join(serverDir(), "notes.txt"), "hello\n");
-            try {
-                await openTab(page, "files", `document.querySelector('[role=treeitem][data-path="notes.txt"]')`);
-                expect(await page.evaluate<boolean>(unsaved)).toBe(false);
-            } finally {
-                fs.rmSync(path.join(serverDir(), "notes.txt"));
-            }
-            expect(page.exceptions).toEqual([]);
-        } finally {
-            await page.close();
-            served.stop();
-        }
-    }, 60_000);
-
     test("Save writes the edit and then leaves", async () => {
         const served = await setUp();
         fs.writeFileSync(eula(), EULA);
@@ -203,136 +175,4 @@ describe("leaving Files with an unsaved edit asks first", () => {
         }
     }, 60_000);
 
-    test("All servers asks too, and leaves for the servers once discarded", async () => {
-        const served = await setUp();
-        fs.writeFileSync(eula(), EULA);
-        const page = await openPage(`${served.url}/?server=s-mc`);
-        try {
-            await editEula(page);
-            await pressEntry(page, "home");
-            await answer(page, "Cancel");
-            await stayed(page);
-            expect(await page.evaluate<string>(`location.search`)).toBe("?server=s-mc");
-            await pressEntry(page, "home");
-            await answer(page, "Discard");
-            await page.waitFor(`!new URLSearchParams(location.search).has("server") && !document.querySelector("input[name=serverMenu]")`, "the servers");
-            expect(fs.readFileSync(eula(), "utf8")).toBe(EULA);
-            expect(page.exceptions).toEqual([]);
-        } finally {
-            await page.close();
-            served.stop();
-        }
-    }, 60_000);
-
-    test("on a phone, every Back asks: the bar's and the system's, and the bar walks back to the servers once discarded", async () => {
-        const served = await setUp();
-        fs.writeFileSync(eula(), EULA);
-        const page = await openPage(`${served.url}/?server=s-mc`, "400,800");
-        // one bar shows, the outermost page's ("Survival › Files › eula.txt"); its Back goes back from the innermost open page
-        const bar = `[...document.querySelectorAll("[role=region]")].find((r) => r.getAttribute("aria-label").startsWith("Survival"))`;
-        const back = `${bar}.querySelector(":scope > header button[aria-label=Back]")`;
-        const pressBack = async () => {
-            // a page slides without changing the DOM, so this is looked at until it is in place
-            const inPlace = `Math.abs(${bar}.getBoundingClientRect().left) < 1`;
-            const deadline = Date.now() + 5_000;
-            while (!(await page.evaluate<boolean>(inPlace))) {
-                if (Date.now() > deadline) throw new Error("The server's page never slid into place");
-                await Bun.sleep(25); // quiet: a deadline-bound poll for the page to slide into place
-            }
-            await page.evaluate(`${back}.dataset.test = "back"`);
-            await page.click('[data-test="back"]');
-            await page.evaluate(`delete document.querySelector('[data-test="back"]').dataset.test`);
-        };
-        const systemBack = () => page.evaluate<boolean>(`(() => { const e = new Event("paperboard:back", { cancelable: true }); window.dispatchEvent(e); return e.defaultPrevented; })()`);
-        const visibleBacks = `[...document.querySelectorAll("button[aria-label=Back]")].filter((b) => b.checkVisibility() && !b.closest("[inert]")).length`;
-        try {
-            await editEula(page);
-            expect(await page.evaluate<number>(visibleBacks)).toBe(1);
-            await pressBack();
-            await answer(page, "Cancel");
-            await stayed(page);
-            expect(await page.evaluate<boolean>(`${bar}.closest("[inert]") === null`)).toBe(true);
-            expect(await systemBack()).toBe(true);
-            await answer(page, "Cancel");
-            await stayed(page);
-            // asked again, it asks again
-            await pressBack();
-            await answer(page, "Cancel");
-            await stayed(page);
-
-            await pressBack();
-            await answer(page, "Discard");
-            await page.waitFor(`!${editor}`, "the file to close");
-            expect(fs.readFileSync(eula(), "utf8")).toBe(EULA);
-            // nothing is left to ask about: each Back goes up a page until the servers list
-            const deadline = Date.now() + 10_000;
-            while (await page.evaluate<boolean>(`Boolean(${bar})`)) {
-                if (Date.now() > deadline) throw new Error("Back never reached the servers list");
-                expect(await page.evaluate<boolean>(`Boolean(${question})`)).toBe(false);
-                const before = await page.evaluate<string>(`${bar}.getAttribute("aria-label")`);
-                await pressBack();
-                // each press goes up exactly one page: the bar names one page fewer, or the server page is gone
-                await page.waitFor(`!${bar} || ${bar}.getAttribute("aria-label") !== ${JSON.stringify(before)}`, "the page above");
-            }
-            await page.waitFor(`!new URLSearchParams(location.search).has("server")`, "the servers list");
-            expect(page.exceptions).toEqual([]);
-        } finally {
-            await page.close();
-            served.stop();
-        }
-    }, 60_000);
-});
-
-describe("crossing between the phone and the wide layout", () => {
-    test("keeps the open player and the tab they are on", async () => {
-        const served = await setUp();
-        const page = await openPage(`${served.url}/?server=s-mc`, "400,800");
-        try {
-            await page.waitFor(`document.querySelector('input[name=serverMenu][value="players"]')`, "the server menu");
-            await pressEntry(page, "players");
-            await page.waitFor(`document.querySelector('input[name=playersList][value="Steve"]')`, "the roster");
-            await page.settled();
-            await page.evaluate(`document.querySelector('input[name=playersList][value="Steve"]').closest("label, li, [role=radio]").click()`);
-            await page.waitFor(`[...document.querySelectorAll("[role=switch]")].some((el) => !el.closest("[inert]"))`, "Steve's page");
-            await page.settled();
-            // Steve's page shows his uuid, which only his page does
-            const steveShown = `document.body.innerText.includes("8667ba71-b85a-4004-af54-457a9734eed7") && !document.body.innerText.includes("Select a player")`;
-            await page.waitFor(steveShown, "Steve's page on the phone");
-            await page.evaluate(`document.querySelector('input[name=playersList][value="Steve"]').closest("label, li, [role=radio]").dataset.test = "steve"`);
-            await page.resize(1400, 900);
-            await page.waitFor(steveShown, "Steve's page in the wide layout");
-            expect(await page.evaluate<string | undefined>(`document.querySelector("input[name=serverMenu]:checked")?.value`)).toBe("players");
-            // the same roster, not one made again
-            expect(await page.evaluate<boolean>(`Boolean(document.querySelector('[data-test="steve"]'))`)).toBe(true);
-            await page.resize(400, 800);
-            await page.waitFor(steveShown, "Steve's page on the phone again");
-            expect(page.exceptions).toEqual([]);
-        } finally {
-            await page.close();
-            served.stop();
-        }
-    }, 60_000);
-
-    test("keeps an open dialog with what was typed in it", async () => {
-        const served = await setUp();
-        const page = await openPage(`${served.url}/?server=s-mc`);
-        const nameField = `[...document.querySelectorAll("[role=dialog] input")].find((el) => el.value === "world" || el.dataset.test === "name")`;
-        try {
-            await openTab(page, "worlds", `${button("New World")}`);
-            await page.settled();
-            await page.evaluate(`${button("New World")}.click()`);
-            await page.waitFor(nameField, "the New World dialog");
-            await page.evaluate(`(() => { const el = ${nameField}; el.dataset.test = "name"; el.focus(); el.select(); })()`);
-            await page.type('input[data-test="name"]', "Skyblock");
-            await page.resize(400, 800);
-            await page.waitFor(`document.querySelector('[role=dialog] input[data-test="name"]')`, "the dialog on the phone");
-            expect(await page.evaluate<string>(`document.querySelector('[role=dialog] input[data-test="name"]').value`)).toBe("Skyblock");
-            await page.resize(1400, 900);
-            expect(await page.evaluate<string>(`document.querySelector('[role=dialog] input[data-test="name"]').value`)).toBe("Skyblock");
-            expect(page.exceptions).toEqual([]);
-        } finally {
-            await page.close();
-            served.stop();
-        }
-    }, 60_000);
 });

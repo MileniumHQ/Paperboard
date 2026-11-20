@@ -216,7 +216,7 @@ export default function ServicesDoc() {
 
             <PaperText preset="title" as="h3" id="start-up">Rebuild the state in onInit</PaperText>
             <PaperText preset="body" as="p">
-                The state lives in memory. The service starts from the contract's <PaperCode>initial</PaperCode> state every time it starts: when Paperboard starts, after a crash, after an update, and on every restart.
+                The state lives in memory. The service starts from the contract's <PaperCode>initial</PaperCode> state every time it starts: when Paperboard starts, after a crash, after an update, and on every restart.{" "}
                 <PaperCode>onInit</PaperCode> runs before the service reports ready, and is where it reads back what it saved.
             </PaperText>
             <PaperTextList>
@@ -227,7 +227,7 @@ export default function ServicesDoc() {
 
             <PaperText preset="title" as="h3" id="save">Save first, then show</PaperText>
             <PaperText preset="body" as="p">
-                What must outlive a restart goes to <PaperLink href="/docs/paperapi/config/">configApi</PaperLink>, the panel's settings document.
+                What must outlive a restart goes to <PaperLink href="/docs/paperapi/config/">configApi</PaperLink>, the panel's settings document.{" "}
                 <PaperCode>saveSettings</PaperCode> awaits <PaperCode>configApi.set</PaperCode> before it changes the state. When the save fails, the call fails with the reason and the window still shows what is on disk.
                 Make the service the only code that writes the document. Pages and widgets ask it to, through a call.
             </PaperText>

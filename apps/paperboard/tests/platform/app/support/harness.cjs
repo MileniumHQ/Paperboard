@@ -88,15 +88,43 @@ function findFrame(match, ms) {
     });
 }
 
+// what each command still out is doing, for a test whose command got no answer
+const pending = new Map();
+// Electron holds a script until the page's main frame stops loading, so
+// that is worked out when asked, not when the command was sent
+const stateOf = (contents) => contents.isDestroyed() ? "its page is gone"
+    : contents.isLoadingMainFrame() ? `waiting for ${contents.getURL()} to stop loading` : `running in ${contents.getURL()}`;
+
 const AsyncFunction = Object.getPrototypeOf(async () => undefined).constructor;
 const commands = {
-    eval: ({ match, code }) => findContents(match).executeJavaScript(code, true),
-    evalFrame: async ({ match, code, waitMs }) => (await findFrame(match, waitMs)).executeJavaScript(code, true),
+    eval: ({ id, match, code }) => {
+        const contents = findContents(match);
+        pending.set(id, () => stateOf(contents));
+        return contents.executeJavaScript(code, true);
+    },
+    evalFrame: async ({ id, match, code, waitMs }) => {
+        pending.set(id, () => `waiting for a frame at ${match}`);
+        const frame = await findFrame(match, waitMs);
+        pending.set(id, () => `running in the frame ${frame.url}`);
+        return frame.executeJavaScript(code, true);
+    },
     main: ({ code }) => new AsyncFunction("require", "electron", "app", code)(require, electron, app),
     quit: () => {
         app.quit();
         return true;
     },
+    // answered by the main process alone: whether it answers at all, what
+    // the command `of` is doing, and the state of every page
+    status: ({ of }) => ({
+        // gone from here: main answered it, or never had it
+        command: pending.get(of)?.() ?? "answered, or never received",
+        pages: webContents.getAllWebContents().map((c) => c.isDestroyed() ? { destroyed: true } : {
+            url: c.getURL(),
+            loading: c.isLoading(),
+            loadingMainFrame: c.isLoadingMainFrame(),
+            crashed: c.isCrashed(),
+        }),
+    }),
 };
 
 let buffer = "";
@@ -109,6 +137,7 @@ socket.on("data", (chunk) => {
         const command = JSON.parse(line);
         Promise.resolve()
             .then(() => commands[command.op](command))
+            .finally(() => pending.delete(command.id))
             .then(
                 (result) => report({ reply: command.id, result: result === undefined ? null : result }),
                 (err) => report({ reply: command.id, error: text(err) }),

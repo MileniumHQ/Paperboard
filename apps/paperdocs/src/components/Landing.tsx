@@ -27,16 +27,10 @@ export function Landing() {
                 gap="half"
                 class={styles.hero}
             >
-                <PaperText rounded preset="headline" as="h1" class={styles.flush}>
+                <PaperText rounded preset="headline" as="h1">
                     Paperboard Docs
                 </PaperText>
-                <PaperText
-                    rounded
-                    preset="subtitle"
-                    color="text-subtle"
-                    as="p"
-                    class={styles.flush}
-                >
+                <PaperText rounded preset="subtitle" color="text-subtle" as="p">
                     Run Paperboard, build panels for it, and look up every API
                     and component.
                 </PaperText>
@@ -65,10 +59,10 @@ export function Landing() {
                 <div class={styles.pair}>
                     <PaperCard padding="double" gap="full">
                         <PaperFlex direction="column" gap="half">
-                            <PaperText preset="title" as="h2" class={styles.flush}>
+                            <PaperText preset="title" as="h2">
                                 Make your first panel
                             </PaperText>
-                            <PaperText preset="body" color="text-subtle" as="p" class={styles.flush}>
+                            <PaperText preset="body" color="text-subtle" as="p">
                                 One command writes a working panel with a
                                 service, a Home widget, and tests. The tutorial
                                 takes it from there to running inside
@@ -98,10 +92,10 @@ export function Landing() {
 
                     <PaperCard padding="double" gap="full">
                         <PaperFlex direction="column" gap="half">
-                            <PaperText preset="title" as="h2" class={styles.flush}>
+                            <PaperText preset="title" as="h2">
                                 Docs for agents
                             </PaperText>
-                            <PaperText preset="body" color="text-subtle" as="p" class={styles.flush}>
+                            <PaperText preset="body" color="text-subtle" as="p">
                                 Every page is also plain Markdown. Give your
                                 coding agent the index and it can build a panel
                                 without reading Paperboard's source.
@@ -125,7 +119,7 @@ export function Landing() {
                 <PaperCard padding="double">
                     <PaperFlex direction="row" gap="full" align="center">
                         <PaperIcon aria-hidden="true">verified</PaperIcon>
-                        <PaperText preset="body" as="p" class={styles.flush}>
+                        <PaperText preset="body" as="p">
                             Panels run with full trust on your computers, so
                             the Panel Library only lists panels reviewed with
                             the Paperboard team.{" "}
@@ -138,7 +132,7 @@ export function Landing() {
             </div>
 
             <PaperFlex direction="column" align="center" gap="full">
-                <PaperText rounded preset="title" as="h2" class={styles.flush}>
+                <PaperText rounded preset="title" as="h2">
                     Looking for a download?
                 </PaperText>
                 <PaperEffect variant="primary">

@@ -10,7 +10,7 @@
     },
     "scripts": {
         "typecheck": "tsc --noEmit",
-        "test": "bun test ./test"
+        "test": "bun test --parallel ./test"
     },
     "dependencies": {
         "@mileniumhq/paperapi": "workspace:*",

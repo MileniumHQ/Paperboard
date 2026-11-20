@@ -8,7 +8,6 @@
     },
     "exports": {
         "./install.sh": "./install/install.sh",
-        "./install.ps1": "./install/install.ps1",
         "./package.json": "./package.json"
     },
     "files": [

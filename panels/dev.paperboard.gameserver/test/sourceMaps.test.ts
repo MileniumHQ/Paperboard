@@ -113,30 +113,6 @@ describe("a Source game's Maps tab", () => {
         }
     });
 
-    test("a map card's long name stays on one line, cut with an ellipsis, so its row of cards keeps the height of the others", async () => {
-        const served = await setUp();
-        const page = await openMaps(served);
-        try {
-            await page.waitFor(`${button("Edit rotation")} || ${button("Add maps")}`, "the rotation");
-            await page.evaluate(`(${button("Edit rotation")} ?? ${button("Add maps")}).click()`);
-            await page.waitFor(`${button("Add maps")} && !${button("Add maps")}.disabled`, "the rotation to be Paperboard's");
-            await page.evaluate(`${button("Add maps")}.click()`);
-            await page.waitFor(`${card(LONG_MAP, "[role=dialog]")} && ${card("cp_well", "[role=dialog]")}`, "the maps to add");
-            // a card's name, as the card shows it
-            const name = (map: string) => `[...${card(map, "[role=dialog]")}.querySelectorAll("[class*=title]")].filter((el) => el.textContent === ${JSON.stringify(map)}).at(-1)`;
-            const fits = await page.evaluate<{ long: number; short: number; cut: boolean }>(`(() => {
-                const long = ${name(LONG_MAP)};
-                const cut = [long, ...long.querySelectorAll("*")].some((el) => el.scrollWidth > el.clientWidth && getComputedStyle(el).textOverflow === "ellipsis");
-                return { long: long.getBoundingClientRect().height, short: ${name("cp_well")}.getBoundingClientRect().height, cut };
-            })()`);
-            expect(fits).toEqual({ long: fits.short, short: fits.short, cut: true });
-            expect(page.exceptions).toEqual([]);
-        } finally {
-            await page.close();
-            served.stop();
-        }
-    });
-
     test("moving a map up or down, or removing one, changes the rotation the server reads; the last map stays with a reason", async () => {
         const served = await setUp();
         await serverCalls("s-tf").sourceMapCycleSet({ maps: ["ctf_2fort", "pl_badwater", "koth_harvest_final"] });

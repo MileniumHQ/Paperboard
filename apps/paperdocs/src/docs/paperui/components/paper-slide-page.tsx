@@ -19,7 +19,7 @@ export default function PaperSlidePageDoc() {
 
             <PaperText preset="subheader" as="h2" id="usage">Usage</PaperText>
             <PaperText preset="body" as="p">
-                Wrap the page content, say whether the phone layout is on with <PaperCode>enabled</PaperCode>, and whether the page is showing with <PaperCode>open</PaperCode>.
+                Wrap the page content, say whether the phone layout is on with <PaperCode>enabled</PaperCode>, and whether the page is showing with <PaperCode>open</PaperCode>.{" "}
                 <PaperCode>onBack</PaperCode> closes it: set <PaperCode>open</PaperCode> to <PaperCode>false</PaperCode> there.
                 The page is not demonstrated live here because it needs the phone layout.
             </PaperText>

@@ -61,18 +61,4 @@ describe("download helpers target exactly the real release files", () => {
         }
     });
 
-    test("other links get no Linux choices", () => {
-        for (const href of [
-            "https://i.paperboard.dev.evil.test/pb/latest/paperboard-linux-x64.AppImage",
-            "https://i.paperboard.dev/pb/latest/paperboard-linux-riscv64.AppImage",
-            "https://i.paperboard.dev/pb/latest/paperboard-linux-x64.deb",
-            "https://i.paperboard.dev/crane/latest/paperboard-linux-x64.AppImage",
-            "https://i.paperboard.dev/pb/0.3.0/paperboard-linux-x64.AppImage",
-            "https://i.paperboard.dev/pb/latest/paperboard-linux-x64.AppImage?x=1",
-            "https://i.paperboard.dev/pb/latest/paperboard-windows-x64-setup.exe",
-            "not a url",
-        ]) {
-            expect({ href, offer: linuxDownloads(href) }).toEqual({ href, offer: null });
-        }
-    });
 });

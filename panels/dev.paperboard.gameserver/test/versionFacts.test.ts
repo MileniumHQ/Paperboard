@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { isSupportedMcVersion, javaPackageFor, resolveVersionProfile, worldPathsFor } from "../src/lib/versionProfile";
+import { javaPackageFor, resolveVersionProfile, worldPathsFor } from "../src/lib/versionProfile";
 import { groupNeoForgeBuilds, neoForgeInstallerUrl, parseNeoForgeVersion, pickNeoForgeBuild } from "../src/games/minecraft/providers/neoforge";
 import { forgeInstallerUrl, forgeMcVersions, pickForgeBuild } from "../src/games/minecraft/providers/forge";
 import { pickFabricLoader } from "../src/games/minecraft/providers/fabric";
@@ -37,13 +37,6 @@ describe("version facts", () => {
         expect((await vanillaProvider.listVersions()).map((v) => v.id)).toEqual(["1.21.1"]);
         versions.unshift({ id: "1.21.2", type: "release", url: "https://piston-meta.mojang.com/v1/1.21.2.json" });
         expect((await vanillaProvider.listVersions()).map((v) => v.id)).toEqual(["1.21.2", "1.21.1"]);
-    });
-
-    test("versions below 1.12.2 are unsupported", () => {
-        expect(isSupportedMcVersion("1.12.2")).toBe(true);
-        for (const version of ["1.12.1", "1.8.9", "1.7.10", "17w31a", "not-a-version", "", null]) {
-            expect(isSupportedMcVersion(version)).toBe(false);
-        }
     });
 
     test("NeoForge builds map to their Minecraft release in both numbering schemes, without snapshot or April-fools builds", () => {

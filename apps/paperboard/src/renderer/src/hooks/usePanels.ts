@@ -10,7 +10,7 @@ import { unsavedPanels } from "../lib/unsavedPanels";
 // adds it again. Never dropped: a panel some computer shows (switching back
 // to that computer shows it without selecting it again, so it would be an
 // empty area with no frame), nor one whose page holds unsaved work.
-export const MAX_OPENED_PANELS = 50;
+const MAX_OPENED_PANELS = 50;
 
 const byName = (panels: PanelItem[]) => [...panels].sort((a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id));
 

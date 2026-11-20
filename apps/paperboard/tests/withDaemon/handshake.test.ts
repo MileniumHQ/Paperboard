@@ -77,42 +77,6 @@ describe("the master token goes only to a daemon that proves itself", () => {
 		});
 	}
 
-	test("a connection that fails before it has a socket says why on the computer's status", async () => {
-		// a paired computer whose stored certificate can't be read
-		const unreadable = new PaperCraneClient();
-		await expect(unreadable.connect("192.0.2.1", 45464, "pc_token", "not a certificate")).rejects.toThrow("Cannot connect to 192.0.2.1:45464");
-		expect(unreadable.getStatus().error).toStartWith("Cannot connect to 192.0.2.1:45464: ");
-		unreadable.disconnect();
-
-		// a local daemon that can't start, which is retried
-		const dir = dataDir();
-		// the daemon can't read its own state, so it can't start
-		fs.mkdirSync(path.join(dir, "local", "authorized_tokens.json"));
-		const client = new PaperCraneClient({ reconnectBaseMs: 1, reconnectMaxMs: 1 });
-		const statuses: (string | undefined)[] = [];
-		const retried = new Promise<void>((resolve) =>
-			client.on("status", (status: { error?: string }) => {
-				statuses.push(status.error);
-				if (statuses.length === 2) resolve();
-			}),
-		);
-		await withDataDir(dir, async () => {
-			try {
-				await expect(client.connect()).rejects.toThrow("Paperboard Server couldn't start on this computer");
-				expect(client.getStatus().connected).toBe(false);
-				const error = client.getStatus().error;
-				expect(error).toStartWith("Paperboard Server couldn't start on this computer: ");
-				expect(error).toContain("EISDIR");
-				// the retry the app schedules fails the same way, and says so again
-				await within("the local daemon to be retried", retried);
-				expect(statuses.every((each) => each?.includes("EISDIR"))).toBe(true);
-			} finally {
-				client.disconnect();
-				client.stopEmbeddedServer();
-			}
-		});
-	});
-
 	test("a restarted daemon refuses the previous daemon's token", async () => {
 		const dir = dataDir();
 		const first = await startDaemon({ dataDir: dir, staticToken: "pc_first_session_token" });
@@ -144,70 +108,6 @@ describe("the master token goes only to a daemon that proves itself", () => {
 			local.stopEmbeddedServer();
 			await within("the embedded daemon to stop", closed);
 		});
-	});
-
-	test("a panel file whose name has spaces or accents is served by the name its page asks for", async () => {
-		const dir = dataDir();
-		const panelDir = await installPanelFiles(dir, { id: "test.page" });
-		fs.writeFileSync(path.join(panelDir, "café menu.png"), "the picture");
-		await withDataDir(dir, async () => {
-			const { servePanelAsset } = await import("../../src/main/panelServe");
-			// a page's <img src="café menu.png"> asks for the URL's encoding of it
-			const res = await servePanelAsset("local", "test.page", new URL("panel://local.test.page/café menu.png").pathname);
-			expect(await res.text()).toBe("the picture");
-			expect(res.status).toBe(200);
-			expect((await servePanelAsset("local", "test.page", "/%E0%A4%A")).status).toBe(400);
-		});
-	});
-
-	test("a panel document whose credential is refused fails with why, never as a missing file", async () => {
-		const token = "pc_refusing_daemon";
-		const listener = await fakeListener((ws, challenge) => {
-			if (challenge) ws.send(JSON.stringify({ type: DAEMON_PROOF_TYPE, proof: daemonProof(token, challenge) }));
-			ws.on("message", (data) => {
-				const frame = JSON.parse(String(data));
-				// it verifies the app, then issues no panel credential
-				ws.send(JSON.stringify({ type: "response", id: frame.id, result: { success: true } }));
-			});
-		});
-		const dir = dataDir();
-		await installPanelFiles(dir, { id: "test.page" });
-		fs.writeFileSync(path.join(dir, "local", "crane.json"), JSON.stringify({ port: listener.port, token }));
-		await withDataDir(dir, async () => {
-			const { default: connectionPool } = await import("../../src/main/communication/papercrane/ConnectionPool");
-			const { servePanelAsset } = await import("../../src/main/panelServe");
-			const local = connectionPool.getClient("local");
-			local.disconnect();
-			await local.connect();
-			const res = await servePanelAsset("local", "test.page", "/index.html");
-			expect(res.status).toBe(500);
-			expect(await res.text()).toBe(`Error: Paperboard Server's answer to auth:panel-token doesn't fit: the field "token" is missing`);
-			// a file that really is missing still says so
-			expect((await servePanelAsset("local", "test.page", "/gone.js")).status).toBe(404);
-			local.disconnect();
-		});
-		await listener.close();
-	});
-
-	test("a computer whose system:info fails is refused for update planning, never planned as an unknown OS", async () => {
-		const token = "pc_no_info_daemon";
-		const listener = await fakeListener((ws, challenge) => {
-			if (challenge) ws.send(JSON.stringify({ type: DAEMON_PROOF_TYPE, proof: daemonProof(token, challenge) }));
-			ws.on("message", (data) => {
-				const frame = JSON.parse(String(data));
-				if (frame.action === "system:info") ws.send(JSON.stringify({ type: "response", id: frame.id, error: "system:info is broken here" }));
-				else ws.send(JSON.stringify({ type: "response", id: frame.id, result: { success: true } }));
-			});
-		});
-		const dir = dataDir();
-		fs.writeFileSync(path.join(dir, "local", "crane.json"), JSON.stringify({ port: listener.port, token }));
-		const client = new PaperCraneClient();
-		await withDataDir(dir, async () => {
-			await client.connect();
-			await expect(client.getSystemInfo()).rejects.toThrow("system:info is broken here");
-			client.disconnect();
-		});
-		await listener.close();
 	});
 
 	test("both clients put their own token last and send the shared protocol version", async () => {

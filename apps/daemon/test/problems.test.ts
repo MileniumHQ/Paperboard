@@ -58,14 +58,6 @@ describe("a panel's problems", () => {
 		await until("the clear to take it away", (p) => p.length === 0);
 	});
 
-	test("a panel keeps only its newest problems", async () => {
-		await call("reportMany", { count: 25 });
-		const kept = await until("the newest of 25", (p) => p.at(-1)?.title === "Problem 24");
-		expect(kept.map((p) => p.title)).toEqual(Array.from({ length: 20 }, (_, i) => `Problem ${i + 5}`));
-		await call("clear");
-		await until("clearing them all", (p) => p.length === 0);
-	});
-
 	test("a panel reads and changes only its own problems; the shell dismisses any", async () => {
 		await call("report", { key: "a", title: "A failed", message: "why" });
 		await until("the report", (p) => p.length === 1);

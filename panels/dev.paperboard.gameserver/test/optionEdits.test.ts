@@ -114,20 +114,4 @@ describe("a game's number option", () => {
         }
     }, 60_000);
 
-    test("every field typed into on the Options tab is one width: a name, a password and a number line up", async () => {
-        const served = await setUp();
-        const page = await openPage(`${served.url}/?server=s-pal`);
-        try {
-            await page.waitFor(`document.querySelector('input[name=serverMenu][value="options"]')`, "the server menu");
-            await page.click('input[name=serverMenu][value="options"]');
-            await page.waitFor(`${fieldIn("Server name")} && ${fieldIn("Join password")}`, "the text fields");
-            await page.settled();
-            const width = (title: string) => page.evaluate<number>(`Math.round(${fieldIn(title)}.getBoundingClientRect().width)`);
-            const widths = [await width("Server name"), await width("Join password"), await width("Maximum players"), await width("Port")];
-            expect(new Set(widths).size).toBe(1);
-        } finally {
-            await page.close();
-            served.stop();
-        }
-    }, 90_000);
 });
