@@ -83,7 +83,7 @@ describe("one tag and canonical asset names per release", () => {
         });
     });
 
-    test("re-indexing a release made before deb, rpm and msi expects only what it shipped", () => {
+    test("re-indexing a release expects only the packages it shipped", () => {
         const pre = new Set(ALL_TARGETS.flatMap((t) => [assetFileName("pb", t), assetFileName("crane", t)]));
         const expected = expectedReleaseAssets(pre, "0.2.2").map((a) => a.file);
         expect(expected.sort()).toEqual([...pre].sort());
@@ -91,7 +91,15 @@ describe("one tag and canonical asset names per release", () => {
         // a release that ships some packages is expected to ship them all
         const partial = new Set([...pre, "paperboard-linux-x64.deb"]);
         const withPackages = expectedReleaseAssets(partial, "0.3.0").map((a) => a.file);
-        expect(withPackages.sort()).toEqual(shippedFiles("0.3.0").sort());
+        expect(withPackages.sort()).toEqual(shippedFiles("0.3.0").filter((f) => !f.endsWith(".msi")).sort());
+
+        // a release with the deb and rpm but no MSI (v0.4.0) still re-indexes
+        const linuxOnly = new Set([...pre, ...shippedFiles("0.4.0").filter((f) => f.endsWith(".deb") || f.endsWith(".rpm"))]);
+        expect(expectedReleaseAssets(linuxOnly, "0.4.0").map((a) => a.file).sort()).toEqual([...linuxOnly].sort());
+
+        // one that ships the MSI is expected to ship all of them
+        const withMsi = new Set([...linuxOnly, "paperboard-windows-x64.msi"]);
+        expect(expectedReleaseAssets(withMsi, "0.5.0").map((a) => a.file).sort()).toEqual([...withMsi].sort());
     });
 });
 

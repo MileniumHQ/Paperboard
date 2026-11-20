@@ -7,6 +7,8 @@
 //
 // For the server: unpack its archive, check its signature (macOS), boot it
 // headless, prove its identity and answer as the release's version.
+// For the Windows MSI: install it for the machine, check it holds what the
+// updater tells an administrator's install by, run it, and uninstall it.
 // For the app: unpack the installer the way the OS does (Archive Utility's
 // ditto on macOS, the setup's own payload on Windows, the AppImage's
 // filesystem on Linux), check the bundle's signature (macOS), launch it on
@@ -21,7 +23,7 @@ import { WebSocket } from "ws";
 import { verifyDaemonProof, DAEMON_CHALLENGE_HEADER, DAEMON_PROOF_TYPE } from "../../apps/daemon/src/security/handshake";
 import { CraneSocket, randomChallenge, readHandshake, startCrane, watch, WAIT_MS } from "../../apps/paperboard/tests/platform/app/support/crane";
 import { cleanupSuite, ownChild, tempDir } from "../../apps/paperboard/tests/platform/app/support/temp";
-import { ALL_TARGETS, archOf, assetFileName, osOf, type Target } from "./publishLib";
+import { ALL_TARGETS, archOf, assetFileName, osOf, paperboardPackages, type Target } from "./publishLib";
 
 const APP_DIR = path.join(import.meta.dir, "..", "..", "apps", "paperboard");
 const VERSION = (JSON.parse(fs.readFileSync(path.join(APP_DIR, "package.json"), "utf8")) as { version: string }).version;
@@ -145,8 +147,7 @@ async function unpackApp(target: Target, dir: string): Promise<string> {
 
 // The packaged app on a throwaway data dir, with Chromium's DevTools on a
 // loopback port so the smoke can read the shell it shows.
-async function smokeApp(target: Target, dir: string): Promise<void> {
-    const executable = await unpackApp(target, dir);
+async function smokeApp(target: Target, executable: string, shipped: string): Promise<void> {
     if (!fs.existsSync(executable)) throw new Error(`the unpacked app has no ${executable}`);
     const dataDir = tempDir("smoke-app-data");
     const env: NodeJS.ProcessEnv = { ...process.env, PAPERBOARD_DIR: dataDir };
@@ -177,7 +178,35 @@ async function smokeApp(target: Target, dir: string): Promise<void> {
     await app.exited;
     const errors = fs.readFileSync(path.join(dataDir, "logs", "paperboard.log"), "utf8").split("\n").filter((line) => line.includes("[ERROR]"));
     if (errors.length) throw new Error(`the app logged errors:\n${errors.join("\n")}`);
-    console.log(`✓ app ${assetFileName("pb", target)}: shell up, server v${info.version}`);
+    console.log(`✓ app ${shipped}: shell up, server v${info.version}`);
+}
+
+// The MSI installed the way an administrator does, into a folder of its own
+// so the runner's Program Files stays as it was, then run and uninstalled.
+// The installer's "Uninstall Paperboard.exe" must be absent: it is how the
+// app tells an MSI install from one it can update itself.
+async function smokeMsi(target: Target, dir: string): Promise<void> {
+    const { releaseFile } = paperboardPackages(target, VERSION)[0]!;
+    const msi = shipped(dir, releaseFile);
+    const installDir = path.join(tempDir("smoke-msi"), "Paperboard");
+    const log = path.join(tempDir("smoke-msi-log"), "msiexec.log");
+    const msiexec = async (...args: string[]) => {
+        try {
+            await run(["msiexec", ...args, "/qn", "/l*v", log]);
+        } catch (err) {
+            throw new Error(`${err instanceof Error ? err.message : String(err)}\n${fs.existsSync(log) ? fs.readFileSync(log, "utf8").slice(-4000) : "msiexec wrote no log"}`);
+        }
+    };
+    await msiexec("/i", msi, `APPLICATIONFOLDER=${installDir}`);
+    try {
+        const executable = path.join(installDir, "paperboard.exe");
+        if (!fs.existsSync(executable)) throw new Error(`${releaseFile} installed no paperboard.exe in ${installDir}: ${fs.existsSync(installDir) ? fs.readdirSync(installDir).join(", ") : "no folder"}`);
+        if (fs.existsSync(path.join(installDir, "Uninstall Paperboard.exe"))) throw new Error(`${releaseFile} installed the installer's uninstaller, so the app would try to update it itself`);
+        await smokeApp(target, executable, releaseFile);
+    } finally {
+        await msiexec("/x", msi);
+    }
+    if (fs.existsSync(path.join(installDir, "paperboard.exe"))) throw new Error(`${releaseFile} left paperboard.exe behind after it was uninstalled`);
 }
 
 // Polls the shell page until `expression` is true. The page is looked up
@@ -228,7 +257,8 @@ async function main(): Promise<void> {
     assertHost(target);
     try {
         await smokeCrane(target, dir);
-        await smokeApp(target, dir);
+        await smokeApp(target, await unpackApp(target, dir), assetFileName("pb", target));
+        if (osOf(target) === "windows") await smokeMsi(target, dir);
     } finally {
         cleanupSuite();
     }

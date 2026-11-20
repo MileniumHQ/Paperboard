@@ -176,20 +176,23 @@ export function isUpdatePayload(file: string): boolean {
     return !PACKAGE_EXTENSIONS.some((ext) => file.endsWith(`.${ext}`));
 }
 
-// The files the download index records from a release. Packages are expected
-// only on a release that ships them, so a release made before deb, rpm and
-// msi still re-indexes; a release with some of them is missing the rest.
+// The files the download index records from a release. A family of packages
+// (the Linux deb and rpm, the Windows MSI) is expected only on a release that
+// ships it, so a release made before one still re-indexes; a release with
+// some of a family is missing the rest.
 export function expectedReleaseAssets(
     onRelease: ReadonlySet<string>,
     version: string,
 ): { app: DlApp; target: Target; file: string }[] {
-    const packages = ALL_TARGETS.flatMap((target) =>
-        paperboardPackages(target, version).map((pkg) => ({ app: "pb" as DlApp, target, file: pkg.releaseFile })),
+    const families = (["linux", "windows"] as const).map((os) =>
+        ALL_TARGETS.filter((target) => osOf(target) === os).flatMap((target) =>
+            paperboardPackages(target, version).map((pkg) => ({ app: "pb" as DlApp, target, file: pkg.releaseFile })),
+        ),
     );
-    const shipsPackages = packages.some((pkg) => onRelease.has(pkg.file));
+    const packages = families.filter((family) => family.some((pkg) => onRelease.has(pkg.file))).flat();
     return [
         ...ALL_TARGETS.map((target) => ({ app: "pb" as DlApp, target, file: assetFileName("pb", target) })),
-        ...(shipsPackages ? packages : []),
+        ...packages,
         ...ALL_TARGETS.map((target) => ({ app: "crane" as DlApp, target, file: assetFileName("crane", target) })),
     ];
 }
