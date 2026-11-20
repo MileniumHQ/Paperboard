@@ -249,10 +249,12 @@ gstep paperui "paperui tests" run_in "$ROOT/packages/paperui" bun run test
 gstep paperui "paperui styling invariant" bash "$ROOT/scripts/gate/check-paperui-styling.sh"
 gstep paperui "paperui silent-catches" run_in "$ROOT/packages/paperui" bash "$CATCH" src
 gstep paperui "paperui code check" run_in "$ROOT" bun scripts/gate/check-solid.ts packages/paperui/src packages/paperui/test
+gstep create-panel "create-panel typecheck:tests" run_in "$ROOT/packages/create-panel" bun run typecheck:tests
 gstep create-panel "create-panel tests" run_in "$ROOT/packages/create-panel" bun run test
 gstep create-panel "create-panel silent-catches" run_in "$ROOT/packages/create-panel" bash "$CATCH" src bin test template
 gstep create-panel "create-panel code check" run_in "$ROOT" bun scripts/gate/check-solid.ts packages/create-panel/src packages/create-panel/bin packages/create-panel/test packages/create-panel/template
 gstep release "release typecheck" run_in "$ROOT/packages/release" bunx tsc --noEmit
+gstep release "release typecheck:tests" run_in "$ROOT/packages/release" bun run typecheck:tests
 gstep release "release tests" run_in "$ROOT/packages/release" bun run test
 gstep release "release silent-catches" run_in "$ROOT/packages/release" bash "$CATCH" src test
 gstep release "release code check" run_in "$ROOT" bun scripts/gate/check-solid.ts packages/release/src packages/release/test
@@ -260,6 +262,7 @@ gstep testkit "testkit typecheck" run_in "$ROOT/packages/testkit" bun run typech
 gstep testkit "testkit tests" run_in "$ROOT/packages/testkit" bun run test
 gstep testkit "testkit silent-catches" run_in "$ROOT/packages/testkit" bash "$CATCH" src test
 gstep testkit "testkit code check" run_in "$ROOT" bun scripts/gate/check-solid.ts packages/testkit/src packages/testkit/test
+gstep npx "npx typecheck:tests" run_in "$ROOT/packages/npx" bun run typecheck:tests
 gstep npx "npx tests" run_in "$ROOT/packages/npx" bun run test
 gstep npx "npx silent-catches" run_in "$ROOT/packages/npx" bash "$CATCH" src test
 gstep npx "npx code check" run_in "$ROOT" bun scripts/gate/check-solid.ts packages/npx/src packages/npx/test

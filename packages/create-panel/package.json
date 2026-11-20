@@ -12,6 +12,7 @@
     ],
     "scripts": {
         "build": "tsc --noEmit && bun build ./bin/cli.ts --outfile dist/cli.js --target=node",
+        "typecheck:tests": "tsc --noEmit -p tsconfig.tests.json",
         "test": "bun test ./test",
         "prepublishOnly": "bun run build"
     },
