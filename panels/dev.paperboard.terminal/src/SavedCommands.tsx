@@ -111,22 +111,29 @@ function SavedCommandsModal(props: {
     const [command, setCommand] = createSignal("");
     // a row's buttons never wait on another call: the service orders them,
     // and the row's run state is what says a command is already going
-    const { busy, run } = createAction();
+    const { run } = createAction();
     // the refusal of the read again is said by the list's own error, in place of the list
     const reading = createAction({ toast: false });
     const readAgain = () => void reading.run("Couldn't read the saved commands", terminal.calls.reloadSavedCommands);
 
     const full = () => props.commands.length >= MAX_SAVED_COMMANDS;
-    const canSave = () => !busy() && !props.loadError && !full() && command().trim() !== "";
+    // never held back by a save still on its way: the form is empty until the next one is typed, and the service saves in order
+    const canSave = () => !props.loadError && !full() && command().trim() !== "";
 
     const save = async () => {
         if (!canSave()) return;
         const sent = { label: label(), command: command() };
-        if (await run("Couldn't save the command", () => terminal.calls.saveCommand(sent))) {
-            // the form empties for the next one, unless the next one is already being typed
+        // the form empties at once, for the next one to be typed while this one saves
+        batch(() => {
+            setLabel("");
+            setCommand("");
+        });
+        if (await run("Couldn't save the command", () => terminal.calls.saveCommand(sent))) return;
+        // refused: what was sent comes back, unless the next one is already being typed
+        if (label() === "" && command() === "") {
             batch(() => {
-                if (label() === sent.label) setLabel("");
-                if (command() === sent.command) setCommand("");
+                setLabel(sent.label);
+                setCommand(sent.command);
             });
         }
     };
