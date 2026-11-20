@@ -143,11 +143,11 @@ async function reaper(group: number, profile: string): Promise<Reaper> {
     };
 }
 
-/** a headless Chrome of its own, with a throwaway profile, that pages open in */
+/** a headless Chrome that pages open in: the suite's under withChrome.ts, else one of its own with a throwaway profile */
 export interface Chrome {
     /** loads `url` in a new page of its own browser context: no cookies, storage or cache shared with the browser's other pages */
     open(url: string, options?: PageOptions): Promise<Page>;
-    /** stops Chrome and removes its profile; pages still open fail with why */
+    /** closes the pages it still has open; a Chrome of its own is stopped and its profile removed, the suite's is left running */
     close(): Promise<void>;
 }
 
@@ -158,7 +158,7 @@ export interface PageOptions {
     init?: string;
 }
 
-/** opens `url` in a fresh headless Chrome with a throwaway profile; closing the page stops that Chrome */
+/** opens `url` in a page of its own; run alone, that is a fresh headless Chrome with a throwaway profile, which closing the page stops */
 export async function openChrome(url: string, options: ChromeOptions = {}): Promise<Page> {
     const chrome = await launchChrome(options);
     let page: Page;
