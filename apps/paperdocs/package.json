@@ -8,6 +8,7 @@
     "dev": "bun run build && wrangler dev",
     "build": "node scripts/check-prose-spacing.mjs && tsc -b && vite build -c vite.site.client.config.ts && vite build -c vite.site.config.ts && bun scripts/prerender-site.mjs && node scripts/check-marketing-artifacts.mjs",
     "test": "bun test",
+    "typecheck:tests": "tsc --noEmit -p tsconfig.tests.json",
     "deploy": "bun run build && wrangler deploy",
     "test:browser": "node scripts/check-learn-browser.mjs",
     "renders": "node scripts/render-models.mjs",

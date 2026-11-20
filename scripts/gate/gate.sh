@@ -235,6 +235,7 @@ gstep scripts "root scripts code check" run_in "$ROOT" bun scripts/gate/check-so
 
 # ── paperdocs: tests plus the static site build (typecheck, site + docs
 # prerender, alias files, shared 404) ────────────────────────────────────────
+gstep paperdocs "paperdocs typecheck:tests" run_in "$ROOT/apps/paperdocs" bun run typecheck:tests
 gstep paperdocs "paperdocs tests" run_in "$ROOT/apps/paperdocs" bun test
 gstep paperdocs "paperdocs build" run_in "$ROOT/apps/paperdocs" bun run build
 gstep paperdocs "paperdocs code check" run_in "$ROOT" bun scripts/gate/check-solid.ts apps/paperdocs/src apps/paperdocs/test apps/paperdocs/scripts
