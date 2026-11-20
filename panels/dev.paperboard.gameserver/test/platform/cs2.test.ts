@@ -133,6 +133,25 @@ describe("Counter-Strike 2", () => {
         expect(bob?.playtime).toBeGreaterThan(0);
     });
 
+    test.skipIf(!support.supported)("a player who changes their name is listed and recorded by the new one", async () => {
+        const server = await cs2Server();
+        await startServerInstance(server.server);
+        await server.server.waitFor((s) => s.serverStatus === "online", "Counter-Strike 2 to say its map is running");
+        await command(server, "fake_connect 5 [U:1:3] Old");
+        await server.server.waitFor((s) => s.onlinePlayers.includes("Old"), "Old online");
+        await command(server, "fake_rename 5 New");
+        await server.server.waitFor((s) => s.onlinePlayers.includes("New") && !s.onlinePlayers.includes("Old"), "the new name online");
+        // the roster writes one at a time, so the Players tab reads it after the rename's record
+        const players = (await call(server, ids.players)) as { online: { userId: number; name: string }[]; seen: { steamId: string; name: string }[] };
+        expect(players.online.find((p) => p.userId === 5)?.name).toBe("New");
+        expect(players.seen.find((p) => p.steamId === "[U:1:3]")?.name).toBe("New");
+        const seen = JSON.parse(fs.readFileSync(path.join(server.dir, "players.json"), "utf8")) as { steamId: string; name: string }[];
+        expect(seen.filter((p) => p.steamId === "[U:1:3]").map((p) => p.name)).toEqual(["New"]);
+        const exit = server.nextExit();
+        await stopServerInstance(server.server);
+        expect(await exit).toBe(0);
+    });
+
     test.skipIf(support.supported)("a computer it doesn't run on is told why at Start, and the server stays offline", async () => {
         const server = await cs2Server();
         await expect(startServerInstance(server.server)).rejects.toThrow(support.reason!);
