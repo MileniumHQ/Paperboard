@@ -11,6 +11,7 @@ import { hullFromAlpha, worldHull, contactBetween, containsPoint } from "./icon-
     const RESTITUTION = 0.94;
     const STOP_SPEED = 2.5;
     const ANG_DAMPING = 0.993;
+    const TILT_SETTLE = 0.08;
     const ANG_STOP = 0.02;
     const MAX_TILT = 0.5;
     const EDGE_INSET = 78;
@@ -237,7 +238,10 @@ import { hullFromAlpha, worldHull, contactBetween, containsPoint } from "./icon-
         start();
     }
 
+    // The damping constants are per 60 Hz frame; scaling by elapsed time keeps
+    // a throw's glide the same on any display refresh rate.
     function integrate(item, dt) {
+        const frames = dt * 60;
         const flat = item.vx === 0 && item.vy === 0;
 
         if (!flat) {
@@ -259,8 +263,9 @@ import { hullFromAlpha, worldHull, contactBetween, containsPoint } from "./icon-
                 item.y = maxY;
                 item.vy = -Math.abs(item.vy) * RESTITUTION;
             }
-            item.vx *= DAMPING;
-            item.vy *= DAMPING;
+            const drag = DAMPING ** frames;
+            item.vx *= drag;
+            item.vy *= drag;
             if (Math.hypot(item.vx, item.vy) < STOP_SPEED) {
                 item.vx = 0;
                 item.vy = 0;
@@ -269,12 +274,12 @@ import { hullFromAlpha, worldHull, contactBetween, containsPoint } from "./icon-
 
         if (item.av !== 0) {
             item.angle += item.av * dt;
-            item.av *= ANG_DAMPING;
+            item.av *= ANG_DAMPING ** frames;
             if (Math.abs(item.av) < ANG_STOP) item.av = 0;
         } else {
             // settle back to the position-matched lean, never upside down
             const tilt = tiltFor(item);
-            item.angle += (tilt - item.angle) * 0.08;
+            item.angle += (tilt - item.angle) * (1 - (1 - TILT_SETTLE) ** frames);
             if (Math.abs(tilt - item.angle) < 0.002) item.angle = tilt;
         }
     }

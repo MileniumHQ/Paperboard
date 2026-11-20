@@ -422,15 +422,58 @@ try {
     await page.mouse.down();
     await page.mouse.move(heading.x + heading.width / 2, heading.y + heading.height / 2, { steps: 16 });
     await page.mouse.up();
-    // Friction acts once per frame, so a glide lasts about 1,600 frames: half
-    // a minute at 60 fps, up to a minute in headless Chromium. The deadline
-    // fails below roughly 18 fps. Damping by elapsed time is tracked in #48.
+    // Friction acts per second, so a glide lasts about half a minute at any
+    // frame rate; the deadline leaves room for a slow runner.
     await page.locator('[data-play-field][data-play-state="resting"]').waitFor({ state: "attached", timeout: 90_000 });
     assert.deepEqual(await page.evaluate(() => [...new Set(window.__overCopy)]), [], "No frame may show an icon over the copy");
     const outroCopy = await page.evaluate(() => [...document.querySelectorAll(".outro-copy .styled-text-host, .outro-copy .download-cta")].map(element => element.getBoundingClientRect().toJSON()));
     const landed = await icons.evaluateAll(elements => elements.map(element => element.getBoundingClientRect().toJSON()));
     assert.ok(landed.every(icon => outroCopy.every(copy => !overlaps(icon, copy))), "An icon dragged onto the heading must end up beside it, not over it");
     console.log("verified dragging pushes icons apart and never leaves one over the copy");
+
+    // A throw glides the same on every display: the same flick, stepped by
+    // hand at three refresh rates, rests as soon.
+    const glides = [];
+    for (const hz of [30, 60, 120]) {
+        const glidePage = await browser.newPage({ viewport: { width: 1440, height: 1080 } });
+        try {
+            await glidePage.goto(`${origin}/`);
+            await glidePage.locator("[data-play-field]").scrollIntoViewIfNeeded();
+            await glidePage.waitForFunction(() => [...document.querySelectorAll(".play-icon")].every(icon => icon.style.transform.includes("translate3d")));
+            await glidePage.locator('[data-play-field][data-play-state="resting"]').waitFor({ state: "attached" });
+            // Take the frame clock over so the test, not the machine, picks the refresh rate.
+            await glidePage.evaluate(() => {
+                const queue = [];
+                window.requestAnimationFrame = callback => queue.push(callback);
+                window.__clock = performance.now();
+                window.__pump = (hz, seconds) => {
+                    const field = document.querySelector("[data-play-field]");
+                    for (let frame = 0; frame < seconds * hz && field.dataset.playState !== "resting"; frame += 1) {
+                        window.__clock += 1000 / hz;
+                        for (const callback of queue.splice(0)) callback(window.__clock);
+                    }
+                    return field.dataset.playState === "resting";
+                };
+            });
+            const flick = await glidePage.locator(".play-icon").first().boundingBox();
+            assert.ok(flick);
+            await glidePage.mouse.move(flick.x + flick.width / 2, flick.y + flick.height / 2);
+            await glidePage.mouse.down();
+            await glidePage.mouse.move(flick.x + flick.width / 2 - 1200, flick.y + flick.height / 2);
+            await glidePage.mouse.up();
+            const seconds = await glidePage.evaluate(([rate]) => {
+                let elapsed = 0;
+                while (!window.__pump(rate, 0.25) && elapsed < 120) elapsed += 0.25;
+                return elapsed;
+            }, [hz]);
+            glides.push({ hz, seconds });
+        } finally { await glidePage.close(); }
+    }
+    console.log("icon glide by refresh rate", JSON.stringify(glides));
+    for (const glide of glides) {
+        assert.ok(Math.abs(glide.seconds / glides[1].seconds - 1) < 0.15, `A throw rests as soon at ${glide.hz} Hz as at 60 Hz (${JSON.stringify(glides)})`);
+    }
+    console.log("verified an icon's glide does not depend on the refresh rate");
 
     // Reduced motion: no toy, the icons sit in their still row.
     const calm = await browser.newPage({ viewport: { width: 1440, height: 900 }, reducedMotion: "reduce" });
