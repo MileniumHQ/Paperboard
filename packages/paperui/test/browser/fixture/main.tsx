@@ -33,6 +33,7 @@ import {
     PaperSlidePage,
     PaperSplit,
     PaperText,
+    PaperTextList,
     PaperToggle,
     createPolling,
     showError,
@@ -391,6 +392,31 @@ const scenarios: Record<string, () => JSX.Element> = {
                 <PaperText preset="caption" as="figcaption">Caption</PaperText>
                 <PaperText preset="body" as="p" class="own-margin">Own margin</PaperText>
             </div>
+        ));
+    },
+
+    textListMargins() {
+        window.t = {};
+        const own = document.createElement("style");
+        own.textContent = ".own-margin { margin-top: 12px; }";
+        document.head.prepend(own);
+        return shell(() => (
+            <div id="column" style={{ display: "flex", "flex-direction": "column", gap: "8px" }}>
+                <PaperText preset="body" as="p">Before</PaperText>
+                <PaperTextList><li>One</li><li>Two</li></PaperTextList>
+                <PaperTextList ordered><li>One</li><li>Two</li></PaperTextList>
+                <PaperTextList class="own-margin"><li>Own margin</li></PaperTextList>
+                <PaperMarkdown text={"Before\n\n- one\n- two\n\n1. first\n2. second\n\nAfter"} />
+            </div>
+        ));
+    },
+
+    textListModal() {
+        window.t = {};
+        return shell(() => (
+            <PaperModal open onClose={() => {}} title="List">
+                <PaperTextList><li>One</li><li>Two</li></PaperTextList>
+            </PaperModal>
         ));
     },
 

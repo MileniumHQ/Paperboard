@@ -38,3 +38,49 @@ describe("PaperText margins", () => {
         page.expectNoErrors();
     });
 });
+
+// Inventory: TextList — PaperTextList has no margin; the layout spaces it.
+describe("PaperTextList margins", () => {
+    test("a list, in a column or in markdown, is spaced only by the gap", async () => {
+        const page = await browser.open("textListMargins");
+
+        const rows = await page.eval<{ margin: string; space: number }[]>(`
+            [...document.querySelectorAll("#column > :is(ul, ol):not(.own-margin)")].map((el) => {
+                const prev = el.previousElementSibling;
+                return {
+                    margin: getComputedStyle(el).margin,
+                    space: Math.round(el.getBoundingClientRect().top - prev.getBoundingClientRect().bottom),
+                };
+            })
+        `);
+        expect(rows).toEqual([
+            { margin: "0px", space: 8 },
+            { margin: "0px", space: 8 },
+        ]);
+
+        // inside markdown the flex gap alone separates a list from its neighbours
+        const gaps = await page.eval<number[]>(`
+            const root = document.querySelector("#column > :last-child");
+            [...root.children].slice(1).map((el) => {
+                const prev = el.previousElementSibling;
+                return Math.round(el.getBoundingClientRect().top - prev.getBoundingClientRect().bottom);
+            })
+        `);
+        expect(new Set(gaps).size).toBe(1);
+        page.expectNoErrors();
+    });
+
+    test("a margin from the caller's own class still applies", async () => {
+        const page = await browser.open("textListMargins");
+
+        expect(await page.eval(`getComputedStyle(document.querySelector("ul.own-margin")).marginTop`)).toBe("12px");
+        page.expectNoErrors();
+    });
+
+    test("a list in a modal body starts at the body's padding, not below a margin", async () => {
+        const page = await browser.open("textListModal");
+
+        expect(await page.eval(`getComputedStyle(document.querySelector("ul")).margin`)).toBe("0px");
+        page.expectNoErrors();
+    });
+});

@@ -1,9 +1,15 @@
 .PaperTextList {
     font-family: var(--paper-font-family);
     color: var(--paper-text);
-    margin: 0 0 var(--paper-uigap-half) 0;
     padding-left: calc(var(--paper-uigap) * 1.5);
     list-style-position: outside;
+}
+
+/* a list drops the browser's margins: the layout it sits in spaces it.
+   :where() keeps this at zero specificity, so a caller's own class can
+   still set a margin */
+:where(.PaperTextList) {
+    margin: 0;
 }
 
 .PaperTextList > * {
