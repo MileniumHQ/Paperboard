@@ -15,6 +15,8 @@ import { errorCode } from "@mileniumhq/paperapi/errors";
 
 export interface ProcessSample {
     ppid: number;
+    /** when it started, ms since the epoch; a parent link counts only from a process started no earlier than its parent */
+    startedAt: number;
     rssBytes: number;
     /** user + system CPU time since the process started */
     cpuMs: number;
@@ -104,20 +106,23 @@ const defaultExec: ExecFn = (command, args) =>
         });
     });
 
-/** /proc/<pid>/stat; null when the line is not one. */
-export function parseLinuxStat(line: string, pageSize: number): ProcessSample | null {
+/** /proc/<pid>/stat; null when the line is not one. `bootMs` is /proc/stat's btime, in ms. */
+export function parseLinuxStat(line: string, pageSize: number, bootMs: number): ProcessSample | null {
     // the command name sits in parentheses and may itself contain them
     const close = line.lastIndexOf(")");
     if (close < 0) return null;
     const fields = line.slice(close + 2).split(" ");
-    // fields[0] is state (stat field 3): ppid is 4, utime 14, stime 15, rss 24
+    // fields[0] is state (stat field 3): ppid is 4, utime 14, stime 15,
+    // starttime 22 (ticks since boot), rss 24
     const ppid = Number(fields[1]);
     const utime = Number(fields[11]);
     const stime = Number(fields[12]);
+    const startTicks = Number(fields[19]);
     const rssPages = Number(fields[21]);
-    if (![ppid, utime, stime, rssPages].every(Number.isFinite)) return null;
+    if (![ppid, utime, stime, startTicks, rssPages].every(Number.isFinite)) return null;
     return {
         ppid,
+        startedAt: bootMs + (startTicks * 1000) / LINUX_TICKS_PER_SECOND,
         rssBytes: Math.max(0, rssPages) * pageSize,
         cpuMs: ((utime + stime) * 1000) / LINUX_TICKS_PER_SECOND,
     };
@@ -132,33 +137,57 @@ export function parsePsTime(value: string): number | null {
     return Math.round(((Number(days) * 24 + h) * 3600 + m * 60 + s) * 1000);
 }
 
-/** `ps -axo pid=,ppid=,rss=,time=`: rss in KiB */
+const PS_MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+/** `ps -o lstart` in the C locale, local time: "Thu Nov 20 09:11:44 2026" (its words, already split) */
+export function parsePsStart(words: string[]): number | null {
+    const [, month, day, clock, year] = words;
+    const m = PS_MONTHS.indexOf(month ?? "");
+    const [h, min, sec] = (clock ?? "").split(":").map(Number);
+    const at = new Date(Number(year), m, Number(day), h, min, sec).getTime();
+    return words.length === 5 && m >= 0 && Number.isFinite(at) ? at : null;
+}
+
+/** `ps -axo pid=,ppid=,rss=,time=,lstart=` under LC_ALL=C: rss in KiB */
 export function parsePsTable(output: string): ProcessTable {
     const table: ProcessTable = new Map();
     for (const line of output.split("\n")) {
-        const [pid, ppid, rss, time] = line.trim().split(/\s+/);
+        const [pid, ppid, rss, time, ...start] = line.trim().split(/\s+/);
         const cpuMs = time ? parsePsTime(time) : null;
-        if (!pid || cpuMs === null || !Number.isInteger(Number(pid))) continue;
-        table.set(Number(pid), { ppid: Number(ppid), rssBytes: Number(rss) * 1024, cpuMs });
+        const startedAt = parsePsStart(start);
+        if (!pid || cpuMs === null || startedAt === null || !Number.isInteger(Number(pid))) continue;
+        table.set(Number(pid), { ppid: Number(ppid), startedAt, rssBytes: Number(rss) * 1024, cpuMs });
     }
     return table;
 }
 
-/** "pid ppid workingSetBytes cpu100ns" lines from the Windows query */
+// a Windows FILETIME counts 100 ns from 1601; the epoch is this many ms later
+const FILETIME_EPOCH_MS = 11_644_473_600_000;
+
+/** "pid ppid workingSetBytes cpu100ns created" lines from the Windows query, created as a FILETIME (0: unknown) */
 export function parseWindowsTable(output: string): ProcessTable {
     const table: ProcessTable = new Map();
     for (const line of output.split("\n")) {
-        const [pid, ppid, ws, cpu] = line.trim().split(/\s+/).map(Number);
-        if (!Number.isInteger(pid) || ![ppid, ws, cpu].every(Number.isFinite)) continue;
-        table.set(pid, { ppid, rssBytes: ws, cpuMs: cpu / 10_000 });
+        const [pid, ppid, ws, cpu, created] = line.trim().split(/\s+/).map(Number);
+        if (!Number.isInteger(pid) || ![ppid, ws, cpu, created].every(Number.isFinite)) continue;
+        // the System and Idle processes have no creation date: older than everything
+        table.set(pid, { ppid, startedAt: created > 0 ? created / 10_000 - FILETIME_EPOCH_MS : 0, rssBytes: ws, cpuMs: cpu / 10_000 });
     }
     return table;
 }
 
 const WINDOWS_QUERY =
-    "Get-CimInstance Win32_Process | ForEach-Object { \"$($_.ProcessId) $($_.ParentProcessId) $($_.WorkingSetSize) $($_.KernelModeTime + $_.UserModeTime)\" }";
+    "Get-CimInstance Win32_Process | ForEach-Object { \"$($_.ProcessId) $($_.ParentProcessId) $($_.WorkingSetSize) $($_.KernelModeTime + $_.UserModeTime) $(if ($_.CreationDate) { $_.CreationDate.ToFileTimeUtc() } else { 0 })\" }";
 
 let linuxPageSize: Promise<number> | null = null;
+
+/** /proc/stat's btime: when the computer booted, ms since the epoch */
+export function parseLinuxBootTime(stat: string): number {
+    const line = stat.split("\n").find((l) => l.startsWith("btime "));
+    const seconds = Number(line?.slice("btime ".length));
+    if (!line || !Number.isInteger(seconds) || seconds <= 0) throw new Error("/proc/stat names no boot time (btime)");
+    return seconds * 1000;
+}
 
 async function readLinuxTable(exec: ExecFn): Promise<ProcessTable> {
     linuxPageSize ??= exec("getconf", ["PAGESIZE"]).then((out) => {
@@ -170,6 +199,7 @@ async function readLinuxTable(exec: ExecFn): Promise<ProcessTable> {
         linuxPageSize = null;
         throw err;
     });
+    const bootMs = parseLinuxBootTime(await fs.promises.readFile("/proc/stat", "utf8"));
     const pids = (await fs.promises.readdir("/proc")).filter((name) => /^\d+$/.test(name));
     const table: ProcessTable = new Map();
     let next = 0;
@@ -185,7 +215,7 @@ async function readLinuxTable(exec: ExecFn): Promise<ProcessTable> {
                 if (code === "ENOENT" || code === "ESRCH") continue;
                 throw err;
             }
-            const sample = parseLinuxStat(line, pageSize);
+            const sample = parseLinuxStat(line, pageSize, bootMs);
             if (sample) table.set(Number(pid), sample);
         }
     };
@@ -198,7 +228,8 @@ export async function readProcessTable(platform = process.platform, exec: ExecFn
         case "linux":
             return readLinuxTable(exec);
         case "darwin":
-            return parsePsTable(await exec("ps", ["-axo", "pid=,ppid=,rss=,time="]));
+            // the C locale, so lstart's month is the English one parsePsStart reads
+            return parsePsTable(await exec("env", ["LC_ALL=C", "ps", "-axo", "pid=,ppid=,rss=,time=,lstart="]));
         case "win32":
             return parseWindowsTable(
                 await exec("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", WINDOWS_QUERY]),
@@ -345,27 +376,54 @@ export async function readAvailableMemory(platform = process.platform, exec: Exe
 // ─── Attribution ─────────────────────────────────────────────────────────────
 
 /**
+ * Each process's children. A process names its parent by pid, but Windows
+ * leaves that pid in place after the parent exits and later hands it to
+ * another process, so a child counts only under a process that started no
+ * later than it did: never under whoever holds its dead parent's pid now.
+ */
+export function processChildren(table: ProcessTable): Map<number, number[]> {
+    const children = new Map<number, number[]>();
+    for (const [pid, sample] of table) {
+        const parent = table.get(sample.ppid);
+        if (sample.ppid === pid || !parent || sample.startedAt < parent.startedAt) continue;
+        const list = children.get(sample.ppid);
+        if (list) list.push(pid);
+        else children.set(sample.ppid, [pid]);
+    }
+    return children;
+}
+
+/**
+ * `roots` that are in the table and everything they started, through
+ * processChildren. `skip` leaves a process and its subtree out.
+ */
+export function processTree(
+    table: ProcessTable,
+    roots: Iterable<number>,
+    skip: (pid: number) => boolean = () => false,
+    children: Map<number, number[]> = processChildren(table),
+): number[] {
+    const tree = new Set<number>();
+    const stack = [...roots];
+    while (stack.length > 0) {
+        const pid = stack.pop() as number;
+        if (tree.has(pid) || !table.has(pid) || skip(pid)) continue;
+        tree.add(pid);
+        stack.push(...(children.get(pid) ?? []));
+    }
+    return [...tree];
+}
+
+/**
  * Which owner each process belongs to: every panel's roots and their
  * descendants first, then Paperboard's (which skips subtrees a panel
  * already owns, such as panel services the daemon spawned).
  */
 export function attribute(table: ProcessTable, roots: UsageRoots): Map<number, string> {
-    const children = new Map<number, number[]>();
-    for (const [pid, sample] of table) {
-        if (sample.ppid === pid) continue;
-        const list = children.get(sample.ppid);
-        if (list) list.push(pid);
-        else children.set(sample.ppid, [pid]);
-    }
+    const children = processChildren(table);
     const owner = new Map<number, string>();
     const claim = (id: string, starts: number[]) => {
-        const stack = starts.filter((pid) => table.has(pid) && !owner.has(pid));
-        while (stack.length > 0) {
-            const pid = stack.pop() as number;
-            if (owner.has(pid)) continue;
-            owner.set(pid, id);
-            for (const child of children.get(pid) ?? []) if (!owner.has(child)) stack.push(child);
-        }
+        for (const pid of processTree(table, starts, (pid) => owner.has(pid), children)) owner.set(pid, id);
     };
     for (const id of [...roots.panels.keys()].sort()) claim(id, roots.panels.get(id) ?? []);
     claim("paperboard", roots.paperboard);
