@@ -63,7 +63,7 @@ class RawSocket {
         const body = Buffer.from(JSON.stringify(frame));
         const mask = crypto.randomBytes(4);
         const header = body.length < 126 ? Buffer.from([0x81, 0x80 | body.length]) : Buffer.from([0x81, 0x80 | 126, body.length >> 8, body.length & 255]);
-        const masked = Buffer.from(body.map((b, i) => b ^ mask[i % 4]));
+        const masked = Buffer.from(body.map((b: number, i: number) => b ^ mask[i % 4]));
         return new Promise((resolve) => {
             this.waiting = { id: frame.id, resolve };
             this.tcp.write(Buffer.concat([header, mask, masked]));

@@ -50,12 +50,12 @@ describe("signed registry installs", () => {
 	});
 
 	test("every unverifiable record or archive is refused and leaves nothing; record defects are refused before any download", async () => {
-		const { record } = await release(origami, { id: "test.base", version: "1.0.0" });
+		const { packed, record } = await release(origami, { id: "test.base", version: "1.0.0" });
 		const defects: Array<{ id: string; record: unknown; message: RegExp; downloads: number }> = [
 			{ id: "test.missing", record: undefined, message: /registry record unavailable/, downloads: 0 },
 			{ id: "test.unsigned", record: { ...record, id: "test.unsigned", signature: undefined }, message: /sign/i, downloads: 0 },
-			{ id: "test.otherkey", record: { ...record, id: "test.otherkey", signature: signPanel("test.otherkey", "1.0.0", record.sha256, "other") }, message: /sign/i, downloads: 0 },
-			{ id: "test.otherversion", record: { ...record, id: "test.otherversion", version: "1.0.1", signature: signPanel("test.otherversion", "1.0.0", record.sha256) }, message: /sign/i, downloads: 0 },
+			{ id: "test.otherkey", record: { ...record, id: "test.otherkey", signature: signPanel("test.otherkey", "1.0.0", packed.sha256, "other") }, message: /sign/i, downloads: 0 },
+			{ id: "test.otherversion", record: { ...record, id: "test.otherversion", version: "1.0.1", signature: signPanel("test.otherversion", "1.0.0", packed.sha256) }, message: /sign/i, downloads: 0 },
 			{ id: "test.nosha", record: { ...record, id: "test.nosha", sha256: undefined }, message: /sha256/, downloads: 0 },
 			{ id: "test.namedother", record: { ...record, id: "test.someone" }, message: /different panel/, downloads: 0 },
 		];
@@ -68,7 +68,7 @@ describe("signed registry installs", () => {
 
 		// signed facts that the archive then contradicts
 		const other = await release(origami, { id: "test.other-bytes", version: "1.0.0", files: { "x.txt": "other" } });
-		origami.setRecord("test.badbytes", { ...record, id: "test.badbytes", sha256: other.record.sha256, signature: signPanel("test.badbytes", "1.0.0", other.record.sha256) });
+		origami.setRecord("test.badbytes", { ...record, id: "test.badbytes", sha256: other.packed.sha256, signature: signPanel("test.badbytes", "1.0.0", other.packed.sha256) });
 		await release(origami, { id: "test.inner", version: "1.0.0" }, { id: "test.wrongid" });
 		await release(origami, { id: "test.wrongversion", version: "2.0.0" }, { version: "1.0.0" });
 		for (const [id, message] of [
@@ -142,7 +142,7 @@ describe("pack, publish and install", () => {
 	test("Origami serves the packed archive under its dotted id with the packed sha256, and the daemon installs it intact", async () => {
 		const { packed, record } = await release(origami, { id: "test.identity.panel", version: "3.1.4", files: { "nested/deep.txt": "deep" } });
 		expect(record.sha256).toBe(packed.sha256);
-		const served = await (await fetch(`${origami.url}/panel/test.identity.panel.json`)).json();
+		const served = (await (await fetch(`${origami.url}/panel/test.identity.panel.json`)).json()) as { id: string; version: string; sha256: string };
 		expect({ id: served.id, version: served.version, sha256: served.sha256 }).toEqual({ id: "test.identity.panel", version: "3.1.4", sha256: packed.sha256 });
 		const archive = Buffer.from(await (await fetch(`${origami.url}/panel/test.identity.panel/download`)).arrayBuffer());
 		expect(sha256(archive)).toBe(packed.sha256);
@@ -334,7 +334,7 @@ describe("update planning", () => {
 		// test.broken's record is damaged in the registry itself: Origami says so
 		origami.kv.set("panel:test.broken", "{damaged");
 		const computers = [computer({ panels: [{ id: "test.unlisted", version: "4.0.0" }, { id: "test.unreadable", version: "1.0.0" }, { id: "test.broken", version: "1.0.0" }] })];
-		const index = await (await fetch(`${origami.url}/panels/index.json`)).json();
+		const index = (await (await fetch(`${origami.url}/panels/index.json`)).json()) as Record<string, unknown>;
 		// the updater's own record fetch; test.unreadable's record comes back as
 		// bytes that are not JSON (a registry or proxy answering garbage)
 		const garbage = serve({ "/panel/test.unreadable.json": "{not json" });

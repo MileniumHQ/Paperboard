@@ -53,7 +53,7 @@ export function serve(initial: Record<string, Route> = {}): LoopbackServer {
 			if (route === undefined) return new Response("not found", { status: 404 });
 			if (typeof route === "function") return route(req);
 			if (typeof route === "string") return new Response(route);
-			if (Buffer.isBuffer(route)) return new Response(new Uint8Array(route));
+			if (route instanceof Uint8Array) return new Response(new Uint8Array(route));
 			return Response.json(route);
 		},
 	});
