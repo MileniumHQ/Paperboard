@@ -5,6 +5,7 @@ import { secretsApi } from "@mileniumhq/paperapi";
 import { startTestDaemon, type TestDaemon } from "../helpers/crane";
 import type { GameServer } from "../helpers/game";
 import { cs2Call as call, cs2Server } from "../helpers/cs2";
+import { waitForFile } from "../helpers/installedPanel";
 import { PANEL_ID } from "../../src/servers";
 import { sendServerCommand, sendChatMessage, startServerInstance, stopServerInstance } from "../../src/service/lifecycle";
 import { gameFor } from "../../src/games";
@@ -25,7 +26,10 @@ const ids = SOURCE_CALLS;
 const BANNED = "[U:1:24691]";
 const command = (server: GameServer, line: string) => sendServerCommand(server.server, line);
 const consoleOf = (server: GameServer) => server.server.state.serverEntries.map((e) => String(e.content));
-const commands = (server: GameServer) => fs.readFileSync(path.join(server.dir, "install", "commands.txt"), "utf8").split("\n").filter(Boolean);
+const commandsFile = (server: GameServer) => path.join(server.dir, "install", "commands.txt");
+const commands = (server: GameServer) => fs.readFileSync(commandsFile(server), "utf8").split("\n").filter(Boolean);
+/** the stand-in writes commands.txt without changing the server state, so this reads the file again and again */
+const sent = (server: GameServer, command: string, what: string) => waitForFile(commandsFile(server), (text) => text.split("\n").includes(command), what);
 const said = (server: GameServer, text: string, what: string) => server.server.waitFor((s) => s.serverEntries.some((e) => String(e.content).includes(text)), what);
 
 // Counter-Strike 2 running, against a stand-in that prints what the real server was measured to (build 26598758).
@@ -79,12 +83,12 @@ describe("Counter-Strike 2", () => {
         // Paperboard's own list bans: someone on it is put out the moment they connect, and when they are banned while on
         await call(server, ids.ban, { steamId: BANNED });
         await command(server, `fake_connect 7 ${BANNED} Cheater`);
-        await server.server.waitFor(() => commands(server).includes("kickid 7 Banned from this server"), "the banned player put out");
+        await sent(server, "kickid 7 Banned from this server", "the banned player put out");
         await said(server, "[Paperboard] Cheater is banned and was put out as they joined.", "the console's note");
         await command(server, "fake_connect 8 [U:1:2] Bob");
         await server.server.waitFor((s) => s.onlinePlayers.includes("Bob"), "Bob online");
         await call(server, ids.ban, { steamId: "[U:1:2]" });
-        await server.server.waitFor(() => commands(server).includes("kickid 8 Banned from this server"), "Bob put out when banned");
+        await sent(server, "kickid 8 Banned from this server", "Bob put out when banned");
         for (const bad of ["STEAM_0:1:1", "[U:1:1]; quit", ""]) await expect(call(server, ids.ban, { steamId: bad })).rejects.toThrow("Steam id");
         await call(server, ids.unban, { steamId: BANNED });
         expect(((await call(server, ids.players)) as { bans: { steamId: string }[] }).bans.map((b) => b.steamId)).toEqual(["[U:1:2]"]);
@@ -94,7 +98,7 @@ describe("Counter-Strike 2", () => {
         expect(server.server.settings.map).toBe("de_inferno");
         // an option the server takes at once is typed into its console
         await call(server, "writeGameOptions", { patch: { mp_autoteambalance: false } });
-        await server.server.waitFor(() => commands(server).includes("mp_autoteambalance 0"), "the live option");
+        await sent(server, "mp_autoteambalance 0", "the live option");
 
         const exit = server.nextExit();
         await stopServerInstance(server.server);
@@ -110,7 +114,9 @@ describe("Counter-Strike 2", () => {
         await server.server.waitFor((s) => s.serverStatus === "online", "Counter-Strike 2 to say its map is running");
         await command(server, "fake_connect 5 [U:1:2] Bob");
         const seenFile = path.join(server.dir, "players.json");
-        await server.server.waitFor(() => fs.existsSync(seenFile) && fs.readFileSync(seenFile, "utf8").includes("[U:1:2]"), "Bob recorded");
+        await server.server.waitFor((s) => s.onlinePlayers.includes("Bob"), "Bob online");
+        // the roster writes one at a time, so the Players tab reads it after his join record
+        expect(((await call(server, ids.players)) as { seen: { steamId: string }[] }).seen.map((p) => p.steamId)).toContain("[U:1:2]");
         fs.chmodSync(server.dir, 0o555);
         try {
             await command(server, "fake_connect 6 [U:1:1] Ann");
@@ -129,6 +135,25 @@ describe("Counter-Strike 2", () => {
         expect(ann?.name).toBe("Ann");
         expect(ann?.playtime).toBeGreaterThan(0);
         expect(bob?.playtime).toBeGreaterThan(0);
+    });
+
+    test.skipIf(!support.supported)("a player who changes their name is listed and recorded by the new one", async () => {
+        const server = await cs2Server();
+        await startServerInstance(server.server);
+        await server.server.waitFor((s) => s.serverStatus === "online", "Counter-Strike 2 to say its map is running");
+        await command(server, "fake_connect 5 [U:1:3] Old");
+        await server.server.waitFor((s) => s.onlinePlayers.includes("Old"), "Old online");
+        await command(server, "fake_rename 5 New");
+        await server.server.waitFor((s) => s.onlinePlayers.includes("New") && !s.onlinePlayers.includes("Old"), "the new name online");
+        // the roster writes one at a time, so the Players tab reads it after the rename's record
+        const players = (await call(server, ids.players)) as { online: { userId: number; name: string }[]; seen: { steamId: string; name: string }[] };
+        expect(players.online.find((p) => p.userId === 5)?.name).toBe("New");
+        expect(players.seen.find((p) => p.steamId === "[U:1:3]")?.name).toBe("New");
+        const seen = JSON.parse(fs.readFileSync(path.join(server.dir, "players.json"), "utf8")) as { steamId: string; name: string }[];
+        expect(seen.filter((p) => p.steamId === "[U:1:3]").map((p) => p.name)).toEqual(["New"]);
+        const exit = server.nextExit();
+        await stopServerInstance(server.server);
+        expect(await exit).toBe(0);
     });
 
     test.skipIf(support.supported)("a computer it doesn't run on is told why at Start, and the server stays offline", async () => {

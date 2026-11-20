@@ -1,11 +1,11 @@
 // A stand-in Counter-Strike 2 server, compiled by standIn.ts and placed as
 // install/game/bin/linuxsteamrt64/cs2. Like the real one (build 26598758) it
 // reads console commands on stdin and prints their answers, says its map is
-// running with a "Host activate" line, and writes Valve's game log lines. Two
-// commands are the test's own: `fake_connect <userid> <steamid> <name>` and
-// `fake_disconnect <userid>` print the log lines of a player joining and
-// leaving. Every command it reads is appended to commands.txt in the
-// install folder.
+// running with a "Host activate" line, and writes Valve's game log lines. Three
+// commands are the test's own: `fake_connect <userid> <steamid> <name>`,
+// `fake_rename <userid> <name>` and `fake_disconnect <userid>` print the log
+// lines of a player joining, changing their name and leaving. Every command it
+// reads is appended to commands.txt in the install folder.
 import * as fs from "node:fs";
 import * as path from "node:path";
 
@@ -41,6 +41,13 @@ for await (const raw of console) {
     } else if ((match = /^fake_connect (\d+) (\S+) (.+)$/.exec(line))) {
         players.set(Number(match[1]), { steamId: match[2]!, name: match[3]! });
         say(`${stamp}"${match[3]}<${match[1]}><${match[2]}><>" connected, address "1.2.3.4:27005"`);
+    } else if ((match = /^fake_rename (\d+) (.+)$/.exec(line))) {
+        const p = players.get(Number(match[1]));
+        if (!p) say(`userid "${match[1]}" not found`);
+        else {
+            say(`${stamp}"${p.name}<${match[1]}><${p.steamId}><>" changed name to "${match[2]}"`);
+            p.name = match[2]!;
+        }
     } else if ((match = /^(?:fake_disconnect|kickid) (\d+)/.exec(line))) {
         const p = players.get(Number(match[1]));
         if (!p) say(`userid "${match[1]}" not found`);
