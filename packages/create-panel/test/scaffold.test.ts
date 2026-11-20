@@ -1,6 +1,5 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 import * as tar from "tar";
 import paperapiPackage from "@mileniumhq/paperapi/package.json";
@@ -76,12 +75,12 @@ describe("every feature choice builds, tests, links and packs", () => {
     });
 
     test("each variant passes its own tests and leaves no data folder behind", async () => {
-        const before = panelTestFolders();
+        const tmp = tempDir("tmp");
         for (const v of variants) {
-            const result = await ok("bun", ["test"], v.dir);
+            const result = await ok("bun", ["test"], v.dir, { TMPDIR: tmp });
             expect(`${result.stdout}${result.stderr}`).toMatch(/\b0 fail\b/);
         }
-        expect([...panelTestFolders()].filter((name) => !before.has(name))).toEqual([]);
+        expect(panelTestFolders(tmp)).toEqual([]);
     }, BUILD_TIMEOUT);
 
     test("each variant links with paperapi link and passes doctor against a running Paperboard", async () => {
@@ -135,14 +134,14 @@ describe("a panel's tests never touch the developer's Paperboard", () => {
             `import { test } from "bun:test";\nimport { writeFileSync } from "node:fs";\ntest("probe", () => { writeFileSync(${JSON.stringify(probeOut)}, process.env.PAPERBOARD_DIR ?? ""); });\n`,
         );
         try {
-            const before = panelTestFolders();
-            await ok("bun", ["test"], v.dir, { PAPERBOARD_DIR: developer });
+            const tmp = tempDir("tmp");
+            await ok("bun", ["test"], v.dir, { PAPERBOARD_DIR: developer, TMPDIR: tmp });
             const seen = readFileSync(probeOut, "utf8");
             expect(seen).not.toBe(developer);
-            expect(seen.startsWith(join(tmpdir(), "panel-test-"))).toBe(true);
+            expect(seen.startsWith(join(tmp, "panel-test-"))).toBe(true);
             // the throwaway folder goes when the panel's test run ends
             expect(existsSync(seen)).toBe(false);
-            expect([...panelTestFolders()].filter((name) => !before.has(name))).toEqual([]);
+            expect(panelTestFolders(tmp)).toEqual([]);
             expect(readdirSync(developer)).toEqual([]);
         } finally {
             rmSync(probe);

@@ -39,10 +39,10 @@ const OPEN: Record<Driver, string> = {
     `,
 };
 
-// every process whose command line names `dir`: a Chrome over a profile in
-// it, or the reaper that cleans up after one
-function processesIn(dir: string): number[] {
-    const found: number[] = [];
+// the command line of every process that names `dir`: a Chrome over a
+// profile in it, or the reaper that cleans up after one
+function processesIn(dir: string): Map<number, string> {
+    const found = new Map<number, string>();
     for (const entry of readdirSync("/proc")) {
         if (!/^\d+$/.test(entry)) continue;
         let cmdline: string;
@@ -53,7 +53,7 @@ function processesIn(dir: string): number[] {
             if ((err as NodeJS.ErrnoException).code === "ENOENT" || (err as NodeJS.ErrnoException).code === "ESRCH") continue;
             throw err;
         }
-        if (cmdline.includes(`${dir}/`)) found.push(Number(entry));
+        if (cmdline.includes(`${dir}/`)) found.set(Number(entry), cmdline);
     }
     return found;
 }
@@ -81,7 +81,7 @@ async function suiteThat(driver: Driver, ending: Ending): Promise<{ left: string
         output += new TextDecoder().decode(value);
     }
     // the Chromes up while its pages are open: each is one browser process with a profile in the dir
-    const started = processesIn(dir).map((pid) => readFileSync(`/proc/${pid}/cmdline`, "utf8")).filter((cmdline) => cmdline.includes("--remote-debugging-port=0") && !cmdline.includes("--type=")).length;
+    const started = [...processesIn(dir).values()].filter((cmdline) => cmdline.includes("--remote-debugging-port=0") && !cmdline.includes("--type=")).length;
     if (ending === "is stopped") child.kill("SIGTERM");
     await child.exited;
     output += await new Response(child.stderr).text();
@@ -89,9 +89,9 @@ async function suiteThat(driver: Driver, ending: Ending): Promise<{ left: string
     // ends: done once nothing that names the dir runs any more
     const deadline = Date.now() + 10_000;
     // quiet: the poll interval of a deadline-bound wait for the Chromes to end
-    while (processesIn(dir).length && Date.now() < deadline) await Bun.sleep(50);
+    while (processesIn(dir).size && Date.now() < deadline) await Bun.sleep(50);
     const left = readdirSync(dir);
-    const chromes = processesIn(dir);
+    const chromes = [...processesIn(dir).keys()];
     // whatever the driver left is this test's to stop, by PID
     for (const pid of chromes) process.kill(pid, "SIGKILL");
     rmSync(dir, { recursive: true, force: true, maxRetries: 10 });
