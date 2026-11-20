@@ -14,8 +14,8 @@ concurrency:
   cancel-in-progress: true
 jobs:
   # Which gate targets run, as the matrix of the jobs below. A pull request
-  # names its own in a line of its description, the same targets its author
-  # ran locally:
+  # names its own in the last `Gate:` line of its description, the same targets
+  # its author ran locally:
   #
   #   Gate: paperdocs
   #   Gate: terminal paperboard platform
@@ -38,7 +38,7 @@ jobs:
         run: |
           named=""
           if [ "$EVENT" = pull_request ]; then
-            named="$(printf '%s\n' "$BODY" | tr -d '\r' | sed -n 's/^Gate:[[:space:]]*//p' | head -n 1 | sed 's/[[:space:]]*$//')"
+            named="$(printf '%s\n' "$BODY" | tr -d '\r' | sed -n 's/^Gate:[[:space:]]*//p' | tail -n 1 | sed 's/[[:space:]]*$//')"
           fi
           if [ -z "$named" ] || [ "$named" = all ]; then
             jobs='[
@@ -66,7 +66,6 @@ jobs:
   gate:
     name: ${{ matrix.name }}
     needs: scope
-    if: needs.scope.outputs.jobs != '[]'
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     strategy:
