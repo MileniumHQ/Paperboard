@@ -60,9 +60,9 @@ function pairing(ctx: RpcContext, action: string): RpcContext["auth"] {
 }
 
 export const systemRpc = rpcModule({
-    "system:ip": () => ({ ip: getNetworkIp() }),
+    "system:ip": async () => ({ ip: await getNetworkIp() }),
     "system:info": async (_, ctx) => {
-        const osInfo = await getDetailedOsInfo();
+        const [osInfo, ip] = await Promise.all([getDetailedOsInfo(), getNetworkIp()]);
         if (ctx.callerPanelId() === null) await confirmCraneUpdate(process.execPath, PAPERCRANE_VERSION);
         return {
             service: "papercrane",
@@ -73,7 +73,7 @@ export const systemRpc = rpcModule({
             distroId: osInfo.distroId,
             distroName: osInfo.distroName,
             arch: process.arch,
-            ip: getNetworkIp(),
+            ip,
             username: process.env.USER || os.userInfo().username,
         };
     },

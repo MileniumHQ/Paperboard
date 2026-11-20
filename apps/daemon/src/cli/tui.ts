@@ -5,18 +5,17 @@ import { getDisplayHost } from "../core/util";
 
 // the bind host may be unspecified (0.0.0.0/::); the string printed for a
 // human must be an address they can actually type into another computer.
-export function formatListenAddress(
+export async function formatListenAddress(
     host: string,
     port: number,
     secure: boolean,
-): string {
-    return `${secure ? "https" : "http"}://${getDisplayHost(host)}:${port}`;
+): Promise<string> {
+    return `${secure ? "https" : "http"}://${await getDisplayHost(host)}:${port}`;
 }
 
 export interface TuiOptions {
-    host: string;
-    port: number;
-    secure: boolean;
+    /** from formatListenAddress, resolved before the screen is drawn */
+    url: string;
     auth: PaperCraneAuth;
     onStop: () => void;
 }
@@ -28,17 +27,13 @@ const PAIRING_TRUST_NOTE =
     "Pairing itself is unauthenticated: pair only on a network you trust. Once paired, the connection is encrypted and locked to this server, so you can use it from anywhere.";
 
 export class PaperCraneTui {
-    private host: string;
-    private port: number;
-    private scheme: string;
+    private url: string;
     private auth: PaperCraneAuth;
     private onStop: () => void;
     private isPromptingRevoke = false;
 
     constructor(options: TuiOptions) {
-        this.host = options.host;
-        this.port = options.port;
-        this.scheme = options.secure ? "https" : "http";
+        this.url = options.url;
         this.auth = options.auth;
         this.onStop = options.onStop;
 
@@ -150,7 +145,7 @@ export class PaperCraneTui {
 
         this.clear();
         console.log(readBanner() ?? "Paperboard Server");
-        console.log(`Listening on ${formatListenAddress(this.host, this.port, this.scheme === "https")}\n`);
+        console.log(`Listening on ${this.url}\n`);
         console.log(`${PAIRING_TRUST_NOTE}\n`);
 
         if (this.auth.isPairingActive()) {
@@ -174,7 +169,7 @@ export class PaperCraneTui {
     }
 
     private renderPlain() {
-        console.log(`[Paperboard Server] Listening on ${formatListenAddress(this.host, this.port, this.scheme === "https")}`);
+        console.log(`[Paperboard Server] Listening on ${this.url}`);
         console.log(`[Paperboard Server] ${PAIRING_TRUST_NOTE}`);
         if (this.auth.isPairingActive()) {
             const code = this.auth.getPairingCode() || "------";

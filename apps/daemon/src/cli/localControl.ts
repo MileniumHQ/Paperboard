@@ -183,7 +183,7 @@ export async function readDaemonStatus(): Promise<DaemonStatus> {
             version: info.version,
             hostname: info.hostname,
             ...(pid !== undefined ? { pid } : {}),
-            ...(listen ? { listen: { url: formatListenAddress(listen.host, listen.port, listen.secure), ...listen } } : {}),
+            ...(listen ? { listen: { url: await formatListenAddress(listen.host, listen.port, listen.secure), ...listen } } : {}),
             auth: token !== null,
             ...(token !== null ? { pairing: await daemon.call("system:pairing-status") } : {}),
         };
@@ -247,7 +247,7 @@ export async function runPair(): Promise<number> {
             console.log(`This daemon only listens on ${listen.host}, without encryption, so Paperboard can't pair with it.`);
             console.log("Start it with --host 0.0.0.0 to pair it from Paperboard over your network.");
         } else {
-            const address = listen ? `${getDisplayHost(listen.host)}:${listen.port}` : null;
+            const address = listen ? `${await getDisplayHost(listen.host)}:${listen.port}` : null;
             console.log("In Paperboard on the other computer, press Add Computer and pick this computer,");
             console.log(`${address ? `or choose Custom IP and type ${address}. Then ` : "then "}enter the code.`);
             console.log("Pair only on a network you trust; once paired, the connection is encrypted.");

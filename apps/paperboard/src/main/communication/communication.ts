@@ -25,17 +25,11 @@ export function startCommunicator(ipcMain: IpcMain) {
     discovery.on("update", onDiscovery);
 
     // mirror pool changes; payload matches computers-list
-    const onPoolChange = () => {
-        pushToShells("computers-changed", {
-            computers: connectionPool.listComputers(),
-            activeId: connectionPool.getActiveId(),
-        });
-    };
-    connectionPool.on("change", onPoolChange);
+    const stopMirror = connectionPool.mirror((payload) => pushToShells("computers-changed", payload));
 
     // stop forwarding so restart never double-subscribes
     return () => {
-        connectionPool.off("change", onPoolChange);
+        stopMirror();
         discovery.off("update", onDiscovery);
         discovery.stop();
         removeWindowSink();

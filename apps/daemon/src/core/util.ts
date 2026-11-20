@@ -1,4 +1,5 @@
-// small pure utilities shared by both sides
+// small utilities shared by both sides
+import * as dgram from "dgram";
 import * as os from "os";
 
 export interface NetworkInterfaceLike {
@@ -26,27 +27,45 @@ function isPrivateIpv4(addr: string): boolean {
     );
 }
 
-// pick a reachable IPv4 from a network-interface table, preferring the
-// private LAN range a peer on the same network would actually use.
+// pick the IPv4 another machine on this network should dial. The address
+// the default route leaves from is the one peers reach; container and VM
+// bridges (Podman's 10.88.0.1, Docker's 172.17.0.1, WSL's vEthernet) are
+// private too, so "the first private address" can name one of them. With no
+// default route, the first private address is still the best guess.
 export function selectNetworkIp(
     ifaces: Record<string, NetworkInterfaceLike[] | undefined>,
+    routed: string | null = null,
 ): string {
-    let fallback = "127.0.0.1";
-    for (const name of Object.keys(ifaces)) {
-        const list = ifaces[name];
-        if (!list) continue;
-        for (const item of list) {
-            if (!isUsableIpv4(item)) continue;
-            const addr = item.address as string;
-            if (isPrivateIpv4(addr)) return addr;
-            if (fallback === "127.0.0.1") fallback = addr;
-        }
-    }
-    return fallback;
+    const usable = Object.values(ifaces).flatMap((list) => (list ?? []).filter(isUsableIpv4)).map((item) => item.address as string);
+    if (routed !== null && usable.includes(routed)) return routed;
+    return usable.find(isPrivateIpv4) ?? usable[0] ?? "127.0.0.1";
 }
 
-export function getNetworkIp(): string {
-    return selectNetworkIp(os.networkInterfaces());
+// TEST-NET-1 (RFC 5737): routed like any outside address, owned by no one.
+// Connecting a UDP socket sends nothing; the kernel only picks the route,
+// and with it the source address of the interface that carries it.
+const ROUTE_PROBE = "192.0.2.1";
+
+/** The local IPv4 the default route leaves from, or null when there is no default route. */
+export function defaultRouteIpv4(): Promise<string | null> {
+    return new Promise((resolve) => {
+        const socket = dgram.createSocket("udp4");
+        let answered = false;
+        const answer = (ip: string | null) => {
+            if (answered) return;
+            answered = true;
+            socket.close();
+            resolve(ip);
+        };
+        // a UDP connect sends nothing, so it fails only when no route exists
+        // (Node says ENETUNREACH, Bun a bare "Failed to connect socket")
+        socket.once("error", () => answer(null));
+        socket.connect(9, ROUTE_PROBE, (err?: Error) => answer(err ? null : socket.address().address));
+    });
+}
+
+export async function getNetworkIp(): Promise<string> {
+    return selectNetworkIp(os.networkInterfaces(), await defaultRouteIpv4());
 }
 
 // a bind host that names no specific interface cannot be dialed as-is
@@ -56,8 +75,8 @@ export function isUnspecifiedHost(host?: string): boolean {
 
 // display the address a peer can actually reach: a concrete bind host is
 // shown verbatim, an unspecified bind (the default) resolves to the LAN IP.
-export function getDisplayHost(host?: string): string {
-    return isUnspecifiedHost(host) ? getNetworkIp() : (host as string);
+export async function getDisplayHost(host?: string): Promise<string> {
+    return isUnspecifiedHost(host) ? await getNetworkIp() : (host as string);
 }
 
 // registry override policy: environment override is honored only outside

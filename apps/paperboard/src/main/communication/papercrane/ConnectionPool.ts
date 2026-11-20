@@ -214,7 +214,8 @@ export class ConnectionPool extends EventEmitter {
     }
 
     /** what the shell shows of each computer: never a pairing's token or pinned certificate */
-    public listComputers(): ComputerInfo[] {
+    public async listComputers(): Promise<ComputerInfo[]> {
+        const networkAddress = await getNetworkIp();
         return Array.from(this.computers.values()).map(({ token: _token, cert: _cert, ...c }) => {
             const client = this.clients.get(c.id);
             const status =
@@ -226,8 +227,22 @@ export class ConnectionPool extends EventEmitter {
             // the local daemon is dialed on loopback, which is no address
             // another machine can use; remote hosts are already the address
             // they were paired with. Computed per call: it follows the network.
-            return { ...c, status, ...(c.id === "local" ? { networkAddress: getNetworkIp() } : {}) };
+            return { ...c, status, ...(c.id === "local" ? { networkAddress } : {}) };
         });
+    }
+
+    /** Calls `listener` with what computers-list answers after each change; returns the unsubscribe. */
+    public mirror(listener: (payload: { computers: ComputerInfo[]; activeId: string }) => void): () => void {
+        // the list waits on the network address, so a newer change's answer drops an older one
+        let changes = 0;
+        const onChange = () => {
+            const change = ++changes;
+            void this.listComputers().then((computers) => {
+                if (change === changes) listener({ computers, activeId: this.getActiveId() });
+            });
+        };
+        this.on("change", onChange);
+        return () => this.off("change", onChange);
     }
 
     // plain {id,name} list for updater

@@ -13,10 +13,9 @@ import { createHostAuthorityCheck } from "./hostAuthority";
 import { davMaxUploadBytes } from "./dav";
 import { DavSessionStore } from "./davAuth";
 import { setupWebSocketServer } from "./ws";
-import { PaperCraneTui } from "../cli/tui";
+import { formatListenAddress, PaperCraneTui } from "../cli/tui";
 import { advertisePaperCrane, isLoopbackHost, type AdvertisementHandle } from "../system/discovery";
 import { writeFileAtomicSync } from "../core/storage";
-import { getDisplayHost } from "../core/util";
 import { DEFAULT_LISTEN_PORT } from "../cli/cli";
 import { getLocalDir, getPaperboardDir, ensurePrivateDir } from "../core/paths";
 import {
@@ -430,25 +429,17 @@ function listenOnce(config: DaemonConfig, port: number): Promise<ServerInstance>
                 );
             }
 
-            if (noAuth || headless) {
-                console.log(
-                    `[Paperboard Server] Listening on ${tlsIdentity ? "https" : "http"}://${getDisplayHost(host)}:${actualPort}`,
-                );
-            } else {
-                // pairing opens only when asked: [p] in the TUI, or
-                // --start-pairing at launch. A daemon listening on the
-                // LAN never offers a pairing code on its own.
-                if (options.startPairing) {
-                    auth.startPairing();
-                }
-                new PaperCraneTui({
-                    host,
-                    port: actualPort,
-                    secure: tlsIdentity !== null,
-                    auth,
-                    onStop: lifecycle.stop,
-                }).start();
+            // pairing opens only when asked: [p] in the TUI, or
+            // --start-pairing at launch. A daemon listening on the
+            // LAN never offers a pairing code on its own.
+            if (!noAuth && !headless && options.startPairing) {
+                auth.startPairing();
             }
+            // the address shown asks the OS for its default route first
+            void formatListenAddress(host, actualPort, tlsIdentity !== null).then((url) => {
+                if (noAuth || headless) console.log(`[Paperboard Server] Listening on ${url}`);
+                else new PaperCraneTui({ url, auth, onStop: lifecycle.stop }).start();
+            });
 
             resolve({ server, wss, engine, auth, port: actualPort, localPort, host, stop: lifecycle.stop });
         };

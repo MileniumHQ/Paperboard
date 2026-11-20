@@ -317,7 +317,7 @@ async function waitForDaemon(plan: Plan): Promise<Ready> {
                 const record = JSON.parse(fs.readFileSync(handshake, "utf8"));
                 if (record?.pid === pid) {
                     const l = record.listen;
-                    return { pid, listen: l && typeof l.host === "string" ? formatListenAddress(l.host, l.port, l.secure === true) : null };
+                    return { pid, listen: l && typeof l.host === "string" ? await formatListenAddress(l.host, l.port, l.secure === true) : null };
                 }
             } catch (err) {
                 // written atomically, so a parse failure is a real problem

@@ -172,9 +172,7 @@ addShellPushSink((channel, payload) => host.push(channel, payload));
 // what communication.ts starts and mirrors for the Electron windows
 discovery.start();
 discovery.on("update", (services) => pushToShells("discovery-changed", services));
-connectionPool.on("change", () =>
-    pushToShells("computers-changed", { computers: connectionPool.listComputers(), activeId: connectionPool.getActiveId() }),
-);
+connectionPool.mirror((payload) => pushToShells("computers-changed", payload));
 
 type Command =
     | { cmd: "sign-in-url" }

@@ -40,8 +40,8 @@ export function createShellInvokeHandlers(deps: ShellHandlerDeps): CallHandlers<
             return { ...creds, computerId: "local" };
         },
 
-        "computers-list": () => ({
-            computers: connectionPool.listComputers(),
+        "computers-list": async () => ({
+            computers: await connectionPool.listComputers(),
             activeId: connectionPool.getActiveId(),
         }),
 
