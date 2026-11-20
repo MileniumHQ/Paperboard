@@ -27,7 +27,7 @@ import { launchOptionsFromArgv } from "../../../src/shared/launchOptions";
 import { initialAppUpdateState } from "../../../src/shared/appUpdate";
 import { initialUpdateQueueState, type UpdateQueueState } from "../../../src/shared/updateQueue";
 import { cancelGoogleSignIn, signInToGoogleDrive } from "../../../src/main/googleOAuth";
-import { ANSWER } from "./protocol";
+import { ANSWER, type Command, type CommandResult } from "./protocol";
 
 const rendererDir = process.argv[2];
 if (!rendererDir) throw new Error("usage: host.main.ts <built renderer dir>");
@@ -111,12 +111,7 @@ connectionPool.on("change", () =>
     pushToShells("computers-changed", { computers: connectionPool.listComputers(), activeId: connectionPool.getActiveId() }),
 );
 
-type Command =
-    | { cmd: "sign-in-url" }
-    | { cmd: "push-update-queue"; state: UpdateQueueState }
-    | { cmd: "google-sign-ins"; atLeast: number };
-
-async function run(command: Command): Promise<unknown> {
+async function run(command: Command): Promise<CommandResult<Command>> {
     switch (command.cmd) {
         case "sign-in-url":
             return host.signInUrl();
@@ -128,6 +123,11 @@ async function run(command: Command): Promise<unknown> {
             // resolves with how many Google sign-ins opened a browser, once at least that many have
             while (googleSignIns < command.atLeast) await new Promise<void>((wake) => googleSignInWaiters.push(wake));
             return googleSignIns;
+        default: {
+            // a command from a test built against another host (or past the types)
+            const unknown: never = command;
+            throw new Error(`unknown command ${(unknown as { cmd?: unknown }).cmd}`);
+        }
     }
 }
 
