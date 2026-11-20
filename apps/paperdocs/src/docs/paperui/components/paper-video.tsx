@@ -148,7 +148,7 @@ export function Example() {
 
             <PaperText preset="subheader" as="h3" id="errors">Errors</PaperText>
             <PaperText preset="body" as="p">
-                When loading or playback fails, the seek line is replaced by the message and a <PaperCode>Retry</PaperCode> button, in an element with <PaperCode>role="alert"</PaperCode>.
+                When loading or playback fails, the seek line is replaced by the message and a <PaperCode>Retry</PaperCode> button, in an element with <PaperCode>role="alert"</PaperCode>.{" "}
                 <PaperCode>onError</PaperCode> receives the same message. The messages are the ones PaperAudio shows, with video in place of audio.
             </PaperText>
             <PaperTable>

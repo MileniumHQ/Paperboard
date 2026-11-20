@@ -19,7 +19,7 @@ export default function PaperProviderDoc() {
 
             <PaperText preset="subheader" as="h2" id="usage">Usage</PaperText>
             <PaperText preset="body" as="p">
-                Import the stylesheet once, then render the provider around the panel.
+                Import the stylesheet once, then render the provider around the panel.{" "}
                 <PaperCode>fullWidth</PaperCode> and <PaperCode>fullHeight</PaperCode> make it fill the panel's frame.
             </PaperText>
             <PaperCode block language="tsx">

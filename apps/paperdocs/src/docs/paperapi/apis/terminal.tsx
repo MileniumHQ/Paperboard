@@ -115,7 +115,7 @@ type StreamSubscription = (() => void) & { attached: Promise<boolean> };`}
 
             <PaperText preset="subheader" as="h2" id="errors">Errors</PaperText>
             <PaperText preset="body" as="p">
-                <PaperCode>create</PaperCode> and <PaperCode>destroy</PaperCode> reject with the daemon's reason, such as <PaperCode>Process &lt;id&gt; is already running</PaperCode> for a second <PaperCode>create</PaperCode>, <PaperCode>spawn cwd does not exist: &lt;path&gt;</PaperCode>, or a refused credential key in <PaperCode>env</PaperCode>.
+                <PaperCode>create</PaperCode> and <PaperCode>destroy</PaperCode> reject with the daemon's reason, such as <PaperCode>Process &lt;id&gt; is already running</PaperCode> for a second <PaperCode>create</PaperCode>, <PaperCode>spawn cwd does not exist: &lt;path&gt;</PaperCode>, or a refused credential key in <PaperCode>env</PaperCode>.{" "}
                 <PaperCode>write</PaperCode> rejects with <PaperCode>Terminal "&lt;id&gt;" is not running</PaperCode>. <PaperCode>write</PaperCode>, <PaperCode>resize</PaperCode> and <PaperCode>exists</PaperCode> reject with <PaperCode>"&lt;id&gt;" belongs to another panel</PaperCode> (<PaperCode>FORBIDDEN</PaperCode>) for another panel's id.
             </PaperText>
         </PaperFlex>

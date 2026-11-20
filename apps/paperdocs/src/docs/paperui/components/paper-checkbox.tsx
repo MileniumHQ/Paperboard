@@ -24,7 +24,7 @@ export default function PaperCheckboxDoc() {
 
             <PaperText preset="subheader" as="h2" id="usage">Usage</PaperText>
             <PaperText preset="body" as="p">
-                Bind <PaperCode>checked</PaperCode> and <PaperCode>onChange</PaperCode> to a signal, which makes the checkbox controlled.
+                Bind <PaperCode>checked</PaperCode> and <PaperCode>onChange</PaperCode> to a signal, which makes the checkbox controlled.{" "}
                 <PaperCode>onChange</PaperCode> receives the new boolean, not an event.
             </PaperText>
             <PaperCard data-docs-demo padding="double" surface="front">

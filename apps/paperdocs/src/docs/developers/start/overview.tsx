@@ -70,7 +70,7 @@ export default function GuidesOverviewDoc() {
             <PaperText preset="subheader" as="h2" id="trust">Panels run with full trust</PaperText>
             <PaperText preset="body" as="p">
                 Paperboard does not sandbox panels. A panel can start any program on the computer, and its service is an ordinary Node or Bun program with the same reach as the account that runs Paperboard.
-                What Paperboard enforces is ownership: a panel reads and writes only its own config, files, secrets, ports and processes.
+                What Paperboard enforces is ownership: a panel reads and writes only its own config, files, secrets, ports and processes.{" "}
                 <PaperLink href="/docs/paperapi/permissions/">Permissions</PaperLink> lists exactly what a panel can and cannot do.
                 This is why every panel in the Panel Library is reviewed by the Paperboard team before it ships. See <PaperLink href="/docs/developers/panel-library/">Get into the Panel Library</PaperLink>.
             </PaperText>
