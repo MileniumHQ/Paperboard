@@ -103,8 +103,32 @@ async function endOurProcesses(): Promise<void> {
     }
 }
 
+const REMOVABLE_WITHIN_MS = 5_000;
+
+// Removes a folder whose processes have all exited. On Windows a killed
+// program's file stays locked for a moment after its process is reported
+// gone: on CI, removing the crane folder right after its daemon and services
+// ended failed with EPERM, and the same removal succeeded 100 ms later. So
+// there, and only for EPERM or EBUSY, it waits for the folder to become
+// removable; anywhere else, or past the deadline, the error stands.
+async function removeDir(dir: string): Promise<void> {
+    const deadline = Date.now() + REMOVABLE_WITHIN_MS;
+    for (;;) {
+        try {
+            fs.rmSync(dir, { recursive: true, force: true });
+            return;
+        } catch (err) {
+            const code = (err as NodeJS.ErrnoException).code;
+            if (process.platform !== "win32" || (code !== "EPERM" && code !== "EBUSY")) throw err;
+            if (Date.now() > deadline) throw new Error(`${dir} was still locked ${REMOVABLE_WITHIN_MS} ms after every process in it had exited: ${(err as Error).message}`);
+        }
+        // quiet: Windows says nothing when it lets go of the file; bounded by the deadline above
+        await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+}
+
 export async function cleanupSuite(): Promise<void> {
     await endOurProcesses();
-    for (const dir of made) fs.rmSync(dir, { recursive: true, force: true });
+    for (const dir of made) await removeDir(dir);
     for (const base of bases) if (fs.readdirSync(base).length === 0) fs.rmdirSync(base);
 }
