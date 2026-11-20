@@ -53,6 +53,10 @@ test("quitting with an unsaved note asks the note: Stay keeps Paperboard running
     await electron.evalIn(SHELL, domCondition(item));
     await electron.evalIn(SHELL, `${item}.click()`);
     await electron.evalInFrame(FRAME, domCondition(`document.getElementById("note")`));
+    // the shell shows the page once it answered the shell's challenge. A note
+    // typed before that is told to the shell only with that answer, after the
+    // marker below, and the quit would find nothing unsaved.
+    await electron.evalIn(SHELL, domCondition(`(() => { const frame = document.querySelector('iframe[title="dev.paperboard.testnotes"]'); return Boolean(frame) && ![...frame.classList].some((name) => name.includes("unpainted")); })()`));
     // the note's "unsaved" message reaches the shell before this marker
     // does, and the shell tells main before its next IPC answers
     await electron.evalIn(SHELL, `window.flushed = new Promise((resolve) => addEventListener("message", (e) => e.data === "test-flush" && resolve())); true`);
