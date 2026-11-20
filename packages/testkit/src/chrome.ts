@@ -490,8 +490,15 @@ async function drive(connection: Connection, url: string, options: PageOptions, 
                 await send("Input.dispatchKeyEvent", { type: "keyUp", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13 });
             }
         },
+        // A click lands where its element was measured. PaperUI's fonts swap
+        // in once loaded (font-display: swap) and move everything laid out
+        // below them, so an element measured on the fallback font can be gone
+        // from that spot by the time the mouse presses: on a busy computer a
+        // server menu entry was measured that way and the click met the gap
+        // above it. The element is measured once the fonts the page is laid
+        // out in have loaded (reading its layout starts their loads).
         async click(selector, button = "left") {
-            const box = await evaluate<{ x: number; y: number } | null>(`(() => { const el = document.querySelector(${JSON.stringify(selector)}); if (!el) return null; el.scrollIntoView({ block: "center" }); const r = el.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; })()`);
+            const box = await evaluate<{ x: number; y: number } | null>(`(async () => { document.body.getBoundingClientRect(); await document.fonts.ready; const el = document.querySelector(${JSON.stringify(selector)}); if (!el) return null; el.scrollIntoView({ block: "center" }); const r = el.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; })()`);
             if (!box) throw new Error(`Nothing to click matches ${selector}`);
             for (const type of ["mousePressed", "mouseReleased"]) await send("Input.dispatchMouseEvent", { type, x: box.x, y: box.y, button, clickCount: 1 });
         },
