@@ -1,8 +1,6 @@
 // Saved commands as a person uses them: added, run and removed in the panel's
 // modal, run from the toolbar's menu, and run from the Home widget.
 import { afterEach, describe, expect, setDefaultTimeout, test } from "bun:test";
-import * as fs from "node:fs";
-import * as path from "node:path";
 import { clearWorkloads } from "./helpers/crane";
 import { widgetUrl } from "testkit/panelUi";
 import { panelBrowser, toastShows, servePanel, type Page } from "./helpers/browser";
@@ -88,10 +86,51 @@ describe("saved commands in the panel", () => {
             served.stop();
         }
     });
-    // the modal's error in place of the list, saying why: never a toast, which would go while the file stays unread
-    const failure = `${dialog}?.querySelector("[data-paper-error][role=region][aria-label=\\"Couldn't read the saved commands\\"]")`;
-    const tryAgain = `[...(${failure}?.querySelectorAll("button") ?? [])].find((b) => b.innerText.includes("Try again"))`;
 
+    // Inventory: Data loss — what is typed into the form while a command saves is kept, and a refused save gives its text back.
+    test("the form empties the moment a command is saved, keeps what is typed while it saves, and takes its text back when the save is refused", async () => {
+        await panelFiles({ "tabs.json": TABS });
+        const service = await startService();
+        const served = await servePanel();
+        const page = await browser.open(served.url);
+        // the form's fields, set as typing sets them, and the Save button
+        const FORM = `(() => {
+            const field = (label) => [...${dialog}.querySelectorAll("label")].find((l) => l.innerText.includes(label)).closest("div").querySelector("input");
+            const type = (label, text) => { const input = field(label); input.value = text; input.dispatchEvent(new InputEvent("input", { bubbles: true })); };
+            const values = () => [field("Name").value, field("Command").value];
+            const save = () => [...${dialog}.querySelectorAll("button")].find((b) => b.innerText.includes("Save")).click();
+            return { type, values, save };
+        })()`;
+        try {
+            await page.waitFor(`document.querySelectorAll(".xterm").length === 1`, "the shell");
+            await openManager(page);
+            // in one turn of the page: the save cannot have come back before the form is read and typed into
+            const atOnce = await page.evaluate<string[]>(`(() => {
+                const form = ${FORM};
+                form.type("Name", "Greet"); form.type("Command", "exit 0");
+                form.save();
+                const emptied = form.values();
+                form.type("Name", "Fails"); form.type("Command", "exit 3");
+                return emptied;
+            })()`);
+            expect(atOnce).toEqual(["", ""]);
+            await page.waitFor(rowShowing("Greet", "Not run yet"), "the first command's row");
+            // the first save came back, and left the next command as it was typed
+            expect(await page.evaluate<string[]>(`${FORM}.values()`)).toEqual(["Fails", "exit 3"]);
+            await page.evaluate(`${FORM}.save()`);
+            await page.waitFor(rowShowing("Fails", "exit 3"), "the second command's row, under the name typed while the first saved");
+
+            // the service is gone: the save is refused, and what was sent is back in the form
+            await service.crash();
+            await page.evaluate(`(() => { const form = ${FORM}; form.type("Name", "Lost"); form.type("Command", "exit 9"); form.save(); })()`);
+            await page.waitFor(toastShows("Couldn't save the command", ""), "the refused save's toast");
+            await page.waitFor(`JSON.stringify(${FORM}.values()) === JSON.stringify(["Lost", "exit 9"])`, "the refused command back in the form");
+            expect(page.exceptions).toEqual([]);
+        } finally {
+            await page.close();
+            served.stop();
+        }
+    });
 });
 
 describe("the Pinned command widget", () => {
