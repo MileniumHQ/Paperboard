@@ -35,7 +35,7 @@ export function buildUpdaterApp(): Promise<string> {
 export const FEED_FILE = ymlKeyFor(feedOf(hostTarget()));
 export const PAYLOAD_FILE = assetFileName("pb", hostTarget());
 
-export type Route = { body: Uint8Array | string } | { status: number } | "stall";
+export type Route = { body: Uint8Array<ArrayBuffer> | string } | { status: number } | "stall";
 
 export class Feed {
     readonly requests: string[] = [];

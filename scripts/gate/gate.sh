@@ -27,7 +27,7 @@
 #     daemon         server daemon (apps/daemon): typecheck, tests, lint,
 #                    silent-catches, and the workload supervisor's (Go)
 #                    format, vet and tests
-#     paperboard     desktop app: typechecks, tests, lint, silent-catches
+#     paperboard     desktop app: typechecks (src and tests), tests, lint, silent-catches
 #     paperdocs      docs site: tests, build
 #     origami        registry worker: typecheck, tests, silent-catches
 #     library        panel library (store) web app: tests, build, silent-catches
@@ -215,9 +215,10 @@ gstep daemon "supervisor tests" run_in "$ROOT/apps/daemon/supervisor" go test -c
 gstep daemon "daemon silent-catches" run_in "$ROOT/apps/daemon" bash "$CATCH" src test
 gstep daemon "daemon code check" run_in "$ROOT" bun scripts/gate/check-solid.ts apps/daemon/src apps/daemon/test
 
-# ── Paperboard app: node + web typechecks, full suite, lint, silent-catches ──
+# ── Paperboard app: node + web + tests typechecks, full suite, lint, silent-catches ──
 gstep paperboard "paperboard typecheck:node" run_in "$ROOT/apps/paperboard" bun run typecheck:node
 gstep paperboard "paperboard typecheck:web" run_in "$ROOT/apps/paperboard" bun run typecheck:web
+gstep paperboard "paperboard typecheck:tests" run_in "$ROOT/apps/paperboard" bun run typecheck:tests
 gstep paperboard "paperboard tests" run_in "$ROOT/apps/paperboard" bun run test
 gstep paperboard "paperboard lint" run_in "$ROOT/apps/paperboard" bunx biome lint
 gstep paperboard "paperboard silent-catches" run_in "$ROOT/apps/paperboard" bash "$CATCH"
