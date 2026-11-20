@@ -7,7 +7,7 @@ import { appendCapped } from "../../service/types";
 import { pushChat, report } from "../serviceKit";
 import { SOURCE_CALLS as ids } from "./index";
 import { parseStatus, type SourceLogEvent } from "./log";
-import { mergeStats, noStats, type SourceStats } from "./roster";
+import { mergeStats, noStats, type SourceGathered, type SourceStats } from "./roster";
 import { rewriteConfigs } from "./files";
 import { mods, modsOn } from "./modLinks";
 import type { SourceGame } from "./instance";
@@ -41,7 +41,7 @@ export class SourcePlayers {
     /** who is on, by the server's user id for their connection */
     readonly online = new Map<number, SourceOnline>();
     /** stats not yet in the roster, by Steam id */
-    #unsaved = new Map<string, Partial<SourceStats>>();
+    #unsaved = new Map<string, SourceGathered>();
     /** when each online player's time was last added to their playtime, by user id */
     readonly #counted = new Map<number, number>();
     #statsTimer: ReturnType<typeof setTimeout> | null = null;
@@ -141,16 +141,18 @@ export class SourcePlayers {
         if (!player) return;
         player.stats[key] += 1;
         if (!this.#game.isPlayer(player.steamId)) return;
-        const unsaved = this.#unsavedOf(player.steamId);
+        const unsaved = this.#unsavedOf(player);
         unsaved[key] = (unsaved[key] ?? 0) + 1;
         if (!this.#statsTimer) this.#statsTimer = setTimeout(() => {
             this.#statsTimer = null;
             this.saveStats().catch((err) => report(this.#game.server, "Could not save players' stats", err));
         }, STATS_FLUSH_MS);
     }
-    #unsavedOf(steamId: string): Partial<SourceStats> {
-        const stats = this.#unsaved.get(steamId) ?? {};
-        this.#unsaved.set(steamId, stats);
+    #unsavedOf(player: SourceOnline): SourceGathered {
+        const stats = this.#unsaved.get(player.steamId) ?? { name: player.name };
+        // a rename since is the name they are recorded by
+        stats.name = player.name || stats.name;
+        this.#unsaved.set(player.steamId, stats);
         return stats;
     }
     /** Adds the time since it was last counted to a person's playtime. */
@@ -159,7 +161,7 @@ export class SourcePlayers {
         this.#counted.set(player.userId, now);
         if (!this.#game.isPlayer(player.steamId) || now <= from) return;
         player.stats.playtime += now - from;
-        const unsaved = this.#unsavedOf(player.steamId);
+        const unsaved = this.#unsavedOf(player);
         unsaved.playtime = (unsaved.playtime ?? 0) + now - from;
     }
     /** Writes what has gathered, with everyone's time on so far, to the roster. */
