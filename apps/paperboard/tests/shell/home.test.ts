@@ -70,6 +70,8 @@ test("a widget added from the gallery, dragged and moved with the keyboard, is s
     const added = await savedLayout((saved) => saved.items.some((item) => item.widgetId === "uptime"), "the added Uptime");
     const at = added.items.find((item) => item.widgetId === "uptime")!;
 
+    // the new tile has come to rest, so the drag starts on it and not where it was a frame ago
+    await page.motionSettled();
     // dragged one cell to the right and one down, as a mouse would
     const box = await page.evaluate<{ x: number; y: number; cell: number }>(`(() => {
         const rect = document.querySelector(${JSON.stringify(tile("Uptime"))}).getBoundingClientRect();
