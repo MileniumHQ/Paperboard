@@ -167,8 +167,10 @@ export async function launchElectron(options: {
 
 // Resolves inside a page with the value of `expression` once it is truthy,
 // watching the DOM rather than polling a clock. A found element answers
-// true: Electron can't send a DOM node back from the page.
-export function domCondition(expression: string, ms = WAIT_MS): string {
+// true: Electron can't send a DOM node back from the page. It gives up a
+// little before the command that carries it does, so a wait that never ends
+// fails saying what it waited for and what the page showed.
+export function domCondition(expression: string, ms = WAIT_MS - 5_000): string {
     return `new Promise((resolve, reject) => {
         const check = () => { const value = (${expression}); return value instanceof Node ? true : value; };
         const first = check();

@@ -44,6 +44,19 @@ afterAll(async () => {
     await daemon?.stop();
 });
 
+/**
+ * Resolves once main has heard what the page last told the shell (unsaved
+ * work, an answer to the quit). The page's messages reach the shell in the
+ * order it sent them, so this marker arrives after them; the shell tells
+ * main what it heard before it does anything else, and main answers the
+ * shell's calls in order.
+ */
+async function toldMain(): Promise<void> {
+    await electron.evalIn(SHELL, `window.flushed = new Promise((resolve) => addEventListener("message", (e) => e.data === "test-flush" && resolve())); true`);
+    await electron.evalInFrame(FRAME, `parent.postMessage("test-flush", "*")`);
+    await electron.evalIn(SHELL, `window.flushed.then(() => window.paperboardShell.invoke("app-version"))`);
+}
+
 const alive = () => electron.child.exitCode === null && electron.child.signalCode === null;
 
 // Inventory: Data loss — quitting with an unsaved note asks the note first: Stay keeps Paperboard open, Discard quits.
@@ -57,11 +70,8 @@ test("quitting with an unsaved note asks the note: Stay keeps Paperboard running
     // typed before that is told to the shell only with that answer, after the
     // marker below, and the quit would find nothing unsaved.
     await electron.evalIn(SHELL, domCondition(`(() => { const frame = document.querySelector('iframe[title="dev.paperboard.testnotes"]'); return Boolean(frame) && ![...frame.classList].some((name) => name.includes("unpainted")); })()`));
-    // the note's "unsaved" message reaches the shell before this marker
-    // does, and the shell tells main before its next IPC answers
-    await electron.evalIn(SHELL, `window.flushed = new Promise((resolve) => addEventListener("message", (e) => e.data === "test-flush" && resolve())); true`);
-    await electron.evalInFrame(FRAME, `(() => { const note = document.getElementById("note"); note.value = "groceries"; note.dispatchEvent(new Event("input")); parent.postMessage("test-flush", "*"); })()`);
-    await electron.evalIn(SHELL, `window.flushed.then(() => window.paperboardShell.invoke("app-version"))`);
+    await electron.evalInFrame(FRAME, `(() => { const note = document.getElementById("note"); note.value = "groceries"; note.dispatchEvent(new Event("input")); })()`);
+    await toldMain();
 
     const asked = `!document.getElementById("ask").hidden`;
     await electron.evalMain(`app.quit(); return true;`);
@@ -69,6 +79,8 @@ test("quitting with an unsaved note asks the note: Stay keeps Paperboard running
     expect(alive()).toBe(true);
     await electron.evalInFrame(FRAME, `document.getElementById("stay").click()`);
     await electron.evalInFrame(FRAME, domCondition(`document.getElementById("ask").hidden`));
+    // main has the answer: a quit while it still waits for one joins that question, and stays with it
+    await toldMain();
     // still running, the note as it was
     expect(await electron.evalInFrame(FRAME, `document.getElementById("note").value`)).toBe("groceries");
     expect(alive()).toBe(true);
