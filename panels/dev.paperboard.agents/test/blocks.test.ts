@@ -372,7 +372,7 @@ describe("the agent's blocks", () => {
     test("the agent's pages are listed with their titles and kinds, deleted for good, and announced", async () => {
         rig = await appRig();
         expect(await rig.blocks.read("apps")).toEqual([]);
-        const made = await rig.app.pages.toolset().call("start_page", { name: "planner", kind: "app", title: "Assignment planner", description: "Due dates, at a glance" });
+        const made = await rig.app.pages.toolset().call("start_page", { name: "planner", kind: "app", title: "Assignment planner", description: "Due dates, at a glance" }, { fromFlow: false });
         expect(made.isError).toBeFalsy();
         expect(await rig.blocks.read("apps")).toEqual(["planner"]);
         await rig.blocks.changes.until((c) => c.includes("apps"), "Pages to announce the change");

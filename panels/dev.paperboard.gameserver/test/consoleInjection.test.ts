@@ -4,6 +4,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { zipSync, strToU8 } from "fflate";
 import { startTestDaemon, type TestDaemon } from "./helpers/crane";
+import { pickCall } from "./helpers/serverCall";
 import { minecraftServer, type McServer } from "./helpers/minecraft";
 import { loopbackServer } from "./helpers/http";
 import { testServer } from "./helpers/scope";
@@ -26,9 +27,7 @@ afterAll(async () => {
 });
 
 const action = (id: string) => {
-    const found = minecraftCalls[id];
-    if (!found) throw new Error(`No call ${id}`);
-    return (ctx: unknown, inputs: unknown) => (found as Function)(ctx, inputs) as Promise<unknown>;
+    return pickCall(minecraftCalls, id);
 };
 
 // Minecraft console and property writes cannot be injected.

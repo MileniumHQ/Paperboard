@@ -8,6 +8,7 @@
         "build": "tsc && vite build && bun build ./src/service.ts --outfile ./dist/service.js --target=node --external @mileniumhq/paperui",
         "pack": "bunx paperapi pack",
         "preview": "vite preview",
+        "typecheck:tests": "tsc --noEmit -p tsconfig.tests.json",
         "test": "bun ../../packages/testkit/src/withChrome.ts bun test --parallel"
     },
     "dependencies": {

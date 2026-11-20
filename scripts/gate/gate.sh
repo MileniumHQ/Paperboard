@@ -303,6 +303,7 @@ for short in agents blocks botcreator gameserver terminal; do
     panel="panels/dev.paperboard.$short"
     gstep "$short" "$panel tests" run_in "$ROOT/$panel" bun run test
     gstep "$short" "$panel typecheck" run_in "$ROOT/$panel" bunx tsc --noEmit
+    gstep "$short" "$panel typecheck:tests" run_in "$ROOT/$panel" bun run typecheck:tests
     gstep "$short" "$panel build" run_in "$ROOT/$panel" bun run build
     gstep "$short" "$panel silent-catches" run_in "$ROOT/$panel" bash "$CATCH" src test
     gstep "$short" "$panel code check" run_in "$ROOT" bun scripts/gate/check-solid.ts "$panel"

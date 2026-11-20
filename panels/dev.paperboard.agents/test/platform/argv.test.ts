@@ -109,7 +109,7 @@ describe("what reaches a brain's command line", () => {
                 host: rig.host,
                 settings: () => ({ name: "Ada", harness, model: null, compaction: "summarize", automationInstructions: `custom-instructions ${HOSTILE}` }),
                 resolve: () => program,
-                env: () => (harness === "codex" ? { CODEX_HOME: codexHome } : {}),
+                env: (): Record<string, string> => (harness === "codex" ? { CODEX_HOME: codexHome } : {}),
                 workdir: path.join(rig.root, "ask"),
                 filesDir,
             });

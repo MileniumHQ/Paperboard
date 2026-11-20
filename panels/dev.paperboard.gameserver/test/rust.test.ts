@@ -4,6 +4,7 @@ import * as net from "node:net";
 import * as path from "node:path";
 import { secretsApi } from "@mileniumhq/paperapi";
 import { startTestDaemon, type TestDaemon } from "./helpers/crane";
+import { pickCall } from "./helpers/serverCall";
 import { gameServer, type GameServer } from "./helpers/game";
 import { freePort } from "./helpers/palworld";
 import { allowLoopbackSocket, installRust } from "./helpers/rust";
@@ -35,7 +36,7 @@ async function rustServer(plan?: Record<string, unknown>): Promise<GameServer & 
     await server.server.game.initialize(false);
     return Object.defineProperty(server as GameServer & { readonly rconPort: number }, "rconPort", { get: rconPort });
 }
-const call = async (server: GameServer, id: string, input: unknown = {}) => (await server.server.game.calls())[id]!(server.server, input);
+const call = async (server: GameServer, id: string, input: unknown = {}) => pickCall(await server.server.game.calls(), id)(server.server, input);
 const vault = async (server: GameServer) => (await secretsApi.get(`${server.server.id}-rust-rcon-password`, PANEL_ID)).value ?? "";
 const consoleOf = (server: GameServer) => server.server.state.serverEntries.map((e) => String(e.content)).join("\n");
 const online = async (server: GameServer) => {
@@ -274,7 +275,7 @@ describe("Rust", () => {
     test("a players answer a newer one replaced is dropped: no rewound list, no repeated join or leave", async () => {
         const server = gameServer("rust", { state: { serverStatus: "online" } });
         const answers: ((players: { steamId: string; name: string }[]) => void)[] = [];
-        const players = playerPoller(server.server, { game: "Rust", id: (p: { steamId: string; name: string }) => p.steamId, list: () => new Promise((resolve) => answers.push(resolve)), remember: async () => {} });
+        const players = playerPoller(server.server, { game: "Rust", id: (p: { steamId: string; name: string }) => p.steamId, list: () => new Promise<{ steamId: string; name: string }[]>((resolve) => answers.push(resolve)), remember: async () => {} });
         const ann = { steamId: BANNED, name: "Ann" };
         // a slow poll is out when a kick asks again; the kick's answer comes first
         const slow = players.poll();

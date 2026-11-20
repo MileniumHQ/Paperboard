@@ -152,7 +152,7 @@ describe("TF2 RCON", () => {
         let connections = 0;
         const server = net.createServer((socket) => {
             const connection = ++connections;
-            let buffer = Buffer.alloc(0);
+            let buffer: Buffer = Buffer.alloc(0);
             socket.on("data", (chunk) => {
                 const decoded = decodePackets(Buffer.concat([buffer, chunk]));
                 buffer = decoded.rest;
