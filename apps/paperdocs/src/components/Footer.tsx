@@ -74,7 +74,7 @@ export function Footer() {
                 <LinkColumn heading="Site" links={FOOTER_SITE_LINKS} />
             </div>
             <div class={styles.bottom}>
-                <PaperText size={2} class={styles.copyright}>
+                <PaperText size={2}>
                     &copy; {new Date().getFullYear()} Milenium
                 </PaperText>
                 <div class={styles.right}>

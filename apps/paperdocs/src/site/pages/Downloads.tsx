@@ -47,7 +47,7 @@ export function Downloads() {
             />
             <div class={styles.stack}>
                 <PaperFlex direction="column" gap="half">
-                    <PaperText preset="subheader" as="h2" class={styles.heading}>Paperboard</PaperText>
+                    <PaperText preset="subheader" as="h2">Paperboard</PaperText>
                     <PaperText preset="body" color="text-subtle">
                         The desktop app. It includes the server daemon for this computer, and updates itself however you installed it.
                     </PaperText>
@@ -55,7 +55,7 @@ export function Downloads() {
                 </PaperFlex>
                 <PaperSeparator />
                 <PaperFlex direction="column" gap="half">
-                    <PaperText preset="subheader" as="h2" class={styles.heading}>From a terminal</PaperText>
+                    <PaperText preset="subheader" as="h2">From a terminal</PaperText>
                     <PaperText preset="body" color="text-subtle">
                         The install script checks the download against the release's checksums before it installs. With Node, npx opens Paperboard and asks first if it isn't installed yet.
                     </PaperText>
@@ -65,7 +65,7 @@ export function Downloads() {
                 </PaperFlex>
                 <PaperSeparator />
                 <PaperFlex direction="column" gap="half">
-                    <PaperText preset="subheader" as="h2" class={styles.heading}>Paperboard server daemon</PaperText>
+                    <PaperText preset="subheader" as="h2">Paperboard server daemon</PaperText>
                     <PaperText preset="body" color="text-subtle">
                         For a headless computer you manage from Paperboard on another device.
                     </PaperText>

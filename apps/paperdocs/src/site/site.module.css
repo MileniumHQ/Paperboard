@@ -29,12 +29,6 @@
     height: 1em;
 }
 
-/* A heading in a column its gap spaces. PaperText as="h2" keeps the
-   browser's heading margins; drop this once PaperText resets them (#32). */
-.heading {
-    margin: 0;
-}
-
 /* Hydration root for the topbar island. display: contents keeps the sticky
    topbar positioned against the page column instead of this wrapper. */
 .topbarIsland {
@@ -105,6 +99,7 @@
 .carouselSlide {
     flex: 0 0 100%;
     min-width: 0;
+    margin: 0;
     display: flex;
     flex-direction: column;
     gap: var(--paper-uigap-half);
@@ -187,13 +182,6 @@
 
 .fieldError {
     color: var(--paper-danger);
-}
-
-/* Semantic tags (p, h2, ul) carry browser default margins. The docs render
-   prose as PaperText spans inside a flex column, so the only spacing is the
-   gap; match that here or every block gets an extra ~16px. */
-.postBody :is(p, h1, h2, h3, h4, h5, h6, ul, ol, li, blockquote, pre, figure) {
-    margin: 0;
 }
 
 @media (max-width: 720px) {

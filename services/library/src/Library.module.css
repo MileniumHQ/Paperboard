@@ -30,7 +30,6 @@
 }
 
 .title {
-    margin: 0;
     line-height: var(--paper-leading-tight);
 }
 
