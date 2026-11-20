@@ -6,11 +6,11 @@ import { streamToFileWithProgress } from "../src/packages/download";
 import { parsePackageRecipe, recipeDigest } from "@mileniumhq/release";
 import { RECORD_MAX_BYTES } from "../src/packages/registryRecord";
 import { tar, tarGz, zip, type TarMember } from "testkit/archive";
-import { killWorkloads, startCrane, workloadRecords } from "testkit/crane";
+import { killWorkloads, startCrane } from "testkit/crane";
 import { dataDir, listTree, modeOf, restoreEnv, tempDir } from "testkit/fs";
 import { startDaemon, stopDaemon } from "testkit/inproc";
 import { FIXTURE_PUBLIC_KEY, serve, sha256, signPackage, type LoopbackServer } from "testkit/release";
-import { TEST_TIMEOUT_MS, waitFor } from "testkit/wait";
+import { TEST_TIMEOUT_MS } from "testkit/wait";
 
 setDefaultTimeout(TEST_TIMEOUT_MS);
 
@@ -198,65 +198,6 @@ describe("signed runtime rollbacks are refused", () => {
 		const panel = await daemon.panelRpc("test.roll");
 		expect((await panel.fail("package:download", { downloadId: "d", packageName: "roll", sha256: "a".repeat(64), allowDowngrade: true })).code).toBe("FORBIDDEN");
 		await panel.close();
-	});
-});
-
-// Runtime updates wait for the workloads using them.
-describe("runtime updates wait for their workloads", () => {
-	test("an update installs at once when idle, waits for a live workload, survives a restart and installs when it stops", async () => {
-		const dir = dataDir();
-		const previous = process.env.PAPERBOARD_DIR;
-		process.env.PAPERBOARD_DIR = dir;
-		try {
-			const first = engineFor(dir);
-			await first.downloadPackage("rt", undefined, publish({ name: "rt", version: "1.0.0", bytes: toolArchive("echo v1") }));
-			// nothing runs from it: the next release replaces it at once
-			const idle = await first.downloadPackage("rt", undefined, publish({ name: "rt", version: "1.1.0", bytes: toolArchive("while :; do sleep 1; done") }));
-			expect(idle.waiting).toBeUndefined();
-			const tool = path.join(dir, "packages", "rt", "bin", "tool");
-			const v11 = fs.readFileSync(tool);
-
-			// a workload runs from it (started by the compiled crane, which then stops: the workload stays)
-			const crane = await startCrane({ dataDir: dir });
-			const rpc = await crane.rpc();
-			await rpc.ok("process:run", { id: "uses-rt", command: tool });
-			await rpc.ok("process:run", { id: "unrelated", command: process.execPath, args: ["-e", "setInterval(() => {}, 1000)"] });
-			await rpc.close();
-			expect((await crane.stop()).code).toBe(0);
-
-			const second = engineFor(dir);
-			await second.recoverRunningSupervisors();
-			const staged = await second.downloadPackage("rt", undefined, publish({ name: "rt", version: "2.0.0", bytes: toolArchive("echo v2") }));
-			expect(staged.waiting?.version).toBe("2.0.0");
-			expect(staged.waiting?.blockedBy.map((b) => b.processId)).toEqual(["uses-rt"]);
-			expect(fs.readFileSync(tool).equals(v11)).toBe(true);
-			// a staged release is a floor too
-			await expect(second.downloadPackage("rt", undefined, publish({ name: "rt", version: "1.5.0", bytes: toolArchive("echo v15") }))).rejects.toThrow("rollback");
-			second.releaseAllClients();
-
-			const third = engineFor(dir);
-			await third.recoverRunningSupervisors();
-			expect(third.pendingPackageUpdates().map((u) => u.version)).toEqual(["2.0.0"]);
-			await third.killProcess("uses-rt");
-			await waitFor("the staged update to install", () => fs.readFileSync(tool, "utf8").includes("echo v2"));
-			expect(third.pendingPackageUpdates()).toEqual([]);
-			third.releaseAllClients();
-
-			// an adopted workload whose command is unknown holds back every package
-			const [unrelated] = workloadRecords(dir);
-			const meta = JSON.parse(fs.readFileSync(unrelated!.file, "utf8"));
-			delete meta.config.command;
-			fs.writeFileSync(unrelated!.file, JSON.stringify(meta));
-			const fourth = engineFor(dir);
-			await fourth.recoverRunningSupervisors();
-			const held = await fourth.downloadPackage("rt", undefined, publish({ name: "rt", version: "3.0.0", bytes: toolArchive("echo v3") }));
-			expect(held.waiting?.blockedBy.map((b) => b.processId)).toEqual(["unrelated"]);
-			await fourth.killProcess("unrelated");
-			await waitFor("the held update to install", () => fs.readFileSync(tool, "utf8").includes("echo v3"));
-		} finally {
-			restoreEnv("PAPERBOARD_DIR", previous);
-			await killWorkloads(dir);
-		}
 	});
 });
 

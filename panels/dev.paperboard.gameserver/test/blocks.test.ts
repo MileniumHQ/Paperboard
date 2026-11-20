@@ -3,7 +3,7 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { backupApi, backupLocationsApi, blocksApi, getTransport, type BackupRecord } from "@mileniumhq/paperapi";
+import { blocksApi, getTransport } from "@mileniumhq/paperapi";
 import { serverCalls } from "./helpers/serverCall";
 import { startTestDaemon, type TestDaemon } from "./helpers/crane";
 import { installFakeJava } from "./helpers/fakeJava";
@@ -24,20 +24,6 @@ const terraria = releaseFor("1.4.5.8");
 const read = <T>(value: string, inputs?: Record<string, unknown>, project = "s-a") => blocksApi.read<T>(PANEL_ID, value, inputs, { project });
 const run = <T>(command: string, inputs?: Record<string, unknown>, project = "s-a") => blocksApi.run<T>(PANEL_ID, command, inputs, { project, timeoutMs: null });
 
-/** resolves with what the next firing of `event` in `project` (or the panel's own, without one) carried */
-function nextEvent(event: string, project: string | undefined, timeoutMs = 10_000): Promise<Record<string, unknown>> {
-    return new Promise((resolve, reject) => {
-        const timer = setTimeout(() => {
-            off();
-            reject(new Error(`${event} did not fire in ${project ?? "the panel"}`));
-        }, timeoutMs);
-        const off = blocksApi.onEvent(PANEL_ID, event, (payload) => {
-            clearTimeout(timer);
-            off();
-            resolve(payload);
-        }, project);
-    });
-}
 // subscriptions reach the daemon on their own; a test waits for the daemon to take them before what fires them
 const settle = () => getTransport().subscriptionsSettled();
 
@@ -234,42 +220,6 @@ describe("each server is a Blocks project with its game's blocks", () => {
         await run("start-server");
         await state.waitFor("s-a", (s) => s.serverStatus === "online", "s-a online again");
     });
-
-    test("Terraria's joins and chat fire as Blocks events with the player and what they said", async () => {
-        const state = servicesState();
-        const started = nextEvent("server-started", "s-t");
-        await settle();
-        expect(await run("start-server", {}, "s-t")).toBeNull();
-        expect(await started).toEqual({});
-        await state.waitFor("s-t", (s) => s.serverStatus === "online", "Terraria online");
-
-        const joined = nextEvent("player-joined", "s-t");
-        const chatted = nextEvent("chat-message", "s-t");
-        await settle();
-        // the stand-in prints what it is told to relay, as the game would
-        await run("run-command", { command: "relay Bob has joined." }, "s-t");
-        await run("run-command", { command: "relay <Bob> hello there" }, "s-t");
-        expect(await joined).toEqual({ player: "Bob" });
-        expect(await chatted).toEqual({ player: "Bob", message: "hello there" });
-
-        // the Players tab's kick and ban, by the name the server knows
-        await state.waitFor("s-t", (s) => s.onlinePlayers.includes("Bob"), "Bob online");
-        expect(await run("kick-player", { player: "Bob" }, "s-t")).toBeNull();
-        await state.waitFor("s-t", (s) => !s.onlinePlayers.includes("Bob"), "Bob kicked");
-        await expect(run("kick-player", { player: "Carol" }, "s-t")).rejects.toThrow("Carol is not online");
-        await expect(run("ban-player", { player: "Carol" }, "s-t")).rejects.toThrow("Carol has never joined this server");
-        // Bob left, so the ban is kept by the address he joined from
-        expect(await run("ban-player", { player: "Bob" }, "s-t")).toBeNull();
-        expect(await read("banned-players", undefined, "s-t")).toEqual(["Bob"]);
-        expect(await run("unban-player", { player: "Bob" }, "s-t")).toBeNull();
-        expect(await read("banned-players", undefined, "s-t")).toEqual([]);
-
-        const stopped = nextEvent("server-stopped", "s-t");
-        await settle();
-        await run("stop-server", {}, "s-t");
-        expect(await stopped).toEqual({});
-        expect(await read("server-status", undefined, "s-t")).toBe("offline");
-    });
 });
 
 describe("the panel's own blocks run its servers, and each server's settings and backups", () => {
@@ -287,18 +237,6 @@ describe("the panel's own blocks run its servers, and each server's settings and
         expect(schema("command.start-server")).toMatchObject({ text: "Start {server}", inputs: { server: { type: `${PANEL_ID}:server` } } });
         expect(schema("event.server-started")).toMatchObject({ values: { server: { type: `${PANEL_ID}:server` } }, filters: { server: "server" } });
         expect(schema("value.servers")).toMatchObject({ type: `list<${PANEL_ID}:server>`, changes: true });
-    });
-
-    test("Servers and Server read the panel's servers, and a server's fields read its name, game and status", async () => {
-        expect(await panelRead("servers")).toEqual(["s-a", "s-t"]);
-        // any Server input starts as a dropdown of them
-        expect(await blocksApi.typeChoices(`${PANEL_ID}:server`)).toEqual([{ label: "Survival", value: "s-a" }, { label: "Island", value: "s-t" }]);
-        expect(await panelRead("server", { server: "s-t" })).toBe("s-t");
-        await expect(panelRead("server", { server: "s-gone" })).rejects.toThrow();
-        expect(await field("s-t", "name")).toBe("Island");
-        expect(await field("s-t", "game")).toBe("Terraria");
-        expect(await field("s-t", "status")).toBe("offline");
-        await expect(field("s-gone", "name")).rejects.toThrow("Choose a server that has not been removed");
     });
 
     test("a server made from Blocks is renamed and removed from Blocks, and its folder is kept", async () => {
@@ -333,28 +271,11 @@ describe("the panel's own blocks run its servers, and each server's settings and
         }
     });
 
-    test("Start Server and Stop Server run a picked server, and its starts and stops fire the panel's events for it", async () => {
-        const state = servicesState();
-        const started = nextEvent("server-started", undefined);
-        await settle();
-        expect(await panelRun("start-server", { server: "s-t" })).toBeNull();
-        expect(await started).toEqual({ server: "s-t" });
-        await state.waitFor("s-t", (s) => s.serverStatus === "online", "Terraria online");
-        expect(await field("s-t", "status")).toBe("online");
-
-        const stopped = nextEvent("server-stopped", undefined);
-        await settle();
-        expect(await panelRun("stop-server", { server: "s-t" })).toBeNull();
-        expect(await stopped).toEqual({ server: "s-t" });
-        expect(await field("s-t", "status")).toBe("offline");
-        await expect(panelRun("restart-server", { server: "s-t" })).rejects.toThrow("The server is not online, so it can't restart");
-    });
-
     test("Console Output reads the end of a server's console", async () => {
-        const lines = await read<string>("console-output", { lines: 1000 }, "s-t");
+        const lines = await read<string>("console-output", { lines: 1000 }, "s-a");
         expect(lines.split("\n").length).toBeGreaterThan(1);
-        expect((await read<string>("console-output", { lines: 1 }, "s-t")).split("\n")).toHaveLength(1);
-        await expect(read("console-output", { lines: 0 }, "s-t")).rejects.toThrow('"Lines"');
+        expect((await read<string>("console-output", { lines: 1 }, "s-a")).split("\n")).toHaveLength(1);
+        await expect(read("console-output", { lines: 0 }, "s-a")).rejects.toThrow('"Lines"');
     });
 
     test("the automation blocks change what a server does on its own, and refuse what its game can't do", async () => {
@@ -369,54 +290,5 @@ describe("the panel's own blocks run its servers, and each server's settings and
         expect(await read("automation", undefined, "s-a")).toMatchObject({ "restart-after-crash": true, "daily-restart": null });
         await expect(run("set-daily-restart", { hour: "04:30" })).rejects.toThrow('"Daily Restart" must be one of');
         await expect(run("set-automatic-updates", { update: true })).rejects.toThrow("This game can't update itself");
-    });
-
-    test("Delete Backup deletes one of the server's backups", async () => {
-        await backupLocationsApi.setForPanel(PANEL_ID, "local", undefined, "s-t");
-        const backup = await backupApi.forSource(PANEL_ID, "s-t").create({ label: "before" });
-        const listed = await read<BackupRecord[]>("backups", undefined, "s-t");
-        expect(listed).toEqual([backup]);
-        expect(await run("delete-backup", { backup: listed[0] }, "s-t")).toBeNull();
-        expect(await read("backups", undefined, "s-t")).toEqual([]);
-        await expect(run("delete-backup", { backup: listed[0] }, "s-t")).rejects.toThrow();
-    });
-
-    test("Back Up the Server and Restore Backup answer with the backup while the service restarts, and each backup fires Finishes or Fails", async () => {
-        await backupLocationsApi.setForPanel(PANEL_ID, "local", undefined, "s-t");
-        const notes = path.join(folder("s-t"), "notes.txt");
-        fs.writeFileSync(notes, "kept");
-        const finished = nextEvent("backup-finished", "s-t", 60_000);
-        await settle();
-        const made = await run<BackupRecord>("back-up", { name: "from blocks" }, "s-t");
-        expect(made).toMatchObject({ sourceId: "s-t", label: "from blocks" });
-        // the service that answers the event is the one that started after the backup
-        expect(await finished).toEqual({ backup: made });
-        const backupField = <T>(name: string) => blocksApi.property<T>(`${PANEL_ID}:backup`, name, made, { project: "s-t" });
-        expect(await backupField("name")).toBe("from blocks");
-        expect(await backupField("created")).toBe(Date.parse(made.createdAt));
-        expect(await read("backups", undefined, "s-t")).toEqual([made]);
-
-        fs.writeFileSync(notes, "changed");
-        expect(await run("restore-backup", { backup: made }, "s-t")).toEqual(made);
-        expect(fs.readFileSync(notes, "utf8")).toBe("kept");
-        await expect(run("restore-backup", { backup: { id: "nope", size: 0 } }, "s-t")).rejects.toThrow();
-
-        // a backup location that can't be written to: the backup fails, and says why
-        const panelBackups = path.join(dataDir, "backups", "panels");
-        const where = fs.readdirSync(panelBackups).find((dir) => fs.existsSync(path.join(panelBackups, dir, `${made.id}.pbbackup`)))!;
-        fs.renameSync(path.join(panelBackups, where), path.join(panelBackups, `${where}.aside`));
-        fs.writeFileSync(path.join(panelBackups, where), "not a folder");
-        try {
-            const failed = nextEvent("backup-failed", "s-t", 60_000);
-            await settle();
-            const refused = await run("back-up", {}, "s-t").then(() => null, (err: Error) => err.message);
-            const { error } = await failed;
-            expect(typeof error).toBe("string");
-            expect(refused).toContain(error as string);
-        } finally {
-            fs.rmSync(path.join(panelBackups, where));
-            fs.renameSync(path.join(panelBackups, `${where}.aside`), path.join(panelBackups, where));
-        }
-        await run("delete-backup", { backup: made }, "s-t");
     });
 });

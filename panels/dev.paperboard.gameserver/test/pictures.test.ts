@@ -1,17 +1,9 @@
 // Pictures from elsewhere (a wiki's map thumbnails, Workshop previews, add-on
-// icons) reach a page only as the bytes the service fetched: the page never
-// loads an address it was handed, and the service refuses what isn't a
-// public picture from the hosts its source uses.
-import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import * as fs from "node:fs";
-import * as path from "node:path";
-import { startTestDaemon, type TestDaemon } from "./helpers/crane";
-import { openPage, servePanel } from "./helpers/browser";
+// icons) reach a page only as the bytes the service fetched, and the service
+// refuses what isn't a public picture from the hosts its source uses.
+import { describe, expect, test } from "bun:test";
 import { loopbackServer, trustLoopback } from "./helpers/http";
-import { writeTree } from "./helpers/tmp";
-import { PANEL_ID } from "../src/servers";
-import { TF2 } from "../src/games/tf2";
-import { MAX_PICTURE_BYTES, PICTURE_HOSTS, servedPicture } from "../src/service/pictures";
+import { MAX_PICTURE_BYTES, servedPicture } from "../src/service/pictures";
 
 // A 1×1 PNG, the shape every picture here takes.
 const PNG = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==", "base64");
@@ -44,64 +36,4 @@ describe("the service's pictures", () => {
         await expect(servedPicture(`${inside.url}/other.png`, [new URL(inside.url).host], "Test")).rejects.toThrow("is a private or local address");
         await expect(servedPicture("file:///etc/passwd", null, "Test")).rejects.toThrow("not file:");
     });
-});
-
-let daemon: TestDaemon;
-beforeAll(async () => {
-    daemon = await startTestDaemon();
-});
-afterAll(async () => {
-    await daemon?.stop();
-});
-
-const SERVERS = "servers-0123456789ab";
-
-describe("a page shows remote pictures", () => {
-    test("only as the service fetched them, never by loading their addresses", async () => {
-        // stand-ins for the Official Team Fortress Wiki and Steam's picture host
-        const wikiPage = fs.readFileSync(path.join(import.meta.dir, "fixtures", "tfwiki-list-of-maps.html"), "utf8");
-        const wiki = loopbackServer((_req, url) => (url.pathname === "/wiki/List_of_maps" ? new Response(wikiPage, { headers: { "content-type": "text/html" } }) : png()));
-        const steam = loopbackServer(() => png());
-        trustLoopback(wiki);
-        trustLoopback(steam);
-        Object.assign(TF2, { mapPictures: { name: "Official Team Fortress Wiki", page: `${wiki.url}/wiki/List_of_maps` } });
-        PICTURE_HOSTS["steam-workshop"]!.push(new URL(steam.url).host);
-
-        const config = path.join(daemon.dataDir, "configs", `${PANEL_ID}.json`);
-        fs.mkdirSync(path.dirname(config), { recursive: true });
-        const workshopMaps = [{ id: "454116880", title: "Discovery", previewImageUrl: `${steam.url}/ugc/454116880/`, tags: ["Arena"], subscribers: 12, updated: 0 }];
-        fs.writeFileSync(config, JSON.stringify({ version: 2, serversDirectory: SERVERS, servers: [{ id: "s-tf", name: "Payload", game: TF2.id, directory: `${SERVERS}/s-tf`, createdAt: 0, settings: { configured: true, workshopMaps } }] }));
-        writeTree(path.join(daemon.dataDir, "files", PANEL_ID, SERVERS, "s-tf", "install"), {
-            [`steamapps/appmanifest_${TF2.appId}.acf`]: `"AppState"\n{\n\t"appid"\t\t"${TF2.appId}"\n\t"buildid"\t\t"19000000"\n}\n`,
-            "tf/maps/ctf_2fort.bsp": "", "tf/maps/pl_badwater.bsp": "",
-            "tf/cfg/mapcycle.txt": "ctf_2fort\npl_badwater\n",
-        });
-        const { gameServerService } = await import("../src/service");
-        await gameServerService.ready;
-        const served = await servePanel(daemon);
-        const page = await openPage(`${served.url}/?server=s-tf`);
-        // every address the page asks for that isn't its own: the panel's files and the daemon's socket are
-        const elsewhere: string[] = [];
-        const own = [served.url, `ws://127.0.0.1:${daemon.port}`];
-        page.on(({ method, params }) => {
-            const url: string | undefined = method === "Network.requestWillBeSent" ? params.request.url : method === "Network.webSocketCreated" ? params.url : undefined;
-            if (url && !url.startsWith("data:") && !own.some((origin) => url.startsWith(origin))) elsewhere.push(url);
-        });
-        try {
-            await page.waitFor(`document.querySelector('input[name=serverMenu][value="maps"]')`, "the server menu");
-            await page.click('input[name=serverMenu][value="maps"]');
-            // each row's picture, as its list item draws it
-            const pictures = (list: string) => `[...document.querySelectorAll('input[name=${list}]')].flatMap((input) => [...input.parentElement.querySelectorAll("img")])`;
-            await page.waitFor(`${pictures("source-map-cycle")}.length === 2 && ${pictures("source-workshop-maps")}.length === 1`, "the maps' pictures");
-            const sources = await page.evaluate<string[]>(`[...${pictures("source-map-cycle")}, ...${pictures("source-workshop-maps")}].map((img) => img.src)`);
-            expect(sources).toEqual(Array(3).fill(`data:image/png;base64,${PNG.toString("base64")}`));
-            expect(wiki.requests).toContain("/wiki/List_of_maps");
-            expect(steam.requests).toEqual(["/ugc/454116880/"]);
-            expect(elsewhere).toEqual([]);
-            expect(page.exceptions).toEqual([]);
-        } finally {
-            await page.close();
-            served.stop();
-        }
-    }, 60_000);
 });

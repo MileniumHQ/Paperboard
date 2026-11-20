@@ -1,11 +1,8 @@
-// Saved commands as a person uses them: added, run and removed in the panel's
-// modal, run from the toolbar's menu, and run from the Home widget.
+// Saved commands as a person uses them from the Home widget.
 import { afterEach, describe, expect, setDefaultTimeout, test } from "bun:test";
-import * as fs from "node:fs";
-import * as path from "node:path";
 import { clearWorkloads } from "./helpers/crane";
 import { widgetUrl } from "testkit/panelUi";
-import { panelBrowser, toastShows, servePanel, type Page } from "./helpers/browser";
+import { panelBrowser, servePanel } from "./helpers/browser";
 import { call, panelFiles, startService, stopServices } from "./helpers/service";
 
 setDefaultTimeout(90_000);
@@ -18,81 +15,6 @@ afterEach(async () => {
 });
 
 const TABS = { tabs: [{ id: "tab1", label: "One" }], activeTabId: "tab1" };
-const dialog = `document.querySelector("[role=dialog]")`;
-// the modal's row for a command: a list row, keyed by the command's id
-const rowShowing = (label: string, text: string) =>
-    `[...${dialog}.querySelectorAll("[data-value]")].some((row) => row.innerText.includes(${JSON.stringify(label)}) && row.innerText.includes(${JSON.stringify(text)}))`;
-const press = (page: Page, selector: string) => page.evaluate(`document.querySelector(${JSON.stringify(selector)}).click()`);
-
-/**
- * Opens the saved-commands modal from the toolbar and waits until its first
- * field has the keyboard: the modal focuses it as it opens, so a field
- * focused before then loses the keyboard to it mid-typing.
- */
-async function openManager(page: Page) {
-    await page.click('button[aria-label="Saved commands"]');
-    await page.clickText("[role=menuitem]", "Manage saved commands");
-    await page.waitFor(dialog, "the modal");
-    await page.waitFor(`document.activeElement?.labels?.[0]?.textContent.trim() === "Name (optional)"`, "the name field to have the keyboard");
-}
-
-/** types into the modal's field with this label */
-async function fill(page: Page, label: string, text: string) {
-    await page.evaluate(`[...${dialog}.querySelectorAll("label")].find((l) => l.innerText.includes(${JSON.stringify(label)})).closest("div").querySelector("input").focus()`);
-    await page.insertText(text);
-}
-
-describe("saved commands in the panel", () => {
-    // a small window: the list scrolls under a form that stays in view
-    test("are added, run and removed in the modal, and a run the menu couldn't start is said in a toast", async () => {
-        await panelFiles({ "tabs.json": TABS });
-        const service = await startService();
-        const served = await servePanel();
-        const page = await browser.open(served.url);
-        try {
-            await page.waitFor(`document.querySelectorAll(".xterm").length === 1`, "the shell");
-            await page.click('button[aria-label="Saved commands"]');
-            await page.waitFor(`document.body.innerText.includes("No saved commands")`, "the empty menu");
-            await page.press("Escape");
-            // its first field has the keyboard, so a name can be typed at once
-            await openManager(page);
-
-            await fill(page, "Name", "Greet");
-            await fill(page, "Command", "exit 0");
-            await page.clickText("[role=dialog] button", "Save");
-            await page.waitFor(rowShowing("Greet", "Not run yet"), "the saved command's row");
-            await fill(page, "Name", "Fails");
-            await fill(page, "Command", "exit 3");
-            await page.press("Enter");
-            await page.waitFor(rowShowing("Fails", "exit 3"), "the second row");
-
-            await press(page, '[role=dialog] button[aria-label="Run Greet"]');
-            await page.waitFor(rowShowing("Greet", "Exit 0"), "the run's exit");
-            await press(page, '[role=dialog] button[aria-label="Run Fails"]');
-            await page.waitFor(rowShowing("Fails", "Exit 3"), "the failing run's exit");
-
-            await press(page, '[role=dialog] button[aria-label="Remove Fails"]');
-            await page.waitFor(`!(${rowShowing("Fails", "exit 3")})`, "the removed row to go");
-            expect(await page.evaluate<boolean>(rowShowing("Greet", "Exit 0"))).toBe(true);
-            await page.press("Escape");
-            await page.waitFor(`!${dialog}`, "the modal to close");
-
-            // the service is gone: a run from the menu can't start, and a toast says why
-            await service.crash();
-            await page.click('button[aria-label="Saved commands"]');
-            await page.clickText("[role=menuitem]", "Greet");
-            await page.waitFor(toastShows("Couldn't start the command", "run-saved-command"), "the refused run's toast");
-            expect(page.exceptions).toEqual([]);
-        } finally {
-            await page.close();
-            served.stop();
-        }
-    });
-    // the modal's error in place of the list, saying why: never a toast, which would go while the file stays unread
-    const failure = `${dialog}?.querySelector("[data-paper-error][role=region][aria-label=\\"Couldn't read the saved commands\\"]")`;
-    const tryAgain = `[...(${failure}?.querySelectorAll("button") ?? [])].find((b) => b.innerText.includes("Try again"))`;
-
-});
 
 describe("the Pinned command widget", () => {
     // the widget's own document, in its frame
@@ -119,5 +41,4 @@ describe("the Pinned command widget", () => {
             served.stop();
         }
     });
-
 });

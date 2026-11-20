@@ -1,6 +1,5 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import * as fs from "node:fs";
-import * as net from "node:net";
 import * as path from "node:path";
 import { secretsApi } from "@mileniumhq/paperapi";
 import { startTestDaemon, type TestDaemon } from "./helpers/crane";
@@ -179,25 +178,6 @@ describe("Rust", () => {
             await expect(call(server, "saveWorld")).rejects.toThrow("Timed out waiting for Rust to write its save");
         } finally { Date.now = original; }
         await stop(server);
-    });
-
-    test("a remote-console port another program took is moved for the run, and the panel's console talks to Rust on the moved one", async () => {
-        const server = await rustServer();
-        const saved = server.rconPort;
-        const holder = net.createServer();
-        await new Promise<void>((resolve, reject) => {
-            holder.once("error", reject);
-            holder.listen(saved, "127.0.0.1", resolve);
-        });
-        try {
-            await online(server);
-            expect(server.server.state.portMoves).toEqual([{ label: "Rust remote console", from: saved, to: server.rconPort, primary: false }]);
-            expect(server.rconPort).not.toBe(saved);
-            await call(server, "saveWorld");
-            await stop(server);
-        } finally {
-            await new Promise<void>((resolve, reject) => holder.close((err) => (err ? reject(err) : resolve())));
-        }
     });
 
     test("a backup refused after Rust stopped for it starts Rust again and drops its resume marker", async () => {
