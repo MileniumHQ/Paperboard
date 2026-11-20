@@ -29,7 +29,7 @@ export async function checkDownloads(browser, origin) {
         assert.equal(await page.locator('main').getByText('Downloads', { exact: true }).count(), 1);
         assert.equal(await page.getByRole('heading', { name: 'Paperboard server daemon', exact: true }).count(), 1);
         // each product is a list whose rows end in a button per architecture
-        assert.equal(await page.getByLabel('Paperboard downloads', { exact: true }).locator('a[href^="https://i.paperboard.dev/"]').count(), 9);
+        assert.equal(await page.getByLabel('Paperboard downloads', { exact: true }).locator('a[href^="https://i.paperboard.dev/"]').count(), 10);
         assert.equal(await page.getByLabel('Paperboard server daemon downloads', { exact: true }).locator('a[href^="https://i.paperboard.dev/"]').count(), 5);
         // the terminal installs: the island renders them again so each copy
         // button copies its command (the prerendered ones do nothing)
@@ -43,11 +43,12 @@ export async function checkDownloads(browser, origin) {
             assert.equal(await page.evaluate(() => navigator.clipboard.readText()), command, `Copy puts ${command} on the clipboard`);
         }
         assert.equal(await page.locator('#site-install pre').filter({ hasText: /\b(irm|iex)\b/ }).count(), 0, 'No pipe-to-PowerShell install is offered');
-        assert.equal(await page.locator('main a[href^="https://i.paperboard.dev/"]').count(), 14, 'Both products retain every architecture and Linux format');
+        assert.equal(await page.locator('main a[href^="https://i.paperboard.dev/"]').count(), 15, 'Both products retain every architecture and Linux format');
         assert.equal(await page.locator('main a[href^="https://i.paperboard.dev/"]').filter({ hasText: /^Download$/ }).count(), 0, 'Links identify the architecture rather than repeating Download');
 
         for (const [app, file, os] of [
             ['pb', 'paperboard-windows-x64-setup.exe', 'Windows'],
+            ['pb', 'paperboard-windows-x64.msi', 'Windows'],
             ['pb', 'paperboard-macos-arm64.zip', 'macOS'],
             ['pb', 'paperboard-macos-x64.zip', 'macOS'],
             ['crane', 'crane-windows-x64.zip', 'Windows'],
@@ -164,7 +165,7 @@ export async function checkDownloads(browser, origin) {
         await page.locator('.download-warning').waitFor({ state: 'detached' });
         assert.equal(await page.getByRole('dialog').count(), 0, 'Reduced motion dismissal stays immediate');
         assert.deepEqual(errors, []);
-        console.log('verified unsigned download warnings for both apps, all six Windows/macOS releases, five marketing pages, keyboard/focus/backdrop, exact downloads, Linux and mobile/reduced motion');
+        console.log('verified unsigned download warnings for both apps, all seven Windows/macOS releases, five marketing pages, keyboard/focus/backdrop, exact downloads, Linux and mobile/reduced motion');
     } finally { await context.close(); }
 }
 
