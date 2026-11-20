@@ -71,7 +71,8 @@ describe("loader settings", () => {
                 expect([setting.id, reread?.value]).toEqual([setting.id, value]);
             }
         }
-    });
+        // Paper's files hold hundreds of settings, each written and read back: seconds of work on a busy computer, where bun's 5 allow none
+    }, 60_000);
 
     test("a per-world serverconfig wins over the global file", async () => {
         const root = copyOf("neoforge-21.1.256");

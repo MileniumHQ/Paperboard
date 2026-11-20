@@ -81,12 +81,6 @@ const PAGES = {
         fixturePanel: true,
         window: true,
     },
-    /** the whole panel, from no projects at all (test/fixtures/projectsFixture.tsx) */
-    projects: { page: "test/fixtures/projectsFixture.html", seed: async () => ({ projects: [] }), fixturePanel: false, window: false },
-    /** the whole panel, over projects the service couldn't read as it started (test/fixtures/unreadableFixture.tsx) */
-    unreadable: { page: "test/fixtures/unreadableFixture.html", seed: async () => ({ projects: [], unreadable: true }), fixturePanel: false, window: false },
-    /** the editor's Load backup window, over backups kept on this computer (test/fixtures/backupsFixture.tsx) */
-    backups: { page: "test/fixtures/backupsFixture.html", seed: async () => ({ projects: [SERVICED], backupsHere: true }), fixturePanel: false, window: false },
 } satisfies Record<string, Setup>;
 export type FixtureName = keyof typeof PAGES;
 

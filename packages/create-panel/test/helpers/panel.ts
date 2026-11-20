@@ -90,7 +90,8 @@ export function readJson(file: string): any {
     return JSON.parse(readFileSync(file, "utf8"));
 }
 
-// the throwaway data folders a panel's test preload makes, by name
-export function panelTestFolders(): Set<string> {
-    return new Set(readdirSync(tmpdir()).filter((name) => name.startsWith("panel-test-")));
+// the throwaway data folders a panel's test preload left in `tmp`, the TMPDIR its run was given: a
+// folder of the test's own, since the computer's temp folder also holds every other suite's
+export function panelTestFolders(tmp: string): string[] {
+    return readdirSync(tmp).filter((name) => name.startsWith("panel-test-"));
 }

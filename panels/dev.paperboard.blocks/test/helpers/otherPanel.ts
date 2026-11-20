@@ -13,7 +13,6 @@
 // request the test sends over IPC.
 import { blocksApi, errorMessage, serviceClient, type BlockSet } from "@mileniumhq/paperapi";
 import { blocksContract } from "../../src/panel";
-import { LATE_NOT_SET_UP } from "../fixtures/world";
 
 const role = process.argv[2];
 // as a real panel service does (paperapi's definePanelService), it ends when
@@ -49,15 +48,7 @@ const SETS: Record<string, BlockSet> = {
                 id: "wave",
                 name: "Wave",
                 text: "Wave at {to}",
-                inputs: {
-                    to: {
-                        type: "text",
-                        name: "To",
-                        choices: () => {
-                            throw new Error(LATE_NOT_SET_UP);
-                        },
-                    },
-                },
+                inputs: { to: { type: "text", name: "To" } },
                 run: () => undefined,
             },
         ],

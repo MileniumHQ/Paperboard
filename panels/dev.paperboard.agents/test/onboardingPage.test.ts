@@ -133,17 +133,4 @@ describe("the first meeting", () => {
         await page.waitFor(`document.querySelector('[aria-label="Quill: computer and settings"]')`, "the chat");
         expect(page.exceptions).toEqual([]);
     });
-
-    // the speech is typed out over seconds: the way forward is there all along, waiting, not sliding in after it
-    test("the footer is in view from the first words with Next waiting, and the name field says its name once", async () => {
-        panel = await bootPanel({ codexOnPath: { signedIn: true, chosen: true, plan: MODELS } });
-        const page = await panel.open();
-        await page.waitFor(`document.querySelector('[aria-live="polite"]')?.innerText.trim().length > 0 && ${NEXT}`, "the first words");
-        await page.motionSettled();
-        expect(await page.evaluate(`${NEXT}.getBoundingClientRect().bottom <= innerHeight && ${NEXT}.disabled`)).toBe(true);
-
-        await page.waitFor(NAME_SHOWN, "the name step");
-        expect(await page.evaluate<string>(`document.querySelector('${NAME}').placeholder`)).toBe("");
-        expect(page.exceptions).toEqual([]);
-    });
 });

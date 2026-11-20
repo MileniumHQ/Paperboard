@@ -54,7 +54,7 @@
         "dev": "vite",
         "build": "tsc --noEmit && vite build && bun build ./bin/cli.ts --outfile dist/cli.js --target=node --external tar",
         "pack": "bun run ./bin/cli.ts pack",
-        "test": "bun test",
+        "test": "bun test --parallel",
         "prepublishOnly": "bun run build"
     },
     "devDependencies": {

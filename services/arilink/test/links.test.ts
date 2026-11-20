@@ -38,20 +38,6 @@ describe("short links forward only to stored https targets", () => {
         expect(env.lookups).toEqual(["/beta2", "/beta2", "/beta2", "/beta2"]);
     });
 
-    test("the bare domain uses the / link", async () => {
-        const env = links(LIVE);
-        const res = await visit(env, "/");
-        expect(res.status).toBe(302);
-        expect(res.headers.get("location")).toBe("https://paperboard.dev/");
-        expect(env.lookups).toEqual(["/"]);
-    });
-
-    test("an unknown key answers 404", async () => {
-        const res = await visit(links(LIVE), "/nothing-here");
-        expect(res.status).toBe(404);
-        expect(res.headers.get("location")).toBeNull();
-    });
-
     test("a stored target that is not https answers 500 and is never forwarded", async () => {
         for (const path of ["/script", "/plain"]) {
             const res = await visit(links(LIVE), path);

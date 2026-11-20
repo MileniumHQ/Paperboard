@@ -34,18 +34,6 @@ export function stateWhere<T>(panelId: string, accept: (state: T) => boolean, wh
     });
 }
 
-/** The first of a panel's problems `accept` takes, as the daemon holds them: now, or once it is reported. */
-export function problemWhere(panelId: string, accept: (problem: PanelProblem) => boolean, what: string, ms = 20_000): Promise<PanelProblem> {
-    let off = () => {};
-    const found = new Promise<PanelProblem>((resolve, reject) => {
-        off = problemsApi.watch(panelId, (problems) => {
-            const match = problems.find(accept);
-            if (match) resolve(match);
-        }, reject);
-    });
-    return within(what, found, ms).finally(() => off());
-}
-
 /** The panel's problems, as the daemon holds them, once `accept` takes the whole list: now, or after a change. */
 export function problemsWhere(panelId: string, accept: (problems: PanelProblem[]) => boolean, what: string, ms = 20_000): Promise<PanelProblem[]> {
     let off = () => {};

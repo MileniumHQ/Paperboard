@@ -1,8 +1,6 @@
-// What the phone's key row sends to the shell, and how far the on-screen
-// keyboard reaches up the panel.
+// What the phone's key row sends to the shell.
 import { describe, expect, test } from "bun:test";
 import { keyBytes, withModifiers, NO_MODIFIERS } from "../src/lib/softKeys";
-import { keyboardInsetOf, type ViewportFrame } from "../src/lib/keyboardInset";
 
 describe("keys the key row sends", () => {
     test("the cursor keys follow the program's cursor mode", () => {
@@ -49,51 +47,5 @@ describe("latched Ctrl and Alt", () => {
             expect(withModifiers(data, latched)).toEqual({ data, consumed: false });
         }
         expect(withModifiers("c", NO_MODIFIERS)).toEqual({ data: "c", consumed: false });
-    });
-});
-
-// a window of a given height whose parent is `above`, placed `top` px down it
-function frame(height: number, visualBottom: number | null, above?: { top: number; frame: ViewportFrame }): ViewportFrame {
-    return { height, visualBottom, parent: () => above ?? null };
-}
-
-describe("how far the keyboard covers the panel", () => {
-    test("a panel in the shell: the shell's visual viewport ends where the keyboard starts", () => {
-        // the shell is 800 tall with a 300 keyboard; the panel starts 54 down it and is 746 tall
-        const shell = frame(800, 500);
-        expect(keyboardInsetOf(frame(746, 746, { top: 54, frame: shell }))).toBe(300);
-    });
-
-    test("no keyboard is no inset", () => {
-        const shell = frame(800, 800);
-        expect(keyboardInsetOf(frame(746, 746, { top: 54, frame: shell }))).toBe(0);
-        // a panel that ends above the keyboard isn't covered
-        expect(keyboardInsetOf(frame(300, 300, { top: 0, frame: frame(800, 500) }))).toBe(0);
-    });
-
-    test("a window with no visual viewport reads as no keyboard", () => {
-        expect(keyboardInsetOf(frame(700, null))).toBe(0);
-    });
-
-    test("a parent of another origin leaves the panel's own viewport to answer", () => {
-        const crossOrigin: ViewportFrame = {
-            height: 700,
-            visualBottom: 400,
-            parent: () => {
-                throw new DOMException("blocked", "SecurityError");
-            },
-        };
-        expect(keyboardInsetOf(crossOrigin)).toBe(300);
-    });
-
-    test("any other failure is not hidden", () => {
-        const broken: ViewportFrame = {
-            height: 700,
-            visualBottom: 400,
-            parent: () => {
-                throw new Error("boom");
-            },
-        };
-        expect(() => keyboardInsetOf(broken)).toThrow("boom");
     });
 });

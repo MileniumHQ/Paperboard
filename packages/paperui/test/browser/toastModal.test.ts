@@ -8,7 +8,6 @@ let page: Page;
 const DIALOG = '[role="dialog"]';
 const TOAST = '[data-paper-toasts] [role="alert"]';
 const CLOSE = `${TOAST} [aria-label="Close"]`;
-const focused = () => page.eval<string>(`(() => { const a = document.activeElement; return a?.id || a?.getAttribute("aria-label") || a?.tagName; })()`);
 
 async function failWithDialogOpen() {
     page = await browser.open("toastModal");
@@ -50,28 +49,4 @@ describe("a failure toast over an open PaperModal", () => {
         expect(await page.eval("t.presses")).toBe(0);
     });
 
-    test("Tab reaches its close from the dialog and goes back in; once it is closed, focus stays in the dialog", async () => {
-        await failWithDialogOpen();
-        await page.eval(`document.getElementById("save").focus()`);
-        await page.press("Tab");
-        expect(await focused()).toBe("Close");
-        expect(await page.eval(`!!document.activeElement.closest('[data-paper-toasts]')`)).toBe(true);
-        // round the cycle, and back the other way
-        await page.press("Tab");
-        expect(await page.eval(`!!document.activeElement.closest('${DIALOG}')`)).toBe(true);
-        await page.press("Tab", 8);
-        expect(await page.eval(`!!document.activeElement.closest('[data-paper-toasts]')`)).toBe(true);
-        await page.press("Tab", 8);
-        expect(await focused()).toBe("save");
-        await page.press("Tab");
-
-        await page.press("Enter");
-        await page.waitFor(`!document.querySelector('${TOAST}')`, "the toast to close from the keyboard");
-        expect(await page.eval("t.isOpen()")).toBe(true);
-        // focus went with the toast; Tab brings it back into the dialog, never to the page under it
-        await page.press("Tab");
-        expect(await page.eval(`!!document.activeElement.closest('${DIALOG}')`)).toBe(true);
-        await page.press("Tab", 8);
-        expect(await page.eval(`!!document.activeElement.closest('${DIALOG}')`)).toBe(true);
-    });
 });

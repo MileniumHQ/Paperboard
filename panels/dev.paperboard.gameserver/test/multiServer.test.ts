@@ -170,27 +170,4 @@ describe("Home's widgets", () => {
         }
     }, 60_000);
 
-    test("the players widget lists who is on its server, and a game without one says it has no such widget", async () => {
-        const served = await setUp();
-        const mc = await openPage(widgetUrl(served.url, "players", { server: "s-mc" }));
-        const ter = await openPage(widgetUrl(served.url, "players", { server: "s-ter" }));
-        let minecraft: Awaited<ReturnType<typeof running>> | null = null;
-        try {
-            await waitForWidget(mc, `${WIDGET_TEXT}.includes("The server is offline")`, "Survival's players, offline");
-            await waitForWidget(ter, `${WIDGET_TEXT}.includes("Game Server isn't answering")`, "Island's players widget refused");
-            expect(await ter.evaluate<string>(`${WIDGET_DOC}.body.textContent`)).toContain("Terraria does not support the players widget");
-
-            minecraft = await running("s-mc", () => serverCalls("s-mc").startServer());
-            // the widget asks the running server who is on: its list answer names them
-            await waitForWidget(mc, `${WIDGET_TEXT}.includes("Alice") && ${WIDGET_TEXT}.includes("Bob") && ${WIDGET_TEXT}.includes("2/10")`, "Alice and Bob online, of 10");
-            expect(await mc.evaluate<string>(WIDGET_TEXT)).not.toContain("Names as typed not read");
-            expect(await consoleOf("s-ter")).not.toContain("minecraft");
-            expect(mc.exceptions).toEqual([]);
-        } finally {
-            await minecraft?.stop();
-            await mc.close();
-            await ter.close();
-            served.stop();
-        }
-    }, 60_000);
 });

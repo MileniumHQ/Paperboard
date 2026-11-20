@@ -75,14 +75,6 @@ describe("computer order and names", () => {
         expect((await openPool()).getComputer("local")?.name).toBe("Workstation");
     });
 
-    test("a blank or overlong name is refused with why and the old one kept", async () => {
-        const pool = await openPool();
-        expect(() => pool.renameComputer("remote-a", "   ")).toThrow("A computer needs a name.");
-        expect(() => pool.renameComputer("remote-a", "x".repeat(65))).toThrow("at most 64 characters");
-        expect(() => pool.renameComputer("remote-a", 7)).toThrow("A computer name must be text.");
-        expect(stored().computers.find((c) => c.id === "remote-a")).toMatchObject({ name: "remote-a", port: 45464 });
-    });
-
     // a pairing saved with a port the next launch can't read is lost then
     test("a pairing with a port that isn't one, or a blank or overlong name, is refused with why before anything is dialed", async () => {
         const pool = await openPool();

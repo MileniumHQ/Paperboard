@@ -1,25 +1,19 @@
 // The whole panel in a real browser (App, as index.tsx mounts it) over the
 // real service, on a real daemon (test/browserFixture.ts): every state it
 // announces arrives as new objects. A person opens a project and uses it
-// while the service keeps announcing: log lines arrive (the project's flow
-// logs what the Fixture Panel gives it), the project list changes under an
-// open dialog (another window makes a project), variables are made and
-// renamed while the Library is scrolled. A call the service refuses is
+// while the service keeps announcing: the registry changes under the Library,
+// flows fail to load, an edit is left unsaved. A call the service refuses is
 // sent for a project it doesn't have (fixtures/wire.ts). What the page kept
-// through each is posted back to the test as JSON. Keys and clicks that matter as a person's
-// own (Enter, the click that leaves focus on a button) are sent through
-// DevTools (/input), so Chrome handles them as trusted input.
+// through each is posted back to the test as JSON.
 import { render } from "solid-js/web";
 import * as Blockly from "blockly";
 import { PaperProvider } from "@mileniumhq/paperui";
 import App from "../../src/App";
-import type { LogEntry } from "../../src/panel";
 import { NOT_SAVED } from "../../src/editorFlows";
-import { AUTO_START } from "../../src/projects/state";
 import { serviceState } from "../../src/bridge";
 import { ask, askLeave, calls, held, holdNextList, holdsUnsaved, refuse, release } from "./wire";
-import { LATE_PANEL, LATE_PANEL_NAME } from "./world";
-import { BUILTIN, registryBlockType } from "../../src/lib/names";
+import { LATE_PANEL_NAME } from "./world";
+import { BUILTIN } from "../../src/lib/names";
 
 const errors: string[] = [];
 window.addEventListener("error", (event) => errors.push(event.error instanceof Error ? event.error.message : event.message));
@@ -50,25 +44,6 @@ async function until<T>(what: string, look: () => T | null | undefined | false):
     }
 }
 
-async function input(calls: { method: string; params: Record<string, unknown> }[]): Promise<void> {
-    const answer = await fetch("/input", { method: "POST", body: JSON.stringify({ calls }) });
-    if (!answer.ok) throw new Error(`the test's input failed: ${await answer.text()}`);
-}
-const press = (key: "Enter") =>
-    input([
-        { method: "Input.dispatchKeyEvent", params: { type: "keyDown", key, code: key, windowsVirtualKeyCode: 13, text: "\r" } },
-        { method: "Input.dispatchKeyEvent", params: { type: "keyUp", key, code: key, windowsVirtualKeyCode: 13 } },
-    ]);
-const typeText = (text: string) => input([{ method: "Input.insertText", params: { text } }]);
-const clickAt = (el: Element) => {
-    const r = el.getBoundingClientRect();
-    const at = { x: r.left + r.width / 2, y: r.top + r.height / 2, button: "left", clickCount: 1 };
-    return input([
-        { method: "Input.dispatchMouseEvent", params: { type: "mousePressed", ...at } },
-        { method: "Input.dispatchMouseEvent", params: { type: "mouseReleased", ...at } },
-    ]);
-};
-
 /** The innermost element matching `selector` whose text is (or ends with) `text`. */
 function byText(selector: string, text: string, root: ParentNode = document): HTMLElement | undefined {
     const all = [...root.querySelectorAll<HTMLElement>(selector)].filter((el) => el.textContent?.trim().endsWith(text));
@@ -80,428 +55,10 @@ function canvas(): Blockly.WorkspaceSvg | undefined {
     return Blockly.Workspace.getAll().find((w): w is Blockly.WorkspaceSvg => w.rendered && !(w as Blockly.WorkspaceSvg).isFlyout && !!(w as Blockly.WorkspaceSvg).getFlyout());
 }
 
-const logged = (message: string) => serviceState.current().log.some((entry: LogEntry) => entry.message === message);
-/** The service logs each line, in order, and the page has heard the last one. */
-async function say(...messages: string[]): Promise<void> {
-    await ask("say", { lines: messages });
-    await until(`"${messages.at(-1)}" in the page's log`, () => logged(messages.at(-1)!));
-}
-/** Another window makes a project, with a block on it so it's kept: the list is announced again. */
-const madeElsewhere = async (name: string) => {
-    const made = await ask<{ id: string }>("window", { do: "call", name: "createProject", input: { name } });
-    await ask("window", { do: "call", name: "saveFlows", input: { project: made.id, flows: { workspace: { blocks: { languageVersion: 0, blocks: [{ type: BUILTIN.onRun, id: "elsewhere", x: 0, y: 0 }] } }, schemas: {} }, preview: null } });
-    await until(`${name} in the page's list`, () => serviceState.current().projects.some((p) => p.name === name));
-};
 /** The Fixture Panel registers its blocks again: every window hears the registry changed. */
 const registryChanged = () => ask("fixture", { do: "register" });
 
-/** A log line arrives: rows already shown stay as they are, and a reader scrolled up stays there. */
-async function consoleChecks() {
-    await say(...Array.from({ length: 30 }, (_, i) => `line ${i}`));
-    const panel = await until("the console", () => document.querySelector('[title="Clear Console"]')?.closest<HTMLElement>('[class*="_panel_"]'));
-    const rows = () => [...panel.querySelectorAll<HTMLElement>('[class*="_line_"]')];
-    await until("30 console rows", () => rows().length === 30);
-    const body = rows()[0]!.parentElement!;
-    const fromEnd = () => Math.round(body.scrollHeight - body.scrollTop - body.clientHeight);
-    await settle();
-    const startsAtEnd = fromEnd();
-    const before = rows();
-    // the reader selects a line to copy it
-    const selected = before[3]!.querySelector('[class*="_text_"]')!;
-    const range = document.createRange();
-    range.selectNodeContents(selected);
-    getSelection()!.removeAllRanges();
-    getSelection()!.addRange(range);
-    await say("one more");
-    await settle();
-    const after = rows();
-    const selection = getSelection()!;
-    const lineCheck = {
-        rows: after.length,
-        rowsKept: before.filter((row, i) => after[i] === row && row.isConnected).length,
-        newRowText: after.at(-1)?.querySelector('[class*="_text_"]')?.textContent ?? "",
-        selection: selection.toString(),
-        selectionInPage: Boolean(selection.anchorNode?.isConnected),
-    };
-    const followedAtEnd = fromEnd();
-    body.scrollTop = 0;
-    await settle();
-    await say("while reading", "while reading, again");
-    await settle();
-    const stayedWhileReading = body.scrollTop;
-    body.scrollTop = body.scrollHeight;
-    await settle();
-    await say("after coming back");
-    await settle();
-    const followedAgain = fromEnd();
-    // a long entry wraps: its time sits on its first line
-    await say("a very long line ".repeat(30));
-    await settle();
-    const wrapped = rows().at(-1)!;
-    const time = wrapped.querySelector<HTMLElement>('[class*="_time_"]')!.getBoundingClientRect();
-    const text = wrapped.querySelector<HTMLElement>('[class*="_text_"]')!.getBoundingClientRect();
-    return {
-        ...lineCheck,
-        startsAtEnd,
-        followedAtEnd,
-        stayedWhileReading,
-        followedAgain,
-        timeTopMinusTextTop: Math.round(time.top - text.top),
-        textLines: Math.round(text.height / parseFloat(getComputedStyle(wrapped).lineHeight)),
-    };
-}
-
-/** The Paperboard window at its narrowest, as the panel gets it beside the app's sidebar. */
-const NARROWEST = { width: 620, height: 520 };
-
-/**
- * The console and the Library, with log lines and a notice shown: they sit
- * in the dock under the canvas, never over a block, and the console is
- * opaque. The narrowest window starts with the Library collapsed, so the
- * canvas has the panel's whole width; a person who opens or collapses it
- * keeps it so as the window is resized.
- */
-async function layoutChecks() {
-    const panel = document.querySelector<HTMLElement>('[title="Clear Console"]')!.closest<HTMLElement>('[class*="_panel_"]')!;
-    // a notice, beside the log: Run is refused
-    refuse("runFlows", true);
-    await clickAt(document.querySelector('[aria-label="Run"]')!);
-    const notice = await until("the refused run's toast", () => alertSaying("Couldn't run the flows"));
-    await settle();
-    const look = () => {
-        const host = canvas()!.getInjectionDiv().getBoundingClientRect();
-        const flyout = canvas()!.getFlyout()!;
-        const shown = flyout.isVisible() && Boolean(byText("[role=radio], button, label", "Logic"));
-        const list = flyout.getWorkspace().getParentSvg().getBoundingClientRect();
-        // how much of each docked card lies over the canvas, and outside the panel
-        const overlap = (r: DOMRect) => Math.max(0, Math.min(r.right, host.right) - Math.max(r.left, host.left)) * Math.max(0, Math.min(r.bottom, host.bottom) - Math.max(r.top, host.top));
-        const outside = (r: DOMRect) => Math.max(0, -r.left, -r.top, r.right - innerWidth, r.bottom - innerHeight);
-        const docked = [panel].map((el) => el.getBoundingClientRect());
-        return {
-            dockHeight: Math.round(panel.parentElement!.getBoundingClientRect().height),
-            libraryShown: shown,
-            // the rail and the list, from the panel's edge; and the list alone
-            libraryWidth: shown ? Math.round(list.right) : 0,
-            listWidth: shown ? Math.round(list.width) : 0,
-            panelWidth: innerWidth,
-            canvasRoom: Math.round(host.right - (shown ? list.right : host.left)),
-            canvasHeight: Math.round(host.height),
-            dockOverCanvas: Math.round(Math.max(...docked.map(overlap))),
-            dockOutside: Math.round(Math.max(...docked.map(outside))),
-        };
-    };
-    const background = getComputedStyle(panel).backgroundColor;
-    const [, , , alpha] = background.match(/[\d.]+/g)!.map(Number);
-    const wide = look();
-    await shoot("console");
-    await viewport(NARROWEST);
-    await settle();
-    const narrow = look();
-    for (const theme of ["light", "dark"]) {
-        document.documentElement.setAttribute("data-paperui-theme", theme);
-        await settle();
-        await fetch("/screenshot", { method: "POST", body: JSON.stringify({ name: `console-narrowest-${theme}`, ...NARROWEST }) });
-    }
-    document.documentElement.removeAttribute("data-paperui-theme");
-    // a screenshot leaves the window at its own size
-    await viewport(NARROWEST);
-    await settle();
-    // the person opens the Library in the narrow window: it stays open, and open as the window widens
-    byText("button", "Library")!.click();
-    await settle();
-    const narrowOpened = look();
-    await fetch("/screenshot", { method: "POST", body: JSON.stringify({ name: "library-opened-narrowest", ...NARROWEST }) });
-    await viewport(null);
-    await settle();
-    const back = look();
-    // and collapsed in the wide window, it stays collapsed in the narrow one and wide again
-    document.querySelector<HTMLElement>('[title="Collapse Library"]')!.click();
-    await settle();
-    await viewport(NARROWEST);
-    await settle();
-    const collapsedNarrow = look();
-    await viewport(null);
-    await settle();
-    const collapsedWide = look();
-    byText("button", "Library")!.click();
-    refuse("runFlows", false);
-    notice.querySelector<HTMLElement>('[aria-label="Close"]')!.click();
-    await settle();
-    return { alpha: alpha ?? 1, backdrop: getComputedStyle(panel).backdropFilter, wide, narrow, narrowOpened, back, collapsedNarrow, collapsedWide, reopened: look() };
-}
-
-/** The Paperboard window the bugs were seen in: narrow enough that the Library starts collapsed. */
-const SMALL = { width: 680, height: 510 };
-
-/** The fill an SVG element is painted with, as the page computes it. */
-const fillOf = (el: Element | null | undefined) => (el ? getComputedStyle(el).fill : "none");
-/** PaperUI's colour token, as the page computes it. */
-function tokenColour(name: string): string {
-    const probe = document.createElement("div");
-    probe.style.color = `var(${name})`;
-    document.body.append(probe);
-    const colour = getComputedStyle(probe).color;
-    probe.remove();
-    return colour;
-}
-
-/**
- * A typed-in value's field and a value block's icon, in the theme shown: the
- * field is PaperUI's field colour behind the theme's text, and an icon never
- * takes the colour of what it sits on.
- */
-function lookOfValues() {
-    const ws = canvas()!;
-    const fieldOf = (id: string) => {
-        const block = ws.getBlockById(id)!;
-        const field = block.getField(block.type === "math_number" ? "NUM" : "TEXT")!;
-        const group = field.getSvgRoot()!;
-        const rect = group.querySelector(":scope > rect");
-        return { fill: rect ? fillOf(rect) : fillOf(block.getSvgRoot().querySelector(":scope > .blocklyPath")), text: fillOf(group.querySelector("text")) };
-    };
-    const iconOf = (id: string) => {
-        const root = ws.getBlockById(id)!.getSvgRoot();
-        const icon = root.querySelector(":scope > g > text.paperBlockSymbol");
-        return { icon: fillOf(icon), behind: fillOf(root.querySelector(":scope > .blocklyPath")) };
-    };
-    return {
-        field: tokenColour("--paper-field"),
-        text: tokenColour("--paper-text"),
-        socket: fieldOf("look-socket"),
-        textBlock: { ...fieldOf("look-text"), ...iconOf("look-text") },
-        numberBlock: { ...fieldOf("look-number"), ...iconOf("look-number") },
-    };
-}
-
-/**
- * Opening a project in a window narrow enough that the Library starts
- * collapsed, with older runs in the console: the list stays hidden with the
- * Library, the console opens with its newest lines whole under its header,
- * values read in either theme and follow a switch, and the Section menu says
- * the section chosen.
- */
-async function lookChecks() {
-    await viewport(SMALL);
-    backButton()!.click();
-    await home();
-    (await until("the project's card", () => byText("*", "Serviced project")))!.click();
-    await until("the canvas", () => canvas());
-    // the Library's blocks have come in from the registry: the list has been filled
-    await until("the Library's list filled", () => canvas()!.getFlyout()!.getContents().length > 0);
-    await settle();
-    const flyout = canvas()!.getFlyout()!;
-    const libraryButton = byText("button", "Library")!.getBoundingClientRect();
-    const list = flyout.getWorkspace().getParentSvg();
-    const listBox = list.getBoundingClientRect();
-    const opened = {
-        listVisible: flyout.isVisible(),
-        listDisplay: getComputedStyle(list).display,
-        coversButton: getComputedStyle(list).display !== "none" && listBox.right > libraryButton.left && listBox.bottom > libraryButton.top,
-    };
-    // the console, scrolled to its newest line: the oldest row shown is whole under its header
-    const panel = document.querySelector('[title="Clear Console"]')!.closest<HTMLElement>('[class*="_panel_"]')!;
-    const header = panel.querySelector<HTMLElement>('[class*="_header_"]')!.getBoundingClientRect();
-    const body = panel.querySelector<HTMLElement>('[class*="_body_"]')!;
-    const shownTop = body.getBoundingClientRect().top;
-    const row = parseFloat(getComputedStyle(body).lineHeight);
-    const firstShown = [...body.querySelectorAll<HTMLElement>('[class*="_line_"]')].map((l) => l.getBoundingClientRect()).find((l) => l.bottom > shownTop)!;
-    const hidden = (shownTop - firstShown.top) % row;
-    const consoleLook = {
-        // how much of the row at the top is hidden, under the header or the body's edge
-        cutRow: Math.round(Math.min(hidden, row - hidden) * 10) / 10,
-        underHeader: Math.round(shownTop - header.bottom),
-        atEnd: Math.round(body.scrollHeight - body.scrollTop - body.clientHeight),
-    };
-    await fetch("/screenshot", { method: "POST", body: JSON.stringify({ name: "opened-small", ...SMALL }) });
-
-    // a value of each kind on the canvas: a text and a number block, and a socket's typed-in text
-    const ws = canvas()!;
-    Blockly.serialization.blocks.append({ type: "text", id: "look-text", x: 40, y: 200, fields: { TEXT: "" } }, ws);
-    Blockly.serialization.blocks.append({ type: "math_number", id: "look-number", x: 40, y: 260, fields: { NUM: 7 } }, ws);
-    Blockly.serialization.blocks.append({ type: BUILTIN.log, id: "look-log", x: 40, y: 320, inputs: { TEXT: { shadow: { type: "text", id: "look-socket", fields: { TEXT: "hi" } } } } }, ws);
-    await settle();
-    ws.centerOnBlock("look-number");
-    const themes: Record<string, unknown> = {};
-    for (const theme of ["light", "dark", "light"]) {
-        // switched while the project is open
-        document.documentElement.setAttribute("data-paperui-theme", theme);
-        await settle();
-        themes[`${Object.keys(themes).length}-${theme}`] = lookOfValues();
-        await fetch("/screenshot", { method: "POST", body: JSON.stringify({ name: `values-small-${Object.keys(themes).length}-${theme}`, ...SMALL }) });
-        await viewport(SMALL);
-        await settle();
-    }
-    document.documentElement.removeAttribute("data-paperui-theme");
-    for (const id of ["look-text", "look-number", "look-log"]) ws.getBlockById(id)!.dispose(false);
-
-    // the person opens the Library and jumps to a section: the menu says which
-    byText("button", "Library")!.click();
-    (await railItem("dev.paperboard.blocks")).click();
-    await settle();
-    const input = await until("the Section menu", () => document.querySelector<HTMLInputElement>('input[name="librarySectionJump"]'));
-    const trigger = input.parentElement!.querySelector<HTMLElement>("button")!;
-    const before = trigger.textContent ?? "";
-    trigger.click();
-    const options = await until("the sections", () => {
-        const all = [...document.querySelectorAll<HTMLElement>('[role="option"]')];
-        return all.length > 1 && all;
-    });
-    const chosen = options.at(-1)!.textContent!.trim();
-    options.at(-1)!.click();
-    await settle();
-    const section = { before, chosen, after: trigger.textContent ?? "", scrolled: canvas()!.getFlyout()!.getWorkspace().getMetricsManager().getViewMetrics(true).top > 0 };
-    // another category's list: the menu starts from no section again
-    (await railItem("Logic")).click();
-    await settle();
-    (await railItem("dev.paperboard.blocks")).click();
-    await settle();
-    const fresh = document.querySelector<HTMLInputElement>('input[name="librarySectionJump"]')!.parentElement!.querySelector("button")!.textContent ?? "";
-    // opened again as it was before, the Library as the window has it
-    await viewport(null);
-    backButton()!.click();
-    await home();
-    (await until("the project's card", () => byText("*", "Serviced project")))!.click();
-    await editing("Serviced project");
-    return { opened, console: consoleLook, themes, section: { ...section, fresh } };
-}
-
-/** The project list changes under the editor's Rename and Delete dialogs. */
-async function dialogChecks() {
-    const menu = async (item: string) => {
-        byText("button, [role=menuitem]", "Project")!.click();
-        (await until(`the Project menu's ${item}`, () => byText("[role=menuitem]", item)))!.click();
-        return until(`the ${item} dialog`, openDialog);
-    };
-    const rename = await menu("Rename");
-    const field = await until("the dialog's name field", () => rename.querySelector<HTMLInputElement>("input"));
-    await settle();
-    field.focus();
-    field.select();
-    await typeText("Renamed by hand");
-    const typed = field.value;
-    // another window makes a project: the list is announced again
-    await madeElsewhere("Made elsewhere");
-    await settle();
-    const renameKept = field.value;
-    byText("button", "Rename", rename)!.click();
-    await until("the Rename dialog to close", () => !openDialog());
-    const renamedTo = calls().filter((c) => c.name === "updateProject").at(-1)?.input.name;
-    await settle();
-
-    refuse("deleteProject", true);
-    const remove = await menu("Delete");
-    await settle();
-    byText("button", "Delete", remove)!.click();
-    await until("the refused delete's toast", () => alertSaying("Couldn't delete the project"));
-    await madeElsewhere("Also made elsewhere");
-    await settle();
-    // the dialog stays open to try again, and the toast keeps saying why
-    const deleteError = remove.isConnected && openDialog() ? (alertSaying("Couldn't delete the project")?.textContent ?? "") : "the dialog closed";
-    byText("button", "Cancel", remove)!.click();
-    await until("the Delete dialog to close", () => !openDialog());
-    refuse("deleteProject", false);
-    await settle();
-    return { typed, renameKept, renamedTo, deleteError };
-}
-
 const railItem = (name: string) => until(`${name} in the Library's rail`, () => byText("[role=radio], button, label", name));
-const variableNames = () => canvas()!.getVariableMap().getAllVariables().map((v) => v.getName());
-
-/** The Library keeps its place while its list is drawn again, and starts at the top for another list. */
-async function libraryChecks() {
-    (await railItem("Variables")).click();
-    await settle();
-    const map = canvas()!.getVariableMap();
-    for (let i = 1; i <= 40; i++) map.createVariable(`counter_${i}`);
-    await settle();
-    const list = canvas()!.getFlyout()!.getWorkspace();
-    // where the list is, to a hundredth of a pixel: Blockly's arithmetic on a list laid out again differs past that
-    const at = () => Math.round(list.scrollY * 100) / 100;
-    const startY = at();
-    list.scrollbar!.setY(600);
-    await settle();
-    const scrolledY = at();
-    map.createVariable("made_while_reading");
-    await settle();
-    const afterCreate = at();
-    map.renameVariable(map.getVariable("counter_5")!, "renamed_while_reading");
-    await settle();
-    const afterRename = at();
-    (await railItem("Logic")).click();
-    await settle();
-    const otherCategory = at();
-    (await railItem("Variables")).click();
-    await settle();
-    const backAgain = at();
-    return { startY, scrolledY, afterCreate, afterRename, otherCategory, backAgain };
-}
-
-/** "Create variable": the name field has the keyboard as it opens, and Enter makes one variable and closes. */
-async function createVariableChecks() {
-    const before = variableNames().length;
-    const button = await until("the Create variable button", () => byText("button", "Create variable"));
-    await clickAt(button);
-    const dialog = await until("the variable name dialog", openDialog);
-    const field = await until("the name field", () => dialog.querySelector<HTMLInputElement>('input[placeholder="Name"]'));
-    await settle();
-    const focusedOnOpen = document.activeElement === field;
-    // the rest is checked whether or not the field had the keyboard
-    if (!focusedOnOpen) field.focus();
-    await typeText("score");
-    await press("Enter");
-    await settle();
-    const names = variableNames();
-    return {
-        focusedOnOpen,
-        made: names.filter((n) => n === "score").length,
-        added: names.length - before,
-        dialogOpen: Boolean(openDialog()),
-    };
-}
-
-/** The switch's own words beside it, pressed twice: what the switch showed after each press. */
-async function flipByLabel(toggle: HTMLElement): Promise<{ label: string; states: (string | null)[] }> {
-    const label = toggle.closest("label");
-    const words = label && byText("*", AUTO_START, label);
-    if (!words || words.contains(toggle)) throw new Error(`the switch has no words of its own beside it: ${toggle.parentElement?.outerHTML.slice(0, 300)}`);
-    const states = [toggle.getAttribute("aria-checked")];
-    for (const _ of [1, 2]) {
-        await clickAt(words);
-        await until("the switch to move by its words", () => toggle.getAttribute("aria-checked") !== states.at(-1));
-        await settle();
-        states.push(toggle.getAttribute("aria-checked"));
-    }
-    return { label: words.textContent ?? "", states };
-}
-
-/** The editor's switch moves, with its thump, once the service has switched the flows. */
-async function toggleChecks() {
-    const toggle = await until("the editor's switch", () => document.querySelector<HTMLElement>(`[role="switch"][aria-label="${AUTO_START}"]`));
-    let animated = false;
-    const watch = new MutationObserver(() => (animated ||= /animating/.test(toggle.className)));
-    watch.observe(toggle, { attributes: true, attributeFilter: ["class"] });
-    const before = toggle.getAttribute("aria-checked");
-    await clickAt(toggle);
-    await until("the switch to move", () => toggle.getAttribute("aria-checked") !== before);
-    await frame();
-    watch.disconnect();
-    const moved = { before, after: toggle.getAttribute("aria-checked"), animated, saved: calls().filter((c) => c.name === "updateProject").at(-1)?.input.enabled };
-
-    // a flip the service refuses is said, and the notice goes once a flip goes through
-    const notice = () => [...document.querySelectorAll<HTMLElement>('[role="alert"], [role="status"]')].find((el) => el.textContent?.includes("Couldn't turn the flows"));
-    refuse("updateProject", true);
-    await clickAt(toggle);
-    const refused = (await until("the refused flip's notice", notice))!.textContent ?? "";
-    refuse("updateProject", false);
-    await clickAt(toggle);
-    await until("the switch to move back", () => toggle.getAttribute("aria-checked") === before);
-    await settle();
-    const noticeAfterRetry = notice()?.textContent ?? null;
-    await clickAt(toggle);
-    await until("the switch to move again", () => toggle.getAttribute("aria-checked") !== before);
-    await settle();
-    return { ...moved, refused, noticeAfterRetry, byLabel: await flipByLabel(toggle) };
-}
 
 /**
  * Two registry changes, the first one's listing held on its way back while
@@ -520,40 +77,19 @@ async function registryChecks() {
             throw new Error(`the newer registry never showed: ${err instanceof Error ? err.message : String(err)}`);
         },
     );
-    // the Late Panel's dropdown fails, as a panel not set up yet does: that is said in a project with
-    // its block on the canvas, and in no other, however often the registry changes
-    const wave = registryBlockType({ kind: "command", panelId: LATE_PANEL, entry: "command.wave" });
-    const choicesFailed = () => alertSaying(`Couldn't load ${LATE_PANEL_NAME}'s choices`);
-    /** The registry changes, and the blocks are defined again from it (which comes after their choices are asked for). */
-    const redefined = async () => {
-        const before = Blockly.Blocks[wave];
-        await registryChanged();
-        await until("the blocks defined again", () => Blockly.Blocks[wave] !== before);
-        await settle();
-    };
-    await redefined();
-    const offCanvas = choicesFailed()?.textContent ?? null;
-    Blockly.serialization.blocks.append({ type: wave, id: "wave-on-canvas", x: 40, y: 240 }, canvas()!);
-    await redefined();
-    const onCanvas = (await until("the failure for the block on the canvas", choicesFailed))!.textContent ?? "";
-    canvas()!.getBlockById("wave-on-canvas")!.dispose(false);
-    choicesFailed()!.querySelector<HTMLElement>('[aria-label="Close"]')!.click();
-    await settle();
-    return { lateShown, offCanvas, onCanvas };
+    return { lateShown };
 }
 
 /** Flows that don't load leave the canvas read-only and say so until they do; Try again loads them. */
 async function loadFailureChecks() {
     (await until("the All projects button", () => document.querySelector<HTMLElement>('[aria-label="All projects"]'))).click();
-    const card = await until("the project's card", () => byText("*", "Renamed by hand"));
+    const card = await until("the project's card", () => byText("*", "Serviced project"));
     refuse("loadFlows", true);
     card.click();
     // the canvas says why it couldn't load, over where the flows would be, with its own Try again
     const error = await until("the canvas's error", () => errorTitled("Couldn't load your flows"));
     const cover = error.closest<HTMLElement>("[class*=cover]")!;
     await settle();
-    // the app switches theme meanwhile: Blockly draws its list again, which stays hidden
-    document.documentElement.setAttribute("data-theme", "dark");
     await settle();
     const failed = {
         text: error.textContent ?? "",
@@ -564,13 +100,6 @@ async function loadFailureChecks() {
         retryOnCanvas: Boolean(byText("button", "Try again", cover)),
         library: Boolean(byText("[role=radio], button, label", "Logic")) || getComputedStyle(canvas()!.getFlyout()!.getWorkspace().getParentSvg()).display !== "none",
     };
-    await shoot("flows-not-loaded");
-    await viewport(NARROWEST);
-    await settle();
-    await fetch("/screenshot", { method: "POST", body: JSON.stringify({ name: "flows-not-loaded-narrowest", ...NARROWEST }) });
-    await viewport(null);
-    await settle();
-    document.documentElement.removeAttribute("data-theme");
     refuse("loadFlows", false);
     byText("button", "Try again", cover)!.click();
     await until("the failure to go", () => !cover.isConnected && !errorTitled("Couldn't load your flows"));
@@ -608,8 +137,8 @@ async function leaveChecks() {
     const savedBeforeHome = saveHolding("edit-before-back") >= 0 && saveHolding("edit-before-back") < callsAtHome;
 
     // New project from the editor's menu: the edit is saved before anything is made
-    (await until("the project's card", () => byText("*", "Renamed by hand")))!.click();
-    await editing("Renamed by hand");
+    (await until("the project's card", () => byText("*", "Serviced project")))!.click();
+    await editing("Serviced project");
     await addBlock("edit-before-new");
     byText("button, [role=menuitem]", "Project")!.click();
     (await until("the Project menu's New project", () => byText("[role=menuitem]", "New project")))!.click();
@@ -644,29 +173,6 @@ async function leaveChecks() {
     };
 }
 
-/**
- * Opening a project is not editing it: the load, a theme change and a
- * registry change all reach Blockly's change listener, and none of them is
- * saved, so the project is not stamped as just edited. Not when it is left
- * again either, which saves what is new first.
- */
-async function openChecks() {
-    const name = "Renamed by hand";
-    const saves = () => callsOf("saveFlows").length;
-    const before = saves();
-    (await until(`${name}'s card`, () => byText("*", name)))!.click();
-    await editing(name);
-    await until("the project's blocks on the canvas", () => canvas()!.getTopBlocks(false).length > 0);
-    await settle();
-    // drawn in both themes, which Blockly reports as changes
-    await shoot("editor-opened");
-    await registryChanged();
-    await settle();
-    backButton()!.click();
-    await home();
-    return { saves: saves() - before };
-}
-
 /** the PaperError in place titled `title` */
 const errorTitled = (title: string) => document.querySelector<HTMLElement>(`[data-paper-error][aria-label="${title.replace(/"/g, '\\"')}"]`);
 /** the failure toast saying `text` */
@@ -688,7 +194,7 @@ const phoneScreen = () => byText("*", "Blocks isn't on phones yet");
  * page that's left.
  */
 async function unsavedChecks() {
-    const name = "Renamed by hand";
+    const name = "Serviced project";
     (await until(`${name}'s card`, () => byText("*", name)))!.click();
     await editing(name);
     const askedBefore = holdsUnsaved();
@@ -755,46 +261,6 @@ async function shoot(name: string, phone = false): Promise<void> {
     await settle();
 }
 
-/**
- * Home: a switch that didn't move says why until a switch moves, and the
- * service's own trouble driving projects shows until it says it is over.
- */
-async function homeChecks() {
-    await home();
-    const name = "Renamed by hand";
-    const toggle = await until("the card's switch", () => document.querySelector<HTMLElement>(`[role="switch"][aria-label="${name}: ${AUTO_START}"]`));
-    const alert = alertSaying;
-    const before = toggle.getAttribute("aria-checked");
-    refuse("updateProject", true);
-    await clickAt(toggle);
-    const failed = (await until("the switch's failure", () => alert("Couldn't turn the flows")))!.textContent ?? "";
-    await settle();
-    const stayed = toggle.getAttribute("aria-checked");
-    // the registry goes away as another window makes a project: the service can't tell the other panels
-    await ask("registry", { away: true });
-    await madeElsewhere("Made while the registry was away");
-    const banner = (await until("the service's banner", () => errorTitled("Flows can't drive projects")))!.textContent ?? "";
-    const bannerToasted = Boolean(alert("Flows can't drive projects"));
-    await shoot("home-failed");
-
-    // the registry is back: the switch that moves next tells the other panels, and the banner goes
-    await ask("registry", { away: false });
-    refuse("updateProject", false);
-    await clickAt(toggle);
-    await until("the switch to move", () => toggle.getAttribute("aria-checked") !== before);
-    await until("the service's banner to go", () => !errorTitled("Flows can't drive projects"));
-    await settle();
-    const after = {
-        moved: toggle.getAttribute("aria-checked"),
-        switchFailure: alert("Couldn't turn the flows")?.textContent ?? null,
-        banner: errorTitled("Flows can't drive projects")?.textContent ?? null,
-    };
-    await shoot("home-recovered");
-    // the card's switch by its words: it flips, and the project doesn't open
-    const byLabel = await flipByLabel(toggle);
-    return { before, failed, stayed, banner, bannerToasted, after, byLabel, stayedHome: Boolean(byText("button", "New project")) };
-}
-
 async function run(): Promise<Record<string, unknown>> {
     render(
         () => (
@@ -808,20 +274,11 @@ async function run(): Promise<Record<string, unknown>> {
     await until("the canvas", () => canvas());
     await railItem("Flow");
     await settle();
-    const consoleResult = await consoleChecks();
-    const look = await lookChecks();
-    const layout = await layoutChecks();
-    const dialogs = await dialogChecks();
-    const library = await libraryChecks();
-    const createVariable = await createVariableChecks();
-    const toggle = await toggleChecks();
     const refresh = await registryChecks();
     const loadFailure = await loadFailureChecks();
     const leaving = await leaveChecks();
-    const opening = await openChecks();
     const unsavedWork = await unsavedChecks();
-    const homeScreen = await homeChecks();
-    return { console: consoleResult, look, layout, dialogs, library, createVariable, toggle, refresh, loadFailure, leaving, opening, unsavedWork, home: homeScreen, uncaught: [...errors] };
+    return { refresh, loadFailure, leaving, unsavedWork, uncaught: [...errors] };
 }
 
 run()

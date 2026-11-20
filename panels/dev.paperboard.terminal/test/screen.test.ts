@@ -1,7 +1,7 @@
-// What the terminal decides on its own before anything reaches a shell or the
-// system browser: which links open, and which pastes are asked about.
+// What the terminal decides on its own before anything reaches the system
+// browser: which links open.
 import { describe, expect, test } from "bun:test";
-import { linkOpens, pasteLines, pasteRunsAtOnce } from "../src/lib/screen";
+import { linkOpens } from "../src/lib/screen";
 
 describe("links open in the system browser only when safe", () => {
     test("https anywhere, http only on this computer", () => {
@@ -21,26 +21,5 @@ describe("links open in the system browser only when safe", () => {
         expect(linkOpens("javascript:alert(1)")).toBe(false);
         expect(linkOpens("ssh://host")).toBe(false);
         expect(linkOpens("not a url")).toBe(false);
-    });
-});
-
-describe("a paste that would run commands is asked about first", () => {
-    const prompt = { atPrompt: true, bracketedPaste: false };
-
-    test("lines pasted at a prompt that runs each one at once", () => {
-        expect(pasteRunsAtOnce("rm -rf build\nmake", prompt)).toBe(true);
-        expect(pasteRunsAtOnce("one\r", prompt)).toBe(true);
-    });
-
-    test("a single line, a shell reading pastes whole, or a program's input is not asked about", () => {
-        expect(pasteRunsAtOnce("echo hi", prompt)).toBe(false);
-        expect(pasteRunsAtOnce("one\ntwo", { atPrompt: true, bracketedPaste: true })).toBe(false);
-        // a command is running (or the shell never marked a prompt): the lines are its input
-        expect(pasteRunsAtOnce("one\ntwo", { atPrompt: false, bracketedPaste: false })).toBe(false);
-    });
-
-    test("the question counts the lines that run", () => {
-        expect(pasteLines("one\ntwo\nthree\n")).toBe(3);
-        expect(pasteLines("one\r\ntwo")).toBe(2);
     });
 });

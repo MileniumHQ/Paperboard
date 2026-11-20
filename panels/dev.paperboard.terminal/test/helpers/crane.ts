@@ -20,7 +20,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { buildSupervisor } from "../../../../scripts/build/supervisor";
 import { processApi, terminalApi } from "@mileniumhq/paperapi";
-import { within } from "./wait";
+import { until, within } from "./wait";
 
 const REPO = path.resolve(import.meta.dir, "../../../..");
 const CRANE_ENTRY = path.join(REPO, "apps/daemon/src/main.ts");
@@ -92,20 +92,9 @@ export async function clearWorkloads(): Promise<void> {
     }
 }
 
-/** Resolves once `file` no longer exists, watching its folder. */
-export function untilGone(file: string, what: string): Promise<void> {
-    const gone = new Promise<void>((resolve) => {
-        const watcher = fs.watch(path.dirname(file), () => {
-            if (fs.existsSync(file)) return;
-            watcher.close();
-            resolve();
-        });
-        if (!fs.existsSync(file)) {
-            watcher.close();
-            resolve();
-        }
-    });
-    return within(what, gone);
+/** Resolves once `file` no longer exists. Read again and again: a folder's watcher (fs.watch) misses changes under Bun. */
+export async function untilGone(file: string, what: string): Promise<void> {
+    await until(what, () => fs.existsSync(file), (exists) => !exists);
 }
 
 // the last resort, when the suite ends: each supervisor and its workload by pid

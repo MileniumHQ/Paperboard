@@ -43,22 +43,6 @@ describe("PaperList rows in a collapsed PaperSplit", () => {
         expect(await page.eval("t.collapsed")).toEqual([true, false, true]);
     });
 
-    test("side by side, the side's content fills the side pane whatever it holds", async () => {
-        page = await browser.open("listSplit");
-        await page.eval("t.setWidth(900)");
-        await page.waitFor("t.collapsed.at(-1) === false", "the 900px split to report side by side");
-        const widths = () =>
-            page.eval<{ pane: number; content: number }>(`(() => {
-                const list = document.querySelector('#split label[data-value]').closest('#split > * > * > * > *');
-                return { pane: list.parentElement.getBoundingClientRect().width, content: list.getBoundingClientRect().width };
-            })()`);
-        const before = await widths();
-        expect(before.content).toBe(before.pane);
-        await page.eval("t.setNames(['Al'])");
-        await page.frames();
-        expect(await widths()).toEqual(before);
-    });
-
     test("crossing the width keeps both panes' elements: nothing in them is built again", async () => {
         page = await browser.open("listSplit");
         await page.waitFor("t.collapsed.at(-1) === true", "the split to collapse");

@@ -7,6 +7,7 @@
 import { spawnSync } from "node:child_process";
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { waitFor } from "testkit/wait";
 import { invoke, serviceClient } from "@mileniumhq/paperapi";
 import { PANEL_ID } from "../../src/servers";
 import { gameServerContract } from "../../src/service/contract";
@@ -62,25 +63,16 @@ export function servicesState() {
     };
 }
 
-/** resolves once `file` exists and its text satisfies `ready`, checked on every change in its folder */
-export function waitForFile(file: string, ready: (text: string) => boolean, what: string, timeoutMs = 20_000): Promise<string> {
-    return new Promise((resolve, reject) => {
-        const dir = path.dirname(file);
-        fs.mkdirSync(dir, { recursive: true });
-        const read = () => (fs.existsSync(file) ? fs.readFileSync(file, "utf8") : null);
-        const check = () => {
-            const text = read();
-            if (text === null || !ready(text)) return false;
-            watcher.close();
-            clearTimeout(timer);
-            resolve(text);
-            return true;
-        };
-        const watcher = fs.watch(dir, () => void check());
-        const timer = setTimeout(() => {
-            watcher.close();
-            reject(new Error(`Timed out waiting for ${what}; ${file} holds: ${read()?.slice(0, 2000)}`));
-        }, timeoutMs);
-        check();
-    });
+/** resolves once `file` exists and its text satisfies `ready`; read again and again, since a folder's watcher (fs.watch) misses writes under Bun */
+export async function waitForFile(file: string, ready: (text: string) => boolean, what: string, timeoutMs = 20_000): Promise<string> {
+    let last: string | null = null;
+    try {
+        return await waitFor(what, () => {
+            last = fs.existsSync(file) ? fs.readFileSync(file, "utf8") : null;
+            // "" is a file too
+            return last !== null && ready(last) ? { text: last } : null;
+        }, { timeoutMs }).then((found) => found.text);
+    } catch (err) {
+        throw new Error(`${(err as Error).message}; ${file} holds: ${(last as string | null)?.slice(0, 2000)}`);
+    }
 }

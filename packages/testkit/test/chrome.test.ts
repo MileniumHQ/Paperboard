@@ -1,8 +1,10 @@
 // A browser suite leaves no Chrome and no temp files behind, however it
 // ends: it closed its pages, it failed with a page still open, or it was
 // stopped (a timeout's SIGTERM) mid-run; with a Chrome per page
-// (openChrome) or pages sharing one (launchChrome). Each case is a real test
-// process driving a real headless Chrome, with a TMPDIR of its own to inspect.
+// (openChrome), pages sharing one (launchChrome), or a whole suite sharing
+// one (withChrome.ts, where both open their pages in the suite's Chrome).
+// Each case is a real test process driving a real headless Chrome, with a
+// TMPDIR of its own to inspect.
 import { describe, expect, test } from "bun:test";
 import { launchChrome } from "../src/chrome";
 import { mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
@@ -10,9 +12,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 const DRIVER = join(import.meta.dir, "..", "src", "chrome.ts");
+const WITH_CHROME = join(import.meta.dir, "..", "src", "withChrome.ts");
 
 type Ending = "closes" | "fails" | "is stopped";
-type Driver = "openChrome" | "launchChrome";
+type Driver = "openChrome" | "launchChrome" | "withChrome";
 
 // each opens two pages, so a shared Chrome holds more than one
 const OPEN: Record<Driver, string> = {
@@ -27,12 +30,19 @@ const OPEN: Record<Driver, string> = {
         const pages = [await chrome.open("data:text/html,<p>open</p>"), await chrome.open("data:text/html,<p>open</p>")];
         const close = async () => { for (const page of pages) await page.close(); await chrome.close(); };
     `,
+    // a suite under withChrome.ts: a file with a Chrome per page and one with a shared Chrome, all in the suite's one
+    withChrome: `
+        import { launchChrome, openChrome } from ${JSON.stringify(DRIVER)};
+        const chrome = await launchChrome();
+        const pages = [await openChrome("data:text/html,<p>open</p>"), await openChrome("data:text/html,<p>open</p>"), await chrome.open("data:text/html,<p>open</p>")];
+        const close = async () => { for (const page of pages) await page.close(); await chrome.close(); };
+    `,
 };
 
-// every process whose command line names `dir`: a Chrome over a profile in
-// it, or the reaper that cleans up after one
-function processesIn(dir: string): number[] {
-    const found: number[] = [];
+// the command line of every process that names `dir`: a Chrome over a
+// profile in it, or the reaper that cleans up after one
+function processesIn(dir: string): Map<number, string> {
+    const found = new Map<number, string>();
     for (const entry of readdirSync("/proc")) {
         if (!/^\d+$/.test(entry)) continue;
         let cmdline: string;
@@ -43,12 +53,12 @@ function processesIn(dir: string): number[] {
             if ((err as NodeJS.ErrnoException).code === "ENOENT" || (err as NodeJS.ErrnoException).code === "ESRCH") continue;
             throw err;
         }
-        if (cmdline.includes(`${dir}/`)) found.push(Number(entry));
+        if (cmdline.includes(`${dir}/`)) found.set(Number(entry), cmdline);
     }
     return found;
 }
 
-async function suiteThat(driver: Driver, ending: Ending): Promise<{ left: string[]; chromes: number[]; output: string }> {
+async function suiteThat(driver: Driver, ending: Ending): Promise<{ left: string[]; chromes: number[]; started: number; output: string }> {
     // short: Chrome's singleton socket path must fit in 108 bytes
     const dir = mkdtempSync(join(tmpdir(), "pbct-"));
     const script = `
@@ -58,7 +68,7 @@ async function suiteThat(driver: Driver, ending: Ending): Promise<{ left: string
         else if (${JSON.stringify(ending)} === "fails") throw new Error("the suite failed");
         else await new Promise(() => {});
     `;
-    const child = Bun.spawn([process.execPath, "-e", script], {
+    const child = Bun.spawn([process.execPath, ...(driver === "withChrome" ? [WITH_CHROME, process.execPath] : []), "-e", script], {
         env: { ...process.env, TMPDIR: dir },
         stdout: "pipe",
         stderr: "pipe",
@@ -70,6 +80,8 @@ async function suiteThat(driver: Driver, ending: Ending): Promise<{ left: string
         if (done) break;
         output += new TextDecoder().decode(value);
     }
+    // the Chromes up while its pages are open: each is one browser process with a profile in the dir
+    const started = [...processesIn(dir).values()].filter((cmdline) => cmdline.includes("--remote-debugging-port=0") && !cmdline.includes("--type=")).length;
     if (ending === "is stopped") child.kill("SIGTERM");
     await child.exited;
     output += await new Response(child.stderr).text();
@@ -77,21 +89,23 @@ async function suiteThat(driver: Driver, ending: Ending): Promise<{ left: string
     // ends: done once nothing that names the dir runs any more
     const deadline = Date.now() + 10_000;
     // quiet: the poll interval of a deadline-bound wait for the Chromes to end
-    while (processesIn(dir).length && Date.now() < deadline) await Bun.sleep(50);
+    while (processesIn(dir).size && Date.now() < deadline) await Bun.sleep(50);
     const left = readdirSync(dir);
-    const chromes = processesIn(dir);
+    const chromes = [...processesIn(dir).keys()];
     // whatever the driver left is this test's to stop, by PID
     for (const pid of chromes) process.kill(pid, "SIGKILL");
     rmSync(dir, { recursive: true, force: true, maxRetries: 10 });
-    return { left, chromes, output };
+    return { left, chromes, started, output };
 }
 
 describe("a browser suite leaves no Chrome and no temp files behind", () => {
-    for (const driver of ["openChrome", "launchChrome"] as Driver[]) {
+    for (const driver of ["openChrome", "launchChrome", "withChrome"] as Driver[]) {
         for (const ending of ["closes", "fails", "is stopped"] as Ending[]) {
             test(`with ${driver}, when it ${ending}`, async () => {
-                const { left, chromes, output } = await suiteThat(driver, ending);
+                const { left, chromes, started, output } = await suiteThat(driver, ending);
                 expect(output).toContain("open");
+                // a Chrome per page, or one for all of them: counted in the suite that stays open
+                if (ending === "is stopped") expect(started).toBe(driver === "openChrome" ? 2 : 1);
                 expect(left).toEqual([]);
                 expect(chromes).toEqual([]);
             }, 30_000);

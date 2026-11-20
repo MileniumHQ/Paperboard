@@ -11,7 +11,7 @@ import { PANEL_ID } from "../src/servers";
 import { TRIGGER_IDS } from "../src/service/contract";
 import { playerPoller } from "../src/games/serviceKit";
 import { sendServerCommand, startServerInstance, stopServerInstance } from "../src/service/lifecycle";
-import { argValue, rconPasswordRule, rustService } from "../src/games/rust/service";
+import { argValue, rconPasswordRule } from "../src/games/rust/service";
 import { parseBanList, parseBansCfg, steamId } from "../src/games/rust/roster";
 import { parseInfo, parsePlayers, RustRcon, RustRconSilent, RustRconUnreachable } from "../src/games/rust/webrcon";
 import { PNG } from "pngjs";
@@ -191,7 +191,8 @@ describe("Rust", () => {
         });
         try {
             await online(server);
-            expect(server.server.state.portMoves).toEqual([{ label: "Rust remote console", from: saved, to: server.rconPort, primary: false }]);
+            // its move, among any: another test's server can take one of this server's other free ports meanwhile, and that one moves too
+            expect(server.server.state.portMoves).toContainEqual({ label: "Rust remote console", from: saved, to: server.rconPort, primary: false });
             expect(server.rconPort).not.toBe(saved);
             await call(server, "saveWorld");
             await stop(server);

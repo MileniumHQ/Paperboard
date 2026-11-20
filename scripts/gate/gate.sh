@@ -218,7 +218,7 @@ gstep daemon "daemon code check" run_in "$ROOT" bun scripts/gate/check-solid.ts 
 # ── Paperboard app: node + web typechecks, full suite, lint, silent-catches ──
 gstep paperboard "paperboard typecheck:node" run_in "$ROOT/apps/paperboard" bun run typecheck:node
 gstep paperboard "paperboard typecheck:web" run_in "$ROOT/apps/paperboard" bun run typecheck:web
-gstep paperboard "paperboard tests" run_in "$ROOT/apps/paperboard" bun test
+gstep paperboard "paperboard tests" run_in "$ROOT/apps/paperboard" bun run test
 gstep paperboard "paperboard lint" run_in "$ROOT/apps/paperboard" bunx biome lint
 gstep paperboard "paperboard silent-catches" run_in "$ROOT/apps/paperboard" bash "$CATCH"
 gstep paperboard "paperboard code check" run_in "$ROOT" bun scripts/gate/check-solid.ts apps/paperboard/src apps/paperboard/tests apps/paperboard/scripts
@@ -228,7 +228,7 @@ gwarn paperboard "paperboard styling literals" bash "$ROOT/scripts/gate/check-ap
 # test drivers, silent-catch backstop. The compiler is packages/paperui's, the
 # same one check-solid.ts loads; the root package depends on none. ──────────
 gstep scripts "root scripts typecheck" run_in "$ROOT" bun packages/paperui/node_modules/typescript/bin/tsc -p scripts/tsconfig.json
-gstep scripts "root scripts tests" run_in "$ROOT" bun test scripts
+gstep scripts "root scripts tests" run_in "$ROOT" bun test --parallel scripts
 gstep scripts "root scripts silent-catches" run_in "$ROOT" bash "$CATCH" scripts
 gstep scripts "root scripts code check" run_in "$ROOT" bun scripts/gate/check-solid.ts scripts
 
@@ -240,7 +240,7 @@ gstep paperdocs "paperdocs code check" run_in "$ROOT" bun scripts/gate/check-sol
 
 # ── shared libraries ─────────────────────────────────────────────────────────
 gstep paperapi "paperapi typecheck" run_in "$ROOT/packages/paperapi" bunx tsc --noEmit
-gstep paperapi "paperapi tests" run_in "$ROOT/packages/paperapi" bun test
+gstep paperapi "paperapi tests" run_in "$ROOT/packages/paperapi" bun run test
 gstep paperapi "paperapi silent-catches" run_in "$ROOT/packages/paperapi" bash "$CATCH" src test
 gstep paperapi "paperapi code check" run_in "$ROOT" bun scripts/gate/check-solid.ts packages/paperapi/src packages/paperapi/test
 gstep paperui "paperui tests" run_in "$ROOT/packages/paperui" bun run test

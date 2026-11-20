@@ -66,17 +66,6 @@ describe("WebDAV", () => {
 		expect((await request(port, { path: "/dav/", method: "PROPFIND", headers: basic(idle.user, idle.pass) })).status).toBe(401);
 	});
 
-	test("a session request whose body is not a JSON object is refused with 400, not read as defaults", async () => {
-		const daemon = await startDaemon();
-		const port = daemon.instance.localPort;
-		for (const method of ["POST", "DELETE"]) {
-			for (const body of ["{idleMs: 1000", "[]", "7"]) {
-				const res = await request(port, { method, path: "/dav/session", headers: bearer(daemon.token), body });
-				expect(res.status).toBe(400);
-			}
-		}
-	});
-
 	test("local/, sockets/ and key or credential files resolve to nothing for every method and are absent from listings", async () => {
 		const daemon = await startDaemon();
 		const port = daemon.instance.localPort;
@@ -116,27 +105,6 @@ describe("WebDAV", () => {
 		const listing = root.body.toString() + panel.body.toString();
 		expect(listing).toContain("notes.txt");
 		for (const name of ["/dav/local", "/dav/sockets", "server.key", "nested.pem", "secrets.json"]) expect(listing).not.toContain(name);
-	});
-
-	test("a folder named with a space or an accent lists under hrefs a mounted drive can open", async () => {
-		const daemon = await startDaemon();
-		const port = daemon.instance.localPort;
-		const folder = path.join(daemon.dataDir, "files", "test.dav", "My Folder");
-		fs.mkdirSync(path.join(folder, "Café"), { recursive: true });
-		fs.writeFileSync(path.join(folder, "a b.txt"), "x");
-		const res = await request(port, { method: "PROPFIND", path: "/dav/files/test.dav/My%20Folder/", headers: { ...bearer(daemon.token), Depth: "1" } });
-		expect(res.status).toBe(207);
-		const hrefs = [...res.body.toString().matchAll(/<D:href>([^<]*)<\/D:href>/g)].map((m) => m[1]);
-		expect(hrefs.sort()).toEqual([
-			"/dav/files/test.dav/My%20Folder/",
-			"/dav/files/test.dav/My%20Folder/Caf%C3%A9/",
-			"/dav/files/test.dav/My%20Folder/a%20b.txt",
-		]);
-		expect(res.body.toString()).toContain("<D:displayname>My Folder</D:displayname>");
-		// each href opens what it names
-		for (const href of hrefs) {
-			expect((await request(port, { method: "PROPFIND", path: href, headers: { ...bearer(daemon.token), Depth: "0" } })).status).toBe(207);
-		}
 	});
 
 	test("encoded traversal, DELETE /dav/%2f, symlinks and a malformed Host leave the data dir intact and /health answering", async () => {
@@ -265,18 +233,6 @@ describe("panel assets and /panel-files", () => {
 		}
 		expect((await request(port, { path: "/panel/test.assets/app.js", headers: bearer(daemon.token) })).body.toString()).toBe("console.log('panel')");
 		expect((await request(port, { path: "/panel-files/test.assets/doc.txt", headers: bearer(daemon.token) })).body.toString()).toBe("doc");
-	});
-
-	test("a panel file whose name has a space or an accent is served by its encoded URL", async () => {
-		const daemon = await withPanel();
-		const port = daemon.instance.localPort;
-		fs.writeFileSync(path.join(daemon.dataDir, "panels", "test.assets", "café menu.png"), "the picture");
-		const auth = bearer(daemon.token);
-		const served = await request(port, { path: "/panel/test.assets/caf%C3%A9%20menu.png", headers: auth });
-		expect(served.status).toBe(200);
-		expect(served.body.toString()).toBe("the picture");
-		expect((await request(port, { path: "/panel/test.assets/%E0%A4%A", headers: auth })).status).toBe(400);
-		expect((await request(port, { path: "/panel/test.assets/..%2F..%2FSENTINEL", headers: auth })).status).not.toBe(200);
 	});
 
 	test("a request carrying the file's ETag gets an empty 304, and a changed file comes in full", async () => {

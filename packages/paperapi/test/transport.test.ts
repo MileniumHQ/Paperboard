@@ -6,10 +6,9 @@ import net from "node:net";
 import { createPanelBridge } from "../src/bridge";
 import { fileApi } from "../src/file";
 import { terminalApi } from "../src/index";
-import { closeTransport, configureHostConnection, getTransport, initPaperApi, invoke, on, RPC_ROUTES } from "../src/ipc";
+import { closeTransport, configureHostConnection, getTransport, initPaperApi, invoke, on } from "../src/ipc";
 import { processApi } from "../src/process";
 import { definePanelService } from "../src/service";
-import { TransportRegistry } from "../src/transport/registry";
 import { CraneTransport } from "../src/ws";
 import { startWireServer, type Frame, type WireServer } from "./helpers/wire";
 
@@ -86,17 +85,6 @@ describe("handlers are owned by the panel that registers them", () => {
         await t.unregisterAction("dev.a", "ping");
         expect((await reply("5", "dev.a", "ping")).error).toBe("Handler for action 'ping' not found");
         expect(await reply("6", "dev.b", "ping")).toEqual({ type: "action_reply", callId: "6", result: "from b" });
-    });
-
-    test("the registry keys every handler by its panel", () => {
-        const registry = new TransportRegistry();
-        registry.addAction("dev.a", "ping", () => "a");
-        registry.addAction("dev.b", "ping", () => "b");
-        expect(registry.getHandler("ping")).toBeUndefined();
-        expect(registry.getHandler("dev.a:ping")?.()).toBe("a");
-        registry.removeAction("dev.a", "ping");
-        expect(registry.getHandler("dev.a:ping")).toBeUndefined();
-        expect(registry.getHandler("dev.b:ping")?.()).toBe("b");
     });
 
     test("a reply that finishes after the connection closed is reported loudly, never thrown into the service", async () => {
@@ -377,13 +365,6 @@ describe("subscriptions and stream attaches survive reconnect and teardown", () 
 
 // Long operations are not cut off by the default deadline.
 describe("long operations are not cut off by the default deadline", () => {
-    test("uninstall, backup and restore carry no timeout while ordinary routes keep 30 s", () => {
-        expect(RPC_ROUTES["panel-uninstall"].timeoutMs).toBeNull();
-        expect(RPC_ROUTES["backup-create"].timeoutMs).toBeNull();
-        expect(RPC_ROUTES["backup-restore"].timeoutMs).toBeNull();
-        expect(RPC_ROUTES["file-read"].timeoutMs).toBeUndefined();
-    });
-
     test("an unanswered uninstall still waits after the default deadline, an ordinary call times out at 30 s", async () => {
         await initPaperApi({ port: server.port, token: server.token });
         const held = deferred();

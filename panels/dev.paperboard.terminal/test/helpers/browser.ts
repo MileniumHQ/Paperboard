@@ -88,7 +88,3 @@ export async function answered(page: Page): Promise<void> {
 /** a page expression: a failure toast shows `title` and `text` */
 export const toastShows = (title: string, text: string) =>
     `[...document.querySelectorAll("[data-paper-toasts] [role=alert]")].some((t) => t.innerText.includes(${JSON.stringify(title)}) && t.innerText.includes(${JSON.stringify(text)}))`;
-
-/** a page expression: some alert shows `title` and `text` */
-export const alertShows = (title: string, text: string) =>
-    `[...document.querySelectorAll("[role=alert]")].some((q) => q.innerText.includes(${JSON.stringify(title)}) && q.innerText.includes(${JSON.stringify(text)}))`;
