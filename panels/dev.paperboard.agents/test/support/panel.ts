@@ -6,18 +6,21 @@
 // puts there (test/support/fakeBrain.mjs as each brain), so no real Codex or
 // Claude on the machine is ever used, and nothing reaches the network.
 //
-// One daemon and one built page per test process, ended when the suite
-// ends; a file boots the service once for the tests that share a setup and
-// opens a page for the tests that use it (bootPanel).
+// One daemon per test process, ended when the suite ends, and one built page
+// per suite (packages/testkit/src/withPanelUi.ts, in the test script; a file
+// run by itself builds its own, packages/testkit/src/panelUi.ts); a file
+// boots the service once for the tests that share a setup and opens a page
+// for the tests that use it (bootPanel).
 //
 // The daemon is loaded by a path the typechecker does not follow: it is
 // another target's source, typechecked by its own gate step.
-import { spawn, spawnSync, type ChildProcess } from "node:child_process";
+import { spawn, type ChildProcess } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { buildSupervisor } from "../../../../scripts/build/supervisor";
 import { openChrome, type Page } from "testkit/chrome";
+import { servePanelUi } from "testkit/panelUi";
 import { PANEL_ID, type Harness, type Settings } from "../../src/contract";
 import { allowTestPort, atSuiteEnd } from "../hermetic";
 import { FAKE_BRAIN, fakeEnv, plan } from "./host";
@@ -63,24 +66,10 @@ function testDaemon() {
             const closed = new Promise<void>((resolve) => instance.server.once("close", () => resolve()));
             instance.stop();
             await within("the test daemon to close", closed);
-            if (built) fs.rmSync(built, { recursive: true, force: true });
         });
         return { instance, dataDir };
     })();
     return daemon;
-}
-
-let built: string | null = null;
-/** the panel's page as `bun run build` makes it, built once per test process */
-function panelUi(): string {
-    if (built) return built;
-    const out = fs.mkdtempSync(path.join(os.tmpdir(), "pb-agents-ui-"));
-    const build = spawnSync(process.execPath, ["x", "vite", "build", "--outDir", out, "--emptyOutDir", "--logLevel", "error"], { cwd: PANEL, encoding: "utf8" });
-    if (build.status !== 0 || !fs.existsSync(path.join(out, "index.html"))) {
-        throw new Error(`Building the panel's page failed (exit ${build.status}):\n${build.stdout}\n${build.stderr}`);
-    }
-    built = out;
-    return out;
 }
 
 export interface BootedPanel {
@@ -198,24 +187,8 @@ export async function bootPanel(o: BootOptions = {}): Promise<BootedPanel> {
     });
     await within("the Agent service to report ready", ready, () => log);
 
-    const dist = panelUi();
-    const creds = JSON.stringify({ port: instance.localPort, token: instance.auth.issuePanelToken(PANEL_ID), scoped: true, computerId: "local", panelId: PANEL_ID }).replace(/</g, "\\u003c");
-    const server = Bun.serve({
-        port: 0,
-        hostname: "127.0.0.1",
-        async fetch(req) {
-            const pathname = new URL(req.url).pathname;
-            const file = path.join(dist, pathname === "/" ? "index.html" : pathname);
-            if (!file.startsWith(dist) || !fs.existsSync(file) || fs.statSync(file).isDirectory()) return new Response("Not found", { status: 404 });
-            if (file.endsWith(".html")) {
-                const html = fs
-                    .readFileSync(file, "utf8")
-                    .replace(/<head[^>]*>/i, (m) => `${m}<script>window.__PAPERBOARD_CRANE=${creds};document.documentElement.setAttribute("data-paper-mobile","false");</script>`);
-                return new Response(html, { headers: { "content-type": "text/html; charset=utf-8" } });
-            }
-            return new Response(Bun.file(file));
-        },
-    });
+    // the suite's build of the page (withPanelUi.ts in the test script), in desktop mode
+    const served = servePanelUi({ panelDir: PANEL, panelId: PANEL_ID, port: instance.localPort, token: instance.auth.issuePanelToken(PANEL_ID), mobile: false });
     const savedSettings = () => (fs.existsSync(settingsFile) ? (JSON.parse(fs.readFileSync(settingsFile, "utf8")) as Settings) : null);
     const pages = new Set<Page>();
     const disallow: (() => void)[] = [];
@@ -234,7 +207,7 @@ export async function bootPanel(o: BootOptions = {}): Promise<BootedPanel> {
             }
         },
         async open() {
-            const page = await openChrome(`http://127.0.0.1:${server.port}/`, {
+            const page = await openChrome(`${served.url}/`, {
                 onPort: (port) => disallow.push(allowTestPort(port)),
                 isCall: (frame) => frame.includes('"action":"blocks:call"'),
             });
@@ -244,7 +217,7 @@ export async function bootPanel(o: BootOptions = {}): Promise<BootedPanel> {
         async close() {
             for (const page of pages) await page.close();
             for (const undo of disallow) undo();
-            server.stop(true);
+            served.stop();
             if (child.exitCode === null && child.signalCode === null) child.kill("SIGTERM");
             await within("the Agent service to exit", exited, () => log);
             fs.rmSync(bin, { recursive: true, force: true });
