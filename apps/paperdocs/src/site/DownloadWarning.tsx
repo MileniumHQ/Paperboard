@@ -1,4 +1,4 @@
-import { PaperButton, PaperEffect, PaperModal, PaperSelector, PaperSelectorItem, PaperText } from '@mileniumhq/paperui';
+import { PaperButton, PaperEffect, PaperModal, PaperSelector, PaperSelectorItem, PaperText, PaperTextList } from '@mileniumhq/paperui';
 import { createSignal, For, Match, onCleanup, Show, Switch } from 'solid-js';
 import { render } from 'solid-js/web';
 import { installationGuidance, unsignedExplanation, type UnsignedDownload } from '../../public/js/unsigned-downloads.mjs';
@@ -141,7 +141,7 @@ function DownloadWarning() {
                     <Match when={unsigned()}>
                         <div id="download-warning-summary"><PaperText as="p" preset="body">{guidance().summary}</PaperText></div>
                         <PaperText as="p" preset="body" color="text-subtle">{unsignedExplanation}</PaperText>
-                        <ol class="download-warning__steps"><For each={guidance().steps}>{step => <li>{step}</li>}</For></ol>
+                        <PaperTextList ordered preset="body" class="download-warning__steps"><For each={guidance().steps}>{step => <PaperTextList.Item>{step}</PaperTextList.Item>}</For></PaperTextList>
                         <PaperText as="p" preset="caption" color="text-subtle">{guidance().note}</PaperText>
                         <a class="download-warning__source" href={guidance().source} target="_blank" rel="noopener noreferrer">{guidance().sourceLabel}</a>
                     </Match>

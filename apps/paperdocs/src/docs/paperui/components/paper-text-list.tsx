@@ -150,7 +150,7 @@ export function Example() {
 
             <PaperText preset="subheader" as="h2" id="behavior">Behavior</PaperText>
             <PaperTextList>
-                <li>The list indents its markers outside the text, with a bottom margin of a half gap.</li>
+                <li>The list indents its markers outside the text, and has no margin of its own: the layout it sits in spaces it.</li>
                 <li>Plain <PaperCode>li</PaperCode> children work and take the list's own size, weight, and color. Use <PaperCode>PaperTextList.Item</PaperCode> only when one item needs a prop of PaperText, such as its own color.</li>
                 <li>Lists nest: put a <PaperCode>PaperTextList</PaperCode> inside an item.</li>
                 <li>The list is a real <PaperCode>ul</PaperCode> or <PaperCode>ol</PaperCode>, so assistive technology announces it as a list.</li>
