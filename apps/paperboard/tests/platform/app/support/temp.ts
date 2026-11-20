@@ -6,7 +6,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import type { ChildProcess } from "node:child_process";
-import { readProcessTable, type ProcessTable } from "daemon/system/usage";
+import { processTree, readProcessTable } from "daemon/system/usage";
 
 const made: string[] = [];
 // folders made to hold temp dirs off the temp dir's drive, removed once empty
@@ -75,25 +75,6 @@ function workloadPids(dir: string): number[] {
     return pids;
 }
 
-// `roots` and every process under them in `table`, followed by parent pid
-export function processTree(table: ProcessTable, roots: Iterable<number>): Set<number> {
-    const tree = new Set<number>();
-    const byParent = new Map<number, number[]>();
-    for (const [pid, sample] of table) {
-        const siblings = byParent.get(sample.ppid);
-        if (siblings) siblings.push(pid);
-        else byParent.set(sample.ppid, [pid]);
-    }
-    const queue = [...roots];
-    while (queue.length > 0) {
-        const pid = queue.pop()!;
-        if (pid === process.pid || tree.has(pid)) continue;
-        tree.add(pid);
-        queue.push(...(byParent.get(pid) ?? []));
-    }
-    return tree;
-}
-
 const GONE_WITHIN_MS = 30_000;
 
 // Ends what this suite still runs (a daemon or an app a failed test never
@@ -101,14 +82,16 @@ const GONE_WITHIN_MS = 30_000;
 // returns once every one of them has exited. A killed process lets go of
 // its files only then, and until it does Windows refuses to remove the
 // program it runs from (the compiled crane every service runs) or a folder
-// it holds open. Only running roots are followed: an exited one's pid may
-// already belong to someone else's process.
+// it holds open. Only running roots are followed (an exited one's pid may
+// already belong to someone else's process), and processTree takes no
+// process that started before the one now holding its parent's pid: the
+// installed app's supervisors, say, whose old daemon's pid one of ours got.
 async function endOurProcesses(): Promise<void> {
     const roots = [...children].filter((c) => c.exitCode === null && c.signalCode === null).map((c) => c.pid!);
     roots.push(...made.flatMap(workloadPids));
     if (roots.length === 0) return;
     // read while the roots still run, so every tree is whole
-    const tree = [...processTree(await readProcessTable(), roots)];
+    const tree = processTree(await readProcessTable(), roots, (pid) => pid === process.pid);
     for (const pid of tree) if (alive(pid)) process.kill(pid, "SIGKILL");
     const deadline = Date.now() + GONE_WITHIN_MS;
     let left = tree.filter(alive);
