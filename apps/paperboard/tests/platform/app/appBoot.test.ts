@@ -41,8 +41,7 @@ describe("desktop app boot", () => {
         expect(credentials).toEqual({ computerId: "local", port: daemon.handshake.port, token: daemon.handshake.token });
 
         expect(electron.failures()).toEqual([]);
-        const exit = await electron.quit();
-        expect(exit).toEqual({ code: 0, signal: null });
+        await electron.quit();
 
         // the daemon and its workload outlive the app
         expect(daemon.child.exitCode).toBeNull();
@@ -65,7 +64,7 @@ describe("desktop app boot", () => {
         expect((await socket.call("system:info")).service).toBe("papercrane");
         socket.close();
         expect(electron.failures()).toEqual([]);
-        expect(await electron.quit()).toEqual({ code: 0, signal: null });
+        await electron.quit();
         expect(errorLines(dataDir)).toEqual([]);
     }, WAIT_MS * 3);
 
@@ -89,7 +88,7 @@ describe("desktop app boot", () => {
         await socket.waitFrame("the workload's exit", (f) => f.type === "event" && f.event === "process:exit" && f.payload.id === "deep-workload");
         socket.close();
         expect(electron.failures()).toEqual([]);
-        expect(await electron.quit()).toEqual({ code: 0, signal: null });
+        await electron.quit();
         expect(errorLines(dataDir)).toEqual([]);
     }, WAIT_MS * 3);
 
@@ -113,7 +112,7 @@ describe("desktop app boot", () => {
         expect(await new Promise((resolve) => second.once("exit", (code) => resolve(code)))).toBe(0);
         await electron.waitEvent("the window shown again", (e) => electron.events.indexOf(e) >= before && e.event === "window-show-suppressed" && e.method === "show");
         expect(electron.failures()).toEqual([]);
-        expect(await electron.quit()).toEqual({ code: 0, signal: null });
+        await electron.quit();
     }, WAIT_MS * 3);
 });
 

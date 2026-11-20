@@ -28,7 +28,7 @@ import { buildCrane, startCrane, type Crane } from "testkit/craneBinary";
 import { installDevPanelInto, type DevPanel } from "../../../scripts/devPanel";
 import { IPHONE_16_PRO } from "../../../src/main/mobileMock";
 import viteConfig from "../../../electron.vite.config";
-import { ANSWER } from "./protocol";
+import { ANSWER, type Command, type CommandResult } from "./protocol";
 import { reapOnExit, type Reaper } from "./reaper";
 
 export { API_DEMO, WIDGET_DEMO, type DevPanel } from "../../../scripts/devPanel";
@@ -100,7 +100,7 @@ export interface Shell {
     dataDir: string;
     daemon: Crane;
     /** a command for the shell host (host.main.ts); resolves to its answer */
-    host<T = unknown>(command: Record<string, unknown>): Promise<T>;
+    host<C extends Command>(command: C): Promise<CommandResult<C>>;
     /** pairs a second daemon as `name` through the shell's computer-pair call, as Add Computer does;
      * returns its computer id, daemon, and the call's whole answer.
      * It listens on 127.0.0.2, so Paperboard dials it as another computer (TLS, pinned certificate),
@@ -227,7 +227,7 @@ export async function bootShell(options: BootOptions = {}): Promise<Shell> {
             await exited;
         });
         let nextId = 1;
-        const ask = <T>(seq: number, command: Record<string, unknown>) =>
+        const ask = <T>(seq: number, command: unknown) =>
             new Promise<T>((resolve, reject) => {
                 const timer = setTimeout(() => reject(new Error(`The shell host did not answer ${JSON.stringify(command)}:\n${output}`)), WAIT_MS);
                 answers.set(seq, {
@@ -237,9 +237,9 @@ export async function bootShell(options: BootOptions = {}): Promise<Shell> {
                 if (seq !== 0) child.stdin!.write(`${JSON.stringify({ seq, command })}\n`);
             });
         await ask<string>(0, {});
-        const host = <T>(command: Record<string, unknown>) => ask<T>(nextId++, command);
+        const host = <C extends Command>(command: C) => ask<CommandResult<C>>(nextId++, command);
 
-        const page = await openChrome(await host<string>({ cmd: "sign-in-url" }), { init: options.init });
+        const page = await openChrome(await host({ cmd: "sign-in-url" }), { init: options.init });
         stops.push(() => page.close());
         if (options.phone) {
             // the mobile mock's viewport and touch (mobileMock.ts emulatePhone);

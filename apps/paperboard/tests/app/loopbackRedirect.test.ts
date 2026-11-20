@@ -1,7 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import * as net from "node:net";
 import { catchLoopbackRedirect, LoopbackRedirectFailure } from "../../src/main/loopbackRedirect";
-import { createFrameLoopbackRedirects } from "../../src/renderer/src/lib/panelLoopbackRedirect";
+import { createFrameLoopbackRedirects, type LoopbackRedirectHost } from "../../src/renderer/src/lib/panelLoopbackRedirect";
+import type { CallAnswer, CallArgs, ShellCall } from "../../src/shared/shellContract";
 
 const PAGE = "<p>Signed in. You can close this tab.</p>";
 
@@ -107,12 +108,12 @@ describe("catching a loopback sign-in redirect", () => {
     });
 
     test("the frame side answers local for this computer and waits remotely under the shell's own id", async () => {
-        const calls: Array<{ channel: string; args: any }> = [];
-        const host = {
+        const calls: Array<{ channel: ShellCall; args: Partial<CallArgs<"panel-loopback-redirect">> }> = [];
+        const host: LoopbackRedirectHost = {
             browser: () => false,
-            invoke: async <T,>(channel: string, args: unknown): Promise<T> => {
-                calls.push({ channel, args });
-                return { status: "caught", url: "http://localhost:4000/cb?code=1" } as T;
+            invoke: async (channel, ...args) => {
+                calls.push({ channel, args: (args[0] ?? {}) as Partial<CallArgs<"panel-loopback-redirect">> });
+                return { status: "caught", url: "http://localhost:4000/cb?code=1" } as CallAnswer<typeof channel>;
             },
         };
         const local = createFrameLoopbackRedirects("local", host);

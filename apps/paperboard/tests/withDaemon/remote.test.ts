@@ -233,7 +233,7 @@ describe("paired computers", () => {
 			expect((await client.connect(REMOTE_HOST, hop.port, token, cert)).connected).toBe(true);
 			remote.instance.auth.revokeToken(token);
 			// the daemon checks the credential on the socket's next frame
-			await client.call("system:info").then(
+			await client.call("system:info", {}).then(
 				() => {
 					throw new Error("a revoked pairing answered a call");
 				},

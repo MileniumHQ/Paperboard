@@ -7,7 +7,7 @@ import { supervisorLaunch } from "../../src/workloads/supervisorLaunch";
 import { PaperCraneAuth } from "../../src/security/auth";
 import { PanelServicesManager } from "../../src/panels/panelServices";
 import { WorkloadRegistry } from "../../src/engine/workloads";
-import { killWorkloads, startCrane, workloadRecords, type CraneProcess } from "testkit/crane";
+import { killWorkloads, startCrane, workloadRecords, type CraneProcess, type StartCraneOptions } from "testkit/crane";
 import { dataDir, restoreEnv, tempDir } from "testkit/fs";
 import { installPanelFiles, serviceCall, serviceSource, stateRead } from "testkit/panels";
 import { Rpc } from "testkit/rpc";
@@ -22,7 +22,7 @@ afterAll(async () => {
 	for (const dir of dirs) await killWorkloads(dir);
 });
 
-async function crane(dir = dataDir(), options: { headless?: boolean } = {}): Promise<CraneProcess> {
+async function crane(dir = dataDir(), options: Omit<StartCraneOptions, "dataDir"> = {}): Promise<CraneProcess> {
 	if (!dirs.includes(dir)) dirs.push(dir);
 	const started = await startCrane({ dataDir: dir, ...options });
 	cranes.push(started);

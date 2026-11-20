@@ -6,8 +6,9 @@
 // Each case is a real test process driving a real headless Chrome, with a
 // TMPDIR of its own to inspect.
 import { describe, expect, test } from "bun:test";
-import { launchChrome } from "../src/chrome";
-import { mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
+import { launchChrome, START_TURN } from "../src/chrome";
+import { waitFor, within } from "../src/wait";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -126,5 +127,51 @@ test("pages sharing a Chrome share no storage or cookies", async () => {
     } finally {
         await chrome.close();
         server.stop(true);
+    }
+}, 30_000);
+
+// Chromes started at once on a busy machine share its CPU and each misses
+// its deadline still starting (#39), so a start waits for the one before it,
+// in any test process; and a process that dies mid-start doesn't leave the
+// rest waiting on it.
+test("a Chrome starts in its turn, and the turn of a process that died starting one passes on", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "pbct-"));
+    // a Chrome that never opens its port, so its starter holds the turn; a
+    // shell that loops, so its command line names the dir it is found by
+    const stuck = join(dir, "stuck-chrome");
+    writeFileSync(stuck, "#!/bin/sh\nwhile :; do sleep 1; done\n", { mode: 0o755 });
+    mkdirSync(join(dir, "holder"));
+    mkdirSync(join(dir, "next"));
+    const starter = (env: Record<string, string>) =>
+        Bun.spawn([process.execPath, "-e", `import { startChrome } from ${JSON.stringify(DRIVER)}; const chrome = await startChrome(); console.log("open"); await chrome.stop();`], {
+            env: { ...process.env, ...env },
+            stdout: "pipe",
+            stderr: "inherit",
+        });
+    const holder = starter({ CHROME_PATH: stuck, TMPDIR: join(dir, "holder") });
+    let next: ReturnType<typeof starter> | null = null;
+    try {
+        await waitFor("the stuck start to hold the turn", () => existsSync(START_TURN) && readFileSync(START_TURN, "utf8") === String(holder.pid));
+        next = starter({ TMPDIR: join(dir, "next") });
+        let opened = false;
+        const output = new Response(next.stdout).text().then((text) => {
+            opened = true;
+            return text;
+        });
+        // quiet: the window in which the next Chrome must not start; unheld, it starts and stops in well under it
+        await Bun.sleep(2_000);
+        expect(opened).toBe(false);
+        // it makes its profile only once it has the turn
+        expect(readdirSync(join(dir, "next"))).toEqual([]);
+        holder.kill("SIGKILL");
+        expect(await within("the next Chrome to start", output)).toBe("open\n");
+        expect(await next.exited).toBe(0);
+    } finally {
+        holder.kill("SIGKILL");
+        next?.kill("SIGKILL");
+        await Promise.all([holder.exited, next?.exited]);
+        // the stuck Chrome goes with its starter's reaper
+        await waitFor("the stuck Chrome to be reaped", () => processesIn(dir).size === 0);
+        rmSync(dir, { recursive: true, force: true, maxRetries: 10 });
     }
 }, 30_000);

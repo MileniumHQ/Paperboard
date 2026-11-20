@@ -1,9 +1,12 @@
-import { afterEach, describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, setDefaultTimeout, test } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
 import { HomeFolder, moveHomeFolder } from "../../src/service/homeFolder";
 import { shellToolset } from "../../src/service/shell";
-import { tempDir } from "../support/host";
+import { SLOW, tempDir } from "../support/host";
+
+// the shell loads just-bash and its WebAssembly on the first command, which a loaded runner takes seconds over
+setDefaultTimeout(SLOW);
 
 const dirs: string[] = [];
 afterEach(() => {

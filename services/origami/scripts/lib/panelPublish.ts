@@ -153,7 +153,7 @@ export interface PublishContext {
 }
 
 function sha256Hex(bytes: Uint8Array): Promise<string> {
-    return crypto.subtle.digest("SHA-256", bytes).then((buf) =>
+    return crypto.subtle.digest("SHA-256", new Uint8Array(bytes)).then((buf) =>
         Array.from(new Uint8Array(buf))
             .map((b) => b.toString(16).padStart(2, "0"))
             .join(""),

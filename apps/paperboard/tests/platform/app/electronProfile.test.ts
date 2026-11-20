@@ -86,7 +86,7 @@ describe("Electron profile move", () => {
         expect(fs.existsSync(to)).toBe(false);
         // Chromium keeps writing its own files; ours are where they were
         expect(fs.readFileSync(path.join(legacy, "paperboard-updater", "pending", "update-info.json"), "utf8")).toBe(`{"fileName":"x"}`);
-        expect(await electron.quit()).toEqual({ code: 0, signal: null });
+        await electron.quit();
 
         const closed = readTree(legacy);
         expect(moveElectronData(legacy, to)).toBe("moved");

@@ -3,6 +3,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { secretsApi } from "@mileniumhq/paperapi";
 import { startTestDaemon, type TestDaemon } from "./helpers/crane";
+import { pickCall } from "./helpers/serverCall";
 import { gameServer, type GameServer } from "./helpers/game";
 import { DEFAULT_PALWORLD_INI, freePort, installPalworld } from "./helpers/palworld";
 import { PANEL_ID } from "../src/servers";
@@ -37,7 +38,7 @@ const entry = (text: string, key: string) => parseOptionSettings(text).find((e) 
 const vault = async (server: GameServer, name: string) => (await secretsApi.get(`${server.server.id}-palworld-${name}`, PANEL_ID)).value ?? "";
 /** the Files tab opening the settings file; it runs after any cleanup already queued */
 const settled = (server: GameServer) => server.server.game.assertFileAccess!(INI, false);
-const action = async (server: GameServer, id: string) => (await server.server.game.calls())[id]!;
+const action = async (server: GameServer, id: string) => pickCall(await server.server.game.calls(), id);
 
 // Secrets stay out of files and the console.
 describe("secrets", () => {

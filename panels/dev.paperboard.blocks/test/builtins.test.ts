@@ -319,15 +319,13 @@ describe("web blocks", () => {
     });
 
     test("an answer longer than the most a block takes fails, and is read no further", async () => {
-        const err = await web("GET", `${base}/endless`, null, "TEXT", new AbortController().signal).catch((e) => e);
-        expect(err.message).toBe(`${base}/endless answered with more than ${WEB_MAX_CHARS} characters`);
+        await expect(web("GET", `${base}/endless`, null, "TEXT", new AbortController().signal)).rejects.toThrow(`${base}/endless answered with more than ${WEB_MAX_CHARS} characters`);
     });
 
     test("a stop while the answer is being read stops the block, and says so", async () => {
         const stop = new AbortController();
         reading = () => stop.abort();
-        const err = await web("GET", `${base}/stalls`, null, "TEXT", stop.signal).catch((e) => e);
-        expect(err.message).toBe("The run was stopped");
+        await expect(web("GET", `${base}/stalls`, null, "TEXT", stop.signal)).rejects.toThrow("The run was stopped");
     });
 
     test("plain http reaches only this computer, and only web addresses are fetched", () => {

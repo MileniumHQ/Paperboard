@@ -33,6 +33,7 @@ import {
     PaperSlidePage,
     PaperSplit,
     PaperText,
+    PaperTextList,
     PaperToggle,
     createPolling,
     showError,
@@ -394,6 +395,31 @@ const scenarios: Record<string, () => JSX.Element> = {
         ));
     },
 
+    textListMargins() {
+        window.t = {};
+        const own = document.createElement("style");
+        own.textContent = ".own-margin { margin-top: 12px; }";
+        document.head.prepend(own);
+        return shell(() => (
+            <div id="column" style={{ display: "flex", "flex-direction": "column", gap: "8px" }}>
+                <PaperText preset="body" as="p">Before</PaperText>
+                <PaperTextList><li>One</li><li>Two</li></PaperTextList>
+                <PaperTextList ordered><li>One</li><li>Two</li></PaperTextList>
+                <PaperTextList class="own-margin"><li>Own margin</li></PaperTextList>
+                <PaperMarkdown text={"Before\n\n- one\n- two\n\n1. first\n2. second\n\nAfter"} />
+            </div>
+        ));
+    },
+
+    textListModal() {
+        window.t = {};
+        return shell(() => (
+            <PaperModal open onClose={() => {}} title="List">
+                <PaperTextList><li>One</li><li>Two</li></PaperTextList>
+            </PaperModal>
+        ));
+    },
+
     markdownAnchors() {
         window.t = {};
         const filler = lines(1, 40).join("\n\n");
@@ -497,7 +523,7 @@ const scenarios: Record<string, () => JSX.Element> = {
         return shell(() => (
             <div style={{ padding: "24px" }}>
                 <label id="free" style={row}>
-                    <PaperToggle name="notify" onChange={(v) => t.changes.push(v)} />
+                    <PaperToggle name="notify" onChange={(v) => void t.changes.push(v)} />
                     <span id="free-text">Notifications</span>
                 </label>
                 <label id="controlled" style={row}>
@@ -511,7 +537,7 @@ const scenarios: Record<string, () => JSX.Element> = {
                     <span id="controlled-text">Controlled</span>
                 </label>
                 <label id="disabled" style={row}>
-                    <PaperToggle disabled onChange={(v) => t.disabledChanges.push(v)} />
+                    <PaperToggle disabled onChange={(v) => void t.disabledChanges.push(v)} />
                     <span id="disabled-text">Disabled</span>
                 </label>
             </div>

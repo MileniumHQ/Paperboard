@@ -4,4 +4,5 @@
 import { afterAll } from "bun:test";
 import { cleanupSuite } from "./temp";
 
-afterAll(() => cleanupSuite());
+// waits for what it kills to exit (temp.ts), so it gets longer than a test
+afterAll(() => cleanupSuite(), 60_000);

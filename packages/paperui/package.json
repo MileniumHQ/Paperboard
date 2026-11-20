@@ -35,6 +35,7 @@
     },
     "scripts": {
         "build": "tsc --noEmit && vite build && cp src/styles/panel.css src/styles/colors.css dist/ && sed '/^@import /d' src/styles/styles.css > dist/tokens.css",
+        "typecheck:tests": "tsc --noEmit -p tsconfig.tests.json",
         "test": "bash scripts/check-styling.sh && bun ../testkit/src/withChrome.ts --no-sandbox --disable-gpu --disable-extensions --mute-audio --autoplay-policy=document-user-activation-required --force-color-profile=srgb --disable-smooth-scrolling vitest run"
     },
     "devDependencies": {

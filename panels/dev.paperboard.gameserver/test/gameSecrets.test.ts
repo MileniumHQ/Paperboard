@@ -3,6 +3,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { secretsApi } from "@mileniumhq/paperapi";
 import { startTestDaemon, type TestDaemon } from "./helpers/crane";
+import { pickCall } from "./helpers/serverCall";
 import { gameServer, type GameServer } from "./helpers/game";
 import { freePort, installPalworld } from "./helpers/palworld";
 import { placeStandIn } from "./helpers/standIn";
@@ -20,11 +21,7 @@ afterAll(async () => {
     await daemon?.stop();
 });
 
-const call = async (server: GameServer, id: string, input: unknown) => {
-    const def = (await server.server.game.calls())[id];
-    if (!def) throw new Error(`${server.server.stored.game} has no call ${id}`);
-    return def(server.server, input);
-};
+const call = async (server: GameServer, id: string, input: unknown) => pickCall(await server.server.game.calls(), id)(server.server, input);
 const vault = async (server: GameServer, name: string) => (await secretsApi.get(`${server.server.id}-${server.server.stored.game}-${name}`, PANEL_ID)).value ?? "";
 /** every file in the server folder that holds `text` */
 function filesHolding(root: string, text: string): string[] {

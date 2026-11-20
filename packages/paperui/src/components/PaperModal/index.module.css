@@ -173,13 +173,6 @@
     flex: 1;
 }
 
-/* The body is a flex column with a gap, and the whole dialog clips to its
-   rounded border. A list's margins would stack on top of that gap and push
-   the content off the rounded top edge. */
-.body :is(ul, ol) {
-    margin: 0;
-}
-
 .noPadding {
     padding: 0 !important;
     gap: 0 !important;

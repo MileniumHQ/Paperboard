@@ -18,7 +18,7 @@ import { SourceGame } from "./instance";
 import { linkLogs, release, removeSecrets, rewriteConfigs, writeConfigs } from "./files";
 import { mapAvailable, mapCalls } from "./rotation";
 import { modCalls, modsOn } from "./modLinks";
-import { playerBlocks, playerCalls } from "./people";
+import { playerBlocks, playerCalls, readStatus } from "./people";
 import { DEFAULT_CLIENT_PORT, prepareLaunch } from "./launch";
 
 /** the colours some servers (Garry's Mod's) write into their console lines */
@@ -92,7 +92,7 @@ export function sourceService(spec: SourceGameSpec, definition: GameDefinition):
                     game.secrets = [password, await game.joinPassword.value(), await game.loginToken.value()].filter(Boolean);
                     // the links are what the server started with: placeMods makes them only at a start
                     game.modsActive = (await modsOn(game)) && (await isLinked(path.join(await game.gameDir(), "addons")));
-                    await game.players.readStatus().catch((err) => report(ctx, `Could not read who is on ${spec.name}`, err));
+                    await readStatus(game).catch((err) => report(ctx, `Could not read who is on ${spec.name}`, err));
                 } else await releaseFiles().catch((err) => report(ctx, `Could not put ${spec.name}'s files back after its last run`, err));
             },
             async beforeRemove() { if (game.busy) throw new Error(`Wait for ${spec.name}'s current operation`); },
@@ -107,7 +107,7 @@ export function sourceService(spec: SourceGameSpec, definition: GameDefinition):
             afterStop: releaseFiles,
             isMutating: () => game.busy,
             readiness: { timeoutMs: 300_000, async probe() {
-                try { await game.players.readStatus(); }
+                try { await readStatus(game); }
                 catch (err) {
                     // RCON listens once the map has loaded, and a reply lost to a
                     // scanner's banned RCON attempt is asked for again

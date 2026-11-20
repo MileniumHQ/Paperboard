@@ -25,14 +25,26 @@ const JOINED_SCHEMA = {
 const WAIT = registryBlockType({ kind: "command", panelId: GAME, entry: "command.wait" });
 const FLOW_FAILED = registryBlockType({ kind: "event", panelId: PANEL_ID, entry: `event.${FLOW_FAILED_EVENT}` });
 
+/** A block as the tests write it: ids are given to it (and what it holds) once a flow is saved. */
+type Draft = Omit<SavedBlock, "id" | "inputs"> & { inputs?: Record<string, { block?: Draft; shadow?: Draft }> };
+const identified = (draft: Draft, id: string): SavedBlock => {
+    const { inputs, ...rest } = draft;
+    if (!inputs) return { ...rest, id };
+    const held = (name: string, input: { block?: Draft; shadow?: Draft }) => ({
+        ...(input.block && { block: identified(input.block, `${id}.${name}`) }),
+        ...(input.shadow && { shadow: identified(input.shadow, `${id}.${name}.shadow`) }),
+    });
+    return { ...rest, id, inputs: Object.fromEntries(Object.entries(inputs).map(([name, input]) => [name, held(name, input)])) };
+};
+
 const text = (t: string) => ({ shadow: { type: "text", fields: { TEXT: t } } });
-const say = (t: string): SavedBlock => ({ type: BUILTIN.log, inputs: { TEXT: text(t) } });
-const flows = (...hats: SavedBlock[]): SavedFlows => ({
-    workspace: { blocks: { languageVersion: 0, blocks: hats.map((hat, i) => ({ id: `hat${i}`, x: 0, y: i * 100, ...hat })) } },
+const say = (t: string): Draft => ({ type: BUILTIN.log, inputs: { TEXT: text(t) } });
+const flows = (...hats: Draft[]): SavedFlows => ({
+    workspace: { blocks: { languageVersion: 0, blocks: hats.map((hat, i) => ({ x: 0, y: i * 100, ...identified(hat, `hat${i}`) })) } },
     schemas: { [JOINED]: { panelId: GAME, entry: "event.joined", schema: JOINED_SCHEMA } },
 });
-const joined = (player: string, then: SavedBlock): SavedBlock => ({ type: JOINED, inputs: { player: text(player), DO: { block: then } } });
-const onRun = (then: SavedBlock): SavedBlock => ({ type: BUILTIN.onRun, inputs: { DO: { block: then } } });
+const joined = (player: string, then: Draft): Draft => ({ type: JOINED, inputs: { player: text(player), DO: { block: then } } });
+const onRun = (then: Draft): Draft => ({ type: BUILTIN.onRun, inputs: { DO: { block: then } } });
 
 /** Lets the runtime's promises run; it answers nothing from a timer. */
 async function until(what: string, holds: () => boolean): Promise<void> {
@@ -62,7 +74,7 @@ function setup(options: { storage?: ProjectStorage; handle?: (handle: BlocksHand
         onChange: (panelId, value, callback, project) => listen(`${panelId} ${project ?? ""}/value.${value}`, () => callback()),
         run: (async (_panelId: string, command: string) => {
             if (command !== "wait") throw new Error(`the test has no command "${command}"`);
-            return new Promise((resolve) => waiting.push({ resolve }));
+            return new Promise<unknown>((resolve) => waiting.push({ resolve }));
         }) as RuntimeDeps["blocks"]["run"],
         read: (async () => {
             throw new Error("the test reads nothing");

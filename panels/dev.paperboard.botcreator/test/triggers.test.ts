@@ -35,7 +35,7 @@ describe("command events stay bound", () => {
         await startService({ discordApi: discord.api });
         await stateWhere<BotsServiceState>(PANEL_ID, (s) => Boolean(s.bots[0]?.connected), "the bot to connect");
 
-        const roll = { bot: BOT, name: "roll", description: "Roll a die", options: [{ name: "sides", description: "How many sides", type: "integer", required: true }] };
+        const roll = { bot: BOT, name: "roll", description: "Roll a die", options: [{ name: "sides", description: "How many sides", type: "integer" as const, required: true }] };
         const globalRoll = commandEventId({ scope: GLOBAL_SCOPE, name: "roll" });
         const homeRoll = commandEventId({ scope: home.id, name: "roll" });
         const first = await call.createCommand(roll);

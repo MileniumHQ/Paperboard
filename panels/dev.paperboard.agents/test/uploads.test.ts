@@ -99,7 +99,7 @@ describe("the agent's files in a message", () => {
 
     test("send_message carries file ids in a chat, and refuses a list that isn't one", async () => {
         const { said, tools } = texter();
-        expect(tools.tools({ fromFlow: false }).find((t) => t.name === "send_message")?.inputSchema.properties).toHaveProperty("files");
+        expect((await tools.tools({ fromFlow: false })).find((t) => t.name === "send_message")?.inputSchema.properties).toHaveProperty("files");
         expect((await tools.call("send_message", { text: "", files: ["0123456789ab"] }, { fromFlow: false })).isError).toBeFalsy();
         expect(said).toEqual([{ text: "", files: ["0123456789ab"] }]);
         expect((await tools.call("send_message", { text: "hi", files: "0123456789ab" }, { fromFlow: false })).isError).toBe(true);

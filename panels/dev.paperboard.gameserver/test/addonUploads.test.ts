@@ -8,7 +8,8 @@ import { uploadDatapacks, uploadPlugins, type UploadDeps } from "../src/service/
 
 const STAGE = "0f8fad5b-d9cb-469f-a165-70867728950e";
 const STAGE_DIR = `.paperboard-transfer/addon-${STAGE}`;
-const zip = (entries: Record<string, string>) => zipSync(Object.fromEntries(Object.entries(entries).map(([k, v]) => [k, strToU8(v)])));
+// a zip records when its entries were made: one moment for all, so the same entries make the same bytes
+const zip = (entries: Record<string, string>) => zipSync(Object.fromEntries(Object.entries(entries).map(([k, v]) => [k, strToU8(v)])), { mtime: "2024-01-01T00:00:00Z" });
 const plugin = (name: string) => zip({ "plugin.yml": `name: ${name}\nmain: x.Main\n`, "x/Main.class": "class" });
 
 /** a server folder with an upload staged; deps are the real filesystem and an in-memory config */

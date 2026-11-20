@@ -1,11 +1,12 @@
 // What this suite makes and must take down again: throwaway directories,
-// the processes it started, and the workloads those started. bun test runs
+// the processes it started, and the processes those started. bun test runs
 // no process "exit" handlers, so preload.ts calls cleanupSuite() from a
 // global afterAll once every file has run.
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import type { ChildProcess } from "node:child_process";
+import { processTree, readProcessTable } from "daemon/system/usage";
 
 const made: string[] = [];
 // folders made to hold temp dirs off the temp dir's drive, removed once empty
@@ -58,7 +59,8 @@ const alive = (pid: number) => {
 
 // supervisors (and their workloads) a daemon started in one of our data
 // dirs outlive that daemon by design; they are ours, so they end here
-function endWorkloads(dir: string): void {
+function workloadPids(dir: string): number[] {
+    const pids: number[] = [];
     for (const sockets of [path.join(dir, "sockets"), path.join(dir, "data", "sockets")]) {
         if (!fs.existsSync(sockets)) continue;
         for (const file of fs.readdirSync(sockets).filter((f) => f.endsWith(".json"))) {
@@ -66,17 +68,67 @@ function endWorkloads(dir: string): void {
             // a record copied in from a fixture names some other run's pids
             if (!(Date.parse(meta.startedAt) >= SUITE_STARTED)) continue;
             for (const pid of [meta.pid, meta.childPid]) {
-                if (typeof pid === "number" && pid > 0 && pid !== process.pid && alive(pid)) process.kill(pid, "SIGKILL");
+                if (typeof pid === "number" && pid > 0 && pid !== process.pid && alive(pid)) pids.push(pid);
             }
         }
     }
+    return pids;
 }
 
-export function cleanupSuite(): void {
-    for (const child of children) {
-        if (child.exitCode === null && child.signalCode === null) child.kill("SIGKILL");
+const GONE_WITHIN_MS = 30_000;
+
+// Ends what this suite still runs (a daemon or an app a failed test never
+// stopped, the services, supervisors and renderers those started) and
+// returns once every one of them has exited. A killed process lets go of
+// its files only then, and until it does Windows refuses to remove the
+// program it runs from (the compiled crane every service runs) or a folder
+// it holds open. Only running roots are followed (an exited one's pid may
+// already belong to someone else's process), and processTree takes no
+// process that started before the one now holding its parent's pid: the
+// installed app's supervisors, say, whose old daemon's pid one of ours got.
+async function endOurProcesses(): Promise<void> {
+    const roots = [...children].filter((c) => c.exitCode === null && c.signalCode === null).map((c) => c.pid!);
+    roots.push(...made.flatMap(workloadPids));
+    if (roots.length === 0) return;
+    // read while the roots still run, so every tree is whole
+    const tree = processTree(await readProcessTable(), roots, (pid) => pid === process.pid);
+    for (const pid of tree) if (alive(pid)) process.kill(pid, "SIGKILL");
+    const deadline = Date.now() + GONE_WITHIN_MS;
+    let left = tree.filter(alive);
+    while (left.length > 0) {
+        if (Date.now() > deadline) throw new Error(`processes this suite started still ran ${GONE_WITHIN_MS} ms after they were killed: ${left.join(", ")}`);
+        // quiet: most of these are not our children, so there is no exit event to wait on; bounded by the deadline above
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        left = left.filter(alive);
     }
-    for (const dir of made) endWorkloads(dir);
-    for (const dir of made) fs.rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+}
+
+const REMOVABLE_WITHIN_MS = 5_000;
+
+// Removes a folder whose processes have all exited. On Windows a killed
+// program's file stays locked for a moment after its process is reported
+// gone: on CI, removing the crane folder right after its daemon and services
+// ended failed with EPERM, and the same removal succeeded 100 ms later. So
+// there, and only for EPERM or EBUSY, it waits for the folder to become
+// removable; anywhere else, or past the deadline, the error stands.
+async function removeDir(dir: string): Promise<void> {
+    const deadline = Date.now() + REMOVABLE_WITHIN_MS;
+    for (;;) {
+        try {
+            fs.rmSync(dir, { recursive: true, force: true });
+            return;
+        } catch (err) {
+            const code = (err as NodeJS.ErrnoException).code;
+            if (process.platform !== "win32" || (code !== "EPERM" && code !== "EBUSY")) throw err;
+            if (Date.now() > deadline) throw new Error(`${dir} was still locked ${REMOVABLE_WITHIN_MS} ms after every process in it had exited: ${(err as Error).message}`);
+        }
+        // quiet: Windows says nothing when it lets go of the file; bounded by the deadline above
+        await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+}
+
+export async function cleanupSuite(): Promise<void> {
+    await endOurProcesses();
+    for (const dir of made) await removeDir(dir);
     for (const base of bases) if (fs.readdirSync(base).length === 0) fs.rmdirSync(base);
 }

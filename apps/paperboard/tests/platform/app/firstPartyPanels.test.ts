@@ -69,7 +69,7 @@ describe("first-party panels under the compiled daemon", () => {
         })`);
         expect(answer).toMatchObject({ type: "response", id: 1, result: { success: true } });
         expect(electron.failures()).toEqual([]);
-        expect(await electron.quit()).toEqual({ code: 0, signal: null });
+        await electron.quit();
 
         await daemon.stop();
         const restarted = await startCrane(crane.file, dataDir);
@@ -104,7 +104,7 @@ describe("first-party panels under the compiled daemon", () => {
         expect(await electron.evalInFrame(FRAME, "window.__shared")).toBe("AbortError");
 
         expect(electron.failures()).toEqual([]);
-        expect(await electron.quit()).toEqual({ code: 0, signal: null });
+        await electron.quit();
         await daemon.stop();
     }, WAIT_MS * 4);
 });

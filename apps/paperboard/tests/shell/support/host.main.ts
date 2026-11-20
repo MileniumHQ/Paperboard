@@ -27,7 +27,7 @@ import { launchOptionsFromArgv } from "../../../src/shared/launchOptions";
 import { initialAppUpdateState, type AppUpdateState } from "../../../src/shared/appUpdate";
 import { initialUpdateQueueState, type UpdateQueueState } from "../../../src/shared/updateQueue";
 import { cancelGoogleSignIn, signInToGoogleDrive } from "../../../src/main/googleOAuth";
-import { ANSWER } from "./protocol";
+import { ANSWER, type Command, type HostCommands } from "./protocol";
 
 const rendererDir = process.argv[2];
 if (!rendererDir) throw new Error("usage: host.main.ts <built renderer dir>");
@@ -112,29 +112,30 @@ connectionPool.on("change", () =>
     pushToShells("computers-changed", { computers: connectionPool.listComputers(), activeId: connectionPool.getActiveId() }),
 );
 
-type Command =
-    | { cmd: "sign-in-url" }
-    | { cmd: "push-update-queue"; state: UpdateQueueState }
-    | { cmd: "push-app-update"; state: AppUpdateState }
-    | { cmd: "google-sign-ins"; atLeast: number };
+// each command's handler, held to the answer protocol.ts declares for it
+const handlers: { [K in keyof HostCommands]: (command: HostCommands[K]["command"]) => Promise<HostCommands[K]["result"]> } = {
+    "sign-in-url": async () => host.signInUrl(),
+    "push-update-queue": async (command) => {
+        updateQueue = command.state;
+        pushToShells("update-queue", updateQueue);
+        return true;
+    },
+    "push-app-update": async (command) => {
+        appUpdate = command.state;
+        pushToShells("app-update-state", appUpdate);
+        return true;
+    },
+    // resolves with how many Google sign-ins opened a browser, once at least that many have
+    "google-sign-ins": async (command) => {
+        while (googleSignIns < command.atLeast) await new Promise<void>((wake) => googleSignInWaiters.push(wake));
+        return googleSignIns;
+    },
+};
 
 async function run(command: Command): Promise<unknown> {
-    switch (command.cmd) {
-        case "sign-in-url":
-            return host.signInUrl();
-        case "push-update-queue":
-            updateQueue = command.state;
-            pushToShells("update-queue", updateQueue);
-            return true;
-        case "push-app-update":
-            appUpdate = command.state;
-            pushToShells("app-update-state", appUpdate);
-            return true;
-        case "google-sign-ins":
-            // resolves with how many Google sign-ins opened a browser, once at least that many have
-            while (googleSignIns < command.atLeast) await new Promise<void>((wake) => googleSignInWaiters.push(wake));
-            return googleSignIns;
-    }
+    // a command from a test built against another host (or past the types) has no handler
+    if (!Object.hasOwn(handlers, command.cmd)) throw new Error(`unknown command ${command.cmd}`);
+    return (handlers[command.cmd] as (command: Command) => Promise<unknown>)(command);
 }
 
 const reply = (seq: number, body: { result?: unknown; error?: string }) => process.stdout.write(`${ANSWER}${JSON.stringify({ seq, ...body })}\n`);

@@ -35,7 +35,6 @@ function failingRename(fail: (from: string, to: string) => boolean, alsoFailRest
         mkdir: (p, o) => nodeFs.mkdir(p, o),
         readdir: (p) => nodeFs.readdir(p),
         rm: (p, o) => nodeFs.rm(p, o),
-        writeFile: (p, d) => nodeFs.writeFile(p, d),
         readFile: (p, e) => nodeFs.readFile(p, e),
         lstat: (p) => nodeFs.lstat(p),
         rename: async (from, to) => {

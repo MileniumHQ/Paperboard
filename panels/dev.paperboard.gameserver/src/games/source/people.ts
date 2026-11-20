@@ -2,12 +2,13 @@
 // lines and `status` name, the stats they gather on the way to the roster,
 // and the calls and blocks that kick and ban them.
 import type { ServerCalls } from "../../service/calls";
+import type { Server } from "../../service/server";
 import { TRIGGER_IDS } from "../../service/contract";
 import { appendCapped } from "../../service/types";
 import { pushChat, report } from "../serviceKit";
 import { SOURCE_CALLS as ids } from "./index";
 import { parseStatus, type SourceLogEvent } from "./log";
-import { mergeStats, noStats, type SourceStats } from "./roster";
+import { mergeStats, noStats, type SourceGathered, type SourceRoster, type SourceStats } from "./roster";
 import { rewriteConfigs } from "./files";
 import { mods, modsOn } from "./modLinks";
 import type { SourceGame } from "./instance";
@@ -26,6 +27,30 @@ export interface SourceOnline {
     stats: SourceStats;
 }
 
+/** A player a server's own listing (`status`) names. */
+export interface SourceListed {
+    userId: number;
+    name: string;
+    /** "" when the listing names no Steam id; the game log names it as they join */
+    steamId: string;
+    since: number;
+}
+
+/** What SourcePlayers keeps track for: one server of a Source game. */
+export interface SourcePlayersHost {
+    readonly server: Server;
+    /** Paperboard's players and bans of the server */
+    roster(): SourceRoster;
+    /** whether a log or status id is a person's, in the form the game writes */
+    isPlayer(id: string): boolean;
+    /**
+     * A game's own step as a person connects, after they are counted, announced
+     * and recorded: a check of its own on who came in, such as a ban list the
+     * game's server keeps no record of. A failure is shown in the console.
+     */
+    joined?(player: SourceOnline): Promise<void>;
+}
+
 /** how long stats gather before they are written to the roster */
 const STATS_FLUSH_MS = 15_000;
 
@@ -37,16 +62,16 @@ function connectedMs(text: string): number {
 }
 
 export class SourcePlayers {
-    readonly #game: SourceGame;
+    readonly #game: SourcePlayersHost;
     /** who is on, by the server's user id for their connection */
     readonly online = new Map<number, SourceOnline>();
     /** stats not yet in the roster, by Steam id */
-    #unsaved = new Map<string, Partial<SourceStats>>();
+    #unsaved = new Map<string, SourceGathered>();
     /** when each online player's time was last added to their playtime, by user id */
     readonly #counted = new Map<number, number>();
     #statsTimer: ReturnType<typeof setTimeout> | null = null;
 
-    constructor(game: SourceGame) {
+    constructor(game: SourcePlayersHost) {
         this.#game = game;
     }
 
@@ -73,13 +98,15 @@ export class SourcePlayers {
             case "connected": {
                 const p = event.player;
                 const now = Date.now();
-                online.set(p.userId, { userId: p.userId, name: p.name, steamId: p.steamId, team: p.team, since: now, stats: noStats() });
+                const player: SourceOnline = { userId: p.userId, name: p.name, steamId: p.steamId, team: p.team, since: now, stats: noStats() };
+                online.set(p.userId, player);
                 this.#counted.set(p.userId, now);
                 this.#setOnline();
                 if (game.isPlayer(p.steamId)) {
                     pushChat(server, { event: "join", sender: p.name, text: `${p.name} joined the game` });
                     server.trigger(TRIGGER_IDS.playerJoined, p.name);
                     game.roster().remember(p.steamId, p.name).catch((err) => report(server, `Could not record ${p.name}`, err));
+                    game.joined?.(player).catch((err) => report(server, `Could not check ${p.name} as they joined`, err));
                 }
                 return;
             }
@@ -141,16 +168,18 @@ export class SourcePlayers {
         if (!player) return;
         player.stats[key] += 1;
         if (!this.#game.isPlayer(player.steamId)) return;
-        const unsaved = this.#unsavedOf(player.steamId);
+        const unsaved = this.#unsavedOf(player);
         unsaved[key] = (unsaved[key] ?? 0) + 1;
         if (!this.#statsTimer) this.#statsTimer = setTimeout(() => {
             this.#statsTimer = null;
             this.saveStats().catch((err) => report(this.#game.server, "Could not save players' stats", err));
         }, STATS_FLUSH_MS);
     }
-    #unsavedOf(steamId: string): Partial<SourceStats> {
-        const stats = this.#unsaved.get(steamId) ?? {};
-        this.#unsaved.set(steamId, stats);
+    #unsavedOf(player: SourceOnline): SourceGathered {
+        const stats = this.#unsaved.get(player.steamId) ?? { name: player.name };
+        // a rename since is the name they are recorded by
+        stats.name = player.name || stats.name;
+        this.#unsaved.set(player.steamId, stats);
         return stats;
     }
     /** Adds the time since it was last counted to a person's playtime. */
@@ -159,7 +188,7 @@ export class SourcePlayers {
         this.#counted.set(player.userId, now);
         if (!this.#game.isPlayer(player.steamId) || now <= from) return;
         player.stats.playtime += now - from;
-        const unsaved = this.#unsavedOf(player.steamId);
+        const unsaved = this.#unsavedOf(player);
         unsaved.playtime = (unsaved.playtime ?? 0) + now - from;
     }
     /** Writes what has gathered, with everyone's time on so far, to the roster. */
@@ -174,23 +203,26 @@ export class SourcePlayers {
         catch (err) { mergeStats(this.#unsaved, stats); throw err; }
     }
 
-    /** Learns who is on, which map and the player cap from `status`: on start and when reattaching. */
-    async readStatus(): Promise<void> {
+    /**
+     * Who is on by the server's own listing: on start and when reattaching.
+     * Those it no longer lists are gone, and one it lists without a Steam id
+     * keeps the id the game log named.
+     */
+    async present(listed: readonly SourceListed[]): Promise<void> {
         const game = this.#game;
-        const status = parseStatus(await game.rcon().exec("status"));
         const online = this.online;
         const now = Date.now();
         const before = new Map(online);
         online.clear();
-        for (const p of status.players) {
+        for (const p of listed) {
             const known = before.get(p.userId);
-            online.set(p.userId, known?.steamId === p.steamId ? known : { userId: p.userId, name: p.name, steamId: p.steamId, team: "", since: now - connectedMs(p.connected), stats: noStats() });
-            if (!this.#counted.has(p.userId)) this.#counted.set(p.userId, now);
-            if (game.isPlayer(p.steamId) && !known) await game.roster().remember(p.steamId, p.name);
+            const same = known && (!p.steamId || known.steamId === p.steamId) ? known : undefined;
+            online.set(p.userId, same ?? { userId: p.userId, name: p.name, steamId: p.steamId, team: "", since: p.since, stats: noStats() });
+            // a user id the server has given someone else counts their time from now
+            if (!same || !this.#counted.has(p.userId)) this.#counted.set(p.userId, now);
+            if (!same && game.isPlayer(p.steamId)) await game.roster().remember(p.steamId, p.name);
         }
         for (const id of [...this.#counted.keys()]) if (!online.has(id)) this.#counted.delete(id);
-        game.server.setState({ maxPlayers: status.maxPlayers, serverLevel: status.map });
-        if (status.version && game.server.settings.version !== status.version) await game.server.updateSettings({ version: status.version });
         this.#setOnline();
     }
 
@@ -202,6 +234,15 @@ export class SourcePlayers {
         this.#counted.clear();
         this.online.clear();
     }
+}
+
+/** Learns who is on, which map and the player cap from RCON's `status`: on start and when reattaching. */
+export async function readStatus(game: SourceGame): Promise<void> {
+    const status = parseStatus(await game.rcon().exec("status"));
+    const now = Date.now();
+    await game.players.present(status.players.map((p) => ({ userId: p.userId, name: p.name, steamId: p.steamId, since: now - connectedMs(p.connected) })));
+    game.server.setState({ maxPlayers: status.maxPlayers, serverLevel: status.map });
+    if (status.version && game.server.settings.version !== status.version) await game.server.updateSettings({ version: status.version });
 }
 
 /** The calls of the Players tab. */
@@ -240,7 +281,7 @@ export function playerCalls(game: SourceGame): ServerCalls {
 }
 
 /** The game's player blocks: the server kicks by its own user id and bans by Steam id, so a block's player name is looked up among the players online, then the ones it has seen. */
-export async function playerBlocks(game: SourceGame) {
+export async function playerBlocks(game: Pick<SourcePlayersHost, "server" | "roster"> & { readonly players: SourcePlayers }) {
     const { mergeBlocks, onlyIdNamed, playerEvents, rosterBlocks, runGameCall } = await import("../../service/blocks");
     const nameOf = (p: { name: string }) => p.name;
     const steamOf = (p: { steamId: string }) => p.steamId;

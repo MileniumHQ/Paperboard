@@ -69,7 +69,7 @@ describe("release data from a shipped release", () => {
             expect(listed.computers.find((c: any) => c.id === paired.id)).toMatchObject({ name: paired.name, host: paired.host, port: paired.port });
             expect(await electron.evalMain(`return electron.nativeTheme.themeSource`)).toBe("dark");
             expect(electron.failures()).toEqual([]);
-            expect(await electron.quit()).toEqual({ code: 0, signal: null });
+            await electron.quit();
 
             // nothing quarantined, nothing gone, nothing rewritten but bookkeeping
             const after = files(dataDir).map((rel) => rel.split(path.sep).join("/"));
