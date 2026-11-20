@@ -422,7 +422,9 @@ try {
     await page.mouse.down();
     await page.mouse.move(heading.x + heading.width / 2, heading.y + heading.height / 2, { steps: 16 });
     await page.mouse.up();
-    // The icons glide for about half a minute before friction stops them.
+    // Friction acts once per frame, so a glide lasts about 1,600 frames: half
+    // a minute at 60 fps, up to a minute in headless Chromium. The deadline
+    // fails below roughly 18 fps. Damping by elapsed time is tracked in #48.
     await page.locator('[data-play-field][data-play-state="resting"]').waitFor({ state: "attached", timeout: 90_000 });
     assert.deepEqual(await page.evaluate(() => [...new Set(window.__overCopy)]), [], "No frame may show an icon over the copy");
     const outroCopy = await page.evaluate(() => [...document.querySelectorAll(".outro-copy .styled-text-host, .outro-copy .download-cta")].map(element => element.getBoundingClientRect().toJSON()));
