@@ -1,8 +1,7 @@
 import * as fs from "fs";
 import * as path from "path";
 import { errorCode } from "@mileniumhq/paperapi/errors";
-
-const DOWNLOAD_BASE = "https://i.paperboard.dev/pb";
+import { DOWNLOAD_BASE } from "./downloadBase";
 
 // What a Linux install that is not an AppImage needs to offer an update: the
 // feed for its arch, and, for a deb or rpm Paperboard published, that package
@@ -15,8 +14,6 @@ export interface LinuxPackageInstall {
     /** the package Paperboard published that this install came from */
     packageType: "deb" | "rpm" | null;
 }
-
-export { DOWNLOAD_BASE };
 
 export function linuxPackageInstall(resourcesPath: string, arch: string): LinuxPackageInstall {
     if (arch !== "x64" && arch !== "arm64") throw new Error(`Paperboard is not built for Linux ${arch}`);

@@ -50,6 +50,7 @@ bun run build:linux       # Linux AppImage, deb and rpm (x64)
 bun run build:linux-arm64 # Linux AppImage, deb and rpm (ARM64)
 bun run build:unpack      # No installer, just an unpacked directory
 ```
+The Windows build makes an MSI with WiX, which runs only on Windows: off Windows it needs wine and wine-mono.
 The Linux builds make an rpm, which needs `rpmbuild` (the `rpm` package on Debian and Ubuntu, `rpm-tools` on Arch, `rpm-build` on Fedora).
 
 The server daemon (PaperCrane) is built and run from [apps/daemon](../daemon/README.md).

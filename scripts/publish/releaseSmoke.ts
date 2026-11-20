@@ -198,14 +198,23 @@ async function smokeMsi(target: Target, dir: string): Promise<void> {
         }
     };
     await msiexec("/i", msi, `APPLICATIONFOLDER=${installDir}`);
+    let failure: unknown = null;
     try {
         const executable = path.join(installDir, "paperboard.exe");
         if (!fs.existsSync(executable)) throw new Error(`${releaseFile} installed no paperboard.exe in ${installDir}: ${fs.existsSync(installDir) ? fs.readdirSync(installDir).join(", ") : "no folder"}`);
         if (fs.existsSync(path.join(installDir, "Uninstall Paperboard.exe"))) throw new Error(`${releaseFile} installed the installer's uninstaller, so the app would try to update it itself`);
         await smokeApp(target, executable, releaseFile);
-    } finally {
-        await msiexec("/x", msi);
+    } catch (err) {
+        failure = err;
     }
+    // the uninstall always runs, and never hides what went wrong before it
+    try {
+        await msiexec("/x", msi);
+    } catch (err) {
+        if (failure === null) throw err;
+        throw new AggregateError([failure, err], `${releaseFile} failed, and then would not uninstall`);
+    }
+    if (failure !== null) throw failure;
     if (fs.existsSync(path.join(installDir, "paperboard.exe"))) throw new Error(`${releaseFile} left paperboard.exe behind after it was uninstalled`);
 }
 

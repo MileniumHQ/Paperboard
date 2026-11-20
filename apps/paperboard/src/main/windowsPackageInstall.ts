@@ -1,6 +1,6 @@
 import * as fs from "fs";
 import * as path from "path";
-import { DOWNLOAD_BASE } from "./linuxPackageInstall";
+import { DOWNLOAD_BASE } from "./downloadBase";
 
 // Paperboard's installer writes "Uninstall Paperboard.exe" beside the app; the
 // MSI, which an administrator deploys and versions, does not. electron-updater
