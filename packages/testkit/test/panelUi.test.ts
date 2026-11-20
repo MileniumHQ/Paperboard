@@ -5,7 +5,7 @@
 // runner building a real vite page (test/fixtures/panel), with a TMPDIR of
 // its own to inspect.
 import { describe, expect, test } from "bun:test";
-import { mkdtempSync, readdirSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -69,5 +69,33 @@ describe("a panel's suite under withPanelUi.ts", () => {
         expect(served).toHaveLength(2);
         expect(code).not.toBe(0);
         expect(left).toEqual([]);
+    }, 60_000);
+
+    test("stops the build, removes it and runs nothing when the suite is stopped mid-build", async () => {
+        const dir = mkdtempSync(join(tmpdir(), "pbpu-"));
+        const holding = join(dir, "holding");
+        const ran = join(dir, "suite-ran");
+        // the fixture's build holds once it has started, and says so in `holding`
+        const env: Record<string, string | undefined> = { ...process.env, TMPDIR: dir, PANEL_UI_HOLD: holding };
+        delete env.PAPERBOARD_DIR;
+        const child = Bun.spawn([process.execPath, WITH_PANEL_UI, "/bin/sh", "-c", `touch '${ran}'`], { cwd: PANEL, env, stdout: "pipe", stderr: "pipe" });
+        try {
+            const deadline = Date.now() + 30_000;
+            // quiet: the poll interval of a deadline-bound wait for the build to start
+            while (!existsSync(holding) && child.exitCode === null && Date.now() < deadline) await Bun.sleep(20);
+            expect(existsSync(holding)).toBe(true);
+            child.kill("SIGTERM");
+            const code = await child.exited;
+            const output = (await new Response(child.stdout).text()) + (await new Response(child.stderr).text());
+            expect(code).toBe(1);
+            expect(output).toContain("stopped (SIGTERM) while building");
+            // the module compile cache vite turns on stays in TMPDIR; the build is what must go
+            expect(readdirSync(dir).filter((entry) => entry.includes("-ui-"))).toEqual([]);
+            expect(existsSync(ran)).toBe(false);
+        } finally {
+            // the runner this test started, should a check above have failed first
+            if (child.exitCode === null) child.kill("SIGKILL");
+            rmSync(dir, { recursive: true, force: true });
+        }
     }, 60_000);
 });
