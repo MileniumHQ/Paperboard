@@ -48,25 +48,28 @@ function chromeBinary(): string {
 // Starting is CPU-bound: a dozen started at once on a busy runner share the
 // CPU, and each is still starting, with nothing on stderr, when its own
 // deadline passes. Taken in turn, each start's deadline counts only its own
-// work. The turn is a file only one process can create (its PID in it); a
-// turn whose process is gone, or held longer than any start may take, is
-// someone's that ended mid-start, and is taken over. It limits load and
-// guards nothing else, so two processes taking over the same stale turn
-// at once only means two Chromes start together.
+// work. The turn is a file only one process can create, which then writes
+// its PID into it; a turn whose process is gone, or held longer than any
+// start may take, is someone's that ended mid-start, and is taken over. It
+// limits load and guards nothing else, so two processes taking over the
+// same stale turn at once only means two Chromes start together. A start
+// that waits in line longer than a test may take gives up, and starts no
+// Chrome.
 //
 // Fixed under /tmp, not the TMPDIR a suite or test may set for itself, so
 // every test process on the machine waits in the same line.
 export const START_TURN = path.join("/tmp", `testkit-chrome-start-${os.userInfo().uid}`);
 /** longer than a start may hold its turn: its port deadline and the reaper's */
 const TURN_HELD_MS = 3 * WAIT_MS;
-/** a start that waits longer than this for its turn says who has it */
-const TURN_WAIT_MS = 10 * 60_000;
+/** how long a start waits in line: under the 60s a test or hook may take, so the wait fails as itself */
+const TURN_WAIT_MS = 30_000;
 
 interface Turn {
     release(): void;
 }
 
-function turnHolder(): { pid: number; age: number } | null {
+/** who holds the turn, and for how long; a pid of null is a turn just taken, its PID not written yet */
+function turnHolder(): { pid: number | null; age: number } | null {
     let text: string;
     let age: number;
     try {
@@ -77,35 +80,36 @@ function turnHolder(): { pid: number; age: number } | null {
         if ((err as NodeJS.ErrnoException).code === "ENOENT") return null;
         throw err;
     }
-    return { pid: Number(text), age };
+    return { pid: text === "" ? null : Number(text), age };
 }
 
 async function startTurn(): Promise<Turn> {
-    const mine = `${START_TURN}.${process.pid}.${Math.random().toString(36).slice(2)}`;
     const deadline = Date.now() + TURN_WAIT_MS;
-    try {
-        for (;;) {
-            // written whole before it is linked into place, so a holder's PID is
-            // never read half-written, and anew each try, so its age counts from
-            // when it was taken
-            fs.writeFileSync(mine, String(process.pid));
-            try {
-                fs.linkSync(mine, START_TURN);
-                break;
-            } catch (err) {
-                if ((err as NodeJS.ErrnoException).code !== "EEXIST") throw err;
-            }
-            const holder = turnHolder();
-            if (holder && (!isAlive(holder.pid) || holder.age > TURN_HELD_MS)) {
-                fs.rmSync(START_TURN, { force: true });
-                continue;
-            }
-            if (Date.now() > deadline) throw new Error(`Waited ${TURN_WAIT_MS / 1000}s for a turn to start Chrome; process ${holder?.pid} has held ${START_TURN} for ${Math.round((holder?.age ?? 0) / 1000)}s`);
-            // quiet: the poll interval of a deadline-bound wait for the turn to be released
-            await new Promise((resolve) => setTimeout(resolve, 20));
+    for (;;) {
+        let fd: number | null = null;
+        try {
+            fd = fs.openSync(START_TURN, "wx");
+        } catch (err) {
+            if ((err as NodeJS.ErrnoException).code !== "EEXIST") throw err;
         }
-    } finally {
-        fs.rmSync(mine, { force: true });
+        if (fd !== null) {
+            try {
+                fs.writeSync(fd, String(process.pid));
+            } finally {
+                fs.closeSync(fd);
+            }
+            break;
+        }
+        const holder = turnHolder();
+        // a turn just taken is its taker's, unless it is older than any start
+        const gone = holder?.pid != null && !isAlive(holder.pid);
+        if (holder && (gone || holder.age > TURN_HELD_MS)) {
+            fs.rmSync(START_TURN, { force: true });
+            continue;
+        }
+        if (Date.now() > deadline) throw new Error(`Waited ${TURN_WAIT_MS / 1000}s behind other Chrome starts on this machine (${START_TURN})`);
+        // quiet: the poll interval of a deadline-bound wait for the turn to be released
+        await new Promise((resolve) => setTimeout(resolve, 20));
     }
     let released = false;
     return {
