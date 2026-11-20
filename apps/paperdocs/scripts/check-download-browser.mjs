@@ -157,8 +157,9 @@ export async function checkDownloads(browser, origin) {
         assert.deepEqual(await mac.evaluate(() => {
             const dialog = document.querySelector('.download-warning');
             const paragraph = dialog.querySelector('p');
-            return { overflow: getComputedStyle(dialog).overflow, paragraphMarginTop: getComputedStyle(paragraph).marginTop };
-        }), { overflow: 'hidden', paragraphMarginTop: '0px' }, 'Dialog clips to its rounded corners and uses its gap for block spacing');
+            const steps = dialog.querySelector('.download-warning__steps');
+            return { overflow: getComputedStyle(dialog).overflow, paragraphMarginTop: getComputedStyle(paragraph).marginTop, stepsMargin: getComputedStyle(steps).margin };
+        }), { overflow: 'hidden', paragraphMarginTop: '0px', stepsMargin: '0px' }, 'Dialog clips to its rounded corners and uses its gap for block spacing');
         await page.keyboard.press('Escape');
         await page.locator('.download-warning').waitFor({ state: 'detached' });
         assert.equal(await page.getByRole('dialog').count(), 0, 'Reduced motion dismissal stays immediate');
