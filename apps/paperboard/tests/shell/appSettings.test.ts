@@ -4,6 +4,7 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { waitFor } from "testkit/wait";
 import { bootShell, type Shell } from "./support/shell";
 
 let shell: Shell;
@@ -46,27 +47,15 @@ afterAll(async () => {
     await shell?.close();
 });
 
-/** resolves once the saved app settings satisfy `ready`, checked on every change to their folder */
+/** resolves once the saved app settings satisfy `ready`; read again and again, since a folder's watcher (fs.watch) misses writes under Bun */
 function savedSettings(ready: (saved: Record<string, unknown>) => boolean, what: string): Promise<Record<string, unknown>> {
     // app-wide settings live with the daemon's own state, not with the panels' configs
-    const dir = path.join(shell.dataDir, "local");
-    const file = path.join(dir, "app-settings.json");
-    return new Promise((resolve, reject) => {
-        const read = () => (fs.existsSync(file) ? (JSON.parse(fs.readFileSync(file, "utf8")) as Record<string, unknown>) : null);
-        const check = () => {
-            const saved = read();
-            if (!saved || !ready(saved)) return;
-            watcher.close();
-            clearTimeout(timer);
-            resolve(saved);
-        };
-        const watcher = fs.watch(dir, check);
-        const timer = setTimeout(() => {
-            watcher.close();
-            reject(new Error(`Timed out waiting for ${what}; ${file} holds ${JSON.stringify(read())}`));
-        }, 20_000);
-        check();
-    });
+    const file = path.join(shell.dataDir, "local", "app-settings.json");
+    return waitFor(what, () => {
+        if (!fs.existsSync(file)) return null;
+        const saved = JSON.parse(fs.readFileSync(file, "utf8")) as Record<string, unknown>;
+        return ready(saved) ? saved : null;
+    }, { timeoutMs: 20_000 });
 }
 
 const SWITCHES = `[document.querySelector("input[name=disableAnimations]").checked, document.querySelector("input[name=disableBlur]").checked]`;

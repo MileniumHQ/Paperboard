@@ -7,7 +7,7 @@ import { SavedCommands, type CommandRun, type SavedCommandsDoc, type SavedComman
 import { describeRun } from "../src/lib/runStatus";
 import { clearWorkloads, testDaemon, untilGone } from "./helpers/crane";
 import { call, panelFiles, PANEL_ID, startService, stopServices } from "./helpers/service";
-import { stateWhere, within } from "./helpers/wait";
+import { stateWhere, until, within } from "./helpers/wait";
 
 // each wait below has its own bound; a test as a whole may take longer than bun's 5 s default
 setDefaultTimeout(60_000);
@@ -32,19 +32,10 @@ function heldCommand(name: string, code: number): { command: string; release: ()
 const runOf = (id: string) => (state: { commandRuns: Record<string, CommandRun> }) => state.commandRuns[id];
 const fileOf = (dir: string): SavedCommandsDoc => JSON.parse(fs.readFileSync(path.join(dir, FILE), "utf8"));
 
-/** Resolves once the saved-commands file says what `accept` wants, checked on every change to its folder. */
+/** Resolves once the saved-commands file says what `accept` wants. Read again and again: a folder's watcher (fs.watch) misses writes under Bun. */
 function fileWhere(dir: string, accept: (doc: SavedCommandsDoc) => boolean, what: string): Promise<SavedCommandsDoc> {
-    let watcher: fs.FSWatcher | undefined;
-    const found = new Promise<SavedCommandsDoc>((resolve) => {
-        const check = () => {
-            // the daemon replaces the file atomically: it is always whole
-            const doc = fileOf(dir);
-            if (accept(doc)) resolve(doc);
-        };
-        watcher = fs.watch(dir, check);
-        check();
-    });
-    return within(what, found, 20_000, () => fs.readFileSync(path.join(dir, FILE), "utf8")).finally(() => watcher?.close());
+    // the daemon replaces the file atomically: it is always whole
+    return until(what, () => fileOf(dir), accept);
 }
 
 /** Resolves once the daemon no longer supervises `procId`. */
