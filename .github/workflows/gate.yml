@@ -223,7 +223,9 @@ jobs:
   # a job the pull request didn't name is skipped, and that passes
   gate-green:
     name: Gate
-    if: always()
+    # runs when a job failed, but not in a run a newer one cancelled: that run
+    # proved nothing, and a failure here would start the reviewer on it
+    if: ${{ !cancelled() }}
     needs: [scope, gate, platform]
     runs-on: ubuntu-24.04
     steps:
