@@ -95,7 +95,8 @@ supervisor_vet() {
 KNOWN_TARGETS="global platform packages paperapi paperui create-panel release testkit npx paperapi-build paperui-build create-panel-build daemon paperboard paperdocs origami library arilink panelapis scripts agents blocks botcreator gameserver terminal"
 
 # Prerequisites per target, expanded transitively. A panel (and any app that
-# bundles the SDK/design system) needs paperapi/paperui dist present; the
+# bundles the SDK/design system, and testkit, whose tests build a panel)
+# needs paperapi/paperui dist present; the
 # panel's vite build resolves @mileniumhq/paperapi to dist, not source.
 target_deps() {
     case "$1" in
@@ -103,7 +104,7 @@ target_deps() {
         paperui) echo "paperui-build" ;;
         create-panel) echo "paperapi-build paperui-build create-panel-build" ;;
         packages) echo "paperapi-build paperui-build create-panel-build" ;;
-        daemon | paperboard | paperdocs | library | platform) echo "paperapi-build paperui-build" ;;
+        daemon | paperboard | paperdocs | library | platform | testkit) echo "paperapi-build paperui-build" ;;
         agents | blocks | botcreator | gameserver | terminal) echo "paperapi-build paperui-build" ;;
         *) echo "" ;;
     esac
