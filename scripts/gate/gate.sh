@@ -208,6 +208,7 @@ gstep packages "packed external consumers" bun "$ROOT/scripts/gate/check-package
 # ── server daemon: typecheck, full suite, lint, silent-catches, and the Go
 # workload supervisor it launches ───────────────────────────────────────────
 gstep daemon "daemon typecheck" run_in "$ROOT/apps/daemon" bun run typecheck
+gstep daemon "daemon typecheck:tests" run_in "$ROOT/apps/daemon" bun run typecheck:tests
 gstep daemon "daemon tests" run_in "$ROOT/apps/daemon" bun run test
 gstep daemon "daemon lint" run_in "$ROOT/apps/daemon" bunx biome lint
 gstep daemon "supervisor format and vet (linux, macOS, Windows)" supervisor_vet
@@ -235,6 +236,7 @@ gstep scripts "root scripts code check" run_in "$ROOT" bun scripts/gate/check-so
 
 # ── paperdocs: tests plus the static site build (typecheck, site + docs
 # prerender, alias files, shared 404) ────────────────────────────────────────
+gstep paperdocs "paperdocs typecheck:tests" run_in "$ROOT/apps/paperdocs" bun run typecheck:tests
 gstep paperdocs "paperdocs tests" run_in "$ROOT/apps/paperdocs" bun test
 gstep paperdocs "paperdocs build" run_in "$ROOT/apps/paperdocs" bun run build
 gstep paperdocs "paperdocs code check" run_in "$ROOT" bun scripts/gate/check-solid.ts apps/paperdocs/src apps/paperdocs/test apps/paperdocs/scripts
@@ -244,14 +246,17 @@ gstep paperapi "paperapi typecheck" run_in "$ROOT/packages/paperapi" bunx tsc --
 gstep paperapi "paperapi tests" run_in "$ROOT/packages/paperapi" bun run test
 gstep paperapi "paperapi silent-catches" run_in "$ROOT/packages/paperapi" bash "$CATCH" src test
 gstep paperapi "paperapi code check" run_in "$ROOT" bun scripts/gate/check-solid.ts packages/paperapi/src packages/paperapi/test
+gstep paperui "paperui typecheck:tests" run_in "$ROOT/packages/paperui" bun run typecheck:tests
 gstep paperui "paperui tests" run_in "$ROOT/packages/paperui" bun run test
 gstep paperui "paperui styling invariant" bash "$ROOT/scripts/gate/check-paperui-styling.sh"
 gstep paperui "paperui silent-catches" run_in "$ROOT/packages/paperui" bash "$CATCH" src
 gstep paperui "paperui code check" run_in "$ROOT" bun scripts/gate/check-solid.ts packages/paperui/src packages/paperui/test
+gstep create-panel "create-panel typecheck:tests" run_in "$ROOT/packages/create-panel" bun run typecheck:tests
 gstep create-panel "create-panel tests" run_in "$ROOT/packages/create-panel" bun run test
 gstep create-panel "create-panel silent-catches" run_in "$ROOT/packages/create-panel" bash "$CATCH" src bin test template
 gstep create-panel "create-panel code check" run_in "$ROOT" bun scripts/gate/check-solid.ts packages/create-panel/src packages/create-panel/bin packages/create-panel/test packages/create-panel/template
 gstep release "release typecheck" run_in "$ROOT/packages/release" bunx tsc --noEmit
+gstep release "release typecheck:tests" run_in "$ROOT/packages/release" bun run typecheck:tests
 gstep release "release tests" run_in "$ROOT/packages/release" bun run test
 gstep release "release silent-catches" run_in "$ROOT/packages/release" bash "$CATCH" src test
 gstep release "release code check" run_in "$ROOT" bun scripts/gate/check-solid.ts packages/release/src packages/release/test
@@ -259,6 +264,7 @@ gstep testkit "testkit typecheck" run_in "$ROOT/packages/testkit" bun run typech
 gstep testkit "testkit tests" run_in "$ROOT/packages/testkit" bun run test
 gstep testkit "testkit silent-catches" run_in "$ROOT/packages/testkit" bash "$CATCH" src test
 gstep testkit "testkit code check" run_in "$ROOT" bun scripts/gate/check-solid.ts packages/testkit/src packages/testkit/test
+gstep npx "npx typecheck:tests" run_in "$ROOT/packages/npx" bun run typecheck:tests
 gstep npx "npx tests" run_in "$ROOT/packages/npx" bun run test
 gstep npx "npx silent-catches" run_in "$ROOT/packages/npx" bash "$CATCH" src test
 gstep npx "npx code check" run_in "$ROOT" bun scripts/gate/check-solid.ts packages/npx/src packages/npx/test
@@ -298,6 +304,7 @@ for short in agents blocks botcreator gameserver terminal; do
     panel="panels/dev.paperboard.$short"
     gstep "$short" "$panel tests" run_in "$ROOT/$panel" bun run test
     gstep "$short" "$panel typecheck" run_in "$ROOT/$panel" bunx tsc --noEmit
+    gstep "$short" "$panel typecheck:tests" run_in "$ROOT/$panel" bun run typecheck:tests
     gstep "$short" "$panel build" run_in "$ROOT/$panel" bun run build
     gstep "$short" "$panel silent-catches" run_in "$ROOT/$panel" bash "$CATCH" src test
     gstep "$short" "$panel code check" run_in "$ROOT" bun scripts/gate/check-solid.ts "$panel"

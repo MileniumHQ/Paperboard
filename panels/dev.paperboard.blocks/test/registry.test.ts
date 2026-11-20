@@ -94,8 +94,9 @@ describe("defaults", () => {
         });
         const ws = new Blockly.Workspace();
         try {
-            const { kind: _kind, ...state } = warp;
-            const created = Blockly.serialization.blocks.append(state as Blockly.serialization.blocks.State, ws);
+            const { kind: _kind, ...rest } = warp;
+            const state: Blockly.serialization.blocks.State = { ...rest, type: WARP };
+            const created = Blockly.serialization.blocks.append(state, ws);
             expect(created.getInputTargetBlock("mode")!.getFieldValue("VALUE")).toBe('"fast"');
         } finally {
             ws.dispose();

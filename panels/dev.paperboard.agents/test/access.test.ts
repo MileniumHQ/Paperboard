@@ -226,8 +226,8 @@ describe("the agent on the user's computer", () => {
     test("an automation's turn can use what's allowed but can't ask for more", async () => {
         const s = setup();
         const tools = s.access.toolset();
-        expect(tools.tools({ fromFlow: true }).map((t) => t.name)).not.toContain("request_access");
-        expect(tools.tools({ fromFlow: false }).map((t) => t.name)).toContain("request_access");
+        expect((await tools.tools({ fromFlow: true })).map((t) => t.name)).not.toContain("request_access");
+        expect((await tools.tools({ fromFlow: false })).map((t) => t.name)).toContain("request_access");
     });
 
     test("an unreadable access.json allows nothing, says so, and is never written over", async () => {

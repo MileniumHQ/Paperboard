@@ -3,6 +3,7 @@
 // initialized for it.
 import * as path from "node:path";
 import { gameServer, type GameServer } from "./game";
+import { pickCall } from "./serverCall";
 import { freePort } from "./palworld";
 import { placeStandIn } from "./standIn";
 import { fakeSteamcmd, steamcmdDir } from "./steamcmd";
@@ -25,4 +26,4 @@ export async function cs2Server(): Promise<GameServer> {
     return server;
 }
 /** one of the game's calls, made for `server` */
-export const cs2Call = async (server: GameServer, id: string, input: unknown = {}) => (await server.server.game.calls())[id]!(server.server, input);
+export const cs2Call = async (server: GameServer, id: string, input: unknown = {}) => pickCall(await server.server.game.calls(), id)(server.server, input);

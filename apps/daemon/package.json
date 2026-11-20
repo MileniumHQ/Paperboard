@@ -10,6 +10,7 @@
     },
     "scripts": {
         "typecheck": "tsc --noEmit",
+        "typecheck:tests": "tsc --noEmit -p tsconfig.tests.json",
         "test": "bun test --parallel ./test"
     },
     "dependencies": {
