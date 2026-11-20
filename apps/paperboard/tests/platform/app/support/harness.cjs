@@ -25,11 +25,7 @@ process.on("uncaughtException", (err) => report({ event: "main-error", kind: "un
 process.on("unhandledRejection", (err) => report({ event: "main-error", kind: "unhandledRejection", message: text(err) }));
 
 app.on("web-contents-created", (_event, contents) => {
-    contents.on("console-message", (event, legacyLevel, legacyMessage) => {
-        const level = typeof event.level === "string" ? event.level : ["verbose", "info", "warning", "error"][legacyLevel];
-        const message = typeof event.message === "string" ? event.message : legacyMessage;
-        report({ event: "console", level, message, url: contents.getURL() });
-    });
+    contents.on("console-message", (event) => report({ event: "console", level: event.level, message: event.message, url: contents.getURL() }));
     contents.on("render-process-gone", (_e, details) => report({ event: "renderer-gone", reason: details.reason, url: contents.getURL() }));
     contents.on("preload-error", (_e, preloadPath, error) => report({ event: "preload-error", preloadPath, message: text(error) }));
     contents.on("did-fail-load", (_e, code, description, url, isMainFrame) => report({ event: "load-failed", code, description, url, isMainFrame }));
