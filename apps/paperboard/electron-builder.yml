@@ -27,6 +27,11 @@ win:
         - target: nsis
           arch:
               - x64
+        # Download only, for deploying through Group Policy, Intune or winget.
+        # The updater feed carries the NSIS installer alone.
+        - target: msi
+          arch:
+              - x64
     publish:
         - provider: generic
           url: https://i.paperboard.dev/pb
@@ -38,6 +43,11 @@ nsis:
     createDesktopShortcut: always
     installerIcon: build/icon.ico
     uninstallerIcon: build/icon.ico
+msi:
+    artifactName: ${name}-${version}-windows-x64.${ext}
+    # Per-user unless asked: ALLUSERS=1 on msiexec installs for everyone
+    oneClick: false
+    perMachine: false
 mac:
     # Ad-hoc: no Developer ID yet. arm64 macOS runs only signed code, and an
     # unsigned download shows as "damaged". Signing needs a Mac, so macOS

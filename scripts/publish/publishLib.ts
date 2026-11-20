@@ -140,11 +140,14 @@ export function paperboardArtifacts(target: Target, version: string): {
     return { buildFile, releaseFile };
 }
 
-// Linux distro packages built beside the AppImage in the same electron-builder
-// pass. They are downloads only: a package manager owns the installed bytes,
-// so they never appear in an updater feed (see isUpdatePayload).
+// Packages built beside the update payload in the same electron-builder pass:
+// the Linux deb and rpm, and the Windows MSI (for managed fleets that deploy
+// through Group Policy, Intune or winget). They are downloads only: a package
+// manager or an installer policy owns the installed bytes, so they never
+// appear in an updater feed (see isUpdatePayload).
 export type LinuxPackage = "deb" | "rpm";
 export const LINUX_PACKAGES: LinuxPackage[] = ["deb", "rpm"];
+const PACKAGE_EXTENSIONS = [...LINUX_PACKAGES, "msi"];
 
 // electron-builder names a package's arch the way its format does: Debian
 // says amd64 where RPM says x86_64.
@@ -157,6 +160,9 @@ export function paperboardPackages(target: Target, version: string): {
     buildFile: string;
     releaseFile: string;
 }[] {
+    if (osOf(target) === "windows") {
+        return [{ buildFile: `paperboard-${version}-${target}.msi`, releaseFile: `paperboard-${target}.msi` }];
+    }
     if (osOf(target) !== "linux") return [];
     const arch = archOf(target);
     return LINUX_PACKAGES.map((format) => ({
@@ -167,12 +173,12 @@ export function paperboardPackages(target: Target, version: string): {
 
 // Whether a published Paperboard file is what the app updates itself with.
 export function isUpdatePayload(file: string): boolean {
-    return !LINUX_PACKAGES.some((format) => file.endsWith(`.${format}`));
+    return !PACKAGE_EXTENSIONS.some((ext) => file.endsWith(`.${ext}`));
 }
 
-// The files the download index records from a release. Distro packages are
-// expected only on a release that ships them, so a release made before deb and
-// rpm still re-indexes; a release with some of them is missing the rest.
+// The files the download index records from a release. Packages are expected
+// only on a release that ships them, so a release made before deb, rpm and
+// msi still re-indexes; a release with some of them is missing the rest.
 export function expectedReleaseAssets(
     onRelease: ReadonlySet<string>,
     version: string,

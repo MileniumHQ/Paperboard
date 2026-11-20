@@ -43,7 +43,7 @@ Compiling for all platforms for GitHub Releases is done on Linux x64. However, y
 Paperboard (Electron app)
 ```zsh
 bun run build             # Typecheck and build
-bun run build:win         # Windows installer
+bun run build:win         # Windows installer and MSI
 bun run build:mac-x64     # macOS .zip (Intel)
 bun run build:mac-arm64   # macOS .zip (Apple Silicon)
 bun run build:linux       # Linux AppImage, deb and rpm (x64)

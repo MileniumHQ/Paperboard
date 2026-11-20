@@ -57,6 +57,7 @@ describe("one tag and canonical asset names per release", () => {
                 "paperboard-macos-x64.zip",
                 "paperboard-macos-arm64.zip",
                 "paperboard-windows-x64-setup.exe",
+                "paperboard-windows-x64.msi",
                 "crane-linux-x64.tar.gz",
                 "crane-linux-arm64.tar.gz",
                 "crane-macos-x64.tar.gz",
@@ -78,10 +79,11 @@ describe("one tag and canonical asset names per release", () => {
             "paperboard-0.3.0-x64.zip": "paperboard-macos-x64.zip",
             "paperboard-0.3.0-arm64.zip": "paperboard-macos-arm64.zip",
             "paperboard-0.3.0-windows-x64-setup.exe": "paperboard-windows-x64-setup.exe",
+            "paperboard-0.3.0-windows-x64.msi": "paperboard-windows-x64.msi",
         });
     });
 
-    test("re-indexing a release made before deb and rpm expects only what it shipped", () => {
+    test("re-indexing a release made before deb, rpm and msi expects only what it shipped", () => {
         const pre = new Set(ALL_TARGETS.flatMap((t) => [assetFileName("pb", t), assetFileName("crane", t)]));
         const expected = expectedReleaseAssets(pre, "0.2.2").map((a) => a.file);
         expect(expected.sort()).toEqual([...pre].sort());
@@ -135,7 +137,7 @@ describe("each target gets the update feed electron-updater requests", () => {
         expect(() => buildLatestYml("linux", "0.3.0", [], "2026-11-09T00:00:00.000Z")).toThrow("No update artifacts for linux");
     });
 
-    test("deb and rpm are never update payloads", () => {
+    test("deb, rpm and msi are never update payloads", () => {
         for (const t of ALL_TARGETS) {
             expect(isUpdatePayload(assetFileName("pb", t))).toBe(true);
             for (const pkg of paperboardPackages(t, "0.3.0")) expect(isUpdatePayload(pkg.releaseFile)).toBe(false);
