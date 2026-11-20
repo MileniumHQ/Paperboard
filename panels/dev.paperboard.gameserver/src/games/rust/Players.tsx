@@ -42,7 +42,7 @@ export default function RustPlayers() {
             players={players()}
             playerId={(player) => player.steamId}
             searchTerms={(player) => [player.steamId]}
-            avatar={(player, size) => <PlayerAvatar name={player.name} size={size} picture={pictures.of(player.steamId)} />}
+            avatar={(player, size) => <PlayerAvatar name={player.name} size={size} picture={pictures.of(player.steamId, size)} />}
             notice={<PlayerPicturesFailure pictures={pictures} />}
             playing={(player) => (player.connected !== undefined ? `Playing · on for ${durationLabel(player.connected)}` : "Playing")}
             pickHint="Players appear here once they join. Pick one to see their Steam id and to kick or ban them."

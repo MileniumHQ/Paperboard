@@ -6,15 +6,15 @@
 // address a web page named. A profile set to private still shows its
 // picture to everyone, so the picture is there for any account Steam knows.
 import { LimitedQueue, errorMessage } from "@mileniumhq/paperapi";
-import { apiFetch } from "../lib/userAgent";
+import { fetchPublic, PublicFetchError, type PublicFetchResponse } from "@mileniumhq/paperapi/net";
 import { steamAccount } from "../games/steam/steamAccount";
 import { servedPicture } from "./pictures";
 
 /** The hosts Steam keeps avatars on (its content security policy names these three). */
 export const STEAM_AVATAR_HOSTS: string[] = ["avatars.fastly.steamstatic.com", "avatars.akamai.steamstatic.com", "avatars.cloudflare.steamstatic.com"];
 
-/** Where a profile's XML is. A test routes this host to a stand-in. */
-const PROFILE_HOST = "https://steamcommunity.com";
+/** Where a profile's XML is. A test points this at a stand-in on this computer, as it adds one to STEAM_AVATAR_HOSTS. */
+export const STEAM_COMMUNITY = { origin: "https://steamcommunity.com" };
 /** How long a profile's picture address is kept: people change their picture rarely, and the address names the picture's content, so a change is a new address. */
 const KEEP_MS = 24 * 60 * 60 * 1000;
 /** How long "no profile" is kept: Steam's words for it are the same as for a profile that failed to load, so it is asked again sooner. */
@@ -25,7 +25,7 @@ const TIMEOUT_MS = 20_000;
 const MAX_BYTES = 256 * 1024;
 /** Profiles asked for at once: Steam Community limits what one address asks of it. */
 const AT_ONCE = 3;
-/** Profiles remembered; each is an address of about a hundred characters. */
+/** Profiles remembered; each is two addresses of about a hundred characters. */
 const MAX_KEPT = 4096;
 
 /** A person's account as the 17-digit number Steam Community's addresses use; anything else is refused. */
@@ -44,26 +44,37 @@ const valueOf = (xml: string, tag: string): string | undefined => {
 /** What Steam Community says of an account it has no profile for. Measured: a name that was never made gets the first in XML, an account number nobody holds gets the second as an HTML error page with a 200 status. */
 const NO_PROFILE = /profile could not be found|failed loading profile data/i;
 
+/** The sizes a page asks for: its rows draw 32 px avatars, which `medium` (64 px) fills, and an opened player 64 px, which wants `full` (184 px) on a sharper screen. */
+export type AvatarSize = "medium" | "full";
+export function requireSize(value: unknown): AvatarSize {
+    if (value !== "medium" && value !== "full") throw new Error(`A Steam profile picture is "medium" or "full", not ${JSON.stringify(value)}`);
+    return value;
+}
+
+/** The addresses of a profile's picture, by size. */
+type Profile = Record<AvatarSize, string>;
+
 /**
- * The picture address in a profile's XML, null for an account Steam has no
+ * The picture addresses in a profile's XML, null for an account Steam has no
  * profile for. Anything else Steam says, or an answer with no picture in it,
  * throws: it is a failure to show, not a profile without a picture.
  */
-export function parseProfile(xml: string, account: string): string | null {
+export function parseProfile(xml: string, account: string): Profile | null {
     const failure = valueOf(xml, "error") ?? /<div class="error_ctn">[\s\S]*?<h3>([^<]*)<\/h3>/.exec(xml)?.[1]?.trim();
     if (failure !== undefined) {
         if (NO_PROFILE.test(failure)) return null;
         throw new Error(`Steam Community said: ${failure.slice(0, 200)}`);
     }
     if (valueOf(xml, "steamID64") !== account) throw new Error(`Steam Community's answer isn't the profile of ${account}`);
-    const picture = valueOf(xml, "avatarFull");
-    if (!picture) throw new Error(`Steam Community's profile of ${account} has no picture in it; its layout may have changed`);
-    return picture;
+    const medium = valueOf(xml, "avatarMedium");
+    const full = valueOf(xml, "avatarFull");
+    if (!medium || !full) throw new Error(`Steam Community's profile of ${account} has no picture in it; its layout may have changed`);
+    return { medium, full };
 }
 
-type Kept = { at: number; picture: string | null };
+type Kept = { at: number; profile: Profile | null };
 const kept = new Map<string, Kept>();
-const inFlight = new Map<string, Promise<string | null>>();
+const inFlight = new Map<string, Promise<Profile | null>>();
 const line = new LimitedQueue(AT_ONCE);
 let coolDown: { until: number; error: Error } | null = null;
 
@@ -73,41 +84,46 @@ function restFrom(error: Error): Error {
     return error;
 }
 
-async function readProfile(account: string): Promise<string | null> {
+async function readProfile(account: string): Promise<Profile | null> {
     if (coolDown && Date.now() < coolDown.until) throw coolDown.error;
-    let response: Response;
+    let answer: PublicFetchResponse;
     try {
-        response = await apiFetch(`${PROFILE_HOST}/profiles/${account}/?xml=1`, { signal: AbortSignal.timeout(TIMEOUT_MS), headers: { Accept: "text/xml" } });
+        answer = await fetchPublic(`${STEAM_COMMUNITY.origin}/profiles/${account}/?xml=1`, {
+            maxBytes: MAX_BYTES,
+            timeoutMs: TIMEOUT_MS,
+            accept: "text/xml",
+            // https, every redirect too; only a stand-in on this computer answers over http
+            requireHttps: STEAM_COMMUNITY.origin.startsWith("https:"),
+        });
     } catch (err) {
-        // fetch says only "fetch failed"; what failed is its cause
-        const cause = err instanceof Error && err.cause instanceof Error ? `: ${err.cause.message}` : "";
-        throw restFrom(new Error(`Couldn't reach Steam Community for profile pictures: ${errorMessage(err)}${cause}`));
+        if (!(err instanceof PublicFetchError)) throw err;
+        // Steam Community failing as a whole rests the service; any other answer is shown as it is
+        if (err.status === 429) throw restFrom(new Error("Steam Community is limiting how often profile pictures are asked for; they will load again in a minute"));
+        if (err.code === "unreachable" || err.code === "timeout") throw restFrom(new Error(`Couldn't load profile pictures from Steam Community: ${err.message}`));
+        if (err.status !== undefined) {
+            const error = new Error(`Steam Community answered HTTP ${err.status} for a profile`);
+            throw err.status >= 500 ? restFrom(error) : error;
+        }
+        if (err.code === "too-large") throw new Error("Steam Community's profile is larger than expected");
+        throw new Error(`Couldn't read Steam Community's profile of ${account}: ${err.message}`);
     }
-    if (response.status === 429) throw restFrom(new Error("Steam Community is limiting how often profile pictures are asked for; they will load again in a minute"));
-    if (!response.ok) {
-        const error = new Error(`Steam Community answered HTTP ${response.status} for a profile`);
-        throw response.status >= 500 ? restFrom(error) : error;
-    }
-    if (Number(response.headers.get("content-length") ?? 0) > MAX_BYTES) throw new Error("Steam Community's profile is larger than expected");
-    const xml = await response.text();
-    if (xml.length > MAX_BYTES) throw new Error("Steam Community's profile is larger than expected");
-    return parseProfile(xml, account);
+    return parseProfile(new TextDecoder().decode(answer.body), account);
 }
 
-/** An account's picture address: from memory when read in the last day, else from Steam, asked once at a time. */
-function pictureAddress(account: string): Promise<string | null> {
+/** An account's picture addresses: from memory when read in the last day, else from Steam, asked once at a time. */
+function profileOf(account: string): Promise<Profile | null> {
     const have = kept.get(account);
-    if (have && Date.now() - have.at < (have.picture === null ? NONE_KEEP_MS : KEEP_MS)) return Promise.resolve(have.picture);
+    if (have && Date.now() - have.at < (have.profile === null ? NONE_KEEP_MS : KEEP_MS)) return Promise.resolve(have.profile);
     let pending = inFlight.get(account);
     if (!pending) {
         pending = line
             .run(() => readProfile(account))
-            .then((picture) => {
+            .then((profile) => {
                 kept.delete(account);
-                kept.set(account, { at: Date.now(), picture });
+                kept.set(account, { at: Date.now(), profile });
                 // the oldest go first
                 if (kept.size > MAX_KEPT) kept.delete(kept.keys().next().value!);
-                return picture;
+                return profile;
             })
             .finally(() => inFlight.delete(account));
         inFlight.set(account, pending);
@@ -116,22 +132,23 @@ function pictureAddress(account: string): Promise<string | null> {
 }
 
 /**
- * A Steam account's profile picture as a data: address, or null when Steam has
- * none for the account: no profile, or a profile whose picture its avatar host
- * no longer has (measured: an old account's `avatarFull` is a 404 there, as it
- * is for everyone, so Steam itself has nothing to show). Throws why the
- * picture can't be had.
+ * A Steam account's profile picture, in the `size` asked for, as a data:
+ * address, or null when Steam has none for the account: no profile, or a
+ * profile whose picture its avatar host no longer has (measured: an old
+ * account's `avatarFull` is a 404 there, as it is for everyone, so Steam
+ * itself has nothing to show). Throws why the picture can't be had.
  */
-export async function steamAvatar(raw: unknown): Promise<string | null> {
+export async function steamAvatar(raw: unknown, size: unknown): Promise<string | null> {
     const account = requireAccount(raw);
-    const address = await pictureAddress(account);
-    if (address === null) return null;
+    const wanted = requireSize(size);
+    const profile = await profileOf(account);
+    if (profile === null) return null;
     try {
-        return await servedPicture(address, STEAM_AVATAR_HOSTS, "Steam");
+        return await servedPicture(profile[wanted], STEAM_AVATAR_HOSTS, "Steam");
     } catch (err) {
         // the avatar host's own answer that there is no such picture; any other failure is shown
-        if (!/ answered 404\b/.test(errorMessage(err))) throw err;
-        kept.set(account, { at: Date.now(), picture: null });
+        if (!(err instanceof Error && err.cause instanceof PublicFetchError && err.cause.status === 404)) throw err;
+        kept.set(account, { at: Date.now(), profile: null });
         return null;
     }
 }

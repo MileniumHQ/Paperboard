@@ -67,7 +67,7 @@ export default function SourcePlayers(props: { spec: SourceGameSpec }) {
             players={players()}
             playerId={(player) => player.key}
             searchTerms={(player) => [player.steamId]}
-            avatar={(player, size) => <PlayerAvatar name={player.name} size={size} bot={player.bot} picture={pictures.of(player.bot ? undefined : player.steamId)} />}
+            avatar={(player, size) => <PlayerAvatar name={player.name} size={size} bot={player.bot} picture={pictures.of(player.bot ? undefined : player.steamId, size)} />}
             notice={<PlayerPicturesFailure pictures={pictures} />}
             playing={(player) => [player.team, player.role, player.bot ? "Bot" : `Playing for ${duration(player.since)}`].filter(Boolean).join(" · ")}
             pickHint="Players appear here once they join. Pick one to see their stats, or to kick or ban them."

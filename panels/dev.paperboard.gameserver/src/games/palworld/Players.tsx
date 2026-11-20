@@ -39,7 +39,7 @@ export default function PalworldPlayers() {
             players={players()}
             playerId={(player) => player.userId}
             searchTerms={(player) => [player.userId]}
-            avatar={(player, size) => <PlayerAvatar name={player.name} size={size} picture={pictures.of(player.userId)} />}
+            avatar={(player, size) => <PlayerAvatar name={player.name} size={size} picture={pictures.of(player.userId, size)} />}
             notice={<PlayerPicturesFailure pictures={pictures} />}
             playing={(player) => `Playing · level ${player.level ?? 0}`}
             pickHint="Players appear here once they join. Pick one to see their level and to kick or ban them."

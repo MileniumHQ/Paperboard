@@ -4,13 +4,13 @@
 // player's picture. Stand-ins are Steam Community (its profile XML, measured
 // against the real one) and its avatar host; the page gets the picture's
 // bytes and never an address.
-import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { afterAll, beforeAll, describe, expect, setSystemTime, test } from "bun:test";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { PNG } from "pngjs";
 import { startTestDaemon, type TestDaemon } from "./helpers/crane";
 import { openPage, servePanel, type Page } from "./helpers/browser";
-import { loopbackServer, routeHost, trustLoopback } from "./helpers/http";
+import { loopbackServer, trustLoopback } from "./helpers/http";
 import { writeTree } from "./helpers/tmp";
 import { PANEL_ID } from "../src/servers";
 import { TF2 } from "../src/games/tf2";
@@ -18,7 +18,7 @@ import { GMOD } from "../src/games/gmod";
 import { rust as RUST } from "../src/games/rust";
 import { palworld as PALWORLD } from "../src/games/palworld";
 import { steamAccount } from "../src/games/steam/steamAccount";
-import { parseProfile, requireAccount, steamAvatar, STEAM_AVATAR_HOSTS } from "../src/service/steamAvatars";
+import { parseProfile, requireAccount, steamAvatar, STEAM_AVATAR_HOSTS, STEAM_COMMUNITY } from "../src/service/steamAvatars";
 
 /** A 1×1 PNG of one colour: each player's picture is told from the others by it. */
 const picture = (red: number, green: number, blue: number): Buffer => {
@@ -45,11 +45,15 @@ const xml = (body: string, status = 200) => new Response(body, { status, headers
 
 // Steam's avatar host's stand-in: a picture by name (one of them not a picture until a test mends it)
 let broken = true;
-let steamDown = false;
+// the status Steam Community answers every profile with while a test says it is failing
+let steamFails: number | null = null;
 const avatars = loopbackServer((_req, url) => {
-    if (url.pathname === "/broken_full.jpg" && broken) return new Response("<html>not a picture</html>", { headers: { "content-type": "text/html" } });
-    const byName: Record<string, Buffer> = { "/alice_full.jpg": RED, "/bob_full.jpg": GREEN, "/dave_full.jpg": BLUE, "/broken_full.jpg": YELLOW, "/rust_full.jpg": GREEN, "/pal_full.jpg": BLUE, "/gmod_full.jpg": YELLOW };
-    const png = byName[url.pathname];
+    // a picture is each size's, `<name>_medium.jpg` and `<name>_full.jpg`
+    const [, name, size] = /^\/(\w+?)_(medium|full)\.jpg$/.exec(url.pathname) ?? [];
+    if (name === "broken" && broken) return new Response("<html>not a picture</html>", { headers: { "content-type": "text/html" } });
+    if (name === "boom") return new Response("Internal error", { status: 500 });
+    const byName: Record<string, Buffer> = { alice: RED, bob: GREEN, dave: BLUE, broken: YELLOW, rust: GREEN, pal: BLUE, gmod: YELLOW, crowd: RED };
+    const png = size ? byName[name!] : undefined;
     return png ? new Response(new Uint8Array(png), { headers: { "content-type": "image/png" } }) : new Response("no such picture", { status: 404 });
 });
 const AVATAR = (name: string) => `${avatars.url}/${name}`;
@@ -69,15 +73,30 @@ const profiles: Record<string, () => Response> = {
     [id64(6001)]: () => xml(profile(id64(6001), AVATAR("pal"))),
     // Steam saying it is busy
     [id64(7001)]: () => xml("<html>Busy</html>", 503),
+    // a profile that never ends and says no length: the service reads no more than it allows
+    [id64(1006)]: () => new Response(new ReadableStream({ pull: (stream) => void stream.enqueue(new Uint8Array(16 * 1024).fill(32)) }), { headers: { "content-type": "text/xml" } }),
+    // a picture its avatar host fails to serve, which is not the host saying it has none
+    [id64(1007)]: () => xml(profile(id64(1007), AVATAR("boom"))),
+    // a redirect to a private address
+    [id64(1008)]: () => new Response(null, { status: 302, headers: { location: "http://10.0.0.1/profiles/x/?xml=1" } }),
 };
+// the players of a crowded server (`s-crowd`): each has a profile with a picture
+const CROWD = 1100;
+const CROWD_FIRST = 20_000;
+// the 17-digit ids are past what a number holds exactly
+const inCrowd = (account: string | undefined) => account !== undefined && BigInt(account) >= BigInt(id64(CROWD_FIRST)) && BigInt(account) < BigInt(id64(CROWD_FIRST + CROWD));
+const crowdName = (n: number) => `Player ${String(n).padStart(4, "0")}`;
 // Steam Community's stand-in: the profile XML of each account, or Steam being down while a test says so
 const steam = loopbackServer((_req, url) => {
     const account = /^\/profiles\/(\d+)\/$/.exec(url.pathname)?.[1];
     if (!account || url.search !== "?xml=1") return new Response("not found", { status: 404 });
-    if (steamDown) return xml("<html>Busy</html>", 503);
+    if (steamFails !== null) return xml("<html>Busy</html>", steamFails);
+    if (inCrowd(account)) return xml(profile(account, AVATAR("crowd")));
     return (profiles[account] ?? (() => xml(NOT_FOUND)))();
 });
-routeHost("steamcommunity.com", steam);
+// the service reaches both as it reaches the real ones, by fetchPublic
+trustLoopback(steam);
+STEAM_COMMUNITY.origin = steam.url;
 trustLoopback(avatars);
 STEAM_AVATAR_HOSTS.push(new URL(avatars.url).host);
 /** the accounts the page's players made Steam Community see, each as the request that asked for it */
@@ -100,7 +119,7 @@ describe("a Steam account as the service takes it", () => {
     });
 
     test("a profile's picture is read from its XML; no profile is none and anything unreadable is a failure", () => {
-        expect(parseProfile(profile(id64(1), "https://avatars.example/a"), id64(1))).toBe("https://avatars.example/a_full.jpg");
+        expect(parseProfile(profile(id64(1), "https://avatars.example/a"), id64(1))).toEqual({ medium: "https://avatars.example/a_medium.jpg", full: "https://avatars.example/a_full.jpg" });
         expect(parseProfile(NOT_FOUND, id64(1))).toBeNull();
         // an account number nobody holds: the same words as XML, or as the HTML error page Steam answers it with
         expect(parseProfile(`<response><error><![CDATA[Failed loading profile data, please try again later.]]></error></response>`, id64(1))).toBeNull();
@@ -108,6 +127,7 @@ describe("a Steam account as the service takes it", () => {
         expect(() => parseProfile(`<response><error><![CDATA[Rate limit exceeded]]></error></response>`, id64(1))).toThrow("Steam Community said: Rate limit exceeded");
         expect(() => parseProfile(profile(id64(2), "https://avatars.example/a"), id64(1))).toThrow("isn't the profile of");
         expect(() => parseProfile(`<profile><steamID64>${id64(1)}</steamID64></profile>`, id64(1))).toThrow("has no picture in it");
+        expect(() => parseProfile(`<profile><steamID64>${id64(1)}</steamID64><avatarFull><![CDATA[https://avatars.example/a_full.jpg]]></avatarFull></profile>`, id64(1))).toThrow("has no picture in it");
         expect(() => parseProfile("<html>nginx</html>", id64(1))).toThrow("isn't the profile of");
     });
 });
@@ -139,6 +159,7 @@ async function setUp() {
                 server("s-rust", "Wasteland", RUST.id),
                 server("s-pal", "Paldea", PALWORLD.id),
                 server("s-down", "Offline Steam", TF2.id),
+                server("s-crowd", "Crowded", TF2.id),
             ],
         }),
     );
@@ -155,6 +176,7 @@ async function setUp() {
             { userId: "xbox_1234567890", name: "Xena", accountName: "Xena", level: 5, lastSeen: 1_700_000_000_000 },
         ]),
     });
+    files("s-crowd", { "players.json": JSON.stringify(Array.from({ length: CROWD }, (_, n) => seen(`[U:1:${CROWD_FIRST + n}]`, crowdName(n)))) });
     files("s-down", { "players.json": JSON.stringify([seen("[U:1:7001]", "Eve")]) });
     const { gameServerService } = await import("../src/service");
     await gameServerService.ready;
@@ -205,7 +227,9 @@ describe("Steam players' pictures in the Players tab", () => {
             // the page asked for no address of its own, and Steam saw each account once
             expect(elsewhere).toEqual([]);
             expect([...asked()].sort()).toEqual([id64(1001), id64(1002), id64(1003), id64(1004), id64(1005)]);
-            expect(avatars.requests.filter((request) => request === "/alice_full.jpg")).toHaveLength(1);
+            // a list's rows asked for the 64 px picture, and only the opened player for the 184 px one
+            expect(avatars.requests.filter((request) => request === "/alice_medium.jpg")).toHaveLength(1);
+            expect(avatars.requests.filter((request) => request.endsWith("_full.jpg"))).toEqual(["/alice_full.jpg"]);
             expect(page.exceptions).toEqual([]);
 
             // another page of the same server is no new ask of Steam
@@ -246,29 +270,87 @@ describe("Steam players' pictures in the Players tab", () => {
     }, 90_000);
 
     test("Garry's Mod's STEAM_0 ids, Rust's 17-digit ids and Palworld's steam_ ids are Steam accounts too, and another platform's player is not", async () => {
-        {
-            for (const [server, name, picture] of [["s-gmod", "Gus", YELLOW], ["s-rust", "Rusty", GREEN], ["s-pal", "Pal", BLUE]] as const) {
-                const { page, elsewhere } = await openPlayers(server, name);
-                try {
-                    await page.waitFor(`${avatarOf(name)}?.src`, `${name}'s picture`);
-                    expect([server, (await avatar(page, name)).src]).toEqual([server, dataUrl(picture)]);
-                    if (server === "s-pal") {
-                        // Xbox players have no Steam account: the figure, with nothing asked of Steam for them
-                        expect(await avatar(page, "Xena")).toMatchObject({ src: null, glyph: "person", title: "" });
-                    }
-                    expect(elsewhere).toEqual([]);
-                    expect(page.exceptions).toEqual([]);
-                } finally {
-                    await page.close();
+        for (const [server, name, picture] of [["s-gmod", "Gus", YELLOW], ["s-rust", "Rusty", GREEN], ["s-pal", "Pal", BLUE]] as const) {
+            const { page, elsewhere } = await openPlayers(server, name);
+            try {
+                await page.waitFor(`${avatarOf(name)}?.src`, `${name}'s picture`);
+                expect([server, (await avatar(page, name)).src]).toEqual([server, dataUrl(picture)]);
+                if (server === "s-pal") {
+                    // Xbox players have no Steam account: the figure, with nothing asked of Steam for them
+                    expect(await avatar(page, "Xena")).toMatchObject({ src: null, glyph: "person", title: "" });
                 }
+                expect(elsewhere).toEqual([]);
+                expect(page.exceptions).toEqual([]);
+            } finally {
+                await page.close();
             }
-            expect([...asked()]).toEqual(expect.arrayContaining([id64(4011), id64(5001), id64(6001)]));
-            expect(asked().filter((account) => !Object.hasOwn(profiles, account!))).toEqual([]);
+        }
+        expect([...asked()]).toEqual(expect.arrayContaining([id64(4011), id64(5001), id64(6001)]));
+        expect(asked().filter((account) => !Object.hasOwn(profiles, account!))).toEqual([]);
+    }, 120_000);
+
+    test("a profile is read within its cap however it arrives, redirects are checked, and a picture its host fails to serve is a failure, not a missing picture", async () => {
+        // an answer that never ends and names no length is cut off at the cap, and says why
+        await expect(steamAvatar(id64(1006), "medium")).rejects.toThrow("Steam Community's profile is larger than expected");
+        // a redirect to a private address is refused before anything is dialed
+        await expect(steamAvatar(id64(1008), "medium")).rejects.toThrow("10.0.0.1 is a private or local address");
+        // the avatar host failing (500) is shown; its 404 is its answer that there is no picture
+        await expect(steamAvatar(id64(1007), "medium")).rejects.toThrow("answered 500");
+        await expect(steamAvatar(id64(1005), "full")).resolves.toBeNull();
+        // none of these is Steam Community failing: it is not left alone for them
+        await expect(steamAvatar(id64(9101), "medium")).resolves.toBeNull();
+        expect(asked()).toContain(id64(9101));
+        await expect(steamAvatar(id64(1001), "large")).rejects.toThrow('"medium" or "full"');
+    }, 30_000);
+
+    test("a crowd of players asks only for the rows on screen, each once, and a row scrolled to keeps its picture", async () => {
+        const { page, elsewhere } = await openPlayers("s-crowd", crowdName(0));
+        try {
+            const rowOf = (n: number) => avatarOf(crowdName(n));
+            await page.waitFor(`${rowOf(0)}?.src`, "the first player's picture");
+            // asking has settled once Steam Community hears nothing more for a moment
+            const settled = async () => {
+                let seen = -1;
+                for (const deadline = Date.now() + 20_000; Date.now() < deadline; ) {
+                    if (steam.requests.length === seen) return;
+                    seen = steam.requests.length;
+                    await Bun.sleep(800); // quiet: letting requests pile up to see that none do
+                }
+                throw new Error("Steam Community kept being asked for pictures");
+            };
+            await settled();
+            const crowd = () => asked().filter(inCrowd);
+            const first = crowd();
+            // only the rows on screen were asked for, and none twice
+            expect(new Set(first).size).toBe(first.length);
+            expect(first.length).toBeGreaterThan(0);
+            expect(first.length).toBeLessThan(CROWD / 4);
+            // the rows scrolled to are asked for as they come to be on screen, and what is shown stays
+            const scrollTo = (n: number) => page.evaluate(`document.querySelector('input[name=playersList][value="${crowdName(n)}"]').closest("label, li, [role=radio]").scrollIntoView()`);
+            await scrollTo(CROWD - 1);
+            await page.waitFor(`${rowOf(CROWD - 1)}?.src`, "the last player's picture");
+            await settled();
+            const all = crowd();
+            expect(new Set(all).size).toBe(all.length);
+            expect(all.length).toBeGreaterThan(first.length);
+            expect(all.length).toBeLessThan(CROWD / 2);
+            await scrollTo(0);
+            await page.waitFor(`${rowOf(0)}?.src`, "the first player's picture, still there");
+            await settled();
+            // coming back asks for nothing again; at most a row the first view never reached
+            const again = crowd();
+            expect(new Set(again).size).toBe(again.length);
+            expect(again.slice(0, all.length)).toEqual(all);
+            expect(again.length - all.length).toBeLessThan(10);
+            expect(elsewhere).toEqual([]);
+            expect(page.exceptions).toEqual([]);
+        } finally {
+            await page.close();
         }
     }, 120_000);
 
     test("while Steam Community is down every picture fails out loud, and the service rests from it instead of asking again for each", async () => {
-        steamDown = true;
+        steamFails = 503;
         const { page } = await openPlayers("s-down", "Eve");
         try {
             await page.waitFor(`${avatarOf("Eve")}?.label`, "Eve's failure");
@@ -281,12 +363,47 @@ describe("Steam players' pictures in the Players tab", () => {
             await page.waitFor(`document.querySelector('[class*=xlarge]')`, "Eve's page");
             // resting: the next account is refused without asking Steam
             const before = steam.requests.length;
-            await expect(steamAvatar(id64(1001))).resolves.toBe(dataUrl(RED));
-            await expect(steamAvatar(id64(9001))).rejects.toThrow("Steam Community answered HTTP 503");
+            await expect(steamAvatar(id64(1001), "full")).resolves.toBe(dataUrl(RED));
+            await expect(steamAvatar(id64(9001), "medium")).rejects.toThrow("Steam Community answered HTTP 503");
             expect(steam.requests).toHaveLength(before);
             expect(page.exceptions).toEqual([]);
         } finally {
             await page.close();
         }
     }, 90_000);
+
+    test("Steam Community limiting us, or not answering at all, also puts the service to rest, told from its status and not its words", async () => {
+        const rested = () => setSystemTime(new Date(Date.now() + 2 * 60 * 1000));
+        try {
+            // the rest from the 503 above has passed
+            rested();
+            steamFails = 429;
+            await expect(steamAvatar(id64(9201), "medium")).rejects.toThrow("Steam Community is limiting how often profile pictures are asked for");
+            const before = steam.requests.length;
+            await expect(steamAvatar(id64(9202), "medium")).rejects.toThrow("limiting how often");
+            expect(steam.requests).toHaveLength(before);
+            // a 403 is no reason to rest: it is shown as it is, and the next account is asked
+            rested();
+            steamFails = 403;
+            await expect(steamAvatar(id64(9203), "medium")).rejects.toThrow("Steam Community answered HTTP 403 for a profile");
+            steamFails = null;
+            await expect(steamAvatar(id64(9204), "medium")).resolves.toBeNull();
+            // a Steam that can't be reached
+            const gone = loopbackServer(() => new Response("never"));
+            trustLoopback(gone);
+            gone.stop();
+            const origin = STEAM_COMMUNITY.origin;
+            STEAM_COMMUNITY.origin = gone.url;
+            try {
+                await expect(steamAvatar(id64(9205), "medium")).rejects.toThrow("Couldn't load profile pictures from Steam Community: Couldn't reach");
+                STEAM_COMMUNITY.origin = origin;
+                // resting: even a Steam that answers is left alone
+                await expect(steamAvatar(id64(9206), "medium")).rejects.toThrow("Couldn't load profile pictures from Steam Community");
+            } finally {
+                STEAM_COMMUNITY.origin = origin;
+            }
+        } finally {
+            setSystemTime();
+        }
+    }, 30_000);
 });

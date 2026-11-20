@@ -453,7 +453,7 @@ const serversCalls: Pick<Handlers, ServersCallName> = {
     readServerConfig: (_input, _ctx, { server }) => requireServer(server).settings,
     retryInitialize: async (_input, _ctx, { server }) => (await retryInitialize(server), true),
     servedPicture: (input) => pictureCall(input),
-    steamAvatar: ({ steamId }) => steamAvatar(steamId),
+    steamAvatar: ({ steamId, size }) => steamAvatar(steamId, size),
 };
 /** Every other call is about one server, and its game answers it. */
 const serverCalls: Omit<Handlers, ServersCallName> = {
