@@ -2,7 +2,6 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { problemsApi, processApi as rawProcess, type PanelProblem } from "@mileniumhq/paperapi";
-import { processApi } from "../src/service/api";
 import { startTestDaemon, type TestDaemon } from "./helpers/crane";
 import { minecraftServer } from "./helpers/minecraft";
 import { gameServer } from "./helpers/game";

@@ -8,7 +8,6 @@ import { bootPanel, openSection, type BootedPanel, type BootOptions, type Page }
 setDefaultTimeout(60_000);
 
 const SETTINGS = { name: "Ada", harness: "codex" as const, model: null, compaction: "summarize" as const };
-const MODELS = { models: { stdout: JSON.stringify({ models: [{ slug: "gpt-x", display_name: "GPT X", visibility: "list", priority: 1 }] }) } };
 
 let panel: BootedPanel | null = null;
 afterEach(async () => {

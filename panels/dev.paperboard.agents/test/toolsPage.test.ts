@@ -26,37 +26,8 @@ async function toolsPage(): Promise<Page> {
     return page;
 }
 
-/** Opens the editor for a new server; resolves once its Name field shows. */
-async function newServer(page: Page): Promise<void> {
-    await page.click(`input[name="agents-tools"][value="new"]`);
-    await page.waitFor(`${EDITOR}?.querySelector('input[name="name"]')`, "the new server's editor");
-}
-
-// the server editor is the form in a dialog (the menu is a dialog of its own, around the Tools page);
-// a variable's row is the group its Remove button is in, and its first field is its Name
+// the server editor is the form in a dialog (the menu is a dialog of its own, around the Tools page)
 const EDITOR = `document.querySelector("[role=dialog] form")`;
-const ROWS = `[...${EDITOR}.querySelectorAll('button[aria-label^="Remove "]')].map((b) => b.closest("[role=group]"))`;
-const addRow = async (page: Page, rows: number) => {
-    await page.evaluate(`[...${EDITOR}.querySelectorAll("button")].find((b) => b.innerText.includes("Add a variable")).dataset.testAdd = "1"`);
-    await page.click(`button[data-test-add]`);
-    await page.waitFor(`${ROWS}.length === ${rows}`, `${rows} variable rows`);
-};
-
-/**
- * Types `text` one character at a time into whatever has the keyboard, as
- * keys pressed one after another would, and says after each one whether the
- * field it started in still has the keyboard and is still on the page.
- */
-const typeKeys = (page: Page, text: string) =>
-    page.evaluate<{ stayed: boolean; value: string }>(`(() => {
-        const field = document.activeElement;
-        let stayed = true;
-        for (const ch of ${JSON.stringify(text)}) {
-            document.execCommand("insertText", false, ch);
-            stayed &&= document.activeElement === field && field.isConnected;
-        }
-        return { stayed, value: field.value };
-    })()`);
 
 describe("the tool server editor", () => {
     test("saving a server the agent set up keeps its secret where the vault has it", async () => {

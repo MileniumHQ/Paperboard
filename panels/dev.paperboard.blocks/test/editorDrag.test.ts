@@ -19,8 +19,6 @@ const fixture = async () => {
     return checks;
 };
 
-/** A dragged block stays under the pointer, to within a pixel or two of rounding. */
-const HELD = 2;
 const TIMEOUT = 180_000;
 
 describe("dragging blocks in the editor", () => {

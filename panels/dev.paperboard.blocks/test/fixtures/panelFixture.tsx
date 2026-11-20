@@ -4,13 +4,11 @@
 // while the service keeps announcing: the registry changes under the Library,
 // flows fail to load, an edit is left unsaved. A call the service refuses is
 // sent for a project it doesn't have (fixtures/wire.ts). What the page kept
-// through each is posted back to the test as JSON. Keys and clicks that matter as a person's
-// own are sent through DevTools (/input), so Chrome handles them as trusted input.
+// through each is posted back to the test as JSON.
 import { render } from "solid-js/web";
 import * as Blockly from "blockly";
 import { PaperProvider } from "@mileniumhq/paperui";
 import App from "../../src/App";
-import type { LogEntry } from "../../src/panel";
 import { NOT_SAVED } from "../../src/editorFlows";
 import { serviceState } from "../../src/bridge";
 import { ask, askLeave, calls, held, holdNextList, holdsUnsaved, refuse, release } from "./wire";
@@ -46,11 +44,6 @@ async function until<T>(what: string, look: () => T | null | undefined | false):
     }
 }
 
-async function input(calls: { method: string; params: Record<string, unknown> }[]): Promise<void> {
-    const answer = await fetch("/input", { method: "POST", body: JSON.stringify({ calls }) });
-    if (!answer.ok) throw new Error(`the test's input failed: ${await answer.text()}`);
-}
-
 /** The innermost element matching `selector` whose text is (or ends with) `text`. */
 function byText(selector: string, text: string, root: ParentNode = document): HTMLElement | undefined {
     const all = [...root.querySelectorAll<HTMLElement>(selector)].filter((el) => el.textContent?.trim().endsWith(text));
@@ -62,12 +55,6 @@ function canvas(): Blockly.WorkspaceSvg | undefined {
     return Blockly.Workspace.getAll().find((w): w is Blockly.WorkspaceSvg => w.rendered && !(w as Blockly.WorkspaceSvg).isFlyout && !!(w as Blockly.WorkspaceSvg).getFlyout());
 }
 
-const logged = (message: string) => serviceState.current().log.some((entry: LogEntry) => entry.message === message);
-/** The service logs each line, in order, and the page has heard the last one. */
-async function say(...messages: string[]): Promise<void> {
-    await ask("say", { lines: messages });
-    await until(`"${messages.at(-1)}" in the page's log`, () => logged(messages.at(-1)!));
-}
 /** The Fixture Panel registers its blocks again: every window hears the registry changed. */
 const registryChanged = () => ask("fixture", { do: "register" });
 

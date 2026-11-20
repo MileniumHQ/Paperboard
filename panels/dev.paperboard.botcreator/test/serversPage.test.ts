@@ -1,8 +1,8 @@
 import { afterAll, afterEach, beforeAll, describe, expect, setDefaultTimeout, test } from "bun:test";
 import type { BotsServiceState } from "../src/bots";
 import { panelBrowser, servePanel, TOASTS, type Page } from "./helpers/browser";
-import { guild, snowflake, startFakeDiscord, userMessage, type FakeDiscord } from "./helpers/discord";
-import { call, PANEL_ID, savedBots, startService, stopServices, storedBot } from "./helpers/service";
+import { guild, startFakeDiscord, type FakeDiscord } from "./helpers/discord";
+import { PANEL_ID, savedBots, startService, stopServices, storedBot } from "./helpers/service";
 import { stateWhere } from "./helpers/wait";
 
 // each wait below has its own bound; a test as a whole may take longer than bun's 5 s default
