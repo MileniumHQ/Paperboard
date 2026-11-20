@@ -31,9 +31,6 @@ app.on("web-contents-created", (_event, contents) => {
         report({ event: "console", level, message, url: contents.getURL() });
     });
     contents.on("render-process-gone", (_e, details) => report({ event: "renderer-gone", reason: details.reason, url: contents.getURL() }));
-    // a page whose script runs on and on: why a command in it got no answer
-    contents.on("unresponsive", () => report({ event: "unresponsive", url: contents.getURL() }));
-    contents.on("responsive", () => report({ event: "responsive", url: contents.getURL() }));
     contents.on("preload-error", (_e, preloadPath, error) => report({ event: "preload-error", preloadPath, message: text(error) }));
     contents.on("did-fail-load", (_e, code, description, url, isMainFrame) => report({ event: "load-failed", code, description, url, isMainFrame }));
     contents.on("did-finish-load", () => report({ event: "loaded", url: contents.getURL() }));
@@ -93,19 +90,22 @@ function findFrame(match, ms) {
 
 // what each command still out is doing, for a test whose command got no answer
 const pending = new Map();
+// Electron holds a script until the page's main frame stops loading, so
+// that is worked out when asked, not when the command was sent
+const stateOf = (contents) => contents.isDestroyed() ? "its page is gone"
+    : contents.isLoadingMainFrame() ? `waiting for ${contents.getURL()} to stop loading` : `running in ${contents.getURL()}`;
 
 const AsyncFunction = Object.getPrototypeOf(async () => undefined).constructor;
 const commands = {
     eval: ({ id, match, code }) => {
         const contents = findContents(match);
-        // Electron holds a script until the page's main frame stops loading
-        pending.set(id, contents.getURL() && !contents.isLoadingMainFrame() ? `running in ${contents.getURL()}` : `waiting for ${contents.getURL() || match} to stop loading`);
+        pending.set(id, () => stateOf(contents));
         return contents.executeJavaScript(code, true);
     },
     evalFrame: async ({ id, match, code, waitMs }) => {
-        pending.set(id, `waiting for a frame at ${match}`);
+        pending.set(id, () => `waiting for a frame at ${match}`);
         const frame = await findFrame(match, waitMs);
-        pending.set(id, `running in the frame ${frame.url}`);
+        pending.set(id, () => `running in the frame ${frame.url}`);
         return frame.executeJavaScript(code, true);
     },
     main: ({ code }) => new AsyncFunction("require", "electron", "app", code)(require, electron, app),
@@ -117,14 +117,12 @@ const commands = {
     // the command `of` is doing, and the state of every page
     status: ({ of }) => ({
         // gone from here: main answered it, or never had it
-        command: pending.get(of) ?? "answered, or never received",
+        command: pending.get(of)?.() ?? "answered, or never received",
         pages: webContents.getAllWebContents().map((c) => c.isDestroyed() ? { destroyed: true } : {
             url: c.getURL(),
             loading: c.isLoading(),
             loadingMainFrame: c.isLoadingMainFrame(),
             crashed: c.isCrashed(),
-            waitingForResponse: c.isWaitingForResponse(),
-            visible: BrowserWindow.fromWebContents(c)?.isVisible() ?? null,
         }),
     }),
 };
