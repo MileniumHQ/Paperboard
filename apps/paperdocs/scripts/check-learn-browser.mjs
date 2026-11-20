@@ -200,6 +200,22 @@ try {
             return { field, html: getComputedStyle(document.documentElement).backgroundColor };
         });
         assert.equal(canvas.html, canvas.field, `The document canvas on ${slug} must match its page field`);
+        // Blocks stands for every panel: its field blends their colours, one
+        // pool each, while its buttons keep the landing blue.
+        const field = await page.locator(".learn-page").evaluate((element) => {
+            const style = getComputedStyle(element);
+            return {
+                blended: element.hasAttribute("data-blend"),
+                pools: new Set(style.backgroundImage.match(/radial-gradient\([^()]*(?:\([^()]*\)[^()]*)*\)/g)?.map((pool) => pool.match(/(?:oklab|color)\([^)]*\)/)?.[0])).size,
+                accent: style.getPropertyValue("--paper-site-accent").trim(),
+                primary: style.getPropertyValue("--paper-primary").trim(),
+            };
+        });
+        assert.equal(field.blended, slug === "blocks", `Only Blocks blends several panel colours (${slug})`);
+        if (slug === "blocks") {
+            assert.equal(field.pools, 5, "The Blocks field must show a distinct pool for each of its five panel colours");
+            assert.equal(field.accent, field.primary, "Blocks keeps the landing blue for its buttons");
+        }
         assert.equal(await page.locator(".learn-feature").count(), FEATURES[slug]);
         // Reveals are scroll-driven CSS: the hero is shown on arrival, a
         // section below the fold waits for the reader to scroll to it.

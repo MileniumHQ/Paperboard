@@ -32,6 +32,15 @@ html:has(.learn-page) {
             color-mix(in srgb, var(--paper-site-accent) 10%, var(--paper-marketing-ink))
         );
 }
+/* A panel that stands for several others (LearnPanel.blend): LearnPage builds
+   --learn-field, one soft pool per colour down the page, over the accent's
+   deepest stop. */
+.learn-page[data-blend] {
+    --learn-pool: 48%;
+    background:
+        var(--learn-field),
+        color-mix(in srgb, var(--paper-site-accent) 10%, var(--paper-marketing-ink));
+}
 .learn-main {
     position: relative;
     z-index: 2;

@@ -10,6 +10,11 @@ Use a `--paper-panel-*` identity token from PaperUI's `styles/colors.css` for
 `accent`. The page derives its background, buttons, and highlights from the
 single `--paper-site-accent` token, also used by the main landing page.
 
+A panel that stands for several others, like Blocks, can list their colours in
+`blend`. The background becomes one soft pool per colour, any number of them,
+in list order from the top of the page down; the accent still colours the
+buttons and highlights.
+
 Screenshots are the panels' own store screenshots. `bun run screens` copies
 each featured panel's dark store screenshots, in store order, from
 `panels/<id>/store` to `public/screens/<name>-<n>.png` (1360 × 1020) and removes
