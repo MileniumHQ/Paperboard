@@ -15,10 +15,15 @@ export interface SourceStats {
 }
 export const STAT_KEYS = ["kills", "deaths", "assists", "dominations", "playtime"] as const satisfies readonly (keyof SourceStats)[];
 export const noStats = (): SourceStats => ({ kills: 0, deaths: 0, assists: 0, dominations: 0, playtime: 0 });
+/** What a player has done since the last save, with the name they had, which records them if the roster has not seen them. */
+export interface SourceGathered extends Partial<SourceStats> {
+    name: string;
+}
 /** Adds `from`'s counts into `into`: what a failed write gathered waits for the next one. */
-export function mergeStats(into: Map<string, Partial<SourceStats>>, from: ReadonlyMap<string, Partial<SourceStats>>): void {
+export function mergeStats(into: Map<string, SourceGathered>, from: ReadonlyMap<string, SourceGathered>): void {
     for (const [steamId, stats] of from) {
-        const kept = into.get(steamId) ?? {};
+        // `into` gathered since, so its name is the newer one
+        const kept = into.get(steamId) ?? { name: stats.name };
         for (const key of STAT_KEYS) if (stats[key]) kept[key] = (kept[key] ?? 0) + stats[key]!;
         into.set(steamId, kept);
     }
@@ -72,18 +77,21 @@ export class SourceRoster {
         });
     }
 
-    /** Adds to the totals of players already seen; a Steam id it has not seen is refused. */
-    addStats(added: ReadonlyMap<string, Partial<SourceStats>>): Promise<void> {
+    /**
+     * Adds to the players' totals. A player the roster has not seen (their
+     * join was not recorded: its write failed) is recorded as seen now, so
+     * one lost join keeps no one's stats out.
+     */
+    addStats(added: ReadonlyMap<string, SourceGathered>, now = Date.now()): Promise<void> {
         return this.serial(async () => {
             if (added.size === 0) return;
-            const seen = await this.seen();
-            const byId = new Map(seen.map((p) => [p.steamId, p]));
+            const byId = new Map((await this.seen()).map((p) => [p.steamId, p]));
             for (const [steamId, stats] of added) {
-                const player = byId.get(steamId);
-                if (!player) throw new Error(`${steamId} has not been seen on this server`);
+                const player = byId.get(steamId) ?? { steamId, name: stats.name || steamId, lastSeen: now };
                 for (const key of STAT_KEYS) if (stats[key]) player[key] = (player[key] ?? 0) + stats[key]!;
+                byId.set(steamId, player);
             }
-            await writeFileAtomic(this.seenFile, JSON.stringify(seen, null, 2));
+            await writeFileAtomic(this.seenFile, JSON.stringify([...byId.values()], null, 2));
         });
     }
 

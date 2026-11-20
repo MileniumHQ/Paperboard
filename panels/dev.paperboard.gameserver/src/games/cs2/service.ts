@@ -15,7 +15,7 @@ import {
 import { SOURCE_CALLS, type SourceMetrics } from "../source";
 import { cvarValue, mapName, optionValue } from "../source/config";
 import { consoleLine, logBody, parseLogLine, steamId, isSteamId, type SourceLogEvent } from "../source/log";
-import { mergeStats, noStats, SourceRoster, type SourceStats } from "../source/roster";
+import { mergeStats, noStats, SourceRoster, type SourceGathered } from "../source/roster";
 import type { SourceOnline } from "../source/people";
 import { installMapPicture } from "../source/installPictures";
 import { cs2, CS2, MODES, type Cs2Mode } from "./index";
@@ -81,7 +81,7 @@ export function cs2Service(ctx: Server): GameService {
         status: null as string[] | null,
         secrets: [] as string[],
         console: new ConsoleBuffer(isErrorLine),
-        unsaved: new Map<string, Partial<SourceStats>>(),
+        unsaved: new Map<string, SourceGathered>(),
         counted: new Map<number, number>(),
         statsTimer: null as ReturnType<typeof setTimeout> | null,
     };
@@ -135,9 +135,11 @@ export function cs2Service(ctx: Server): GameService {
         }));
     }
 
-    function unsaved(id: string): Partial<SourceStats> {
-        const stats = local.unsaved.get(id) ?? {};
-        local.unsaved.set(id, stats);
+    function unsaved(player: SourceOnline): SourceGathered {
+        const stats = local.unsaved.get(player.steamId) ?? { name: player.name };
+        // a rename since is the name they are recorded by
+        stats.name = player.name || stats.name;
+        local.unsaved.set(player.steamId, stats);
         return stats;
     }
     function countPlaytime(player: SourceOnline, now = Date.now()) {
@@ -145,7 +147,8 @@ export function cs2Service(ctx: Server): GameService {
         local.counted.set(player.userId, now);
         if (!isSteamId(player.steamId) || now <= from) return;
         player.stats.playtime += now - from;
-        unsaved(player.steamId).playtime = (unsaved(player.steamId).playtime ?? 0) + now - from;
+        const gathered = unsaved(player);
+        gathered.playtime = (gathered.playtime ?? 0) + now - from;
     }
     async function saveStats() {
         if (local.statsTimer) clearTimeout(local.statsTimer!);
@@ -162,7 +165,8 @@ export function cs2Service(ctx: Server): GameService {
         if (!player) return;
         player.stats[key] += 1;
         if (!isSteamId(player.steamId)) return;
-        unsaved(player.steamId)[key] = (unsaved(player.steamId)[key] ?? 0) + 1;
+        const gathered = unsaved(player);
+        gathered[key] = (gathered[key] ?? 0) + 1;
         if (!local.statsTimer) local.statsTimer = setTimeout(() => {
             local.statsTimer = null;
             saveStats().catch((err) => report(ctx, "Could not save players' stats", err));
