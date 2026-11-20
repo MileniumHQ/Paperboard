@@ -1,11 +1,12 @@
 // What this suite makes and must take down again: throwaway directories,
-// the processes it started, and the workloads those started. bun test runs
+// the processes it started, and the processes those started. bun test runs
 // no process "exit" handlers, so preload.ts calls cleanupSuite() from a
 // global afterAll once every file has run.
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import type { ChildProcess } from "node:child_process";
+import { readProcessTable, type ProcessTable } from "daemon/system/usage";
 
 const made: string[] = [];
 // folders made to hold temp dirs off the temp dir's drive, removed once empty
@@ -58,7 +59,8 @@ const alive = (pid: number) => {
 
 // supervisors (and their workloads) a daemon started in one of our data
 // dirs outlive that daemon by design; they are ours, so they end here
-function endWorkloads(dir: string): void {
+function workloadPids(dir: string): number[] {
+    const pids: number[] = [];
     for (const sockets of [path.join(dir, "sockets"), path.join(dir, "data", "sockets")]) {
         if (!fs.existsSync(sockets)) continue;
         for (const file of fs.readdirSync(sockets).filter((f) => f.endsWith(".json"))) {
@@ -66,17 +68,60 @@ function endWorkloads(dir: string): void {
             // a record copied in from a fixture names some other run's pids
             if (!(Date.parse(meta.startedAt) >= SUITE_STARTED)) continue;
             for (const pid of [meta.pid, meta.childPid]) {
-                if (typeof pid === "number" && pid > 0 && pid !== process.pid && alive(pid)) process.kill(pid, "SIGKILL");
+                if (typeof pid === "number" && pid > 0 && pid !== process.pid && alive(pid)) pids.push(pid);
             }
         }
     }
+    return pids;
 }
 
-export function cleanupSuite(): void {
-    for (const child of children) {
-        if (child.exitCode === null && child.signalCode === null) child.kill("SIGKILL");
+// `roots` and every process under them in `table`, followed by parent pid
+export function processTree(table: ProcessTable, roots: Iterable<number>): Set<number> {
+    const tree = new Set<number>();
+    const byParent = new Map<number, number[]>();
+    for (const [pid, sample] of table) {
+        const siblings = byParent.get(sample.ppid);
+        if (siblings) siblings.push(pid);
+        else byParent.set(sample.ppid, [pid]);
     }
-    for (const dir of made) endWorkloads(dir);
-    for (const dir of made) fs.rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+    const queue = [...roots];
+    while (queue.length > 0) {
+        const pid = queue.pop()!;
+        if (pid === process.pid || tree.has(pid)) continue;
+        tree.add(pid);
+        queue.push(...(byParent.get(pid) ?? []));
+    }
+    return tree;
+}
+
+const GONE_WITHIN_MS = 30_000;
+
+// Ends what this suite still runs (a daemon or an app a failed test never
+// stopped, the services, supervisors and renderers those started) and
+// returns once every one of them has exited. A killed process lets go of
+// its files only then, and until it does Windows refuses to remove the
+// program it runs from (the compiled crane every service runs) or a folder
+// it holds open. Only running roots are followed: an exited one's pid may
+// already belong to someone else's process.
+async function endOurProcesses(): Promise<void> {
+    const roots = [...children].filter((c) => c.exitCode === null && c.signalCode === null).map((c) => c.pid!);
+    roots.push(...made.flatMap(workloadPids));
+    if (roots.length === 0) return;
+    // read while the roots still run, so every tree is whole
+    const tree = [...processTree(await readProcessTable(), roots)];
+    for (const pid of tree) if (alive(pid)) process.kill(pid, "SIGKILL");
+    const deadline = Date.now() + GONE_WITHIN_MS;
+    let left = tree.filter(alive);
+    while (left.length > 0) {
+        if (Date.now() > deadline) throw new Error(`processes this suite started still ran ${GONE_WITHIN_MS} ms after they were killed: ${left.join(", ")}`);
+        // quiet: most of these are not our children, so there is no exit event to wait on; bounded by the deadline above
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        left = left.filter(alive);
+    }
+}
+
+export async function cleanupSuite(): Promise<void> {
+    await endOurProcesses();
+    for (const dir of made) fs.rmSync(dir, { recursive: true, force: true });
     for (const base of bases) if (fs.readdirSync(base).length === 0) fs.rmdirSync(base);
 }
