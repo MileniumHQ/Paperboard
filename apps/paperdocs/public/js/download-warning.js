@@ -49,14 +49,16 @@ function onDownload(event) {
     }
 }
 
-document.addEventListener('click', onDownload);
-document.addEventListener('auxclick', onDownload);
+// Capture, before the page sees the click: nothing on the page that stops a
+// click's propagation can let a release download without asking.
+document.addEventListener('click', onDownload, true);
+document.addEventListener('auxclick', onDownload, true);
 function onPageHide(event) {
     // A cached document keeps its controller for browser Back/Forward.
     if (event.persisted) return;
     closed = true;
-    document.removeEventListener('click', onDownload);
-    document.removeEventListener('auxclick', onDownload);
+    document.removeEventListener('click', onDownload, true);
+    document.removeEventListener('auxclick', onDownload, true);
     window.removeEventListener('pagehide', onPageHide);
 }
 window.addEventListener('pagehide', onPageHide);

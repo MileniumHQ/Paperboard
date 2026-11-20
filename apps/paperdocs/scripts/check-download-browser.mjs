@@ -5,6 +5,7 @@ import assert from 'node:assert/strict';
 export async function checkDownloads(browser, origin) {
     const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
     try {
+        await context.grantPermissions(['clipboard-read', 'clipboard-write'], { origin });
         await context.addInitScript(() => {
             Object.defineProperty(navigator, 'userAgentData', { value: {
                 platform: 'Windows',
@@ -27,7 +28,20 @@ export async function checkDownloads(browser, origin) {
         // column rather than a heading role.
         assert.equal(await page.locator('main').getByText('Downloads', { exact: true }).count(), 1);
         assert.equal(await page.getByRole('heading', { name: 'Paperboard server daemon', exact: true }).count(), 1);
-        assert.equal(await page.locator('main ul').count(), 2, 'Each product has a plain text list');
+        // each product is a list whose rows end in a button per architecture
+        assert.equal(await page.getByLabel('Paperboard downloads', { exact: true }).locator('a[href^="https://i.paperboard.dev/"]').count(), 9);
+        assert.equal(await page.getByLabel('Paperboard server daemon downloads', { exact: true }).locator('a[href^="https://i.paperboard.dev/"]').count(), 5);
+        // the terminal installs: the island renders them again so each copy
+        // button copies its command (the prerendered ones do nothing)
+        const commands = ['curl -fsSL https://i.paperboard.dev | sh', 'irm https://i.paperboard.dev | iex', 'npx @mileniumhq/paperboard'];
+        const copyButtons = page.locator('#site-install button');
+        assert.equal(await copyButtons.count(), commands.length, 'Each install command has its copy button');
+        for (const [i, command] of commands.entries()) {
+            assert.equal(await page.locator('#site-install pre').filter({ hasText: command }).count(), 1, `${command} is shown`);
+            await copyButtons.nth(i).click();
+            await page.waitForFunction(i => document.querySelectorAll('#site-install button')[i]?.getAttribute('aria-label') === 'Copied', i);
+            assert.equal(await page.evaluate(() => navigator.clipboard.readText()), command, `Copy puts ${command} on the clipboard`);
+        }
         assert.equal(await page.locator('main a[href^="https://i.paperboard.dev/"]').count(), 14, 'Both products retain every architecture and Linux format');
         assert.equal(await page.locator('main a[href^="https://i.paperboard.dev/"]').filter({ hasText: /^Download$/ }).count(), 0, 'Links identify the architecture rather than repeating Download');
 
@@ -60,6 +74,21 @@ export async function checkDownloads(browser, origin) {
             assert.equal(await link.evaluate(node => node === document.activeElement), true, 'Dismissal restores the selected download link');
             assert.equal(await page.evaluate(() => document.documentElement.style.overflow), '');
         }
+        // something on the page that stops a click's propagation can't let a
+        // release download without asking: the warning hears the click first
+        await page.evaluate(() => { window.stopClicks = (e) => e.stopPropagation(); document.querySelector('main').addEventListener('click', window.stopClicks); });
+        await page.locator('a[href$="paperboard-macos-arm64.zip"]').click();
+        await page.getByRole('dialog', { name: 'Installing on macOS' }).waitFor();
+        assert.equal(downloads, 0, 'A click whose propagation is stopped still asks first');
+        await page.keyboard.press('Escape');
+        await page.locator('.download-warning').waitFor({ state: 'detached' });
+        await page.evaluate(() => document.querySelector('main').removeEventListener('click', window.stopClicks));
+        // a middle click asks too, instead of opening the release in a new tab
+        await page.locator('a[href$="paperboard-macos-x64.zip"]').click({ button: 'middle' });
+        await page.getByRole('dialog', { name: 'Installing on macOS' }).waitFor();
+        assert.equal(downloads, 0, 'A middle click starts no download');
+        await page.keyboard.press('Escape');
+        await page.locator('.download-warning').waitFor({ state: 'detached' });
         const windows = page.locator('a[href$="paperboard-windows-x64-setup.exe"]');
         await windows.click();
         await page.waitForFunction(() => document.activeElement?.classList.contains('download-warning'));

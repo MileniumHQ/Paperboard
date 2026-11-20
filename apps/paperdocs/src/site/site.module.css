@@ -23,6 +23,18 @@
     gap: var(--paper-uigap);
 }
 
+/* A platform mark in a download row, at the list's icon size. */
+.platformIcon {
+    width: 1em;
+    height: 1em;
+}
+
+/* A heading in a column its gap spaces. PaperText as="h2" keeps the
+   browser's heading margins; drop this once PaperText resets them (#32). */
+.heading {
+    margin: 0;
+}
+
 /* Hydration root for the topbar island. display: contents keeps the sticky
    topbar positioned against the page column instead of this wrapper. */
 .topbarIsland {

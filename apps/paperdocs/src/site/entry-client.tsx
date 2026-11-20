@@ -2,6 +2,7 @@ import { render } from "solid-js/web";
 import "../index.css";
 import { SiteTopbar } from "./SiteTopbar";
 import { ContactForm } from "./pages/ContactForm";
+import { InstallCommands } from "./pages/InstallCommands";
 import { startCarousel } from "./blogCarousel";
 
 export async function showUnsignedDownload(download: import('../../public/js/unsigned-downloads.mjs').UnsignedDownload, trigger: HTMLElement) {
@@ -22,9 +23,10 @@ export async function showLinuxDownload(downloads: import('../../public/js/linux
 // The shared base stylesheet is imported here because this entry, not
 // SitePage, is the bundle root the browser loads.
 //
-// Root pages have a #site-topbar island (plus #site-contact on /contact). Docs
-// pages have a #docs-root island; the docs app is imported only there so the
-// root pages never download it or the search index.
+// Root pages have a #site-topbar island (plus #site-contact on /contact and
+// #site-install on /downloads). Docs pages have a #docs-root island; the docs
+// app is imported only there so the root pages never download it or the
+// search index.
 
 const topbarRoot = document.getElementById("site-topbar");
 if (topbarRoot) {
@@ -36,6 +38,12 @@ const contactRoot = document.getElementById("site-contact");
 if (contactRoot) {
     contactRoot.replaceChildren();
     render(() => <ContactForm />, contactRoot);
+}
+
+const installRoot = document.getElementById("site-install");
+if (installRoot) {
+    installRoot.replaceChildren();
+    render(() => <InstallCommands />, installRoot);
 }
 
 // Post carousels stay static markup; the script only moves and times them.
