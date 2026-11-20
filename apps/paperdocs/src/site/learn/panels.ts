@@ -19,7 +19,7 @@ export interface LearnPanel {
     alt: string;
     features: PanelFeature[];
     note?: string;
-    /** colours the page's field blends, for a panel that stands for several others; without it the field is the accent alone */
+    /** colours the page's field blends, top to bottom, for a panel that stands for several others; any count. Without it the field is the accent alone. The accent still drives the buttons. */
     blend?: string[];
 }
 
@@ -199,9 +199,9 @@ export const LEARN_PANELS: LearnPanel[] = [
         alt: "Blocks that welcome players and restart a game server that crashed",
         blend: [
             "var(--paper-panel-gameserver)",
-            "var(--paper-panel-ai)",
-            "var(--paper-panel-actions)",
             "var(--paper-panel-botcreator)",
+            "var(--paper-panel-actions)",
+            "var(--paper-panel-ai)",
             "var(--paper-panel-agents)",
         ],
         features: [
