@@ -208,6 +208,7 @@ gstep packages "packed external consumers" bun "$ROOT/scripts/gate/check-package
 # ── server daemon: typecheck, full suite, lint, silent-catches, and the Go
 # workload supervisor it launches ───────────────────────────────────────────
 gstep daemon "daemon typecheck" run_in "$ROOT/apps/daemon" bun run typecheck
+gstep daemon "daemon typecheck:tests" run_in "$ROOT/apps/daemon" bun run typecheck:tests
 gstep daemon "daemon tests" run_in "$ROOT/apps/daemon" bun run test
 gstep daemon "daemon lint" run_in "$ROOT/apps/daemon" bunx biome lint
 gstep daemon "supervisor format and vet (linux, macOS, Windows)" supervisor_vet
