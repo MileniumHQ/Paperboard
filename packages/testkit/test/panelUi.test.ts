@@ -2,8 +2,8 @@
 // test starts, and every test process serves that one build: none builds its
 // own inside a test's time limit. The build is gone once the suite ends,
 // however it ends, and the exit code is the suite's. Each case is a real
-// runner building a real panel (the Terminal panel), with a TMPDIR of its
-// own to inspect.
+// runner building a real vite page (test/fixtures/panel), with a TMPDIR of
+// its own to inspect.
 import { describe, expect, test } from "bun:test";
 import { mkdtempSync, readdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -11,7 +11,7 @@ import { join } from "node:path";
 
 const PANEL_UI = join(import.meta.dir, "..", "src", "panelUi.ts");
 const WITH_PANEL_UI = join(import.meta.dir, "..", "src", "withPanelUi.ts");
-const PANEL = join(import.meta.dir, "..", "..", "..", "panels", "dev.paperboard.terminal");
+const PANEL = join(import.meta.dir, "fixtures", "panel");
 
 // a test process: says which build it serves and whether it is there; with no
 // PAPERBOARD_DIR, one that tried to build its own would fail instead

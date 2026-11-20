@@ -22,7 +22,8 @@
         "@types/bun": "1.4.4",
         "@types/node": "^24.19.2",
         "@types/ws": "^8.18.2",
-        "typescript": "~6.0.3"
+        "typescript": "~6.0.3",
+        "vite": "^8.3.8"
     },
     "license": "PolyForm-Noncommercial-1.0.0"
 }

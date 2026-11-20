@@ -17,12 +17,12 @@ const built = new Map<string, string>();
 /** the variable withPanelUi.ts tells a suite's test files its panel's built UI in: {"panelDir", "dir"} */
 export const SUITE_PANEL_UI = "TESTKIT_PANEL_UI";
 
-/** builds the panel's UI with its own vite config, as `bun run build` makes it, into `out` */
-export function buildPanelUi(panelDir: string, out: string): void {
-    const build = spawnSync(process.execPath, ["x", "vite", "build", "--outDir", out, "--emptyOutDir", "--logLevel", "error"], { cwd: panelDir, encoding: "utf8" });
-    if (build.status !== 0 || !fs.existsSync(path.join(out, "index.html"))) {
-        throw new Error(`Building the panel UI failed (exit ${build.status}):\n${build.stdout}\n${build.stderr}`);
-    }
+/** the command that builds the panel's UI with its own vite config, as `bun run build` makes it, into `out`; run it in the panel's folder */
+export const panelUiBuild = (out: string): string[] => [process.execPath, "x", "vite", "build", "--outDir", out, "--emptyOutDir", "--logLevel", "error"];
+
+/** throws why, when the build into `out` that ended with `code` made no UI */
+export function checkPanelUiBuilt(out: string, code: number | null, output: string): void {
+    if (code !== 0 || !fs.existsSync(path.join(out, "index.html"))) throw new Error(`Building the panel UI failed (exit ${code}):\n${output}`);
 }
 
 /**
@@ -43,7 +43,9 @@ export function panelUi(panelDir: string): string {
     const home = process.env.PAPERBOARD_DIR;
     if (!home || !home.startsWith(os.tmpdir())) throw new Error(`The panel UI is built into the suite's throwaway PAPERBOARD_DIR, not ${home}`);
     const out = fs.mkdtempSync(path.join(home, `${path.basename(panelDir)}-ui-`));
-    buildPanelUi(panelDir, out);
+    const [command, ...args] = panelUiBuild(out);
+    const build = spawnSync(command!, args, { cwd: panelDir, encoding: "utf8" });
+    checkPanelUiBuilt(out, build.status, `${build.stdout}\n${build.stderr}`);
     built.set(panelDir, out);
     return out;
 }

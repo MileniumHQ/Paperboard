@@ -12,7 +12,7 @@
 import { startChrome, SUITE_CHROME } from "./chrome";
 import { runSuite, splitCommand } from "./suite";
 
-const { switches, command } = splitCommand(process.argv.slice(2), "withChrome.ts [--chrome-switch...] <command> [argument...]");
+const { switches, command } = splitCommand(process.argv.slice(2), "withChrome.ts [--chrome-switch...] <command> [argument...]", true);
 const chrome = await startChrome(switches);
 const code = await runSuite("withChrome", command, { [SUITE_CHROME]: JSON.stringify({ port: chrome.port, args: chrome.args }) });
 await chrome.stop();
