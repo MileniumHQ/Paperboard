@@ -67,7 +67,7 @@ export function createSteamPictures(): SteamPictures {
             }
             if (!answer) return { state: "loading" };
             if (answer.state === "picture") return { state: "picture", src: answer.src };
-            if (answer.state === "none") return { state: "none", why: "Steam has no profile for this account" };
+            if (answer.state === "none") return { state: "none", why: "Steam has no picture for this account" };
             return { state: "failed", error: answer.error };
         },
         failure: () => {

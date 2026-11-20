@@ -117,10 +117,21 @@ function pictureAddress(account: string): Promise<string | null> {
 
 /**
  * A Steam account's profile picture as a data: address, or null when Steam has
- * no profile for the account. Throws why the picture can't be had.
+ * none for the account: no profile, or a profile whose picture its avatar host
+ * no longer has (measured: an old account's `avatarFull` is a 404 there, as it
+ * is for everyone, so Steam itself has nothing to show). Throws why the
+ * picture can't be had.
  */
 export async function steamAvatar(raw: unknown): Promise<string | null> {
     const account = requireAccount(raw);
     const address = await pictureAddress(account);
-    return address === null ? null : servedPicture(address, STEAM_AVATAR_HOSTS, "Steam");
+    if (address === null) return null;
+    try {
+        return await servedPicture(address, STEAM_AVATAR_HOSTS, "Steam");
+    } catch (err) {
+        // the avatar host's own answer that there is no such picture; any other failure is shown
+        if (!/ answered 404\b/.test(errorMessage(err))) throw err;
+        kept.set(account, { at: Date.now(), picture: null });
+        return null;
+    }
 }

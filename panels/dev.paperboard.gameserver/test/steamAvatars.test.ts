@@ -61,6 +61,8 @@ const profiles: Record<string, () => Response> = {
     [id64(1003)]: () => new Response(NO_ACCOUNT, { headers: { "content-type": "text/html; charset=UTF-8" } }),
     // its picture is not a picture, until a test fixes it
     [id64(1004)]: () => xml(profile(id64(1004), AVATAR("broken"))),
+    // a profile whose picture Steam's own host no longer has (the host answers 404, as it does for anyone)
+    [id64(1005)]: () => xml(profile(id64(1005), AVATAR("gone"), "friendsonly")),
     // a game's other forms of the same ids
     [id64(4011)]: () => xml(profile(id64(4011), AVATAR("gmod"))),
     [id64(5001)]: () => xml(profile(id64(5001), AVATAR("rust"))),
@@ -143,7 +145,7 @@ async function setUp() {
     const files = (id: string, tree: Record<string, string>) => writeTree(path.join(daemon.dataDir, "files", PANEL_ID, SERVERS, id), tree);
     const seen = (steamId: string, name: string) => ({ steamId, name, lastSeen: 1_700_000_000_000 });
     files("s-tf", {
-        "players.json": JSON.stringify([seen("[U:1:1001]", "Alice"), seen("[U:1:1002]", "Bob"), seen("[U:1:1003]", "Carol"), seen("[U:1:1004]", "Dave")]),
+        "players.json": JSON.stringify([seen("[U:1:1001]", "Alice"), seen("[U:1:1002]", "Bob"), seen("[U:1:1003]", "Carol"), seen("[U:1:1004]", "Dave"), seen("[U:1:1005]", "Frank")]),
     });
     files("s-gmod", { "players.json": JSON.stringify([seen("STEAM_0:1:2005", "Gus")]) });
     files("s-rust", { "rust-players.json": JSON.stringify([seen(id64(5001), "Rusty")]) });
@@ -191,15 +193,18 @@ describe("Steam players' pictures in the Players tab", () => {
             expect((await avatar(page, "Alice")).src).toBe(dataUrl(RED));
             expect((await avatar(page, "Bob")).src).toBe(dataUrl(GREEN));
             // an account with no profile is the figure, which says why; it is not the hourglass of a picture still coming
-            await page.waitFor(`${avatarOf("Carol")}.title === "Steam has no profile for this account"`, "Carol's note");
+            await page.waitFor(`${avatarOf("Carol")}.title === "Steam has no picture for this account"`, "Carol's note");
             expect(await avatar(page, "Carol")).toMatchObject({ src: null, glyph: "person" });
+            // a picture Steam's host no longer has is the same figure, not an alert
+            await page.waitFor(`${avatarOf("Frank")}?.title === "Steam has no picture for this account"`, "Frank's note");
+            expect(await avatar(page, "Frank")).toMatchObject({ src: null, glyph: "person", label: null });
 
             await page.click('input[name=playersList][value="Alice"]');
             await page.waitFor(`document.querySelector('[class*=xlarge] img')`, "Alice's picture on her page");
             expect((await avatar(page, "Alice", "open")).src).toBe(dataUrl(RED));
             // the page asked for no address of its own, and Steam saw each account once
             expect(elsewhere).toEqual([]);
-            expect([...asked()].sort()).toEqual([id64(1001), id64(1002), id64(1003), id64(1004)]);
+            expect([...asked()].sort()).toEqual([id64(1001), id64(1002), id64(1003), id64(1004), id64(1005)]);
             expect(avatars.requests.filter((request) => request === "/alice_full.jpg")).toHaveLength(1);
             expect(page.exceptions).toEqual([]);
 
@@ -208,7 +213,7 @@ describe("Steam players' pictures in the Players tab", () => {
             await page.waitFor(`document.querySelector('input[name=serverMenu][value="players"]')`, "the server menu");
             await page.click('input[name=serverMenu][value="players"]');
             await page.waitFor(`${avatarOf("Alice")}?.src`, "Alice's picture again");
-            expect([...asked()].sort()).toEqual([id64(1001), id64(1002), id64(1003), id64(1004)]);
+            expect([...asked()].sort()).toEqual([id64(1001), id64(1002), id64(1003), id64(1004), id64(1005)]);
         } finally {
             await page.close();
         }
