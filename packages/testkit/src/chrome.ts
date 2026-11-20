@@ -17,6 +17,8 @@
 // step on a busy CI runner, and a dozen files each starting their own is how
 // one of them times out. There openChrome() and launchChrome() open their
 // pages in the suite's Chrome. A file run by itself starts its own.
+// Wherever a Chrome is started, it starts in its turn, one at a time across
+// every test process on the machine (START_TURN).
 //
 // Chrome leaves nothing behind: its profile is its temp dir too (Chrome
 // puts its singleton socket under TMPDIR), and the profile is removed and
@@ -26,6 +28,7 @@ import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
+import { isAlive } from "./wait";
 
 const CHROMES = ["/usr/bin/google-chrome-stable", "/usr/bin/google-chrome", "/usr/bin/chromium", "/usr/bin/chromium-browser"];
 const WAIT_MS = 20_000;
@@ -39,6 +42,80 @@ function chromeBinary(): string {
     const found = CHROMES.find((file) => fs.existsSync(file));
     if (!found) throw new Error(`These tests drive the UI in headless Chrome, and none is installed (looked for ${CHROMES.join(", ")}). Install it or set CHROME_PATH.`);
     return found;
+}
+
+// Chrome starts one at a time on the machine, across every test process.
+// Starting is CPU-bound: a dozen started at once on a busy runner share the
+// CPU, and each is still starting, with nothing on stderr, when its own
+// deadline passes. Taken in turn, each start's deadline counts only its own
+// work. The turn is a file only one process can create (its PID in it); a
+// turn whose process is gone, or held longer than any start may take, is
+// someone's that ended mid-start, and is taken over. It limits load and
+// guards nothing else, so two processes taking over the same stale turn
+// at once only means two Chromes start together.
+//
+// Fixed under /tmp, not the TMPDIR a suite or test may set for itself, so
+// every test process on the machine waits in the same line.
+export const START_TURN = path.join("/tmp", `testkit-chrome-start-${os.userInfo().uid}`);
+/** longer than a start may hold its turn: its port deadline and the reaper's */
+const TURN_HELD_MS = 3 * WAIT_MS;
+/** a start that waits longer than this for its turn says who has it */
+const TURN_WAIT_MS = 10 * 60_000;
+
+interface Turn {
+    release(): void;
+}
+
+function turnHolder(): { pid: number; age: number } | null {
+    let text: string;
+    let age: number;
+    try {
+        text = fs.readFileSync(START_TURN, "utf8");
+        age = Date.now() - fs.statSync(START_TURN).mtimeMs;
+    } catch (err) {
+        // released between the try and the look
+        if ((err as NodeJS.ErrnoException).code === "ENOENT") return null;
+        throw err;
+    }
+    return { pid: Number(text), age };
+}
+
+async function startTurn(): Promise<Turn> {
+    const mine = `${START_TURN}.${process.pid}.${Math.random().toString(36).slice(2)}`;
+    const deadline = Date.now() + TURN_WAIT_MS;
+    try {
+        for (;;) {
+            // written whole before it is linked into place, so a holder's PID is
+            // never read half-written, and anew each try, so its age counts from
+            // when it was taken
+            fs.writeFileSync(mine, String(process.pid));
+            try {
+                fs.linkSync(mine, START_TURN);
+                break;
+            } catch (err) {
+                if ((err as NodeJS.ErrnoException).code !== "EEXIST") throw err;
+            }
+            const holder = turnHolder();
+            if (holder && (!isAlive(holder.pid) || holder.age > TURN_HELD_MS)) {
+                fs.rmSync(START_TURN, { force: true });
+                continue;
+            }
+            if (Date.now() > deadline) throw new Error(`Waited ${TURN_WAIT_MS / 1000}s for a turn to start Chrome; process ${holder?.pid} has held ${START_TURN} for ${Math.round((holder?.age ?? 0) / 1000)}s`);
+            // quiet: the poll interval of a deadline-bound wait for the turn to be released
+            await new Promise((resolve) => setTimeout(resolve, 20));
+        }
+    } finally {
+        fs.rmSync(mine, { force: true });
+    }
+    let released = false;
+    return {
+        release() {
+            if (released) return;
+            released = true;
+            // still ours: not taken over as stale by a process that then holds it
+            if (turnHolder()?.pid === process.pid) fs.rmSync(START_TURN, { force: true });
+        },
+    };
 }
 
 export type CdpEvent = { method: string; params: any };
@@ -192,6 +269,17 @@ export interface RunningChrome {
 
 /** starts a headless Chrome with a throwaway profile and waits for its DevTools port */
 export async function startChrome(args: string[] = []): Promise<RunningChrome> {
+    const binary = chromeBinary();
+    // its deadline starts once it is this Chrome's turn to start: see START_TURN
+    const turn = await startTurn();
+    try {
+        return await spawnChrome(binary, args);
+    } finally {
+        turn.release();
+    }
+}
+
+async function spawnChrome(binary: string, args: string[]): Promise<RunningChrome> {
     // short: the singleton socket's path (<profile>/com.google.Chrome.XXXXXX/
     // SingletonSocket) must fit in 108 bytes, under a suite's own TMPDIR too
     const profile = fs.mkdtempSync(path.join(os.tmpdir(), "pb-chrome-"));
@@ -217,7 +305,7 @@ export async function startChrome(args: string[] = []): Promise<RunningChrome> {
         return stopping;
     };
     try {
-        chrome = spawn(chromeBinary(), [
+        chrome = spawn(binary, [
             "--headless=new", "--remote-debugging-port=0", `--user-data-dir=${profile}`, "--no-first-run", "--no-default-browser-check",
             "--disable-background-networking", "--disable-component-update", "--disable-sync", "--metrics-recording-only",
             ...args, "about:blank",
