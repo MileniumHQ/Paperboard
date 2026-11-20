@@ -5,6 +5,7 @@ import assert from 'node:assert/strict';
 export async function checkDownloads(browser, origin) {
     const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
     try {
+        await context.grantPermissions(['clipboard-read', 'clipboard-write'], { origin });
         await context.addInitScript(() => {
             Object.defineProperty(navigator, 'userAgentData', { value: {
                 platform: 'Windows',
@@ -27,17 +28,20 @@ export async function checkDownloads(browser, origin) {
         // column rather than a heading role.
         assert.equal(await page.locator('main').getByText('Downloads', { exact: true }).count(), 1);
         assert.equal(await page.getByRole('heading', { name: 'Paperboard server daemon', exact: true }).count(), 1);
-        // each product is a list whose rows end in a button per architecture;
-        // the row actions stop a click's propagation, which must not skip the modal
+        // each product is a list whose rows end in a button per architecture
         assert.equal(await page.getByLabel('Paperboard downloads', { exact: true }).locator('a[href^="https://i.paperboard.dev/"]').count(), 9);
         assert.equal(await page.getByLabel('Paperboard server daemon downloads', { exact: true }).locator('a[href^="https://i.paperboard.dev/"]').count(), 5);
-        // the terminal installs, each copyable once the island has rendered
-        for (const command of ['curl -fsSL https://i.paperboard.dev | sh', 'irm https://i.paperboard.dev | iex', 'npx @mileniumhq/paperboard']) {
-            const block = page.locator('#site-install pre').filter({ hasText: command });
-            assert.equal(await block.count(), 1, `${command} is shown`);
+        // the terminal installs: the island renders them again so each copy
+        // button copies its command (the prerendered ones do nothing)
+        const commands = ['curl -fsSL https://i.paperboard.dev | sh', 'irm https://i.paperboard.dev | iex', 'npx @mileniumhq/paperboard'];
+        const copyButtons = page.locator('#site-install button');
+        assert.equal(await copyButtons.count(), commands.length, 'Each install command has its copy button');
+        for (const [i, command] of commands.entries()) {
+            assert.equal(await page.locator('#site-install pre').filter({ hasText: command }).count(), 1, `${command} is shown`);
+            await copyButtons.nth(i).click();
+            await page.waitForFunction(i => document.querySelectorAll('#site-install button')[i]?.getAttribute('aria-label') === 'Copied', i);
+            assert.equal(await page.evaluate(() => navigator.clipboard.readText()), command, `Copy puts ${command} on the clipboard`);
         }
-        await page.locator('#site-install button').first().waitFor();
-        assert.equal(await page.locator('#site-install button').count(), 3, 'Each install command has its copy button');
         assert.equal(await page.locator('main a[href^="https://i.paperboard.dev/"]').count(), 14, 'Both products retain every architecture and Linux format');
         assert.equal(await page.locator('main a[href^="https://i.paperboard.dev/"]').filter({ hasText: /^Download$/ }).count(), 0, 'Links identify the architecture rather than repeating Download');
 

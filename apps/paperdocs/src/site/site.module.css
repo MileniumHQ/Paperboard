@@ -29,15 +29,9 @@
     height: 1em;
 }
 
-/* A heading or label with what it introduces under it. */
-.section {
-    display: flex;
-    flex-direction: column;
-    gap: var(--paper-uigap-half);
-}
-
-/* the gap spaces a section; a heading's own margins would add to it */
-.section > * {
+/* A heading in a column its gap spaces. PaperText as="h2" keeps the
+   browser's heading margins; drop this once PaperText resets them (#32). */
+.heading {
     margin: 0;
 }
 
