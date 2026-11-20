@@ -17,7 +17,7 @@ The repo has four kinds of parts:
 - `packages/` are internal and external npm packages
 - `panels/` are the first-party panels that make Paperboard what it is
 
-`scripts/` at the root holds the gate (`scripts/gate`), the release tooling (`scripts/publish`), the supervisor build (`scripts/build`) and setup (`scripts/dev`)
+`scripts/` at the root holds the gate (`scripts/gate`), the release tooling (`scripts/publish`), the supervisor build (`scripts/build`) and setup (`scripts/dev`).
 
 - **Paperboard** (`apps/paperboard`) is the desktop app: the frontend that displays the interfaces of any panels. It runs the server daemon for its own computer inside it.
 - **The server daemon** (`apps/daemon`, which the code likes to call PaperCrane but it really shouldn't) runs panels' persistent code and lets them integrate deeper into the user's device through a WebSocket. It is built into the app, and compiled on its own for other computers. Its workload supervisor (`apps/daemon/supervisor`) is the one part in this codebase written in Go.
@@ -26,10 +26,10 @@ The repo has four kinds of parts:
 - **PaperDocs** (`apps/paperdocs`) is a Cloudflare Worker that serves the landing pages for Paperboard as well as the official docs and blog. It contains the entire documentation for PaperAPI and PaperUI.
 - **Origami** (`services/origami`) is a Cloudflare Worker behind package downloads and updates. It contains a registry of packages like Java, as well as CDN services for panels and Paperboard.
 - **Library** (`services/library`) is the panel store, served by Origami as a web page and inside the app.
-- **Arilink** (`services/arilink`) is a worker that provides short-links on https://pbd.lc
-- **Panel APIs** (`services/panelapis`) provides web APIs for panels that need them
+- **Arilink** (`services/arilink`) is a worker that provides shortlinks on https://pbd.lc.
+- **Panel APIs** (`services/panelapis`) provides web APIs for panels that need them.
 - **npx** (`packages/npx`) is `npx @mileniumhq/paperboard`, which installs Paperboard or runs its server daemon.
-- **testkit** (`packages/testkit`) is the shared test harness for CI and testing
+- **testkit** (`packages/testkit`) is the shared test harness for CI and testing.
 
 And of course, the panels:
 
