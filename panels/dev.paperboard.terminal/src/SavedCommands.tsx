@@ -1,7 +1,7 @@
 // Saved commands, run from the toolbar's menu and managed in a modal: add,
 // run, remove. The list and every outcome are the service's; this only asks
 // and shows what it answered.
-import { createSignal, For, Index, Show } from "solid-js";
+import { batch, createSignal, For, Index, Show } from "solid-js";
 import {
     PaperButton,
     PaperContextMenuHeader,
@@ -121,9 +121,13 @@ function SavedCommandsModal(props: {
 
     const save = async () => {
         if (!canSave()) return;
-        if (await run("Couldn't save the command", () => terminal.calls.saveCommand({ label: label(), command: command() }))) {
-            setLabel("");
-            setCommand("");
+        const sent = { label: label(), command: command() };
+        if (await run("Couldn't save the command", () => terminal.calls.saveCommand(sent))) {
+            // the form empties for the next one, unless the next one is already being typed
+            batch(() => {
+                if (label() === sent.label) setLabel("");
+                if (command() === sent.command) setCommand("");
+            });
         }
     };
 
