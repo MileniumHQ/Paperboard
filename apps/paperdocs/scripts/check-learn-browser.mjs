@@ -422,8 +422,9 @@ try {
     await page.mouse.down();
     await page.mouse.move(heading.x + heading.width / 2, heading.y + heading.height / 2, { steps: 16 });
     await page.mouse.up();
-    // Friction acts per second, so a glide lasts about half a minute at any
-    // frame rate; the deadline leaves room for a slow runner.
+    // Friction acts per second, so a glide lasts about half a minute at 30 fps
+    // and up; below that the step is capped and the glide stretches, which is
+    // the slow runner the deadline leaves room for.
     await page.locator('[data-play-field][data-play-state="resting"]').waitFor({ state: "attached", timeout: 90_000 });
     assert.deepEqual(await page.evaluate(() => [...new Set(window.__overCopy)]), [], "No frame may show an icon over the copy");
     const outroCopy = await page.evaluate(() => [...document.querySelectorAll(".outro-copy .styled-text-host, .outro-copy .download-cta")].map(element => element.getBoundingClientRect().toJSON()));
@@ -437,6 +438,18 @@ try {
     for (const hz of [30, 60, 120]) {
         const glidePage = await browser.newPage({ viewport: { width: 1440, height: 1080 } });
         try {
+            // The icons scatter with Math.random, and the flick's rest time
+            // depends on the neighbours it hits: seed it so every rate starts
+            // from the same scatter.
+            await glidePage.addInitScript(() => {
+                let seed = 0x9e3779b9;
+                Math.random = () => {
+                    seed = (seed + 0x6d2b79f5) | 0;
+                    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+                    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+                    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+                };
+            });
             await glidePage.goto(`${origin}/`);
             await glidePage.locator("[data-play-field]").scrollIntoViewIfNeeded();
             await glidePage.waitForFunction(() => [...document.querySelectorAll(".play-icon")].every(icon => icon.style.transform.includes("translate3d")));
