@@ -318,7 +318,7 @@ describe("SourceMod's calls on a TF2 server", () => {
 
         await call(ids.sourcemodSet, { on: true });
         expect((await call(ids.players)).admins).toEqual([]);
-        for (const steamId of ["[U:1:1]; quit", "BOT", "", 7]) await expect(call(ids.admin, { steamId, admin: true })).rejects.toThrow();
+        for (const steamId of ["[U:1:1]; quit", "BOT", "", 7]) await expect(call(ids.admin, { steamId, admin: true })).rejects.toThrow("Choose a player by their Steam id");
         await expect(call(ids.admin, { steamId: ID, admin: "yes" })).rejects.toThrow("Choose admin or not");
         expect(fs.readFileSync(file, "utf8")).toBe("// admins\n");
 
