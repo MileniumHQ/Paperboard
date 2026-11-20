@@ -151,10 +151,130 @@ describe("named sources and beforeBackup", () => {
 		await panel.close();
 		await host.close();
 	});
+
+	test("a beforeBackup error refuses the backup and restarts the service; progress lists a running backup", async () => {
+		const dir = dataDir();
+		const log = path.join(tempDir(), "starts.log");
+		// the backup goes on once this file is there. Not an action: the daemon
+		// stops the service the moment beforeBackup returns, which would race
+		// that action's own reply
+		const release = path.join(tempDir(), "release");
+		await installPanelFiles(dir, {
+			id: "test.prep",
+			service: countedService(log, {
+				extra: "let mode = 'refuse';",
+				actions: "{ ping: async () => 'pong', allow: async () => { mode = 'wait'; return true; } }",
+				// quiet: the daemon's own deadline for getting ready bounds this wait
+				options: `beforeBackup: async () => { if (mode === 'refuse') throw new Error('world is busy'); while (!fs.existsSync(${JSON.stringify(release)})) await new Promise((r) => setTimeout(r, 20)); },`,
+			}),
+		});
+		const daemon = await startDaemon({ dataDir: dir });
+		const host = await daemon.rpc();
+		const panel = await daemon.panelRpc("test.prep");
+		await readyService(host, "test.prep");
+		await panel.ok("file:write", { targetPath: "x.txt", content: "x" });
+		await host.ok("backup:panel-destination-set", { panelId: "test.prep", destinationId: "local" });
+		const before = starts(log);
+		const refused = await panel.fail("backup:create", { panelId: "test.prep" });
+		expect(refused.code).toBe("CONFLICT");
+		expect(refused.error).toContain("world is busy");
+		expect(starts(log)).toBe(before + 1);
+		await readyService(host, "test.prep");
+
+		await host.ok("actions:call", { panelId: "test.prep", action: "allow", args: [] });
+		const running = panel.call("backup:create", { panelId: "test.prep" }, 30_000);
+		const progress = await waitFor("the running backup in progress", async () => {
+			const list = (await panel.ok("backup:progress", { panelId: "test.prep" })).progress;
+			return list.length ? list : null;
+		});
+		expect(progress[0]).toMatchObject({ panelId: "test.prep", kind: "create" });
+		fs.writeFileSync(release, "");
+		expect((await running).error).toBeUndefined();
+		await panel.close();
+		await host.close();
+	});
+
+	test("afterBackup and afterRestore hear each one end, in the service that runs after it, made or failed", async () => {
+		const dir = dataDir();
+		const heard = path.join(tempDir(), "after.log");
+		const refuse = path.join(tempDir(), "refuse");
+		const log = (hook: string) => `${hook}: async (_ctx, ended) => { fs.appendFileSync(${JSON.stringify(heard)}, JSON.stringify(["${hook}", ended]) + "\\n"); },`;
+		await installPanelFiles(dir, {
+			id: "test.after",
+			service: serviceSource({
+				actions: PING,
+				extra: 'import * as fs from "node:fs";',
+				options: `${log("afterBackup")} ${log("afterRestore")} beforeBackup: async () => { if (fs.existsSync(${JSON.stringify(refuse)})) throw new Error("not now"); },`,
+			}),
+		});
+		const daemon = await startDaemon({ dataDir: dir });
+		const host = await daemon.rpc();
+		const panel = await daemon.panelRpc("test.after");
+		await readyService(host, "test.after");
+		const heardLines = async (count: number) => waitFor(`${count} hook calls`, async () => {
+			const lines = fs.existsSync(heard) ? fs.readFileSync(heard, "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l)) : [];
+			return lines.length >= count ? lines : null;
+		});
+		await panel.ok("file:write", { targetPath: "data.txt", content: "d" });
+		await host.ok("backup:panel-destination-set", { panelId: "test.after", destinationId: "local" });
+
+		const record = await panel.ok("backup:create", { panelId: "test.after", label: "kept" });
+		expect((await heardLines(1))[0]).toEqual(["afterBackup", { ok: true, backup: record }]);
+
+		fs.writeFileSync(refuse, "");
+		expect((await panel.fail("backup:create", { panelId: "test.after" })).error).toContain("not now");
+		expect((await heardLines(2))[1]).toEqual(["afterBackup", { ok: false, error: "The panel could not get ready for a backup: not now" }]);
+
+		expect((await panel.ok("backup:restore", { panelId: "test.after", backupId: record.id })).id).toBe(record.id);
+		expect((await heardLines(3))[2]).toEqual(["afterRestore", { ok: true, backup: record }]);
+		expect((await panel.fail("backup:restore", { panelId: "test.after", backupId: newBackupId() })).code).toBe("NOT_FOUND");
+		const [, , , failed] = await heardLines(4);
+		expect(failed[0]).toBe("afterRestore");
+		expect(failed[1]).toMatchObject({ ok: false, error: expect.stringContaining("is not at this panel's backup location") });
+		await panel.close();
+		await host.close();
+	});
 });
 
-// A service backing up its own panel from a block gets the backup as the answer.
-describe("a service that backs up its own panel from a block", () => {
+// A service backing up its own panel from an action or a block gets the backup as the answer.
+describe("a service that backs up its own panel from an action or a block", () => {
+	test("gets the backup record as the action's answer, answers the next call, and a foreign duringCall is refused", async () => {
+		const dir = dataDir();
+		await installPanelFiles(dir, {
+			id: "test.selfsave",
+			service: serviceSource({
+				extra: `import { backupApi } from ${JSON.stringify(PAPERAPI)};`,
+				actions: "{ ping: async () => 'pong', save: async () => backupApi.create('test.selfsave', { label: 'from action' })}",
+			}),
+		});
+		const crane = await startCrane({ dataDir: dir });
+		try {
+			const host = await crane.rpc();
+			await readyService(host, "test.selfsave");
+			await host.ok("file:write", { appId: "test.selfsave", targetPath: "data.txt", content: "d" });
+			await host.ok("backup:panel-destination-set", { panelId: "test.selfsave", destinationId: "local" });
+			const answer = await host.ok("actions:call", { panelId: "test.selfsave", action: "save", args: [], timeoutMs: 60_000 }, 70_000);
+			expect(answer.result).toMatchObject({ panelId: "test.selfsave", label: "from action" });
+			await readyService(host, "test.selfsave");
+
+			// a call that went to another connection cannot be carried by this one
+			const served = await crane.rpc();
+			await served.ok("actions:register", { panelId: "test.carrier", action: "hold" });
+			const held = host.call("actions:call", { panelId: "test.carrier", action: "hold", args: [], timeoutMs: 60_000 }, 70_000);
+			const call = await served.next((f) => f.type === "action_call" && f.action === "hold");
+			const intruder = await crane.rpc();
+			expect((await intruder.fail("backup:create", { panelId: "test.selfsave", duringCall: call.callId })).code).toBe("FORBIDDEN");
+			served.send({ type: "action_reply", callId: call.callId, result: "done" });
+			expect((await held).result).toEqual({ result: "done" });
+			await intruder.close();
+			await served.close();
+			await host.close();
+		} finally {
+			await crane.stop();
+			await killWorkloads(dir);
+		}
+	});
+
 	test("a block that backs up or restores gets the record as its answer, and a foreign duringCall for a block call is refused", async () => {
 		const dir = dataDir();
 		await installPanelFiles(dir, {

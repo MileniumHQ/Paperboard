@@ -7,6 +7,7 @@ import type { ServerSoftwareType } from "../src/software/catalog";
 
 const FIXTURES = path.join(import.meta.dir, "fixtures", "loader");
 const CASES: [ServerSoftwareType, string, string[]][] = [
+    ["paper", "paper-26.3", ["config/paper-world-defaults.yml", "config/paper-global.yml", "spigot.yml", "bukkit.yml"]],
     ["neoforge", "neoforge-21.1.256", ["config/neoforge-server.toml"]],
     ["neoforge", "neoforge-26.3.0.57", ["config/neoforge-synced.toml"]],
     ["forge", "forge-14.23.5.2859", ["config/forge.cfg"]],

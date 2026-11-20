@@ -6,6 +6,7 @@ import { minecraftServer, type McServer } from "./helpers/minecraft";
 import { loopbackServer, routeHost, type LoopbackServer } from "./helpers/http";
 import { currentPlayerNames, setPlayerFlag } from "../src/service/playerLists";
 import { startServerInstance, stopServerInstance } from "../src/service/lifecycle";
+import { punishPlayer } from "../src/games/minecraft/calls";
 
 const XUID = "2535428504476914";
 let daemon: TestDaemon;
@@ -27,6 +28,7 @@ afterAll(async () => {
 });
 
 const NAMING = { prefix: ".", replaceSpaces: true };
+const STEVE = "8667ba71-b85a-4004-af54-457a9734eed7";
 // new UUID(0, xuid), as Floodgate builds a Bedrock player's uuid
 const FLOODGATE_UUID = (() => {
     const hex = BigInt(XUID).toString(16).padStart(16, "0");
@@ -85,6 +87,22 @@ describe("op and whitelist edits", () => {
         const mc = minecraftServer({ files: { "server.properties": "online-mode=false\n", "whitelist.json": "[{\"name\": \"Steve\"," } });
         await expect(flag(mc, "whitelist", "Steve")).rejects.toThrow("whitelist.json is not valid JSON");
         expect(read(mc, "whitelist.json")).toBe("[{\"name\": \"Steve\",");
+    });
+
+    test("a running server takes them through its console, done once it has, and a change it refuses fails with its words", async () => {
+        const mc = minecraftServer({ files: { "server.properties": "online-mode=true\n", "usercache.json": JSON.stringify([{ name: "Steve", uuid: STEVE, expiresOn: "2030-01-01 00:00:00 +0000" }]) } });
+        await running(mc);
+        await flag(mc, "op", "Steve");
+        // the server wrote it, as it writes its own lists
+        expect(JSON.parse(read(mc, "ops.json"))).toEqual([{ uuid: STEVE, name: "Steve", level: 4, bypassesPlayerLimit: false }]);
+        await expect(flag(mc, "whitelist", "Steve", false)).rejects.toThrow("The server refused: Player is not whitelisted");
+        // an online-mode server finds no account by that name
+        await expect(flag(mc, "whitelist", "Nobody")).rejects.toThrow("The server refused: That player does not exist");
+        // Steve is not on it, so there is nobody to kick
+        await expect(punishPlayer(mc.server, "kick", "Steve")).rejects.toThrow("The server refused: No player was found");
+        expect(mc.commands().filter((c) => c !== "list")).toEqual(["op Steve", "whitelist remove Steve", "whitelist add Nobody", "kick Steve"]);
+        expect(JSON.parse(read(mc, "whitelist.json"))).toEqual([]);
+        await stop(mc);
     });
 
     test("a Bedrock player gets the uuid Floodgate derives from GeyserMC's XUID offline, and fwhitelist online", async () => {

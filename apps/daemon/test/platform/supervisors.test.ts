@@ -367,6 +367,50 @@ describe("supervised workloads are reported faithfully", () => {
 
 // Workloads and terminals start and take input on every platform.
 describe("workloads and terminals take input on every platform", () => {
+	test("utf16le input, closed input, and PWD set to the workload's own folder", async () => {
+		const c = await crane();
+		const rpc = await c.rpc();
+		await rpc.ok("process:run", { id: "utf16", inputEncoding: "utf16le", ...js("process.stdin.on('data', (d) => process.stdout.write(d.toString('hex')))") });
+		await rpc.ok("process:write", { id: "utf16", data: "é\n" });
+		await waitFor("the hex of the input", () => dataOf(rpc, "utf16").includes("e9000a00"));
+		await rpc.ok("process:kill", { id: "utf16" });
+
+		await rpc.ok("process:run", { id: "noinput", stdin: false, ...js("process.stdin.on('end', () => console.log('eof')); process.stdin.resume()") });
+		expect(await exitOf(rpc, "noinput")).toBe(0);
+		expect(dataOf(rpc, "noinput")).toContain("eof");
+		expect((await rpc.fail("process:write", { id: "noinput", data: "x" })).error).toBeTruthy();
+
+		// a program that reads its input to the end goes on once it's closed, with everything written before
+		await rpc.ok("process:run", { id: "drain", ...js("let n = 0; process.stdin.on('data', (d) => (n += d.length)); process.stdin.on('end', () => console.log('read:' + n))") });
+		const chunk = "x".repeat(65536);
+		for (let i = 0; i < 4; i++) await rpc.ok("process:write", { id: "drain", data: chunk });
+		await rpc.ok("process:close-input", { id: "drain" });
+		expect((await rpc.fail("process:write", { id: "drain", data: "x" })).error).toBeTruthy();
+		expect(await exitOf(rpc, "drain")).toBe(0);
+		expect(dataOf(rpc, "drain")).toContain(`read:${4 * 65536}`);
+
+		// input to a program that closed its own is reported where its output goes, and later writes are refused
+		// closed at the OS: on Windows, libuv's close of fd 0-2 does nothing,
+		// so the program closes its standard input handle itself
+		const closeInput =
+			process.platform === "win32"
+				? `const k = require("bun:ffi").dlopen("kernel32.dll", { GetStdHandle: { args: ["u32"], returns: "ptr" }, CloseHandle: { args: ["ptr"], returns: "i32" } }).symbols;
+				   if (!k.CloseHandle(k.GetStdHandle(0xfffffff6))) throw new Error("CloseHandle on standard input failed");`
+				: `require("fs").closeSync(0);`;
+		await rpc.ok("process:run", { id: "deaf", ...js(`${closeInput} console.log('closed'); setInterval(() => {}, 1000)`) });
+		await waitFor("the input to close", () => dataOf(rpc, "deaf").includes("closed"));
+		await rpc.ok("process:write", { id: "deaf", data: "lost\n" });
+		await waitFor("the undelivered input reported", () => dataOf(rpc, "deaf", "stderr").includes("[Input Error] input was not delivered"));
+		expect((await rpc.fail("process:write", { id: "deaf", data: "x" })).error).toContain("takes no more input");
+		await rpc.ok("process:kill", { id: "deaf" });
+
+		const cwd = tempDir();
+		await rpc.ok("process:run", { id: "pwd", cwd, ...js("console.log(process.env.PWD)") });
+		await exitOf(rpc, "pwd");
+		expect(dataOf(rpc, "pwd").trim()).toBe(cwd);
+		await rpc.close();
+	});
+
 	if (process.platform === "win32") {
 		test("JAVA_HOME/bin joins the existing Path key without dropping the system path", async () => {
 			const c = await crane();

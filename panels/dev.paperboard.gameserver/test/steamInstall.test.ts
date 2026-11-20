@@ -6,7 +6,7 @@ import { startTestDaemon, type TestDaemon } from "./helpers/crane";
 import { gameServer } from "./helpers/game";
 import { fakeSteamcmd, STEAM_FIXTURES } from "./helpers/steamcmd";
 import { readTree, tempDir, writeTree } from "./helpers/tmp";
-import { installApp, installedBuild, latestBuild } from "../src/games/steam/steamcmd";
+import { installApp, installedBuild, latestBuild, parseAppSize, parseLatestBuild } from "../src/games/steam/steamcmd";
 import { steamUpdateStatus } from "../src/games/steam/installAction";
 import { palworldService } from "../src/games/palworld/service";
 import { PALWORLD_APP_ID } from "../src/games/palworld";
@@ -22,11 +22,42 @@ afterAll(async () => {
 
 const TF2 = 232250;
 const PALWORLD_INFO = path.join(STEAM_FIXTURES, "palworld-app-info.txt");
+const TF2_INFO = path.join(STEAM_FIXTURES, "tf2-app-info.txt");
 const DEFAULT_INI = "[/Script/Pal.PalGameWorldSettings]\nOptionSettings=(AdminPassword=\"\",ServerPassword=\"\",RESTAPIPort=8212)\n";
 const appUpdates = (runs: string[][]) => runs.filter((args) => args.includes("+app_update"));
 
 // Steam and Terraria installs and updates are verified.
 describe("Steam and Terraria installs", () => {
+    test("the public build is read from depots, branches, public, and an update is offered only for an install that differs", async () => {
+        const steam = fakeSteamcmd({ appInfo: { [PALWORLD_APP_ID]: PALWORLD_INFO, [TF2]: TF2_INFO } });
+        expect(await latestBuild(PALWORLD_APP_ID)).toBe("25247047");
+        expect(await latestBuild(TF2)).toBe("26334371");
+        expect(steam.runs()).toEqual([
+            ["+login", "anonymous", "+app_info_update", "1", "+app_info_print", String(PALWORLD_APP_ID), "+quit"],
+            ["+login", "anonymous", "+app_info_update", "1", "+app_info_print", String(TF2), "+quit"],
+        ]);
+
+        const dir = tempDir();
+        const spec = { appId: PALWORLD_APP_ID, installDir: async () => dir };
+        expect(await steamUpdateStatus(spec)).toEqual({ installed: null, latest: "25247047", updateAvailable: false });
+        const manifest = (build: string) => writeTree(dir, { [`steamapps/appmanifest_${PALWORLD_APP_ID}.acf`]: `"AppState"\n{\n\t"buildid"\t\t"${build}"\n}\n` });
+        manifest("25247047");
+        expect(await steamUpdateStatus(spec)).toEqual({ installed: "25247047", latest: "25247047", updateAvailable: false });
+        manifest("24000000");
+        expect(await steamUpdateStatus(spec)).toEqual({ installed: "24000000", latest: "25247047", updateAvailable: true });
+
+        // the public branch, not another branch's build that appears first
+        const lines = fs.readFileSync(TF2_INFO, "utf8").split("\n");
+        expect(parseLatestBuild(lines, TF2)).toBe("26334371");
+        expect(() => parseLatestBuild(lines, 440)).toThrow("SteamCMD printed no information for app 440");
+
+        // the size setup states before it downloads: the app's shared depot and this system's own, at the branch
+        expect(parseAppSize(lines, TF2, "public", "linux")).toBe(15089400440 + 156352847 + 9989);
+        expect(parseAppSize(lines, TF2, "public", "win32")).toBe(15089400440 + 268076621);
+        expect(parseAppSize(lines, TF2, "double-physics-test", "linux")).toBe(14643925483 + 156090787 + 9989);
+        expect(() => parseAppSize(lines, TF2, "no-such-branch", "linux")).toThrow("Steam lists no no-such-branch files of app 232250 for linux");
+    });
+
     test("a game on a Steam branch is installed from it, and its updates are that branch's builds", async () => {
         const GMOD = 4020;
         const info = path.join(STEAM_FIXTURES, "gmod-app-info.txt");

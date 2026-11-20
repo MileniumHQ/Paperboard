@@ -4,7 +4,7 @@ import { afterAll, beforeAll, describe, expect, setDefaultTimeout, test } from "
 import { blocksApi, memoryBlocks, type BlockEventDefinition } from "@mileniumhq/paperapi";
 import type { BotsServiceState } from "../src/bots";
 import { blockTypes } from "../src/blocks/blockTypes";
-import { blockEvent, commandEvent, commandEventId } from "../src/blocks/events";
+import { blockEvent, commandEvent, commandEventId, staticEvents } from "../src/blocks/events";
 import { GLOBAL_SCOPE, type SlashCommandDefinition } from "../src/types";
 import { guild, slashCommand, snowflake, startFakeDiscord, userMessage, type FakeBot, type FakeDiscord, type FakeGuild } from "./helpers/discord";
 import { call, PANEL_ID, savedBots, startService, storedBot, stopServices } from "./helpers/service";
@@ -49,6 +49,15 @@ const EVENTS = [
     "role-deleted", "role-removed", "thread-created", "voice-changed",
 ];
 
+// every static trigger a session fires (session.ts attachListeners), by the name the session gives it
+const TRIGGERS = [
+    "on-message", "on-member-join", "on-member-leave", "on-reaction-add", "on-connection-error", "interaction-triggered",
+    "modal-submitted", "on-message-edited", "on-message-deleted", "on-reaction-removed", "on-member-banned", "on-role-added",
+    "on-role-removed", "on-thread-created", "on-voice-state-change", "on-bot-ready", "on-guild-joined", "on-guild-left",
+    "on-channel-created", "on-channel-deleted", "on-role-created", "on-role-deleted", "on-member-roles-changed", "on-member-unbanned",
+    "on-nickname-changed",
+];
+
 const nextEvent = (event: string) => nextEventOf(PANEL_ID, event, BOT);
 
 describe("each trigger a session fires is one of the bot's Blocks events, with a payload of its types", () => {
@@ -61,6 +70,18 @@ describe("each trigger a session fires is one of the bot's Blocks events, with a
         await bot.register({ events: [event] });
         await bot.fire(event.id, payload);
     };
+
+    test("every static trigger, even with nothing in its payload", async () => {
+        const mapped = new Set<string>();
+        for (const trigger of TRIGGERS) {
+            const { event, payload } = blockEvent(trigger, {}, []);
+            const definition = staticEvents.find((e) => e.id === event);
+            expect([trigger, definition?.id]).toEqual([trigger, event]);
+            await firesAs(definition!, payload);
+            mapped.add(event);
+        }
+        expect([...mapped].sort()).toEqual(EVENTS);
+    });
 
     test("a slash command, its options typed, and an optional one not given is none", async () => {
         const command: SlashCommandDefinition = {

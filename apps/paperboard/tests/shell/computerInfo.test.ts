@@ -1,7 +1,8 @@
-// A computer's info page in the real shell: a switch that saves to the
-// computer.
+// A computer's info page and the Forget Computer dialog in the real shell:
+// a switch that saves to the computer, and forgetting a computer that can't
+// be reached.
 import { afterAll, beforeAll, expect, test } from "bun:test";
-import { bootShell, toastShown, type Shell } from "./support/shell";
+import { bootShell, clickText, toastShown, type Shell } from "./support/shell";
 
 // Holds the shell's calls of one daemon action until the test sends them
 // on, as they were or with a parameter the daemon refuses.
@@ -75,5 +76,26 @@ test("Refuse taken ports flips at once while it saves, and goes back with why wh
     // read, it is closed: the next test starts with no toast in the corner
     await page.click(`[aria-label=Notifications] [role=alert] [aria-label=Close]`);
     await page.waitFor(`!${toastShown("The setting was not saved")}`, "the toast closed");
+    expect(page.exceptions).toEqual([]);
+});
+
+// Inventory: Security — a computer that couldn't be told it's forgotten keeps trusting this one, so forgetting it says so first.
+test("forgetting a computer that can't be reached warns that it wasn't told, and forgets it here only when asked again", async () => {
+    const { page } = shell;
+    const shed = await shell.pairComputer("Shed");
+    const SHED = rail("Shed (127.0.0.2)");
+    await page.waitFor(`document.querySelector(${JSON.stringify(SHED)})`, "Shed on the rail");
+    await shed.daemon.stop();
+
+    await page.click(SHED, "right");
+    await page.waitFor(`document.querySelector("[data-context-item='Forget Computer']")`, "Shed's menu");
+    await page.click("[data-context-item='Forget Computer']");
+    await page.waitFor(`document.querySelector("[role=dialog]")?.innerText.includes("forget Shed")`, "the Forget Computer dialog for Shed");
+    await clickText(page, "[role=dialog] button", "Forget Computer");
+    await page.waitFor(`[...document.querySelectorAll("[role=dialog] [role=alert]")].some((a) => a.innerText.includes("Shed wasn't told"))`, "the warning that Shed wasn't told");
+    expect(await page.evaluate(`!!document.querySelector(${JSON.stringify(SHED)})`)).toBe(true);
+
+    await clickText(page, "[role=dialog] button", "Forget Anyway");
+    await page.waitFor(`!document.querySelector(${JSON.stringify(SHED)}) && !document.querySelector("[role=dialog]")`, "Shed gone from the rail");
     expect(page.exceptions).toEqual([]);
 });
