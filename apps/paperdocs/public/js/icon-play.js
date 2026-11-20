@@ -68,12 +68,17 @@ import { hullFromAlpha, worldHull, contactBetween, containsPoint } from "./icon-
         };
     }
 
+    // Measured on the turned silhouette, not the square: a spinning icon
+    // reaches past its square further than COPY_MARGIN, over the copy.
     function keepOffCopy(item) {
         if (!obstacle) return;
-        const left = item.x + item.size - obstacle.x;
-        const right = obstacle.x + obstacle.w - item.x;
-        const top = item.y + item.size - obstacle.y;
-        const bottom = obstacle.y + obstacle.h - item.y;
+        const hull = worldHull(item);
+        const xs = hull.map((p) => p.x);
+        const ys = hull.map((p) => p.y);
+        const left = Math.max(...xs) - obstacle.x;
+        const right = obstacle.x + obstacle.w - Math.min(...xs);
+        const top = Math.max(...ys) - obstacle.y;
+        const bottom = obstacle.y + obstacle.h - Math.min(...ys);
         if (left <= 0 || right <= 0 || top <= 0 || bottom <= 0) return;
         // Leave by the shortest way out, bouncing off that face.
         const push = Math.min(left, right, top, bottom);
@@ -352,12 +357,16 @@ import { hullFromAlpha, worldHull, contactBetween, containsPoint } from "./icon-
             raf = requestAnimationFrame(step);
         } else {
             running = false;
+            field.dataset.playState = "resting";
         }
     }
 
+    // data-play-state says what the icons are doing: "moving" until every
+    // one has come to rest, "resting", or "still" in the CSS row.
     function start() {
         if (running) return;
         running = true;
+        field.dataset.playState = "moving";
         last = 0;
         raf = requestAnimationFrame(step);
     }
@@ -488,6 +497,7 @@ import { hullFromAlpha, worldHull, contactBetween, containsPoint } from "./icon-
             stop();
             items.length = 0;
             scattered = false;
+            field.dataset.playState = "still";
             for (const icon of icons) {
                 icon.style.removeProperty("transform");
                 icon.style.removeProperty("width");
@@ -498,6 +508,7 @@ import { hullFromAlpha, worldHull, contactBetween, containsPoint } from "./icon-
         }
     }
     still.addEventListener("change", applyMode);
+    applyMode();
 
     const observer = new IntersectionObserver(
         (entries) => {
