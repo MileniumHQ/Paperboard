@@ -222,6 +222,7 @@ export default function TroubleshootingDoc() {
             <PaperText preset="title" as="h3" id="package-manager">Update Paperboard with the package manager you used to install it</PaperText>
             <PaperText preset="body" as="p">
                 This Paperboard was not installed from the AppImage, so it cannot update itself. Update it the way you installed it, or switch to the AppImage from <PaperLink href="/docs/paperboard/install/">Install Paperboard</PaperLink>.
+                A Paperboard installed from the Windows MSI is updated by your administrator, who installs the new MSI.
             </PaperText>
         </PaperFlex>
     );

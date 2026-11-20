@@ -160,14 +160,11 @@ describe("desktop app update checks", () => {
         session.dispose();
     });
 
-    test("a Windows install without the installer's uninstaller is offered the MSI, not a second copy", () => {
+    test("a Windows install without the installer's uninstaller leaves its update to an administrator, not a second copy", () => {
         const nsis = tempDir("nsis");
         fs.writeFileSync(path.join(nsis, "Uninstall Paperboard.exe"), "");
         expect(windowsMsiInstall(nsis, "x64")).toBeNull();
-        expect(windowsMsiInstall(tempDir("msi"), "x64")).toEqual({
-            feedUrl: "https://i.paperboard.dev/pb/latest.yml",
-            download: "https://i.paperboard.dev/pb/latest/paperboard-windows-x64.msi",
-        });
+        expect(windowsMsiInstall(tempDir("msi"), "x64")).toEqual({ feedUrl: "https://i.paperboard.dev/pb/latest.yml" });
         expect(() => windowsMsiInstall(tempDir("msi"), "arm64")).toThrow("Windows arm64");
     });
 });

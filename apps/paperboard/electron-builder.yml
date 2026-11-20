@@ -27,8 +27,8 @@ win:
         - target: nsis
           arch:
               - x64
-        # Download only, for deploying through Group Policy, Intune or winget.
-        # The updater feed carries the NSIS installer alone.
+        # Download only, for administrators deploying through Group Policy or
+        # Intune. The updater feed carries the NSIS installer alone.
         - target: msi
           arch:
               - x64
@@ -45,9 +45,10 @@ nsis:
     uninstallerIcon: build/icon.ico
 msi:
     artifactName: ${name}-${version}-windows-x64.${ext}
-    # Per-user unless asked: ALLUSERS=1 on msiexec installs for everyone
+    # Per-machine only: a per-user MSI would install into the installer's own
+    # folder, and an administrator is who deploys and updates it
     oneClick: false
-    perMachine: false
+    perMachine: true
 mac:
     # Ad-hoc: no Developer ID yet. arm64 macOS runs only signed code, and an
     # unsigned download shows as "damaged". Signing needs a Mac, so macOS

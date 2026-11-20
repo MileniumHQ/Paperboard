@@ -13,7 +13,9 @@ export default function AppUpdateModal(props: { state: AppUpdateState; open: boo
         const lead = props.state.status === "manual" ? `Paperboard ${props.state.version} is available.` : "Paperboard could not check for updates.";
         const how = packageDownload()
             ? "Download the new package and install it over this one, the same way you installed Paperboard."
-            : "Update Paperboard with the package manager you used to install it.";
+            : props.state.installMode === "administrator"
+              ? "Your administrator installs updates to this copy of Paperboard."
+              : "Update Paperboard with the package manager you used to install it.";
         return `${lead} ${how} You can keep using this version in the meantime.`;
     };
     const openDownload = () =>

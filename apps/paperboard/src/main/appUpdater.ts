@@ -1,7 +1,8 @@
 // Paperboard's own update: electron-updater where it can replace the app
 // (AppImage, macOS, Windows installer), Paperboard's deb or rpm where this
 // computer can install one itself, and otherwise a notice with where to
-// download it (a Windows MSI, another package manager).
+// download it (another package manager), or for an MSI install, that its
+// administrator updates it.
 // One AppUpdateSession owns the state every window shows.
 import * as path from "path";
 import { app, autoUpdater as electronAutoUpdater } from "electron";
@@ -74,7 +75,7 @@ export function appUpdater(): AppUpdateSession {
     if (session) return session;
     const fromMsi = windowsInstall();
     if (fromMsi) {
-        return startSession(new ManualAppUpdater(app.getVersion(), fromMsi.feedUrl), "package-download");
+        return startSession(new ManualAppUpdater(app.getVersion(), fromMsi.feedUrl), "administrator");
     }
     const found = linuxInstall();
     if (found?.packageType) {
@@ -105,9 +106,9 @@ function startSession(updater: ConstructorParameters<typeof AppUpdateSession>[0]
     return session;
 }
 
-/** Where the user gets the latest Paperboard: their deb, rpm or MSI, else the downloads page. */
+/** Where the user gets the latest Paperboard: their deb or rpm, else the downloads page. */
 export function appUpdateDownloadUrl(): string {
-    return linuxInstall()?.download ?? windowsInstall()?.download ?? "https://paperboard.dev/downloads/";
+    return linuxInstall()?.download ?? "https://paperboard.dev/downloads/";
 }
 
 // a package install is out (its password prompt is open): a second press

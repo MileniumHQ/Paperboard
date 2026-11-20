@@ -126,8 +126,8 @@ export default function InstallDoc() {
 
             <PaperText preset="body" as="p">
                 The MSI is for computers an administrator manages, such as through Group Policy or Intune.
-                It installs Paperboard for your account, like the installer. Add <PaperCode>ALLUSERS=1</PaperCode> to install it for everyone on the computer, and <PaperCode>/qn</PaperCode> for a silent install: <PaperCode>msiexec /i paperboard-windows-x64.msi ALLUSERS=1 /qn</PaperCode>.
-                Paperboard from the MSI doesn't replace itself: it tells you when a new version is out, and <b>Download update</b> gets the new MSI to install over the old one.
+                It installs Paperboard for everyone on the computer, and <PaperCode>msiexec /i paperboard-windows-x64.msi /qn</PaperCode> installs it silently.
+                Paperboard from the MSI doesn't replace itself: it tells you when a new version is out, and your administrator installs the new MSI over the old one.
             </PaperText>
 
             <PaperText preset="subheader" as="h2" id="macos">macOS</PaperText>

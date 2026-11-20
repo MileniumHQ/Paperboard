@@ -204,3 +204,19 @@ test("a download in progress has no dialog, and a new attempt closes a failure's
     await page.waitFor(`!${dialog}`, "the dialog closed");
     expect(page.exceptions).toEqual([]);
 });
+
+// Inventory: Updates — an MSI install says its administrator updates it, and offers no download of its own.
+test("an MSI install is told its administrator installs the update, with nothing to download", async () => {
+    const { page } = shell;
+    await shell.host({
+        cmd: "push",
+        channel: "app-update-state",
+        payload: { revision: 3000, status: "manual", installMode: "administrator", version: "1.6.0", percent: null, error: null },
+    });
+    const dialog = `[...document.querySelectorAll("[role=dialog]")].find((d) => d.innerText.includes("Paperboard update available"))`;
+    await page.waitFor(`!!${dialog} && ${dialog}.innerText.includes("Paperboard 1.6.0 is available. Your administrator installs updates to this copy of Paperboard.")`, "the administrator notice");
+    expect(await page.evaluate(`${dialog}.innerText.includes("Download")`)).toBe(false);
+    await clickText(page, "button", "Later");
+    await page.waitFor(`!${dialog}`, "the dialog closed");
+    expect(page.exceptions).toEqual([]);
+});
