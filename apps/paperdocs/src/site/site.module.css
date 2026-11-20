@@ -23,6 +23,24 @@
     gap: var(--paper-uigap);
 }
 
+/* A platform mark in a download row, at the list's icon size. */
+.platformIcon {
+    width: 1em;
+    height: 1em;
+}
+
+/* A heading or label with what it introduces under it. */
+.section {
+    display: flex;
+    flex-direction: column;
+    gap: var(--paper-uigap-half);
+}
+
+/* the gap spaces a section; a heading's own margins would add to it */
+.section > * {
+    margin: 0;
+}
+
 /* Hydration root for the topbar island. display: contents keeps the sticky
    topbar positioned against the page column instead of this wrapper. */
 .topbarIsland {

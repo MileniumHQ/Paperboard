@@ -1,11 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
-import path from "node:path";
 import { linuxDownloads } from "../public/js/linux-downloads.mjs";
 import { unsignedDownload } from "../public/js/unsigned-downloads.mjs";
+import { releaseUrls } from "../src/site/pages/downloadRows";
 
-const downloadsPage = readFileSync(path.join(import.meta.dir, "..", "src", "site", "pages", "downloads.md"), "utf8");
-const pageLinks = new Set([...downloadsPage.matchAll(/\]\((https:\/\/[^)\s]+)\)/g)].map((m) => m[1]!));
+const pageLinks = new Set(releaseUrls());
 
 const UNSIGNED = [
     ["pb", "paperboard-windows-x64-setup.exe", "windows", "Paperboard"],
