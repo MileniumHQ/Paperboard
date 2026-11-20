@@ -245,6 +245,7 @@ gstep paperapi "paperapi typecheck" run_in "$ROOT/packages/paperapi" bunx tsc --
 gstep paperapi "paperapi tests" run_in "$ROOT/packages/paperapi" bun run test
 gstep paperapi "paperapi silent-catches" run_in "$ROOT/packages/paperapi" bash "$CATCH" src test
 gstep paperapi "paperapi code check" run_in "$ROOT" bun scripts/gate/check-solid.ts packages/paperapi/src packages/paperapi/test
+gstep paperui "paperui typecheck:tests" run_in "$ROOT/packages/paperui" bun run typecheck:tests
 gstep paperui "paperui tests" run_in "$ROOT/packages/paperui" bun run test
 gstep paperui "paperui styling invariant" bash "$ROOT/scripts/gate/check-paperui-styling.sh"
 gstep paperui "paperui silent-catches" run_in "$ROOT/packages/paperui" bash "$CATCH" src
