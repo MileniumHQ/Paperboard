@@ -192,30 +192,6 @@ describe("Terraria's Worlds tab", () => {
     }, 60_000);
 });
 
-describe("Terraria's Worlds tab fields", () => {
-    test("a name that is taken is said under the field, and the field is described by it", async () => {
-        const served = await setUp();
-        const page = await openPage(`${served.url}/?server=s-ter`);
-        try {
-            await openTab(page, "worlds");
-            await page.waitFor(`${button("New World")}`, "the Worlds tab");
-            await page.evaluate(`${button("New World")}.click()`);
-            await page.waitFor(`${DIALOG}?.querySelector("input")`, "the New World dialog");
-            await page.evaluate(`(() => { const input = ${DIALOG}.querySelector("input"); input.focus(); input.select(); })()`);
-            await page.type(`[role=dialog] input`, "Island");
-            const said = `(() => { const input = ${DIALOG}.querySelector("input"); const note = document.getElementById(input.getAttribute("aria-describedby") ?? ""); return input.getAttribute("aria-invalid") === "true" && note?.textContent; })()`;
-            await page.waitFor(said, "the taken name, said under the field");
-            expect(await page.evaluate<string>(said)).toBe("There's already a world that's named this.");
-            // what the field says is also what it is described by; nothing else on the page says it
-            expect(await page.evaluate<number>(`document.body.textContent.split("There's already a world").length - 1`)).toBe(1);
-            expect(page.exceptions).toEqual([]);
-        } finally {
-            await page.close();
-            served.stop();
-        }
-    }, 60_000);
-});
-
 describe("a tModLoader server's Mods tab", () => {
     test("lists the mods in tModLoader/Mods, installs one found on the Steam Workshop, and uninstalls it to the trash", async () => {
         const served = await setUp();

@@ -41,6 +41,5 @@ The guides for building panels are at <https://paperboard.dev/docs/developers/>.
   drive it with.
 - `src/editorFlows.ts` loads and saves the open project's canvas, and
   `src/libraryModel.ts` is what the Library lists.
-- `test/uiStandards.test.ts` keeps inline styles out of the UI.
 - `test/hermetic.ts` keeps the tests off the network and off your real
   Paperboard data.

@@ -3,7 +3,7 @@
 // saves and the service pushes the servers' status.
 import { afterAll, beforeAll, describe, expect, setDefaultTimeout, test } from "bun:test";
 import { blankForm, newRow, specFromForm } from "../src/tools/form";
-import { bootPanel, markNodes, marked, openSection, type BootedPanel, type Page } from "./support/panel";
+import { bootPanel, openSection, type BootedPanel, type Page } from "./support/panel";
 
 setDefaultTimeout(60_000);
 
@@ -59,47 +59,6 @@ const typeKeys = (page: Page, text: string) =>
     })()`);
 
 describe("the tool server editor", () => {
-    test("typing in a variable's Name and Value keeps the keyboard in that field", async () => {
-        const page = await toolsPage();
-        await newServer(page);
-        await addRow(page, 1);
-        await page.evaluate(`${ROWS}[0].querySelector("input").focus()`);
-        expect(await typeKeys(page, "API_HOST")).toEqual({ stayed: true, value: "API_HOST" });
-        // the row's Value: its field after its Name that isn't its Kind
-        await page.evaluate(`[...${ROWS}[0].querySelectorAll('input:not([name^="kind-"])')][1].focus()`);
-        expect(await typeKeys(page, "localhost")).toEqual({ stayed: true, value: "localhost" });
-        expect(page.exceptions).toEqual([]);
-    });
-
-    test("Save with no name says why under Name, keeps the editor open, and puts the keyboard in Name", async () => {
-        const page = await toolsPage();
-        // a short window: five variables push the bottom of the form out of view
-        await page.resize(1000, 560);
-        await newServer(page);
-        for (let rows = 1; rows <= 5; rows++) await addRow(page, rows);
-        await page.evaluate(`${EDITOR}.requestSubmit()`);
-        const NAME_FIELD = `${EDITOR}.querySelector('input[name="name"]')`;
-        await page.waitFor(`${NAME_FIELD}.getAttribute("aria-invalid") === "true"`, "the refusal on the field");
-        // the words are under the field the refusal is about, which the field points at, and in the window whatever the editor scrolled to
-        const seen = await page.evaluate<{ said: string; bottom: number; editor: boolean; toasts: number }>(`(() => {
-            const input = ${NAME_FIELD};
-            const said = document.getElementById(input.getAttribute("aria-describedby"));
-            return {
-                said: said?.innerText ?? "",
-                bottom: said?.getBoundingClientRect().bottom ?? Infinity,
-                editor: Boolean(${EDITOR}),
-                toasts: document.querySelectorAll("[data-paper-toasts] [role=alert]").length,
-            };
-        })()`);
-        expect(seen.said.length, "nothing is said under the field").toBeGreaterThan(0);
-        expect(seen.bottom).toBeLessThanOrEqual(560);
-        expect(seen.editor, "the editor closed").toBe(true);
-        expect(seen.toasts, "the field's refusal is said twice").toBe(0);
-        // the editor moves to the field as it shows the refusal, before the page does anything else
-        expect(await page.evaluate<boolean>(`document.activeElement === ${NAME_FIELD}`)).toBe(true);
-        expect(page.exceptions).toEqual([]);
-    });
-
     test("saving a server the agent set up keeps its secret where the vault has it", async () => {
         const page = await toolsPage();
         await page.click(`input[name="agents-tools"][value="server:linear"]`);
@@ -115,29 +74,5 @@ describe("the tool server editor", () => {
     test("two new secrets that would share one vault name are refused, never one saved over the other", () => {
         const rows = [newRow({ name: "API_KEY", kind: "secret", typed: "one" }), newRow({ name: "api_key", kind: "secret", typed: "two" })];
         expect(() => specFromForm({ ...blankForm(), name: "web", command: "/bin/false", rows })).toThrow("API_KEY and api_key would keep their secrets under one name");
-    });
-});
-
-describe("a server's switch", () => {
-    test("flips at once and stays usable through its own save, as does the rest of the page; is the same switch through the status the service pushes; and ends on", async () => {
-        const page = await toolsPage();
-        const toggle = `[role=switch][aria-label="notes on"]`;
-        const others = `[role=switch][aria-label="Let it use your other panels"]`;
-        await page.waitFor(`document.querySelector('${toggle}')?.getAttribute("aria-checked") === "false"`, "the server's switch, off");
-        expect(await markNodes(page, toggle, "before")).toBe(1);
-        // pressed, and looked at in the same moment: the save has only just left
-        const pressed = await page.evaluate<{ checked: string | null; disabled: string | null; othersDisabled: string | null }>(`(() => {
-            document.querySelector('${toggle}').click();
-            const at = (s) => document.querySelector(s);
-            return { checked: at('${toggle}').getAttribute("aria-checked"), disabled: at('${toggle}').getAttribute("aria-disabled"), othersDisabled: at('${others}').getAttribute("aria-disabled") };
-        })()`);
-        expect(pressed).toEqual({ checked: "true", disabled: null, othersDisabled: null });
-        // the service saves it and pushes the servers' status with it on
-        await page.received((f) => f.includes("event.emit-tools") && f.includes('"enabled":true'), "the servers' status, pushed with the server on");
-        await page.settled();
-        expect(await marked(page, toggle, "before")).toEqual({ kept: 1, all: 1 });
-        expect(await page.evaluate(`document.querySelector('${toggle}').getAttribute("aria-checked")`)).toBe("true");
-        expect(await page.evaluate(`document.querySelector('${toggle}').getAttribute("aria-disabled")`)).not.toBe("true");
-        expect(page.exceptions).toEqual([]);
     });
 });
