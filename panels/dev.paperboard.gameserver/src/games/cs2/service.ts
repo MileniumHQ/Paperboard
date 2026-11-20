@@ -4,7 +4,6 @@ import path from "node:path";
 import { errorCode } from "../../service/api";
 import { initialServerState } from "../../service/initialState";
 import { appendCapped } from "../../service/types";
-import { TRIGGER_IDS } from "../../service/contract";
 import { validateOptions } from "../options";
 import { installedBuild, steamClientLibrary } from "../steam/steamcmd";
 import { steamInstall, steamInstallCalls, steamUpdateStatus, type SteamInstallSpec } from "../steam/installAction";
@@ -14,9 +13,9 @@ import {
 } from "../serviceKit";
 import { SOURCE_CALLS, type SourceMetrics } from "../source";
 import { cvarValue, mapName, optionValue } from "../source/config";
-import { consoleLine, logBody, parseLogLine, steamId, isSteamId, type SourceLogEvent } from "../source/log";
-import { mergeStats, noStats, SourceRoster, type SourceGathered } from "../source/roster";
-import type { SourceOnline } from "../source/people";
+import { consoleLine, logBody, parseLogLine, steamId, isSteamId } from "../source/log";
+import { SourceRoster } from "../source/roster";
+import { playerBlocks, SourcePlayers } from "../source/people";
 import { installMapPicture } from "../source/installPictures";
 import { cs2, CS2, MODES, type Cs2Mode } from "./index";
 import { activatedMap, consoleSaid, isErrorLine, parseStatusPlayers, STATUS_END, STATUS_PLAYERS, withoutPositions } from "./console";
@@ -27,8 +26,6 @@ const options = CS2.options;
 const STDBUF = ["/usr/bin/stdbuf", "/bin/stdbuf"];
 /** maps the server ships that are no place to play: menu backdrops and tools */
 const NOT_PLAYABLE = /_vanity$|^lobby_mapveto$|^graphics_settings$/;
-/** how long stats gather before they are written to the roster */
-const STATS_FLUSH_MS = 15_000;
 
 export function modeOf(saved: Record<string, unknown>) {
     const chosen = String(optionValue(options.find((o) => o.id === "gamemode")!, saved));
@@ -74,16 +71,12 @@ export function cs2Service(ctx: Server): GameService {
     const local = {
         busy: false,
         roster: null as SourceRoster | null,
-        online: new Map<number, SourceOnline>(),
         /** the server has said its map is running */
         active: false,
         /** the player rows of a `status` answer being printed; null outside one */
         status: null as string[] | null,
         secrets: [] as string[],
         console: new ConsoleBuffer(isErrorLine),
-        unsaved: new Map<string, SourceGathered>(),
-        counted: new Map<number, number>(),
-        statsTimer: null as ReturnType<typeof setTimeout> | null,
     };
 
     // Layout: install/ is SteamCMD's folder, left out of backups; Paperboard's
@@ -127,125 +120,25 @@ export function cs2Service(ctx: Server): GameService {
     const removeSecrets = async () => fs.rm(await secretsFile(), { force: true });
     const linkLogs = async () => linkFolder(path.join(await gameDir(), "logs"), path.join(await ctx.root(), "logs"));
 
-    function setOnline() {
-        const humans = [...local.online.values()].filter((p) => p.steamId !== "BOT" && p.name);
-        ctx.setState((prev) => ({
-            onlinePlayers: humans.map((p) => p.name),
-            seenPlayers: humans.reduce((seen, p) => (seen.includes(p.name) ? seen : appendCapped(seen, p.name)), prev.seenPlayers),
-        }));
-    }
-
-    function unsaved(player: SourceOnline): SourceGathered {
-        const stats = local.unsaved.get(player.steamId) ?? { name: player.name };
-        // a rename since is the name they are recorded by
-        stats.name = player.name || stats.name;
-        local.unsaved.set(player.steamId, stats);
-        return stats;
-    }
-    function countPlaytime(player: SourceOnline, now = Date.now()) {
-        const from = local.counted.get(player.userId) ?? now;
-        local.counted.set(player.userId, now);
-        if (!isSteamId(player.steamId) || now <= from) return;
-        player.stats.playtime += now - from;
-        const gathered = unsaved(player);
-        gathered.playtime = (gathered.playtime ?? 0) + now - from;
-    }
-    async function saveStats() {
-        if (local.statsTimer) clearTimeout(local.statsTimer!);
-        local.statsTimer = null;
-        const now = Date.now();
-        for (const player of local.online.values()) countPlaytime(player, now);
-        const stats = local.unsaved;
-        local.unsaved = new Map();
-        try { await roster().addStats(stats); }
-        catch (err) { mergeStats(local.unsaved, stats); throw err; }
-    }
-    function bump(userId: number, key: "kills" | "deaths" | "assists") {
-        const player = local.online.get(userId);
-        if (!player) return;
-        player.stats[key] += 1;
-        if (!isSteamId(player.steamId)) return;
-        const gathered = unsaved(player);
-        gathered[key] = (gathered[key] ?? 0) + 1;
-        if (!local.statsTimer) local.statsTimer = setTimeout(() => {
-            local.statsTimer = null;
-            saveStats().catch((err) => report(ctx, "Could not save players' stats", err));
-        }, STATS_FLUSH_MS);
-    }
-
-    /**
-     * A banned player is put out the moment they connect. Counter-Strike 2's own
-     * `banid` prints nothing and lists nothing, so whether it holds can't be
-     * seen; Paperboard's list is what bans.
-     */
-    async function enforceBan(player: { userId: number; steamId: string; name: string }) {
-        if (!(await roster().bans()).some((ban) => ban.steamId === player.steamId)) return;
-        await send(`kickid ${player.userId} Banned from this server`);
-        ctx.setState((prev) => ({ serverEntries: appendCapped(prev.serverEntries, { type: "warn", content: `[Paperboard] ${player.name} is banned and was put out as they joined.` }) }));
-    }
-
-    function observeEvent(event: SourceLogEvent) {
-        const players = local.online;
-        switch (event.kind) {
-            case "connected": {
-                const p = event.player;
-                const now = Date.now();
-                players.set(p.userId, { userId: p.userId, name: p.name, steamId: p.steamId, team: p.team, since: now, stats: noStats() });
-                local.counted.set(p.userId, now);
-                setOnline();
-                if (isSteamId(p.steamId)) {
-                    pushChat(ctx, { event: "join", sender: p.name, text: `${p.name} joined the game` });
-                    ctx.trigger(TRIGGER_IDS.playerJoined, p.name);
-                    roster().remember(p.steamId, p.name).catch((err) => report(ctx, `Could not record ${p.name}`, err));
-                    enforceBan(p).catch((err) => report(ctx, `Could not put the banned player ${p.name} out`, err));
-                }
-                return;
-            }
-            case "disconnected": {
-                const p = event.player;
-                const known = players.get(p.userId);
-                if (known) countPlaytime(known);
-                players.delete(p.userId);
-                local.counted.delete(p.userId);
-                setOnline();
-                const name = p.name || known?.name || "";
-                if (isSteamId(p.steamId) && name) {
-                    pushChat(ctx, { event: "leave", sender: name, text: `${name} left the game` });
-                    ctx.trigger(TRIGGER_IDS.playerLeft, name);
-                    roster().remember(p.steamId, name).catch((err) => report(ctx, `Could not record ${name} leaving`, err));
-                    saveStats().catch((err) => report(ctx, `Could not save ${name}'s stats`, err));
-                }
-                return;
-            }
-            case "kill":
-                if (event.player.userId !== event.victim.userId) bump(event.player.userId, "kills");
-                bump(event.victim.userId, "deaths");
-                return;
-            case "suicide": bump(event.player.userId, "deaths"); return;
-            case "assist": bump(event.player.userId, "assists"); return;
-            case "say": {
-                const p = event.player;
-                if (p.steamId === "BOT") return;
-                const text = event.team ? `(Team) ${event.text}` : event.text;
-                ctx.trigger(TRIGGER_IDS.chatMessage, pushChat(ctx, { sender: p.name, content: text, text: `<${p.name}> ${text}` }));
-                return;
-            }
-            default: return;
-        }
-    }
+    const players = new SourcePlayers({
+        server: ctx, roster, isPlayer: (id) => isSteamId(id),
+        /**
+         * A banned player is put out the moment they connect. Counter-Strike 2's own
+         * `banid` prints nothing and lists nothing, so whether it holds can't be
+         * seen; Paperboard's list is what bans.
+         */
+        async joined(player) {
+            if (!(await roster().bans()).some((ban) => ban.steamId === player.steamId)) return;
+            await send(`kickid ${player.userId} Banned from this server`);
+            ctx.setState((prev) => ({ serverEntries: appendCapped(prev.serverEntries, { type: "warn", content: `[Paperboard] ${player.name} is banned and was put out as they joined.` }) }));
+        },
+    });
 
     /** A `status` answer's player rows: who is on by the server's own count, for a server Paperboard found running or just started. */
-    function applyStatus(rows: readonly string[]) {
-        const listed = parseStatusPlayers(rows);
-        const players = local.online;
+    async function applyStatus(rows: readonly string[]) {
         const now = Date.now();
-        for (const id of [...players.keys()]) if (!listed.some((p) => p.userId === id)) { players.delete(id); local.counted.delete(id); }
-        for (const p of listed) {
-            // status names no Steam id: a person's is known once the game log names them
-            if (!players.has(p.userId)) players.set(p.userId, { userId: p.userId, name: p.name, steamId: p.bot ? "BOT" : "", team: "", since: now, stats: noStats() });
-            if (!local.counted.has(p.userId)) local.counted.set(p.userId, now);
-        }
-        setOnline();
+        // status names no Steam id: a person's is known once the game log names them
+        await players.present(parseStatusPlayers(rows).map((p) => ({ userId: p.userId, name: p.name, steamId: p.bot ? "BOT" : "", since: now })));
     }
 
     const steam: SteamInstallSpec = {
@@ -261,22 +154,7 @@ export function cs2Service(ctx: Server): GameService {
         updateStatus: () => steamUpdateStatus(steam),
         installUpdate: install,
         initialState: () => ({ ...initialServerState(), serverSoftware: CS2.id, serverPort: String(CS2.defaultPort), serverMotd: "" }),
-        blocks: async () => {
-            const { mergeBlocks, onlyIdNamed, playerEvents, rosterBlocks, runGameCall } = await import("../../service/blocks");
-            const people = () => [...local.online.values()].filter((p) => p.steamId !== "BOT");
-            const nameOf = (p: { name: string }) => p.name;
-            const steamOf = (p: { steamId: string }) => p.steamId;
-            return mergeBlocks({ events: playerEvents() }, rosterBlocks({
-                kick: (name) => runGameCall(ctx, ids.kick, { userId: Number(onlyIdNamed(name, [...local.online.values()], nameOf, (p) => String(p.userId), "online")) }),
-                ban: async (name) => runGameCall(ctx, ids.ban, { steamId: onlyIdNamed(name, [...people(), ...await roster().seen()], nameOf, steamOf, "on this server") }),
-                unban: async (name) => {
-                    const bans = await roster().bans();
-                    const byId = bans.find((ban) => ban.steamId === name);
-                    return runGameCall(ctx, ids.unban, { steamId: byId ? byId.steamId : onlyIdNamed(name, bans, nameOf, steamOf, "banned") });
-                },
-                banned: async () => (await roster().bans()).map((ban) => ban.name || ban.steamId),
-            }));
-        },
+        blocks: () => playerBlocks({ server: ctx, roster, players }),
         calls: async () => { const { sharedCalls } = await import("../../service/calls"); return { ...sharedCalls,
             readGameOptions: async (ctx) => { await loadOptions(); return ctx.state.gameSettings; },
             writeGameOptions: async (ctx, { patch }) => {
@@ -303,15 +181,15 @@ export function cs2Service(ctx: Server): GameService {
                 return ctx.state.gameSettings;
             },
             ...steamInstallCalls(steam, install),
-            [ids.metrics]: async (): Promise<SourceMetrics> => ({ bots: [...local.online.values()].filter((p) => p.steamId === "BOT").length }),
+            [ids.metrics]: async (): Promise<SourceMetrics> => ({ bots: [...players.online.values()].filter((p) => p.steamId === "BOT").length }),
             [ids.players]: async () => {
-                await saveStats();
+                await players.saveStats();
                 // no SourceMod here: the Players tab has no admin list to show
-                return { seen: await roster().seen(), bans: await roster().bans(), online: [...local.online.values()], admins: null };
+                return { seen: await roster().seen(), bans: await roster().bans(), online: [...players.online.values()], admins: null };
             },
             [ids.kick]: async (ctx, { userId }) => {
                 if (!online()) throw new Error("Counter-Strike 2 is not running");
-                const player = local.online.get(userId);
+                const player = players.online.get(userId);
                 if (!player) throw new Error("That player is not online");
                 await send(`kickid ${player.userId} Kicked by the server admin`);
                 return true;
@@ -319,7 +197,7 @@ export function cs2Service(ctx: Server): GameService {
             [ids.ban]: async (ctx, { steamId: raw }) => {
                 const id = steamId(raw);
                 await roster().ban(id);
-                if (online()) for (const player of local.online.values()) if (player.steamId === id) await send(`kickid ${player.userId} Banned from this server`);
+                if (online()) for (const player of players.online.values()) if (player.steamId === id) await send(`kickid ${player.userId} Banned from this server`);
                 return true;
             },
             [ids.unban]: async (_ctx, { steamId: raw }) => {
@@ -351,11 +229,7 @@ export function cs2Service(ctx: Server): GameService {
         },
         async beforeRemove() { if (local.busy) throw new Error("Wait for Counter-Strike 2's current operation"); },
         async dispose() {
-            if (local.statsTimer) clearTimeout(local.statsTimer!);
-            local.statsTimer = null;
-            local.unsaved.clear();
-            local.counted.clear();
-            local.online.clear();
+            players.dispose();
             local.console.dispose();
         },
         async prepareLaunch() {
@@ -385,7 +259,7 @@ export function cs2Service(ctx: Server): GameService {
             if (token) secrets.push(`sv_setsteamaccount ${cvarValue(token, "Game server login token")}`);
             await writePrivate(await secretsFile(), `${secrets.join("\n")}\n`);
             local.secrets = [join, token].filter(Boolean);
-            local.online.clear();
+            players.online.clear();
             local.active = false;
             local.status = null;
             const internet = optionValue(options.find((o) => o.id === "internet")!, saved) !== false;
@@ -401,7 +275,7 @@ export function cs2Service(ctx: Server): GameService {
             };
         },
         async afterStop() {
-            await saveStats().catch((err) => report(ctx, "Could not save players' stats", err));
+            await players.saveStats().catch((err) => report(ctx, "Could not save players' stats", err));
             await removeSecrets();
         },
         isMutating: () => local.busy,
@@ -429,7 +303,10 @@ export function cs2Service(ctx: Server): GameService {
             if (map) { local.active = true; ctx.setState({ serverLevel: map }); }
             // a status answer's player rows are read between its two markers
             if (line.trim() === STATUS_PLAYERS) local.status = [];
-            else if (local.status && line.trim() === STATUS_END) { applyStatus(local.status!); local.status = null; }
+            else if (local.status && line.trim() === STATUS_END) {
+                applyStatus(local.status).catch((err) => report(ctx, "Could not read who is on Counter-Strike 2", err));
+                local.status = null;
+            }
             else if (local.status) local.status!.push(line);
             const body = logBody(line);
             if (body !== null) {
@@ -437,7 +314,7 @@ export function cs2Service(ctx: Server): GameService {
                 if (said !== null) pushChat(ctx, { event: "server", content: said, text: `<Server> ${said}` });
                 else {
                     const event = parseLogLine(withoutPositions(line));
-                    if (event) observeEvent(event);
+                    if (event) players.observe(event);
                 }
             }
             local.console.push(ctx, consoleLine(line));
