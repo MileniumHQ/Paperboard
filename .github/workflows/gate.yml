@@ -126,6 +126,12 @@ jobs:
         if: matrix.name != 'web'
         run: |
           node "$(node -p "require.resolve('electron/install.js', { paths: ['apps/paperboard'] })")"
+      # A fresh runner reads Chrome's files off a cold disk, so its first
+      # start takes 5 to over 20 seconds, and later ones take 0.1. The
+      # testkit gives a start 20 seconds before it calls Chrome hung, so
+      # Chrome starts once here, where the wait is only the disk's.
+      - name: Start Chrome once from a cold disk
+        run: timeout 120 google-chrome-stable --headless=new --no-sandbox --disable-gpu --dump-dom about:blank > /dev/null
       - name: Gate
         env:
           PAPERBOARD_GATE_PREBUILT: ${{ steps.libs.outputs.cache-hit == 'true' && 'paperapi paperui' || '' }}
