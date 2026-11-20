@@ -67,7 +67,6 @@
 
 /* a group label between items, aligned with their text */
 .PaperListLabel {
-    margin: 0;
     padding: var(--paper-uigap-threefourths);
 }
 

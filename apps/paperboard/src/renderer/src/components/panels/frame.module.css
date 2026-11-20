@@ -83,7 +83,6 @@
     align-items: center;
     gap: var(--paper-uigap-half);
     max-width: 100%;
-    margin: 0;
     line-height: 1;
 }
 

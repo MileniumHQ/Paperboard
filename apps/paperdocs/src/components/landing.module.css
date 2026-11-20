@@ -18,11 +18,6 @@
         var(--paper-ease-emphasized) both;
 }
 
-/* headings and paragraphs here are laid out by their flex gaps, not margins */
-.flush {
-    margin: 0;
-}
-
 .column {
     width: 100%;
     max-width: var(--paper-size-panel-wide);

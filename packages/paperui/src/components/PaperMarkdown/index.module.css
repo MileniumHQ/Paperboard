@@ -30,9 +30,9 @@
     text-align: center;
 }
 
-/* the flex gap is the only block spacing: browser margins on paragraphs and
-   headings, and the list's own bottom margin, would stack on top of it */
-.PaperMarkdown :is(p, h1, h2, h3, h4, h5, h6, ul, ol) {
+/* the flex gap is the only block spacing: a list's own bottom margin would
+   stack on top of it */
+.PaperMarkdown :is(ul, ol) {
     margin: 0;
 }
 

@@ -226,12 +226,10 @@
 }
 
 .title {
-    margin: 0;
     line-height: 1.25;
 }
 
 .description {
-    margin: 0;
     line-height: 1.45;
     display: -webkit-box;
     -webkit-line-clamp: 3;
