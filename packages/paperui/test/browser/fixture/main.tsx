@@ -375,6 +375,25 @@ const scenarios: Record<string, () => JSX.Element> = {
         ));
     },
 
+    textMargins() {
+        window.t = {};
+        // the caller's rule comes before PaperUI's stylesheet, as a panel's
+        // can in its bundle, so only specificity decides between them
+        const own = document.createElement("style");
+        own.textContent = ".own-margin { margin-top: 12px; }";
+        document.head.prepend(own);
+        return shell(() => (
+            <div id="column" style={{ display: "flex", "flex-direction": "column", gap: "8px" }}>
+                <PaperText preset="header" as="h1">Header</PaperText>
+                <PaperText preset="title" as="h2">Title</PaperText>
+                <PaperText preset="label" as="h3">Label</PaperText>
+                <PaperText preset="body" as="p">Body</PaperText>
+                <PaperText preset="caption" as="figcaption">Caption</PaperText>
+                <PaperText preset="body" as="p" class="own-margin">Own margin</PaperText>
+            </div>
+        ));
+    },
+
     markdownAnchors() {
         window.t = {};
         const filler = lines(1, 40).join("\n\n");

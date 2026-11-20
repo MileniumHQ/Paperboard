@@ -71,7 +71,6 @@
 
 /* a group label sits flush with the entries' text, with room above it */
 .menuLabel {
-    margin: 0;
     padding: var(--paper-uigap-threefourths) var(--paper-uigap-threefourths) var(--paper-uigap-onefourth);
     padding-left: calc(
         var(--paper-uigap-threefourths) +

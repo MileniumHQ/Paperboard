@@ -174,9 +174,9 @@
 }
 
 /* The body is a flex column with a gap, and the whole dialog clips to its
-   rounded border. Browser margins on paragraphs, headings and lists would
-   stack on top of that gap and push the content off the rounded top edge. */
-.body :is(p, h1, h2, h3, h4, h5, h6, ul, ol) {
+   rounded border. A list's margins would stack on top of that gap and push
+   the content off the rounded top edge. */
+.body :is(ul, ol) {
     margin: 0;
 }
 
