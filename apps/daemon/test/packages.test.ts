@@ -239,7 +239,8 @@ describe("runtime updates wait for their workloads", () => {
 			expect(third.pendingPackageUpdates().map((u) => u.version)).toEqual(["2.0.0"]);
 			await third.killProcess("uses-rt");
 			await waitFor("the staged update to install", () => fs.readFileSync(tool, "utf8").includes("echo v2"));
-			expect(third.pendingPackageUpdates()).toEqual([]);
+			// the release is in place a moment before it stops being listed as waiting
+			await waitFor("the installed update to stop waiting", () => third.pendingPackageUpdates().length === 0);
 			third.releaseAllClients();
 
 			// an adopted workload whose command is unknown holds back every package
