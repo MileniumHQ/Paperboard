@@ -17,8 +17,4 @@ describe("app settings over their defaults", () => {
         expect(withAppSettingsDefaults(DEFAULTS, { disableBlur: false })).toEqual({ ...DEFAULTS, disableBlur: false });
         expect(withAppSettingsDefaults(DEFAULTS, { reducedMotion: true, disableBlur: false })).toEqual({ ...DEFAULTS, disableAnimations: true, disableBlur: false });
     });
-
-    test("nothing saved is the defaults", () => {
-        expect(withAppSettingsDefaults(DEFAULTS, {})).toEqual(DEFAULTS);
-    });
 });

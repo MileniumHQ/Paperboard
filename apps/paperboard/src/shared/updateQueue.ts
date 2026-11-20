@@ -169,8 +169,3 @@ export function holdGroupReason(group: UpdateHoldGroup): string {
         : `${listOf(panels)} ${panels.length === 1 ? "is" : "are"}`;
     return `${using} using ${group.names.length > 1 ? "them" : "it"}`;
 }
-
-/** "Game Server and Java 21 need updating, but Game Server is using them." */
-export function holdGroupText(group: UpdateHoldGroup): string {
-    return `${holdGroupTitle(group)}, but ${holdGroupReason(group)}.`;
-}

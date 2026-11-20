@@ -1,8 +1,0 @@
-{
-    "name": "Failing",
-    "id": "dev.paperboard.testfailing",
-    "version": "0.0.1",
-    "description": "A shell test fixture: a panel whose service cannot start. Not released.",
-    "publisher": "Paperboard",
-    "service": "./dist/service.js"
-}

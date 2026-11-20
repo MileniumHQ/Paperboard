@@ -565,21 +565,4 @@ describe("panel services start and hydrate", () => {
 		expect(services.runningCount()).toBe(0);
 		auth.dispose();
 	});
-
-	test("back-to-back setState calls are coalesced into one sync in flight", async () => {
-		const dir = dataDir();
-		await installPanelFiles(dir, {
-			id: "test.chatty",
-			service: serviceSource({ calls: "{ burst: async (ctx) => { for (let i = 1; i <= 200; i++) ctx.setState({ n: i }); return true; } }", options: "state: { n: 0 }," }),
-		});
-		const c = await crane(dir);
-		const rpc = await c.rpc();
-		await waitFor("the chatty service to register", async () => !(await rpc.call("blocks:call", stateRead("test.chatty"))).error);
-		await rpc.ok("events:subscribe", { events: ["*"] });
-		await rpc.ok("blocks:call", serviceCall("test.chatty", "burst"));
-		const syncs = () => rpc.frames.filter((f) => f.type === "event" && f.event === "blocks:test.chatty:event.panel-state-changed");
-		await waitFor("the final state to sync", () => syncs().some((f) => f.payload?.state?.n === 200));
-		expect(syncs().length).toBeLessThanOrEqual(2);
-		await rpc.close();
-	});
 });

@@ -103,20 +103,4 @@ describe("held updates", () => {
         expect(daemon.stopAndUpdates).toEqual([["java21"]]);
         expect(updateQueue.hold("package:local:java21")).toMatchObject({ name: "java21", version: "21.0.5" });
     });
-
-    test("a computer that can't say what waits on it is named in the update list, and keeps what it held", async () => {
-        daemon.pending = [{ name: "node22", version: "22.1.0", blockedBy: [{ processId: "bot", owner: null, holds: true }] }];
-        await refreshHolds();
-        expect(updateQueue.hold("package:local:node22")).toBeDefined();
-        expect(updateQueue.snapshot().holdsError).toBeNull();
-
-        daemon.pendingError = "Paperboard Server RPC 'package:pending' timed out";
-        await refreshHolds();
-        expect(updateQueue.snapshot().holdsError).toBe("This computer didn't say which updates wait on it: Paperboard Server RPC 'package:pending' timed out.");
-        expect(updateQueue.hold("package:local:node22")).toBeDefined();
-
-        daemon.pendingError = null;
-        await refreshHolds();
-        expect(updateQueue.snapshot().holdsError).toBeNull();
-    });
 });

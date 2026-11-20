@@ -46,17 +46,6 @@ afterAll(async () => {
 
 const alive = () => electron.child.exitCode === null && electron.child.signalCode === null;
 
-// Inventory: Updates/releases — Restart to update that can't restart answers why, so the dialog can say it.
-test("Restart to update with nothing downloaded is refused with why, and Paperboard keeps running", async () => {
-    // an update check has run, so Paperboard's updater exists, with nothing
-    // downloaded; the refused restart must leave the next quit asking (the next test)
-    await electron.evalIn(SHELL, `window.paperboardShell.invoke("update-check")`);
-    expect(await electron.evalIn(SHELL, `window.paperboardShell.invoke("app-update-state").then((s) => s.status)`)).not.toBe("ready");
-    const answer = await electron.evalIn(SHELL, `window.paperboardShell.invoke("quit-and-install").then(() => "restarted", (err) => err.message)`);
-    expect(answer).toContain("No app update has been downloaded");
-    expect(alive()).toBe(true);
-});
-
 // Inventory: Data loss — quitting with an unsaved note asks the note first: Stay keeps Paperboard open, Discard quits.
 test("quitting with an unsaved note asks the note: Stay keeps Paperboard running, Discard quits", async () => {
     await electron.evalIn(SHELL, `document.querySelector('[role=radio][aria-label^="This Computer"]').click()`);

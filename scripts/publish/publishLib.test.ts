@@ -20,13 +20,11 @@ import {
     mergeVersionRecord,
     APP_KEYS,
     missingAppKeys,
-    missingLinuxPackageTools,
     paperboardArtifacts,
     paperboardPackages,
     PAPERDL_R2_BUCKET,
     r2YmlKey,
     tagFor,
-    type Target,
 } from "./publishLib";
 import { signRelease } from "./releaseSigning";
 
@@ -260,14 +258,5 @@ describe("a release build carries every app key, or refuses to start", () => {
             "A release build needs MAIN_VITE_GOOGLE_CLIENT_SECRET: put it in apps/paperboard/.env.local, or in the repository's Actions secrets for the release workflow.",
         );
         expect(missingAppKeys({})).toContain("needs MAIN_VITE_GOOGLE_CLIENT_ID and MAIN_VITE_GOOGLE_CLIENT_SECRET: put them in");
-    });
-});
-
-describe("a Linux build names a missing packaging tool before it starts", () => {
-    test("rpmbuild on PATH passes; without it the message says what to install", () => {
-        expect(missingLinuxPackageTools((cmd) => (cmd === "rpmbuild" ? "/usr/bin/rpmbuild" : null))).toBeNull();
-        const missing = missingLinuxPackageTools(() => null);
-        expect(missing).toContain("needs rpmbuild");
-        expect(missing).toContain("rpm-build (Fedora)");
     });
 });

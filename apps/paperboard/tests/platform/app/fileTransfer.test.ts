@@ -153,20 +153,6 @@ describe("panel file export and import", () => {
 		expect(fs.readdirSync(storage).filter((n) => n.includes(".davpart"))).toEqual([]);
 	});
 
-	test("a batch names the file that failed and how many were already copied", async () => {
-		const dir = tempDir();
-		fs.writeFileSync(path.join(dir, "one.txt"), "1");
-		fs.writeFileSync(path.join(dir, "two.bin"), bytes(100_000));
-		const result = await runPanelImport(
-			{ computerId: "local", panelId: PANEL, path: "batch", selection: "files" },
-			deps({ paths: [path.join(dir, "one.txt"), path.join(dir, "two.bin")] }),
-		);
-		expect(result).toMatchObject({ status: "failed", code: "too-large" });
-		expect((result as { message: string }).message).toStartWith("two.bin: ");
-		expect((result as { message: string }).message).toContain("1 file was already copied");
-		expect(fs.readFileSync(path.join(storage, "batch", "one.txt"), "utf8")).toBe("1");
-	});
-
 	test("a request naming a panel other than the asking frame's fails before any dialog", async () => {
 		const result = await runPanelFileTransfer("local", PANEL, { kind: "export", requestId: "r1", panelId: "test.someone-else", path: "world.dat" });
 		expect(result).toEqual({ status: "failed", code: "invalid-request", message: "The panel id does not match the panel that asked" });

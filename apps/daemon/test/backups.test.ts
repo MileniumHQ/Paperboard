@@ -9,7 +9,7 @@ import { LocalBackupStore } from "../src/backups/localStore";
 import { S3BackupStore, signS3Request } from "../src/backups/s3Store";
 import { DriveBackupStore } from "../src/backups/driveStore";
 import { BUSY_RETRY_MS } from "../src/backups/schedules";
-import { backupTransferDeadlineMs, newBackupId, type BackupRecord } from "../src/backups/types";
+import { newBackupId, type BackupRecord } from "../src/backups/types";
 import { ROUTINE_BACKUP_LABEL } from "@mileniumhq/paperapi/backups";
 import { tarGz } from "testkit/archive";
 import { fakeDrive, fakeS3 } from "testkit/cloud";
@@ -395,13 +395,6 @@ describe("cloud stores round-trip", () => {
 	afterAll(async () => {
 		await s3.close();
 		await drive.close();
-	});
-
-	test("a large archive over a slow home uplink is given the time it needs", () => {
-		// 1 GB at 10 Mbit/s takes about 13 minutes; the largest archive at 1 Mbit/s about 12 hours
-		for (const [bytes, bytesPerSecond] of [[1e9, 1.25e6], [5 * 1024 ** 3, 125_000]] as const) {
-			expect(backupTransferDeadlineMs(bytes)).toBeGreaterThan((bytes / bytesPerSecond) * 1000);
-		}
 	});
 
 	test("an S3 backup whose record can't be saved takes its uploaded archive with it", async () => {

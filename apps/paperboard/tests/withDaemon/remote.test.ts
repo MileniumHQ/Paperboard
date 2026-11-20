@@ -14,7 +14,7 @@ import { createTlsIdentity } from "daemon/security/tlsIdentity";
 import { setupWebSocketServer } from "daemon/server/ws";
 import { ConnectionPool } from "../../src/main/communication/papercrane/ConnectionPool";
 import { PaperCraneClient } from "../../src/main/communication/papercrane/PaperCraneClient";
-import { dataDir, modeOf, restoreEnv, tempDir } from "testkit/fs";
+import { dataDir, modeOf, restoreEnv } from "testkit/fs";
 import { type InProcessDaemon, request, startDaemon, stopDaemon } from "testkit/inproc";
 import { Rpc } from "testkit/rpc";
 import { TEST_TIMEOUT_MS, waitFor } from "testkit/wait";

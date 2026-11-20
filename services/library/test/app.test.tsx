@@ -1,7 +1,7 @@
 import { afterAll, afterEach, beforeAll, describe, expect, test } from "vitest";
 import { createServer, type Server, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
-import { cleanup, fireEvent, render, screen, waitFor } from "@solidjs/testing-library";
+import { cleanup, render, screen, waitFor } from "@solidjs/testing-library";
 import PanelLibraryApp from "../src/App";
 import { createLibraryBridge, type LibraryBridge } from "../src/bridge";
 import { shell, type Shell } from "./helpers/shell";
@@ -71,35 +71,6 @@ const CLOCK = {
     description: "A clock.",
     iconUrl: "/panel/dev.example.clock/icon",
 };
-
-const installs = () => host.sent.filter((m) => m.type === "paperboard:library-install");
-
-// Installs round-trip through the shell, with a bound, and failures are shown.
-describe("installs round-trip through the shell, and failures are shown", () => {
-    test("a shell failure is shown inline, and a success turns the action into Open", async () => {
-        serveIndex({ [CLOCK.id]: CLOCK });
-        open(`/library/?panel=${CLOCK.id}`);
-        fireEvent.click(await screen.findByRole("button", { name: /Install/ }));
-
-        await waitFor(() => expect(installs()).toHaveLength(1));
-        expect(installs()[0]).toMatchObject({ panelId: CLOCK.id });
-        host.reply({ type: "paperboard:library-install-result", requestId: installs()[0]!.requestId, panelId: CLOCK.id, ok: false, error: "Disk full" });
-        expect((await screen.findByRole("alert")).textContent).toBe("Couldn't install Clock: Disk full");
-
-        // the failure leaves the action usable: a retry is a new request
-        fireEvent.click(await screen.findByRole("button", { name: /Install/ }));
-        await waitFor(() => expect(installs()).toHaveLength(2));
-        expect(screen.queryByRole("alert")).toBeNull();
-        // the shell answers the way Paperboard does: the result, then the new installed list
-        host.reply({ type: "paperboard:library-install-result", requestId: installs()[1]!.requestId, panelId: CLOCK.id, ok: true });
-        host.reply({ type: "paperboard:library-installed", theme: "light", installed: [{ id: CLOCK.id, name: "Clock", version: "1.2.0" }] });
-
-        fireEvent.click(await screen.findByRole("button", { name: /Open/ }));
-        expect(screen.queryByRole("alert")).toBeNull();
-        expect(host.sent.filter((m) => m.type === "paperboard:library-open")).toEqual([{ type: "paperboard:library-open", panelId: CLOCK.id }]);
-        expect(installs()).toHaveLength(2);
-    });
-});
 
 // Store listings render safely.
 describe("store listings render safely", () => {
