@@ -27,7 +27,7 @@ import { launchOptionsFromArgv } from "../../../src/shared/launchOptions";
 import { initialAppUpdateState } from "../../../src/shared/appUpdate";
 import { initialUpdateQueueState, type UpdateQueueState } from "../../../src/shared/updateQueue";
 import { cancelGoogleSignIn, signInToGoogleDrive } from "../../../src/main/googleOAuth";
-import { ANSWER, type Command, type CommandResult } from "./protocol";
+import { ANSWER, type Command, type HostCommands } from "./protocol";
 
 const rendererDir = process.argv[2];
 if (!rendererDir) throw new Error("usage: host.main.ts <built renderer dir>");
@@ -111,24 +111,25 @@ connectionPool.on("change", () =>
     pushToShells("computers-changed", { computers: connectionPool.listComputers(), activeId: connectionPool.getActiveId() }),
 );
 
-async function run(command: Command): Promise<CommandResult<Command>> {
-    switch (command.cmd) {
-        case "sign-in-url":
-            return host.signInUrl();
-        case "push-update-queue":
-            updateQueue = command.state;
-            pushToShells("update-queue", updateQueue);
-            return true;
-        case "google-sign-ins":
-            // resolves with how many Google sign-ins opened a browser, once at least that many have
-            while (googleSignIns < command.atLeast) await new Promise<void>((wake) => googleSignInWaiters.push(wake));
-            return googleSignIns;
-        default: {
-            // a command from a test built against another host (or past the types)
-            const unknown: never = command;
-            throw new Error(`unknown command ${(unknown as { cmd?: unknown }).cmd}`);
-        }
-    }
+// each command's handler, held to the answer protocol.ts declares for it
+const handlers: { [K in keyof HostCommands]: (command: HostCommands[K]["command"]) => Promise<HostCommands[K]["result"]> } = {
+    "sign-in-url": async () => host.signInUrl(),
+    "push-update-queue": async (command) => {
+        updateQueue = command.state;
+        pushToShells("update-queue", updateQueue);
+        return true;
+    },
+    // resolves with how many Google sign-ins opened a browser, once at least that many have
+    "google-sign-ins": async (command) => {
+        while (googleSignIns < command.atLeast) await new Promise<void>((wake) => googleSignInWaiters.push(wake));
+        return googleSignIns;
+    },
+};
+
+async function run(command: Command): Promise<unknown> {
+    // a command from a test built against another host (or past the types) has no handler
+    if (!Object.hasOwn(handlers, command.cmd)) throw new Error(`unknown command ${command.cmd}`);
+    return (handlers[command.cmd] as (command: Command) => Promise<unknown>)(command);
 }
 
 const reply = (seq: number, body: { result?: unknown; error?: string }) => process.stdout.write(`${ANSWER}${JSON.stringify({ seq, ...body })}\n`);
