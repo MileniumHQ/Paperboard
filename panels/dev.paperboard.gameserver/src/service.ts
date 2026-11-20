@@ -29,6 +29,7 @@ import { errorMessage, problemsApi } from "@mileniumhq/paperapi";
 import { appendCapped, type GameServerState } from "./service/types";
 import { SERVERS_CALLS, gameServerContract, type CallName, type ServerSummary } from "./service/contract";
 import { pictureCall } from "./service/pictures";
+import { steamAvatar } from "./service/steamAvatars";
 import { handleProcessData, handleProcessExit, stopServerInstance, cancelReadiness, restartServerInstance, startServerInstance, releaseServer } from "./service/lifecycle";
 import { cancelAutomation, readAutomation, scheduleDailyRestart, scheduleUpdateChecks } from "./service/automation";
 import { historyWriter, readHistory } from "./service/history";
@@ -452,6 +453,7 @@ const serversCalls: Pick<Handlers, ServersCallName> = {
     readServerConfig: (_input, _ctx, { server }) => requireServer(server).settings,
     retryInitialize: async (_input, _ctx, { server }) => (await retryInitialize(server), true),
     servedPicture: (input) => pictureCall(input),
+    steamAvatar: ({ steamId }) => steamAvatar(steamId),
 };
 /** Every other call is about one server, and its game answers it. */
 const serverCalls: Omit<Handlers, ServersCallName> = {
