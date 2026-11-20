@@ -3,7 +3,7 @@
 // hidden by support/harness.cjs, which also carries the test's commands.
 import * as net from "node:net";
 import * as path from "node:path";
-import { spawn } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
 import { APP_DIR } from "./build";
 import { watch, WAIT_MS, type Watched } from "./crane";
 import { ownChild, tempDir } from "./temp";
@@ -31,7 +31,8 @@ export interface ElectronApp extends Watched {
     evalInFrame<T = any>(match: string, code: string): Promise<T>;
     // runs `code` as an async function body in the main process
     evalMain<T = any>(code: string): Promise<T>;
-    quit(): Promise<{ code: number | null; signal: NodeJS.Signals | null }>;
+    // quits the app; rejects saying why when it doesn't exit with code 0
+    quit(): Promise<void>;
     // what the main process and renderers reported as broken
     failures(): HarnessEvent[];
 }
@@ -59,9 +60,13 @@ export async function launchElectron(options: {
         PAPERBOARD_DIR: options.dataDir,
         PB_HARNESS_PORT: String(port),
     };
+    // Chromium's own log on stderr, so an app that ends badly says what
+    // Chromium saw last
+    env.ELECTRON_ENABLE_LOGGING = "1";
     delete env.ELECTRON_RUN_AS_NODE;
     delete env.ELECTRON_RENDERER_URL;
     delete env.PAPERCRANE_PORT;
+    const launchedAt = new Date();
     const child = spawn(electronBinary(), ["--require", HARNESS, options.appDir, `--user-data-dir=${userDataDir}`, ...(options.args ?? [])], {
         env, stdio: ["ignore", "pipe", "pipe"], windowsHide: true,
     });
@@ -169,13 +174,47 @@ export async function launchElectron(options: {
         evalInFrame: (match, code) => command("evalFrame", { match, code, waitMs: WAIT_MS / 2 }),
         evalMain: (code) => command("main", { code }),
         async quit() {
-            if (child.exitCode === null && child.signalCode === null) await command("quit", {});
-            return watched.exited;
+            const running = () => child.exitCode === null && child.signalCode === null;
+            // a main process that dies before it answers is reported below,
+            // with how it ended, rather than as a lost answer
+            if (running()) await command("quit", {}).catch((err: Error) => { if (running()) throw err; });
+            const exit = await watched.exited;
+            if (exit.code === 0 && exit.signal === null) return;
+            throw new Error(`electron quit ${watched.howExited()}${await crashReport(child.pid!, launchedAt)}\n` +
+                `last events: ${JSON.stringify(events.slice(-20)).slice(0, 4000)}\n${watched.output().slice(-8000)}`);
         },
         failures: () => events.filter((e) =>
             e.event === "main-error" || e.event === "renderer-gone" || e.event === "preload-error" ||
             (e.event === "load-failed" && e.isMainFrame) || (e.event === "console" && e.level === "error")),
     };
+}
+
+// Windows Error Reporting's record of each program that crashed since
+// `since` (the faulting module, the offset into it and the exception code),
+// as PowerShell prints them; nothing when there is none
+const CRASH_QUERY = `
+$since = [DateTimeOffset]::Parse($env:PB_CRASHES_SINCE).LocalDateTime
+try {
+    Get-WinEvent -FilterHashtable @{ LogName = 'Application'; ProviderName = 'Application Error'; StartTime = $since } -ErrorAction Stop |
+        ForEach-Object { $_.Message; '' }
+} catch {
+    if ($_.FullyQualifiedErrorId -notlike 'NoMatchingEventsFound*') { throw }
+}`;
+
+// What Windows knows about an app that exited badly. Bun reports only the
+// low byte of a Windows exit code, so a native crash such as 0xC0000005
+// (an access violation) arrives as "code 5": the crash record has the rest.
+// Elsewhere a crash is a signal, which the exit already names.
+async function crashReport(pid: number, since: Date): Promise<string> {
+    if (process.platform !== "win32") return "";
+    const found = await new Promise<string>((resolve) => {
+        execFile("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", CRASH_QUERY], {
+            env: { ...process.env, PB_CRASHES_SINCE: since.toISOString() }, windowsHide: true, timeout: 30_000, maxBuffer: 4 * 1024 * 1024,
+        }, (err, stdout, stderr) => resolve(err ? `couldn't read the Windows crash records: ${err.message}\n${stderr}` : stdout.trim()));
+    });
+    const ofApp = new RegExp(`process id: 0x0*${pid.toString(16)}\\b`, "i");
+    return `\n(Bun keeps only the low byte of a Windows exit code; Electron's pid was ${pid})\n` +
+        (found === "" ? "Windows recorded no crash since the app launched" : `Windows crash records since the app launched${ofApp.test(found) ? ", the app's among them" : ""}:\n${found.slice(0, 8000)}`);
 }
 
 // Resolves inside a page with the value of `expression` once it is truthy,

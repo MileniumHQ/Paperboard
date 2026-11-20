@@ -66,7 +66,7 @@ describe("failures reach the caller", () => {
         expect(standing).toContain("Paperboard is showing the defaults, and changes aren't saved: ");
         expect(standing).toMatch(/JSON/);
         expect(await electron.evalIn(SHELL, `!!document.querySelector('[role=switch]:has(input[name=disableBlur])')`)).toBe(false);
-        expect(await electron.quit()).toEqual({ code: 0, signal: null });
+        await electron.quit();
         expect(fs.readFileSync(settingsFile, "utf8")).toBe("{ not json");
         expect(fs.existsSync(autostart)).toBe(true);
 
@@ -89,7 +89,7 @@ describe("failures reach the caller", () => {
             fs.chmodSync(path.join(saveDir, "local"), 0o755);
         }
         expect(JSON.parse(fs.readFileSync(path.join(saveDir, "local", "app-settings.json"), "utf8")).runOnStartup).toBe(false);
-        expect(await second.quit()).toEqual({ code: 0, signal: null });
+        await second.quit();
     }, WAIT_MS * 3);
 
     test("a panel's microphone request that Paperboard can't decide is refused, and the window says why", async () => {
@@ -110,7 +110,7 @@ describe("failures reach the caller", () => {
         const toast = await electron.evalIn(SHELL, domCondition(`[...document.querySelectorAll("[aria-label=Notifications] [role=alert]")].map((d) => d.innerText).find((t) => t.includes("can't use your microphone"))`));
         expect(toast).toContain("aren't valid JSON");
         expect(fs.readFileSync(path.join(dataDir, "local", "panel-permissions.json"), "utf8")).toBe("{ not json");
-        expect(await electron.quit()).toEqual({ code: 0, signal: null });
+        await electron.quit();
     }, WAIT_MS * 3);
 
     test("SDK terminal and process calls the daemon refuses reject with its reason", async () => {
