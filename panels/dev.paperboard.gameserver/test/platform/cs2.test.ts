@@ -104,6 +104,33 @@ describe("Counter-Strike 2", () => {
         expect(seen.find((p) => p.steamId === "[U:1:1]")?.playtime).toBeGreaterThan(0);
     });
 
+    test.skipIf(!support.supported)("a player whose join could not be recorded still has their time on saved, and keeps no one else's out", async () => {
+        const server = await cs2Server();
+        await startServerInstance(server.server);
+        await server.server.waitFor((s) => s.serverStatus === "online", "Counter-Strike 2 to say its map is running");
+        await command(server, "fake_connect 5 [U:1:2] Bob");
+        const seenFile = path.join(server.dir, "players.json");
+        await server.server.waitFor(() => fs.existsSync(seenFile) && fs.readFileSync(seenFile, "utf8").includes("[U:1:2]"), "Bob recorded");
+        fs.chmodSync(server.dir, 0o555);
+        try {
+            await command(server, "fake_connect 6 [U:1:1] Ann");
+            await said(server, "Could not record Ann", "Ann's failed join record");
+        } finally {
+            fs.chmodSync(server.dir, 0o755);
+        }
+        const exit = server.nextExit();
+        await stopServerInstance(server.server);
+        expect(await exit).toBe(0);
+        // time on is saved as the server's run is cleaned up
+        await server.server.lifecycle.released;
+        const seen = JSON.parse(fs.readFileSync(seenFile, "utf8")) as { steamId: string; name: string; playtime?: number }[];
+        const ann = seen.find((p) => p.steamId === "[U:1:1]");
+        const bob = seen.find((p) => p.steamId === "[U:1:2]");
+        expect(ann?.name).toBe("Ann");
+        expect(ann?.playtime).toBeGreaterThan(0);
+        expect(bob?.playtime).toBeGreaterThan(0);
+    });
+
     test.skipIf(support.supported)("a computer it doesn't run on is told why at Start, and the server stays offline", async () => {
         const server = await cs2Server();
         await expect(startServerInstance(server.server)).rejects.toThrow(support.reason!);
