@@ -2,8 +2,6 @@
   "extends": "./tsconfig.json",
   "compilerOptions": {
     "noImplicitAny": true,
-    "noUnusedLocals": false,
-    "noUnusedParameters": false,
     "allowImportingTsExtensions": true,
     "types": ["node", "bun"]
   },
