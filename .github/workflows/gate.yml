@@ -3,6 +3,8 @@ on:
   push:
     branches: [main]
   pull_request:
+    # edited: the description names the gate targets
+    types: [opened, synchronize, reopened, edited]
   workflow_dispatch:
 permissions:
   contents: read
@@ -11,16 +13,65 @@ concurrency:
   group: gate-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 jobs:
-  # The whole gate, once, on Linux x64, split into parallel jobs: each group
-  # is a set of `bun run gate` targets, so a job proves exactly what it names
+  # Which gate targets run, as the matrix of the jobs below. A pull request
+  # names its own in the last `Gate:` line of its description, the same targets
+  # its author ran locally:
+  #
+  #   Gate: paperdocs
+  #   Gate: terminal paperboard platform
+  #
+  # `platform` also starts the other release targets' runners. With no such
+  # line (or `Gate: all`), and on a push to main or a manual run, everything
+  # runs.
+  scope:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      jobs: ${{ steps.scope.outputs.jobs }}
+      platform: ${{ steps.scope.outputs.platform }}
+    steps:
+      - name: Scope
+        id: scope
+        env:
+          EVENT: ${{ github.event_name }}
+          BODY: ${{ github.event.pull_request.body }}
+        run: |
+          named=""
+          if [ "$EVENT" = pull_request ]; then
+            named="$(printf '%s\n' "$BODY" | tr -d '\r' | sed -n 's/^Gate:[[:space:]]*//p' | tail -n 1 | sed 's/[[:space:]]*$//')"
+          fi
+          if [ -z "$named" ] || [ "$named" = all ]; then
+            jobs='[
+              {"name": "libraries", "targets": "packages paperapi paperui create-panel release testkit npx scripts"},
+              {"name": "app", "targets": "daemon paperboard"},
+              {"name": "gameserver", "targets": "gameserver"},
+              {"name": "panels", "targets": "agents blocks botcreator terminal"},
+              {"name": "web", "targets": "paperdocs origami library arilink panelapis global"}
+            ]'
+            platform=true
+          elif ! printf '%s' "$named" | grep -qE '^[a-z-]+( [a-z-]+)*$'; then
+            echo "The description's Gate line must be gate targets separated by spaces, got: $named" >&2
+            exit 1
+          else
+            jobs="[{\"name\": \"gate\", \"targets\": \"$named\"}]"
+            platform=false
+            case " $named " in *" platform "*) platform=true ;; esac
+          fi
+          echo "jobs=$(echo $jobs)" >> "$GITHUB_OUTPUT"
+          echo "platform=$platform" >> "$GITHUB_OUTPUT"
+          echo "Gate targets: ${named:-all}" >> "$GITHUB_STEP_SUMMARY"
+
+  # The targets, on Linux x64. Everything is split into parallel jobs, each a
+  # set of `bun run gate` targets; a pull request's own list is one job.
   gate:
-    name: ${{ matrix.group }}
+    name: ${{ matrix.name }}
+    needs: scope
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
-        group: [libraries, app, panels, web]
+        include: ${{ fromJSON(needs.scope.outputs.jobs) }}
     steps:
       - uses: actions/checkout@v5
       - uses: oven-sh/setup-bun@v2
@@ -47,7 +98,7 @@ jobs:
       # match is a different build.
       - name: Restore the PaperAPI and PaperUI builds of these sources
         id: libs
-        if: matrix.group != 'libraries'
+        if: matrix.name != 'libraries'
         uses: actions/cache@v4
         with:
           path: |
@@ -55,37 +106,41 @@ jobs:
             packages/paperui/dist
           key: libs-linux-x64-${{ hashFiles('packages/paperapi/**', 'packages/paperui/**', 'bun.lock', 'package.json', 'patches/**') }}
       # the silent-catch and TODO-expiry gates scan with ripgrep, and the
-      # app's Electron tests need a display and a session bus
-      - run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y --no-install-recommends ripgrep xvfb dbus
+      # app's Electron tests need a display and a session bus. apt is slow and
+      # sometimes down, so it runs only for a tool the runner doesn't have.
+      - name: Tools the gate needs
+        run: |
+          missing=""
+          command -v rg > /dev/null || missing="$missing ripgrep"
+          command -v xvfb-run > /dev/null || missing="$missing xvfb"
+          command -v dbus-run-session > /dev/null || missing="$missing dbus"
+          if [ -n "$missing" ]; then
+            sudo apt-get update -qq
+            sudo apt-get install -y --no-install-recommends $missing
+          fi
           # Ubuntu 24.04 keeps Electron's sandbox from making user namespaces
           sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
       - run: bun install --frozen-lockfile
       # Electron fetches its binary only when its install script runs
       - name: Fetch Electron
-        if: matrix.group != 'web'
+        if: matrix.name != 'web'
         run: |
           node "$(node -p "require.resolve('electron/install.js', { paths: ['apps/paperboard'] })")"
       - name: Gate
         env:
           PAPERBOARD_GATE_PREBUILT: ${{ steps.libs.outputs.cache-hit == 'true' && 'paperapi paperui' || '' }}
-        run: |
-          case "${{ matrix.group }}" in
-            libraries) targets="packages paperapi paperui create-panel release testkit npx scripts" ;;
-            app) targets="daemon paperboard" ;;
-            panels) targets="agents blocks botcreator gameserver terminal" ;;
-            web) targets="paperdocs origami library arilink panelapis global" ;;
-            *) echo "unknown gate group ${{ matrix.group }}" >&2; exit 2 ;;
-          esac
-          dbus-run-session -- xvfb-run -a bun run gate $targets
+          TARGETS: ${{ matrix.targets }}
+        run: dbus-run-session -- xvfb-run -a bun run gate $TARGETS
 
   # The other release targets run only the cross-platform suite: the tests
   # whose outcome depends on the OS or CPU (booting and updating the built
   # app and daemon, processes and signals, paths, archives, file modes).
   # Logic that's the same everywhere is proven once by the Linux gate above.
+  # A pull request that names its targets runs them only if it names `platform`.
   platform:
     name: platform (${{ matrix.target.name }})
+    needs: scope
+    if: needs.scope.outputs.platform == 'true'
     runs-on: ${{ matrix.target.runner }}
     timeout-minutes: 30
     strategy:
@@ -102,61 +157,26 @@ jobs:
         shell: bash
     steps:
       - uses: actions/checkout@v5
-      # The docs site, the services and the root's markdown can't reach a cross-platform
-      # suite, so a change made only of those skips it. Anything else, or a
-      # run with nothing to compare against, runs it.
-      - name: Does this change reach the cross-platform suite
-        id: scope
-        env:
-          EVENT: ${{ github.event_name }}
-          PUSH_BEFORE: ${{ github.event.before }}
-          PR_BASE: ${{ github.event.pull_request.base.sha }}
-        run: |
-          case "$EVENT" in
-            push) base="$PUSH_BEFORE" ;;
-            pull_request) base="$PR_BASE" ;;
-            *) base="" ;;
-          esac
-          run=true
-          if [ -z "$base" ] || [ "$base" = 0000000000000000000000000000000000000000 ]; then
-            echo "A $EVENT run has no earlier commit to compare with: running the suite"
-          elif ! git fetch --no-tags --depth=1 origin "$base"; then
-            echo "Couldn't fetch $base to compare with: running the suite"
-          else
-            changed="$(git diff --name-only "$base" HEAD)"
-            echo "Changed since $base:"
-            echo "$changed"
-            reach="$(echo "$changed" | grep -vE '^(apps/paperdocs/|services/|[^/]+\.md$)' || true)"
-            if [ -n "$changed" ] && [ -z "$reach" ]; then
-              run=false
-              echo "Only web apps, services and root markdown changed: skipping the cross-platform suite" | tee -a "$GITHUB_STEP_SUMMARY"
-            fi
-          fi
-          echo "run=$run" >> "$GITHUB_OUTPUT"
       - uses: oven-sh/setup-bun@v2
-        if: steps.scope.outputs.run == 'true'
         with:
           bun-version: 1.4.4
       - uses: actions/setup-node@v5
-        if: steps.scope.outputs.run == 'true'
         with:
           node-version: 24
       - uses: actions/setup-go@v5
-        if: steps.scope.outputs.run == 'true'
         with:
           go-version-file: apps/daemon/supervisor/go.mod
           cache-dependency-path: apps/daemon/supervisor/go.sum
       # On macOS and Windows, restoring Bun's package cache takes longer than
       # a cold install, so only Linux keeps it
       - name: Cache Bun packages (Linux)
-        if: steps.scope.outputs.run == 'true' && matrix.target.os == 'linux'
+        if: matrix.target.os == 'linux'
         uses: actions/cache@v4
         with:
           path: ~/.bun/install/cache
           key: bun-${{ matrix.target.name }}-${{ hashFiles('bun.lock') }}
           restore-keys: bun-${{ matrix.target.name }}-
       - name: Cache the Electron binary
-        if: steps.scope.outputs.run == 'true'
         uses: actions/cache@v4
         with:
           path: |
@@ -167,7 +187,6 @@ jobs:
           restore-keys: electron-${{ matrix.target.name }}-
       - name: Restore the PaperAPI and PaperUI builds of these sources
         id: libs
-        if: steps.scope.outputs.run == 'true'
         uses: actions/cache@v4
         with:
           path: |
@@ -175,19 +194,21 @@ jobs:
             packages/paperui/dist
           key: libs-${{ matrix.target.name }}-${{ hashFiles('packages/paperapi/**', 'packages/paperui/**', 'bun.lock', 'package.json', 'patches/**') }}
       - name: Display and session bus for Electron (Linux)
-        if: steps.scope.outputs.run == 'true' && matrix.target.os == 'linux'
+        if: matrix.target.os == 'linux'
         run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y --no-install-recommends xvfb dbus
+          missing=""
+          command -v xvfb-run > /dev/null || missing="$missing xvfb"
+          command -v dbus-run-session > /dev/null || missing="$missing dbus"
+          if [ -n "$missing" ]; then
+            sudo apt-get update -qq
+            sudo apt-get install -y --no-install-recommends $missing
+          fi
           sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
       - run: bun install --frozen-lockfile
-        if: steps.scope.outputs.run == 'true'
       - name: Fetch Electron
-        if: steps.scope.outputs.run == 'true'
         run: |
           node "$(node -p "require.resolve('electron/install.js', { paths: ['apps/paperboard'] })")"
       - name: Cross-platform suite
-        if: steps.scope.outputs.run == 'true'
         env:
           PAPERBOARD_GATE_PREBUILT: ${{ steps.libs.outputs.cache-hit == 'true' && 'paperapi paperui' || '' }}
         run: |
@@ -197,16 +218,24 @@ jobs:
             bun run gate platform
           fi
 
-  # One stable check to require in branch protection, whatever the matrix is
+  # One stable check to require in branch protection, whatever the matrix is:
+  # a job the pull request didn't name is skipped, and that passes
   gate-green:
     name: Gate
-    if: always()
-    needs: [gate, platform]
+    # runs when a job failed, but not in a run a newer one cancelled: that run
+    # proved nothing, and a failure here would start the reviewer on it
+    if: ${{ !cancelled() }}
+    needs: [scope, gate, platform]
     runs-on: ubuntu-24.04
     steps:
       - name: Every gate job passed
+        env:
+          SCOPE: ${{ needs.scope.result }}
+          GATE: ${{ needs.gate.result }}
+          PLATFORM: ${{ needs.platform.result }}
         run: |
-          if [ "${{ needs.gate.result }}" != success ] || [ "${{ needs.platform.result }}" != success ]; then
-            echo "gate: ${{ needs.gate.result }}, platform: ${{ needs.platform.result }}" >&2
+          ok() { [ "$1" = success ] || [ "$1" = skipped ]; }
+          if [ "$SCOPE" != success ] || ! ok "$GATE" || ! ok "$PLATFORM"; then
+            echo "scope: $SCOPE, gate: $GATE, platform: $PLATFORM" >&2
             exit 1
           fi
