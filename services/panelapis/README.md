@@ -4,7 +4,7 @@ Server-side APIs for Paperboard panels, served from the root of `panels.ariapis.
 
 ## Modscan
 
-Paperboard's server-side Steam Workshop metadata service. The owner's Steam Web API key stays in a Worker secret; desktop users do not supply keys. This app is independent of the Game Server panel and is not integrated into it.
+Paperboard's server-side Steam Workshop metadata service. The owner's Steam Web API key stays in a Worker secret; desktop users do not supply keys. The Game Server panel calls it (`panels/dev.paperboard.gameserver/src/games/steam/modscan.ts`) for Workshop search, items and collections, and lists it as Paperboard modscan in its manifest's `store.services`.
 
 ### Terms review — 2026-10-30
 
@@ -27,13 +27,13 @@ The [Steam Subscriber Agreement](https://store.steampowered.com/subscriber_agree
 
 No numerical cache TTL or universal maximum personal-data retention period was found in these reviewed documents. The 60-second search and 300-second item/collection TTLs are our choices, not Valve mandates. `cache_max_age_seconds` in QueryFiles controls Steam's own stale results, not our retention permission. Never describe an invented retention period as a Valve requirement.
 
-Before operating publicly:
+Disclosure status, checked against the repository on 2026-11-20:
 
-1. Publish the privacy policy and user-facing terms described above, accurately listing the actual countries where Cloudflare processes/caches data. Standard global Cache API placement does not promise a restricted set of countries; determine and disclose that scope, or change deployment before claiming residency guarantees.
-2. Disclose public item metadata, public author Steam IDs and short free-text descriptions in edge caches (up to five minutes of freshness). Public IDs can still be personal data. This app does not retrieve profiles, email, real names, passwords, private subscriptions or a caller's Steam ID. Do not enrich author IDs or collect nonpublic user data without a separate review and the required request/disclosures.
-3. Disclose client IP processing by Cloudflare for abuse prevention. This Worker stores no IP/request history itself; the rate-limit binding processes IPs. Disable request/subrequest tracing and any external log drains that capture Steam URLs or request bodies. Confirm provider retention and cache eviction behavior in the operator policy: TTL limits serving freshness, not guaranteed physical deletion from Cloudflare infrastructure.
-4. Keep the key confidential and dedicate its upstream usage to this service. Coordinate any other key/account usage within Valve's total cap; the local guard cannot count unrelated applications. Do not reset the durable budget name, storage or migration while calls remain in its rolling window. When changing keys, retain the conservative guard rather than resetting it.
-5. Preserve attribution, disclaimers and source links when integrating the panel. Handle explicit API errors visibly. Re-review Valve's terms periodically and stop when access is withdrawn.
+1. **Privacy disclosures: done.** Panel-specific services are disclosed in each panel's manifest, not the privacy page. The Game Server panel's `store.services` lists "Paperboard modscan": Workshop search, collections and the items mods install, update and require, with public items and their authors' Steam IDs cached for up to five minutes at the nearest Cloudflare site. `apps/paperdocs/src/site/pages/privacy.md` covers the panel APIs (`panels.ariapis.com`) in general: they see the IP address, keep no record of who asked, and use the IP only for rate limiting.
+2. **User-facing terms: not done.** No terms page exists, so the warranty and liability disclaimers are only in the response metadata and the panel's result view. Public author IDs can still be personal data. This app does not retrieve profiles, email, real names, passwords, private subscriptions or a caller's Steam ID. Do not enrich author IDs or collect nonpublic user data without a separate review and the required request/disclosures.
+3. **Client IPs: disclosed** in the privacy page (see 1). This Worker stores no IP/request history itself; the rate-limit binding processes IPs. Keep request/subrequest tracing and any external log drains that capture Steam URLs or request bodies disabled. TTL limits serving freshness, not guaranteed physical deletion from Cloudflare infrastructure.
+4. **Key handling: in place.** The key is a Worker secret used only by this service. Coordinate any other use of the key within Valve's total cap; the local guard cannot count unrelated applications. Do not reset the durable budget name, storage or migration while calls remain in its rolling window. When changing keys, retain the conservative guard.
+5. **Panel integration: done.** The Game Server panel declares the service in its manifest (`store.services`, as Paperboard modscan). The Source Workshop pane and the Terraria Mods tab both show the attribution, source link and disclaimers from `meta` under their results (`lib/addons/workshop.ts` `notices()`). The install, update and required-mod lookups (`games/terraria/modStore.ts`) show Steam data only inside that tab, such as the install dialog's list of required mods. Handle explicit API errors visibly, re-review Valve's terms periodically, and stop when access is withdrawn.
 
 ### Endpoints
 
@@ -79,13 +79,13 @@ bun run --cwd services/panelapis dev
 
 Tests run local workerd via Miniflare, with real cache, rate-limit and durable storage bindings; only outgoing Steam HTTP is mocked. Test storage is ephemeral, and dev persistence lives under `/tmp/paperboard-panelapis-dev`, never the user's `.paperboard`. For dev requests supply a local `CF-Connecting-IP` header. Local secrets belong in an ignored `.dev.vars`, never source control. The test harness uses Miniflare's v4 configuration converter because the installed Wrangler dependency uses Miniflare 5's updated API.
 
-Operator steps below are documentation only; no deployment, secret upload or Cloudflare writes were performed during implementation:
+The Worker `panelapis` is deployed by hand with Wrangler (no CI job deploys it) and serves `panels.ariapis.com`. The steps below set up a new account or recover the service; for a routine release only the last step applies.
 
-1. Complete the pre-operation terms/privacy steps above and register the correct application/domain with Valve. Confirm that a normal Web API key can query the chosen games; a live authenticated smoke test was not performed here. Upstream access denial is explicit and must be resolved with Valve, never worked around.
-2. Authenticate Wrangler to the intended Cloudflare account; confirm the `ariapis.com` zone is in that account. The config attaches `panels.ariapis.com` as a Worker custom domain, so the Worker owns the whole host and deployment creates its DNS record and certificate. The hostname must not already have a conflicting DNS record. Other panel APIs are routed in code, not with extra Cloudflare routes.
-3. Confirm rate-limit namespace `1281930` is unique in the account (change before first deployment if necessary). The first deployment migration creates the SQLite Durable Object; remote bindings are not used locally.
-4. Set the Worker secret named `STEAM_WEB_API_KEY` securely through the Cloudflare dashboard for Worker `panelapis`; never put its value in `wrangler.jsonc`, shell history, a URL shared with users or Git. Missing configuration produces a clear 503. No secret-setting command is run by these scripts.
-5. When separately authorized to publish, run `bun run --cwd services/panelapis deploy`. Verify routing, attribution, privacy disclosures, cache behavior and visible failures before integrating any panel.
+1. Register the correct application/domain with Valve and confirm a normal Web API key can query the allowlisted games. Upstream access denial is explicit and must be resolved with Valve, never worked around.
+2. Authenticate Wrangler to the Cloudflare account that holds the `ariapis.com` zone. The config attaches `panels.ariapis.com` as a Worker custom domain, so the Worker owns the whole host and deployment creates its DNS record and certificate. The hostname must not already have a conflicting DNS record. Other panel APIs are routed in code, not with extra Cloudflare routes.
+3. Rate-limit namespace `1281930` must be unique in the account. The first deployment's migration creates the SQLite Durable Object; remote bindings are not used locally.
+4. Set the Worker secret `STEAM_WEB_API_KEY` through the Cloudflare dashboard for Worker `panelapis`; never put its value in `wrangler.jsonc`, shell history, a URL shared with users or Git. Missing configuration produces a clear 503.
+5. Run `bun run --cwd services/panelapis deploy`. Verify routing, attribution, privacy disclosures, cache behavior and visible failures after each deploy.
 
 ### Emailing Valve about growth
 

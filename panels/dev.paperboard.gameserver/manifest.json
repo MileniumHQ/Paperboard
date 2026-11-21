@@ -116,7 +116,11 @@
             },
             {
                 "name": "Steam",
-                "detail": "SteamCMD downloads, Workshop search (via Paperboard's modscan), pictures and collections, and players' profile pictures (Steam Community sees each Steam id)"
+                "detail": "SteamCMD downloads, Workshop pictures, and players' profile pictures (Steam Community sees each Steam id)"
+            },
+            {
+                "name": "Paperboard modscan",
+                "detail": "Workshop search, collections and the items mods install, update and require, cached with their authors' Steam ids for 5 minutes at your nearest Cloudflare site"
             },
             {
                 "name": "Facepunch",
