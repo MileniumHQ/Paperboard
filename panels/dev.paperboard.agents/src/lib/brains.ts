@@ -6,10 +6,8 @@ import { createRead, type Read } from "@mileniumhq/paperui/headless";
 import { BRAINS, type BrainModel, type Harness } from "../contract";
 import type { Agent } from "./agent";
 
-export const harnessName = (id: string) => BRAINS[id as Harness]?.name ?? id;
-export const harnessProgram = (id: string) => BRAINS[id as Harness]?.program ?? id;
-export const harnessDescription = (id: string) => BRAINS[id as Harness]?.description;
-export const harnessCli = (id: string) => BRAINS[id as Harness]?.cli;
+/** The program under a choice, as its subtitles name it ("Codex CLI"). */
+export const brainCli = (h: Harness) => `${BRAINS[h].program} CLI`;
 
 /** The models a harness offers, fetched again whenever the harness changes, or its brain is installed, signed in or removed (what it lists, or can't, depends on that). */
 export function createModels(agent: Agent, harness: () => Harness | undefined): Read<BrainModel[]> {
