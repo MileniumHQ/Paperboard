@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { STORE_MAX_ABOUT_BYTES } from "../../packages/paperapi/src/internal";
 import { storeUploadParts } from "./publishLib";
 import { assertRelativePanelBuild, discoverPanels, PANELS_ROOT, resolvePublishTarget, rootAbsoluteRefs } from "./publishManifest";
 
@@ -74,6 +75,9 @@ describe("panel publishing finds every panel and refuses incomplete ones", () =>
         const parts = storeUploadParts({ about: "./store/about.md", screenshots: [{ light: "./store/1-light.png" }] }, read);
         expect(parts.about).toBe("# Listed\n");
         expect(parts.files.map((f) => [f.field, f.fileName, f.type, f.bytes.byteLength])).toEqual([["screenshot-0-light", "1-light.png", "image/png", 3]]);
+
+        writeFileSync(join(dir, "store", "about.md"), "x".repeat(STORE_MAX_ABOUT_BYTES + 1));
+        expect(() => storeUploadParts({ about: "./store/about.md" }, read)).toThrow(`over the ${STORE_MAX_ABOUT_BYTES}-byte about cap`);
     });
 
     test("every first-party panel's store listing validates and its files exist", () => {
