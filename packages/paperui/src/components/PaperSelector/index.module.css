@@ -6,12 +6,21 @@
     padding: calc(var(--paper-border-width) * 2);
 }
 
-/* a horizontal selector is rows of equal columns, as many as fit at a
-   field's width each: items share a row while they fit, and the rest break
-   onto the next row instead of squeezing their text */
+/* a horizontal selector shares each row among the items that fit with
+   their titles on one line: an item never gets narrower than its title, so
+   one that would break it onto two lines moves to the next row instead */
 .PaperSelector.horizontal {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(min(var(--paper-size-field), 100%), 1fr));
+    flex-direction: row;
+    flex-wrap: wrap;
+}
+
+.PaperSelector.horizontal .PaperSelectorItem {
+    width: auto;
+    flex: 1 1 0;
+}
+
+.PaperSelector.horizontal .itemTitle {
+    white-space: nowrap;
 }
 
 .PaperSelectorItem {
