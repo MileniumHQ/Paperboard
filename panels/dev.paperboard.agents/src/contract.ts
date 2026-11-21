@@ -8,6 +8,7 @@
 // web browser the service runs, reached through the service's MCP endpoint.
 
 import { defineContract, shape, type Infer } from "@mileniumhq/paperapi";
+import type { PaperRole } from "@mileniumhq/paperui";
 import { serverSpec, toolsView } from "./toolsContract";
 
 export const PANEL_ID = "dev.paperboard.agents";
@@ -35,7 +36,7 @@ export const DEFAULT_MODEL = "default";
 export const AGENT_COLORS = ["blue", "purple", "pink", "red", "orange", "yellow", "green", "teal"] as const;
 export type AgentColor = (typeof AGENT_COLORS)[number];
 export const DEFAULT_COLOR: AgentColor = "blue";
-export const COLOR_ROLES: Record<AgentColor, string> = {
+export const COLOR_ROLES: Record<AgentColor, PaperRole> = {
     blue: "primary",
     purple: "extra-2",
     pink: "extra-3",
