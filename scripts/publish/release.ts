@@ -26,6 +26,7 @@ import {
     type VersionFileEntry,
     type YmlEntry,
 } from "./publishLib";
+import { releaseGateCheck } from "./releaseGate";
 import { loadReleaseSigningKey, releaseMessage } from "./releaseSigning";
 import type { BuiltBinary } from "./binaries";
 import { ensureCloudflareAuth, ensureGithubAuth, kvReadRecord, kvWriteRecord, r2PutText } from "./cloud";
@@ -35,7 +36,7 @@ const RELEASE_WORKFLOW = "release.yml";
 
 // The commit the release workflow will build: HEAD, with no uncommitted
 // changes to tracked files (CI never sees them), already on origin/main, and
-// with a green Gate.
+// passed by a full Gate run (releaseGate.ts).
 async function releaseCommit(): Promise<string> {
     const changed = await sh(["git", "status", "--porcelain", "--untracked-files=no"], { cwd: REPO_ROOT, quiet: true });
     if (changed) {
@@ -46,16 +47,8 @@ async function releaseCommit(): Promise<string> {
     if (!(await cmdOk(["git", "merge-base", "--is-ancestor", commit, "origin/main"], REPO_ROOT))) {
         fail(`HEAD (${commit.slice(0, 10)}) is not on origin/main yet. Push it first; releases build only from main.`);
     }
-    const gate = await sh(
-        ["gh", "api", `repos/${GH_REPO}/commits/${commit}/check-runs?check_name=Gate`, "--jq", "[.check_runs[] | {status, conclusion}]"],
-        { quiet: true },
-    );
-    const runs = JSON.parse(gate) as { status: string; conclusion: string | null }[];
-    if (!runs.length) fail(`${commit.slice(0, 10)} has no Gate run. Releases build only commits the gate passed.`);
-    if (runs.some((r) => r.status !== "completed")) fail(`The Gate on ${commit.slice(0, 10)} is still running. Publish once it passes.`);
-    if (!runs.some((r) => r.conclusion === "success")) {
-        fail(`The Gate on ${commit.slice(0, 10)} did not pass (${runs.map((r) => r.conclusion).join(", ")}). Fix main first.`);
-    }
+    const problem = await releaseGateCheck(commit);
+    if (problem) fail(problem);
     return commit;
 }
 

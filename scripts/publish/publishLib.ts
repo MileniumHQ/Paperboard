@@ -219,6 +219,45 @@ export function missingAppKeys(env: Record<string, string | undefined>): string 
         : `A release build needs ${missing.join(" and ")}: put ${missing.length === 1 ? "it" : "them"} in apps/paperboard/.env.local, or in the repository's Actions secrets for the release workflow.`;
 }
 
+// A run of the Gate workflow (.github/workflows/gate.yml), as GitHub's
+// workflow-runs API lists it.
+export interface GateRun {
+    event: string;
+    status: string;
+    conclusion: string | null;
+    head_sha: string;
+    html_url: string;
+}
+
+// The Gate workflow's events that run every target: a push to main and a
+// manual run. A pull request runs only the targets its Gate line names.
+export const FULL_GATE_EVENTS = ["push", "workflow_dispatch"] as const;
+
+// Why a release's commit isn't a full SHA, or null when it is. Checked before
+// the commit goes into any URL.
+export function commitShaProblem(commit: string): string | null {
+    return /^[0-9a-f]{40}$/.test(commit) ? null : `A release names its commit by its full SHA, got ${JSON.stringify(commit)}.`;
+}
+
+// Why a commit can't be released, or null when it can: a release builds only
+// a commit a full Gate run passed. A pull request's run may be scoped, so it
+// never counts.
+export function releaseGateProblem(commit: string, runs: readonly GateRun[]): string | null {
+    const sha = commitShaProblem(commit);
+    if (sha) return sha;
+    const short = commit.slice(0, 10);
+    const full = runs.filter((r) => r.head_sha === commit && (FULL_GATE_EVENTS as readonly string[]).includes(r.event));
+    if (full.some((r) => r.status === "completed" && r.conclusion === "success")) return null;
+    const running = full.find((r) => r.status !== "completed");
+    if (running) return `The full Gate on ${short} is still running (${running.html_url}). Release once it passes.`;
+    if (full.length) {
+        return `The full Gate on ${short} did not pass (${full.map((r) => r.conclusion ?? "no conclusion").join(", ")}: ${full[0]!.html_url}). ` +
+            "Fix main and release a commit that passed, or re-run the Gate on this one if it was cancelled or flaked.";
+    }
+    return `${short} never had a full Gate run, only a pull request's scoped one or none. Releases build only a commit the whole gate passed: ` +
+        `a push to main runs it, or start one on main's tip with \`gh workflow run gate.yml --repo ${GH_REPO} --ref main\`.`;
+}
+
 // Public download URL. versionOrLatest is a real version ("3.0.0-alpha")
 // or the literal "latest", which Origami resolves from the KV record.
 export function dlFileUrl(
