@@ -10,7 +10,7 @@ Paperboard runs on your own computers. Your panels, their files and settings, an
 
 Paperboard downloads panels from our panel library (origami.ariapis.com), and app updates from i.paperboard.dev and GitHub. The install command (`curl -fsSL https://i.paperboard.dev | sh`, or `npx @mileniumhq/paperboard install`) downloads Paperboard from the same two places. Like any website, these servers see your IP address and which file you asked for. Our host, Cloudflare, keeps request logs for a few days so we can keep the service running and fix problems. We do not combine them with anything else.
 
-Some panels ask our panel APIs (panels.ariapis.com) for things a panel can't do on its own computer. The Game Server panel's Workshop tab searches and looks up Steam Workshop mods through it, so it sees your IP address, your search terms and the mod ids you look up. It passes them to Steam, keeps the answers in Cloudflare's cache for a minute (searches) or five minutes (mod details), and stores no record of who asked. It uses your IP address only to limit how many requests one computer can make.
+Some panels also use our panel APIs (panels.ariapis.com) for things they can't do on your computer alone. Like the servers above, they see your IP address and what the panel asked for. They keep no record of who asked, and use your IP address only to limit how many requests one computer can make.
 
 This website stores your light or dark theme choice in your browser and nothing else. It sets no cookies.
 
@@ -27,8 +27,6 @@ Paperboard's use and transfer of information received from Google APIs to any ot
 ## Panels
 
 Some panels contact other services, for example to download a game server or connect a Discord bot. Each panel's library page lists the services it contacts under "Services used", and what it uses them for. Those services' own privacy policies apply to what they receive.
-
-For example, the Game Server panel shows a Steam player's profile picture in its Players list. It asks Steam Community (steamcommunity.com) for the picture of each player's public Steam id, and downloads it from Steam's avatar servers (avatars.fastly.steamstatic.com, avatars.akamai.steamstatic.com and avatars.cloudflare.steamstatic.com). Steam sees your IP address and the Steam ids of the players on your server. It keeps what it finds in memory for a day, and the panel never sends them anywhere else.
 
 ## Contact
 
