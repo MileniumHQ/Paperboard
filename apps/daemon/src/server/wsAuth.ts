@@ -28,6 +28,10 @@ async function computerFacts() {
         osVersion: osInfo.osVersion,
         distroId: osInfo.distroId,
         distroName: osInfo.distroName,
+        flavor: osInfo.flavor,
+        machine: osInfo.machine,
+        board: osInfo.board,
+        operator: osInfo.operator,
         arch: process.arch,
     };
 }
