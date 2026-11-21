@@ -345,6 +345,17 @@
                     "file": "paper-wizard"
                 }
             }
+        },
+        "marketing": {
+            "name": "Marketing",
+            "icon": "campaign",
+            "pages": {
+                "marketing": {
+                    "name": "Marketing",
+                    "index": 0,
+                    "file": "marketing"
+                }
+            }
         }
     }
 }

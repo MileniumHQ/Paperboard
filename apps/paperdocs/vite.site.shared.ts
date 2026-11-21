@@ -11,6 +11,10 @@ export const paperuiAlias = [
         replacement: resolve(paperuiRoot, "src/styles/styles.css"),
     },
     {
+        find: /^@mileniumhq\/paperui\/marketing$/,
+        replacement: resolve(paperuiRoot, "src/marketing/index.ts"),
+    },
+    {
         find: /^@mileniumhq\/paperui$/,
         replacement: resolve(paperuiRoot, "src/index.ts"),
     },
