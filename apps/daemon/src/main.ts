@@ -85,6 +85,10 @@ async function main(): Promise<void> {
             const { runStatus } = await import("./cli/localControl");
             return finish(() => runStatus(command.json));
         }
+        case "identify": {
+            const { runIdentify } = await import("./cli/identify");
+            return finish(() => runIdentify(command.json));
+        }
         case "pair": {
             const { runPair } = await import("./cli/localControl");
             return finish(runPair);

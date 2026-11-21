@@ -31,6 +31,9 @@ const computerStatus = shape.object({
     error: shape.optional(shape.text()),
 });
 
+/** One named layer of a computer's identity (see the daemon's system/identity.ts). */
+const identityPart = shape.object({ id: shape.text(), name: shape.text(), version: shape.optional(shape.text()) });
+
 /** A paired computer as the shell shows it: never its token or pinned certificate. */
 export const computerInfo = shape.object({
     id: shape.text(),
@@ -43,6 +46,10 @@ export const computerInfo = shape.object({
     osVersion: shape.optional(shape.text()),
     distroId: shape.optional(shape.text()),
     distroName: shape.optional(shape.text()),
+    flavor: shape.optional(identityPart),
+    machine: shape.optional(identityPart),
+    board: shape.optional(shape.text()),
+    operator: shape.optional(identityPart),
     arch: shape.optional(shape.text()),
     isLocal: shape.optional(shape.boolean()),
     status: computerStatus,

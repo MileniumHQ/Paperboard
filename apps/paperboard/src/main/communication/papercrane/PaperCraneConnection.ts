@@ -399,7 +399,9 @@ export class PaperCraneConnection extends EventEmitter {
                 // seconds after every launch.
                 if (this.token) {
                     try {
-                        await this.request_("auth:verify", {}, AUTH_TIMEOUT_MS, ws);
+                        // the daemon answers with what the computer is now: an OS
+                        // upgrade since pairing shows on the next sign-in
+                        this.emit("facts", await this.request_("auth:verify", {}, AUTH_TIMEOUT_MS, ws));
                     } catch (err) {
                         if (!current()) return superseded();
                         const reason = errorMessage(err);
