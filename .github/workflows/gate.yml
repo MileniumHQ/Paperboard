@@ -105,7 +105,7 @@ jobs:
             packages/paperapi/dist
             packages/paperui/dist
           key: libs-linux-x64-${{ hashFiles('packages/paperapi/**', 'packages/paperui/**', 'bun.lock', 'package.json', 'patches/**') }}
-      # the silent-catch and TODO-expiry gates scan with ripgrep, and the
+      # the TODO-expiry gate scans with ripgrep, and the
       # app's Electron tests need a display and a session bus. apt is slow and
       # sometimes down, so it runs only for a tool the runner doesn't have.
       - name: Tools the gate needs

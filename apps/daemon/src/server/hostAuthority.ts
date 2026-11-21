@@ -10,7 +10,7 @@ function authorityHostname(authority: string | undefined): string | null {
         if (url.pathname !== "/" || url.username || url.password) return null;
         return url.hostname.replace(/^\[|\]$/g, "").replace(/\.$/, "").toLowerCase();
     } catch {
-        return null; // malformed authority is a refusal
+        return null; // quiet: a malformed authority is a refusal, which the caller answers
     }
 }
 

@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
-# Paperboard workspace gate: every repo's suite + typechecks, the
-# silent-catch backstop, and the changelog-existence backstop.
+# Paperboard workspace gate: every repo's suite + typechecks, the code
+# check, and the changelog-existence backstop.
 # Exits 0 only when everything passes; keeps going to report all failures.
 #
 # Usage: gate.sh [target...]
 #   No target runs the whole gate. Named targets run only their own steps
 #   plus the shared-library builds they consume. Targets:
 #     packages       shared library builds + packed external consumer check
-#     paperapi       SDK: build, typecheck, tests, silent-catches
-#     paperui        design system: build, tests, styling, silent-catches
+#     paperapi       SDK: build, typecheck, tests
+#     paperui        design system: build, tests, styling
 #   Every target with code runs the code check (scripts/gate/check-solid.ts) over
 #   its sources and tests: the mechanical Solid mistakes AGENTS.md's "Solid:"
 #   section names, and the house rules that kept coming back (a catch that
@@ -17,23 +17,23 @@
 #   paperboard, library and the panels also run an advisory styling
 #   check (scripts/gate/check-app-styling.sh): literal sizes, colors, motion,
 #   z-index and the like that have a PaperUI token. It warns, never fails.
-#     create-panel   panel scaffolder: build, tests, silent-catches
+#     create-panel   panel scaffolder: build, tests
 #     release        @mileniumhq/release (release key, signed messages, package
-#                    recipes, version order): typecheck, tests, silent-catches
+#                    recipes, version order): typecheck, tests
 #     testkit        the shared test harness (packages/testkit): typecheck,
-#                    tests, silent-catches
+#                    tests
 #     npx            @mileniumhq/paperboard (npx launcher for the daemon):
-#                    build, tests, silent-catches
+#                    build, tests
 #     daemon         server daemon (apps/daemon): typecheck, tests, lint,
-#                    silent-catches, and the workload supervisor's (Go)
-#                    format, vet and tests
-#     paperboard     desktop app: typechecks (src and tests), tests, lint, silent-catches
+#                    and the workload supervisor's (Go) format, vet and
+#                    tests
+#     paperboard     desktop app: typechecks (src and tests), tests, lint
 #     paperdocs      docs site: tests, build
-#     origami        registry worker: typecheck, tests, silent-catches
-#     library        panel library (store) web app: tests, build, silent-catches
-#     arilink        pbd.lc short-link worker: typecheck, tests, silent-catches
-#     panelapis      third-party API proxy worker: typecheck, tests, silent-catches
-#     scripts        root dev/publish scripts: typecheck, tests, silent-catches
+#     origami        registry worker: typecheck, tests
+#     library        panel library (store) web app: tests, build
+#     arilink        pbd.lc short-link worker: typecheck, tests
+#     panelapis      third-party API proxy worker: typecheck, tests
+#     scripts        root dev/publish scripts: typecheck, tests
 #     agents blocks botcreator gameserver terminal   first-party panels
 #     global         repo-wide checks (changelog-existence, todo-expiry)
 #     platform       the cross-platform suites only: each `tests/platform` or
@@ -47,7 +47,6 @@
 set -u
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-CATCH="$ROOT/apps/paperboard/scripts/check-no-silent-catches.sh"
 FAIL=0
 TEST_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/paperboard-gate-XXXXXX")"
 export PAPERBOARD_DIR="$TEST_ROOT/data"
@@ -205,7 +204,7 @@ want paperui-build && lib_build paperui
 gstep create-panel-build "create-panel build" run_in "$ROOT/packages/create-panel" bun run build
 gstep packages "packed external consumers" bun "$ROOT/scripts/gate/check-package-artifacts.mjs"
 
-# ── server daemon: typecheck, full suite, lint, silent-catches, and the Go
+# ── server daemon: typecheck, full suite, lint, code check, and the Go
 # workload supervisor it launches ───────────────────────────────────────────
 gstep daemon "daemon typecheck" run_in "$ROOT/apps/daemon" bun run typecheck
 gstep daemon "daemon typecheck:tests" run_in "$ROOT/apps/daemon" bun run typecheck:tests
@@ -213,25 +212,22 @@ gstep daemon "daemon tests" run_in "$ROOT/apps/daemon" bun run test
 gstep daemon "daemon lint" run_in "$ROOT/apps/daemon" bunx biome lint
 gstep daemon "supervisor format and vet (linux, macOS, Windows)" supervisor_vet
 gstep daemon "supervisor tests" run_in "$ROOT/apps/daemon/supervisor" go test -count=1 ./...
-gstep daemon "daemon silent-catches" run_in "$ROOT/apps/daemon" bash "$CATCH" src test
 gstep daemon "daemon code check" run_in "$ROOT" bun scripts/gate/check-solid.ts apps/daemon/src apps/daemon/test
 
-# ── Paperboard app: node + web + tests typechecks, full suite, lint, silent-catches ──
+# ── Paperboard app: node + web + tests typechecks, full suite, lint ──
 gstep paperboard "paperboard typecheck:node" run_in "$ROOT/apps/paperboard" bun run typecheck:node
 gstep paperboard "paperboard typecheck:web" run_in "$ROOT/apps/paperboard" bun run typecheck:web
 gstep paperboard "paperboard typecheck:tests" run_in "$ROOT/apps/paperboard" bun run typecheck:tests
 gstep paperboard "paperboard tests" run_in "$ROOT/apps/paperboard" bun run test
 gstep paperboard "paperboard lint" run_in "$ROOT/apps/paperboard" bunx biome lint
-gstep paperboard "paperboard silent-catches" run_in "$ROOT/apps/paperboard" bash "$CATCH"
 gstep paperboard "paperboard code check" run_in "$ROOT" bun scripts/gate/check-solid.ts apps/paperboard/src apps/paperboard/tests apps/paperboard/scripts
 gwarn paperboard "paperboard styling literals" bash "$ROOT/scripts/gate/check-app-styling.sh" apps/paperboard
 
 # ── root dev scripts: typecheck, publisher release-math proofs, the browser
-# test drivers, silent-catch backstop. The compiler is packages/paperui's, the
+# test drivers, code check. The compiler is packages/paperui's, the
 # same one check-solid.ts loads; the root package depends on none. ──────────
 gstep scripts "root scripts typecheck" run_in "$ROOT" bun packages/paperui/node_modules/typescript/bin/tsc -p scripts/tsconfig.json
 gstep scripts "root scripts tests" run_in "$ROOT" bun test --parallel scripts
-gstep scripts "root scripts silent-catches" run_in "$ROOT" bash "$CATCH" scripts
 gstep scripts "root scripts code check" run_in "$ROOT" bun scripts/gate/check-solid.ts scripts
 
 # ── paperdocs: tests plus the static site build (typecheck, site + docs
@@ -244,59 +240,49 @@ gstep paperdocs "paperdocs code check" run_in "$ROOT" bun scripts/gate/check-sol
 # ── shared libraries ─────────────────────────────────────────────────────────
 gstep paperapi "paperapi typecheck" run_in "$ROOT/packages/paperapi" bunx tsc --noEmit
 gstep paperapi "paperapi tests" run_in "$ROOT/packages/paperapi" bun run test
-gstep paperapi "paperapi silent-catches" run_in "$ROOT/packages/paperapi" bash "$CATCH" src test
 gstep paperapi "paperapi code check" run_in "$ROOT" bun scripts/gate/check-solid.ts packages/paperapi/src packages/paperapi/test
 gstep paperui "paperui typecheck:tests" run_in "$ROOT/packages/paperui" bun run typecheck:tests
 gstep paperui "paperui tests" run_in "$ROOT/packages/paperui" bun run test
 gstep paperui "paperui styling invariant" bash "$ROOT/scripts/gate/check-paperui-styling.sh"
-gstep paperui "paperui silent-catches" run_in "$ROOT/packages/paperui" bash "$CATCH" src
 gstep paperui "paperui code check" run_in "$ROOT" bun scripts/gate/check-solid.ts packages/paperui/src packages/paperui/test
 gstep create-panel "create-panel typecheck:tests" run_in "$ROOT/packages/create-panel" bun run typecheck:tests
 gstep create-panel "create-panel tests" run_in "$ROOT/packages/create-panel" bun run test
-gstep create-panel "create-panel silent-catches" run_in "$ROOT/packages/create-panel" bash "$CATCH" src bin test template
 gstep create-panel "create-panel code check" run_in "$ROOT" bun scripts/gate/check-solid.ts packages/create-panel/src packages/create-panel/bin packages/create-panel/test packages/create-panel/template
 gstep release "release typecheck" run_in "$ROOT/packages/release" bunx tsc --noEmit
 gstep release "release typecheck:tests" run_in "$ROOT/packages/release" bun run typecheck:tests
 gstep release "release tests" run_in "$ROOT/packages/release" bun run test
-gstep release "release silent-catches" run_in "$ROOT/packages/release" bash "$CATCH" src test
 gstep release "release code check" run_in "$ROOT" bun scripts/gate/check-solid.ts packages/release/src packages/release/test
 gstep testkit "testkit typecheck" run_in "$ROOT/packages/testkit" bun run typecheck
 gstep testkit "testkit tests" run_in "$ROOT/packages/testkit" bun run test
-gstep testkit "testkit silent-catches" run_in "$ROOT/packages/testkit" bash "$CATCH" src test
 gstep testkit "testkit code check" run_in "$ROOT" bun scripts/gate/check-solid.ts packages/testkit/src packages/testkit/test
 gstep npx "npx typecheck:tests" run_in "$ROOT/packages/npx" bun run typecheck:tests
 gstep npx "npx tests" run_in "$ROOT/packages/npx" bun run test
-gstep npx "npx silent-catches" run_in "$ROOT/packages/npx" bash "$CATCH" src test
 gstep npx "npx code check" run_in "$ROOT" bun scripts/gate/check-solid.ts packages/npx/src packages/npx/test
 
 # ── registry service: typecheck plus its worker suite (the library division
 # has its own vitest suite below; `bun test ./test` scopes bun to the worker) ─
 gstep origami "origami typecheck" run_in "$ROOT/services/origami" bun run typecheck
 gstep origami "origami tests" run_in "$ROOT/services/origami" bun run test
-gstep origami "origami silent-catches" run_in "$ROOT/services/origami" bash "$CATCH" src test
 gstep origami "origami code check" run_in "$ROOT" bun scripts/gate/check-solid.ts services/origami/src services/origami/test services/origami/scripts
 
 # ── arilink: the pbd.lc short-link worker ───────────────────────────────────
 gstep arilink "arilink typecheck" run_in "$ROOT/services/arilink" bun run typecheck
 gstep arilink "arilink tests" run_in "$ROOT/services/arilink" bun run test
-gstep arilink "arilink silent-catches" run_in "$ROOT/services/arilink" bash "$CATCH" src test
 gstep arilink "arilink code check" run_in "$ROOT" bun scripts/gate/check-solid.ts services/arilink/src services/arilink/test
 
 # ── panelapis: third-party API proxy worker ─────────────────────────────────
 gstep panelapis "panelapis typecheck" run_in "$ROOT/services/panelapis" bun run typecheck
 gstep panelapis "panelapis tests" run_in "$ROOT/services/panelapis" bun run test
-gstep panelapis "panelapis silent-catches" run_in "$ROOT/services/panelapis" bash "$CATCH" src test
 gstep panelapis "panelapis code check" run_in "$ROOT" bun scripts/gate/check-solid.ts services/panelapis/src services/panelapis/test
 
 # ── the panel library division of origami: browser-logic suite and the
 # production build that static assets serve (typecheck rides origami's) ──────
 gstep library "library tests" run_in "$ROOT/services/library" bun run test
 gstep library "library build" run_in "$ROOT/services/library" bun run build
-gstep library "library silent-catches" run_in "$ROOT/services/library" bash "$CATCH" src test
 gstep library "library code check" run_in "$ROOT" bun scripts/gate/check-solid.ts services/library/src services/library/test
 gwarn library "library styling literals" bash "$ROOT/scripts/gate/check-app-styling.sh" services/library
 
-# ── first-party panels: suite, typecheck, production build, silent-catch gate.
+# ── first-party panels: suite, typecheck, production build, code check.
 # The daemon runs the built dist/service.js, not the TypeScript source, so the
 # gate rebuilds every panel: tests and typechecks prove the source, the build
 # proves the artifact that actually ships. ───────────────────────────────────
@@ -306,7 +292,6 @@ for short in agents blocks botcreator gameserver terminal; do
     gstep "$short" "$panel typecheck" run_in "$ROOT/$panel" bunx tsc --noEmit
     gstep "$short" "$panel typecheck:tests" run_in "$ROOT/$panel" bun run typecheck:tests
     gstep "$short" "$panel build" run_in "$ROOT/$panel" bun run build
-    gstep "$short" "$panel silent-catches" run_in "$ROOT/$panel" bash "$CATCH" src test
     gstep "$short" "$panel code check" run_in "$ROOT" bun scripts/gate/check-solid.ts "$panel"
     gwarn "$short" "$panel styling literals" bash "$ROOT/scripts/gate/check-app-styling.sh" "$panel"
 done
