@@ -35,7 +35,7 @@ type Reply = { ok: (result: any) => void; fail: (e: Error) => void };
 export class AcpTurn {
     private next = 0;
     private replies = new Map<number, Reply>();
-    private tools = new Map<string, string>(); // toolCallId → tool name, for this turn
+    private calls = new Set<string>(); // the turn's toolCallIds: a call's update is only read for one it began
     private text = "";
     private messageId: string | null = null;
     private closed = false;
@@ -99,7 +99,7 @@ export class AcpTurn {
         if (this.cancelTimer) clearTimeout(this.cancelTimer);
         const replies = [...this.replies.values()];
         this.replies.clear();
-        this.tools.clear();
+        this.calls.clear();
         const gone = new Error("OpenCode stopped before answering");
         for (const r of replies) r.fail(gone);
         for (const stop of this.stopped.splice(0)) stop(gone);
@@ -140,7 +140,7 @@ export class AcpTurn {
         if (u.sessionUpdate === "tool_call" && typeof u.toolCallId === "string") {
             this.flush();
             const name = String(u.name ?? "");
-            this.tools.set(u.toolCallId, name);
+            this.calls.add(u.toolCallId);
             const ours = `${MCP_SERVER}_`;
             this.o.emit({ type: "tool", name: name.startsWith(ours) ? name.slice(ours.length) : null });
             return;
@@ -152,7 +152,7 @@ export class AcpTurn {
         }
         if (u.sessionUpdate === "session_info_update" && u._meta && RETRY_META in u._meta) return this.retrying(u._meta[RETRY_META]);
         // a call that's done was written long before: the model's next step is work until it says otherwise
-        if (u.sessionUpdate === "tool_call_update" && (u.status === "completed" || u.status === "failed") && this.tools.has(u.toolCallId)) {
+        if (u.sessionUpdate === "tool_call_update" && (u.status === "completed" || u.status === "failed") && this.calls.has(u.toolCallId)) {
             this.o.emit({ type: "working" });
             return;
         }

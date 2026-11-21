@@ -126,11 +126,10 @@ export default function Chat(props: { agent: Agent; face: FaceController; pages:
         }),
     );
 
-    // Old transcripts held tool-call entries; only messages, errors, the agent's requests, pages and status lines are shown.
+    // every entry is shown: old transcripts' tool-call entries never get this far (readTranscript drops them)
     const rows = createMemo<Row[]>(() => {
-        const shown = props.agent.entries.filter((e) => e.kind === "user" || e.kind === "agent" || e.kind === "error" || e.kind === "sign-in" || e.kind === "access" || e.kind === "prompt" || e.kind === "tool-server" || e.kind === "tool-sign-in" || e.kind === "app" || e.kind === "status");
         const items: Pick<Row, "key" | "entry" | "waiting" | "side">[] = [
-            ...shown.map((entry) => ({ key: entry.id, entry, waiting: null, side: sideOf(entry) })),
+            ...props.agent.entries.map((entry) => ({ key: entry.id, entry, waiting: null, side: sideOf(entry) })),
             ...props.agent.state.chat.waiting.map((w) => ({ key: w.id, entry: null, waiting: w, side: "me" as const })),
         ];
         const gap = (a: (typeof items)[number], b: (typeof items)[number]) => (a.entry && b.entry ? b.entry.at - a.entry.at : 0);
