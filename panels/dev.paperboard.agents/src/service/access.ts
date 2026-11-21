@@ -293,6 +293,8 @@ export class Access {
     toolset(): Toolset {
         return {
             id: "access",
+            // the request is a card the agent writes
+            writes: ["request_access"],
             // a flow has no one to answer a request, but may use what's allowed
             tools: (mode) => (mode.fromFlow ? ACCESS_TOOLS.filter((t) => t.name !== "request_access") : ACCESS_TOOLS),
             instructions: () => ACCESS_INSTRUCTIONS,

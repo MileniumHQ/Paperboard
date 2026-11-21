@@ -141,7 +141,8 @@ export class AcpTurn {
             this.flush();
             const name = String(u.name ?? "");
             this.tools.set(u.toolCallId, name);
-            this.o.emit(name === `${MCP_SERVER}_send_message` ? { type: "typing" } : { type: "working" });
+            const ours = `${MCP_SERVER}_`;
+            this.o.emit({ type: "tool", name: name.startsWith(ours) ? name.slice(ours.length) : null });
             return;
         }
         // how much of the model's context the session fills, and its window
@@ -150,8 +151,8 @@ export class AcpTurn {
             return;
         }
         if (u.sessionUpdate === "session_info_update" && u._meta && RETRY_META in u._meta) return this.retrying(u._meta[RETRY_META]);
-        // a text that's gone out: the model's next step is work until it says otherwise
-        if (u.sessionUpdate === "tool_call_update" && (u.status === "completed" || u.status === "failed") && this.tools.get(u.toolCallId) === `${MCP_SERVER}_send_message`) {
+        // a call that's done was written long before: the model's next step is work until it says otherwise
+        if (u.sessionUpdate === "tool_call_update" && (u.status === "completed" || u.status === "failed") && this.tools.has(u.toolCallId)) {
             this.o.emit({ type: "working" });
             return;
         }

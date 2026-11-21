@@ -52,6 +52,7 @@ export function messagesToolset(texter: Texter): Toolset {
     return {
         id: "messages",
         tools: (mode) => (mode.fromFlow ? MESSAGE_FLOW_TOOLS : MESSAGE_TOOLS),
+        writes: ["send_message"],
         call: async (name, args, mode = USER_TURN): Promise<ToolResult> => {
             if (name !== "send_message") return { text: `unknown tool ${name}`, isError: true };
             if (typeof args.text !== "string") return { text: "text must be a string", isError: true };

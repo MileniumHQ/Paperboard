@@ -387,7 +387,7 @@ export default function Chat(props: { agent: Agent; face: FaceController; pages:
                             </>
                         )}
                     </For>
-                    {/* only while it writes: working with its tools shows on its face, not as typing */}
+                    {/* only while it writes a text or a card: thinking and working show on its face, not as typing */}
                     {/* it pops in like a bubble, and goes at once: the reply it turns into takes its place */}
                     <PaperPresence when={props.agent.state.chat.typing} appear motion="pop" exitClass="">
                         <div class={styles.row} classList={{ [styles.them!]: true, [styles.joinsPrev!]: typingJoins() }} role="status" aria-label={`${name()} is typing`}>

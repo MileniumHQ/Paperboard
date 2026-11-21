@@ -253,7 +253,6 @@ export class AiApp {
             mcpToolset(this.servers),
             blocksToolset({ registry: t.blocks, enabled: () => this.servers.config.blocks }),
         ], () => this.conversation?.mode() ?? { fromFlow: false });
-        // any tool but its messages means the agent is working, not typing, whatever its harness reports
         this.tools = {
             ...tools,
             // a flow's turn ends with the user's instructions for it: the flow's own, or else the ones in settings
@@ -266,7 +265,8 @@ export class AiApp {
             call: async (name, args) => {
                 // a summary is written from what it already knows: no texting, no work
                 if (this.conversation?.compacting) return { text: "You're writing a summary of the conversation: no texts and no tools until it's done.", isError: true };
-                if (name !== "send_message") this.conversation?.working();
+                // a call that arrives is written: whatever the agent was typing is done, whatever its harness reports
+                this.conversation?.working();
                 if (!this.turnLog) return tools.call(name, args);
                 const started = Date.now();
                 try {
@@ -302,6 +302,7 @@ export class AiApp {
             problem: (h) => this.brainProblem(h),
             mcp: () => ({ url: this.mcp!.url, token: this.mcp!.token, onToolsListed: (cb) => this.mcp!.onToolsListed(cb) }),
             instructions: () => this.tools!.instructions(),
+            writes: (tool) => this.tools!.writes(tool),
             emit: (entry) => {
                 this.ctx.emit("entry", entry);
                 if (entry.kind === "agent") {

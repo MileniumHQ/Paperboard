@@ -430,9 +430,10 @@ export function askLaunch(spec: AskSpec): AskLaunch {
 export type TurnEvent =
     | { type: "thread"; id: string }
     | { type: "message"; text: string }
-    // the model began a send_message (as far as its harness shows that), or began using another tool. Its plain
-    // output is never shown, so writing it isn't typing
-    | { type: "typing" }
+    // the model began writing a call to one of the panel's tools (its name), or to one of the harness's own
+    // (null), as far as the harness shows that: it may be typing. Its plain output is never shown, so it isn't
+    | { type: "tool"; name: string | null }
+    // the model is past writing a call: it's working
     | { type: "working" }
     // how much of the model's context the thread fills: tokens its next request starts with, and the window if known
     | { type: "context"; used?: number; size?: number }
@@ -452,8 +453,8 @@ export function parseTurnLine(harness: Harness, line: string): TurnEvent[] {
         if (ev.type === "item.completed" && ev.item?.type === "agent_message" && typeof ev.item.text === "string") {
             return [{ type: "message", text: ev.item.text }];
         }
-        // Codex shows an item when it starts, not while it's written: a tool other than its messages is work
-        if (ev.type === "item.started" && ev.item?.type !== "agent_message" && ev.item?.type !== "reasoning" && ev.item?.tool !== "send_message") return [{ type: "working" }];
+        // Codex shows a call only once it's written, so it never shows typing: a call starting is work
+        if (ev.type === "item.started" && ev.item?.type !== "agent_message" && ev.item?.type !== "reasoning") return [{ type: "working" }];
         if (ev.type === "turn.failed") return [{ type: "failed", message: String(ev.error?.message ?? "the turn failed") }];
         if (ev.type === "error") return [{ type: "failed", message: String(ev.message ?? "Codex reported an error") }];
         return [];
@@ -461,8 +462,9 @@ export function parseTurnLine(harness: Harness, line: string): TurnEvent[] {
     // the beginning of a block, written token by token after it: a text to the user, or another tool call
     if (ev.type === "stream_event" && ev.event?.type === "content_block_start" && typeof ev.parent_tool_use_id !== "string") {
         const block = ev.event.content_block;
-        if (block?.type === "tool_use" && block.name === `mcp__${MCP_SERVER}__send_message`) return [{ type: "typing" }];
-        if (block?.type === "tool_use" || block?.type === "server_tool_use") return [{ type: "working" }];
+        const ours = `mcp__${MCP_SERVER}__`;
+        if (block?.type === "tool_use" && typeof block.name === "string" && block.name.startsWith(ours)) return [{ type: "tool", name: block.name.slice(ours.length) }];
+        if (block?.type === "tool_use" || block?.type === "server_tool_use") return [{ type: "tool", name: null }];
         return [];
     }
     if (ev.type === "assistant") {

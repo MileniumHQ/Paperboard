@@ -88,6 +88,8 @@ export class Prompts {
     toolset(): Toolset {
         return {
             id: "prompt",
+            // its question is a card the agent writes
+            writes: ["ask_user"],
             // a flow has no one to answer
             tools: (mode) => (mode.fromFlow ? [] : PROMPT_TOOLS),
             instructions: (mode) => (mode.fromFlow ? "" : PROMPT_INSTRUCTIONS),

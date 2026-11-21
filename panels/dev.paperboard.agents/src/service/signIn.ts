@@ -78,6 +78,8 @@ export class SignIns {
     toolset(): Toolset {
         return {
             id: "sign-in",
+            // the sign-in card
+            writes: ["ask_to_sign_in"],
             // a flow can't type them in
             tools: (mode) => (mode.fromFlow ? [] : SIGN_IN_TOOLS),
             instructions: (mode) => (mode.fromFlow ? SIGN_IN_FLOW_INSTRUCTIONS : SIGN_IN_INSTRUCTIONS),
