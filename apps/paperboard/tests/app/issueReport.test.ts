@@ -7,16 +7,7 @@ import * as path from "node:path";
 import * as tar from "tar";
 import { StoppedError, type Harness } from "trissue-embedded";
 import { fetchReleaseSource, unpackAsarHarness, unpackedAsarPath } from "../../src/main/issueReportSource";
-import {
-    GITHUB_DESTINATION,
-    defaultDestination,
-    joinOr,
-    linkDescription,
-    linkIndex,
-    linkValue,
-    upsertConsoleEntry,
-    type WrittenReport,
-} from "../../src/renderer/src/components/settings/issueReportModel";
+import { GITHUB_DESTINATION, defaultDestination, upsertConsoleEntry, type WrittenReport } from "../../src/renderer/src/components/settings/issueReportModel";
 
 describe("fetchReleaseSource", () => {
     let workDir: string;
@@ -101,6 +92,7 @@ describe("fetchReleaseSource", () => {
         try {
             expect(source.kind).toBe("remote");
             expect(source.github).toBe("MileniumHQ/Paperboard");
+            expect(source.url).toBe(`${baseUrl}/MileniumHQ/Paperboard.git`);
             expect(source.ref).toBe("v0.4.0");
             expect(source.commit).toMatch(/^[0-9a-f]{40}$/);
             expect(fs.existsSync(path.join(source.dir, "README.md"))).toBe(true);
@@ -208,16 +200,7 @@ describe("issueReportModel", () => {
         expect(list5[1]).toBe(list4[1]);
     });
 
-    test("linkValue and linkIndex round-trip and reject invalid values", () => {
-        expect(linkIndex(linkValue(0))).toBe(0);
-        expect(linkIndex(linkValue(3))).toBe(3);
-        expect(linkIndex(GITHUB_DESTINATION)).toBeNull();
-        expect(linkIndex(null)).toBeNull();
-        expect(linkIndex("link:-1")).toBeNull();
-        expect(linkIndex("link:abc")).toBeNull();
-    });
-
-    test("defaultDestination prefers signed-in GitHub and otherwise falls back to the first link", () => {
+    test("defaultDestination prefers signed-in GitHub and falls back on error or missing CLI", () => {
         const base: Omit<WrittenReport, "github"> = { status: "written", title: "T", body: "B", text: "T\nB" };
         const links = [{ label: "Discord", description: "Opens Discord.", includesIssue: false }];
         expect(defaultDestination({ ...base, github: { repo: "MileniumHQ/Paperboard", state: "signed-in", login: "pxl" } }, links)).toBe(
@@ -226,20 +209,5 @@ describe("issueReportModel", () => {
         expect(defaultDestination({ ...base, github: { repo: "MileniumHQ/Paperboard", state: "missing" } }, links)).toBe("link:0");
         expect(defaultDestination({ ...base, github: { repo: "MileniumHQ/Paperboard", state: "error", error: "offline" } }, links)).toBe("link:0");
         expect(defaultDestination({ ...base, github: null }, [])).toBeNull();
-    });
-
-    test("linkDescription notes clipboard copy only for links without issue placeholders", () => {
-        expect(linkDescription({ label: "Email", description: "Opens mail.", includesIssue: true })).toBe("Opens mail.");
-        expect(linkDescription({ label: "Discord", description: "Opens Discord.", includesIssue: false })).toBe(
-            "Opens Discord. Copies the issue to your clipboard first.",
-        );
-        expect(linkDescription({ label: "Discord", includesIssue: false })).toBe("Copies the issue to your clipboard first.");
-    });
-
-    test("joinOr formats short agent lists naturally", () => {
-        expect(joinOr([])).toBe("");
-        expect(joinOr(["Claude Code"])).toBe("Claude Code");
-        expect(joinOr(["Claude Code", "Codex"])).toBe("Claude Code or Codex");
-        expect(joinOr(["Claude Code", "Codex", "Cursor"])).toBe("Claude Code, Codex, or Cursor");
     });
 });

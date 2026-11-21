@@ -27,13 +27,6 @@ export function linkDescription(link: ReportLink): string | undefined {
     return link.description ? `${link.description} Copies the issue to your clipboard first.` : "Copies the issue to your clipboard first.";
 }
 
-/** Joins agent names as natural English prose ("Claude Code, Codex, or Cursor"). */
-export function joinOr(names: readonly string[]): string {
-    if (names.length <= 1) return names[0] ?? "";
-    if (names.length === 2) return `${names[0]} or ${names[1]}`;
-    return `${names.slice(0, -1).join(", ")}, or ${names[names.length - 1]}`;
-}
-
 // a failed tool is an error; a refused one is a warning; the person's own words are commands;
 // tool lines stay plain, so a path is never read as Markdown
 export function consoleEntry(entry: IssueReportEntry): PaperConsoleEntry {

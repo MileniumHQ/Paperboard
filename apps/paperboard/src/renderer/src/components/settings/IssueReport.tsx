@@ -27,7 +27,6 @@ import { AgentIcon } from "./AgentIcon";
 import {
     GITHUB_DESTINATION,
     defaultDestination,
-    joinOr,
     linkDescription,
     linkIndex,
     linkValue,
@@ -42,6 +41,7 @@ type Phase =
     | { step: "written"; reportId: string; issue: WrittenReport };
 
 const REPORT_DOCS_URL = "https://paperboard.dev/docs/paperboard/troubleshooting/#report-an-issue";
+const AGENT_LIST = new Intl.ListFormat("en", { type: "disjunction" });
 
 function gitHubNote(github: NonNullable<WrittenReport["github"]>): string {
     switch (github.state) {
@@ -150,11 +150,6 @@ export default function IssueReport(props: { open: boolean; onClose: () => void 
     const send = createAction();
     const busy = () => phase().step === "working" || send.busy();
 
-    // closing never discards a written issue or stops a run: Stop or Start over is explicit
-    const close = () => {
-        if (!busy()) props.onClose();
-    };
-
     const selectedLink = () => {
         const index = linkIndex(destination());
         return index === null ? undefined : setup.value()?.links[index];
@@ -198,17 +193,16 @@ export default function IssueReport(props: { open: boolean; onClose: () => void 
     };
 
     return (
+        // closing never discards a written issue; omitting onClose while busy blocks Esc, backdrop, and the X button
         <PaperModal
             open={props.open}
             title="Report an Issue"
             size="large"
-            onClose={busy() ? undefined : close}
-            closeOnEsc={!busy()}
-            closeOnBackdropClick={!busy()}
+            onClose={busy() ? undefined : props.onClose}
             footer={
                 <Switch>
                     <Match when={phase().step === "describe"}>
-                        <PaperButton variant="text" onClick={close}>
+                        <PaperButton variant="text" onClick={() => props.onClose()}>
                             {agent() ? "Cancel" : "Close"}
                         </PaperButton>
                         <Show when={agent()}>
@@ -266,7 +260,7 @@ export default function IssueReport(props: { open: boolean; onClose: () => void 
                                     description={
                                         <>
                                             A coding agent on this computer reads Paperboard's code and writes the issue. Install one such as{" "}
-                                            {joinOr(ready().known)}, or another supported agent listed in{" "}
+                                            {AGENT_LIST.format(ready().known)}, or another supported agent listed in{" "}
                                             <PaperLink href={REPORT_DOCS_URL} target="_blank" rel="noopener noreferrer">
                                                 Report an issue
                                             </PaperLink>

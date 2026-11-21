@@ -32,7 +32,7 @@ export async function fetchReleaseSource(repo: string, tag: string, options: Rel
     const [org, name] = repo.split("/");
     const base = (options.baseUrl ?? "https://github.com").replace(/\/+$/, "");
     const origin = new URL(base).host;
-    const url = `${base}/${org}/${name}/archive/refs/tags/${encodeURIComponent(tag)}.tar.gz`;
+    const archiveUrl = `${base}/${org}/${name}/archive/refs/tags/${encodeURIComponent(tag)}.tar.gz`;
     const maxBytes = options.maxBytes ?? MAX_ARCHIVE_BYTES;
 
     if (options.signal?.aborted) throw new StoppedError();
@@ -46,7 +46,7 @@ export async function fetchReleaseSource(repo: string, tag: string, options: Rel
         await fs.promises.mkdir(dir);
         let response: Response;
         try {
-            response = await fetch(url, { signal: options.signal });
+            response = await fetch(archiveUrl, { signal: options.signal });
         } catch (err) {
             if (options.signal?.aborted) throw new StoppedError();
             throw new Error(`Couldn't download Paperboard ${tag}'s code from ${origin}: ${err instanceof Error ? err.message : String(err)}`);
@@ -105,7 +105,7 @@ export async function fetchReleaseSource(repo: string, tag: string, options: Rel
             org,
             name,
             origin,
-            url,
+            url: `${base}/${org}/${name}.git`,
             ref: tag,
             github: repo,
             dir,
