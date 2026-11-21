@@ -20,7 +20,7 @@ import {
     PaperText,
     createRead,
 } from "@mileniumhq/paperui";
-import bannerImg from "./assets/PanelLibraryBanner.webp";
+import bannerImg from "../banners/beta-4/banner.webp";
 import styles from "./Library.module.css";
 import type { LibraryBridge } from "./bridge";
 import PanelPage, { iconGlyph, publisherLabel } from "./PanelPage";
