@@ -38,12 +38,15 @@ export interface ProvidersDeps {
     idleMs?: number;
 }
 
+/** Where the provider server listens, and the password it takes. */
+type Server = { base: string; auth: string };
+
 /** A server's reply that isn't a success, in OpenCode's own words. */
 class ProviderError extends Error {}
 
 export class Providers {
-    private server: { base: string; auth: string } | null = null;
-    private starting: Promise<{ base: string; auth: string }> | null = null;
+    private server: Server | null = null;
+    private starting: Promise<Server> | null = null;
     private idle: ReturnType<typeof setTimeout> | null = null;
     /** sign-ins started and not finished: the server stays up for them */
     private pending = new Set<string>();
@@ -155,7 +158,7 @@ export class Providers {
         }, this.deps.idleMs ?? IDLE_MS);
     }
 
-    private async connection(): Promise<{ base: string; auth: string }> {
+    private async connection(): Promise<Server> {
         if (this.server) return this.server;
         this.starting ??= this.start().catch((e) => {
             this.starting = null;
@@ -164,7 +167,7 @@ export class Providers {
         return this.starting;
     }
 
-    private async start(): Promise<{ base: string; auth: string }> {
+    private async start(): Promise<Server> {
         const program = this.deps.program();
         if (!program) throw new ProviderError("OpenCode isn't installed yet.");
         const port = await (this.deps.port ?? freePort)();
@@ -207,7 +210,7 @@ export class Providers {
                 if (Date.now() > end) throw new ProviderError("OpenCode's provider server didn't start in time");
                 await new Promise((r) => setTimeout(r, 100));
             }
-            await this.catalog(base, auth);
+            await this.catalog({ base, auth });
         } catch (e) {
             this.unsubscribe();
             await stopProcess(SERVER_PROCESS_ID, { host: this.deps.host }).catch((k) => {
@@ -220,18 +223,15 @@ export class Providers {
     }
 
     /** Resolves once OpenCode's provider list has loaded, or it has had CATALOG_MS to. */
-    private async catalog(base: string, auth: string): Promise<void> {
-        const f = this.deps.fetch ?? fetch;
+    private async catalog(server: Server): Promise<void> {
         const abort = new AbortController();
         const timer = setTimeout(() => abort.abort(), CATALOG_MS);
         try {
-            const events = await f(`${base}/api/event`, { headers: { authorization: auth, accept: "text/event-stream" }, signal: abort.signal });
+            const events = await (this.deps.fetch ?? fetch)(`${server.base}/api/event`, { headers: { authorization: server.auth, accept: "text/event-stream" }, signal: abort.signal });
             if (!events.ok || !events.body) throw new ProviderError(`OpenCode refused its event stream (${events.status})`);
             const reader = events.body.pipeThrough(new TextDecoderStream()).getReader();
             // subscribed first, then looked at: a catalog that loads in between is still heard
-            const listed = await f(`${base}/api/integration`, { headers: { authorization: auth }, signal: abort.signal });
-            if (!listed.ok) throw new ProviderError(`OpenCode refused (${listed.status}): ${(await listed.text()).slice(0, 300) || listed.statusText}`);
-            const body = (await listed.json()) as { data?: unknown };
+            const body = (await this.call(server, "GET", "/api/integration", undefined, abort.signal)) as { data?: unknown };
             if (Array.isArray(body?.data) && body.data.length > 0) return;
             let buffer = "";
             for (;;) {
@@ -245,7 +245,7 @@ export class Providers {
                     try {
                         if ((JSON.parse(line.slice(5)) as { type?: unknown }).type === "integration.updated") return;
                     } catch {
-                        // quiet: another kind of event, read past
+                        // quiet: a line that isn't JSON can't be the one awaited; the time limit still ends the wait
                     }
                 }
             }
@@ -264,12 +264,16 @@ export class Providers {
     }
 
     private async request(method: string, path: string, body?: unknown): Promise<unknown> {
-        const { base, auth } = await this.connection();
-        const res = await (this.deps.fetch ?? fetch)(`${base}${path}`, {
+        return this.call(await this.connection(), method, path, body);
+    }
+
+    /** One call to a server, started or still starting. */
+    private async call(server: Server, method: string, path: string, body?: unknown, signal: AbortSignal = AbortSignal.timeout(REQUEST_MS)): Promise<unknown> {
+        const res = await (this.deps.fetch ?? fetch)(`${server.base}${path}`, {
             method,
-            headers: { authorization: auth, ...(body === undefined ? {} : { "content-type": "application/json" }) },
+            headers: { authorization: server.auth, ...(body === undefined ? {} : { "content-type": "application/json" }) },
             body: body === undefined ? undefined : JSON.stringify(body),
-            signal: AbortSignal.timeout(REQUEST_MS),
+            signal,
         });
         if (res.status === 204) return null;
         const text = await res.text();
