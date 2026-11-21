@@ -1,25 +1,26 @@
 import { For, Match, Switch } from "solid-js";
 import { PaperButton, PaperCard, PaperCollapsible, PaperFlex, PaperIcon, PaperText, createAction } from "@mileniumhq/paperui";
-import type { AccessEntry, AccessItem } from "../contract";
+import type { AccessEntry, AskedItem } from "../contract";
 import type { Agent } from "../lib/agent";
 import RequestEnd from "./RequestEnd";
 
-/** what a folder or command lets the agent do, in the user's words */
-export const itemText = (item: AccessItem) =>
-    item.kind === "folder"
-        ? { icon: "folder", what: item.path, how: "List, read, search, create and edit files in it" }
-        : { icon: "terminal", what: item.command.join(" "), how: item.anyArguments ? "Run it, with any arguments after these" : "Run exactly this" };
+/** what a folder or a shell lets the agent do, in the user's words; a single command is what requests asked for before shells */
+export const itemText = (item: AskedItem) => {
+    if (item.kind === "folder") return { icon: "folder", what: item.path, code: true, how: "List, read, search, create and edit files in it" };
+    if (item.kind === "shell") return { icon: "terminal", what: "A shell", code: false, how: "Run any command as you, in a shell it opens for the task" };
+    return { icon: "terminal", what: item.command.join(" "), code: true, how: item.anyArguments ? "Run it, with any arguments after these" : "Run exactly this" };
+};
 
-/** "2 folders and a command" */
-function countText(items: AccessItem[]): string {
-    const folders = items.filter((i) => i.kind === "folder").length;
-    const commands = items.length - folders;
+/** "2 folders and a shell" */
+function countText(items: AskedItem[]): string {
+    const count = (kind: AskedItem["kind"]) => items.filter((i) => i.kind === kind).length;
     const part = (n: number, one: string) => (n === 0 ? null : n === 1 ? `a ${one}` : `${n} ${one}s`);
-    const text = [part(folders, "folder"), part(commands, "command")].filter(Boolean).join(" and ");
+    const parts = [part(count("folder"), "folder"), part(count("shell"), "shell"), part(count("command"), "command")].filter((p) => p !== null);
+    const text = parts.length < 3 ? parts.join(" and ") : `${parts.slice(0, -1).join(", ")} and ${parts.at(-1)}`;
     return text.charAt(0).toUpperCase() + text.slice(1);
 }
 
-/** The agent asking for folders and commands on the user's own computer: once, for good, or not at all. */
+/** The agent asking for folders and a shell on the user's own computer: once, for good, or not at all. */
 export default function AccessRequest(props: { agent: Agent; entry: AccessEntry; name: string }) {
     const e = () => props.entry;
     const { busy, run } = createAction();
@@ -48,7 +49,7 @@ export default function AccessRequest(props: { agent: Agent; entry: AccessEntry;
                                     <PaperFlex direction="row" align="start" gap="half">
                                         <PaperIcon>{t.icon}</PaperIcon>
                                         <PaperFlex gap="onefourth" minWidth={0}>
-                                            <PaperText family="code" size={2} breakWord>
+                                            <PaperText family={t.code ? "code" : undefined} size={2} breakWord>
                                                 {t.what}
                                             </PaperText>
                                             <PaperText preset="hint">{t.how}</PaperText>

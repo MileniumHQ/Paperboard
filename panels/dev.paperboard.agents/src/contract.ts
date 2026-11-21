@@ -161,15 +161,20 @@ export const LIMITS = {
         waitMinutes: 10,
     },
     access: {
-        /** folders and commands in one request */
+        /** folders and a shell in one request */
         items: 5,
         reasonChars: 500,
         pathChars: 1024,
-        /** arguments in a command, its program included */
-        commandArgs: 32,
-        argChars: 1024,
+        /** what a shell is for, as the agent says it */
+        taskChars: 120,
+        /** shells open at once */
+        shells: 4,
+        /** a command line, or text typed into a program */
+        commandChars: 8000,
         /** an unanswered request lapses after this long */
         waitMinutes: 15,
+        /** an unanswered sudo password card lapses after this long; sudo gives up on its own prompt at 5 */
+        sudoWaitMinutes: 4,
         /** grants kept for good */
         always: 200,
     },
@@ -680,17 +685,17 @@ const toolSignInEntry = object({
 export type ToolSignInEntry = Infer<typeof toolSignInEntry>;
 
 const folderItem = { kind: oneOf("folder"), path: text() };
-const commandItem = {
-    kind: oneOf("command"),
-    /** the program and the arguments the grant covers, as run: one program, never a shell line */
-    command: list(text()),
-    /** it also covers the same command with more arguments after these */
-    anyArguments: boolean(),
-};
+/** shells the agent opens for a task, which run any command as the user */
+const shellItem = { kind: oneOf("shell") };
 
-/** Something on the user's computer the agent asks for: a folder to work in, or a command to run. */
-const accessItem = shape.either(object(folderItem), object(commandItem));
+/** Something on the user's computer the agent asks for: a folder to work in, or shells to run commands in. */
+const accessItem = shape.either(object(folderItem), object(shellItem));
 export type AccessItem = Infer<typeof accessItem>;
+
+/** A single command, as requests asked for before shells: kept so their cards in past conversations still read. */
+const pastCommandItem = { kind: oneOf("command"), command: list(text()), anyArguments: boolean() };
+const askedItem = shape.either(object(folderItem), object(shellItem), object(pastCommandItem));
+export type AskedItem = Infer<typeof askedItem>;
 
 /** The agent asking for access to the user's computer: answered on its card, once or for good. */
 const accessEntry = object({
@@ -698,7 +703,7 @@ const accessEntry = object({
     kind: oneOf("access"),
     /** what it wants to do and why, in its words */
     reason: text(),
-    items: list(accessItem),
+    items: list(askedItem),
     /** allowed: for this time; always: kept until the user takes it back on the Access page */
     status: oneOf("waiting", "allowed", "always", "declined", "expired"),
 });
@@ -706,11 +711,39 @@ export type AccessEntry = Infer<typeof accessEntry>;
 
 /** A grant, as the Access page lists it. */
 const granted = { at: number(), once: boolean() };
-const accessGrant = shape.either(object({ ...folderItem, ...granted }), object({ ...commandItem, ...granted }));
+const accessGrant = shape.either(object({ ...folderItem, ...granted }), object({ ...shellItem, ...granted }));
 export type AccessGrant = Infer<typeof accessGrant>;
+
+/** A shell the agent has open on the user's computer. */
+const userShell = object({
+    /** its number, as the agent calls it */
+    id: number(),
+    task: text(),
+    /** where it opened */
+    folder: text(),
+    opened: number(),
+    /** what it runs now; null at its prompt */
+    running: nullable(text()),
+});
+export type UserShellView = Infer<typeof userShell>;
+
+/** The agent asking for the user's password, for sudo in one of its shells. The password is never kept. */
+const sudoEntry = object({
+    ...entryHead,
+    kind: oneOf("sudo"),
+    shell: number(),
+    task: text(),
+    reason: text(),
+    /** checking: the password went to sudo, which hasn't answered yet */
+    status: oneOf("waiting", "checking", "allowed", "declined", "expired", "failed"),
+    /** waiting again after a wrong password; failed: why */
+    error: optional(text()),
+});
+export type SudoEntry = Infer<typeof sudoEntry>;
 
 const accessView = object({
     grants: list(accessGrant),
+    shells: list(userShell),
     /** the grants file couldn't be read: nothing it held is allowed, and nothing is written over it */
     error: nullable(text()),
 });
@@ -725,6 +758,7 @@ const chatEntry = shape.either(
     object({ ...entryHead, kind: oneOf("error"), title: optional(text()), text: text() }),
     signInEntry,
     accessEntry,
+    sudoEntry,
     promptEntry,
     toolServerEntry,
     toolSignInEntry,
@@ -834,6 +868,11 @@ export const agentsContract = defineContract(PANEL_ID, {
         access: { output: accessView },
         answerAccess: { input: object({ id: text(), how: oneOf("once", "always", "decline") }), output: nothing() },
         revokeAccess: { input: object({ grant: accessItem }), output: accessView },
+        /** a shell the agent opened, closed by the user */
+        closeShell: { input: object({ id: number() }), output: accessView },
+        /** the user's password for sudo in the agent's shell: typed into sudo's prompt once, never kept */
+        answerSudo: { input: object({ id: text(), password: text() }), output: nothing() },
+        declineSudo: { input: byId, output: nothing() },
         /** a program the agent asks to run as one of its tool servers: allowed or not */
         answerToolServer: { input: object({ id: text(), allow: boolean() }), output: nothing() },
         // the pages the agent made: list them, open one (its address), its picture, save one as a PDF, or delete it

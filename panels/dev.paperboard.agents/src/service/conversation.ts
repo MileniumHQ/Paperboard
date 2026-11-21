@@ -26,7 +26,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { errorMessage, problemsApi, stopProcess } from "@mileniumhq/paperapi";
 import { writeFileAtomicSync } from "@mileniumhq/paperapi/fs";
-import { BRAINS, CURRENT_CONVERSATION, LIMITS, PANEL_ID, type AccessEntry, type PageEntry, type PromptEntry, type ToolServerEntry, type ToolSignInEntry, type Attachment, type ChatEntry, type ChatState, type Harness, type PastConversation, type Settings, type SignInEntry, type WaitingMessage } from "../contract";
+import { BRAINS, CURRENT_CONVERSATION, LIMITS, PANEL_ID, type AccessEntry, type SudoEntry, type PageEntry, type PromptEntry, type ToolServerEntry, type ToolSignInEntry, type Attachment, type ChatEntry, type ChatState, type Harness, type PastConversation, type Settings, type SignInEntry, type WaitingMessage } from "../contract";
 import type { StartOptions } from "./browser";
 import { Attachments } from "./attachments";
 import { sizeText } from "../lib/files";
@@ -270,7 +270,7 @@ export class Conversation {
     }
 
     /** Add or update a card: a sign-in, access, prompt or tool-server request (signIn.ts, access.ts, prompts.ts and serverTools.ts own them; this only shows them) or a page shown to the user. */
-    post(entry: SignInEntry | AccessEntry | PromptEntry | ToolServerEntry | ToolSignInEntry | PageEntry) {
+    post(entry: SignInEntry | AccessEntry | SudoEntry | PromptEntry | ToolServerEntry | ToolSignInEntry | PageEntry) {
         if (this.closed) return;
         this.put(entry);
     }

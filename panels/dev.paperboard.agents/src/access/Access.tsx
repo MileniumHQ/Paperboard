@@ -1,21 +1,27 @@
-// What the agent may do on the user's own computer: the folders and commands
-// they allowed, always or for this time, and taking any of them back. The
-// agent asks in the chat; this page follows every change as it happens.
+// What the agent may do on the user's own computer: the shells it has open,
+// which the user can close, and the folders and shells they allowed, always
+// or for this time, which they can take back. The agent asks in the chat;
+// this page follows every change as it happens.
 
 import { For, Match, Show, Switch } from "solid-js";
-import { PaperButton, PaperEmptyState, PaperError, PaperFlex, PaperIcon, PaperList, PaperListItem, PaperLoader, createRead, showError } from "@mileniumhq/paperui";
-import type { AccessGrant, AccessView } from "../contract";
+import { PaperButton, PaperEmptyState, PaperError, PaperFlex, PaperIcon, PaperList, PaperListItem, PaperListLabel, PaperLoader, createRead, showError } from "@mileniumhq/paperui";
+import type { AccessGrant, AccessView, UserShellView } from "../contract";
 import type { Agent } from "../lib/agent";
 import { holdPage } from "../lib/pageHold";
 import { localStamp } from "../routineText";
 import { itemText } from "../chat/AccessRequest";
 
-const grantKey = (g: AccessGrant) => `${g.kind}:${itemText(g).what}:${g.kind === "command" && g.anyArguments}:${g.once}:${g.at}`;
+const grantKey = (g: AccessGrant) => `${g.kind}:${g.kind === "folder" ? g.path : ""}:${g.once}:${g.at}`;
+const shellKey = (s: UserShellView) => `${s.id}:${s.opened}`;
 
 export default function Access(props: { agent: Agent }) {
     const name = () => props.agent.name();
-    // each grant keyed by what it is, so a change, read or pushed, touches only what changed
-    const shape = (view: AccessView) => ({ error: view.error, grants: view.grants.map((grant) => ({ key: grantKey(grant), grant })) });
+    // each grant and shell keyed by what it is, so a change, read or pushed, touches only what changed
+    const shape = (view: AccessView) => ({
+        error: view.error,
+        grants: view.grants.map((grant) => ({ key: grantKey(grant), grant })),
+        shells: view.shells.map((shell) => ({ key: shellKey(shell), shell })),
+    });
     // a change pushed while the first read is out is newer than it: the read doesn't replace it
     const access = createRead(() => props.agent.calls.access().then(shape), {
         key: "key",
@@ -23,13 +29,20 @@ export default function Access(props: { agent: Agent }) {
     });
     const view = access.value;
     const grants = () => view()?.grants ?? [];
+    const shells = () => view()?.shells ?? [];
     holdPage(access.ready());
 
     const revoke = (g: AccessGrant) =>
         props.agent.calls
-            .revokeAccess({ grant: g.kind === "folder" ? { kind: "folder", path: g.path } : { kind: "command", command: g.command, anyArguments: g.anyArguments } })
+            .revokeAccess({ grant: g.kind === "folder" ? { kind: "folder", path: g.path } : { kind: "shell" } })
             .then((next) => access.set(shape(next)))
-            .catch((e) => showError(`Couldn't take back ${itemText(g).what}`, e));
+            .catch((e) => showError(`Couldn't take back ${g.kind === "folder" ? g.path : "shells"}`, e));
+
+    const close = (s: UserShellView) =>
+        props.agent.calls
+            .closeShell({ id: s.id })
+            .then((next) => access.set(shape(next)))
+            .catch((e) => showError(`Couldn't close the shell for ${s.task}`, e));
 
     return (
         <Switch>
@@ -52,7 +65,7 @@ export default function Access(props: { agent: Agent }) {
                 </Show>
                 <PaperFlex flex minHeight={0}>
                     <Show
-                        when={grants().length > 0}
+                        when={grants().length > 0 || shells().length > 0}
                         fallback={
                             <PaperFlex padding="double">
                                 <PaperEmptyState
@@ -64,26 +77,51 @@ export default function Access(props: { agent: Agent }) {
                         }
                     >
                         <PaperList selectable={false} borderless fullWidth fullHeight background="transparent">
-                            <For each={grants()}>
-                                {(row) => {
-                                    const g = row.grant;
-                                    const t = itemText(g);
-                                    return (
-                                        <PaperListItem
-                                            value={`${g.kind}:${t.what}:${g.kind === "command" && g.anyArguments}:${g.once}`}
-                                            icon={t.icon}
-                                            description={`${t.how} · ${g.once ? "this time only" : `allowed ${localStamp(g.at)}`}`}
-                                            actions={
-                                                <PaperButton icon size="small" variant="text" aria-label={`Take back ${t.what}`} title="Take this back" onClick={() => void revoke(g)}>
-                                                    <PaperIcon>delete</PaperIcon>
-                                                </PaperButton>
-                                            }
-                                        >
-                                            {t.what}
-                                        </PaperListItem>
-                                    );
-                                }}
-                            </For>
+                            <Show when={shells().length > 0}>
+                                <PaperListLabel as="h3">Open shells</PaperListLabel>
+                                <For each={shells()}>
+                                    {(row) => {
+                                        const s = row.shell;
+                                        return (
+                                            <PaperListItem
+                                                value={`shell:${s.id}`}
+                                                icon="terminal"
+                                                description={`${s.running ? `Running ${s.running}` : "At its prompt"} · opened in ${s.folder} ${localStamp(s.opened)}`}
+                                                actions={
+                                                    <PaperButton icon size="small" variant="text" aria-label={`Close the shell for ${s.task}`} title="Close this shell" onClick={() => void close(s)}>
+                                                        <PaperIcon>close</PaperIcon>
+                                                    </PaperButton>
+                                                }
+                                            >
+                                                {s.task}
+                                            </PaperListItem>
+                                        );
+                                    }}
+                                </For>
+                            </Show>
+                            <Show when={grants().length > 0}>
+                                <PaperListLabel as="h3">Allowed</PaperListLabel>
+                                <For each={grants()}>
+                                    {(row) => {
+                                        const g = row.grant;
+                                        const t = itemText(g);
+                                        return (
+                                            <PaperListItem
+                                                value={`${g.kind}:${t.what}:${g.once}`}
+                                                icon={t.icon}
+                                                description={`${t.how} · ${g.once ? "this time only" : `allowed ${localStamp(g.at)}`}`}
+                                                actions={
+                                                    <PaperButton icon size="small" variant="text" aria-label={`Take back ${t.what}`} title="Take this back" onClick={() => void revoke(g)}>
+                                                        <PaperIcon>delete</PaperIcon>
+                                                    </PaperButton>
+                                                }
+                                            >
+                                                {t.what}
+                                            </PaperListItem>
+                                        );
+                                    }}
+                                </For>
+                            </Show>
                         </PaperList>
                     </Show>
                 </PaperFlex>

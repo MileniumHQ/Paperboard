@@ -127,10 +127,12 @@ export function readTranscript(file: string): { entries: ChatEntry[]; ids: Set<s
         }
         if (typeof e.id === "string") ids.add(e.id);
         // transcripts from before the chat was only a chat hold tool-call entries: not messages, not shown
-        if (e.kind !== "user" && e.kind !== "agent" && e.kind !== "error" && e.kind !== "sign-in" && e.kind !== "app" && e.kind !== "access" && e.kind !== "prompt" && e.kind !== "tool-server" && e.kind !== "tool-sign-in") return;
+        if (e.kind !== "user" && e.kind !== "agent" && e.kind !== "error" && e.kind !== "sign-in" && e.kind !== "app" && e.kind !== "access" && e.kind !== "sudo" && e.kind !== "prompt" && e.kind !== "tool-server" && e.kind !== "tool-sign-in") return;
         // a sign-in request lives only as long as the service that asked for it
         if (e.kind === "sign-in" && (e.status === "waiting" || e.status === "submitting")) e = { ...e, status: "expired" };
         if (e.kind === "access" && e.status === "waiting") e = { ...e, status: "expired" };
+        // the shell sudo was asking in closed with the service
+        if (e.kind === "sudo" && (e.status === "waiting" || e.status === "checking")) e = { ...e, status: "expired", error: undefined };
         if (e.kind === "prompt" && (e.status === "waiting" || e.status === "sending")) e = { ...e, status: "expired" };
         if (e.kind === "tool-server" && e.status === "waiting") e = { ...e, status: "expired" };
         byId.delete(e.id); // re-insert so a changed entry keeps its newest position

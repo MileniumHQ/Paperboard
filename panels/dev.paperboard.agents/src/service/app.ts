@@ -33,6 +33,7 @@ import { messagesToolset } from "./messages";
 import { Routines } from "./routines";
 import { SignIns } from "./signIn";
 import { Access } from "./access";
+import type { Terminals } from "./userShells";
 import { Prompts } from "./prompts";
 import { ServerTools } from "./serverTools";
 import { describeSchedule, localStamp } from "../routineText";
@@ -66,6 +67,8 @@ export interface AppHost extends Omit<ComputerHost, "packages">, Omit<TurnHost, 
     readSettings(): Promise<unknown>;
     writeSettings(s: Settings): Promise<void>;
     exec(command: string, args: string[], o?: { timeoutMs?: number; env?: Record<string, string>; cwd?: string }): Promise<{ stdout: string; stderr: string; exitCode: number }>;
+    /** the daemon's terminals: the shells the agent opens on the user's computer */
+    terminals: Terminals;
     /** a program on PATH: for the user's own tool servers */
     findProgram(command: string, args: readonly string[]): Launch | null;
     /** a brain's program already on this computer; the daemon's own lookup when left out */
@@ -179,8 +182,7 @@ export class AiApp {
         });
         this.access = new Access({
             file: path.join(root, "access.json"),
-            findProgram: (command, args) => this.host.findProgram(command, args),
-            exec: (command, args, o) => this.host.exec(command, args, o),
+            terminals: this.host.terminals,
             post: (entry) => this.conversation.post(entry),
             tell: (text) => this.conversation.tell(text),
             turning: () => this.conversation?.turning() ?? false,
@@ -323,7 +325,7 @@ export class AiApp {
             },
             onTurnFailed: (error) => this.blocks.fire("turn-failed", { error, conversation: this.conversation.id() }),
             onTurnEnd: () => this.access.turnEnded(),
-            onLeave: () => this.lapseRequests(),
+            onLeave: () => void this.lapseRequests().catch((e) => this.reportShellsLeft(e)),
             onState: (chat) => this.ctx.setState({ chat }),
             codexHome: this.brains.homes.codex,
         });
@@ -341,6 +343,8 @@ export class AiApp {
         });
         // after the conversation exists: a one-off missed while the service was down runs as soon as it's read
         await this.routines.load();
+        // shells a service that stopped without closing them left on the user's computer: nobody's now
+        await this.access.shells.sweep().catch((e) => this.reportShellsLeft(e));
         // quiet: a broken index shows in state.memory.error from the start; the failure itself is reported there
         await this.memory.list().then(
             () => undefined,
@@ -348,18 +352,25 @@ export class AiApp {
         );
     }
 
-    /** What the conversation was waiting on lapses with it: its sign-in, access, prompt and tool-server requests. */
-    private lapseRequests() {
+    /** What the conversation was waiting on lapses with it: its sign-in, access, prompt and tool-server requests, and its shells close. */
+    private lapseRequests(): Promise<void> {
         this.signIns?.shutdown();
-        this.access?.shutdown();
         this.prompts?.shutdown();
         this.serverTools?.shutdown();
+        return this.access?.shutdown() ?? Promise.resolve();
+    }
+
+    /** a shell that wouldn't close is still running on the user's computer: they're told, where they'll see it */
+    private reportShellsLeft(e: unknown) {
+        const title = "A shell Agents opened couldn't be closed";
+        problemsApi.report(PANEL_ID, { key: title, title, message: `${errorMessage(e)}. It closes when Agents restarts.` });
     }
 
     async shutdown() {
         // before the conversation closes, so a waiting request's bubble says it lapsed
-        this.lapseRequests();
+        const lapsed = this.lapseRequests().catch((e) => this.reportShellsLeft(e));
         const stops = await Promise.allSettled([
+            lapsed,
             this.routines?.shutdown(),
             this.conversation?.shutdown(),
             this.asker?.shutdown(),
