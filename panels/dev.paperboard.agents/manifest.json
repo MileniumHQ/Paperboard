@@ -48,8 +48,8 @@
         ],
         "services": [
             {
-                "name": "ChatGPT, Claude or OpenCode",
-                "detail": "The brain you pick (Codex, Claude or OpenCode CLI), on your computer or downloaded from its maker, signed in with your account. Your chats go to it"
+                "name": "ChatGPT, Gemini, Claude or OpenCode",
+                "detail": "Your chosen brain (Codex, Antigravity, Claude or OpenCode CLI), on your computer or from its maker, with your account. Your chats go to it"
             },
             {
                 "name": "The web",
@@ -74,6 +74,10 @@
                 "detail": "OpenAI's coding agent, Apache-2.0"
             },
             {
+                "name": "Antigravity CLI",
+                "detail": "Google's agent CLI, run as published by Google"
+            },
+            {
                 "name": "Claude CLI",
                 "detail": "Anthropic's coding agent, Claude Code, run as published by Anthropic"
             },
@@ -93,7 +97,7 @@
         "requirements": [
             {
                 "name": "Brain",
-                "detail": "A ChatGPT or Claude account, or any provider through OpenCode (which has free models too)"
+                "detail": "A ChatGPT, Google, or Claude account, or any provider through OpenCode (which has free models too)"
             },
             {
                 "name": "Computer",

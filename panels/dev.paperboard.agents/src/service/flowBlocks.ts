@@ -2,7 +2,7 @@
 // and events, which app.ts registers and keeps told of changes (blocksSync.ts).
 
 import type { BlockSet } from "@mileniumhq/paperapi";
-import { BRAINS, DEFAULT_MODEL, HARNESSES, LIMITS, SIGN_IN_REQUIRED, USAGE_HARNESSES, type PageInfo, type BrainModel, type BrainState, type BrainUsage, type Harness, type Routine } from "../contract";
+import { BRAINS, DEFAULT_MODEL, HARNESSES, LIMITS, USAGE_HARNESSES, signsOut, type PageInfo, type BrainModel, type BrainState, type BrainUsage, type Harness, type Routine } from "../contract";
 import type { ServerStatus } from "../toolsContract";
 import { DAY_NAMES, describeSchedule, localStamp } from "../routineText";
 import { ASK_MS } from "./ask";
@@ -751,7 +751,7 @@ export function flowBlocks(host: BlocksHost): BlockSet {
                 name: "Install Brain",
                 category: CATEGORY.brain,
                 icon: "download",
-                description: "Downloads and installs a brain, waiting until it's done. ChatGPT and Claude need signing in to in the Agent panel after.",
+                description: "Downloads and installs a brain, waiting until it's done. ChatGPT, Gemini and Claude need signing in to in the Agent panel after.",
                 text: "install {brain}",
                 inputs: { brain: brainInput },
                 run: ({ brain: id }: { brain: Harness }) =>
@@ -767,7 +767,7 @@ export function flowBlocks(host: BlocksHost): BlockSet {
                 name: "Use Brain on This Computer",
                 category: CATEGORY.brain,
                 icon: "computer",
-                description: "Has a brain run the Codex CLI, Claude CLI or OpenCode CLI already on this computer instead of downloading one. Fails when it isn't there, or the brain is installed already.",
+                description: "Has a brain run the Codex CLI, Antigravity CLI, Claude CLI or OpenCode CLI already on this computer instead of downloading one. Fails when it isn't there, or the brain is installed already.",
                 text: "use the {brain} on this computer",
                 inputs: { brain: brainInput },
                 run: ({ brain: id }: { brain: Harness }) =>
@@ -783,7 +783,7 @@ export function flowBlocks(host: BlocksHost): BlockSet {
                 icon: "logout",
                 description: "Signs a brain out of its account; the agent can't think with it until it's signed in again in the Agent panel",
                 text: "sign {brain} out",
-                inputs: { brain: { type: "brain", name: "Brain", choices: brainChoices((h) => SIGN_IN_REQUIRED[h]) } },
+                inputs: { brain: { type: "brain", name: "Brain", choices: brainChoices(signsOut) } },
                 run: ({ brain: id }: { brain: Harness }) =>
                     ready(() => {
                         if (!brain(id).signedIn) throw new Error(`${BRAINS[id].program} isn't signed in`);

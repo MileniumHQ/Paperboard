@@ -22,7 +22,7 @@ export type Character = (typeof CHARACTERS)[number];
 export const characterOf = (name: string | null | undefined): Character | null =>
     CHARACTERS.find((c) => c === (name ?? "").trim().toLowerCase()) ?? null;
 
-export const HARNESSES = ["codex", "claude-code", "opencode"] as const;
+export const HARNESSES = ["codex", "antigravity", "claude-code", "opencode"] as const;
 export type Harness = (typeof HARNESSES)[number];
 
 export interface BrainInfo {
@@ -40,6 +40,11 @@ export const BRAINS: Record<Harness, BrainInfo> = {
         name: "ChatGPT",
         program: "Codex",
         description: "Sign in with your ChatGPT account",
+    },
+    antigravity: {
+        name: "Gemini",
+        program: "Antigravity",
+        description: "Your Google account, shared with this computer's Antigravity",
     },
     "claude-code": {
         name: "Claude",
@@ -367,7 +372,17 @@ const brainState = object({
 export type BrainState = Infer<typeof brainState>;
 
 /** OpenCode works with its free models before anything is connected; the others need their sign-in. */
-export const SIGN_IN_REQUIRED: Record<Harness, boolean> = { codex: true, "claude-code": true, opencode: false };
+export const SIGN_IN_REQUIRED: Record<Harness, boolean> = { codex: true, antigravity: true, "claude-code": true, opencode: false };
+
+/**
+ * Antigravity keeps its sign-in in the OS keyring, one per OS user, whatever its home: the agent uses this
+ * computer's own Antigravity sign-in. The panel signs it in when there's none, and never signs it out.
+ */
+export const SHARED_SIGN_IN: Record<Harness, boolean> = { codex: false, antigravity: true, "claude-code": false, opencode: false };
+
+/** The brains the panel signs out itself: a sign-in of their own, not a shared one. */
+export type SignsOut = "codex" | "claude-code";
+export const signsOut = (h: Harness): h is SignsOut => SIGN_IN_REQUIRED[h] && !SHARED_SIGN_IN[h];
 
 /** A field of a provider's connect form. Only text fields (optionally a list of choices) are supported. */
 const providerField = object({
@@ -543,7 +558,7 @@ const aiState = object({
     /** null until onboarding has saved them */
     settings: nullable(settings),
     onboarding: onboardingDraft,
-    brains: object({ codex: brainState, "claude-code": brainState, opencode: brainState }),
+    brains: object({ codex: brainState, antigravity: brainState, "claude-code": brainState, opencode: brainState }),
     computer: computerState,
     chat: chatState,
     memory: memoryState,
@@ -722,7 +737,7 @@ const NO_BRAIN: BrainState = { phase: "none", installed: false, version: null, s
 export const DEFAULT_STATE: AiState = {
     settings: null,
     onboarding: NO_ONBOARDING,
-    brains: { codex: { ...NO_BRAIN }, "claude-code": { ...NO_BRAIN }, opencode: { ...NO_BRAIN } },
+    brains: { codex: { ...NO_BRAIN }, antigravity: { ...NO_BRAIN }, "claude-code": { ...NO_BRAIN }, opencode: { ...NO_BRAIN } },
     computer: { phase: "none", installed: false, steps: [], error: null, userControl: false },
     chat: { busy: false, typing: false, waiting: [], compacting: false },
     memory: { revision: 0, error: null },

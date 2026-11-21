@@ -22,7 +22,7 @@ import {
     createAction,
     useContextMenuState,
 } from "@mileniumhq/paperui";
-import { BRAINS, SIGN_IN_REQUIRED, USAGE_HARNESSES, type BrainState, type Harness } from "../contract";
+import { BRAINS, SHARED_SIGN_IN, SIGN_IN_REQUIRED, USAGE_HARNESSES, signsOut, type BrainState, type Harness } from "../contract";
 import type { Agent } from "../lib/agent";
 import { submitOnPaste } from "../lib/paste";
 import { createLoopbackCatch } from "../lib/loopback";
@@ -203,7 +203,10 @@ export function SignInSteps(props: { agent: Agent; harness: Harness; actions: Br
                         when={opened() || !login().url}
                         fallback={
                             <>
-                                <PaperText preset="body">Sign in to {name()} with your account.{login().code ? " The page asks for this code." : ""}</PaperText>
+                                <PaperText preset="body">
+                                    Sign in to {name()} with your account.{login().code ? " The page asks for this code." : ""}
+                                    {SHARED_SIGN_IN[props.harness] ? ` This signs in ${BRAINS[props.harness].program} on this computer too.` : ""}
+                                </PaperText>
                                 <Show when={login().code}>
                                     {(shown) => (
                                         <PaperFlex direction="row" gap="half" align="center">
@@ -395,7 +398,7 @@ export function BrainButtons(props: { agent: Agent; harness: Harness; actions: B
                             <PaperIcon>hub</PaperIcon> Providers
                         </PaperButton>
                     </Show>
-                    <Show when={SIGN_IN_REQUIRED[props.harness]}>
+                    <Show when={signsOut(props.harness)}>
                         <PaperButton variant="text" disabled={busy()} onClick={() => void props.actions.signOut(props.harness)}>
                             Sign out
                         </PaperButton>

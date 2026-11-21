@@ -19,8 +19,10 @@ import crypto from "crypto";
  * - dmg: macOS only; hdiutil mounts the image read-only and ditto copies out
  * - msi: the cabinets inside a Windows Installer package, read on any
  *   computer (apps/daemon/src/packages/msiArchive.ts); members are the MSI's File keys
+ * - file: the download is itself a single file (e.g. a bare Windows .exe), placed
+ *   at "file" in the unpacked tree; take maps one bin/ path from "file"
  */
-export const RECIPE_UNPACKS = ["zip", "tar", "tar.xz", "dmg", "msi"] as const;
+export const RECIPE_UNPACKS = ["zip", "tar", "tar.xz", "dmg", "msi", "file"] as const;
 export type RecipeUnpack = (typeof RECIPE_UNPACKS)[number];
 
 export interface PackageRecipe {
@@ -66,6 +68,11 @@ export function parsePackageRecipe(value: unknown): PackageRecipe {
     const out: Record<string, string> = {};
     for (const [dest, source] of entries) {
         out[checkPath(dest, "destination")] = checkPath(source, "source");
+    }
+    if (unpack === "file") {
+        if (entries.length !== 1 || Object.values(out)[0] !== "file") {
+            throw new Error(`Package recipe unpack "file" must take exactly one path from "file"`);
+        }
     }
     const dests = Object.keys(out);
     for (const a of dests) {

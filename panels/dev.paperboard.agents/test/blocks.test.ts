@@ -305,8 +305,9 @@ describe("the agent's blocks", () => {
 
     test("brains are read, installed and signed out of; Switch Brain refuses one that isn't signed in", async () => {
         rig = await appRig({ downloads: ["claude-code"] });
-        expect(await rig.blocks.read("brains")).toEqual(["codex", "claude-code", "opencode"]);
+        expect(await rig.blocks.read("brains")).toEqual(["codex", "antigravity", "claude-code", "opencode"]);
         expect(await rig.blocks.read("current-brain")).toBe("codex");
+        expect(await rig.blocks.property("brain", "name", "antigravity")).toBe("Gemini");
         expect(await rig.blocks.property("brain", "name", "claude-code")).toBe("Claude");
         expect(await rig.blocks.property("brain", "status", "codex")).toBe("ready");
         expect(await rig.blocks.property("brain", "signed-in", "codex")).toBe(true);
@@ -328,6 +329,8 @@ describe("the agent's blocks", () => {
         await expect(rig.blocks.run("switch-brain", { brain: "claude-code" })).rejects.toThrow("Claude isn't ready: sign in to it first");
         await expect(rig.blocks.run("sign-out-brain", { brain: "claude-code" })).rejects.toThrow("Claude isn't signed in");
         await expect(rig.blocks.run("sign-out-brain", { brain: "opencode" })).rejects.toThrow('"Brain" must be one of ChatGPT, Claude');
+        // Gemini's sign-in is the computer's: no block signs it out
+        await expect(rig.blocks.run("sign-out-brain", { brain: "antigravity" })).rejects.toThrow('"Brain" must be one of ChatGPT, Claude');
         await rig.blocks.run("sign-out-brain", { brain: "codex" });
         expect(await rig.blocks.property("brain", "signed-in", "codex")).toBe(false);
         expect(await rig.blocks.property("brain", "status", "codex")).toBe("installed");

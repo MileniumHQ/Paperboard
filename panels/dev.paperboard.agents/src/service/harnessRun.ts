@@ -55,11 +55,15 @@ export async function runHarness(o: HarnessRun): Promise<HarnessOutcome> {
         }
         o.onEvent(ev);
     };
+    // each header value as it appears inside the JSON line
+    const secrets = (o.acp?.mcpServers ?? []).flatMap((s) => (s.headers ?? []).map((h) => JSON.stringify(h.value).slice(1, -1))).filter((v) => v.length > 0);
     const acp = o.acp
         ? new AcpTurn({
               ...o.acp,
               write: (line) => {
-                  o.line?.("stdin", line);
+                  // the log is written to disk: the MCP servers' headers carry the panel's token, taken out by value
+                  const logged = secrets.reduce((l, v) => l.replaceAll(v, "[redacted]"), line);
+                  o.line?.("stdin", logged);
                   return writeLine(o.host.write, o.id, line);
               },
               emit: onEvent,

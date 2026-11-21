@@ -20,7 +20,7 @@ export interface AppRig {
     close(): Promise<void>;
 }
 
-export async function appRig(o: { settings?: Settings; downloads?: ("claude-code" | "opencode")[] } = {}): Promise<AppRig> {
+export async function appRig(o: { settings?: Settings; downloads?: ("antigravity" | "claude-code" | "opencode")[] } = {}): Promise<AppRig> {
     const root = tempDir("app");
     const storage = path.join(root, "storage");
     const host = new TestHost(fakeEnv(root));

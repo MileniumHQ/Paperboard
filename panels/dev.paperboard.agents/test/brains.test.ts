@@ -9,7 +9,7 @@ import { loginTail } from "../src/service/brainLogin";
 import { Brains, loginProcessId } from "../src/service/brains";
 import { findExistingBrain } from "../src/service/existingBrains";
 import { CLAUDE_MEMORY_OFF } from "../src/service/harness";
-import { askClaudeModels, listModels } from "../src/service/models";
+import { askAntigravityModels, askClaudeModels, listModels } from "../src/service/models";
 import { readUsage } from "../src/service/usage";
 import { conversationRig, settled, turnId, type Rig } from "./support/rig";
 import { brainPackage, fakeEnv, fakeLog, packageHost, plan, Recorder, SLOW, tempDir, TestHost } from "./support/host";
@@ -25,7 +25,7 @@ type States = Record<Harness, BrainState>;
 async function brains(o: { installed?: Harness[]; root?: string; find?: (harness: Harness) => string | null; downloads?: Record<string, string>; arch?: string } = {}) {
     const root = o.root ?? tempDir("brains");
     const host = new TestHost(fakeEnv(root));
-    const installed = Object.fromEntries((o.installed ?? ["codex", "claude-code", "opencode"]).map((h) => [h, brainPackage(root, h)]));
+    const installed = Object.fromEntries((o.installed ?? ["codex", "antigravity", "claude-code", "opencode"]).map((h) => [h, brainPackage(root, h)]));
     const states = new Recorder<States>();
     const b = new Brains({ host: { ...host, packages: packageHost(installed, o.downloads) } as never, dir: path.join(root, "storage", "brains"), find: o.find ?? (() => null), onState: states.push, arch: o.arch });
     cleanups.push(async () => {
@@ -46,15 +46,34 @@ describe("harness launch", () => {
         fs.mkdirSync(elsewhere);
         fs.copyFileSync(path.join(installed.codex!, "bin", "codex"), path.join(elsewhere, "codex"));
         expect(b.resolve("codex")).toBe(path.join(installed.codex!, "bin", "codex"));
+        expect(b.resolve("antigravity")).toBe(path.join(installed.antigravity!, "bin", "agy"));
         expect(b.resolve("claude-code")).toBe(path.join(installed["claude-code"]!, "bin", "claude"));
         const storage = path.join(root, "storage", "brains");
         expect(b.env("codex")).toEqual({ CODEX_HOME: path.join(storage, "codex") });
+        const agyHome = path.join(storage, "antigravity");
+        expect(b.env("antigravity")).toEqual({
+            HOME: agyHome,
+            XDG_CONFIG_HOME: path.join(agyHome, ".config"),
+            XDG_CACHE_HOME: path.join(agyHome, ".cache"),
+            XDG_DATA_HOME: path.join(agyHome, ".local", "share"),
+            USERPROFILE: agyHome,
+            APPDATA: path.join(agyHome, "AppData", "Roaming"),
+            LOCALAPPDATA: path.join(agyHome, "AppData", "Local"),
+            AGY_CLI_DISABLE_AUTO_UPDATE: "1",
+        });
+        expect(JSON.parse(fs.readFileSync(path.join(agyHome, "antigravity-cli", "settings.json"), "utf8"))).toEqual({
+            permissions: {
+                allow: ["mcp(paperboard/*)"],
+                deny: ["command(*)", "read_file(*)", "write_file(*)", "read_url(*)"],
+            },
+        });
         expect(b.env("claude-code")).toEqual({ CLAUDE_CONFIG_DIR: path.join(storage, "claude"), DISABLE_AUTOUPDATER: "1" });
         const oc = b.env("opencode");
         expect(oc.OPENCODE_DISABLE_AUTOUPDATE).toBe("1");
         for (const k of ["XDG_DATA_HOME", "XDG_CONFIG_HOME", "XDG_CACHE_HOME", "XDG_STATE_HOME"]) expect(oc[k]!.startsWith(path.join(storage, "opencode") + path.sep)).toBe(true);
         // the status checks ran with those homes, not the user's
         expect(fakeLog(root).filter((e) => e.name === "codex").every((e) => e.env.CODEX_HOME === path.join(storage, "codex"))).toBe(true);
+        expect(fakeLog(root).filter((e) => e.name === "agy" && e.event === "run").every((e) => e.env.HOME === agyHome && e.env.XDG_CONFIG_HOME === path.join(agyHome, ".config"))).toBe(true);
     }, SLOW);
 
     test("Codex runs read-only with its own tools off, reaching only the panel's MCP server", async () => {
@@ -242,6 +261,8 @@ describe("looking for a brain on the computer", () => {
         expect(findExistingBrain("claude-code", env("linux", [], home))).toBe(installer);
         const opencode = program(path.join(home, ".opencode", "bin"), "opencode");
         expect(findExistingBrain("opencode", env("linux", [], home))).toBe(opencode);
+        const agy = program(path.join(root, "bin"), "agy");
+        expect(findExistingBrain("antigravity", env("linux", [path.join(root, "bin")], home))).toBe(agy);
         // another harness's folder isn't searched
         expect(findExistingBrain("codex", env("linux", [], home))).toBeNull();
     });
@@ -264,6 +285,9 @@ describe("looking for a brain on the computer", () => {
         expect(findExistingBrain("codex", env("win32", [dir], root))).toBeNull();
         const exe = program(dir, "codex.exe");
         expect(findExistingBrain("codex", env("win32", [dir], root))).toBe(exe);
+        const localAppData = path.join(root, "AppData", "Local");
+        const agyExe = program(path.join(localAppData, "agy", "bin"), "agy.exe");
+        expect(findExistingBrain("antigravity", { ...env("win32", [], root), localAppData })).toBe(agyExe);
     });
 });
 
@@ -344,6 +368,22 @@ describe("brain sign-in", () => {
         await b.cancelSignIn("codex");
         expect(b.snapshot().codex).toMatchObject({ phase: "installed", login: null, error: null });
     }, SLOW);
+
+    test("Antigravity signs in with a pasted Google authorization code, names no account it wasn't told, and has no Sign out that would reach past the panel", async () => {
+        const { host, b, states } = await brains({ installed: ["antigravity"] });
+        expect(b.snapshot().antigravity).toMatchObject({ phase: "installed", installed: true, signedIn: false });
+        await b.signIn("antigravity");
+        await states.until((s) => s.at(-1)?.antigravity.login?.expectsCode === true, "Antigravity's sign-in page");
+        expect(b.snapshot().antigravity.login!.url).toStartWith("https://accounts.google.com/o/oauth2/auth?");
+        await b.submitCode("antigravity", "  4/0A-google-code  ");
+        await states.until((s) => s.at(-1)?.antigravity.phase === "ready", "Antigravity to be signed in");
+        expect(host.writes.filter((w) => w.id === loginProcessId("antigravity"))).toEqual([{ id: loginProcessId("antigravity"), data: "4/0A-google-code\n" }]);
+        expect(JSON.stringify(states.items)).not.toContain("4/0A-google-code");
+        expect(b.snapshot().antigravity).toMatchObject({ signedIn: true, account: null, login: null, error: null });
+        // its sign-in is the computer's (the OS keyring): signing out here would sign the user out everywhere
+        expect(() => b.signOut("antigravity")).toThrow("Antigravity uses this computer's own sign-in; sign out of it there");
+        expect(b.snapshot().antigravity).toMatchObject({ phase: "ready", signedIn: true });
+    }, SLOW);
 });
 
 // A failed login says why in its own words, not in the sign-in page's one-time address.
@@ -365,42 +405,65 @@ describe("brain failures", () => {
     test("a status that can't be read is failed, never signed out", async () => {
         const root = tempDir("status");
         cleanups.push(() => fs.rmSync(root, { recursive: true, force: true }));
-        plan(root, { status: { exit: 2, stderr: "panic: config.toml is corrupt\n" } });
+        // even a -32000 server error with a non-auth message must fail rather than report signed-out
+        plan(root, { status: { exit: 2, stderr: "panic: config.toml is corrupt\n" }, agyStatusError: { code: -32000, message: "keychain locked" } });
         const host = new TestHost(fakeEnv(root));
         cleanups.push(() => host.close());
-        const b = new Brains({ host: { ...host, packages: packageHost({ codex: brainPackage(root, "codex") }) } as never, dir: path.join(root, "brains"), find: () => null, onState: () => {} });
+        const b = new Brains({
+            host: { ...host, packages: packageHost({ codex: brainPackage(root, "codex"), antigravity: brainPackage(root, "antigravity") }) } as never,
+            dir: path.join(root, "brains"),
+            find: () => null,
+            onState: () => {},
+        });
         await b.init();
         expect(b.snapshot().codex).toMatchObject({ phase: "failed", installed: true, signedIn: false });
         expect(b.snapshot().codex.error).toContain("panic: config.toml is corrupt");
+        expect(b.snapshot().antigravity).toMatchObject({ phase: "failed", installed: true, signedIn: false });
+        expect(b.snapshot().antigravity.error).toContain("keychain locked");
     }, SLOW);
 
-    test("a model listing that fails or is empty is an error, and a freshly signed-in Claude still lists its models", async () => {
-        const { root, host, b } = await brains({ installed: ["codex", "claude-code"] });
+    test("a model listing that fails or is empty is an error, and a freshly signed-in Claude or Antigravity still lists its models", async () => {
+        const { root, host, b } = await brains({ installed: ["codex", "antigravity", "claude-code"] });
         const run = (_c: string, args: string[], o: { timeoutMs: number }) => host.exec(b.resolve("codex")!, args, { timeoutMs: o.timeoutMs, env: b.env("codex") });
         const claude = () => askClaudeModels(host, { command: b.resolve("claude-code")!, env: b.env("claude-code"), cwd: path.join(root, "models") });
+        const antigravity = () => askAntigravityModels(host, { command: b.resolve("antigravity")!, home: b.home("antigravity"), env: b.env("antigravity"), cwd: path.join(root, "models") });
         plan(root, { models: { exit: 1, stderr: "not signed in" } });
-        await expect(listModels("codex", b.homes, run, claude)).rejects.toThrow("Codex couldn't list its models: not signed in");
+        await expect(listModels("codex", b.homes, run, claude, antigravity)).rejects.toThrow("Codex couldn't list its models: not signed in");
         plan(root, { models: { stdout: '{"models":[]}' } });
-        await expect(listModels("codex", b.homes, run, claude)).rejects.toThrow("Codex's model list is empty.");
+        await expect(listModels("codex", b.homes, run, claude, antigravity)).rejects.toThrow("Codex's model list is empty.");
         plan(root, { models: { stdout: '{"models":[{"slug":"gpt-x","display_name":"GPT X","visibility":"list","priority":1}]}' } });
-        expect(await listModels("codex", b.homes, run, claude)).toEqual([{ id: "gpt-x", name: "GPT X", description: null, older: false }]);
+        expect(await listModels("codex", b.homes, run, claude, antigravity)).toEqual([{ id: "gpt-x", name: "GPT X", description: null, older: false }]);
+
+        // Antigravity lists models via ACP session/new
+        plan(root, { agyModels: [] });
+        await expect(listModels("antigravity", b.homes, run, claude, antigravity)).rejects.toThrow("Antigravity's model list is empty.");
+        plan(root, {
+            agyModels: [
+                { value: "gemini-3-flash", name: "Gemini 3 Flash", description: "Fast" },
+                { value: "gemini-3.1-pro-high", name: "Gemini 3.1 Pro (High)" },
+            ],
+        });
+        expect(await listModels("antigravity", b.homes, run, claude, antigravity)).toEqual([
+            { id: "gemini-3-flash", name: "Gemini 3 Flash", description: "Fast", older: false },
+            { id: "gemini-3.1-pro-high", name: "Gemini 3.1 Pro (High)", description: null, older: false },
+        ]);
 
         // no catalog yet: Claude itself is asked, over stream-json
         expect(fs.existsSync(path.join(b.homes.claude, "cache", "model-catalog"))).toBe(false);
         plan(root, { claudeModels: [] });
-        await expect(listModels("claude-code", b.homes, run, claude)).rejects.toThrow("Claude's model list is empty.");
+        await expect(listModels("claude-code", b.homes, run, claude, antigravity)).rejects.toThrow("Claude's model list is empty.");
         plan(root, {
             claudeModels: [
                 { value: "default", resolvedModel: "claude-default", displayName: "Default" },
                 { value: "opus", resolvedModel: "claude-opus-5-5", description: "Opus 5.5 · Most capable" },
             ],
         });
-        expect(await listModels("claude-code", b.homes, run, claude)).toEqual([{ id: "claude-opus-5-5", name: "Opus 5.5", description: "Most capable", older: false }]);
+        expect(await listModels("claude-code", b.homes, run, claude, antigravity)).toEqual([{ id: "claude-opus-5-5", name: "Opus 5.5", description: "Most capable", older: false }]);
         // each Claude it asked was stopped once it answered: nothing reached a model
-        const asked = host.started.filter((s) => s.id.includes(".models."));
+        const asked = host.started.filter((s) => s.id.includes(".models.") && !s.id.includes(".acp."));
         expect(asked).toHaveLength(2);
         for (const s of asked) await host.gone(s.id);
-        expect(host.kills.filter((k) => k.id.includes(".models.")).map((k) => k.signal)).toEqual(["SIGTERM", "SIGTERM"]);
+        expect(host.kills.filter((k) => k.id.includes(".models.") && !k.id.includes(".acp.")).map((k) => k.signal)).toEqual(["SIGTERM", "SIGTERM"]);
     }, SLOW);
 
     test("a brain's plan usage is read from its harness, which is stopped once it has answered", async () => {
@@ -465,7 +528,7 @@ describe("brain failures", () => {
         expect(host.kills.filter((k) => k.id.includes(".usage.")).map((k) => k.signal)).toEqual(Array(6).fill("SIGTERM"));
     }, SLOW);
 
-    test("a Claude that ends while it is asked for its models is a failed listing, not a crashed service", async () => {
+    test("a Claude or Antigravity that ends while it is asked for its models is a failed listing, not a crashed service", async () => {
         const root = tempDir("models-exit");
         const host = new TestHost();
         cleanups.push(async () => {
@@ -485,6 +548,15 @@ describe("brain failures", () => {
                 await new Promise((r) => setTimeout(r, 20));
             } };
             await expect(askClaudeModels(slowWrite, { command: quits, env: {}, cwd: path.join(root, "models") })).rejects.toThrow("Claude ended before it listed its models (exit 0): no config");
+            // an Antigravity process that exits before start() resolves still surfaces its exit code and stderr
+            const slowStart = {
+                ...host,
+                start: async (o: Parameters<TestHost["start"]>[0]) => {
+                    await host.start(o);
+                    await host.gone(o.id);
+                },
+            };
+            await expect(askAntigravityModels(slowStart, { command: quits, home: root, env: {}, cwd: path.join(root, "models") })).rejects.toThrow("Antigravity ended before answering (exit 0): no config");
             // the rejection happened while the write was pending; a rejection left unhandled is reported once the task it was in has run
             await new Promise((r) => setImmediate(r));
         } finally {

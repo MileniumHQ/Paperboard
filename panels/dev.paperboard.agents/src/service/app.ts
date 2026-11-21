@@ -26,7 +26,7 @@ import { McpServers, type Vault } from "./mcpServers";
 import { checkSecretName } from "./mcpConfig";
 import { mcpToolset } from "./mcpToolset";
 import type { ToolsConfig } from "../toolsContract";
-import { askClaudeModels, listModels } from "./models";
+import { askAntigravityModels, askClaudeModels, listModels } from "./models";
 import { readUsage } from "./usage";
 import { Memory } from "./memory";
 import { messagesToolset } from "./messages";
@@ -301,6 +301,7 @@ export class AiApp {
             log: this.turnLog,
             settings: () => this.ctx.state.settings,
             resolve: (h) => this.brains.resolve(h),
+            home: (h) => this.brains.home(h),
             env: (h) => this.brains.env(h),
             problem: (h) => this.brainProblem(h),
             mcp: () => ({ url: this.mcp!.url, token: this.mcp!.token, onToolsListed: (cb) => this.mcp!.onToolsListed(cb) }),
@@ -331,6 +332,7 @@ export class AiApp {
             host: { ...this.host, write: this.host.tools.write },
             settings: () => this.ctx.state.settings,
             resolve: (h) => this.brains.resolve(h),
+            home: (h) => this.brains.home(h),
             env: (h) => this.brains.env(h),
             problem: (h) => this.brainProblem(h),
             workdir: path.join(root, "ask"),
@@ -410,16 +412,29 @@ export class AiApp {
         const harness = this.harnessOf(input);
         // OpenCode's own listing opens the folder its provider server is using
         if (harness === "opencode" && !(await this.providers.quiet())) throw new Error("Finish connecting the provider first.");
-        return listModels(harness, this.brains.homes, (command, args, o) => {
-            const h: Harness = command === "codex" ? "codex" : "opencode";
-            const resolved = this.brains.resolve(h);
-            if (!resolved) throw new Error(`${BRAINS[h].program} isn't installed`);
-            return this.host.exec(resolved, args, { timeoutMs: o.timeoutMs, env: this.brains.env(h) });
-        }, () => {
-            const command = this.brains.resolve("claude-code");
-            if (!command) throw new Error("Claude isn't installed");
-            return askClaudeModels({ ...this.host, write: this.host.tools.write }, { command, env: { ...this.brains.env("claude-code"), ...CLAUDE_MEMORY_OFF }, cwd: this.modelsDir });
-        });
+        return listModels(
+            harness,
+            this.brains.homes,
+            (command, args, o) => {
+                const h: Harness = command === "codex" ? "codex" : "opencode";
+                const resolved = this.brains.resolve(h);
+                if (!resolved) throw new Error(`${BRAINS[h].program} isn't installed`);
+                return this.host.exec(resolved, args, { timeoutMs: o.timeoutMs, env: this.brains.env(h) });
+            },
+            () => {
+                const command = this.brains.resolve("claude-code");
+                if (!command) throw new Error(`${BRAINS["claude-code"].program} isn't installed`);
+                return askClaudeModels({ ...this.host, write: this.host.tools.write }, { command, env: { ...this.brains.env("claude-code"), ...CLAUDE_MEMORY_OFF }, cwd: this.modelsDir });
+            },
+            () => {
+                const command = this.brains.resolve("antigravity");
+                if (!command) throw new Error(`${BRAINS.antigravity.program} isn't installed`);
+                return askAntigravityModels(
+                    { ...this.host, write: this.host.tools.write },
+                    { command, home: this.brains.home("antigravity"), env: this.brains.env("antigravity"), cwd: this.modelsDir },
+                );
+            },
+        );
     }
 
     /** How much of a brain's plan is used, asked of the harness itself. */

@@ -24,6 +24,8 @@ export interface AskDeps {
     host: TurnHost;
     settings: () => Settings | null;
     resolve: (harness: Harness) => string | null;
+    /** the harness's isolated home folder in the panel's storage */
+    home: (harness: Harness) => string;
     /** what the harness runs with besides the daemon's environment: its home, and no updating itself */
     env: (harness: Harness) => Record<string, string>;
     /** why the harness can't answer (not signed in, say), or null */
@@ -86,20 +88,33 @@ export class Asker {
 
     private async run(id: string, settings: Settings, command: string, question: string, instructions: string | null, lines: string[] | null): Promise<string> {
         const { host } = this.deps;
-        const filesDir = runFilesDir(settings.harness, this.deps.env(settings.harness), this.deps.filesDir);
+        const env = this.deps.env(settings.harness);
+        const filesDir = runFilesDir(settings.harness, env, this.deps.filesDir);
         const messages: string[] = [];
         const ms = this.deps.askMs ?? ASK_MS;
         fs.mkdirSync(this.deps.workdir, { recursive: true });
+        const launch = askLaunch({ harness: settings.harness, command, model: settings.model, name: settings.name, question, instructions, filesDir, home: this.deps.home(settings.harness) });
         const r = await runHarness({
             host,
             id,
             harness: settings.harness,
-            launch: askLaunch({ harness: settings.harness, command, model: settings.model, name: settings.name, question, instructions, filesDir }),
+            launch,
             cwd: this.deps.workdir,
-            env: this.deps.env(settings.harness),
+            env,
             ms,
             // no tool servers to wait for
-            acp: settings.harness === "opencode" ? { cwd: this.deps.workdir, thread: null, model: settings.model, message: question, ready: async () => {} } : null,
+            acp:
+                settings.harness === "opencode" || settings.harness === "antigravity"
+                    ? {
+                          who: BRAINS[settings.harness].program,
+                          cwd: this.deps.workdir,
+                          thread: null,
+                          model: settings.model,
+                          message: question,
+                          sessionParams: launch.acpSession,
+                          ready: async () => {},
+                      }
+                    : null,
             onEvent: (ev) => {
                 if (ev.type === "message") messages.push(ev.text);
             },

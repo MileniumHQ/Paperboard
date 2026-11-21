@@ -29,6 +29,7 @@
         "update:proton": "bun scripts/update-proton.ts",
         "update:codex": "bun scripts/update-codex.ts",
         "update:claude-code": "bun scripts/update-claude-code.ts",
+        "update:antigravity": "bun scripts/update-antigravity.ts",
         "update:opencode": "bun scripts/update-opencode.ts"
     },
     "devDependencies": {
