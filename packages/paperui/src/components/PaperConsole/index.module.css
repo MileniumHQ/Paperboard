@@ -121,6 +121,12 @@
     min-width: 0;
 }
 
+/* a Markdown row is prose: PaperMarkdown's own type, wrapped as its
+   paragraphs say rather than as the console's preformatted lines */
+.markdown {
+    white-space: normal;
+}
+
 .entry.command {
     color: var(--paper-text);
 }

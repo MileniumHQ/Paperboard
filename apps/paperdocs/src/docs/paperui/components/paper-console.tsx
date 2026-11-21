@@ -19,6 +19,12 @@ const entries: PaperConsoleEntry[] = [
     { type: "error", content: "Failed to save world" },
 ];
 
+const agentEntries: PaperConsoleEntry[] = [
+    { type: "info", content: "Search for \"hourCycle\"" },
+    { type: "info", content: "Read src/components/home/Clock.tsx" },
+    { content: "The clock formats time with **toLocaleTimeString** and no `hourCycle`, so it follows the app's language:\n\n- en-US shows 3:45 PM\n- de-DE shows 15:45", markdown: true },
+];
+
 export default function PaperConsoleDoc() {
     return (
         <PaperFlex direction="column" gap="double" fullWidth>
@@ -56,6 +62,22 @@ export function Example() {
         </PaperCard>
     );
 }`}
+            </PaperCode>
+
+            <PaperText preset="subheader" as="h3" id="markdown">Markdown rows</PaperText>
+            <PaperText preset="body" as="p">
+                Set <PaperCode>markdown</PaperCode> on an entry to draw its text as Markdown, such as a coding agent's reply between the tools it runs.
+                Other rows stay plain, so a file name like <PaperCode>src/main_window.ts</PaperCode> in a tool's line is never read as emphasis.
+            </PaperText>
+            <PaperCard data-docs-demo padding="full" height="panel-height-small" surface="front">
+                <PaperConsole entries={agentEntries} title="Investigating" showInput={false} />
+            </PaperCard>
+            <PaperCode block language="tsx">
+{`const entries: PaperConsoleEntry[] = [
+    { type: "info", content: "Search for \\"hourCycle\\"" },
+    { type: "info", content: "Read src/components/home/Clock.tsx" },
+    { content: "The clock formats time with **toLocaleTimeString** and no \`hourCycle\`, so it follows the app's language:\\n\\n- en-US shows 3:45 PM\\n- de-DE shows 15:45", markdown: true },
+];`}
             </PaperCode>
 
             <PaperText preset="subheader" as="h2" id="props">Props</PaperText>
@@ -180,8 +202,8 @@ export function Example() {
 
             <PaperText preset="subheader" as="h3" id="entries">Entries</PaperText>
             <PaperText preset="body" as="p">
-                PaperConsoleEntry is <PaperCode>{"{ type?, content, id?, timestamp? }"}</PaperCode>.
-                Only <PaperCode>type</PaperCode> and <PaperCode>content</PaperCode> are read: <PaperCode>id</PaperCode> and <PaperCode>timestamp</PaperCode> are in the type but nothing draws or keys on them.
+                PaperConsoleEntry is <PaperCode>{"{ type?, content, markdown?, id?, timestamp? }"}</PaperCode>.
+                Only <PaperCode>type</PaperCode>, <PaperCode>content</PaperCode> and <PaperCode>markdown</PaperCode> are read: <PaperCode>id</PaperCode> and <PaperCode>timestamp</PaperCode> are in the type but nothing draws or keys on them.
             </PaperText>
             <PaperTable>
                 <thead>
@@ -198,6 +220,12 @@ export function Example() {
                         <td><PaperCode>string | JSX.Element</PaperCode></td>
                         <td>Required, no default</td>
                         <td>The line. A string with ANSI color codes is drawn in color (foreground, background, bold, italic, underline). An element is rendered as is.</td>
+                    </tr>
+                    <tr>
+                        <td><PaperCode>markdown</PaperCode></td>
+                        <td><PaperCode>boolean</PaperCode></td>
+                        <td>No default (off)</td>
+                        <td>Draws string content as Markdown, in PaperMarkdown's prose type rather than the console's code type. ANSI codes are not read in a Markdown row.</td>
                     </tr>
                     <tr>
                         <td><PaperCode>type</PaperCode></td>
@@ -218,6 +246,7 @@ export function Example() {
                 <li>The command input keeps the last 200 submitted commands. The Up arrow recalls older ones, the Down arrow moves back toward the text you were typing.</li>
                 <li>The console does not append a typed command to <PaperCode>entries</PaperCode>. Add your own <PaperCode>command</PaperCode> entry in <PaperCode>onCommand</PaperCode> if you want it echoed.</li>
                 <li>A string without an escape character has its carriage returns removed. A string with ANSI codes keeps only the text after its last carriage return.</li>
+                <li>A string loses the blank lines it starts or ends with, and the spaces it ends with, so text that streams in or a line read with its newline draws no empty space. The first line keeps its indentation.</li>
                 <li>The root is a flex column that takes the space its parent leaves (<PaperCode>flex: 1 1 auto</PaperCode>, <PaperCode>min-height: 0</PaperCode>). In a parent without a bounded height the output area does not scroll.</li>
             </PaperTextList>
 

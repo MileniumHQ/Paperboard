@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 import { createSignal, For } from "solid-js";
-import { fireEvent, render, screen } from "@solidjs/testing-library";
+import { fireEvent, render, screen, waitFor } from "@solidjs/testing-library";
 import {
     PaperButton,
     PaperChart,
@@ -286,6 +286,21 @@ describe("elements that persist across new data", () => {
         expect(container.querySelector("a")).toBeNull();
         setText("See [docs]\n\n[docs]: https://paperboard.dev");
         expect(container.querySelector("a")?.getAttribute("href")).toBe("https://paperboard.dev");
+    });
+
+    test("a console Markdown row keeps its elements when fresh entry objects arrive, and updates in place", async () => {
+        const row = (tail: string): PaperConsoleEntry => ({ content: `Hello **world**\n\n${tail}`, markdown: true });
+        const [entries, setEntries] = createSignal<PaperConsoleEntry[]>([row("Tail")]);
+        const { container } = render(() => <PaperConsole entries={entries()} />);
+        const strong = container.querySelector("strong");
+        expect(strong?.textContent).toBe("world");
+        // entries reach the rows on a short timer: wait for the new text to land
+        setEntries([row("Tail"), { content: "Next", markdown: true }]);
+        await waitFor(() => expect(container.textContent).toContain("Next"));
+        expect(container.querySelector("strong")).toBe(strong);
+        setEntries([row("Tail grows"), { content: "Next", markdown: true }]);
+        await waitFor(() => expect(container.textContent).toContain("Tail grows"));
+        expect(container.querySelector("strong")).toBe(strong);
     });
 
     test("a donut keeps its slices across new data, so they slide to their new sizes", () => {
