@@ -98,3 +98,22 @@ describe("check-app-styling: hairlines are exempt, sizes are not", () => {
         expect(check(css)).toEqual({ code: 0, out: "ok: app styling\n" });
     });
 });
+
+describe("check-store-listing.ts: a panel's store block passes the publisher's validation", () => {
+    const check = (store: unknown, files: Record<string, string> = {}) => {
+        const root = tree([], { "manifest.json": JSON.stringify({ id: "dev.me", version: "0.1.0", store }), ...files });
+        return { root, ...run(root, ["bun", join(import.meta.dir, "check-store-listing.ts"), root]) };
+    };
+
+    test("a broken listing fails with the panel and the reason", () => {
+        const r = check({ about: "./store/about.md" });
+        expect(r.code).toBe(1);
+        expect(r.out).toContain(`FAIL: ${r.root} store listing:`);
+        expect(r.out).toContain("ENOENT");
+    });
+
+    test("a listing whose files exist passes, and so does a manifest without one", () => {
+        expect(check({ about: "./store/about.md" }, { "store/about.md": "# Me\n" }).code).toBe(0);
+        expect(check(undefined).code).toBe(0);
+    });
+});

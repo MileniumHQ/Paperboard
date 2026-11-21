@@ -16,6 +16,7 @@ import {
     storeImageExtension,
     storeScreenshotField,
     STORE_IMAGE_TYPES,
+    STORE_MAX_ABOUT_BYTES,
     STORE_MAX_SCREENSHOT_BYTES,
 } from "../../packages/paperapi/src/internal";
 import { DOWNLOAD_HOST, FILE_SEGMENT, GH_REPO, VERSION_SEGMENT } from "../../services/origami/src/downloadUrl";
@@ -454,8 +455,13 @@ export function storeUploadParts(
             });
         }
     }
-    const about = store.about
-        ? new TextDecoder().decode(read(store.about))
-        : undefined;
+    let about: string | undefined;
+    if (store.about) {
+        const bytes = read(store.about);
+        if (bytes.byteLength > STORE_MAX_ABOUT_BYTES) {
+            throw new Error(`${store.about} is over the ${STORE_MAX_ABOUT_BYTES}-byte about cap`);
+        }
+        about = new TextDecoder().decode(bytes);
+    }
     return { ...(about !== undefined ? { about } : {}), files };
 }
