@@ -251,10 +251,13 @@ export interface StoreImageFile {
     bytes: Uint8Array;
 }
 
+/** A store block with its files read: about text and screenshot bytes. */
 export interface StoreFiles {
-    store: StoreManifest;
     about?: string;
     screenshots: { light: StoreImageFile; dark?: StoreImageFile; alt?: string }[];
+    services: StoreRow[];
+    credits: StoreRow[];
+    requirements: StoreRow[];
 }
 
 async function readCapped(read: StoreFileReader, path: string, cap: number): Promise<Uint8Array> {
@@ -284,7 +287,12 @@ export async function readStoreFiles(raw: unknown, read: StoreFileReader): Promi
             ...(shot.alt ? { alt: shot.alt } : {}),
         });
     }
-    const files: StoreFiles = { store, screenshots };
+    const files: StoreFiles = {
+        screenshots,
+        services: store.services,
+        credits: store.credits,
+        requirements: store.requirements,
+    };
     if (store.about) {
         files.about = new TextDecoder().decode(await readCapped(read, store.about, STORE_MAX_ABOUT_BYTES));
     }
@@ -314,7 +322,6 @@ function toBase64(bytes: Uint8Array): string {
     return btoa(binary);
 }
 
-
 /**
  * Loads an installed panel's icon and (when `full`) its store listing.
  * A manifest that declares no listing yields just the icon. A listing that
@@ -341,15 +348,12 @@ export async function loadInstalledPanelMedia(
 
     const dataUrl = (file: StoreImageFile) => `data:${file.type};base64,${toBase64(file.bytes)}`;
     media.store = {
-        ...(files.about !== undefined ? { about: files.about } : {}),
+        ...files,
         screenshots: files.screenshots.map((shot) => ({
             light: dataUrl(shot.light),
             ...(shot.dark ? { dark: dataUrl(shot.dark) } : {}),
             ...(shot.alt ? { alt: shot.alt } : {}),
         })),
-        services: files.store.services,
-        credits: files.store.credits,
-        requirements: files.store.requirements,
     };
     return media;
 }

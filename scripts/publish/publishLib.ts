@@ -429,10 +429,10 @@ export async function storeUploadParts(
     rawStore: unknown,
     read: StoreFileReader,
 ): Promise<{ about?: string; files: StoreUploadPart[] }> {
-    const store = await readStoreFiles(rawStore, read);
-    if (!store) return { files: [] };
+    const listing = await readStoreFiles(rawStore, read);
+    if (!listing) return { files: [] };
     const files: StoreUploadPart[] = [];
-    for (const [index, shot] of store.screenshots.entries()) {
+    for (const [index, shot] of listing.screenshots.entries()) {
         for (const theme of ["light", "dark"] as const) {
             const file = shot[theme];
             if (!file) continue;
@@ -444,5 +444,5 @@ export async function storeUploadParts(
             });
         }
     }
-    return { ...(store.about !== undefined ? { about: store.about } : {}), files };
+    return { ...(listing.about !== undefined ? { about: listing.about } : {}), files };
 }

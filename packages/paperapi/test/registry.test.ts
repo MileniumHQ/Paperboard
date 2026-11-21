@@ -162,6 +162,7 @@ fetchRegistryIndex().then((v) => { console.log("RESOLVED", JSON.stringify(v)); }
                 alt: "Chat",
             },
         ]);
+        expect(read1?.services).toEqual([]);
 
         files["manifest.json"] = new TextEncoder().encode(JSON.stringify({ store }));
         expect((await loadInstalledPanelMedia(read, true)).store).toEqual({
