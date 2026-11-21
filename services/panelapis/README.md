@@ -79,13 +79,13 @@ bun run --cwd services/panelapis dev
 
 Tests run local workerd via Miniflare, with real cache, rate-limit and durable storage bindings; only outgoing Steam HTTP is mocked. Test storage is ephemeral, and dev persistence lives under `/tmp/paperboard-panelapis-dev`, never the user's `.paperboard`. For dev requests supply a local `CF-Connecting-IP` header. Local secrets belong in an ignored `.dev.vars`, never source control. The test harness uses Miniflare's v4 configuration converter because the installed Wrangler dependency uses Miniflare 5's updated API.
 
-Operator steps below are documentation only; no deployment, secret upload or Cloudflare writes were performed during implementation:
+The Worker `panelapis` is deployed by hand with Wrangler (no CI job deploys it) and serves `panels.ariapis.com`. The steps below set up a new account or recover the service; for a routine release only the last step applies.
 
-1. Close the open disclosure items above and register the correct application/domain with Valve. Confirm that a normal Web API key can query the chosen games; a live authenticated smoke test was not performed here. Upstream access denial is explicit and must be resolved with Valve, never worked around.
-2. Authenticate Wrangler to the intended Cloudflare account; confirm the `ariapis.com` zone is in that account. The config attaches `panels.ariapis.com` as a Worker custom domain, so the Worker owns the whole host and deployment creates its DNS record and certificate. The hostname must not already have a conflicting DNS record. Other panel APIs are routed in code, not with extra Cloudflare routes.
-3. Confirm rate-limit namespace `1281930` is unique in the account (change before first deployment if necessary). The first deployment migration creates the SQLite Durable Object; remote bindings are not used locally.
-4. Set the Worker secret named `STEAM_WEB_API_KEY` securely through the Cloudflare dashboard for Worker `panelapis`; never put its value in `wrangler.jsonc`, shell history, a URL shared with users or Git. Missing configuration produces a clear 503. No secret-setting command is run by these scripts.
-5. When separately authorized to publish, run `bun run --cwd services/panelapis deploy`. Verify routing, attribution, privacy disclosures, cache behavior and visible failures after each deploy.
+1. Register the correct application/domain with Valve and confirm a normal Web API key can query the allowlisted games. Upstream access denial is explicit and must be resolved with Valve, never worked around.
+2. Authenticate Wrangler to the Cloudflare account that holds the `ariapis.com` zone. The config attaches `panels.ariapis.com` as a Worker custom domain, so the Worker owns the whole host and deployment creates its DNS record and certificate. The hostname must not already have a conflicting DNS record. Other panel APIs are routed in code, not with extra Cloudflare routes.
+3. Rate-limit namespace `1281930` must be unique in the account. The first deployment's migration creates the SQLite Durable Object; remote bindings are not used locally.
+4. Set the Worker secret `STEAM_WEB_API_KEY` through the Cloudflare dashboard for Worker `panelapis`; never put its value in `wrangler.jsonc`, shell history, a URL shared with users or Git. Missing configuration produces a clear 503.
+5. Run `bun run --cwd services/panelapis deploy`. Verify routing, attribution, privacy disclosures, cache behavior and visible failures after each deploy.
 
 ### Emailing Valve about growth
 
