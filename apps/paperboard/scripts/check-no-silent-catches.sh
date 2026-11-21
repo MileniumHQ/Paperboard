@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
-# Backstop for AGENTS.md "No silent failure".
+# Backstop for AGENTS.md "Fail loudly".
+# scripts/gate/check-solid.ts flags catches that do nothing or only log; this
+# grep adds the catch clauses that return a fallback with no trace (shape 2),
+# which check-solid only flags on .catch() handlers.
 # Biome's noEmptyBlockStatements misses some empty-body shapes (arrow-function
 # handlers, parenthesized bindings), so this grep runs as a gates step and
 # fails the build if any silent catch exists.
