@@ -7,7 +7,7 @@
 //
 // Needs gh signed in, or GH_TOKEN with actions: read. Loads nothing the
 // workspace installs, so the workflow runs it before `bun install`.
-import { GH_REPO, releaseGateProblem, type GateRun } from "./publishLib";
+import { commitShaProblem, GH_REPO, releaseGateProblem, type GateRun } from "./publishLib";
 
 // The Gate workflow's runs at exactly this commit, newest first.
 export async function gateRuns(commit: string): Promise<GateRun[]> {
@@ -21,6 +21,9 @@ export async function gateRuns(commit: string): Promise<GateRun[]> {
 }
 
 export async function releaseGateCheck(commit: string): Promise<string | null> {
+    // before gateRuns: nothing unchecked goes into the API's URL
+    const sha = commitShaProblem(commit);
+    if (sha) return sha;
     return releaseGateProblem(commit, await gateRuns(commit));
 }
 

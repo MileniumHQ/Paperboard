@@ -233,11 +233,18 @@ export interface GateRun {
 // manual run. A pull request runs only the targets its Gate line names.
 export const FULL_GATE_EVENTS = ["push", "workflow_dispatch"] as const;
 
+// Why a release's commit isn't a full SHA, or null when it is. Checked before
+// the commit goes into any URL.
+export function commitShaProblem(commit: string): string | null {
+    return /^[0-9a-f]{40}$/.test(commit) ? null : `A release names its commit by its full SHA, got ${JSON.stringify(commit)}.`;
+}
+
 // Why a commit can't be released, or null when it can: a release builds only
 // a commit a full Gate run passed. A pull request's run may be scoped, so it
 // never counts.
 export function releaseGateProblem(commit: string, runs: readonly GateRun[]): string | null {
-    if (!/^[0-9a-f]{40}$/.test(commit)) return `A release names its commit by its full SHA, got ${JSON.stringify(commit)}.`;
+    const sha = commitShaProblem(commit);
+    if (sha) return sha;
     const short = commit.slice(0, 10);
     const full = runs.filter((r) => r.head_sha === commit && (FULL_GATE_EVENTS as readonly string[]).includes(r.event));
     if (full.some((r) => r.status === "completed" && r.conclusion === "success")) return null;
