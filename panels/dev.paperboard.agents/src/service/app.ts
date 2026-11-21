@@ -235,7 +235,7 @@ export class AiApp {
         const checkpoints = new Checkpoints({ home, dir: path.join(root, "checkpoints") });
         const tools = toolbox([
             { id: "computer", tools: () => COMPUTER_TOOLS, call: (name, args) => browserTool(this.computer, name, args), instructions: () => COMPUTER_INSTRUCTIONS, context: () => this.computer.openWindowsNote() },
-            messagesToolset({ say: (text, replyTo, files) => this.conversation.say(text, replyTo, files) }),
+            messagesToolset({ say: (text, replyTo, files) => this.conversation.say(text, replyTo, files), status: (tone, text) => this.conversation.status(tone, text) }),
             shellToolset(home),
             pages.toolset(),
             checkpoints.toolset(),

@@ -26,7 +26,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { errorMessage, problemsApi, stopProcess } from "@mileniumhq/paperapi";
 import { writeFileAtomicSync } from "@mileniumhq/paperapi/fs";
-import { CURRENT_CONVERSATION, LIMITS, PANEL_ID, type AccessEntry, type PageEntry, type PromptEntry, type ToolServerEntry, type ToolSignInEntry, type Attachment, type ChatEntry, type ChatState, type Harness, type PastConversation, type Settings, type SignInEntry, type WaitingMessage } from "../contract";
+import { CURRENT_CONVERSATION, LIMITS, PANEL_ID, type AccessEntry, type PageEntry, type PromptEntry, type ToolServerEntry, type ToolSignInEntry, type Attachment, type ChatEntry, type ChatState, type Harness, type PastConversation, type Settings, type SignInEntry, type StatusTone, type WaitingMessage } from "../contract";
 import type { StartOptions } from "./browser";
 import { Attachments } from "./attachments";
 import { sizeText } from "../lib/files";
@@ -393,6 +393,15 @@ export class Conversation {
         this.setTyping(false);
         this.put(entry);
         return { id: entry.id };
+    }
+
+    /** A status line from send_status, outside the bubbles: it answers nothing, so a reply is still owed. */
+    status(tone: StatusTone, text: string) {
+        if (!this.running) throw new Error("there's no conversation going on right now");
+        const line = text.trim();
+        if (!line) throw new Error("say something first");
+        if (line.length > LIMITS.status) throw new Error(`a status is at most ${LIMITS.status} characters; text the rest with send_message`);
+        this.put({ id: this.newId(), at: Date.now(), kind: "status", tone, text: line });
     }
 
     /** A tool call arrived, or the model began one that isn't written to the user: whatever it was writing is done. */
