@@ -116,7 +116,7 @@
             },
             {
                 "name": "Steam",
-                "detail": "Palworld, TF2, CS2, Garry's Mod and Rust servers and Workshop items via SteamCMD; Workshop search (Paperboard's modscan), pictures and Garry's Mod collections; and players' profile pictures from Steam Community, which sees the Steam id of each player shown"
+                "detail": "SteamCMD downloads, Workshop search (via Paperboard's modscan), pictures and collections, and players' profile pictures (Steam Community sees each Steam id)"
             },
             {
                 "name": "Facepunch",
