@@ -100,6 +100,18 @@ describe("OpenCode's provider server", () => {
         expect(host.kills.map((k) => k.signal)).toEqual(["SIGTERM"]);
     }, SLOW);
 
+    test("a server that answers before its catalog loads isn't read as having no providers", async () => {
+        const { root, providers } = rig();
+        plan(root, { catalogMs: 1_500 });
+        expect((await providers.list()).map((p) => p.id)).toContain("anthropic");
+        // one that loads with none lists none, without waiting out the catalog's time
+        await providers.stop();
+        plan(root, { integrations: [] });
+        const started = Date.now();
+        expect(await providers.list()).toEqual([]);
+        expect(Date.now() - started).toBeLessThan(5_000);
+    }, SLOW);
+
     test("each start's listeners go when its server stops", async () => {
         const { host, providers } = rig();
         for (let i = 0; i < 3; i++) {

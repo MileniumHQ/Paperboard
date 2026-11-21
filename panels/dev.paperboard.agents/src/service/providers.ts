@@ -4,6 +4,8 @@
 // or a sign-in page), and calls to connect, finish a sign-in and take a
 // credential back. This panel starts that server when asked, on a loopback
 // port behind a one-time password, and stops it when nothing is pending.
+// It answers before its catalog has loaded (an empty list until then), so
+// the server counts as ready once it says `integration.updated`.
 //
 // Keys go straight from the user's field to OpenCode's server and are kept
 // nowhere here; OpenCode stores them in its own folder.
@@ -16,6 +18,8 @@ import type { BrainsHost } from "./brains";
 
 export const SERVER_PROCESS_ID = "brain-opencode-server";
 const READY_MS = 30_000;
+/** past this, a list still empty is what OpenCode has */
+const CATALOG_MS = 10_000;
 const IDLE_MS = 60_000;
 const REQUEST_MS = 60_000;
 const KEY_MAX = 4_096;
@@ -203,6 +207,7 @@ export class Providers {
                 if (Date.now() > end) throw new ProviderError("OpenCode's provider server didn't start in time");
                 await new Promise((r) => setTimeout(r, 100));
             }
+            await this.catalog(base, auth);
         } catch (e) {
             this.unsubscribe();
             await stopProcess(SERVER_PROCESS_ID, { host: this.deps.host }).catch((k) => {
@@ -212,6 +217,46 @@ export class Providers {
         }
         this.server = { base, auth };
         return this.server;
+    }
+
+    /** Resolves once OpenCode's provider list has loaded, or it has had CATALOG_MS to. */
+    private async catalog(base: string, auth: string): Promise<void> {
+        const f = this.deps.fetch ?? fetch;
+        const abort = new AbortController();
+        const timer = setTimeout(() => abort.abort(), CATALOG_MS);
+        try {
+            const events = await f(`${base}/api/event`, { headers: { authorization: auth, accept: "text/event-stream" }, signal: abort.signal });
+            if (!events.ok || !events.body) throw new ProviderError(`OpenCode refused its event stream (${events.status})`);
+            const reader = events.body.pipeThrough(new TextDecoderStream()).getReader();
+            // subscribed first, then looked at: a catalog that loads in between is still heard
+            const listed = await f(`${base}/api/integration`, { headers: { authorization: auth }, signal: abort.signal });
+            if (!listed.ok) throw new ProviderError(`OpenCode refused (${listed.status}): ${(await listed.text()).slice(0, 300) || listed.statusText}`);
+            const body = (await listed.json()) as { data?: unknown };
+            if (Array.isArray(body?.data) && body.data.length > 0) return;
+            let buffer = "";
+            for (;;) {
+                const { value, done } = await reader.read();
+                if (done) throw new ProviderError("OpenCode closed its event stream before its providers loaded");
+                buffer += value;
+                const lines = buffer.split("\n");
+                buffer = lines.pop()!;
+                for (const line of lines) {
+                    if (!line.startsWith("data:")) continue;
+                    try {
+                        if ((JSON.parse(line.slice(5)) as { type?: unknown }).type === "integration.updated") return;
+                    } catch {
+                        // quiet: another kind of event, read past
+                    }
+                }
+            }
+        } catch (e) {
+            // the time is up: what it lists now is what it has
+            if (abort.signal.aborted) return;
+            throw e;
+        } finally {
+            clearTimeout(timer);
+            abort.abort();
+        }
     }
 
     private unsubscribe() {
