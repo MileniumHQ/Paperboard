@@ -281,7 +281,8 @@ export function blocksToolset(deps: BlocksToolsetDeps): Toolset {
         if (def.choices) return choiceList(def.choices);
         if (def.dynamicChoices) return choiceList(await deps.registry.choices(target.panelId, target.entry, input, options(args, target.project)));
         const custom = customType(def.type);
-        if (custom) return typeValues(custom, args, target.project);
+        // a type's values are listed in a project of the type's own panel: another panel's type has none of this one's projects
+        if (custom) return typeValues(custom, args, custom.startsWith(`${target.panelId}:`) ? target.project : undefined);
         return fault(`${input} takes any ${def.type}${def.default !== undefined ? ` (it's ${JSON.stringify(def.default)} when left out)` : ""}; there's no list of choices.`);
     }
 

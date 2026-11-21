@@ -14,6 +14,7 @@ afterEach(async () => {
 const USER = { fromFlow: false };
 const SERVERS = "dev.example.servers";
 const TERMINAL = "dev.paperboard.terminal";
+const BOTS = "dev.example.bots";
 
 /** Three panels' blocks in memory, with the daemon's checks, and what was run through them. */
 async function registry() {
@@ -46,6 +47,11 @@ async function registry() {
     const survival = await servers.defineProject({ id: "survival", name: "Survival" });
     projects.push({ panelId: SERVERS, id: "survival", name: "Survival" });
     await survival.register({ commands: [{ id: "say", name: "Say", inputs: { text: { type: "text", name: "Text" } }, run: ({ text }: { text: string }) => void ran.push(`say ${text}`) }] });
+    // another panel's project block that takes a server
+    const bots = panel(BOTS);
+    const guild = await bots.defineProject({ id: "guild", name: "Guild" });
+    projects.push({ panelId: BOTS, id: "guild", name: "Guild" });
+    await guild.register({ commands: [{ id: "announce", name: "Announce", inputs: { server: { type: `${SERVERS}:server`, name: "Server" } }, run: () => void ran.push("announce") }] });
     await panel(TERMINAL).panel.register({ commands: [{ id: "run-command", name: "Run Command", inputs: { command: { type: "text", name: "Command" } }, run: () => void ran.push("terminal") }] });
     await panel(PANEL_ID).panel.register({ commands: [{ id: "send-message", name: "Send Message", run: () => void ran.push("agent") }] });
 
@@ -106,6 +112,13 @@ describe("Paperboard's blocks as the agent's tools", () => {
         // the owning panel checks the inputs: one that's missing fails with its reason
         expect((await call("run_block", { panel: SERVERS, block: "command.say", project: "survival" })).isError).toBe(true);
         expect((await call("block_field", { type: server, field: "players", value: "survival" })).text).toBe(`${server} has no field "players". Its fields: status.`);
+    });
+
+    test("a project block's input of another panel's type lists that type's values outside the project", async () => {
+        const { call } = await registry();
+        const listed = await call("block_choices", { panel: BOTS, block: "command.announce", project: "guild", input: "server" });
+        expect(listed.isError).toBeUndefined();
+        expect(JSON.parse(listed.text).choices).toEqual([{ label: "Survival", value: "survival" }]);
     });
 
     test("non-object or oversized inputs are refused before anything runs", async () => {
