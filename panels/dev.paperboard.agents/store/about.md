@@ -1,6 +1,6 @@
 Text an agent like you'd text a friend. It has a computer of its own, so instead of telling you how to do something, it does it.
 
-- **Your choice of brain** - Use ChatGPT, Claude or another provider with your own account, plus free models built in.
+- **Your choice of brain** - Use ChatGPT, Claude, or another provider, including free ones through OpenCode.
 - **A computer of its own** - It browses the web in its own browser. Watch it work, or take over any time.
 - **Your computer, if you allow it** - It asks before it uses a folder or runs a command, and you can take anything back on the Access page.
 - **Apps made for you** - Ask for a planner, a tracker or a little game, and open it right beside the chat.

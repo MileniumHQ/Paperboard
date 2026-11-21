@@ -24,7 +24,7 @@ import { errorMessage } from "@mileniumhq/paperapi";
 import BrainLogo from "../lib/BrainLogo";
 import { COMPACTIONS, DEFAULT_MODEL, HARNESSES, LIMITS, type Compaction, type Harness, type Settings as Saved } from "../contract";
 import type { Agent } from "../lib/agent";
-import { SEARCH_MODELS_FROM, createModels, harnessCli, harnessDefaultDescription, harnessName, loadedModels } from "../lib/brains";
+import { SEARCH_MODELS_FROM, createModels, harnessCli, harnessName, harnessProgram, loadedModels } from "../lib/brains";
 import { BrainButtons, BrainStatus, SignInModal, brainLine, createBrainActions } from "./Brain";
 import Providers from "./Providers";
 
@@ -158,7 +158,7 @@ function AgentSettings(props: { agent: Agent }) {
                             searchable={listed().length >= SEARCH_MODELS_FROM}
                             onValueChange={(v) => report("Couldn't change the model", picked.set(String(v)))}
                         >
-                            <PaperSelectMenuItem value={DEFAULT_MODEL} icon="tune" description={harnessDefaultDescription(current().harness)}>
+                            <PaperSelectMenuItem value={DEFAULT_MODEL} icon="tune" description={`Whatever ${harnessProgram(current().harness)} is set to use`}>
                                 Default
                             </PaperSelectMenuItem>
                             <For each={listed()}>
@@ -201,13 +201,7 @@ function BrainsSettings(props: { agent: Agent }) {
                                     <span>{harnessName(h)}</span>
                                 </PaperFlex>
                             }
-                            description={
-                                <>
-                                    {brainLine(h, props.agent.state.brains[h])}
-                                    <br />
-                                    <PaperText preset="caption">{harnessCli(h)}</PaperText>
-                                </>
-                            }
+                            description={`${brainLine(h, props.agent.state.brains[h])} · ${harnessCli(h)}`}
                         >
                             <BrainButtons agent={props.agent} harness={h} actions={actions} onProviders={() => setProviders(true)} onSignIn={setSigningIn} />
                         </PaperSettingItem>

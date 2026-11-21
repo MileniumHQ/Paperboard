@@ -5,7 +5,7 @@
 // conversation as entry events plus a history call.
 
 import path from "node:path";
-import { DEFAULT_MODEL, HARNESSES, LIMITS, NO_ONBOARDING, ONBOARDING_STEP, PANEL_ID, parseSettings, type AiState, type OnboardingDraft, type Harness, type Settings, type agentsContract } from "../contract";
+import { BRAINS, DEFAULT_MODEL, HARNESSES, LIMITS, NO_ONBOARDING, ONBOARDING_STEP, PANEL_ID, parseSettings, type AiState, type OnboardingDraft, type Harness, type Settings, type agentsContract } from "../contract";
 import { HomeFolder, moveHomeFolder } from "./homeFolder";
 import { Checkpoints } from "./checkpoints";
 import { shellToolset } from "./shell";
@@ -18,7 +18,7 @@ import { Providers } from "./providers";
 import type { LoginMethod } from "./brainLogin";
 import { startComputerMcp, type ComputerMcp } from "./computerMcp";
 import { Conversation, type TurnHost } from "./conversation";
-import { CLAUDE_MEMORY_OFF, HARNESS_NAMES, customSection } from "./harness";
+import { CLAUDE_MEMORY_OFF, customSection } from "./harness";
 import { COMPUTER_INSTRUCTIONS, COMPUTER_TOOLS } from "./computerTools";
 import { filesToolset } from "./attachmentTools";
 import { blocksToolset, type BlocksRegistry } from "./blocksToolset";
@@ -373,7 +373,7 @@ export class AiApp {
         const settings = parseSettings(((input ?? {}) as Record<string, unknown>).settings);
         const brain = this.brains.snapshot()[settings.harness];
         if (brain.phase !== "ready") {
-            throw new Error(`${HARNESS_NAMES[settings.harness]} isn't ready: ${brain.installed ? "sign in to it first" : "install it first"}`);
+            throw new Error(`${BRAINS[settings.harness].program} isn't ready: ${brain.installed ? "sign in to it first" : "install it first"}`);
         }
         await this.host.writeSettings(settings);
         this.ctx.setState({ settings, onboarding: NO_ONBOARDING });
@@ -410,7 +410,7 @@ export class AiApp {
         return listModels(harness, this.brains.homes, (command, args, o) => {
             const h: Harness = command === "codex" ? "codex" : "opencode";
             const resolved = this.brains.resolve(h);
-            if (!resolved) throw new Error(`${HARNESS_NAMES[h]} isn't installed`);
+            if (!resolved) throw new Error(`${BRAINS[h].program} isn't installed`);
             return this.host.exec(resolved, args, { timeoutMs: o.timeoutMs, env: this.brains.env(h) });
         }, () => {
             const command = this.brains.resolve("claude-code");
@@ -423,7 +423,7 @@ export class AiApp {
     private brainProblem(harness: Harness): string | null {
         const b = this.brains.snapshot()[harness];
         if (b.phase === "ready" || b.phase === "signing-in" || b.phase === "installing") return null;
-        const name = HARNESS_NAMES[harness];
+        const name = BRAINS[harness].program;
         if (b.phase === "installed") return `${name} isn't signed in. Sign in to it in the agent's settings.`;
         if (b.phase === "failed" && b.installed) return `${name} isn't working: ${b.error}`;
         return null;
@@ -449,13 +449,13 @@ export class AiApp {
                 (e) => {
                     if (this.brains.snapshot()[harness].error !== errorMessage(e)) throw e;
                     // quiet: the brain's state says why, as it does for one found by a look
-                    console.error(`[agents] ${HARNESS_NAMES[harness]} on this computer wasn't used:`, String(e));
+                    console.error(`[agents] ${BRAINS[harness].program} on this computer wasn't used:`, String(e));
                     return { accepted: true };
                 },
             );
         }
         // quiet: a download and an unpack, accepted now and followed through state.brains, which carries the error
-        void (from === "package" ? this.brains.installOwn(harness) : this.brains.install(harness)).catch((e) => console.error(`[agents] ${HARNESS_NAMES[harness]} didn't install:`, String(e)));
+        void (from === "package" ? this.brains.installOwn(harness) : this.brains.install(harness)).catch((e) => console.error(`[agents] ${BRAINS[harness].program} didn't install:`, String(e)));
         return { accepted: true };
     }
 

@@ -3,33 +3,13 @@
 // its own (service/models.ts).
 
 import { createRead, type Read } from "@mileniumhq/paperui/headless";
-import type { BrainModel, Harness } from "../contract";
+import { BRAINS, type BrainModel, type Harness } from "../contract";
 import type { Agent } from "./agent";
 
-// "Claude", not "Claude Code": Anthropic's terms ask that products built on it don't carry its product's name
-const BRAINS: Record<Harness, { name: string; description: string; cli: string }> = {
-    codex: {
-        name: "ChatGPT",
-        description: "Sign in with your ChatGPT account",
-        cli: "Uses Codex CLI",
-    },
-    "claude-code": {
-        name: "Claude",
-        description: "Sign in with your Claude account",
-        cli: "Uses Claude CLI",
-    },
-    opencode: {
-        name: "Other provider",
-        description: "Free models included, or connect any provider",
-        cli: "Uses OpenCode CLI",
-    },
-};
-
 export const harnessName = (id: string) => BRAINS[id as Harness]?.name ?? id;
+export const harnessProgram = (id: string) => BRAINS[id as Harness]?.program ?? id;
 export const harnessDescription = (id: string) => BRAINS[id as Harness]?.description;
 export const harnessCli = (id: string) => BRAINS[id as Harness]?.cli;
-export const harnessDefaultLabel = (id: string | undefined) => (id === "opencode" ? "Use the default" : `Use ${harnessName(id ?? "")}'s default`);
-export const harnessDefaultDescription = (id: string) => (id === "opencode" ? "Whatever OpenCode is set to use" : `Whatever ${harnessName(id)} is set to use`);
 
 /** The models a harness offers, fetched again whenever the harness changes, or its brain is installed, signed in or removed (what it lists, or can't, depends on that). */
 export function createModels(agent: Agent, harness: () => Harness | undefined): Read<BrainModel[]> {

@@ -176,14 +176,14 @@ describe("failed turns", () => {
         rig = await conversationRig({ harness: "codex", resolve: () => null });
         rig.conversation.send("hi");
         await settled(rig);
-        expect(errors(rig).map((e) => (e as { text: string }).text)).toEqual(["ChatGPT isn't installed. Install it in the agent's settings."]);
+        expect(errors(rig).map((e) => (e as { text: string }).text)).toEqual(["Codex isn't installed. Install it in the agent's settings."]);
         expect(rig.host.started).toEqual([]);
         await rig.close();
 
-        rig = await conversationRig({ harness: "codex", problem: () => "ChatGPT isn't signed in. Sign in to it in the agent's settings." });
+        rig = await conversationRig({ harness: "codex", problem: () => "Codex isn't signed in. Sign in to it in the agent's settings." });
         rig.conversation.send("hi");
         await settled(rig);
-        expect(errors(rig).map((e) => (e as { text: string }).text)).toEqual(["ChatGPT isn't signed in. Sign in to it in the agent's settings."]);
+        expect(errors(rig).map((e) => (e as { text: string }).text)).toEqual(["Codex isn't signed in. Sign in to it in the agent's settings."]);
         expect(rig.host.started).toEqual([]);
     }, SLOW);
 });

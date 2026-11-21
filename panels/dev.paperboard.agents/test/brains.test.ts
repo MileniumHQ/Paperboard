@@ -193,7 +193,7 @@ describe("brains already on the computer", () => {
         } catch (e) {
             refused = e;
         }
-        expect(String(refused)).toContain("ChatGPT has no build for this computer");
+        expect(String(refused)).toContain("Codex has no build for this computer");
         expect(b.snapshot().codex).toMatchObject({ phase: "installed", existing: own, error: null });
     }, SLOW);
 
@@ -339,7 +339,7 @@ describe("brain sign-in", () => {
         await b.signIn("codex", "code");
         await states.until((s) => !!s.at(-1)?.codex.login, "Codex's device code");
         expect(b.snapshot().codex.login).toEqual({ url: "https://auth.openai.com/codex/device", code: "RJEL-90J2I", expectsCode: false, callback: null });
-        await expect(b.submitCode("codex", "RJEL-90J2I")).rejects.toThrow("ChatGPT isn't waiting for a code.");
+        await expect(b.submitCode("codex", "RJEL-90J2I")).rejects.toThrow("Codex isn't waiting for a code.");
         await b.cancelSignIn("codex");
         expect(b.snapshot().codex).toMatchObject({ phase: "installed", login: null, error: null });
     }, SLOW);

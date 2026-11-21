@@ -43,7 +43,7 @@ describe("a save the service refuses", () => {
         const page = await settingsPage({ codexOnPath: { signedIn: true } });
         await page.evaluate(fill(NAME, "Grace"));
         await page.waitFor(toast("Couldn't save the name"), "the name's refusal");
-        expect(await page.evaluate(`${toast("Couldn't save the name")}.innerText`)).toContain("ChatGPT isn't ready");
+        expect(await page.evaluate(`${toast("Couldn't save the name")}.innerText`)).toContain("Codex isn't ready");
         expect(await page.evaluate(`${NAME}.value`)).toBe("Grace");
 
         await page.evaluate(fill(FLOWS, "Reply with just the answer."));

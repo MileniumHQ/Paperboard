@@ -9,8 +9,8 @@
 import { randomUUID } from "node:crypto";
 import fs from "node:fs";
 import { errorMessage } from "@mileniumhq/paperapi";
-import { LIMITS, PANEL_ID, type Harness, type Settings } from "../contract";
-import { askInstructions, askLaunch, HARNESS_NAMES, removeLeftRunFiles, runFilesDir } from "./harness";
+import { BRAINS, LIMITS, PANEL_ID, type Harness, type Settings } from "../contract";
+import { askInstructions, askLaunch, removeLeftRunFiles, runFilesDir } from "./harness";
 import type { TurnLog } from "./turnLog";
 import type { TurnHost } from "./conversation";
 import { harnessFailure, runHarness } from "./harnessRun";
@@ -58,7 +58,7 @@ export class Asker {
         if (own && own.length > LIMITS.instructions) throw new Error(`instructions are limited to ${LIMITS.instructions} characters`);
         const custom = own || settings.automationInstructions || null;
         const command = this.deps.resolve(settings.harness);
-        if (!command) throw new Error(`${HARNESS_NAMES[settings.harness]} isn't installed. Install it in the agent's settings`);
+        if (!command) throw new Error(`${BRAINS[settings.harness].program} isn't installed. Install it in the agent's settings`);
         const problem = this.deps.problem?.(settings.harness);
         if (problem) throw new Error(problem);
         if (this.running.size >= MAX_ASKING) throw new Error(`the agent is already answering ${MAX_ASKING} questions; ask again once one is done`);
@@ -112,7 +112,7 @@ export class Asker {
                 : undefined,
         });
         if (r.timedOut) throw new Error(`the agent didn't answer within ${Math.round(ms / 1000)} seconds`);
-        const failed = harnessFailure(r, settings.harness, HARNESS_NAMES[settings.harness], "question");
+        const failed = harnessFailure(r, settings.harness, BRAINS[settings.harness].program, "question");
         if (failed) throw new Error(failed);
         // what it said before searching ("let me look that up") isn't the answer; its last message is
         const answer = messages.map((m) => m.trim()).filter(Boolean).at(-1);

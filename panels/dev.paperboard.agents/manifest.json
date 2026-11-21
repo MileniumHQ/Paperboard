@@ -48,7 +48,7 @@
         ],
         "services": [
             {
-                "name": "ChatGPT, Claude or Other provider",
+                "name": "ChatGPT, Claude or OpenCode",
                 "detail": "The brain you pick (Codex, Claude or OpenCode CLI), on your computer or downloaded from its maker, signed in with your account. Your chats go to it"
             },
             {
@@ -93,7 +93,7 @@
         "requirements": [
             {
                 "name": "Brain",
-                "detail": "A ChatGPT, Claude or other provider account (Other provider also has free models)"
+                "detail": "A ChatGPT or Claude account, or any provider through OpenCode (which has free models too)"
             },
             {
                 "name": "Computer",

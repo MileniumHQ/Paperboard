@@ -23,12 +23,10 @@ import { randomUUID } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { errorMessage } from "@mileniumhq/paperapi";
-import { characterOf, type Character, type Harness } from "../contract";
+import { BRAINS, characterOf, type Character, type Harness } from "../contract";
 import type { Sections } from "./toolsets";
 import { MCP_TOKEN_ENV } from "./computerMcp";
 import { writeLine } from "./mcpClient";
-
-export const HARNESS_NAMES: Record<Harness, string> = { codex: "ChatGPT", "claude-code": "Claude", opencode: "Other provider" };
 
 /** MCP server name the harness knows the service's endpoint by; its tools are mcp__paperboard__<tool> */
 export const MCP_SERVER = "paperboard";
@@ -43,7 +41,7 @@ const VOICES: Record<Character, string> = {
  * starts and again after a switch, and keeps the old note: without this the agent reads two models.
  */
 function modelNote(harness: Harness, model: string | null): string {
-    const which = model ?? `the model ${harness === "opencode" ? "OpenCode" : HARNESS_NAMES[harness]} is set to use by default`;
+    const which = model ?? `the model ${BRAINS[harness].program} is set to use by default`;
     return `You think with ${which}. The user can switch models mid-conversation: of the notes naming your model, the latest is current.`;
 }
 
