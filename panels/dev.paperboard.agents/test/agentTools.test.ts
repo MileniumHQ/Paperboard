@@ -4,7 +4,12 @@ import { memoryBlocks, type BlockProjectInfo, type MemoryBlocks } from "@mileniu
 import { blocksToolset, type BlocksRegistry } from "../src/service/blocksToolset";
 import { MCP_TOKEN_ENV, startComputerMcp, type ComputerMcp } from "../src/service/computerMcp";
 import { MAX_IMAGES, toToolResult } from "../src/service/mcpClient";
-import { toolbox, type Toolset } from "../src/service/toolsets";
+import { toolbox, USER_TURN, type Toolset } from "../src/service/toolsets";
+import { messagesToolset } from "../src/service/messages";
+import { Access, type AccessDeps } from "../src/service/access";
+import { Prompts, type PromptDeps } from "../src/service/prompts";
+import { ServerTools, type ServerToolsDeps } from "../src/service/serverTools";
+import { SignIns, type SignInDeps } from "../src/service/signIn";
 
 const closers: (() => Promise<void>)[] = [];
 afterEach(async () => {
@@ -69,6 +74,27 @@ async function registry() {
     const set = blocksToolset({ registry: host, enabled: () => true });
     return { set, ran, call: (name: string, args: Record<string, unknown>) => set.call(name, args, USER) };
 }
+
+// The typing bubble shows while the model writes a toolset's cards: each one has to be a tool it offers.
+describe("the tools written to the user", () => {
+    test("each toolset's writes are tools it offers, and the toolbox types for them and nothing else", async () => {
+        // listing and writes read none of their deps
+        const sets: Toolset[] = [
+            messagesToolset({ say: () => ({ id: "m" }), status: () => undefined }),
+            new SignIns({} as SignInDeps).toolset(),
+            new Access({} as AccessDeps).toolset(),
+            new Prompts({} as PromptDeps).toolset(),
+            new ServerTools({} as ServerToolsDeps).toolset(),
+        ];
+        for (const set of sets) {
+            const offered = (await set.tools(USER_TURN)).map((t) => t.name);
+            for (const name of set.writes ?? []) expect(offered).toContain(name);
+        }
+        const box = toolbox(sets);
+        const cards = (await box.list()).map((t) => t.name).filter((n) => box.writes(n));
+        expect(cards.sort()).toEqual(["add_tool_server", "ask_to_sign_in", "ask_tool_server_sign_in", "ask_user", "request_access", "send_message", "update_tool_server"]);
+    });
+});
 
 // Only listed blocks can be used.
 describe("Paperboard's blocks as the agent's tools", () => {

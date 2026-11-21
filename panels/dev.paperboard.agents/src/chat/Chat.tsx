@@ -1,10 +1,10 @@
 import { For, Show, createComputed, createEffect, createMemo, createSignal, on, onCleanup, onMount, type JSX } from "solid-js";
-import { PAPER_PANEL_COMPACT_WIDTH, PaperButton, PaperContextMenu, PaperError, PaperContextMenuItem, PaperEmptyState, PaperFlex, PaperIcon, copyText, haptic, PaperMarkdown, useContextMenuState, PaperPresence, PaperProgress, PaperText, showError, type MarkdownImage, type MarkdownLink } from "@mileniumhq/paperui";
+import { PAPER_PANEL_COMPACT_WIDTH, PaperButton, PaperContextMenu, PaperError, PaperContextMenuItem, PaperEmptyState, PaperFlex, PaperIcon, copyText, haptic, PaperMarkdown, useContextMenuState, PaperPresence, PaperProgress, PaperText, getVarCss, showError, type MarkdownImage, type MarkdownLink } from "@mileniumhq/paperui";
 import { createStore, reconcile } from "solid-js/store";
 import { AGENT_FACE_PX, Face } from "../face/Face";
 import { skinFor } from "../face/skins";
 import type { FaceController } from "../face/controller";
-import type { AccessEntry, ChatEntry, PageEntry, PromptEntry, SignInEntry, ToolServerEntry, ToolSignInEntry, WaitingMessage } from "../contract";
+import type { AccessEntry, ChatEntry, PageEntry, PromptEntry, SignInEntry, StatusEntry, StatusTone, ToolServerEntry, ToolSignInEntry, WaitingMessage } from "../contract";
 import type { Agent } from "../lib/agent";
 import PageCard from "../pages/PageCard";
 import type { Launcher } from "../pages/launcher";
@@ -38,7 +38,7 @@ interface Row {
     entry: ChatEntry | null;
     /** a message not yet read by the agent */
     waiting: WaitingMessage | null;
-    side: "me" | "them" | "note" | "card" | "access" | "prompt" | "tool-server" | "tool-sign-in" | "app";
+    side: "me" | "them" | "note" | "card" | "access" | "prompt" | "tool-server" | "tool-sign-in" | "app" | "status";
     /** a timestamp to show above this row, if any */
     stamp: number | null;
     joinsPrev: boolean;
@@ -126,11 +126,10 @@ export default function Chat(props: { agent: Agent; face: FaceController; pages:
         }),
     );
 
-    // Old transcripts held tool-call entries; only messages, errors, the agent's requests and pages are shown.
+    // every entry is shown: old transcripts' tool-call entries never get this far (readTranscript drops them)
     const rows = createMemo<Row[]>(() => {
-        const shown = props.agent.entries.filter((e) => e.kind === "user" || e.kind === "agent" || e.kind === "error" || e.kind === "sign-in" || e.kind === "access" || e.kind === "prompt" || e.kind === "tool-server" || e.kind === "tool-sign-in" || e.kind === "app");
         const items: Pick<Row, "key" | "entry" | "waiting" | "side">[] = [
-            ...shown.map((entry) => ({ key: entry.id, entry, waiting: null, side: sideOf(entry) })),
+            ...props.agent.entries.map((entry) => ({ key: entry.id, entry, waiting: null, side: sideOf(entry) })),
             ...props.agent.state.chat.waiting.map((w) => ({ key: w.id, entry: null, waiting: w, side: "me" as const })),
         ];
         const gap = (a: (typeof items)[number], b: (typeof items)[number]) => (a.entry && b.entry ? b.entry.at - a.entry.at : 0);
@@ -370,6 +369,11 @@ export default function Chat(props: { agent: Agent; face: FaceController; pages:
                                 <Show when={row.side === "app"}>
                                     <PageCard entry={row.entry as PageEntry} pages={props.pages} />
                                 </Show>
+                                <Show when={row.side === "status"}>
+                                    <PaperPresence when appear={arriving().has(row.key)} motion="pop">
+                                        <StatusLine entry={row.entry as StatusEntry} />
+                                    </PaperPresence>
+                                </Show>
                                 <Show when={row.side === "me" || row.side === "them"}>
                                     <PaperPresence when appear={arriving().has(row.key)} motion="pop">
                                         <Bubble
@@ -387,7 +391,7 @@ export default function Chat(props: { agent: Agent; face: FaceController; pages:
                             </>
                         )}
                     </For>
-                    {/* only while it writes: working with its tools shows on its face, not as typing */}
+                    {/* only while it writes a text or a card: thinking and working show on its face, not as typing */}
                     {/* it pops in like a bubble, and goes at once: the reply it turns into takes its place */}
                     <PaperPresence when={props.agent.state.chat.typing} appear motion="pop" exitClass="">
                         <div class={styles.row} classList={{ [styles.them!]: true, [styles.joinsPrev!]: typingJoins() }} role="status" aria-label={`${name()} is typing`}>
@@ -449,7 +453,7 @@ export default function Chat(props: { agent: Agent; face: FaceController; pages:
     );
 }
 
-const SIDES: Partial<Record<ChatEntry["kind"], Row["side"]>> = { user: "me", agent: "them", "sign-in": "card", access: "access", prompt: "prompt", "tool-server": "tool-server", "tool-sign-in": "tool-sign-in", app: "app" };
+const SIDES: Partial<Record<ChatEntry["kind"], Row["side"]>> = { user: "me", agent: "them", "sign-in": "card", access: "access", prompt: "prompt", "tool-server": "tool-server", "tool-sign-in": "tool-sign-in", app: "app", status: "status" };
 const sideOf = (e: ChatEntry): Row["side"] => SIDES[e.kind] ?? "note";
 
 /**
@@ -462,6 +466,26 @@ function FailedTurn(props: { entry: Extract<ChatEntry, { kind: "error" }> }) {
             <PaperFlex maxWidth="panel-small" data-message={props.entry.id}>
                 <PaperError title={props.entry.title ?? props.entry.text} error={props.entry.title ? props.entry.text : undefined} />
             </PaperFlex>
+        </PaperFlex>
+    );
+}
+
+const TONES: Record<StatusTone, { icon: string; color: string; label: string }> = {
+    done: { icon: "check_circle", color: "success", label: "Done" },
+    failed: { icon: "cancel", color: "danger", label: "Failed" },
+    info: { icon: "info", color: "primary", label: "Info" },
+    warning: { icon: "warning", color: "warning", label: "Warning" },
+};
+
+/** A status line from the agent: its icon and a few words, outside the bubbles. */
+function StatusLine(props: { entry: StatusEntry }) {
+    const tone = () => TONES[props.entry.tone];
+    return (
+        <PaperFlex direction="row" align="center" gap="half" class={styles.status} data-message={props.entry.id}>
+            <PaperIcon label={tone().label} style={{ color: getVarCss(tone().color) }}>
+                {tone().icon}
+            </PaperIcon>
+            <PaperText preset="hint">{props.entry.text}</PaperText>
         </PaperFlex>
     );
 }

@@ -33,6 +33,11 @@ export interface Toolset {
     instructions?(mode: TurnMode): string | Promise<string>;
     /** what's true right now (the memory, the routines, what's allowed): a part of the instructions' Now */
     context?(mode: TurnMode): string | Promise<string>;
+    /**
+     * Its tools whose arguments are something the user reads: a text, or a card in the chat (a sign-in, a request
+     * to allow something). While the model writes one of these, the agent is typing; any other tool is work.
+     */
+    writes?: readonly string[];
 }
 
 /** Each toolset's parts of the agent's instructions, in toolset order. */
@@ -45,6 +50,8 @@ export interface Toolbox {
     list(): Promise<ToolSpec[]>;
     call(name: string, args: Record<string, unknown>): Promise<ToolResult>;
     instructions(): Promise<Sections>;
+    /** the model writing this tool's call is the agent typing to the user (Toolset.writes) */
+    writes(name: string): boolean;
 }
 
 /**
@@ -52,6 +59,7 @@ export interface Toolbox {
  * fails rather than pick one. A tool the mode doesn't list can't be called either.
  */
 export function toolbox(sets: Toolset[], mode: () => TurnMode = () => USER_TURN): Toolbox {
+    const written = new Set(sets.flatMap((set) => set.writes ?? []));
     const listAll = async (m: TurnMode) => {
         const owners = new Map<string, Toolset>();
         const tools: ToolSpec[] = [];
@@ -84,5 +92,6 @@ export function toolbox(sets: Toolset[], mode: () => TurnMode = () => USER_TURN)
             }
             return out;
         },
+        writes: (name) => written.has(name),
     };
 }

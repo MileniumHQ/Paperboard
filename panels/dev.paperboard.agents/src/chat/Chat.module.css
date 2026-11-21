@@ -73,11 +73,15 @@
     flex-direction: column;
 }
 
-/* the conversation itself, under the top bar */
+/* the conversation itself, under the top bar: in the message box's column, so a wide window doesn't pull the sides apart */
 .messages {
     flex: 1 0 auto;
     display: flex;
     flex-direction: column;
+    box-sizing: border-box;
+    width: 100%;
+    max-width: var(--paper-page-width);
+    margin: 0 auto;
     gap: var(--paper-uigap-third);
     padding: var(--paper-uigap) var(--paper-uigap-double) var(--paper-uigap-double);
 }
@@ -246,6 +250,14 @@
 
 .them .swipeIcon {
     left: 0;
+}
+
+/* ---- a status line: on the agent's side, in line with its bubbles */
+
+.status {
+    align-self: flex-start;
+    max-width: min(100%, var(--paper-size-panel-large));
+    padding: var(--paper-uigap-onefourth) 0;
 }
 
 /* ---- the typing indicator */

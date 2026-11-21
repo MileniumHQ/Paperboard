@@ -94,7 +94,7 @@ describe("uploads", () => {
 describe("the agent's files in a message", () => {
     const texter = () => {
         const said: { text: string; files?: string[] }[] = [];
-        return { said, tools: messagesToolset({ say: (text, _replyTo, files) => (said.push({ text, files }), { id: "m1" }) }) };
+        return { said, tools: messagesToolset({ say: (text, _replyTo, files) => (said.push({ text, files }), { id: "m1" }), status: () => undefined }) };
     };
 
     test("send_message carries file ids in a chat, and refuses a list that isn't one", async () => {

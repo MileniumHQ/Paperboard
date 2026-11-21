@@ -9,6 +9,7 @@ import { startComputerMcp, type ComputerMcp } from "../../src/service/computerMc
 import { Conversation, TURN_PROC_ID } from "../../src/service/conversation";
 import { openTurnLog } from "../../src/service/turnLog";
 import { messagesToolset } from "../../src/service/messages";
+import { SignIns } from "../../src/service/signIn";
 import { toolbox } from "../../src/service/toolsets";
 import { brainProgram, fakeEnv, fakeLog, Recorder, TestHost, tempDir } from "./host";
 
@@ -42,8 +43,26 @@ export async function conversationRig(o: { harness?: Harness; contextBudget?: nu
     const agyHome = path.join(root, "storage", "brains", "antigravity");
     fs.mkdirSync(codexHome, { recursive: true });
     fs.mkdirSync(agyHome, { recursive: true });
-    // the real messages toolset, texting the rig's conversation
-    const mcp = await startComputerMcp(toolbox([messagesToolset({ say: (text, replyTo, files) => rig.conversation.say(text, replyTo, files) })]));
+    // the real messages toolset, texting the rig's conversation,
+    // and a card's: a sign-in on a page the computer pretends to have open, filled by nothing
+    const signIns = new SignIns({
+        prepare: async (args) => ({ text: JSON.stringify({ site: "example.com", fields: (args.fields as unknown[]).map(() => ({ secret: false })) }), images: [{ data: "aW1n", type: "image/png" }] }),
+        fill: async () => ({ ok: true }),
+        post: (entry) => rig.conversation.post(entry),
+        tell: (text) => rig.conversation.tell(text),
+    });
+    const tools = toolbox([
+        messagesToolset({ say: (text, replyTo, files) => rig.conversation.say(text, replyTo, files), status: (tone, text) => rig.conversation.status(tone, text) }),
+        signIns.toolset(),
+    ]);
+    // a call that arrives is written, as the service tells the conversation (app.ts)
+    const mcp = await startComputerMcp({
+        list: () => tools.list(),
+        call: (name, args) => {
+            rig.conversation.called(name);
+            return tools.call(name, args);
+        },
+    });
     const settings: Settings = { name: "Ada", color: "blue", harness, model: null, compaction: "summarize" };
     const entries = new Recorder<ChatEntry>();
     const states = new Recorder<ChatState>();
@@ -59,6 +78,7 @@ export async function conversationRig(o: { harness?: Harness; contextBudget?: nu
             problem: o.problem,
             mcp: () => ({ url: mcp.url, token: mcp.token, onToolsListed: (cb) => mcp.onToolsListed(cb) }),
             instructions: o.instructions ?? (async () => ({ tools: ["**Test:** a section"], now: [] })),
+            writes: (tool) => tools.writes(tool),
             emit: entries.push,
             onState: states.push,
             codexHome,
