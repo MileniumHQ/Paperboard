@@ -25,6 +25,34 @@ export const characterOf = (name: string | null | undefined): Character | null =
 export const HARNESSES = ["codex", "claude-code", "opencode"] as const;
 export type Harness = (typeof HARNESSES)[number];
 
+export interface BrainInfo {
+    /** Choice label shown in the picker, settings, and dropdown. */
+    readonly name: string;
+    /** Underlying CLI program name used in sentences about the program. */
+    readonly program: string;
+    /** How the choice is signed in to, one line. */
+    readonly description: string;
+}
+
+// "Claude", not "Claude Code": Anthropic's terms ask that products built on it don't carry its product's name
+export const BRAINS: Record<Harness, BrainInfo> = {
+    codex: {
+        name: "ChatGPT",
+        program: "Codex",
+        description: "Sign in with your ChatGPT account",
+    },
+    "claude-code": {
+        name: "Claude",
+        program: "Claude",
+        description: "Sign in with your Claude account",
+    },
+    opencode: {
+        name: "Other provider",
+        program: "OpenCode",
+        description: "Free models included, or connect any provider",
+    },
+};
+
 /** The model a brain is on when none is chosen: whatever the harness is set to use already. Saved as null. */
 export const DEFAULT_MODEL = "default";
 

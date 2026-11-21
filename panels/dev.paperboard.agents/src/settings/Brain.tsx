@@ -22,9 +22,8 @@ import {
     createAction,
     useContextMenuState,
 } from "@mileniumhq/paperui";
-import { SIGN_IN_REQUIRED, USAGE_HARNESSES, type BrainState, type Harness } from "../contract";
+import { BRAINS, SIGN_IN_REQUIRED, USAGE_HARNESSES, type BrainState, type Harness } from "../contract";
 import type { Agent } from "../lib/agent";
-import { harnessName } from "../lib/brains";
 import { submitOnPaste } from "../lib/paste";
 import { createLoopbackCatch } from "../lib/loopback";
 import Usage from "./Usage";
@@ -79,14 +78,14 @@ export function createBrainActions(agent: Agent) {
     };
     return {
         busy: (h: Harness) => (running[h] ?? 0) > 0,
-        install: (h: Harness) => act(h, `Couldn't install ${harnessName(h)}`, () => agent.calls.installBrain({ harness: h })),
-        useFound: (h: Harness) => act(h, `Couldn't use ${harnessName(h)}`, () => agent.calls.installBrain({ harness: h, from: "computer" })),
-        installOwn: (h: Harness) => act(h, `Couldn't install ${harnessName(h)}`, () => agent.calls.installBrain({ harness: h, from: "package" })),
-        signIn: (h: Harness) => act(h, `Couldn't sign in to ${harnessName(h)}`, () => agent.calls.signInBrain({ harness: h })),
-        cancel: (h: Harness) => act(h, `Couldn't stop signing in to ${harnessName(h)}`, () => agent.calls.cancelBrainSignIn({ harness: h })),
-        signOut: (h: Harness) => act(h, `Couldn't sign out of ${harnessName(h)}`, () => agent.calls.signOutBrain({ harness: h })),
-        submitCode: (h: Harness, code: string) => act(h, `${harnessName(h)} didn't take the code`, () => agent.calls.brainCode({ harness: h, code })),
-        finishAt: (h: Harness, address: string) => act(h, `Couldn't finish signing in to ${harnessName(h)}`, () => agent.calls.brainAddress({ harness: h, address })),
+        install: (h: Harness) => act(h, `Couldn't install ${BRAINS[h].program}`, () => agent.calls.installBrain({ harness: h })),
+        useFound: (h: Harness) => act(h, `Couldn't use ${BRAINS[h].program}`, () => agent.calls.installBrain({ harness: h, from: "computer" })),
+        installOwn: (h: Harness) => act(h, `Couldn't install ${BRAINS[h].program}`, () => agent.calls.installBrain({ harness: h, from: "package" })),
+        signIn: (h: Harness) => act(h, `Couldn't sign in to ${BRAINS[h].name}`, () => agent.calls.signInBrain({ harness: h })),
+        cancel: (h: Harness) => act(h, `Couldn't stop signing in to ${BRAINS[h].name}`, () => agent.calls.cancelBrainSignIn({ harness: h })),
+        signOut: (h: Harness) => act(h, `Couldn't sign out of ${BRAINS[h].name}`, () => agent.calls.signOutBrain({ harness: h })),
+        submitCode: (h: Harness, code: string) => act(h, `${BRAINS[h].name} didn't take the code`, () => agent.calls.brainCode({ harness: h, code })),
+        finishAt: (h: Harness, address: string) => act(h, `Couldn't finish signing in to ${BRAINS[h].name}`, () => agent.calls.brainAddress({ harness: h, address })),
     };
 }
 export type BrainActions = ReturnType<typeof createBrainActions>;
@@ -97,7 +96,7 @@ export type BrainActions = ReturnType<typeof createBrainActions>;
  */
 export function BrainStatus(props: { agent: Agent; harness: Harness; actions: BrainActions }) {
     const b = () => props.agent.state.brains[props.harness];
-    const name = () => harnessName(props.harness);
+    const name = () => BRAINS[props.harness].program;
 
     return (
         <PaperFlex gap="half">
@@ -146,7 +145,7 @@ export function BrainStatus(props: { agent: Agent; harness: Harness; actions: Br
  */
 export function SignInSteps(props: { agent: Agent; harness: Harness; actions: BrainActions; cancel?: JSX.Element }) {
     const b = () => props.agent.state.brains[props.harness];
-    const name = () => harnessName(props.harness);
+    const name = () => BRAINS[props.harness].name;
     // the page was opened: what it hands back is the one thing left to show
     const [opened, setOpened] = createSignal(false);
     createEffect(on(() => b().login?.url, () => setOpened(false)));
@@ -193,7 +192,7 @@ export function SignInSteps(props: { agent: Agent; harness: Harness; actions: Br
             when={b().login}
             fallback={
                 <PaperFlex gap="full" align="start">
-                    <PaperLoader loaderStatus="indeterminate" label={`Getting ${name()}'s sign-in page`} />
+                    <PaperLoader loaderStatus="indeterminate" label={`Getting ${BRAINS[props.harness].program}'s sign-in page`} />
                     {props.cancel}
                 </PaperFlex>
             }
@@ -311,7 +310,7 @@ export function SignInModal(props: { agent: Agent; harness: Harness | null; acti
             open={props.harness !== null}
             onClose={close}
             size="small"
-            title={props.harness ? `Sign in to ${harnessName(props.harness)}` : ""}
+            title={props.harness ? `Sign in to ${BRAINS[props.harness].name}` : ""}
             footer={
                 <Show
                     when={done()}
@@ -342,7 +341,7 @@ export function SignInModal(props: { agent: Agent; harness: Harness | null; acti
                             </Match>
                             <Match when={b()!.phase === "failed"}>
                                 <PaperError
-                                    title={`Couldn't sign in to ${harnessName(h())}`}
+                                    title={`Couldn't sign in to ${BRAINS[h()].name}`}
                                     error={b()!.error}
                                     action={{ label: "Try again", disabled: props.actions.busy(h()), onClick: () => void props.actions.signIn(h()) }}
                                 />
@@ -409,7 +408,7 @@ export function BrainButtons(props: { agent: Agent; harness: Harness; actions: B
                     icon
                     variant="text"
                     title="More"
-                    aria-label={`More for ${harnessName(props.harness)}`}
+                    aria-label={`More for ${BRAINS[props.harness].name}`}
                     disabled={busy()}
                     onClick={(e) => menu.openBelow(e, { align: "right" })}
                 >

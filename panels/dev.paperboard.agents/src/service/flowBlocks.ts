@@ -2,11 +2,10 @@
 // and events, which app.ts registers and keeps told of changes (blocksSync.ts).
 
 import type { BlockSet } from "@mileniumhq/paperapi";
-import { DEFAULT_MODEL, HARNESSES, LIMITS, SIGN_IN_REQUIRED, USAGE_HARNESSES, type PageInfo, type BrainModel, type BrainState, type BrainUsage, type Harness, type Routine } from "../contract";
+import { BRAINS, DEFAULT_MODEL, HARNESSES, LIMITS, SIGN_IN_REQUIRED, USAGE_HARNESSES, type PageInfo, type BrainModel, type BrainState, type BrainUsage, type Harness, type Routine } from "../contract";
 import type { ServerStatus } from "../toolsContract";
 import { DAY_NAMES, describeSchedule, localStamp } from "../routineText";
 import { ASK_MS } from "./ask";
-import { HARNESS_NAMES } from "./harness";
 import type { Memory } from "./memory";
 import { parseSchedule, type Routines } from "./routines";
 
@@ -140,7 +139,7 @@ const instructions = {
     maxLength: LIMITS.instructions,
 } as const;
 
-const brainChoices = (only: (h: Harness) => boolean = () => true) => HARNESSES.filter(only).map((h) => ({ label: HARNESS_NAMES[h], value: h }));
+const brainChoices = (only: (h: Harness) => boolean = () => true) => HARNESSES.filter(only).map((h) => ({ label: BRAINS[h].name, value: h }));
 
 const brainInput = { type: "brain", name: "Brain" } as const;
 
@@ -166,11 +165,11 @@ export function flowBlocks(host: BlocksHost): BlockSet {
     const models = async (): Promise<BrainModel[]> => {
         const harness = host.brains.current();
         const listed = await host.models.list();
-        return [{ id: DEFAULT_MODEL, name: "Default", description: `Whatever ${HARNESS_NAMES[harness]} is set to use`, older: false }, ...listed];
+        return [{ id: DEFAULT_MODEL, name: "Default", description: `Whatever ${BRAINS[harness].program} is set to use`, older: false }, ...listed];
     };
     const model = async (id: string) => {
         const found = (await models()).find((m) => m.id === id);
-        if (!found) throw new Error(`${HARNESS_NAMES[host.brains.current()]} has no model "${id}"`);
+        if (!found) throw new Error(`${BRAINS[host.brains.current()].program} has no model "${id}"`);
         return found;
     };
     const brain = (id: string): BrainState => {
@@ -179,7 +178,7 @@ export function flowBlocks(host: BlocksHost): BlockSet {
     };
     const brainName = (id: string) => {
         brain(id);
-        return HARNESS_NAMES[id as Harness];
+        return BRAINS[id as Harness].name;
     };
     /**
      * A brain's usage, one answer per flow step: the list reads it fresh, and the fields read after it reuse that
@@ -202,7 +201,7 @@ export function flowBlocks(host: BlocksHost): BlockSet {
         const harness = id.slice(0, slash) as Harness;
         if (slash < 0 || !USAGE_HARNESSES.includes(harness)) throw new Error(`"${id}" isn't a usage limit; one is a brain and a limit, like claude-code/session`);
         const found = (await usageOf(harness, false)).windows.find((w) => w.id === id.slice(slash + 1));
-        if (!found) throw new Error(`${HARNESS_NAMES[harness]} has no usage limit "${id.slice(slash + 1)}" right now`);
+        if (!found) throw new Error(`${BRAINS[harness].name} has no usage limit "${id.slice(slash + 1)}" right now`);
         return found;
     };
     const toolServer = (name: string): ToolServerFacts => {
@@ -752,14 +751,14 @@ export function flowBlocks(host: BlocksHost): BlockSet {
                 name: "Install Brain",
                 category: CATEGORY.brain,
                 icon: "download",
-                description: "Downloads and installs a brain, waiting until it's done. Codex and Claude need signing in to in the Agent panel after.",
+                description: "Downloads and installs a brain, waiting until it's done. ChatGPT and Claude need signing in to in the Agent panel after.",
                 text: "install {brain}",
                 inputs: { brain: brainInput },
                 run: ({ brain: id }: { brain: Harness }) =>
                     ready(() => {
                         const b = brain(id);
-                        if (b.phase === "installing") throw new Error(`${HARNESS_NAMES[id]} is installing already`);
-                        if (b.installed && b.phase !== "failed" && !b.existing) throw new Error(`${HARNESS_NAMES[id]} is installed already`);
+                        if (b.phase === "installing") throw new Error(`${BRAINS[id].program} is installing already`);
+                        if (b.installed && b.phase !== "failed" && !b.existing) throw new Error(`${BRAINS[id].program} is installed already`);
                         return host.brains.install(id);
                     }),
             },
@@ -768,12 +767,12 @@ export function flowBlocks(host: BlocksHost): BlockSet {
                 name: "Use Brain on This Computer",
                 category: CATEGORY.brain,
                 icon: "computer",
-                description: "Has a brain run the Codex, Claude or OpenCode already on this computer instead of downloading one. Fails when it isn't there, or the brain is installed already.",
+                description: "Has a brain run the Codex CLI, Claude CLI or OpenCode CLI already on this computer instead of downloading one. Fails when it isn't there, or the brain is installed already.",
                 text: "use the {brain} on this computer",
                 inputs: { brain: brainInput },
                 run: ({ brain: id }: { brain: Harness }) =>
                     ready(() => {
-                        if (brain(id).existing) throw new Error(`${HARNESS_NAMES[id]} uses the one on this computer already`);
+                        if (brain(id).existing) throw new Error(`${BRAINS[id].program} uses the one on this computer already`);
                         return host.brains.useFound(id);
                     }),
             },
@@ -787,7 +786,7 @@ export function flowBlocks(host: BlocksHost): BlockSet {
                 inputs: { brain: { type: "brain", name: "Brain", choices: brainChoices((h) => SIGN_IN_REQUIRED[h]) } },
                 run: ({ brain: id }: { brain: Harness }) =>
                     ready(() => {
-                        if (!brain(id).signedIn) throw new Error(`${HARNESS_NAMES[id]} isn't signed in`);
+                        if (!brain(id).signedIn) throw new Error(`${BRAINS[id].program} isn't signed in`);
                         return host.brains.signOut(id);
                     }),
             },

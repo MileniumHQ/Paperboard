@@ -6,9 +6,8 @@
 import { For, Match, Show, Switch, createSignal } from "solid-js";
 import { PaperButton, PaperError, PaperFlex, PaperLoader, PaperPopover, PaperProgress, PaperText, type PaperRole } from "@mileniumhq/paperui";
 import { createRead } from "@mileniumhq/paperui/headless";
-import type { Harness, UsageWindow } from "../contract";
+import { BRAINS, type Harness, type UsageWindow } from "../contract";
 import type { Agent } from "../lib/agent";
-import { harnessName } from "../lib/brains";
 
 const MINUTE = 60_000;
 const HOUR = 60 * MINUTE;
@@ -50,7 +49,7 @@ export default function Usage(props: { agent: Agent; harness: Harness }) {
     const [open, setOpen] = createSignal(false);
     let button: HTMLButtonElement | undefined;
 
-    const name = () => harnessName(props.harness);
+    const name = () => BRAINS[props.harness].name;
     // read each time it opens; closed, nothing is read and the last answer stays for the next opening
     const usage = createRead((h: Harness) => props.agent.calls.usage({ harness: h }), { source: () => open() && props.harness });
 

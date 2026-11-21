@@ -26,11 +26,11 @@ import fs from "node:fs";
 import path from "node:path";
 import { errorMessage, problemsApi, stopProcess } from "@mileniumhq/paperapi";
 import { writeFileAtomicSync } from "@mileniumhq/paperapi/fs";
-import { CURRENT_CONVERSATION, LIMITS, PANEL_ID, type AccessEntry, type PageEntry, type PromptEntry, type ToolServerEntry, type ToolSignInEntry, type Attachment, type ChatEntry, type ChatState, type Harness, type PastConversation, type Settings, type SignInEntry, type WaitingMessage } from "../contract";
+import { BRAINS, CURRENT_CONVERSATION, LIMITS, PANEL_ID, type AccessEntry, type PageEntry, type PromptEntry, type ToolServerEntry, type ToolSignInEntry, type Attachment, type ChatEntry, type ChatState, type Harness, type PastConversation, type Settings, type SignInEntry, type WaitingMessage } from "../contract";
 import type { StartOptions } from "./browser";
 import { Attachments } from "./attachments";
 import { sizeText } from "../lib/files";
-import { HARNESS_NAMES, codexContext, instructions, removeLeftRunFiles, runFilesDir, turnLaunch, type TurnLaunch } from "./harness";
+import { codexContext, instructions, removeLeftRunFiles, runFilesDir, turnLaunch, type TurnLaunch } from "./harness";
 import { harnessFailure, runHarness } from "./harnessRun";
 import type { TurnLog } from "./turnLog";
 import { ATTACHMENTS, CARRY, History, summary, THREADS } from "./history";
@@ -543,7 +543,7 @@ export class Conversation {
 
     private async run(settings: Settings, thread: string | null, message: string) {
         const command = this.deps.resolve(settings.harness);
-        if (!command) throw new Error(`${HARNESS_NAMES[settings.harness]} isn't installed. Install it in the agent's settings.`);
+        if (!command) throw new Error(`${BRAINS[settings.harness].program} isn't installed. Install it in the agent's settings.`);
         const problem = this.deps.problem?.(settings.harness);
         if (problem) throw new Error(problem);
         const mcp = this.deps.mcp();

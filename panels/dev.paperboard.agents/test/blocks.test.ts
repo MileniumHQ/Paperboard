@@ -327,7 +327,7 @@ describe("the agent's blocks", () => {
 
         await expect(rig.blocks.run("switch-brain", { brain: "claude-code" })).rejects.toThrow("Claude isn't ready: sign in to it first");
         await expect(rig.blocks.run("sign-out-brain", { brain: "claude-code" })).rejects.toThrow("Claude isn't signed in");
-        await expect(rig.blocks.run("sign-out-brain", { brain: "opencode" })).rejects.toThrow('"Brain" must be one of Codex, Claude');
+        await expect(rig.blocks.run("sign-out-brain", { brain: "opencode" })).rejects.toThrow('"Brain" must be one of ChatGPT, Claude');
         await rig.blocks.run("sign-out-brain", { brain: "codex" });
         expect(await rig.blocks.property("brain", "signed-in", "codex")).toBe(false);
         expect(await rig.blocks.property("brain", "status", "codex")).toBe("installed");
