@@ -27,6 +27,14 @@ export type Harness = (typeof HARNESSES)[number];
 /** The model a brain is on when none is chosen: whatever the harness is set to use already. Saved as null. */
 export const DEFAULT_MODEL = "default";
 
+/**
+ * The colors an agent can be: PaperUI's color roles, around the color wheel. Its face glows in it.
+ * Settings saved before the color was a choice are primary.
+ */
+export const AGENT_COLORS = ["primary", "extra-2", "extra-3", "danger", "attention", "warning", "success", "extra-1"] as const;
+export type AgentColor = (typeof AGENT_COLORS)[number];
+export const DEFAULT_COLOR: AgentColor = "primary";
+
 export const COMPACTIONS = ["summarize", "forget"] as const;
 export type Compaction = (typeof COMPACTIONS)[number];
 
@@ -40,9 +48,12 @@ const object = shape.object;
 const oneOf = shape.oneOf;
 
 const harness = oneOf(...HARNESSES);
+const agentColor = oneOf(...AGENT_COLORS);
 
 const settings = object({
     name: text(),
+    /** the color its face glows in */
+    color: agentColor,
     harness,
     /** null: whatever the harness is set to use already */
     model: nullable(text()),
@@ -141,6 +152,8 @@ export function parseSettings(v: unknown): Settings {
     const name = typeof s.name === "string" ? s.name.trim() : "";
     if (!name) throw new Error("give the agent a name");
     if (name.length > LIMITS.name) throw new Error(`names are limited to ${LIMITS.name} characters`);
+    if (s.color !== undefined && !AGENT_COLORS.includes(s.color as AgentColor)) throw new Error(`"${String(s.color)}" isn't one of the agent's colors`);
+    const color = (s.color as AgentColor | undefined) ?? DEFAULT_COLOR;
     if (!HARNESSES.includes(s.harness as Harness)) throw new Error("pick a brain");
     let model: string | null = null;
     if (typeof s.model === "string" && s.model && s.model !== DEFAULT_MODEL) {
@@ -154,7 +167,7 @@ export function parseSettings(v: unknown): Settings {
     if (s.automationInstructions !== undefined && typeof s.automationInstructions !== "string") throw new Error("instructions for automations are text");
     const automationInstructions = s.automationInstructions?.trim() ?? "";
     if (automationInstructions.length > LIMITS.instructions) throw new Error(`instructions for automations are limited to ${LIMITS.instructions} characters`);
-    return { name, harness: s.harness as Harness, model, compaction, ...(automationInstructions ? { automationInstructions } : {}) };
+    return { name, color, harness: s.harness as Harness, model, compaction, ...(automationInstructions ? { automationInstructions } : {}) };
 }
 
 /** the current conversation's id where it's listed with the past ones, whose ids are 12 hex digits */
@@ -459,9 +472,9 @@ export const ONBOARDING_STEP = { name: 0, brain: 1, signIn: 2, model: 3, compute
  * Kept by the service while it runs; saving the settings clears it. The last
  * step saves, so the computer's step is the furthest one picked up.
  */
-const onboardingDraft = object({ step: number(), name: text(), harness: nullable(harness), model: nullable(text()) });
+const onboardingDraft = object({ step: number(), name: text(), color: agentColor, harness: nullable(harness), model: nullable(text()) });
 export type OnboardingDraft = Infer<typeof onboardingDraft>;
-export const NO_ONBOARDING: OnboardingDraft = { step: 0, name: "", harness: null, model: null };
+export const NO_ONBOARDING: OnboardingDraft = { step: 0, name: "", color: DEFAULT_COLOR, harness: null, model: null };
 
 const aiState = object({
     /** null until onboarding has saved them */

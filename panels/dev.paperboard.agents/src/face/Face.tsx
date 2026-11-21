@@ -5,6 +5,8 @@ import { FEATURES, arrayToPose, faceBasis, poseToArray, strokePath, type Orienta
 import { BLINK_MS, blinkSince, frameSeconds } from "./blink";
 import styles from "./Face.module.css";
 import type { FaceSkin } from "./skins";
+import { getVarCss } from "@mileniumhq/paperui";
+import { DEFAULT_COLOR, type AgentColor } from "../contract";
 
 const R = 80;
 /** the hologram's rim, in the sphere's own units */
@@ -52,8 +54,10 @@ export function Face(props: {
     frame?: "face" | "sphere";
     /** a painted sphere and features (see skins.ts); a painted face is always shown whole */
     skin?: FaceSkin | null;
-    /** the sphere drawn as the Agent's hologram: a ball glowing in the panel's color, with a bright rim; a skin wins over it */
+    /** the sphere drawn as the Agent's hologram: a ball glowing in `color`, with a bright rim; a skin wins over it */
     hologram?: boolean;
+    /** the hologram's glow: one of the agent's colors */
+    color?: AgentColor;
     class?: string;
 }) {
     const reduced = window.matchMedia("(prefers-reduced-motion: reduce)");
@@ -194,7 +198,7 @@ export function Face(props: {
             height={size()}
             role="img"
             aria-label={`Agent, looking ${props.face.expression()}`}
-            style={props.skin ? { "--face-ink": props.skin.ink } : undefined}
+            style={props.skin ? { "--face-ink": props.skin.ink } : { "--face-glow": getVarCss(props.color ?? DEFAULT_COLOR) }}
         >
             <Show when={props.skin}>
                 {(skin) => <circle cx={frame().dx} cy={-frame().dy} r={R} fill={skin().sphere} />}

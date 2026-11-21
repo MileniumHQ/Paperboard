@@ -14,7 +14,7 @@ import { PANEL_ID, bootPanel, type BootedPanel, type Page } from "./support/pane
 setDefaultTimeout(120_000);
 
 const MODELS = { models: { stdout: JSON.stringify({ models: [{ slug: "gpt-x", display_name: "GPT X", visibility: "list", priority: 1 }] }) } };
-const SAVED = { name: "Ada", harness: "codex" as const, model: null, compaction: "summarize" as const };
+const SAVED = { name: "Ada", color: "primary" as const, harness: "codex" as const, model: null, compaction: "summarize" as const };
 
 let panel: BootedPanel | null = null;
 afterEach(async () => {
@@ -112,6 +112,8 @@ describe("the first meeting", () => {
         await page.navigate(url);
         await page.waitFor(NAME_SHOWN, "the name step");
         await page.type(NAME, "Quill");
+        await page.click('[aria-label="Purple"]');
+        await page.waitFor(`document.querySelector('[aria-label="Purple"]').getAttribute("aria-pressed") === "true"`, "Purple picked");
         await next(page, "the name step's Next");
         await choose(page, "harness", "codex");
         // the panel is left, and opened again
@@ -129,7 +131,7 @@ describe("the first meeting", () => {
         await choose(page, "computer", "later");
         await next(page, "the computer step's Next");
         await next(page, "Let's chat");
-        await panel.settingsSaved({ ...SAVED, name: "Quill" });
+        await panel.settingsSaved({ ...SAVED, name: "Quill", color: "extra-2" });
         await page.waitFor(`document.querySelector('[aria-label="Quill: computer and settings"]')`, "the chat");
         expect(page.exceptions).toEqual([]);
     });
