@@ -24,7 +24,10 @@ import {
     paperboardPackages,
     PAPERDL_R2_BUCKET,
     r2YmlKey,
+    FULL_GATE_EVENTS,
+    releaseGateProblem,
     tagFor,
+    type GateRun,
 } from "./publishLib";
 import { signRelease } from "./releaseSigning";
 
@@ -268,5 +271,60 @@ describe("a release build carries every app key, or refuses to start", () => {
             "A release build needs MAIN_VITE_GOOGLE_CLIENT_SECRET: put it in apps/paperboard/.env.local, or in the repository's Actions secrets for the release workflow.",
         );
         expect(missingAppKeys({})).toContain("needs MAIN_VITE_GOOGLE_CLIENT_ID and MAIN_VITE_GOOGLE_CLIENT_SECRET: put them in");
+    });
+});
+
+describe("a release builds only a commit the whole gate passed", () => {
+    const sha = "a".repeat(40);
+    const run = (over: Partial<GateRun>): GateRun => ({
+        event: "push", status: "completed", conclusion: "success", head_sha: sha, html_url: "https://github.com/run/1", ...over,
+    });
+
+    test("a passed push or manual run at that exact commit is enough", () => {
+        for (const event of ["push", "workflow_dispatch"]) {
+            expect(releaseGateProblem(sha, [run({ event })])).toBeNull();
+        }
+        // one green full run among failed ones counts: a re-run that passed
+        expect(releaseGateProblem(sha, [run({ conclusion: "failure" }), run({ event: "workflow_dispatch" })])).toBeNull();
+    });
+
+    test("a pull request's scoped run never counts, nor a run of another commit", () => {
+        expect(releaseGateProblem(sha, [run({ event: "pull_request" })])).toContain("never had a full Gate run");
+        expect(releaseGateProblem(sha, [run({ head_sha: "b".repeat(40) })])).toContain("never had a full Gate run");
+        expect(releaseGateProblem(sha, [])).toContain("gh workflow run gate.yml --repo MileniumHQ/Paperboard --ref main");
+    });
+
+    test("a running, failed or cancelled full run refuses, saying which and where", () => {
+        expect(releaseGateProblem(sha, [run({ status: "in_progress", conclusion: null })])).toBe(
+            "The full Gate on aaaaaaaaaa is still running (https://github.com/run/1). Release once it passes.",
+        );
+        const failed = releaseGateProblem(sha, [run({ conclusion: "failure" }), run({ conclusion: "cancelled", event: "workflow_dispatch" })]);
+        expect(failed).toContain("did not pass (failure, cancelled: https://github.com/run/1)");
+    });
+
+    test("the commit is named by its full SHA, never a branch or a short one", () => {
+        for (const ref of ["main", "aaaaaaa", "A".repeat(40)]) {
+            expect(releaseGateProblem(ref, [run({ head_sha: ref })])).toContain("by its full SHA");
+        }
+    });
+
+    test("the release workflow checks it before any target builds", () => {
+        const workflow = Bun.YAML.parse(readFileSync(join(ROOT, ".github", "workflows", "release.yml"), "utf8")) as {
+            jobs: Record<string, { needs?: string | string[]; permissions?: Record<string, string>; steps?: { run?: string }[] }>;
+        };
+        const verify = workflow.jobs.verify!;
+        expect(verify.permissions).toEqual({ contents: "read", actions: "read" });
+        const runs = (verify.steps ?? []).map((s) => s.run ?? "").join("\n");
+        expect(runs).toContain("bun scripts/publish/releaseGate.ts");
+        expect(runs).toContain("git merge-base --is-ancestor \"$COMMIT\" origin/main");
+        expect(workflow.jobs.build!.needs).toBe("verify");
+    });
+
+    test("the events it counts are ones gate.yml runs on, and runs in full", () => {
+        const gate = readFileSync(join(import.meta.dir, "..", "..", ".github", "workflows", "gate.yml"), "utf8");
+        const workflow = Bun.YAML.parse(gate) as { on: Record<string, unknown> };
+        for (const event of FULL_GATE_EVENTS) expect(Object.keys(workflow.on)).toContain(event);
+        // only a pull request's description scopes the run
+        expect(gate).toContain('if [ "$EVENT" = pull_request ]; then');
     });
 });

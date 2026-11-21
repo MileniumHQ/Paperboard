@@ -26,12 +26,48 @@ concurrency:
   group: release
   cancel-in-progress: false
 jobs:
+  # A release builds only a commit on main that a full Gate run passed (a
+  # push to main or a manual run; a pull request's run may be scoped, so it
+  # never counts), and whose package.json names this version.
+  # Checked here as well as by Publish binaries, since a run can be started
+  # by hand.
+  verify:
+    name: verify
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.commit }}
+          fetch-depth: 0
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.4
+      - name: The commit is on main and names this version
+        env:
+          COMMIT: ${{ inputs.commit }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          [ "$(git rev-parse HEAD)" = "$COMMIT" ] || { echo "Refusing to release: name the commit by its full SHA, got $COMMIT" >&2; exit 1; }
+          git merge-base --is-ancestor "$COMMIT" origin/main || { echo "Refusing to release: $COMMIT is not on main" >&2; exit 1; }
+          actual=$(node -p "require('./apps/paperboard/package.json').version")
+          [ "$actual" = "$VERSION" ] || { echo "Refusing to release: package.json is v$actual, not v$VERSION" >&2; exit 1; }
+      - name: A full Gate run passed the commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+          COMMIT: ${{ inputs.commit }}
+        run: bun scripts/publish/releaseGate.ts "$COMMIT"
+
   # Each target built on a runner of its own OS, so macOS builds are signed
   # by a Mac and Windows binaries carry their version info. linux-arm64 is
   # built on x64: electron-builder's deb and rpm tooling is x64 only, and
   # nothing on Linux needs signing.
   build:
     name: build (${{ matrix.target.name }})
+    needs: verify
     runs-on: ${{ matrix.target.runner }}
     timeout-minutes: 45
     strategy:
@@ -53,15 +89,6 @@ jobs:
       - uses: actions/checkout@v5
         with:
           ref: ${{ inputs.commit }}
-          fetch-depth: 0
-      - name: The commit is on main and names this version
-        env:
-          COMMIT: ${{ inputs.commit }}
-          VERSION: ${{ inputs.version }}
-        run: |
-          git merge-base --is-ancestor "$COMMIT" origin/main || { echo "$COMMIT is not on main" >&2; exit 1; }
-          actual=$(node -p "require('./apps/paperboard/package.json').version")
-          [ "$actual" = "$VERSION" ] || { echo "package.json is v$actual, not v$VERSION" >&2; exit 1; }
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.4.4
