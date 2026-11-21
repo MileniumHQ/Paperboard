@@ -30,8 +30,8 @@ const DEMO_ICONS = [
 ];
 
 const PICKS = [
-    { name: "Game Server", icon: "/pictures/game-server.png", accent: "#dc204c", description: "Run servers for your favorite games" },
-    { name: "Bot Creator", icon: "/pictures/discord-bot.png", accent: "#5865f2", description: "Make Discord bots without writing code" },
+    { name: "Game Server", banner: "/screens/gameserver-1.png", icon: "/pictures/game-server.png", accent: "#dc204c", description: "Run servers for your favorite games" },
+    { name: "Bot Creator", banner: "/screens/botcreator-1.png", icon: "/pictures/discord-bot.png", accent: "#5865f2", description: "Make Discord bots without writing code" },
 ];
 
 function PropTable(props: { rows: [string, string, string, string][] }) {
@@ -93,9 +93,9 @@ function CardDemo() {
                         {(pick) => (
                             <div style={{ width: `calc(${getVarCss("uigap")} * 26)` }}>
                                 <MarketingCard
+                                    banner={pick.banner}
                                     icon={pick.icon}
                                     title={pick.name}
-                                    subtitle="Paperboard"
                                     description={pick.description}
                                     selected={picked() === pick}
                                     onClick={() => setPicked(pick)}
@@ -207,6 +207,7 @@ export function Welcome(props: { onNext: () => void }) {
                 A card to choose from: the surface itself, sunk a few shades and frosted, on a raised edge.
                 With <PaperCode>onClick</PaperCode> it is a button that sinks onto its edge when pressed and springs back.
                 The chosen card of a set takes <PaperCode>selected</PaperCode>. Pick one below to see the surface take its color.
+                A card fills its cell and its description always stands two lines tall, so a set of cards is one height whatever their words; give each the same width.
             </PaperText>
             <PaperCard data-docs-demo padding="double" surface="front">
                 <CardDemo />
@@ -214,9 +215,10 @@ export function Welcome(props: { onNext: () => void }) {
             <PropTable
                 rows={[
                     ["title", "string", "Required", "The name."],
-                    ["icon", "string", "No default", "A picture's address, drawn bare above the title."],
+                    ["banner", "string", "No default", "A screenshot's address, cut to a wide strip across the top."],
+                    ["icon", "string", "No default", "A picture's address, drawn bare above the title; under a banner it sits half over the banner's edge."],
                     ["subtitle", "string", "No default", "A line under the title, such as who made it."],
-                    ["description", "string | JSX.Element", "No default", "A sentence on what choosing it does."],
+                    ["description", "string | JSX.Element", "No default", "A sentence on what choosing it does, kept to two lines."],
                     ["selected", "boolean", "false", "Marks the chosen card of a set; screen readers hear it pressed."],
                     ["onClick", "(e: MouseEvent) => void", "No default", "Makes the card a button."],
                 ]}

@@ -7,7 +7,9 @@
     position: relative;
     isolation: isolate;
     display: block;
+    /* fills its cell, so every card in a row or grid stands the same height */
     width: calc(100% - var(--edge));
+    height: calc(100% - var(--edge));
     margin: 0 var(--edge) var(--edge) 0;
     border-radius: 18px;
     transition: transform 0.4s var(--marketing-ease-spring);
@@ -49,11 +51,12 @@
 .card {
     display: flex;
     flex-direction: column;
-    align-items: flex-start;
-    gap: 2px;
+    align-items: stretch;
     width: 100%;
+    height: 100%;
     margin: 0;
-    padding: 26px 26px 24px;
+    padding: 0;
+    overflow: hidden;
     box-sizing: border-box;
     border-radius: inherit;
     border: 2px solid color-mix(in srgb, var(--paper-on-color) 14%, transparent);
@@ -90,13 +93,45 @@
     border-color: var(--paper-on-color);
 }
 
+/* a screenshot across the top, cut to one shape so a set lines up */
+.banner {
+    display: block;
+    width: 100%;
+    aspect-ratio: 16 / 7;
+    object-fit: cover;
+    object-position: top left;
+    border-bottom: 2px solid color-mix(in srgb, var(--paper-on-color) 12%, transparent);
+}
+
+.body {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+    flex: 1;
+    padding: 26px 26px 24px;
+}
+
 .icon {
+    position: relative;
     width: 76px;
     height: 76px;
     margin-bottom: 16px;
     display: block;
     object-fit: contain;
     filter: drop-shadow(0 10px 16px color-mix(in srgb, var(--paper-marketing-ink) 35%, transparent));
+}
+
+/* under a banner the icon sits on its edge, half over the picture */
+.banner + .body {
+    padding-top: 0;
+}
+
+.banner + .body .icon {
+    width: 68px;
+    height: 68px;
+    margin-top: -34px;
+    margin-bottom: 12px;
 }
 
 .title {
@@ -112,7 +147,14 @@
     color: color-mix(in srgb, var(--paper-on-color) 60%, transparent);
 }
 
+/* always two lines tall, so cards with short and long descriptions match */
 .description {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    overflow: hidden;
+    min-height: calc(2lh);
     margin-top: 8px;
     font-size: 17px;
     font-weight: 600;
