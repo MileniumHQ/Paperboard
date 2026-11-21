@@ -109,6 +109,7 @@ describe("machines and motherboards", () => {
         expect(board({ board_vendor: "ASRock", board_name: "B850M Pro-A WiFi", product_name: "B850M Pro-A WiFi", chassis_type: "3" })).toBe("ASRock B850M Pro-A WiFi");
         expect(board({ board_vendor: "Micro-Star International Co., Ltd.", board_name: "MAG B550 TOMAHAWK (MS-7C91)", product_name: "MS-7C91" }))
             .toBe("MSI MAG B550 TOMAHAWK (MS-7C91)");
+        expect(board({ board_vendor: "Supermicro", board_name: "X11SCH-F", product_name: "Super Server", chassis_type: "17" })).toBe("Supermicro X11SCH-F");
         // part numbers: a laptop's, a prebuilt's, a Mac's
         expect(board({ board_vendor: "ASUSTeK COMPUTER INC.", board_name: "G513QY", product_name: "ROG Strix G513QY", chassis_type: "10" })).toBeUndefined();
         expect(board({ board_vendor: "Dell Inc.", board_name: "0KFHNV", product_name: "XPS 13 9310" })).toBeUndefined();

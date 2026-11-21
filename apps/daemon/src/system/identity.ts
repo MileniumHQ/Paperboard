@@ -307,8 +307,9 @@ function linuxMachine(probe: SystemProbe, dmi: Dmi): IdentityPart | undefined {
 // ---------------------------------------------------------------- motherboard
 
 // what firmware leaves in a field nobody filled in
-// (systemd's hwdb list, and what boards ship with in the wild)
-const PLACEHOLDER = /^(to be filled by o\.?e\.?m\.?|tbd by oem|default string|system (product )?name|system manufacturer|base ?board product name|type2 - board (product name|vendor name)\d*|not (applicable|specified|available)|no asset information|n\/a|none|null|invalid|unknown|o\.e\.m\.?|oem|0+|123456789|0123456789|x+|\s*)$/i;
+// (systemd's hwdb list, what boards ship with in the wild, and Supermicro's
+// generic "Super Server" system name)
+const PLACEHOLDER = /^(to be filled by o\.?e\.?m\.?|tbd by oem|default string|system (product )?name|system manufacturer|base ?board product name|type2 - board (product name|vendor name)\d*|not (applicable|specified|available)|no asset information|super server|n\/a|none|null|invalid|unknown|o\.e\.m\.?|oem|0+|123456789|0123456789|x+|\s*)$/i;
 
 // Retail motherboard makers, by their legal names. A board is named only
 // when one of these sold it on its own: a laptop's or a prebuilt PC's board
