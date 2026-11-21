@@ -68,7 +68,11 @@ export async function handleAuth(action: unknown, params: any, ctx: AuthContext)
                 return true;
             }
             identity.grant(params?.token ?? null, entry?.panelId ?? null, entry?.relayTo ?? null);
-            reply({ success: true, ...(await computerFacts()) });
+            // what the computer is goes to the host's own connection (the
+            // shell keeps a paired computer's identity current with it); a
+            // panel or relay credential is answered without reading it
+            const host = !entry?.panelId && !entry?.relayTo;
+            reply({ success: true, ...(host ? await computerFacts() : {}) });
         } else {
             reply(null, "Invalid authentication token", ErrorCode.AUTH_REQUIRED);
         }

@@ -102,6 +102,27 @@ describe("tokens persist and revocation is exact", () => {
 	});
 });
 
+// Signing in tells the host what the computer is, and tells no panel.
+describe("verify answers the computer's identity to the host only", () => {
+	test("a host credential's verify carries the identity; a panel's and a refused one's carry none", async () => {
+		const daemon = await startDaemon();
+		const host = await Rpc.open(daemon.url);
+		const facts = await host.ok("auth:verify", { token: daemon.token });
+		expect(facts).toMatchObject({ success: true, os: expect.any(String), hostname: expect.any(String), arch: process.arch });
+		const panelToken = (await host.ok("auth:panel-token", { panelId: "test.identity" })).token as string;
+
+		const panel = await Rpc.open(daemon.url);
+		const panelAnswer = await panel.ok("auth:verify", { token: panelToken });
+		expect(panelAnswer).toEqual({ success: true });
+
+		const stranger = await Rpc.open(daemon.url);
+		const refused = await stranger.call("auth:verify", { token: "pc_wrong" });
+		expect(refused.code).toBe("AUTH_REQUIRED");
+		expect(refused.result ?? null).toBeNull();
+		await Promise.all([host.close(), panel.close(), stranger.close()]);
+	});
+});
+
 // Panel credentials are minted by the host only, one per panel, never the master.
 describe("panel credentials come from the host, one per panel", () => {
 	test("issuePanelToken is stable per panel and does not use the pairing budget", () => {
