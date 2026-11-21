@@ -74,7 +74,21 @@ Waiting for a computer to pair... (Ctrl+C cancels)`}
             <PaperText preset="subheader" as="h2" id="computer-info">The Computer Info page</PaperText>
             <PaperText preset="body" as="p">
                 Select a computer in the rail, then the top entry of its sidebar, which shows its name and operating system.
-                Its Computer Info page shows its address, its backup locations, the network ports its panels hold, and for a paired computer, <b>Forget Computer</b>.
+                Its Computer Info page shows its address, what the computer is, its backup locations, the network ports its panels hold, and for a paired computer, <b>Forget Computer</b>.
+            </PaperText>
+            <PaperText preset="body" as="p">
+                The <b>System</b> section lists what Paperboard detected about the computer, and the sidebar entry is tinted in that system's color:
+            </PaperText>
+            <PaperTextList>
+                <li><b>Operated by</b>: an autonomous agent working on the computer, such as Claude Duet, Claude Code on the web or Grok Bot.</li>
+                <li><b>System</b>: what is built on the operating system, such as Omarchy on Arch, Raspberry Pi OS, Proxmox VE, TrueNAS, Unraid or Synology DSM.</li>
+                <li><b>Operating system</b>: the distribution, macOS or Windows, with its version.</li>
+                <li><b>Runs in</b>: ChromeOS (Linux on a Chromebook), WSL, GitHub Codespaces, a Docker or Podman container, or the cloud or hypervisor of a virtual machine.</li>
+                <li><b>Motherboard</b>: the board of a computer that is not a virtual machine.</li>
+                <li><b>Architecture</b>: x86-64 or ARM64.</li>
+            </PaperTextList>
+            <PaperText preset="body" as="p">
+                A paired computer's details are read again each time Paperboard connects to it. Run <PaperCode>papercrane identify</PaperCode> on a computer to see what it reports.
             </PaperText>
 
             <PaperText preset="subheader" as="h2" id="forget-a-computer">Forget a computer</PaperText>

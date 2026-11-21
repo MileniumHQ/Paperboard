@@ -35,6 +35,7 @@ export default function DaemonCliDoc() {
                     <tr><td><PaperCode>serve</PaperCode></td><td>Starts the daemon. In a terminal it shows its own screen; with <PaperCode>--headless</PaperCode> it prints log lines instead.</td></tr>
                     <tr><td><PaperCode>pair</PaperCode></td><td>Opens pairing on the daemon running for the data directory, prints the code, and waits until a computer pairs.</td></tr>
                     <tr><td><PaperCode>status</PaperCode></td><td>Shows whether a daemon is running for the data directory, with its version, PID, address and paired computers.</td></tr>
+                    <tr><td><PaperCode>identify</PaperCode></td><td>Prints what this computer is, as Paperboard names it: its OS, what is built on it, the machine it runs in, its motherboard, and an agent operating it.</td></tr>
                     <tr><td><PaperCode>install-service</PaperCode></td><td>Installs, turns on and starts the daemon as a systemd (Linux) or launchd (macOS) service. On Windows it prints Task Scheduler commands.</td></tr>
                     <tr><td><PaperCode>uninstall-service</PaperCode></td><td>Stops the service and removes it. The data directory is kept.</td></tr>
                     <tr><td><PaperCode>help [command]</PaperCode></td><td>Prints help for the program or for one command.</td></tr>
@@ -140,6 +141,29 @@ papercrane --host 127.0.0.1             # only accept this computer`}
                 <PaperCode>auth</PaperCode> is false for a daemon started with <PaperCode>--no-auth</PaperCode>, and then <PaperCode>pairing</PaperCode> is left out.{" "}
                 <PaperCode>pairing.active</PaperCode> is true while a code is waiting to be entered.
             </PaperText>
+
+            <PaperText preset="subheader" as="h2" id="identify">identify</PaperText>
+            <PaperText preset="body" as="p">
+                Reads the computer the way the daemon does when Paperboard connects, and prints each layer it found. A layer it found nothing for is left out.
+            </PaperText>
+            <PaperTable>
+                <thead>
+                    <tr>
+                        <th>Option</th>
+                        <th>Default</th>
+                        <th>What it does</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr><td><PaperCode>--json</PaperCode></td><td>off</td><td>Prints the identity as JSON, with the same fields <PaperCode>system.getInfo</PaperCode> answers.</td></tr>
+                </tbody>
+            </PaperTable>
+            <PaperCode block language="text">
+{`System       Omarchy 4.5.0
+OS           Arch Linux (arch 6.17.8-arch1-1)
+Board        ASRock B850M Pro-A WiFi
+Arch         x64`}
+            </PaperCode>
 
             <PaperText preset="subheader" as="h2" id="install-service">install-service</PaperText>
             <PaperTable>
