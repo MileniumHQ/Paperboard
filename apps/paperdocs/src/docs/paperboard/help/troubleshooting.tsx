@@ -234,8 +234,12 @@ export default function TroubleshootingDoc() {
             <PaperTextList>
                 <li>The agent only reads. Paperboard refuses every tool that would change your computer or reach the internet.</li>
                 <li>What you write goes to the agent you picked, and on to its provider, as any task you give it does.</li>
-                <li>The issue goes nowhere until you send it: to GitHub with the GitHub CLI (<PaperCode>gh</PaperCode>) signed in, to Discord, by email, or copied.</li>
-                <li>No agent listed? Install one of the agents the window names, then open it again. In a browser or on a phone, report from the desktop app.</li>
+                <li>The issue goes nowhere until you send it: to GitHub with the GitHub CLI (<PaperCode>gh</PaperCode>) signed in, copied to your clipboard for Discord, by email, or copied directly.</li>
+                <li>
+                    No agent listed? Install a coding agent such as Claude Code, Codex, Cursor, Grok, OpenCode, or Antigravity—or any other{" "}
+                    <PaperLink href="https://github.com/pxlkt/trissue#agents">ACP coding agent supported by trissue</PaperLink>—then select <b>Check again</b>.
+                    In a browser or on a phone, report from the desktop app.
+                </li>
             </PaperTextList>
         </PaperFlex>
     );
