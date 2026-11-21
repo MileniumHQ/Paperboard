@@ -18,6 +18,7 @@ import {
 import { PaperInput } from "../PaperInput";
 import { PaperIcon } from "../PaperIcon";
 import { PaperButton } from "../PaperButton";
+import { PaperMarkdown } from "../PaperMarkdown";
 import { parseAnsiToSegments } from "../../utils/ansi";
 import { cx } from "../../utils/cx";
 
@@ -33,6 +34,8 @@ export interface PaperConsoleEntry {
     id?: string | number;
     type?: PaperConsoleEntryType;
     content: string | JSX.Element;
+    /** draw string content as Markdown, such as an agent's reply */
+    markdown?: boolean;
     timestamp?: string | Date | number;
 }
 
@@ -61,6 +64,17 @@ function entryContent(entry: RawEntry): string | JSX.Element {
     return typeof entry === "string" ? entry : entry.content;
 }
 
+function isMarkdown(entry: RawEntry): boolean {
+    return typeof entry !== "string" && entry.markdown === true && typeof entry.content === "string";
+}
+
+// text that streams in, or a line read with its newline, often starts or
+// ends with blank lines a row would draw as empty space; the first line
+// keeps its indentation
+function trimBlankLines(text: string): string {
+    return text.replace(/^(?:[ \t]*\r?\n)+/, "").trimEnd();
+}
+
 // rows with the same type and text are the same height at a given width, so
 // heights are cached by content — upstream logs are usually rebuilt arrays of
 // fresh objects, which an identity key would never hit. the first row has no
@@ -68,7 +82,7 @@ function entryContent(entry: RawEntry): string | JSX.Element {
 function heightKey(entry: RawEntry, index: number): unknown {
     const content = entryContent(entry);
     if (typeof content !== "string") return content;
-    return `${index === 0 ? 1 : 0}${entryType(entry)}\0${content}`;
+    return `${index === 0 ? 1 : 0}${isMarkdown(entry) ? 1 : 0}${entryType(entry)}\0${content}`;
 }
 
 // last row index whose top is at or above y
@@ -481,11 +495,16 @@ export function PaperConsole(props: ParentProps<PaperConsoleProps>) {
         }
     };
 
-    const renderEntryContent = (content: string | JSX.Element): JSX.Element => {
-        if (typeof content !== "string") return content;
-        if (!content.includes("\x1b")) {
-            return content.replace(/\r/g, "");
+    const renderEntryContent = (entry: RawEntry): JSX.Element => {
+        const raw = entryContent(entry);
+        if (typeof raw !== "string") return raw;
+        if (isMarkdown(entry)) {
+            return <PaperMarkdown class={styles.markdown} preset="text" text={trimBlankLines(raw.replace(/\r/g, ""))} />;
         }
+        if (!raw.includes("\x1b")) {
+            return trimBlankLines(raw.replace(/\r/g, ""));
+        }
+        const content = trimBlankLines(raw);
         const segments = parseAnsiToSegments(content);
         if (segments.length === 1 && Object.keys(segments[0].style).length === 0) {
             return segments[0].text;
@@ -584,7 +603,7 @@ export function PaperConsole(props: ParentProps<PaperConsoleProps>) {
                                     >
                                         {renderPrefix(entryType(entry()))}
                                         <div class={styles.content}>
-                                            {renderEntryContent(entryContent(entry()))}
+                                            {renderEntryContent(entry())}
                                         </div>
                                     </div>
                                 )}
