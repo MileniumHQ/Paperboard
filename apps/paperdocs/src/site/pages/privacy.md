@@ -24,6 +24,10 @@ When you connect Google Drive, Paperboard asks only for access to the files it c
 
 Paperboard's use and transfer of information received from Google APIs to any other app will adhere to the [Google API Services User Data Policy](https://developers.google.com/terms/api-services-user-data-policy), including the Limited Use requirements.
 
+## Reporting an issue
+
+When you report an issue from App Settings, Paperboard downloads its own code from GitHub, and the coding agent you pick on your computer reads it. What you write goes to that agent and its provider, under their privacy policy. The issue is sent only where you choose: to GitHub through your GitHub account, to our Discord, or by your email app.
+
 ## Panels
 
 Some panels contact other services, for example to download a game server or connect a Discord bot. Each panel's library page lists the services it contacts under "Services used", and what it uses them for. Those services' own privacy policies apply to what they receive.

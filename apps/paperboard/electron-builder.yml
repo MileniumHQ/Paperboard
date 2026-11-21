@@ -20,6 +20,8 @@ asarUnpack:
     - "**/node-notifier/**"
     - "**/screenshot-desktop/**"
     - "**/loudness/**"
+    # trissue runs its bundled Codex adapter as a separate Node process
+    - "**/trissue-embedded/dist/adapters/**"
 win:
     executableName: paperboard
     icon: build/icon.ico

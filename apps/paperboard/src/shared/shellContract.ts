@@ -120,6 +120,67 @@ const panelFileTransfer = shape.object({
     selection: shape.optional(shape.json()),
 });
 
+// Report an issue: a coding agent on this computer reads Paperboard's code
+// and writes the issue up (trissue). The shell names each report, so what
+// an old one still says never reaches a new one.
+const reportId = filled(64);
+
+/** A coding agent installed on this computer. */
+const issueAgent = shape.object({ id: shape.text(), name: shape.text() });
+
+const issueReportSetup = shape.object({
+    /** the question above the description, from the repo's trissue config */
+    prompt: shape.text(),
+    agents: shape.list(issueAgent),
+    /** featured coding agents trissue can run, installed or not */
+    known: shape.list(shape.text()),
+    /** where else the issue can go, in the config's order; includesIssue is false when the link needs clipboard paste */
+    links: shape.list(
+        shape.object({
+            label: shape.text(),
+            description: shape.optional(shape.text()),
+            includesIssue: shape.boolean(),
+        }),
+    ),
+});
+export type IssueReportSetup = Infer<typeof issueReportSetup>;
+
+/** Whether the issue can be filed with the GitHub CLI; null when the config files no GitHub issues. */
+const issueGitHub = shape.nullable(
+    shape.object({
+        repo: shape.text(),
+        state: shape.oneOf("missing", "signed-out", "signed-in", "error"),
+        login: shape.optional(shape.text()),
+        error: shape.optional(shape.text()),
+    }),
+);
+export type IssueGitHub = Infer<typeof issueGitHub>;
+
+const issueReportResult = shape.either(
+    shape.object({
+        status: shape.oneOf("written"),
+        title: shape.text(),
+        /** Markdown */
+        body: shape.text(),
+        /** the issue as one text, the way it's copied */
+        text: shape.text(),
+        github: issueGitHub,
+    }),
+    shape.object({ status: shape.oneOf("stopped") }),
+);
+export type IssueReportResult = Infer<typeof issueReportResult>;
+
+/** One line of what the agent did, changed in place under its id. */
+const issueReportEntry = shape.object({
+    reportId: shape.text(),
+    id: shape.text(),
+    kind: shape.oneOf("thought", "message", "tool", "blocked", "steer", "notice"),
+    text: shape.text(),
+    status: shape.optional(shape.text()),
+    toolKind: shape.optional(shape.text()),
+});
+export type IssueReportEntry = Infer<typeof issueReportEntry>;
+
 // ─── Channels ───────────────────────────────────────────────────────────────
 
 interface CallDefinition {
@@ -211,6 +272,18 @@ export const SHELL_CALLS = {
     // whether this window's panels hold unsaved work, which a quit asks about
     "panels-unsaved": { args: shape.object({ unsaved: shape.boolean() }), answer: none },
     "quit-answer": { args: shape.object({ askId, answer: shape.boolean() }), answer: none },
+
+    // Report an issue: the agents on this computer and where issues go
+    "issue-report-setup": { args: none, answer: issueReportSetup },
+    // resolves once the agent wrote the issue, or was stopped
+    "issue-report-start": { args: shape.object({ reportId, description: words(20_000), agent: filled(64) }), answer: issueReportResult },
+    // the person's words to the agent while it works
+    "issue-report-steer": { args: shape.object({ reportId, text: words(4000) }), answer: none },
+    "issue-report-stop": { args: shape.object({ reportId }), answer: none },
+    // files the written issue with the GitHub CLI: the new issue's URL
+    "issue-report-file": { args: shape.object({ reportId }), answer: shape.text() },
+    // opens one of the config's links with the written issue in it
+    "issue-report-open-link": { args: shape.object({ reportId, index: shape.number() }), answer: none },
 } as const satisfies Record<string, CallDefinition>;
 
 export const SHELL_SENDS = {
@@ -232,6 +305,7 @@ export const SHELL_PUSHES = {
     "panel-permission-failed": permissionFailure,
     "panel-permissions-changed": none,
     "quit-ask": shape.object({ askId: shape.text() }),
+    "issue-report-entry": issueReportEntry,
 } as const satisfies Record<string, Shape<any>>;
 
 export type ShellCall = keyof typeof SHELL_CALLS;

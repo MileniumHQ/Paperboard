@@ -1,0 +1,24 @@
+/* an agent's mark, sized to the icon slot it sits in */
+.mark,
+.mono {
+    display: inline-flex;
+    flex-shrink: 0;
+    width: var(--paper-icon-size-medium);
+    height: var(--paper-icon-size-medium);
+}
+
+.mark {
+    object-fit: contain;
+}
+
+/* a one-color mark is drawn in the text color, never a slot's accent: the
+   file is only its shape */
+.mono {
+    background-color: var(--paper-text);
+    mask: var(--agent-mark) center / contain no-repeat;
+    -webkit-mask: var(--agent-mark) center / contain no-repeat;
+}
+
+.symbol {
+    flex-shrink: 0;
+}

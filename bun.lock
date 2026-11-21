@@ -55,6 +55,7 @@
         "mime-types": "^3.0.2",
         "semver": "^7.8.6",
         "tar": "^7.5.23",
+        "trissue-embedded": "^0.1.5",
         "ws": "^8.23.0",
       },
       "devDependencies": {
@@ -1596,6 +1597,8 @@
     "tough-cookie": ["tough-cookie@6.1.0", "", { "dependencies": { "tldts": "^7.0.5" } }, "sha512-FTxc8u8Kl2tz0Lat1u8ksvcy8bwHRyEMawwTWybo51JqaC6O7SvfuhAKg+Ld6VqyIe2QRJBzY9HA7y2WyFRT2w=="],
 
     "tr46": ["tr46@7.0.0", "", { "dependencies": { "punycode": "^2.3.1" } }, "sha512-BcDSDW+SIGWVOns1Zm6Yg91q9AEj7eaID0QDY9oIqJD1A8dscNwMcl9Sms2DeuWCNov1X0/oXanHGYQBSLwZsg=="],
+
+    "trissue-embedded": ["trissue-embedded@0.1.5", "", {}, "sha512-ONk/4M0MOhWcSu1ozdKu8d3Js0x5dlFhkBhdFPwjw4EmHRl3imvEczHJpOR5Ld1lTr4XejIlgydovialXSmzfg=="],
 
     "truncate-utf8-bytes": ["truncate-utf8-bytes@1.0.2", "", { "dependencies": { "utf8-byte-length": "^1.0.1" } }, "sha512-95Pu1QXQvruGEhv62XCMO3Mm90GscOCClvrIUwCM0PYOXK3kaF3l3sIHxx71ThJfcbM2O5Au6SO3AWCSEfW4mQ=="],
 
