@@ -120,7 +120,7 @@
             },
             {
                 "name": "Paperboard modscan",
-                "detail": "Workshop search and collections, caching public items and their authors' Steam ids for up to 5 minutes at the Cloudflare site nearest you"
+                "detail": "Workshop search, collections and the items mods install, update and require, cached with their authors' Steam ids for 5 minutes at your nearest Cloudflare site"
             },
             {
                 "name": "Facepunch",
