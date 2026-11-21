@@ -4,9 +4,9 @@
 
 import { errorMessage } from "@mileniumhq/paperapi";
 import { AcpTurn, type AcpEvent, type AcpTurnOptions } from "./acp";
-import { feed, HARNESS_NAMES, parseTurnLine, writeRunFiles, type AskLaunch } from "./harness";
+import { feed, parseTurnLine, writeRunFiles, type AskLaunch } from "./harness";
 import type { TurnHost } from "./conversation";
-import type { Harness } from "../contract";
+import { BRAINS, type Harness } from "../contract";
 import { writeLine } from "./mcpClient";
 import { lineReader } from "./lines";
 
@@ -51,15 +51,19 @@ export async function runHarness(o: HarnessRun): Promise<HarnessOutcome> {
         else if (ev.type === "done") {
             out.answered = true;
             // quiet: its time limit stops it anyway; the answer is already in
-            void o.stop().catch((e) => console.error(`[agents] couldn't stop ${HARNESS_NAMES[o.harness]} after its answer (its time limit still will): ${errorMessage(e)}`));
+            void o.stop().catch((e) => console.error(`[agents] couldn't stop ${BRAINS[o.harness].program} after its answer (its time limit still will): ${errorMessage(e)}`));
         }
         o.onEvent(ev);
     };
+    // each header value as it appears inside the JSON line
+    const secrets = (o.acp?.mcpServers ?? []).flatMap((s) => (s.headers ?? []).map((h) => JSON.stringify(h.value).slice(1, -1))).filter((v) => v.length > 0);
     const acp = o.acp
         ? new AcpTurn({
               ...o.acp,
               write: (line) => {
-                  o.line?.("stdin", line);
+                  // the log is written to disk: the MCP servers' headers carry the panel's token, taken out by value
+                  const logged = secrets.reduce((l, v) => l.replaceAll(v, "[redacted]"), line);
+                  o.line?.("stdin", logged);
                   return writeLine(o.host.write, o.id, line);
               },
               emit: onEvent,
@@ -71,7 +75,7 @@ export async function runHarness(o: HarnessRun): Promise<HarnessOutcome> {
         else for (const ev of parseTurnLine(o.harness, line)) onEvent(ev);
     };
     // a line past the cap is dropped to its end, and the run says so
-    const stdout = lineReader(MAX_LINE, onLine, () => out.failures.push(`${HARNESS_NAMES[o.harness]} printed a line over ${MAX_LINE / 1024 / 1024} MB, which couldn't be read`));
+    const stdout = lineReader(MAX_LINE, onLine, () => out.failures.push(`${BRAINS[o.harness].program} printed a line over ${MAX_LINE / 1024 / 1024} MB, which couldn't be read`));
     // every listener goes when the run is over, whether or not it ever started
     const offs: (() => void)[] = [];
     const exited = new Promise<number | undefined>((ok) => {
@@ -121,6 +125,6 @@ export function harnessFailure(r: HarnessOutcome, harness: Harness, who: string,
     if (r.failures.length) return r.failures[r.failures.length - 1]!;
     const stderr = r.stderr.trim();
     if (r.code !== 0 && !r.answered) return `${who} ended with exit ${r.code ?? "?"}${stderr ? `: ${stderr.split("\n").slice(-3).join(" ").slice(0, 400)}` : ""}`;
-    if (r.unfed) return `${HARNESS_NAMES[harness]} ended before it took the ${what}: ${errorMessage(r.unfed)}`;
+    if (r.unfed) return `${BRAINS[harness].program} ended before it took the ${what}: ${errorMessage(r.unfed)}`;
     return null;
 }

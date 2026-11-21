@@ -9,8 +9,8 @@
 import { randomUUID } from "node:crypto";
 import fs from "node:fs";
 import { errorMessage } from "@mileniumhq/paperapi";
-import { LIMITS, PANEL_ID, type Harness, type Settings } from "../contract";
-import { askInstructions, askLaunch, HARNESS_NAMES, removeLeftRunFiles, runFilesDir } from "./harness";
+import { BRAINS, LIMITS, PANEL_ID, type Harness, type Settings } from "../contract";
+import { askInstructions, askLaunch, removeLeftRunFiles, runFilesDir } from "./harness";
 import type { TurnLog } from "./turnLog";
 import type { TurnHost } from "./conversation";
 import { harnessFailure, runHarness } from "./harnessRun";
@@ -24,6 +24,8 @@ export interface AskDeps {
     host: TurnHost;
     settings: () => Settings | null;
     resolve: (harness: Harness) => string | null;
+    /** the harness's isolated home folder in the panel's storage */
+    home: (harness: Harness) => string;
     /** what the harness runs with besides the daemon's environment: its home, and no updating itself */
     env: (harness: Harness) => Record<string, string>;
     /** why the harness can't answer (not signed in, say), or null */
@@ -58,7 +60,7 @@ export class Asker {
         if (own && own.length > LIMITS.instructions) throw new Error(`instructions are limited to ${LIMITS.instructions} characters`);
         const custom = own || settings.automationInstructions || null;
         const command = this.deps.resolve(settings.harness);
-        if (!command) throw new Error(`${HARNESS_NAMES[settings.harness]} isn't installed. Install it in the agent's settings`);
+        if (!command) throw new Error(`${BRAINS[settings.harness].program} isn't installed. Install it in the agent's settings`);
         const problem = this.deps.problem?.(settings.harness);
         if (problem) throw new Error(problem);
         if (this.running.size >= MAX_ASKING) throw new Error(`the agent is already answering ${MAX_ASKING} questions; ask again once one is done`);
@@ -86,20 +88,33 @@ export class Asker {
 
     private async run(id: string, settings: Settings, command: string, question: string, instructions: string | null, lines: string[] | null): Promise<string> {
         const { host } = this.deps;
-        const filesDir = runFilesDir(settings.harness, this.deps.env(settings.harness), this.deps.filesDir);
+        const env = this.deps.env(settings.harness);
+        const filesDir = runFilesDir(settings.harness, env, this.deps.filesDir);
         const messages: string[] = [];
         const ms = this.deps.askMs ?? ASK_MS;
         fs.mkdirSync(this.deps.workdir, { recursive: true });
+        const launch = askLaunch({ harness: settings.harness, command, model: settings.model, name: settings.name, question, instructions, filesDir, home: this.deps.home(settings.harness) });
         const r = await runHarness({
             host,
             id,
             harness: settings.harness,
-            launch: askLaunch({ harness: settings.harness, command, model: settings.model, name: settings.name, question, instructions, filesDir }),
+            launch,
             cwd: this.deps.workdir,
-            env: this.deps.env(settings.harness),
+            env,
             ms,
             // no tool servers to wait for
-            acp: settings.harness === "opencode" ? { cwd: this.deps.workdir, thread: null, model: settings.model, message: question, ready: async () => {} } : null,
+            acp:
+                settings.harness === "opencode" || settings.harness === "antigravity"
+                    ? {
+                          who: BRAINS[settings.harness].program,
+                          cwd: this.deps.workdir,
+                          thread: null,
+                          model: settings.model,
+                          message: question,
+                          sessionParams: launch.acpSession,
+                          ready: async () => {},
+                      }
+                    : null,
             onEvent: (ev) => {
                 if (ev.type === "message") messages.push(ev.text);
             },
@@ -112,7 +127,7 @@ export class Asker {
                 : undefined,
         });
         if (r.timedOut) throw new Error(`the agent didn't answer within ${Math.round(ms / 1000)} seconds`);
-        const failed = harnessFailure(r, settings.harness, HARNESS_NAMES[settings.harness], "question");
+        const failed = harnessFailure(r, settings.harness, BRAINS[settings.harness].program, "question");
         if (failed) throw new Error(failed);
         // what it said before searching ("let me look that up") isn't the answer; its last message is
         const answer = messages.map((m) => m.trim()).filter(Boolean).at(-1);

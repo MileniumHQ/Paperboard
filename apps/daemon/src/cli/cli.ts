@@ -48,6 +48,7 @@ export type CliCommand =
     | { kind: "serve"; options: ServeOptions }
     | { kind: "panel-service"; module: string }
     | { kind: "status"; json: boolean }
+    | { kind: "identify"; json: boolean }
     | { kind: "pair" }
     | { kind: "install-service"; target: ServiceTarget; serve: { port?: number; host?: string; dataDir?: string }; runAs?: string }
     | { kind: "uninstall-service"; target: ServiceTarget };
@@ -248,6 +249,15 @@ ${ENVIRONMENT_HELP}`);
         .action((opts: Record<string, unknown>) => {
             applyDataDir(opts, env);
             run({ kind: "status", json: opts.json === true });
+        });
+
+    program
+        .command("identify")
+        .summary("show what this computer is, as Paperboard names it")
+        .description("Print the identity this daemon reports to Paperboard: the OS, what is built on it, the machine it runs in, the motherboard, and an agent operating it.")
+        .option("--json", "print the identity as JSON")
+        .action((opts: Record<string, unknown>) => {
+            run({ kind: "identify", json: opts.json === true });
         });
 
     const install = addServiceTargetOptions(addListenOptions(

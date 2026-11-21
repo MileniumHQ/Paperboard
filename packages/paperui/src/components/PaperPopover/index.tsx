@@ -11,6 +11,8 @@ import {
     type ParentProps,
 } from "solid-js";
 import { ThemedPortal } from "../shared/ThemedPortal";
+import { PaperButton } from "../PaperButton";
+import { PaperIcon } from "../PaperIcon";
 import { PaperText } from "../PaperText";
 import { mergeStyle } from "../../utils/style";
 import { cx } from "../../utils/cx";
@@ -32,6 +34,12 @@ export interface PaperPopoverProps extends Omit<JSX.HTMLAttributes<HTMLDivElemen
      * the list's look and its title sits over the list like a group label.
      */
     flush?: boolean;
+    /**
+     * Its title sits in a bar across the top, the way a PaperModal's does,
+     * with a close button when it has onClose: for a popover that is a small
+     * window of its own, such as a summary, rather than a menu.
+     */
+    header?: boolean;
 }
 
 // room kept between the popover and the window's edges
@@ -80,6 +88,7 @@ export function PaperPopover(props: ParentProps<PaperPopoverProps>) {
         "title",
         "closeOnOutside",
         "flush",
+        "header",
         "class",
         "classList",
         "style",
@@ -147,6 +156,7 @@ export function PaperPopover(props: ParentProps<PaperPopoverProps>) {
                         [styles.placed]: position() !== null,
                         [styles.above]: position()?.side === "above",
                         [styles.flush]: Boolean(local.flush),
+                        [styles.withHeader]: Boolean(local.header),
                         ...local.classList,
                     }}
                     style={mergeStyle(
@@ -159,20 +169,38 @@ export function PaperPopover(props: ParentProps<PaperPopoverProps>) {
                     )}
                 >
                     <span class={styles.tail} aria-hidden="true" />
-                    <Show when={title()}>
-                        {typeof title() === "string" ? (
-                            local.flush ? (
-                                <PaperText as="div" preset="section" color="text-subtle" class={styles.title}>
-                                    {title()}
-                                </PaperText>
-                            ) : (
-                                <PaperText preset="label" class={styles.title}>
-                                    {title()}
-                                </PaperText>
-                            )
-                        ) : (
-                            title()
-                        )}
+                    <Show
+                        when={local.header}
+                        fallback={
+                            <Show when={title()}>
+                                {typeof title() === "string" ? (
+                                    local.flush ? (
+                                        <PaperText as="div" preset="section" color="text-subtle" class={styles.title}>
+                                            {title()}
+                                        </PaperText>
+                                    ) : (
+                                        <PaperText preset="label" class={styles.title}>
+                                            {title()}
+                                        </PaperText>
+                                    )
+                                ) : (
+                                    title()
+                                )}
+                            </Show>
+                        }
+                    >
+                        <div class={styles.header}>
+                            <PaperText size={4} weight={700}>
+                                {title()}
+                            </PaperText>
+                            <Show when={local.onClose}>
+                                <PaperButton size="tiny" icon type="button" variant="text" onClick={() => local.onClose?.()} aria-label="Close" class={styles.close}>
+                                    <PaperIcon aria-hidden="true" zeroHeight>
+                                        close
+                                    </PaperIcon>
+                                </PaperButton>
+                            </Show>
+                        </div>
                     </Show>
                     <div class={styles.body}>{local.children}</div>
                 </div>

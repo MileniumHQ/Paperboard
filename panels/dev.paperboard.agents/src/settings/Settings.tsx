@@ -22,9 +22,10 @@ import {
 } from "@mileniumhq/paperui";
 import { errorMessage } from "@mileniumhq/paperapi";
 import BrainLogo from "../lib/BrainLogo";
-import { COMPACTIONS, DEFAULT_MODEL, HARNESSES, LIMITS, type Compaction, type Harness, type Settings as Saved } from "../contract";
+import ColorPicker from "../lib/ColorPicker";
+import { BRAINS, COMPACTIONS, DEFAULT_MODEL, HARNESSES, LIMITS, type AgentColor, type Compaction, type Harness, type Settings as Saved } from "../contract";
 import type { Agent } from "../lib/agent";
-import { SEARCH_MODELS_FROM, createModels, harnessName, loadedModels } from "../lib/brains";
+import { SEARCH_MODELS_FROM, brainCli, createModels, loadedModels } from "../lib/brains";
 import { BrainButtons, BrainStatus, SignInModal, brainLine, createBrainActions } from "./Brain";
 import Providers from "./Providers";
 
@@ -64,9 +65,10 @@ function AgentSettings(props: { agent: Agent }) {
     const save = (patch: Partial<Saved>) =>
         props.agent.saveSettings((cur) => {
             const next = { ...cur, ...patch };
-            return next.name === cur.name && next.harness === cur.harness && next.model === cur.model ? null : next;
+            return next.name === cur.name && next.color === cur.color && next.harness === cur.harness && next.model === cur.model ? null : next;
         });
     // a pick shows at once, while it saves
+    const color = createSavedValue(() => current().color, (c: AgentColor) => save({ color: c }));
     const harness = createSavedValue(() => current().harness, (h: Harness) => save({ harness: h, model: null }));
     const picked = createSavedValue(() => current().model ?? DEFAULT_MODEL, (v: string) => save({ model: v === DEFAULT_MODEL ? null : v }));
     const report = (title: string, saving: Promise<void>) => {
@@ -103,6 +105,9 @@ function AgentSettings(props: { agent: Agent }) {
                         onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
                     />
                 </PaperSettingItem>
+                <PaperSettingItem title="Color" description="The color of your agent.">
+                    <ColorPicker value={color.value()} onPick={(c) => report("Couldn't change the color", color.set(c))} />
+                </PaperSettingItem>
                 <PaperSettingItem title="Brain" description="The agent harness that thinks for it. Each keeps its own thread of your conversation.">
                     <PaperSelectMenu
                         name="harness"
@@ -113,8 +118,8 @@ function AgentSettings(props: { agent: Agent }) {
                     >
                         <For each={HARNESSES}>
                             {(h) => (
-                                <PaperSelectMenuItem value={h} icon={<BrainLogo harness={h} />} disabled={!isReady(h)}>
-                                    {harnessName(h)}
+                                <PaperSelectMenuItem value={h} icon={<BrainLogo harness={h} />} description={brainCli(h)} disabled={!isReady(h)}>
+                                    {BRAINS[h].name}
                                     {isReady(h) ? "" : " (not set up)"}
                                 </PaperSelectMenuItem>
                             )}
@@ -158,7 +163,7 @@ function AgentSettings(props: { agent: Agent }) {
                             searchable={listed().length >= SEARCH_MODELS_FROM}
                             onValueChange={(v) => report("Couldn't change the model", picked.set(String(v)))}
                         >
-                            <PaperSelectMenuItem value={DEFAULT_MODEL} icon="tune" description={`Whatever ${harnessName(current().harness)} is set to use`}>
+                            <PaperSelectMenuItem value={DEFAULT_MODEL} icon="tune" description={`Whatever ${BRAINS[current().harness].program} is set to use`}>
                                 Default
                             </PaperSelectMenuItem>
                             <For each={listed()}>
@@ -180,7 +185,7 @@ function AgentSettings(props: { agent: Agent }) {
     );
 }
 
-/** Codex, Claude and OpenCode: each is installed here from its maker and signed in with its own login. */
+/** ChatGPT (Codex CLI), Gemini (Antigravity CLI), Claude (Claude CLI) and Other provider (OpenCode CLI): each is installed here from its maker and signed in with its own login, except Gemini, which shares this computer's Antigravity sign-in (SHARED_SIGN_IN). */
 function BrainsSettings(props: { agent: Agent }) {
     const actions = createBrainActions(props.agent);
     const [providers, setProviders] = createSignal(false);
@@ -194,7 +199,10 @@ function BrainsSettings(props: { agent: Agent }) {
             <PaperSettingList autoHeight>
                 <For each={HARNESSES}>
                     {(h) => (
-                        <PaperSettingItem title={harnessName(h)} description={brainLine(h, props.agent.state.brains[h])}>
+                        <PaperSettingItem
+                            title={BRAINS[h].name}
+                            description={`${brainLine(h, props.agent.state.brains[h])} · ${brainCli(h)}`}
+                        >
                             <BrainButtons agent={props.agent} harness={h} actions={actions} onProviders={() => setProviders(true)} onSignIn={setSigningIn} />
                         </PaperSettingItem>
                     )}
@@ -203,7 +211,7 @@ function BrainsSettings(props: { agent: Agent }) {
             <For each={HARNESSES.filter(busy)}>
                 {(h) => (
                     <PaperFlex gap="half">
-                        <PaperText preset="section">{harnessName(h)}</PaperText>
+                        <PaperText preset="section">{BRAINS[h].name}</PaperText>
                         <BrainStatus agent={props.agent} harness={h} actions={actions} />
                     </PaperFlex>
                 )}

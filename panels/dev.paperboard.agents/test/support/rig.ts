@@ -7,6 +7,7 @@ import type { ChatEntry, ChatState, Harness, Settings } from "../../src/contract
 import type { Sections } from "../../src/service/toolsets";
 import { startComputerMcp, type ComputerMcp } from "../../src/service/computerMcp";
 import { Conversation, TURN_PROC_ID } from "../../src/service/conversation";
+import { openTurnLog } from "../../src/service/turnLog";
 import { messagesToolset } from "../../src/service/messages";
 import { SignIns } from "../../src/service/signIn";
 import { toolbox } from "../../src/service/toolsets";
@@ -23,6 +24,8 @@ export interface Rig {
     settings: Settings;
     /** the fake brain's log */
     log(): any[];
+    /** the developer's turn log as written to disk, when the rig was made with turnLog */
+    turnLog(): string;
     /** the turns the brain was started for */
     turns(): any[];
     /** a fresh Conversation over the same folder: the service started again */
@@ -30,14 +33,16 @@ export interface Rig {
     close(): Promise<void>;
 }
 
-export async function conversationRig(o: { harness?: Harness; contextBudget?: number; problem?: (h: Harness) => string | null; resolve?: (h: Harness) => string | null; env?: (h: Harness) => Record<string, string>; root?: string; instructions?: () => Promise<Sections>; turnMs?: number; onLeave?: () => void } = {}): Promise<Rig> {
+export async function conversationRig(o: { harness?: Harness; contextBudget?: number; problem?: (h: Harness) => string | null; resolve?: (h: Harness) => string | null; env?: (h: Harness) => Record<string, string>; root?: string; instructions?: () => Promise<Sections>; turnMs?: number; onLeave?: () => void; turnLog?: boolean } = {}): Promise<Rig> {
     const root = o.root ?? tempDir("conversation");
     const harness = o.harness ?? "codex";
     const host = new TestHost(fakeEnv(root));
     const program = brainProgram(root, harness);
     const dir = path.join(root, "storage", "conversation");
     const codexHome = path.join(root, "storage", "brains", "codex");
+    const agyHome = path.join(root, "storage", "brains", "antigravity");
     fs.mkdirSync(codexHome, { recursive: true });
+    fs.mkdirSync(agyHome, { recursive: true });
     // the real messages toolset, texting the rig's conversation,
     // and a card's: a sign-in on a page the computer pretends to have open, filled by nothing
     const signIns = new SignIns({
@@ -58,16 +63,18 @@ export async function conversationRig(o: { harness?: Harness; contextBudget?: nu
             return tools.call(name, args);
         },
     });
-    const settings: Settings = { name: "Ada", harness, model: null, compaction: "summarize" };
+    const settings: Settings = { name: "Ada", color: "blue", harness, model: null, compaction: "summarize" };
     const entries = new Recorder<ChatEntry>();
     const states = new Recorder<ChatState>();
+    const turnLog = o.turnLog ? openTurnLog(path.join(root, "turn-log"), { PAPERBOARD_AGENT_LOG: "1" }) : null;
     const make = () => {
         const c = new Conversation({
             host,
             dir,
             settings: () => rig.settings,
             resolve: o.resolve ?? (() => program),
-            env: o.env ?? ((h): Record<string, string> => (h === "codex" ? { CODEX_HOME: codexHome } : {})),
+            home: (h) => (h === "codex" ? codexHome : h === "antigravity" ? agyHome : path.join(root, "storage", "brains", h)),
+            env: o.env ?? ((h): Record<string, string> => (h === "codex" ? { CODEX_HOME: codexHome } : h === "antigravity" ? { HOME: agyHome, XDG_CONFIG_HOME: path.join(agyHome, ".config"), AGY_CLI_DISABLE_AUTO_UPDATE: "1" } : {})),
             problem: o.problem,
             mcp: () => ({ url: mcp.url, token: mcp.token, onToolsListed: (cb) => mcp.onToolsListed(cb) }),
             instructions: o.instructions ?? (async () => ({ tools: ["**Test:** a section"], now: [] })),
@@ -78,6 +85,7 @@ export async function conversationRig(o: { harness?: Harness; contextBudget?: nu
             contextBudget: o.contextBudget,
             turnMs: o.turnMs,
             onLeave: o.onLeave,
+            log: turnLog,
         });
         c.init();
         return c;
@@ -92,6 +100,7 @@ export async function conversationRig(o: { harness?: Harness; contextBudget?: nu
         mcp,
         settings,
         log: () => fakeLog(root),
+        turnLog: () => fs.readFileSync(turnLog!.file, "utf8"),
         turns: () => fakeLog(root).filter((e) => e.event === "turn"),
         restart: () => (rig.conversation = make()),
         close: async () => {

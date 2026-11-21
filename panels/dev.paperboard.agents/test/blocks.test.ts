@@ -27,7 +27,7 @@ describe("the agent's blocks", () => {
     test("registers the agent's types, values, commands and events, and nothing that reaches its secrets or controls", async () => {
         rig = await appRig();
         const set = rig.blocks.set!;
-        expect(set.types!.map((t) => t.id)).toEqual(["conversation", "message", "fact", "note", "routine", "model", "brain", "tool-server", "app", "attachment"]);
+        expect(set.types!.map((t) => t.id)).toEqual(["conversation", "message", "fact", "note", "routine", "model", "brain", "usage-limit", "tool-server", "app", "attachment"]);
         expect(Object.keys(set.types![0]!.fields!)).toEqual(["title", "messages"]);
         expect(Object.keys(set.types![1]!.fields!)).toEqual(["text", "from"]);
         expect(set.values!.map((v) => [v.id, v.type, v.changes ?? false])).toEqual([
@@ -39,6 +39,7 @@ describe("the agent's blocks", () => {
             ["routines", "list<routine>", true],
             ["current-brain", "brain", true],
             ["brains", "list<brain>", false],
+            ["usage-limits", "list<usage-limit>", false],
             ["current-model", "model", true],
             ["models", "list<model>", false],
             ["tool-servers", "list<tool-server>", true],
@@ -304,8 +305,9 @@ describe("the agent's blocks", () => {
 
     test("brains are read, installed and signed out of; Switch Brain refuses one that isn't signed in", async () => {
         rig = await appRig({ downloads: ["claude-code"] });
-        expect(await rig.blocks.read("brains")).toEqual(["codex", "claude-code", "opencode"]);
+        expect(await rig.blocks.read("brains")).toEqual(["codex", "antigravity", "claude-code", "opencode"]);
         expect(await rig.blocks.read("current-brain")).toBe("codex");
+        expect(await rig.blocks.property("brain", "name", "antigravity")).toBe("Gemini");
         expect(await rig.blocks.property("brain", "name", "claude-code")).toBe("Claude");
         expect(await rig.blocks.property("brain", "status", "codex")).toBe("ready");
         expect(await rig.blocks.property("brain", "signed-in", "codex")).toBe(true);
@@ -326,7 +328,9 @@ describe("the agent's blocks", () => {
 
         await expect(rig.blocks.run("switch-brain", { brain: "claude-code" })).rejects.toThrow("Claude isn't ready: sign in to it first");
         await expect(rig.blocks.run("sign-out-brain", { brain: "claude-code" })).rejects.toThrow("Claude isn't signed in");
-        await expect(rig.blocks.run("sign-out-brain", { brain: "opencode" })).rejects.toThrow('"Brain" must be one of Codex, Claude');
+        await expect(rig.blocks.run("sign-out-brain", { brain: "opencode" })).rejects.toThrow('"Brain" must be one of ChatGPT, Claude');
+        // Gemini's sign-in is the computer's: no block signs it out
+        await expect(rig.blocks.run("sign-out-brain", { brain: "antigravity" })).rejects.toThrow('"Brain" must be one of ChatGPT, Claude');
         await rig.blocks.run("sign-out-brain", { brain: "codex" });
         expect(await rig.blocks.property("brain", "signed-in", "codex")).toBe(false);
         expect(await rig.blocks.property("brain", "status", "codex")).toBe("installed");

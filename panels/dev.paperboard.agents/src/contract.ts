@@ -8,6 +8,7 @@
 // web browser the service runs, reached through the service's MCP endpoint.
 
 import { defineContract, shape, type Infer } from "@mileniumhq/paperapi";
+import type { PaperRole } from "@mileniumhq/paperui";
 import { serverSpec, toolsView } from "./toolsContract";
 
 export const PANEL_ID = "dev.paperboard.agents";
@@ -21,11 +22,63 @@ export type Character = (typeof CHARACTERS)[number];
 export const characterOf = (name: string | null | undefined): Character | null =>
     CHARACTERS.find((c) => c === (name ?? "").trim().toLowerCase()) ?? null;
 
-export const HARNESSES = ["codex", "claude-code", "opencode"] as const;
+export const HARNESSES = ["codex", "antigravity", "claude-code", "opencode"] as const;
 export type Harness = (typeof HARNESSES)[number];
+
+export interface BrainInfo {
+    /** Choice label shown in the picker, settings, and dropdown. */
+    readonly name: string;
+    /** Underlying CLI program name used in sentences about the program. */
+    readonly program: string;
+    /** How the choice is signed in to, one line. */
+    readonly description: string;
+}
+
+// "Claude", not "Claude Code": Anthropic's terms ask that products built on it don't carry its product's name
+export const BRAINS: Record<Harness, BrainInfo> = {
+    codex: {
+        name: "ChatGPT",
+        program: "Codex",
+        description: "Sign in with your ChatGPT account",
+    },
+    antigravity: {
+        name: "Gemini",
+        program: "Antigravity",
+        description: "Your Google account, shared with this computer's Antigravity",
+    },
+    "claude-code": {
+        name: "Claude",
+        program: "Claude",
+        description: "Sign in with your Claude account",
+    },
+    opencode: {
+        name: "Other provider",
+        program: "OpenCode",
+        description: "Free models included, or connect any provider",
+    },
+};
 
 /** The model a brain is on when none is chosen: whatever the harness is set to use already. Saved as null. */
 export const DEFAULT_MODEL = "default";
+
+/**
+ * The colors an agent can be, around the color wheel; its face glows in it. Saved by its own name, and
+ * drawn in the PaperUI color role beside it, so a renamed role never touches what's saved.
+ * Settings saved before the color was a choice are blue.
+ */
+export const AGENT_COLORS = ["blue", "purple", "pink", "red", "orange", "yellow", "green", "teal"] as const;
+export type AgentColor = (typeof AGENT_COLORS)[number];
+export const DEFAULT_COLOR: AgentColor = "blue";
+export const COLOR_ROLES: Record<AgentColor, PaperRole> = {
+    blue: "primary",
+    purple: "extra-2",
+    pink: "extra-3",
+    red: "danger",
+    orange: "attention",
+    yellow: "warning",
+    green: "success",
+    teal: "extra-1",
+};
 
 export const COMPACTIONS = ["summarize", "forget"] as const;
 export type Compaction = (typeof COMPACTIONS)[number];
@@ -40,9 +93,12 @@ const object = shape.object;
 const oneOf = shape.oneOf;
 
 const harness = oneOf(...HARNESSES);
+const agentColor = oneOf(...AGENT_COLORS);
 
 const settings = object({
     name: text(),
+    /** the color its face glows in */
+    color: agentColor,
     harness,
     /** null: whatever the harness is set to use already */
     model: nullable(text()),
@@ -143,6 +199,8 @@ export function parseSettings(v: unknown): Settings {
     const name = typeof s.name === "string" ? s.name.trim() : "";
     if (!name) throw new Error("give the agent a name");
     if (name.length > LIMITS.name) throw new Error(`names are limited to ${LIMITS.name} characters`);
+    if (s.color !== undefined && !AGENT_COLORS.includes(s.color as AgentColor)) throw new Error(`"${String(s.color)}" isn't one of the agent's colors`);
+    const color = (s.color as AgentColor | undefined) ?? DEFAULT_COLOR;
     if (!HARNESSES.includes(s.harness as Harness)) throw new Error("pick a brain");
     let model: string | null = null;
     if (typeof s.model === "string" && s.model && s.model !== DEFAULT_MODEL) {
@@ -156,7 +214,7 @@ export function parseSettings(v: unknown): Settings {
     if (s.automationInstructions !== undefined && typeof s.automationInstructions !== "string") throw new Error("instructions for automations are text");
     const automationInstructions = s.automationInstructions?.trim() ?? "";
     if (automationInstructions.length > LIMITS.instructions) throw new Error(`instructions for automations are limited to ${LIMITS.instructions} characters`);
-    return { name, harness: s.harness as Harness, model, compaction, ...(automationInstructions ? { automationInstructions } : {}) };
+    return { name, color, harness: s.harness as Harness, model, compaction, ...(automationInstructions ? { automationInstructions } : {}) };
 }
 
 /** the current conversation's id where it's listed with the past ones, whose ids are 12 hex digits */
@@ -241,6 +299,29 @@ const brainModel = object({
 });
 export type BrainModel = Infer<typeof brainModel>;
 
+/** One of a plan's limits: a window of time, and how much of it is used. */
+const usageWindow = object({
+    id: text(),
+    /** "Session", "Weekly", "Weekly · Fable" */
+    label: text(),
+    /** 0–100 */
+    used: number(),
+    /** ISO time; null when the harness doesn't say */
+    resetsAt: nullable(text()),
+});
+export type UsageWindow = Infer<typeof usageWindow>;
+
+/** How much of a brain's plan is used, as its harness's own usage screen says. No windows: the account has no plan limits (an API key). */
+const brainUsage = object({
+    /** "Max", "Pro", "Free" */
+    plan: nullable(text()),
+    windows: list(usageWindow),
+});
+export type BrainUsage = Infer<typeof brainUsage>;
+
+/** The brains whose plan usage can be read. OpenCode connects other providers' keys, with no plan of its own. */
+export const USAGE_HARNESSES: readonly Harness[] = ["claude-code", "codex"];
+
 /** What a sign-in asks of the user, as its harness printed it. */
 const loginPrompt = object({
     /** the page to open */
@@ -293,7 +374,17 @@ const brainState = object({
 export type BrainState = Infer<typeof brainState>;
 
 /** OpenCode works with its free models before anything is connected; the others need their sign-in. */
-export const SIGN_IN_REQUIRED: Record<Harness, boolean> = { codex: true, "claude-code": true, opencode: false };
+export const SIGN_IN_REQUIRED: Record<Harness, boolean> = { codex: true, antigravity: true, "claude-code": true, opencode: false };
+
+/**
+ * Antigravity keeps its sign-in in the OS keyring, one per OS user, whatever its home: the agent uses this
+ * computer's own Antigravity sign-in. The panel signs it in when there's none, and never signs it out.
+ */
+export const SHARED_SIGN_IN: Record<Harness, boolean> = { codex: false, antigravity: true, "claude-code": false, opencode: false };
+
+/** The brains the panel signs out itself: a sign-in of their own, not a shared one. */
+export type SignsOut = "codex" | "claude-code";
+export const signsOut = (h: Harness): h is SignsOut => SIGN_IN_REQUIRED[h] && !SHARED_SIGN_IN[h];
 
 /** A field of a provider's connect form. Only text fields (optionally a list of choices) are supported. */
 const providerField = object({
@@ -461,15 +552,15 @@ export const ONBOARDING_STEP = { name: 0, brain: 1, signIn: 2, model: 3, compute
  * Kept by the service while it runs; saving the settings clears it. The last
  * step saves, so the computer's step is the furthest one picked up.
  */
-const onboardingDraft = object({ step: number(), name: text(), harness: nullable(harness), model: nullable(text()) });
+const onboardingDraft = object({ step: number(), name: text(), color: agentColor, harness: nullable(harness), model: nullable(text()) });
 export type OnboardingDraft = Infer<typeof onboardingDraft>;
-export const NO_ONBOARDING: OnboardingDraft = { step: 0, name: "", harness: null, model: null };
+export const NO_ONBOARDING: OnboardingDraft = { step: 0, name: "", color: DEFAULT_COLOR, harness: null, model: null };
 
 const aiState = object({
     /** null until onboarding has saved them */
     settings: nullable(settings),
     onboarding: onboardingDraft,
-    brains: object({ codex: brainState, "claude-code": brainState, opencode: brainState }),
+    brains: object({ codex: brainState, antigravity: brainState, "claude-code": brainState, opencode: brainState }),
     computer: computerState,
     chat: chatState,
     memory: memoryState,
@@ -658,7 +749,7 @@ const NO_BRAIN: BrainState = { phase: "none", installed: false, version: null, s
 export const DEFAULT_STATE: AiState = {
     settings: null,
     onboarding: NO_ONBOARDING,
-    brains: { codex: { ...NO_BRAIN }, "claude-code": { ...NO_BRAIN }, opencode: { ...NO_BRAIN } },
+    brains: { codex: { ...NO_BRAIN }, antigravity: { ...NO_BRAIN }, "claude-code": { ...NO_BRAIN }, opencode: { ...NO_BRAIN } },
     computer: { phase: "none", installed: false, steps: [], error: null, userControl: false },
     chat: { busy: false, typing: false, waiting: [], compacting: false },
     memory: { revision: 0, error: null },
@@ -694,6 +785,8 @@ export const agentsContract = defineContract(PANEL_ID, {
         signOutBrain: { input: byHarness, output: nothing() },
         /** the models a brain offers, from the harness's own catalog */
         models: { input: byHarness, output: list(brainModel) },
+        /** how much of a brain's plan is used (Claude and Codex) */
+        usage: { input: byHarness, output: brainUsage },
         // OpenCode's providers: list them, connect one by key or by a sign-in page, take it back
         providers: { output: list(providerInfo) },
         connectKey: { input: object({ provider: text(), key: text(), answer: optional(shape.record(text())) }), output: nothing() },

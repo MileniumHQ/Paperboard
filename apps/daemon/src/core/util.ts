@@ -125,50 +125,6 @@ export class RingBuffer {
 }
 
 import * as fs from "fs";
-import { logger } from "./logger";
-
-// linux distro info from /etc/os-release
-export function getLinuxDistroInfo(): {
-    distroId: string;
-    distroName: string;
-    version?: string;
-} {
-    if (process.platform !== "linux") {
-        const plat = process.platform === "win32" ? "windows" : "macos";
-        return {
-            distroId: plat,
-            distroName: plat === "windows" ? "Windows" : "macOS",
-        };
-    }
-    try {
-        if (fs.existsSync("/etc/os-release")) {
-            const content = fs.readFileSync("/etc/os-release", "utf8");
-            let id = "linux";
-            let name = "Linux";
-            let version: string | undefined;
-            for (const line of content.split("\n")) {
-                if (line.startsWith("ID="))
-                    id = line.slice(3).replace(/["']/g, "").trim();
-                if (line.startsWith("PRETTY_NAME="))
-                    name = line.slice(12).replace(/["']/g, "").trim();
-                else if (name === "Linux" && line.startsWith("NAME="))
-                    name = line.slice(5).replace(/["']/g, "").trim();
-                if (!version && line.startsWith("VERSION_ID=")) {
-                    version = line.slice(11).replace(/["']/g, "").trim();
-                }
-                if (!version && line.startsWith("BUILD_ID=")) {
-                    version = line.slice(9).replace(/["']/g, "").trim();
-                }
-            }
-            const out = { distroId: id || "linux", distroName: name || "Linux" };
-            return version ? { ...out, version } : out;
-        }
-    } catch (err) {
-        // shown as plain Linux; the log keeps why
-        logger.warn("[util] /etc/os-release is unreadable, so this computer shows as Linux:", err);
-    }
-    return { distroId: "linux", distroName: "Linux" };
-}
 
 // the shell a terminal runs when its creator named none
 export function getDefaultShell(): string {

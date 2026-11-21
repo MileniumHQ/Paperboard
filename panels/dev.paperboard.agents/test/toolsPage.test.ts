@@ -7,7 +7,7 @@ import { bootPanel, openSection, type BootedPanel, type Page } from "./support/p
 
 setDefaultTimeout(60_000);
 
-const SETTINGS = { name: "Ada", harness: "codex" as const, model: null, compaction: "summarize" as const };
+const SETTINGS = { name: "Ada", color: "blue" as const, harness: "codex" as const, model: null, compaction: "summarize" as const };
 // a server that is off; switched on, it starts when the agent first needs it
 const NOTES = { name: "notes", where: "host", transport: "stdio", command: "/bin/false", args: [], env: {}, enabled: false };
 // one the agent set up: its secret's vault name is its own, not one made from the variable's name

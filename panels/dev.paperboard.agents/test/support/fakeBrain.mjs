@@ -40,7 +40,7 @@ const argv = process.argv.slice(2);
 const planFile = path.join(FAKE_DIR, "plan.json");
 const plan = fs.existsSync(planFile) ? JSON.parse(fs.readFileSync(planFile, "utf8")) : {};
 
-const ENV_KEYS = /^(CODEX_HOME|CLAUDE_CONFIG_DIR|XDG_\w+|DISABLE_\w+|CLAUDE_CODE_\w+|OPENCODE_\w+|BROWSER|PAPERBOARD_COMPUTER_MCP_TOKEN)$/;
+const ENV_KEYS = /^(CODEX_HOME|CLAUDE_CONFIG_DIR|HOME|USERPROFILE|APPDATA|LOCALAPPDATA|AGY_\w+|XDG_\w+|DISABLE_\w+|CLAUDE_CODE_\w+|OPENCODE_\w+|BROWSER|PAPERBOARD_COMPUTER_MCP_TOKEN)$/;
 function log(entry) {
     fs.appendFileSync(path.join(FAKE_DIR, "calls.jsonl"), JSON.stringify({ name, ...entry }) + "\n");
 }
@@ -112,10 +112,10 @@ function hold(file = "release") {
     });
 }
 
-async function listTools(url) {
+async function listTools(url, auth = `Bearer ${process.env.PAPERBOARD_COMPUTER_MCP_TOKEN}`) {
     const res = await fetch(url, {
         method: "POST",
-        headers: { "content-type": "application/json", authorization: `Bearer ${process.env.PAPERBOARD_COMPUTER_MCP_TOKEN}` },
+        headers: { "content-type": "application/json", authorization: auth },
         body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list", params: {} }),
     });
     const body = await res.json();
@@ -123,10 +123,10 @@ async function listTools(url) {
 }
 
 /** Text the user over the panel's send_message tool; throws when it's refused. */
-async function sendMessage(url, text) {
+async function sendMessage(url, text, auth = `Bearer ${process.env.PAPERBOARD_COMPUTER_MCP_TOKEN}`) {
     const res = await fetch(url, {
         method: "POST",
-        headers: { "content-type": "application/json", authorization: `Bearer ${process.env.PAPERBOARD_COMPUTER_MCP_TOKEN}` },
+        headers: { "content-type": "application/json", authorization: auth },
         body: JSON.stringify({ jsonrpc: "2.0", id: 2, method: "tools/call", params: { name: "send_message", arguments: { text } } }),
     });
     const body = await res.json();
@@ -159,6 +159,31 @@ const fixture = (f) => fs.readFileSync(path.join(fixturesDir, f), "utf8");
 async function codex() {
     const home = process.env.CODEX_HOME;
     const auth = home ? path.join(home, "auth.json") : null;
+    if (argv[0] === "app-server") {
+        // JSON-RPC a line each: initialize, then account/rateLimits/read answered from plan.codexUsage
+        // (plan.codexUsageError: refused); then wait to be stopped
+        log({ event: "app-server", argv });
+        let buf = "";
+        let initialized = false;
+        process.stdin.setEncoding("utf8");
+        process.stdin.on("data", (d) => {
+            buf += d;
+            for (let i = buf.indexOf("\n"); i >= 0; i = buf.indexOf("\n")) {
+                const msg = JSON.parse(buf.slice(0, i));
+                buf = buf.slice(i + 1);
+                if (msg.method === "initialize") {
+                    initialized = true;
+                    out({ id: msg.id, result: { userAgent: "codex/9.8.7", codexHome: home } });
+                } else if (msg.method === "account/rateLimits/read") {
+                    if (!initialized) out({ id: msg.id, error: { code: -32600, message: "Not initialized" } });
+                    else if (plan.codexUsageError) out({ id: msg.id, error: { code: -32600, message: plan.codexUsageError } });
+                    else out({ id: msg.id, result: plan.codexUsage });
+                }
+            }
+        });
+        process.on("SIGTERM", () => process.exit(0));
+        return;
+    }
     if (argv[0] === "login" && argv[1] === "status") {
         if (plan.status) {
             process.stdout.write(plan.status.stdout ?? "");
@@ -296,7 +321,7 @@ async function claude() {
         return;
     }
     if (argv.includes("--input-format")) {
-        // the models question: an initialize request over stream-json, answered, then wait to be stopped
+        // a question over stream-json (initialize: the models; get_usage: plan.claudeUsage), answered, then wait to be stopped
         let buf = "";
         process.stdin.setEncoding("utf8");
         process.stdin.on("data", (d) => {
@@ -306,6 +331,10 @@ async function claude() {
                 buf = buf.slice(i + 1);
                 if (msg.type === "control_request" && msg.request?.subtype === "initialize") {
                     out({ type: "control_response", response: { subtype: "success", request_id: msg.request_id, response: { models: plan.claudeModels ?? [] } } });
+                }
+                if (msg.type === "control_request" && msg.request?.subtype === "get_usage") {
+                    log({ event: "usage", request: msg.request });
+                    out({ type: "control_response", response: { subtype: "success", request_id: msg.request_id, response: plan.claudeUsage ?? { rate_limits_available: false } } });
                 }
             }
         });
@@ -503,7 +532,144 @@ async function opencode() {
     process.exit(64);
 }
 
+// ------------------------------------------------------------------ Antigravity
+
+async function agy() {
+    const geminiDirIdx = argv.indexOf("--gemini-dir");
+    const home = (geminiDirIdx >= 0 ? argv[geminiDirIdx + 1] : null) ?? process.env.HOME;
+    const marker = home ? path.join(home, "signed-in") : null;
+    if (argv[0] === "acp" && argv.includes("--login")) {
+        process.stdout.write(fixture("antigravityLogin.txt"));
+        let got = "";
+        process.stdin.setEncoding("utf8");
+        process.stdin.on("data", (d) => {
+            got += d;
+            log({ event: "stdin", data: d });
+            if (got.includes("\n")) {
+                if (marker) {
+                    fs.mkdirSync(path.dirname(marker), { recursive: true });
+                    fs.writeFileSync(marker, "{}");
+                }
+                process.exit(0);
+            }
+        });
+        return;
+    }
+    if (argv[0] === "acp") {
+        let buf = "";
+        let mcp = null;
+        let mcpAuth = undefined;
+        let permNextId = 900;
+        const permWaiters = new Map();
+        process.stdin.setEncoding("utf8");
+        const send = (o) => out({ jsonrpc: "2.0", ...o });
+        const askPermission = (toolName) =>
+            new Promise((ok) => {
+                const id = ++permNextId;
+                permWaiters.set(id, (msg) => {
+                    const optionId = msg.result?.outcome?.optionId ?? null;
+                    log({ event: "permission", tool: toolName, optionId });
+                    ok(optionId);
+                });
+                send({
+                    id,
+                    method: "session/request_permission",
+                    params: {
+                        toolCall: { toolCallId: `perm_${id}`, name: toolName, title: toolName },
+                        options: [
+                            { optionId: "allow_once", kind: "allow_once", name: "Allow once" },
+                            { optionId: "reject_once", kind: "reject_once", name: "Reject once" },
+                        ],
+                    },
+                });
+            });
+        const recordSession = (params) => {
+            const servers = Array.isArray(params?.mcpServers) ? params.mcpServers : [];
+            mcp = servers.find((s) => s.name === "paperboard") ?? null;
+            mcpAuth = mcp?.headers?.find((h) => /^authorization$/i.test(h.name))?.value;
+            log({
+                event: "acp-config",
+                instructions: params?._meta?.antigravity?.systemPrompt?.append,
+                disableBuiltInTools: params?.disableBuiltInTools,
+                mcpServers: servers.map((s) => ({ name: s.name, url: s.url })),
+            });
+        };
+        process.stdin.on("data", (d) => {
+            buf += d;
+            const lines = [];
+            for (let i = buf.indexOf("\n"); i >= 0; i = buf.indexOf("\n")) {
+                lines.push(buf.slice(0, i));
+                buf = buf.slice(i + 1);
+            }
+            for (const line of lines) {
+                const msg = JSON.parse(line);
+                if (msg.method === undefined && typeof msg.id === "number" && permWaiters.has(msg.id)) {
+                    const done = permWaiters.get(msg.id);
+                    permWaiters.delete(msg.id);
+                    done(msg);
+                    continue;
+                }
+                log({ event: "acp", method: msg.method });
+                if (msg.method === "initialize") {
+                    send({ id: msg.id, result: { protocolVersion: 1 } });
+                } else if (msg.method === "session/list") {
+                    if (plan.agyStatusError) {
+                        const err = typeof plan.agyStatusError === "string" ? { code: -32603, message: plan.agyStatusError } : plan.agyStatusError;
+                        send({ id: msg.id, error: err });
+                    } else if (marker && fs.existsSync(marker)) send({ id: msg.id, result: { sessions: [] } });
+                    else send({ id: msg.id, error: { code: -32000, message: "Authentication required" } });
+                } else if (msg.method === "session/new") {
+                    recordSession(msg.params);
+                    const options = plan.agyModels ?? [
+                        { value: "gemini-3-flash", name: "Gemini 3 Flash" },
+                        { value: "gemini-3.1-pro-high", name: "Gemini 3.1 Pro (High)" },
+                    ];
+                    send({
+                        id: msg.id,
+                        result: {
+                            sessionId: "agy_ses_fake",
+                            configOptions: [{ id: "model", category: "model", options }],
+                        },
+                    });
+                } else if (msg.method === "session/resume") {
+                    recordSession(msg.params);
+                    send({ id: msg.id, result: {} });
+                } else if (msg.method === "session/prompt") {
+                    void (async () => {
+                        const prompt = (msg.params?.prompt ?? []).map((p) => p.text ?? "").join("");
+                        const url = mcp?.url ?? null;
+                        if (newest(prompt).includes("[[tools]]") && url) await listTools(url, mcpAuth);
+                        if (newest(prompt).includes("[[ask-perm]]")) {
+                            await askPermission("command");
+                            await askPermission("mcp_paperboard_send_message");
+                        }
+                        if (newest(prompt).includes("[[fail]]")) {
+                            process.stderr.write("the brain fell over\n");
+                            process.exit(1);
+                        }
+                        if (texts(prompt, url)) {
+                            send({ method: "session/update", params: { update: { sessionUpdate: "tool_call", toolCallId: "call_fake", name: "mcp_paperboard_send_message" } } });
+                            await sendMessage(url, plan.reply ?? "ok from gemini", mcpAuth);
+                            send({ method: "session/update", params: { update: { sessionUpdate: "tool_call_update", toolCallId: "call_fake", status: "completed" } } });
+                        } else {
+                            send({ method: "session/update", params: { update: { sessionUpdate: "agent_message_chunk", messageId: "m1", content: { type: "text", text: plan.reply ?? "ok from gemini" } } } });
+                        }
+                        send({ id: msg.id, result: { stopReason: "end_turn" } });
+                    })();
+                } else if (msg.id !== undefined) {
+                    send({ id: msg.id, result: {} });
+                }
+            }
+        });
+        process.on("SIGTERM", () => process.exit(0));
+        return;
+    }
+    process.stderr.write(`fake agy: unknown command ${argv.join(" ")}\n`);
+    process.exit(64);
+}
+
 if (name === "codex") await codex();
+else if (name === "agy") await agy();
 else if (name === "claude") await claude();
 else if (name === "opencode") await opencode();
 else {

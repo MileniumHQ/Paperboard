@@ -20,10 +20,11 @@ import { skinFor } from "../face/skins";
 import { createFace, type FaceController } from "../face/controller";
 import { createSpeaker, type Speaker } from "./speech";
 import { scriptFor } from "./script";
-import { SEARCH_MODELS_FROM, createModels, harnessDescription, harnessName, loadedModels } from "../lib/brains";
+import { SEARCH_MODELS_FROM, brainCli, createModels, loadedModels } from "../lib/brains";
 import BrainLogo from "../lib/BrainLogo";
 import { SetupProgress } from "../computer/Computer";
-import { DEFAULT_MODEL, HARNESSES, LIMITS, ONBOARDING_STEP, characterOf, type Harness } from "../contract";
+import { BRAINS, DEFAULT_MODEL, HARNESSES, LIMITS, ONBOARDING_STEP, characterOf, type AgentColor, type Harness } from "../contract";
+import ColorPicker from "../lib/ColorPicker";
 import type { Agent } from "../lib/agent";
 import { BrainButtons, BrainStatus, brainLine, createBrainActions } from "../settings/Brain";
 import Providers from "../settings/Providers";
@@ -76,6 +77,7 @@ function Flow(props: { agent: Agent; onSaving: () => void; onDone: () => void })
     // a meeting left part way is picked up where it was, with its answers
     const kept = props.agent.state.onboarding;
     const [name, setName] = createSignal(kept.name);
+    const [color, setColor] = createSignal<AgentColor>(kept.color);
     const [harness, setHarness] = createSignal<Harness | undefined>(kept.harness ?? undefined);
     const [model, setModel] = createSignal<string | undefined>(kept.model ?? undefined);
     const [computer, setComputer] = createSignal<"setup" | "later">();
@@ -88,7 +90,7 @@ function Flow(props: { agent: Agent; onSaving: () => void; onDone: () => void })
         setSaveError(null);
         props.onSaving();
         try {
-            await props.agent.calls.setup({ settings: { name: name().trim(), harness: harness()!, model: model() === DEFAULT_MODEL ? null : (model() ?? null), compaction: "summarize" } });
+            await props.agent.calls.setup({ settings: { name: name().trim(), color: color(), harness: harness()!, model: model() === DEFAULT_MODEL ? null : (model() ?? null), compaction: "summarize" } });
             if (computer() === "setup") await props.agent.calls.installComputer();
             return true;
         } catch (e) {
@@ -119,6 +121,8 @@ function Flow(props: { agent: Agent; onSaving: () => void; onDone: () => void })
                 speaker={speaker}
                 name={name}
                 setName={setName}
+                color={color}
+                setColor={setColor}
                 harness={harness}
                 setHarness={setHarness}
                 model={model}
@@ -144,6 +148,8 @@ function Scenes(props: {
     speaker: Speaker;
     name: Getter<string>;
     setName: Setter<string>;
+    color: Getter<AgentColor>;
+    setColor: Setter<AgentColor>;
     harness: Getter<Harness | undefined>;
     setHarness: Setter<Harness>;
     model: Getter<string | undefined>;
@@ -298,15 +304,15 @@ function Scenes(props: {
     // answer's failure is the one shown
     const [keepError, setKeepError] = createSignal<string | null>(null);
     let keeping = 0;
-    const keep = (step: number, typed: string, h: Harness | undefined, m: string | undefined) => {
+    const keep = (step: number, typed: string, c: AgentColor, h: Harness | undefined, m: string | undefined) => {
         if (step > STEP.computer) return;
         const mine = ++keeping;
-        props.agent.calls.keepOnboarding({ step, name: typed, harness: h ?? null, model: m ?? null }).then(
+        props.agent.calls.keepOnboarding({ step, name: typed, color: c, harness: h ?? null, model: m ?? null }).then(
             () => mine === keeping && setKeepError(null),
             (e) => mine === keeping && setKeepError(errorMessage(e)),
         );
     };
-    createEffect(on([wizard.currentStep, props.name, props.harness, props.model], ([step, typed, h, m]) => keep(step, typed, h, m), { defer: true }));
+    createEffect(on([wizard.currentStep, props.name, props.color, props.harness, props.model], ([step, typed, c, h, m]) => keep(step, typed, c, h, m), { defer: true }));
 
     // the speaker glides when a step's content re-centers the column, instead of jumping
     let above: HTMLDivElement | undefined;
@@ -320,7 +326,7 @@ function Scenes(props: {
             <div ref={above} class={styles.above} />
             <Show when={speakerShown()}>
                 <div ref={speakerEl} class={styles.speaker} classList={{ [styles.leaving!]: leaving() }}>
-                    <Face face={props.face} size={AGENT_FACE_PX} frame="sphere" hologram skin={skinFor(name())} />
+                    <Face face={props.face} size={AGENT_FACE_PX} frame="sphere" hologram color={props.color()} skin={skinFor(name())} />
                     <div
                         class={styles.bubble}
                         classList={{
@@ -347,6 +353,7 @@ function Scenes(props: {
                         onInput={(e) => props.setName(e.currentTarget.value)}
                         maxLength={LIMITS.name}
                     />
+                    <ColorPicker value={props.color()} onPick={props.setColor} />
                     {/* say why Next waits */}
                     <Show when={props.name().length === 0}>
                         <PaperText preset="hint">Type a name to continue.</PaperText>
@@ -359,8 +366,8 @@ function Scenes(props: {
                     <PaperSelector name="harness" value={props.harness()} onValueChange={(v) => props.setHarness(v as Harness)}>
                         <For each={HARNESSES}>
                             {(h) => (
-                                <PaperSelectorItem value={h} icon={<BrainLogo harness={h} />} description={harnessDescription(h)}>
-                                    {harnessName(h)}
+                                <PaperSelectorItem value={h} icon={<BrainLogo harness={h} />} description={`${BRAINS[h].description} · ${brainCli(h)}`}>
+                                    {BRAINS[h].name}
                                 </PaperSelectorItem>
                             )}
                         </For>
@@ -376,7 +383,7 @@ function Scenes(props: {
                     <Show when={props.harness()}>
                         {(h) => (
                             <>
-                                <PaperSectionHeader title={harnessName(h())} role="heading" aria-level={2} />
+                                <PaperSectionHeader title={BRAINS[h()].name} role="heading" aria-level={2} />
                                 {/* one card: the header's inset is the card's, so the line, the sign-in and the buttons all start where its title does */}
                                 <PaperCard padding="sixfourths" gap="full">
                                     <Show when={brainReady() || brain()?.phase === "installed" || (brain()?.phase === "none" && brain()?.found)}>
@@ -404,7 +411,7 @@ function Scenes(props: {
                     </Show>
                     <PaperSelector name="model" value={props.model()} onValueChange={(v) => props.setModel(String(v))}>
                         <PaperSelectorItem value={DEFAULT_MODEL} icon="tune" description="Whatever it's set to use already.">
-                            Use {harnessName(props.harness() ?? "")}'s default
+                            Use {props.harness() ? `${BRAINS[props.harness()!].program}'s` : "its"} default
                         </PaperSelectorItem>
                         <For each={found()}>
                             {(m) => (
@@ -480,7 +487,7 @@ function Scenes(props: {
                     <PaperError
                         title="Couldn't keep your answers so far"
                         error={err()}
-                        action={{ label: "Try again", onClick: () => keep(wizard.currentStep(), props.name(), props.harness(), props.model()) }}
+                        action={{ label: "Try again", onClick: () => keep(wizard.currentStep(), props.name(), props.color(), props.harness(), props.model()) }}
                     />
                 )}
             </Show>

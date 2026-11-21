@@ -5,7 +5,7 @@
 // conversation as entry events plus a history call.
 
 import path from "node:path";
-import { DEFAULT_MODEL, HARNESSES, LIMITS, NO_ONBOARDING, ONBOARDING_STEP, PANEL_ID, parseSettings, type AiState, type OnboardingDraft, type Harness, type Settings, type agentsContract } from "../contract";
+import { BRAINS, DEFAULT_MODEL, HARNESSES, LIMITS, NO_ONBOARDING, ONBOARDING_STEP, PANEL_ID, USAGE_HARNESSES, parseSettings, type AiState, type BrainUsage, type OnboardingDraft, type Harness, type Settings, type agentsContract } from "../contract";
 import { HomeFolder, moveHomeFolder } from "./homeFolder";
 import { Checkpoints } from "./checkpoints";
 import { shellToolset } from "./shell";
@@ -18,7 +18,7 @@ import { Providers } from "./providers";
 import type { LoginMethod } from "./brainLogin";
 import { startComputerMcp, type ComputerMcp } from "./computerMcp";
 import { Conversation, type TurnHost } from "./conversation";
-import { CLAUDE_MEMORY_OFF, HARNESS_NAMES, customSection } from "./harness";
+import { CLAUDE_MEMORY_OFF, customSection } from "./harness";
 import { COMPUTER_INSTRUCTIONS, COMPUTER_TOOLS } from "./computerTools";
 import { filesToolset } from "./attachmentTools";
 import { blocksToolset, type BlocksRegistry } from "./blocksToolset";
@@ -26,7 +26,8 @@ import { McpServers, type Vault } from "./mcpServers";
 import { checkSecretName } from "./mcpConfig";
 import { mcpToolset } from "./mcpToolset";
 import type { ToolsConfig } from "../toolsContract";
-import { askClaudeModels, listModels } from "./models";
+import { askAntigravityModels, askClaudeModels, listModels } from "./models";
+import { readUsage } from "./usage";
 import { Memory } from "./memory";
 import { messagesToolset } from "./messages";
 import { Routines } from "./routines";
@@ -99,8 +100,10 @@ export class AiApp {
     private turnLog: TurnLog | null = null;
     servers!: McpServers;
     asker!: Asker;
-    /** the empty folder Claude runs in when it's asked for its models */
+    /** the empty folder a harness runs in when it's asked about itself: its models, its usage */
     private modelsDir = "";
+    /** a usage question still out, per brain: a second ask while it is gets the same answer */
+    private usageAsks = new Map<Harness, Promise<BrainUsage>>();
     private readonly blocks: BlocksSync;
     private settle!: (failure: Error | null) => void;
     private readonly settled = new Promise<Error | null>((ok) => (this.settle = ok));
@@ -298,6 +301,7 @@ export class AiApp {
             log: this.turnLog,
             settings: () => this.ctx.state.settings,
             resolve: (h) => this.brains.resolve(h),
+            home: (h) => this.brains.home(h),
             env: (h) => this.brains.env(h),
             problem: (h) => this.brainProblem(h),
             mcp: () => ({ url: this.mcp!.url, token: this.mcp!.token, onToolsListed: (cb) => this.mcp!.onToolsListed(cb) }),
@@ -329,6 +333,7 @@ export class AiApp {
             host: { ...this.host, write: this.host.tools.write },
             settings: () => this.ctx.state.settings,
             resolve: (h) => this.brains.resolve(h),
+            home: (h) => this.brains.home(h),
             env: (h) => this.brains.env(h),
             problem: (h) => this.brainProblem(h),
             workdir: path.join(root, "ask"),
@@ -374,7 +379,7 @@ export class AiApp {
         const settings = parseSettings(((input ?? {}) as Record<string, unknown>).settings);
         const brain = this.brains.snapshot()[settings.harness];
         if (brain.phase !== "ready") {
-            throw new Error(`${HARNESS_NAMES[settings.harness]} isn't ready: ${brain.installed ? "sign in to it first" : "install it first"}`);
+            throw new Error(`${BRAINS[settings.harness].program} isn't ready: ${brain.installed ? "sign in to it first" : "install it first"}`);
         }
         await this.host.writeSettings(settings);
         this.ctx.setState({ settings, onboarding: NO_ONBOARDING });
@@ -389,7 +394,7 @@ export class AiApp {
         if (!Number.isInteger(draft.step) || draft.step < 0 || draft.step > ONBOARDING_STEP.computer) throw new Error(`step ${draft.step} isn't one the first meeting picks up at`);
         if (draft.name.length > LIMITS.name) throw new Error(`names are limited to ${LIMITS.name} characters`);
         if (draft.model !== null && draft.model.length > LIMITS.model) throw new Error(`models are limited to ${LIMITS.model} characters`);
-        this.ctx.setState({ onboarding: { step: draft.step, name: draft.name, harness: draft.harness, model: draft.model } });
+        this.ctx.setState({ onboarding: { step: draft.step, name: draft.name, color: draft.color, harness: draft.harness, model: draft.model } });
     }
 
     /** The settings live in the panel's config document; none yet is a fresh install. One that won't read is never taken for none. */
@@ -408,23 +413,52 @@ export class AiApp {
         const harness = this.harnessOf(input);
         // OpenCode's own listing opens the folder its provider server is using
         if (harness === "opencode" && !(await this.providers.quiet())) throw new Error("Finish connecting the provider first.");
-        return listModels(harness, this.brains.homes, (command, args, o) => {
-            const h: Harness = command === "codex" ? "codex" : "opencode";
-            const resolved = this.brains.resolve(h);
-            if (!resolved) throw new Error(`${HARNESS_NAMES[h]} isn't installed`);
-            return this.host.exec(resolved, args, { timeoutMs: o.timeoutMs, env: this.brains.env(h) });
-        }, () => {
-            const command = this.brains.resolve("claude-code");
-            if (!command) throw new Error("Claude isn't installed");
-            return askClaudeModels({ ...this.host, write: this.host.tools.write }, { command, env: { ...this.brains.env("claude-code"), ...CLAUDE_MEMORY_OFF }, cwd: this.modelsDir });
-        });
+        return listModels(
+            harness,
+            this.brains.homes,
+            (command, args, o) => {
+                const h: Harness = command === "codex" ? "codex" : "opencode";
+                const resolved = this.brains.resolve(h);
+                if (!resolved) throw new Error(`${BRAINS[h].program} isn't installed`);
+                return this.host.exec(resolved, args, { timeoutMs: o.timeoutMs, env: this.brains.env(h) });
+            },
+            () => {
+                const command = this.brains.resolve("claude-code");
+                if (!command) throw new Error(`${BRAINS["claude-code"].program} isn't installed`);
+                return askClaudeModels({ ...this.host, write: this.host.tools.write }, { command, env: { ...this.brains.env("claude-code"), ...CLAUDE_MEMORY_OFF }, cwd: this.modelsDir });
+            },
+            () => {
+                const command = this.brains.resolve("antigravity");
+                if (!command) throw new Error(`${BRAINS.antigravity.program} isn't installed`);
+                return askAntigravityModels(
+                    { ...this.host, write: this.host.tools.write },
+                    { command, home: this.brains.home("antigravity"), env: this.brains.env("antigravity"), cwd: this.modelsDir },
+                );
+            },
+        );
+    }
+
+    /** How much of a brain's plan is used, asked of the harness itself. */
+    async usage(input: unknown): Promise<BrainUsage> {
+        const harness = this.harnessOf(input);
+        if (!USAGE_HARNESSES.includes(harness)) throw new Error(`${BRAINS[harness].name} has no usage limits of its own to show`);
+        const b = this.brains.snapshot()[harness];
+        if (!b.signedIn) throw new Error(`${BRAINS[harness].name} isn't signed in`);
+        const command = this.brains.resolve(harness);
+        if (!command) throw new Error(`${BRAINS[harness].program} isn't installed`);
+        const out = this.usageAsks.get(harness);
+        if (out) return out;
+        const env = { ...this.brains.env(harness), ...(harness === "claude-code" ? CLAUDE_MEMORY_OFF : {}) };
+        const ask = readUsage(harness, { ...this.host, write: this.host.tools.write }, { command, env, cwd: this.modelsDir }).finally(() => this.usageAsks.delete(harness));
+        this.usageAsks.set(harness, ask);
+        return ask;
     }
 
     /** Why a brain can't think right now, in words that say how to fix it; null when it can. */
     private brainProblem(harness: Harness): string | null {
         const b = this.brains.snapshot()[harness];
         if (b.phase === "ready" || b.phase === "signing-in" || b.phase === "installing") return null;
-        const name = HARNESS_NAMES[harness];
+        const name = BRAINS[harness].program;
         if (b.phase === "installed") return `${name} isn't signed in. Sign in to it in the agent's settings.`;
         if (b.phase === "failed" && b.installed) return `${name} isn't working: ${b.error}`;
         return null;
@@ -450,13 +484,13 @@ export class AiApp {
                 (e) => {
                     if (this.brains.snapshot()[harness].error !== errorMessage(e)) throw e;
                     // quiet: the brain's state says why, as it does for one found by a look
-                    console.error(`[agents] ${HARNESS_NAMES[harness]} on this computer wasn't used:`, String(e));
+                    console.error(`[agents] ${BRAINS[harness].program} on this computer wasn't used:`, String(e));
                     return { accepted: true };
                 },
             );
         }
         // quiet: a download and an unpack, accepted now and followed through state.brains, which carries the error
-        void (from === "package" ? this.brains.installOwn(harness) : this.brains.install(harness)).catch((e) => console.error(`[agents] ${HARNESS_NAMES[harness]} didn't install:`, String(e)));
+        void (from === "package" ? this.brains.installOwn(harness) : this.brains.install(harness)).catch((e) => console.error(`[agents] ${BRAINS[harness].program} didn't install:`, String(e)));
         return { accepted: true };
     }
 
@@ -563,6 +597,7 @@ export class AiApp {
             brains: {
                 state: () => this.brains.snapshot(),
                 current: () => this.settings().harness,
+                usage: (harness) => this.usage({ harness }),
                 // a model belongs to its brain: the new one starts on its own default, as the settings do it
                 choose: async (harness) => void (await this.setup({ settings: { ...this.settings(), harness, model: null } })),
                 install: (harness) => this.brains.installOwn(harness),

@@ -3,18 +3,11 @@
 // its own (service/models.ts).
 
 import { createRead, type Read } from "@mileniumhq/paperui/headless";
-import type { BrainModel, Harness } from "../contract";
+import { BRAINS, type BrainModel, type Harness } from "../contract";
 import type { Agent } from "./agent";
 
-// "Claude", not "Claude Code": Anthropic's terms ask that products built on it don't carry its product's name
-const BRAINS: Record<Harness, { name: string; description: string }> = {
-    codex: { name: "Codex", description: "OpenAI's coding agent" },
-    "claude-code": { name: "Claude", description: "Anthropic's coding agent" },
-    opencode: { name: "OpenCode", description: "The open source coding agent, with any provider" },
-};
-
-export const harnessName = (id: string) => BRAINS[id as Harness]?.name ?? id;
-export const harnessDescription = (id: string) => BRAINS[id as Harness]?.description;
+/** The program under a choice, as its subtitles name it ("Codex CLI"). */
+export const brainCli = (h: Harness) => `${BRAINS[h].program} CLI`;
 
 /** The models a harness offers, fetched again whenever the harness changes, or its brain is installed, signed in or removed (what it lists, or can't, depends on that). */
 export function createModels(agent: Agent, harness: () => Harness | undefined): Read<BrainModel[]> {

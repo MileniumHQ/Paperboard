@@ -99,6 +99,7 @@ export interface FakeBrain {
 /** each harness's program, as the fake brain acts it, its home in the panel's storage (Brains.home), and the file there that says it's signed in */
 const PROGRAMS: Record<Harness, { program: string; home: string; signedIn: string }> = {
     codex: { program: "codex", home: "codex", signedIn: "auth.json" },
+    antigravity: { program: "agy", home: "antigravity", signedIn: "signed-in" },
     "claude-code": { program: "claude", home: "claude", signedIn: "signed-in" },
     opencode: { program: "opencode", home: "opencode", signedIn: "auth.json" },
 };

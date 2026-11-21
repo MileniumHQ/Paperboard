@@ -153,6 +153,7 @@ export const RECIPE_SUFFIX: Record<PackageRecipe["unpack"], string> = {
     "tar.xz": ".tar.xz",
     dmg: ".dmg",
     msi: ".msi",
+    file: ".bin",
 };
 
 // a system tool, with its stderr in the error when it fails
@@ -229,6 +230,10 @@ export async function applyPackageRecipe(archivePath: string, pkgDir: string, re
             }
         } else if (recipe.unpack === "msi") {
             await extractMsi(archivePath, scratch);
+        } else if (recipe.unpack === "file") {
+            const destFile = path.join(scratch, "file");
+            await fs.promises.copyFile(archivePath, destFile);
+            if (process.platform !== "win32") fs.chmodSync(destFile, 0o755);
         } else {
             if (process.platform !== "darwin") throw new Error("This package unpacks a macOS disk image, which only macOS can open");
             tree = path.join(scratch, "volume");
