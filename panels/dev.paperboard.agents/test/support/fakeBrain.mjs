@@ -544,9 +544,6 @@ async function agy() {
                         send({ id: msg.id, error: err });
                     } else if (marker && fs.existsSync(marker)) send({ id: msg.id, result: { sessions: [] } });
                     else send({ id: msg.id, error: { code: -32000, message: "Authentication required" } });
-                } else if (msg.method === "logout") {
-                    if (marker) fs.rmSync(marker, { force: true });
-                    send({ id: msg.id, result: {} });
                 } else if (msg.method === "session/new") {
                     recordSession(msg.params);
                     const options = plan.agyModels ?? [

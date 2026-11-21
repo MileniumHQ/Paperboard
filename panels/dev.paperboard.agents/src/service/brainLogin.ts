@@ -47,7 +47,7 @@ export const STATUS_COMMAND: Record<"codex" | "claude-code", string[]> = {
     codex: ["login", "status"],
     "claude-code": ["auth", "status"],
 };
-export const LOGOUT_COMMAND: Record<"codex" | "claude-code", string[]> = {
+export const LOGOUT_COMMAND: Partial<Record<Harness, string[]>> = {
     codex: ["logout"],
     "claude-code": ["auth", "logout"],
 };

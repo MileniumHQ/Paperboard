@@ -2,7 +2,7 @@
 // and events, which app.ts registers and keeps told of changes (blocksSync.ts).
 
 import type { BlockSet } from "@mileniumhq/paperapi";
-import { BRAINS, DEFAULT_MODEL, HARNESSES, LIMITS, SIGN_IN_REQUIRED, type PageInfo, type BrainModel, type BrainState, type Harness, type Routine } from "../contract";
+import { BRAINS, DEFAULT_MODEL, HARNESSES, LIMITS, SHARED_SIGN_IN, SIGN_IN_REQUIRED, type PageInfo, type BrainModel, type BrainState, type Harness, type Routine } from "../contract";
 import type { ServerStatus } from "../toolsContract";
 import { DAY_NAMES, describeSchedule, localStamp } from "../routineText";
 import { ASK_MS } from "./ask";
@@ -717,7 +717,7 @@ export function flowBlocks(host: BlocksHost): BlockSet {
                 icon: "logout",
                 description: "Signs a brain out of its account; the agent can't think with it until it's signed in again in the Agent panel",
                 text: "sign {brain} out",
-                inputs: { brain: { type: "brain", name: "Brain", choices: brainChoices((h) => SIGN_IN_REQUIRED[h]) } },
+                inputs: { brain: { type: "brain", name: "Brain", choices: brainChoices((h) => SIGN_IN_REQUIRED[h] && !SHARED_SIGN_IN[h]) } },
                 run: ({ brain: id }: { brain: Harness }) =>
                     ready(() => {
                         if (!brain(id).signedIn) throw new Error(`${BRAINS[id].program} isn't signed in`);

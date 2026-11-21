@@ -368,7 +368,7 @@ describe("brain sign-in", () => {
         expect(b.snapshot().codex).toMatchObject({ phase: "installed", login: null, error: null });
     }, SLOW);
 
-    test("Antigravity signs in with a pasted Google authorization code and signs out over ACP", async () => {
+    test("Antigravity signs in with a pasted Google authorization code, names no account it wasn't told, and has no Sign out that would reach past the panel", async () => {
         const { host, b, states } = await brains({ installed: ["antigravity"] });
         expect(b.snapshot().antigravity).toMatchObject({ phase: "installed", installed: true, signedIn: false });
         await b.signIn("antigravity");
@@ -378,9 +378,10 @@ describe("brain sign-in", () => {
         await states.until((s) => s.at(-1)?.antigravity.phase === "ready", "Antigravity to be signed in");
         expect(host.writes.filter((w) => w.id === loginProcessId("antigravity"))).toEqual([{ id: loginProcessId("antigravity"), data: "4/0A-google-code\n" }]);
         expect(JSON.stringify(states.items)).not.toContain("4/0A-google-code");
-        expect(b.snapshot().antigravity).toMatchObject({ signedIn: true, account: "Google", login: null, error: null });
-        await b.signOut("antigravity");
-        expect(b.snapshot().antigravity).toMatchObject({ phase: "installed", signedIn: false, account: null });
+        expect(b.snapshot().antigravity).toMatchObject({ signedIn: true, account: null, login: null, error: null });
+        // its sign-in is the computer's (the OS keyring): signing out here would sign the user out everywhere
+        expect(() => b.signOut("antigravity")).toThrow("Antigravity uses this computer's own sign-in; sign out of it there");
+        expect(b.snapshot().antigravity).toMatchObject({ phase: "ready", signedIn: true });
     }, SLOW);
 });
 

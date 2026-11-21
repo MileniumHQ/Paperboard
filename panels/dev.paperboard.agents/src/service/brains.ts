@@ -14,7 +14,11 @@
 // HOME/XDG_*/APPDATA for Antigravity, CLAUDE_CONFIG_DIR, XDG_* for OpenCode),
 // even a program the user installed, so the agent never touches, or is changed
 // by, the user's own settings and sign-ins. Credentials stay in those folders,
-// written by the harnesses themselves; this panel never reads them. Auto-update
+// written by the harnesses themselves; this panel never reads them. The one
+// exception is Antigravity's sign-in: agy keeps it in the OS keyring, which is
+// the OS user's whatever the home, so the agent shares this computer's
+// Antigravity sign-in (SHARED_SIGN_IN). The panel signs it in when there's
+// none, and has no Sign out for it, which would reach past the panel. Auto-update
 // is off for every harness: a package is the only way a new build arrives, and
 // a program the user installed is theirs to update.
 
@@ -22,7 +26,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { errorMessage, SerialQueue } from "@mileniumhq/paperapi";
 import { writeFileAtomicSync } from "@mileniumhq/paperapi/fs";
-import { BRAINS, SIGN_IN_REQUIRED, type BrainState, type Harness, type LoginPrompt } from "../contract";
+import { BRAINS, SHARED_SIGN_IN, SIGN_IN_REQUIRED, type BrainState, type Harness, type LoginPrompt } from "../contract";
 import { AcpRpcError, runAcpCall } from "./acp";
 import { LOGOUT_COMMAND, STATUS_COMMAND, antigravityAcpArgs, callbackAddress, loginCommand, loginEnv, loginTail, outputTail, readLoginOutput, readStatus, type LoginMethod } from "./brainLogin";
 import type { StartOptions } from "./browser";
@@ -132,7 +136,7 @@ export class Brains {
         const home = this.home(harness);
         if (harness === "codex") return { CODEX_HOME: home };
         if (harness === "antigravity") {
-            // agy scopes its credential-user-scope and secret storage from the OS home/config dirs
+            // its settings and caches; its sign-in is the OS keyring's, shared with the computer (SHARED_SIGN_IN)
             return {
                 HOME: home,
                 XDG_CONFIG_HOME: path.join(home, ".config"),
@@ -325,32 +329,14 @@ export class Brains {
 
     signOut(harness: Harness): Promise<void> {
         if (harness === "opencode") throw new Error("OpenCode's providers are disconnected one by one");
+        if (SHARED_SIGN_IN[harness]) throw new Error(`${BRAINS[harness].program} uses this computer's own sign-in; sign out of it there`);
+        const logout = LOGOUT_COMMAND[harness];
+        if (!logout) throw new Error(`${BRAINS[harness].program} has no sign-out command`);
         return this.busy[harness].run(async () => {
             const exe = this.resolve(harness);
             if (!exe) throw this.fail(harness, `${BRAINS[harness].program} isn't installed.`);
             const timeoutMs = this.deps.statusMs ?? STATUS_MS;
-            if (harness === "antigravity") {
-                try {
-                    await runAcpCall(
-                        this.deps.host,
-                        {
-                            label: "logout",
-                            who: BRAINS.antigravity.program,
-                            command: exe,
-                            args: antigravityAcpArgs(this.home("antigravity")),
-                            cwd: this.home("antigravity"),
-                            env: this.env("antigravity"),
-                            timeoutMs,
-                        },
-                        (call) => call("logout", {}),
-                    );
-                } catch (e) {
-                    throw this.fail(harness, `${BRAINS[harness].program} didn't sign out: ${errorMessage(e)}`);
-                }
-                await this.look(harness);
-                return;
-            }
-            const out = await this.deps.host.exec(exe, LOGOUT_COMMAND[harness], { timeoutMs, env: this.env(harness) });
+            const out = await this.deps.host.exec(exe, logout, { timeoutMs, env: this.env(harness) });
             if (out.exitCode !== 0) throw this.fail(harness, `${BRAINS[harness].program} didn't sign out: ${outputTail(out.stderr || out.stdout) || `exit ${out.exitCode}`}`);
             await this.look(harness);
         });
@@ -507,7 +493,8 @@ export class Brains {
                     },
                     (call) => call("session/list", {}),
                 );
-                return { signedIn: true, account: "Google" };
+                // session/list says nothing of the account, and the sign-in may be one made outside Paperboard
+                return { signedIn: true, account: null };
             } catch (e) {
                 if (e instanceof AcpRpcError && e.code === -32000 && /authentication required/i.test(e.message)) {
                     return { signedIn: false, account: null };

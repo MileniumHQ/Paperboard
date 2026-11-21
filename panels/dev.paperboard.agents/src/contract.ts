@@ -43,7 +43,7 @@ export const BRAINS: Record<Harness, BrainInfo> = {
     antigravity: {
         name: "Gemini",
         program: "Antigravity",
-        description: "Sign in with your Google account",
+        description: "Your Google account, shared with this computer's Antigravity",
     },
     "claude-code": {
         name: "Claude",
@@ -325,6 +325,12 @@ export type BrainState = Infer<typeof brainState>;
 
 /** OpenCode works with its free models before anything is connected; the others need their sign-in. */
 export const SIGN_IN_REQUIRED: Record<Harness, boolean> = { codex: true, antigravity: true, "claude-code": true, opencode: false };
+
+/**
+ * Antigravity keeps its sign-in in the OS keyring, one per OS user, whatever its home: the agent uses this
+ * computer's own Antigravity sign-in. The panel signs it in when there's none, and never signs it out.
+ */
+export const SHARED_SIGN_IN: Record<Harness, boolean> = { codex: false, antigravity: true, "claude-code": false, opencode: false };
 
 /** A field of a provider's connect form. Only text fields (optionally a list of choices) are supported. */
 const providerField = object({
