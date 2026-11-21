@@ -14,6 +14,7 @@ export default function TroubleshootingDoc() {
                 The messages Paperboard and the server daemon show when something goes wrong, what causes each one, and what to do.
                 Find the message you see, word for word, under its area.
                 When a message is not here, the log has the full story: <PaperCode>logs/paperboard.log</PaperCode> in the <PaperLink href="/docs/paperboard/data-directory/">data directory</PaperLink>.
+                For a problem this page does not cover, <PaperLink href="#report-an-issue">report an issue</PaperLink>.
             </PaperText>
 
             <PaperText preset="subheader" as="h2" id="installing">Installing Paperboard</PaperText>
@@ -224,6 +225,18 @@ export default function TroubleshootingDoc() {
                 This Paperboard was not installed from the AppImage, so it cannot update itself. Update it the way you installed it, or switch to the AppImage from <PaperLink href="/docs/paperboard/install/">Install Paperboard</PaperLink>.
                 A Paperboard installed from the Windows MSI is updated by your administrator, who installs the new MSI.
             </PaperText>
+
+            <PaperText preset="subheader" as="h2" id="report-an-issue">Report an issue</PaperText>
+            <PaperText preset="body" as="p">
+                In <b>App Settings</b>, under <b>Help</b>, select <b>Report an Issue</b>. Say what went wrong and pick a coding agent installed on this computer, such as Claude Code or Codex.
+                The agent reads the code of the Paperboard version you run, finds the likely cause, and writes the issue. You can tell it more while it works, or stop it.
+            </PaperText>
+            <PaperTextList>
+                <li>The agent only reads. Paperboard refuses every tool that would change your computer or reach the internet.</li>
+                <li>What you write goes to the agent you picked, and on to its provider, as any task you give it does.</li>
+                <li>The issue goes nowhere until you send it: to GitHub with the GitHub CLI (<PaperCode>gh</PaperCode>) signed in, to Discord, by email, or copied.</li>
+                <li>No agent listed? Install one of the agents the window names, then open it again. In a browser or on a phone, report from the desktop app.</li>
+            </PaperTextList>
         </PaperFlex>
     );
 }
