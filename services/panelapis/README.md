@@ -4,7 +4,7 @@ Server-side APIs for Paperboard panels, served from the root of `panels.ariapis.
 
 ## Modscan
 
-Paperboard's server-side Steam Workshop metadata service. The owner's Steam Web API key stays in a Worker secret; desktop users do not supply keys. The Game Server panel calls it (`panels/dev.paperboard.gameserver/src/games/steam/modscan.ts`) for Workshop search, items and collections, and lists it under Steam in its manifest's `store.services`.
+Paperboard's server-side Steam Workshop metadata service. The owner's Steam Web API key stays in a Worker secret; desktop users do not supply keys. The Game Server panel calls it (`panels/dev.paperboard.gameserver/src/games/steam/modscan.ts`) for Workshop search, items and collections, and lists it as Paperboard modscan in its manifest's `store.services`.
 
 ### Terms review — 2026-10-30
 
@@ -29,11 +29,11 @@ No numerical cache TTL or universal maximum personal-data retention period was f
 
 Disclosure status, checked against the repository on 2026-11-20:
 
-1. **Privacy policy and user-facing terms: partly done.** `apps/paperdocs/src/site/pages/privacy.md` says panels use the panel APIs (`panels.ariapis.com`), which see the IP address, keep no record of who asked, and use the IP only for rate limiting. It does not yet name Steam Workshop data, the edge caches, or the countries where Cloudflare caches. No user-facing terms page exists, so the warranty and liability disclaimers are only in the response metadata and the panel's result view.
-2. **Cached public metadata: not yet disclosed to users.** Item metadata, public author Steam IDs and short descriptions sit in edge caches for up to five minutes. Public IDs can still be personal data. This app does not retrieve profiles, email, real names, passwords, private subscriptions or a caller's Steam ID. Do not enrich author IDs or collect nonpublic user data without a separate review and the required request/disclosures.
+1. **Privacy disclosures: done.** Panel-specific services are disclosed in each panel's manifest, not the privacy page. The Game Server panel's `store.services` lists "Paperboard modscan": Workshop search and collections, with public items and their authors' Steam IDs cached for up to five minutes at the nearest Cloudflare site. `apps/paperdocs/src/site/pages/privacy.md` covers the panel APIs (`panels.ariapis.com`) in general: they see the IP address, keep no record of who asked, and use the IP only for rate limiting.
+2. **User-facing terms: not done.** No terms page exists, so the warranty and liability disclaimers are only in the response metadata and the panel's result view. Public author IDs can still be personal data. This app does not retrieve profiles, email, real names, passwords, private subscriptions or a caller's Steam ID. Do not enrich author IDs or collect nonpublic user data without a separate review and the required request/disclosures.
 3. **Client IPs: disclosed** in the privacy page (see 1). This Worker stores no IP/request history itself; the rate-limit binding processes IPs. Keep request/subrequest tracing and any external log drains that capture Steam URLs or request bodies disabled. TTL limits serving freshness, not guaranteed physical deletion from Cloudflare infrastructure.
 4. **Key handling: in place.** The key is a Worker secret used only by this service. Coordinate any other use of the key within Valve's total cap; the local guard cannot count unrelated applications. Do not reset the durable budget name, storage or migration while calls remain in its rolling window. When changing keys, retain the conservative guard.
-5. **Panel integration: partly done.** The Game Server panel declares the service in its manifest (`store.services`, under Steam). The Source Workshop pane shows the attribution, source link and disclaimers from `meta`. The Terraria mod store also looks up item details (installed mods and what they require) but does not show the attribution. Handle explicit API errors visibly, re-review Valve's terms periodically, and stop when access is withdrawn.
+5. **Panel integration: partly done.** The Game Server panel declares the service in its manifest (`store.services`, as Paperboard modscan). The Source Workshop pane shows the attribution, source link and disclaimers from `meta`. The Terraria mod store also looks up item details (installed mods and what they require) but does not show the attribution. Handle explicit API errors visibly, re-review Valve's terms periodically, and stop when access is withdrawn.
 
 ### Endpoints
 
