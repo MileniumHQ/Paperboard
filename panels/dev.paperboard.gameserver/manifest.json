@@ -116,7 +116,7 @@
             },
             {
                 "name": "Steam",
-                "detail": "Server and Workshop downloads via SteamCMD, Workshop search and collections, and players' profile pictures (Steam Community sees each Steam id)"
+                "detail": "SteamCMD downloads, Workshop search (via Paperboard's modscan), pictures and collections, and players' profile pictures (Steam Community sees each Steam id)"
             },
             {
                 "name": "Facepunch",
