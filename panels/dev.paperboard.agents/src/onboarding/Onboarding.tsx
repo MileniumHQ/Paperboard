@@ -20,10 +20,10 @@ import { skinFor } from "../face/skins";
 import { createFace, type FaceController } from "../face/controller";
 import { createSpeaker, type Speaker } from "./speech";
 import { scriptFor } from "./script";
-import { SEARCH_MODELS_FROM, createModels, harnessDescription, harnessName, harnessProgram, loadedModels } from "../lib/brains";
+import { SEARCH_MODELS_FROM, brainCli, createModels, loadedModels } from "../lib/brains";
 import BrainLogo from "../lib/BrainLogo";
 import { SetupProgress } from "../computer/Computer";
-import { DEFAULT_MODEL, HARNESSES, LIMITS, ONBOARDING_STEP, characterOf, type Harness } from "../contract";
+import { BRAINS, DEFAULT_MODEL, HARNESSES, LIMITS, ONBOARDING_STEP, characterOf, type Harness } from "../contract";
 import type { Agent } from "../lib/agent";
 import { BrainButtons, BrainStatus, brainLine, createBrainActions } from "../settings/Brain";
 import Providers from "../settings/Providers";
@@ -359,8 +359,8 @@ function Scenes(props: {
                     <PaperSelector name="harness" value={props.harness()} onValueChange={(v) => props.setHarness(v as Harness)}>
                         <For each={HARNESSES}>
                             {(h) => (
-                                <PaperSelectorItem value={h} icon={<BrainLogo harness={h} />} description={harnessDescription(h)}>
-                                    {harnessName(h)}
+                                <PaperSelectorItem value={h} icon={<BrainLogo harness={h} />} description={`${BRAINS[h].description} · ${brainCli(h)}`}>
+                                    {BRAINS[h].name}
                                 </PaperSelectorItem>
                             )}
                         </For>
@@ -376,7 +376,7 @@ function Scenes(props: {
                     <Show when={props.harness()}>
                         {(h) => (
                             <>
-                                <PaperSectionHeader title={harnessName(h())} role="heading" aria-level={2} />
+                                <PaperSectionHeader title={BRAINS[h()].name} role="heading" aria-level={2} />
                                 {/* one card: the header's inset is the card's, so the line, the sign-in and the buttons all start where its title does */}
                                 <PaperCard padding="sixfourths" gap="full">
                                     <Show when={brainReady() || brain()?.phase === "installed" || (brain()?.phase === "none" && brain()?.found)}>
@@ -404,7 +404,7 @@ function Scenes(props: {
                     </Show>
                     <PaperSelector name="model" value={props.model()} onValueChange={(v) => props.setModel(String(v))}>
                         <PaperSelectorItem value={DEFAULT_MODEL} icon="tune" description="Whatever it's set to use already.">
-                            Use {harnessProgram(props.harness() ?? "")}'s default
+                            Use {props.harness() ? `${BRAINS[props.harness()!].program}'s` : "its"} default
                         </PaperSelectorItem>
                         <For each={found()}>
                             {(m) => (

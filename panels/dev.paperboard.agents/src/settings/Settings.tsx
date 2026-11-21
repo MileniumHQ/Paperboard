@@ -22,9 +22,9 @@ import {
 } from "@mileniumhq/paperui";
 import { errorMessage } from "@mileniumhq/paperapi";
 import BrainLogo from "../lib/BrainLogo";
-import { COMPACTIONS, DEFAULT_MODEL, HARNESSES, LIMITS, type Compaction, type Harness, type Settings as Saved } from "../contract";
+import { BRAINS, COMPACTIONS, DEFAULT_MODEL, HARNESSES, LIMITS, type Compaction, type Harness, type Settings as Saved } from "../contract";
 import type { Agent } from "../lib/agent";
-import { SEARCH_MODELS_FROM, createModels, harnessCli, harnessName, harnessProgram, loadedModels } from "../lib/brains";
+import { SEARCH_MODELS_FROM, brainCli, createModels, loadedModels } from "../lib/brains";
 import { BrainButtons, BrainStatus, SignInModal, brainLine, createBrainActions } from "./Brain";
 import Providers from "./Providers";
 
@@ -113,8 +113,8 @@ function AgentSettings(props: { agent: Agent }) {
                     >
                         <For each={HARNESSES}>
                             {(h) => (
-                                <PaperSelectMenuItem value={h} icon={<BrainLogo harness={h} />} description={harnessCli(h)} disabled={!isReady(h)}>
-                                    {harnessName(h)}
+                                <PaperSelectMenuItem value={h} icon={<BrainLogo harness={h} />} description={brainCli(h)} disabled={!isReady(h)}>
+                                    {BRAINS[h].name}
                                     {isReady(h) ? "" : " (not set up)"}
                                 </PaperSelectMenuItem>
                             )}
@@ -158,7 +158,7 @@ function AgentSettings(props: { agent: Agent }) {
                             searchable={listed().length >= SEARCH_MODELS_FROM}
                             onValueChange={(v) => report("Couldn't change the model", picked.set(String(v)))}
                         >
-                            <PaperSelectMenuItem value={DEFAULT_MODEL} icon="tune" description={`Whatever ${harnessProgram(current().harness)} is set to use`}>
+                            <PaperSelectMenuItem value={DEFAULT_MODEL} icon="tune" description={`Whatever ${BRAINS[current().harness].program} is set to use`}>
                                 Default
                             </PaperSelectMenuItem>
                             <For each={listed()}>
@@ -195,13 +195,8 @@ function BrainsSettings(props: { agent: Agent }) {
                 <For each={HARNESSES}>
                     {(h) => (
                         <PaperSettingItem
-                            title={
-                                <PaperFlex direction="row" gap="half" align="center">
-                                    <BrainLogo harness={h} />
-                                    <span>{harnessName(h)}</span>
-                                </PaperFlex>
-                            }
-                            description={`${brainLine(h, props.agent.state.brains[h])} · ${harnessCli(h)}`}
+                            title={BRAINS[h].name}
+                            description={`${brainLine(h, props.agent.state.brains[h])} · ${brainCli(h)}`}
                         >
                             <BrainButtons agent={props.agent} harness={h} actions={actions} onProviders={() => setProviders(true)} onSignIn={setSigningIn} />
                         </PaperSettingItem>
@@ -211,7 +206,7 @@ function BrainsSettings(props: { agent: Agent }) {
             <For each={HARNESSES.filter(busy)}>
                 {(h) => (
                     <PaperFlex gap="half">
-                        <PaperText preset="section">{harnessName(h)}</PaperText>
+                        <PaperText preset="section">{BRAINS[h].name}</PaperText>
                         <BrainStatus agent={props.agent} harness={h} actions={actions} />
                     </PaperFlex>
                 )}

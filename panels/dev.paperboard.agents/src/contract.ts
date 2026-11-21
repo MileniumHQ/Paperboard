@@ -29,10 +29,8 @@ export interface BrainInfo {
     readonly name: string;
     /** Underlying CLI program name used in sentences about the program. */
     readonly program: string;
-    /** Single-line subtitle explaining the sign-in flow and underlying CLI. */
+    /** How the choice is signed in to, one line. */
     readonly description: string;
-    /** Short CLI name (e.g. "Codex CLI"). */
-    readonly cli: string;
 }
 
 // "Claude", not "Claude Code": Anthropic's terms ask that products built on it don't carry its product's name
@@ -40,26 +38,22 @@ export const BRAINS: Record<Harness, BrainInfo> = {
     codex: {
         name: "ChatGPT",
         program: "Codex",
-        description: "Sign in with your ChatGPT account · Codex CLI",
-        cli: "Codex CLI",
+        description: "Sign in with your ChatGPT account",
     },
     antigravity: {
         name: "Gemini",
         program: "Antigravity",
-        description: "Sign in with your Google account · Antigravity CLI",
-        cli: "Antigravity CLI",
+        description: "Sign in with your Google account",
     },
     "claude-code": {
         name: "Claude",
         program: "Claude",
-        description: "Sign in with your Claude account · Claude CLI",
-        cli: "Claude CLI",
+        description: "Sign in with your Claude account",
     },
     opencode: {
         name: "Other provider",
         program: "OpenCode",
-        description: "Free models included, or connect any provider · OpenCode CLI",
-        cli: "OpenCode CLI",
+        description: "Free models included, or connect any provider",
     },
 };
 
