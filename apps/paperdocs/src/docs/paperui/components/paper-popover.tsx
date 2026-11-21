@@ -8,6 +8,7 @@ import {
     PaperList,
     PaperListItem,
     PaperPopover,
+    PaperProgress,
     PaperTable,
     PaperText,
     PaperTextList,
@@ -24,6 +25,23 @@ function ListDemo() {
                     <PaperListItem value="gameserver" loaderStatus="loading" percent={60} description="Downloading 6.0 MB of 10.0 MB">Game Server</PaperListItem>
                     <PaperListItem value="java" loaderStatus="waiting" description="Waiting">Java 21</PaperListItem>
                 </PaperList>
+            </PaperPopover>
+        </>
+    );
+}
+
+function HeaderDemo() {
+    let anchor: HTMLButtonElement | undefined;
+    const [open, setOpen] = createSignal(false);
+    return (
+        <>
+            <PaperButton ref={anchor} onClick={() => setOpen(!open())}>Show storage</PaperButton>
+            <PaperPopover open={open()} anchor={anchor} onClose={() => setOpen(false)} title="Storage" header>
+                <PaperFlex direction="row" justify="space-between">
+                    <PaperText preset="label">Backups</PaperText>
+                    <PaperText preset="hint">62% left</PaperText>
+                </PaperFlex>
+                <PaperProgress value={62} aria-label="Backups: 62% left" />
             </PaperPopover>
         </>
     );
@@ -133,6 +151,12 @@ export function Example() {
                         <td>The content fills the bubble edge to edge, for a <PaperLink href="/docs/paperui/paperlist/">PaperList</PaperLink>. The bubble takes the list's inset surface, and the title sits over the list like a <PaperCode>PaperListLabel</PaperCode>.</td>
                     </tr>
                     <tr>
+                        <td><PaperCode>header</PaperCode></td>
+                        <td><PaperCode>boolean</PaperCode></td>
+                        <td>No default (off)</td>
+                        <td>The title sits in a bar across the top, the way a <PaperLink href="/docs/paperui/papermodal/">PaperModal</PaperLink>'s does, with a close button when there is <PaperCode>onClose</PaperCode>. For a popover that is a small window of its own, such as a summary, rather than a list.</td>
+                    </tr>
+                    <tr>
                         <td><PaperCode>closeOnOutside</PaperCode></td>
                         <td><PaperCode>boolean</PaperCode></td>
                         <td><PaperCode>true</PaperCode></td>
@@ -167,6 +191,23 @@ export function Example() {
         </PaperListItem>
         <PaperListItem value="java" loaderStatus="waiting" description="Waiting">Java 21</PaperListItem>
     </PaperList>
+</PaperPopover>`}
+            </PaperCode>
+
+            <PaperText preset="subheader" as="h3" id="header">A popover with a header</PaperText>
+            <PaperText preset="body" as="p">
+                With <PaperCode>header</PaperCode>, the title gets a modal's bar and a close button. The Agent panel's usage popover is one.
+            </PaperText>
+            <PaperCard data-docs-demo padding="double" surface="front">
+                <HeaderDemo />
+            </PaperCard>
+            <PaperCode block language="tsx">
+{`<PaperPopover open={open()} anchor={anchor} onClose={() => setOpen(false)} title="Storage" header>
+    <PaperFlex direction="row" justify="space-between">
+        <PaperText preset="label">Backups</PaperText>
+        <PaperText preset="hint">62% left</PaperText>
+    </PaperFlex>
+    <PaperProgress value={62} aria-label="Backups: 62% left" />
 </PaperPopover>`}
             </PaperCode>
         </PaperFlex>

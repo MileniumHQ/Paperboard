@@ -22,10 +22,11 @@ import {
     createAction,
     useContextMenuState,
 } from "@mileniumhq/paperui";
-import { BRAINS, SIGN_IN_REQUIRED, type BrainState, type Harness } from "../contract";
+import { BRAINS, SIGN_IN_REQUIRED, USAGE_HARNESSES, type BrainState, type Harness } from "../contract";
 import type { Agent } from "../lib/agent";
 import { submitOnPaste } from "../lib/paste";
 import { createLoopbackCatch } from "../lib/loopback";
+import Usage from "./Usage";
 
 /** Who a brain is signed in as. An email is who; anything else (ChatGPT, a provider's name) is how. */
 export function signedInLine(b: BrainState): string {
@@ -353,7 +354,7 @@ export function SignInModal(props: { agent: Agent; harness: Harness | null; acti
     );
 }
 
-/** The buttons that move a brain along: install, sign in, sign out, or the providers screen. */
+/** The buttons that move a brain along: install, sign in, sign out, the plan's usage, or the providers screen. */
 export function BrainButtons(props: { agent: Agent; harness: Harness; actions: BrainActions; onProviders: () => void; onSignIn?: (h: Harness) => void }) {
     const signIn = () => (props.onSignIn ? props.onSignIn(props.harness) : void props.actions.signIn(props.harness));
     const b = () => props.agent.state.brains[props.harness];
@@ -386,6 +387,9 @@ export function BrainButtons(props: { agent: Agent; harness: Harness; actions: B
                     <PaperButton onClick={signIn}>Continue signing in</PaperButton>
                 </Match>
                 <Match when={b().phase === "ready"}>
+                    <Show when={USAGE_HARNESSES.includes(props.harness) && b().signedIn}>
+                        <Usage agent={props.agent} harness={props.harness} />
+                    </Show>
                     <Show when={props.harness === "opencode"}>
                         <PaperButton onClick={props.onProviders}>
                             <PaperIcon>hub</PaperIcon> Providers

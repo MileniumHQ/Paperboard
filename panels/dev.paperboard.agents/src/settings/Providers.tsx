@@ -4,7 +4,7 @@
 // A key goes from its field to OpenCode and is kept nowhere else.
 
 import { For, Match, Show, Switch, createEffect, createSignal, on } from "solid-js";
-import { createPolling, PaperButton, PaperCopyButton, PaperFlex, PaperIcon, PaperInput, PaperLoader, PaperModal, PaperError, PaperSelectMenu, PaperSelectMenuItem, PaperText, createAction, createRead, showError } from "@mileniumhq/paperui";
+import { createPolling, PaperButton, PaperCopyButton, PaperEmptyState, PaperFlex, PaperIcon, PaperInput, PaperLoader, PaperModal, PaperError, PaperSelectMenu, PaperSelectMenuItem, PaperText, createAction, createRead, showError } from "@mileniumhq/paperui";
 import type { ProviderAttempt, ProviderField, ProviderInfo, ProviderMethod } from "../contract";
 import type { Agent } from "../lib/agent";
 
@@ -119,142 +119,147 @@ export default function Providers(props: { agent: Agent; open: boolean; onClose:
                         <Show when={providers.error()}>
                             {(err) => <PaperError title="Couldn't list the providers" error={err()} action={{ label: "Try again", disabled: providers.loading(), onClick: () => void refetch() }} />}
                         </Show>
-                        <PaperSelectMenu name="provider" label="Provider" fullWidth searchable disabled={attempt() !== null} value={selected()} onValueChange={(v) => setSelected(String(v))}>
-                            <For each={providers.value() ?? []}>
+                        <Show
+                            when={(providers.value()?.length ?? 0) > 0}
+                            fallback={<PaperEmptyState icon="hub" title="No providers available" description="OpenCode didn't list any providers to connect." />}
+                        >
+                            <PaperSelectMenu name="provider" label="Provider" fullWidth searchable disabled={attempt() !== null} value={selected()} onValueChange={(v) => setSelected(String(v))}>
+                                <For each={providers.value() ?? []}>
+                                    {(p) => (
+                                        <PaperSelectMenuItem value={p.id} icon={p.connected ? "check_circle" : undefined} description={p.connected ? "Connected" : (p.unsupported ?? undefined)}>
+                                            {p.name}
+                                        </PaperSelectMenuItem>
+                                    )}
+                                </For>
+                            </PaperSelectMenu>
+                            <Show when={current()}>
                                 {(p) => (
-                                    <PaperSelectMenuItem value={p.id} icon={p.connected ? "check_circle" : undefined} description={p.connected ? "Connected" : (p.unsupported ?? undefined)}>
-                                        {p.name}
-                                    </PaperSelectMenuItem>
-                                )}
-                            </For>
-                        </PaperSelectMenu>
-                        <Show when={current()}>
-                            {(p) => (
-                                <PaperFlex gap="full">
-                                    {/* a sign-in under way is the one thing shown, so it reads as one step */}
-                                    <Show when={attempt()?.provider !== p().id}>
-                                    <For each={p().connections}>
-                                        {(c) => (
-                                            <PaperFlex direction="row" gap="half" align="center" justify="space-between">
-                                                <PaperFlex direction="row" gap="half" align="center">
-                                                    <PaperIcon>check_circle</PaperIcon>
-                                                    <PaperText preset="text">{c.label} is connected.</PaperText>
+                                    <PaperFlex gap="full">
+                                        {/* a sign-in under way is the one thing shown, so it reads as one step */}
+                                        <Show when={attempt()?.provider !== p().id}>
+                                        <For each={p().connections}>
+                                            {(c) => (
+                                                <PaperFlex direction="row" gap="half" align="center" justify="space-between">
+                                                    <PaperFlex direction="row" gap="half" align="center">
+                                                        <PaperIcon>check_circle</PaperIcon>
+                                                        <PaperText preset="text">{c.label} is connected.</PaperText>
+                                                    </PaperFlex>
+                                                    <PaperButton
+                                                        size="small"
+                                                        variant="outline"
+                                                        disabled={busy()}
+                                                        onClick={() => void action.run(`Couldn't disconnect ${p().name}`, async () => (await props.agent.calls.disconnectProvider({ credential: c.id }), await refetch()))}
+                                                    >
+                                                        Disconnect
+                                                    </PaperButton>
                                                 </PaperFlex>
-                                                <PaperButton
-                                                    size="small"
-                                                    variant="outline"
-                                                    disabled={busy()}
-                                                    onClick={() => void action.run(`Couldn't disconnect ${p().name}`, async () => (await props.agent.calls.disconnectProvider({ credential: c.id }), await refetch()))}
-                                                >
-                                                    Disconnect
-                                                </PaperButton>
-                                            </PaperFlex>
-                                        )}
-                                    </For>
-                                    <Show when={p().unsupported}>
-                                        <PaperText preset="hint">
-                                            {p().unsupported}
-                                        </PaperText>
-                                    </Show>
-                                    <For each={p().methods}>
-                                        {(m) => (
-                                            <PaperFlex gap="half">
-                                                {/* a heading tells the ways to connect apart; one alone would only repeat its field */}
-                                                <Show when={p().methods.length > 1}>
-                                                    <PaperText preset="section">
-                                                        {m.label}
-                                                    </PaperText>
-                                                </Show>
-                                                <For each={m.fields.filter((f) => shown(f, valuesOf(m)))}>
-                                                    {(f) => (
-                                                        <Show
-                                                            when={f.options}
-                                                            fallback={
+                                            )}
+                                        </For>
+                                        <Show when={p().unsupported}>
+                                            <PaperText preset="hint">
+                                                {p().unsupported}
+                                            </PaperText>
+                                        </Show>
+                                        <For each={p().methods}>
+                                            {(m) => (
+                                                <PaperFlex gap="half">
+                                                    {/* a heading tells the ways to connect apart; one alone would only repeat its field */}
+                                                    <Show when={p().methods.length > 1}>
+                                                        <PaperText preset="section">
+                                                            {m.label}
+                                                        </PaperText>
+                                                    </Show>
+                                                    <For each={m.fields.filter((f) => shown(f, valuesOf(m)))}>
+                                                        {(f) => (
+                                                            <Show
+                                                                when={f.options}
+                                                                fallback={
+                                                                    <PaperInput
+                                                                        label={f.title}
+                                                                        fullWidth
+                                                                        placeholder={f.placeholder ?? undefined}
+                                                                        value={valuesOf(m)[f.key]}
+                                                                        onInput={(e) => setAnswers({ ...answers(), [f.key]: e.currentTarget.value })}
+                                                                    />
+                                                                }
+                                                            >
+                                                                {(options) => (
+                                                                    <PaperSelectMenu
+                                                                        name={f.key}
+                                                                        label={f.title}
+                                                                        fullWidth
+                                                                        value={valuesOf(m)[f.key] || undefined}
+                                                                        onValueChange={(v) => setAnswers({ ...answers(), [f.key]: String(v) })}
+                                                                    >
+                                                                        <For each={options()}>{(o) => <PaperSelectMenuItem value={o.value} description={o.description ?? undefined}>{o.label}</PaperSelectMenuItem>}</For>
+                                                                    </PaperSelectMenu>
+                                                                )}
+                                                            </Show>
+                                                        )}
+                                                    </For>
+                                                    <Show
+                                                        when={m.kind === "key"}
+                                                        fallback={
+                                                            <PaperFlex direction="row">
+                                                                <PaperButton variant="primary" disabled={busy() || attempt() !== null || incomplete(m)} onClick={() => void begin(p(), m)}>
+                                                                    Sign in
+                                                                </PaperButton>
+                                                            </PaperFlex>
+                                                        }
+                                                    >
+                                                        <PaperFlex direction="row" gap="half" align="end">
+                                                            <PaperFlex grow>
                                                                 <PaperInput
-                                                                    label={f.title}
+                                                                    label="API key"
+                                                                    type="password"
                                                                     fullWidth
-                                                                    placeholder={f.placeholder ?? undefined}
-                                                                    value={valuesOf(m)[f.key]}
-                                                                    onInput={(e) => setAnswers({ ...answers(), [f.key]: e.currentTarget.value })}
+                                                                    autocomplete="off"
+                                                                    value={key()}
+                                                                    onInput={(e) => setKey(e.currentTarget.value)}
+                                                                    onKeyDown={(e) => e.key === "Enter" && key().trim() && !incomplete(m) && void connectKey(p(), m)}
                                                                 />
-                                                            }
-                                                        >
-                                                            {(options) => (
-                                                                <PaperSelectMenu
-                                                                    name={f.key}
-                                                                    label={f.title}
-                                                                    fullWidth
-                                                                    value={valuesOf(m)[f.key] || undefined}
-                                                                    onValueChange={(v) => setAnswers({ ...answers(), [f.key]: String(v) })}
-                                                                >
-                                                                    <For each={options()}>{(o) => <PaperSelectMenuItem value={o.value} description={o.description ?? undefined}>{o.label}</PaperSelectMenuItem>}</For>
-                                                                </PaperSelectMenu>
-                                                            )}
-                                                        </Show>
-                                                    )}
-                                                </For>
-                                                <Show
-                                                    when={m.kind === "key"}
-                                                    fallback={
-                                                        <PaperFlex direction="row">
-                                                            <PaperButton variant="primary" disabled={busy() || attempt() !== null || incomplete(m)} onClick={() => void begin(p(), m)}>
-                                                                Sign in
+                                                            </PaperFlex>
+                                                            <PaperButton variant="primary" disabled={busy() || !key().trim() || incomplete(m)} onClick={() => void connectKey(p(), m)}>
+                                                                Connect
                                                             </PaperButton>
                                                         </PaperFlex>
-                                                    }
-                                                >
-                                                    <PaperFlex direction="row" gap="half" align="end">
-                                                        <PaperFlex grow>
-                                                            <PaperInput
-                                                                label="API key"
-                                                                type="password"
-                                                                fullWidth
-                                                                autocomplete="off"
-                                                                value={key()}
-                                                                onInput={(e) => setKey(e.currentTarget.value)}
-                                                                onKeyDown={(e) => e.key === "Enter" && key().trim() && !incomplete(m) && void connectKey(p(), m)}
-                                                            />
-                                                        </PaperFlex>
-                                                        <PaperButton variant="primary" disabled={busy() || !key().trim() || incomplete(m)} onClick={() => void connectKey(p(), m)}>
-                                                            Connect
-                                                        </PaperButton>
-                                                    </PaperFlex>
-                                                </Show>
-                                            </PaperFlex>
-                                        )}
-                                    </For>
-                                    </Show>
-                                    <Show when={attempt()?.provider === p().id ? attempt() : null}>
-                                        {(a) => (
-                                            <PaperFlex gap="full">
-                                                <PaperText preset="hint">{a().info.instructions || "Open the sign-in page and finish there."}</PaperText>
-                                                <PaperFlex direction="row" gap="half" align="center" wrap>
-                                                    <PaperButton variant="primary" href={a().info.url} target="_blank">
-                                                        Open the sign-in page <PaperIcon>open_in_new</PaperIcon>
-                                                    </PaperButton>
-                                                    <PaperCopyButton text={a().info.url} label="Copy link" variant="outline" />
+                                                    </Show>
                                                 </PaperFlex>
-                                                <Show
-                                                    when={a().info.mode === "code"}
-                                                    fallback={<PaperLoader size="small" loaderStatus="indeterminate" label="Waiting for you to finish signing in" />}
-                                                >
-                                                    <PaperFlex direction="row" gap="half" align="end">
-                                                        <PaperFlex grow>
-                                                            <PaperInput label="Code from the page" fullWidth autocomplete="off" value={code()} onInput={(e) => setCode(e.currentTarget.value)} />
-                                                        </PaperFlex>
-                                                        <PaperButton variant="primary" disabled={!code().trim()} onClick={() => void check(code().trim())}>
-                                                            Continue
+                                            )}
+                                        </For>
+                                        </Show>
+                                        <Show when={attempt()?.provider === p().id ? attempt() : null}>
+                                            {(a) => (
+                                                <PaperFlex gap="full">
+                                                    <PaperText preset="hint">{a().info.instructions || "Open the sign-in page and finish there."}</PaperText>
+                                                    <PaperFlex direction="row" gap="half" align="center" wrap>
+                                                        <PaperButton variant="primary" href={a().info.url} target="_blank">
+                                                            Open the sign-in page <PaperIcon>open_in_new</PaperIcon>
                                                         </PaperButton>
+                                                        <PaperCopyButton text={a().info.url} label="Copy link" variant="outline" />
                                                     </PaperFlex>
-                                                </Show>
-                                                <PaperFlex direction="row" justify="flex-end">
-                                                    <PaperButton variant="outline" onClick={() => void cancel()}>Cancel</PaperButton>
+                                                    <Show
+                                                        when={a().info.mode === "code"}
+                                                        fallback={<PaperLoader size="small" loaderStatus="indeterminate" label="Waiting for you to finish signing in" />}
+                                                    >
+                                                        <PaperFlex direction="row" gap="half" align="end">
+                                                            <PaperFlex grow>
+                                                                <PaperInput label="Code from the page" fullWidth autocomplete="off" value={code()} onInput={(e) => setCode(e.currentTarget.value)} />
+                                                            </PaperFlex>
+                                                            <PaperButton variant="primary" disabled={!code().trim()} onClick={() => void check(code().trim())}>
+                                                                Continue
+                                                            </PaperButton>
+                                                        </PaperFlex>
+                                                    </Show>
+                                                    <PaperFlex direction="row" justify="flex-end">
+                                                        <PaperButton variant="outline" onClick={() => void cancel()}>Cancel</PaperButton>
+                                                    </PaperFlex>
                                                 </PaperFlex>
-                                            </PaperFlex>
-                                        )}
-                                    </Show>
-                                </PaperFlex>
-                            )}
+                                            )}
+                                        </Show>
+                                    </PaperFlex>
+                                )}
+                            </Show>
                         </Show>
                     </Match>
                 </Switch>
