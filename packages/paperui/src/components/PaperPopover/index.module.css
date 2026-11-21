@@ -79,6 +79,36 @@
     padding: var(--paper-uigap-threefourths);
 }
 
+/* header: the title in a bar across the top, as a PaperModal's, over a padded body */
+.PaperPopover.withHeader {
+    gap: 0;
+    padding: 0;
+}
+
+.withHeader:not(.above) .tail {
+    background: var(--paper-surface);
+}
+
+.header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--paper-uigap-half);
+    padding: var(--paper-uigap-half) var(--paper-uigap);
+    border-bottom: var(--paper-border-width) solid var(--paper-border);
+    /* the box's own corners, inside its border: the tail stays out of a clipped box */
+    border-radius: calc(var(--paper-border-radius) - var(--paper-border-width)) calc(var(--paper-border-radius) - var(--paper-border-width)) 0 0;
+    background: var(--paper-surface);
+}
+
+.close {
+    margin-left: auto;
+}
+
+.withHeader .body {
+    padding: var(--paper-uigap-threefourths) var(--paper-uigap);
+}
+
 .flush .body {
     gap: 0;
 }

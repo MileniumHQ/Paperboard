@@ -13,12 +13,11 @@
 // background one): `provider/model` a line. A catalog that can't be read is an
 // error, never an empty list.
 
-import { randomUUID } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import { PANEL_ID, type BrainModel, type Harness } from "../contract";
+import type { BrainModel, Harness } from "../contract";
 import type { TurnHost } from "./conversation";
-import { lineReader } from "./lines";
+import { askClaude, type AskLaunch } from "./harnessAsk";
 
 /** far past any real catalog; a file this big isn't one */
 const MAX_CATALOG_BYTES = 4 * 1024 * 1024;
@@ -116,71 +115,13 @@ function claudePickerModels(listed: unknown): BrainModel[] {
     return models;
 }
 
-/** what starting Claude Code to ask it for its models takes */
-export interface ClaudeLaunch {
-    command: string;
-    env: Record<string, string>;
-    /** an empty folder: no project for it to pick up */
-    cwd: string;
-    timeoutMs?: number;
-}
-
-const MAX_ANSWER = 16 * 1024 * 1024;
-
 /**
  * Starts Claude Code in its stream-json mode, sends `initialize`, and returns the models of its answer.
  * Nothing reaches a model: the process is stopped once it has answered.
  */
-export async function askClaudeModels(host: TurnHost, launch: ClaudeLaunch): Promise<unknown> {
-    const id = `${PANEL_ID}.models.${randomUUID()}`;
-    const request = randomUUID();
-    let stderr = "";
-    let settle!: { ok: (v: unknown) => void; fail: (e: Error) => void };
-    const answered = new Promise<unknown>((ok, fail) => (settle = { ok, fail }));
-    // Claude can end (or time out) while the request is still being written, before anything awaits `answered`: that
-    // rejection must not be unhandled, which would stop the whole service. `await answered` below still throws it.
-    void Promise.allSettled([answered]); // marks it handled here; the failure itself is thrown where it is awaited
-    const onLine = (line: string) => {
-        let ev: any;
-        try {
-            ev = JSON.parse(line);
-        } catch {
-            return; // quiet: a stray log line
-        }
-        if (ev?.type !== "control_response" || ev.response?.request_id !== request) return;
-        if (ev.response.subtype !== "success") settle.fail(new Error(`Claude couldn't list its models: ${String(ev.response.error ?? ev.response.subtype)}`));
-        else settle.ok(ev.response.response?.models);
-    };
-    const offs = [
-        host.onStdout(id, lineReader(MAX_ANSWER, onLine, () => settle.fail(new Error("Claude's answer is too big to be a model list"))).push),
-        host.onStderr(id, (data) => {
-            stderr = (stderr + data).slice(-2000);
-        }),
-        host.onExit(id, (code) => {
-            const said = stderr.trim().split("\n").slice(-3).join(" ").slice(0, 300);
-            settle.fail(new Error(`Claude ended before it listed its models (exit ${code ?? "?"})${said ? `: ${said}` : "."}`));
-        }),
-    ];
-    const ms = launch.timeoutMs ?? MODELS_MS;
-    const timer = setTimeout(() => settle.fail(new Error(`Claude didn't list its models within ${Math.round(ms / 1000)} seconds.`)), ms);
-    let started = false;
-    try {
-        fs.mkdirSync(launch.cwd, { recursive: true });
-        await host.start({
-            id,
-            command: launch.command,
-            args: ["-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose"],
-            cwd: launch.cwd,
-            env: launch.env,
-        });
-        started = true;
-        await host.write(id, `${JSON.stringify({ type: "control_request", request_id: request, request: { subtype: "initialize" } })}\n`);
-        return await answered;
-    } finally {
-        clearTimeout(timer);
-        for (const off of offs) off();
-        if (started && (await host.exists(id))) await host.kill(id, "SIGTERM");
-    }
+export async function askClaudeModels(host: TurnHost, launch: AskLaunch): Promise<unknown> {
+    const answer = (await askClaude(host, { timeoutMs: MODELS_MS, ...launch }, { subtype: "initialize" }, ["list its models", "listed its models"], "models")) as { models?: unknown } | null;
+    return answer?.models;
 }
 
 function codexModels(out: { stdout: string; stderr: string; exitCode: number }): BrainModel[] {

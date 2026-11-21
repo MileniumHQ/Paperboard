@@ -27,7 +27,7 @@ describe("the agent's blocks", () => {
     test("registers the agent's types, values, commands and events, and nothing that reaches its secrets or controls", async () => {
         rig = await appRig();
         const set = rig.blocks.set!;
-        expect(set.types!.map((t) => t.id)).toEqual(["conversation", "message", "fact", "note", "routine", "model", "brain", "tool-server", "app", "attachment"]);
+        expect(set.types!.map((t) => t.id)).toEqual(["conversation", "message", "fact", "note", "routine", "model", "brain", "usage-limit", "tool-server", "app", "attachment"]);
         expect(Object.keys(set.types![0]!.fields!)).toEqual(["title", "messages"]);
         expect(Object.keys(set.types![1]!.fields!)).toEqual(["text", "from"]);
         expect(set.values!.map((v) => [v.id, v.type, v.changes ?? false])).toEqual([
@@ -39,6 +39,7 @@ describe("the agent's blocks", () => {
             ["routines", "list<routine>", true],
             ["current-brain", "brain", true],
             ["brains", "list<brain>", false],
+            ["usage-limits", "list<usage-limit>", false],
             ["current-model", "model", true],
             ["models", "list<model>", false],
             ["tool-servers", "list<tool-server>", true],

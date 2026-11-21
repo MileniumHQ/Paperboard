@@ -155,6 +155,31 @@ const fixture = (f) => fs.readFileSync(path.join(fixturesDir, f), "utf8");
 async function codex() {
     const home = process.env.CODEX_HOME;
     const auth = home ? path.join(home, "auth.json") : null;
+    if (argv[0] === "app-server") {
+        // JSON-RPC a line each: initialize, then account/rateLimits/read answered from plan.codexUsage
+        // (plan.codexUsageError: refused); then wait to be stopped
+        log({ event: "app-server", argv });
+        let buf = "";
+        let initialized = false;
+        process.stdin.setEncoding("utf8");
+        process.stdin.on("data", (d) => {
+            buf += d;
+            for (let i = buf.indexOf("\n"); i >= 0; i = buf.indexOf("\n")) {
+                const msg = JSON.parse(buf.slice(0, i));
+                buf = buf.slice(i + 1);
+                if (msg.method === "initialize") {
+                    initialized = true;
+                    out({ id: msg.id, result: { userAgent: "codex/9.8.7", codexHome: home } });
+                } else if (msg.method === "account/rateLimits/read") {
+                    if (!initialized) out({ id: msg.id, error: { code: -32600, message: "Not initialized" } });
+                    else if (plan.codexUsageError) out({ id: msg.id, error: { code: -32600, message: plan.codexUsageError } });
+                    else out({ id: msg.id, result: plan.codexUsage });
+                }
+            }
+        });
+        process.on("SIGTERM", () => process.exit(0));
+        return;
+    }
     if (argv[0] === "login" && argv[1] === "status") {
         if (plan.status) {
             process.stdout.write(plan.status.stdout ?? "");
@@ -292,7 +317,7 @@ async function claude() {
         return;
     }
     if (argv.includes("--input-format")) {
-        // the models question: an initialize request over stream-json, answered, then wait to be stopped
+        // a question over stream-json (initialize: the models; get_usage: plan.claudeUsage), answered, then wait to be stopped
         let buf = "";
         process.stdin.setEncoding("utf8");
         process.stdin.on("data", (d) => {
@@ -302,6 +327,10 @@ async function claude() {
                 buf = buf.slice(i + 1);
                 if (msg.type === "control_request" && msg.request?.subtype === "initialize") {
                     out({ type: "control_response", response: { subtype: "success", request_id: msg.request_id, response: { models: plan.claudeModels ?? [] } } });
+                }
+                if (msg.type === "control_request" && msg.request?.subtype === "get_usage") {
+                    log({ event: "usage", request: msg.request });
+                    out({ type: "control_response", response: { subtype: "success", request_id: msg.request_id, response: plan.claudeUsage ?? { rate_limits_available: false } } });
                 }
             }
         });
