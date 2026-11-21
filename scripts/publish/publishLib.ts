@@ -11,14 +11,7 @@
 // and the canonical asset names are mirrored by
 // services/origami/src/routes/paperdl.ts: change both sides together.
 
-import {
-    parseStoreManifest,
-    storeImageExtension,
-    storeScreenshotField,
-    STORE_IMAGE_TYPES,
-    STORE_MAX_ABOUT_BYTES,
-    STORE_MAX_SCREENSHOT_BYTES,
-} from "../../packages/paperapi/src/internal";
+import { readStoreFiles, storeScreenshotField, type StoreFileReader } from "../../packages/paperapi/src/internal";
 import { DOWNLOAD_HOST, FILE_SEGMENT, GH_REPO, VERSION_SEGMENT } from "../../services/origami/src/downloadUrl";
 
 export { GH_REPO };
@@ -422,9 +415,9 @@ export function buildSha256Sums(files: { file: string; sha256: string }[]): stri
 }
 
 // The files a panel's store listing names, as publish-form parts. The
-// manifest block is validated by the same parser Origami enforces, so a
-// listing the registry would refuse fails here, before the upload. `read`
-// resolves a manifest path against the panel root; a missing file throws.
+// listing is read by the same reader Paperboard uses for installed panels,
+// under the caps Origami enforces, so a listing the registry would refuse
+// fails here, before the upload.
 export interface StoreUploadPart {
     field: string;
     fileName: string;
@@ -432,36 +425,24 @@ export interface StoreUploadPart {
     bytes: Uint8Array;
 }
 
-export function storeUploadParts(
+export async function storeUploadParts(
     rawStore: unknown,
-    read: (relativePath: string) => Uint8Array,
-): { about?: string; files: StoreUploadPart[] } {
-    const store = parseStoreManifest(rawStore);
-    if (!store) return { files: [] };
+    read: StoreFileReader,
+): Promise<{ about?: string; files: StoreUploadPart[] }> {
+    const listing = await readStoreFiles(rawStore, read);
+    if (!listing) return { files: [] };
     const files: StoreUploadPart[] = [];
-    for (const [index, shot] of store.screenshots.entries()) {
+    for (const [index, shot] of listing.screenshots.entries()) {
         for (const theme of ["light", "dark"] as const) {
             const file = shot[theme];
             if (!file) continue;
-            const bytes = read(file);
-            if (bytes.byteLength > STORE_MAX_SCREENSHOT_BYTES) {
-                throw new Error(`${file} is over the ${STORE_MAX_SCREENSHOT_BYTES}-byte screenshot cap`);
-            }
             files.push({
                 field: storeScreenshotField(index, theme),
-                fileName: file.split("/").pop()!,
-                type: STORE_IMAGE_TYPES[storeImageExtension(file)!]!,
-                bytes,
+                fileName: file.path.split("/").pop()!,
+                type: file.type,
+                bytes: file.bytes,
             });
         }
     }
-    let about: string | undefined;
-    if (store.about) {
-        const bytes = read(store.about);
-        if (bytes.byteLength > STORE_MAX_ABOUT_BYTES) {
-            throw new Error(`${store.about} is over the ${STORE_MAX_ABOUT_BYTES}-byte about cap`);
-        }
-        about = new TextDecoder().decode(bytes);
-    }
-    return { ...(about !== undefined ? { about } : {}), files };
+    return { ...(listing.about !== undefined ? { about: listing.about } : {}), files };
 }

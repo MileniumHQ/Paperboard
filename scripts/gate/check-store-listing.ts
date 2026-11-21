@@ -18,7 +18,7 @@ for (const arg of dirs) {
     const dir = resolve(arg);
     try {
         const manifest = JSON.parse(readFileSync(join(dir, "manifest.json"), "utf8"));
-        storeUploadParts(manifest.store, (rel) => readFileSync(join(dir, rel)));
+        await storeUploadParts(manifest.store, (rel) => readFileSync(join(dir, rel)));
     } catch (err) {
         console.error(`FAIL: ${arg} store listing: ${err instanceof Error ? err.message : String(err)}`);
         failed = true;
