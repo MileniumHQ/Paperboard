@@ -266,10 +266,10 @@ export class AiApp {
                 return custom ? { ...own, now: [...own.now, customSection(custom)] } : own;
             },
             call: async (name, args) => {
+                // a call that arrives is written, even one refused below: whatever the agent was typing is done, whatever its harness reports
+                this.conversation?.called(name);
                 // a summary is written from what it already knows: no texting, no work
                 if (this.conversation?.compacting) return { text: "You're writing a summary of the conversation: no texts and no tools until it's done.", isError: true };
-                // a call that arrives is written: whatever the agent was typing is done, whatever its harness reports
-                this.conversation?.called(name);
                 if (!this.turnLog) return tools.call(name, args);
                 const started = Date.now();
                 try {
