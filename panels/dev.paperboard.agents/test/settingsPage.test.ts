@@ -7,7 +7,7 @@ import { bootPanel, openSection, type BootedPanel, type BootOptions, type Page }
 
 setDefaultTimeout(60_000);
 
-const SETTINGS = { name: "Ada", harness: "codex" as const, model: null, compaction: "summarize" as const };
+const SETTINGS = { name: "Ada", color: "blue" as const, harness: "codex" as const, model: null, compaction: "summarize" as const };
 
 let panel: BootedPanel | null = null;
 afterEach(async () => {
@@ -52,6 +52,25 @@ describe("a save the service refuses", () => {
         await page.settled();
         // nothing was saved
         expect(panel!.savedSettings()).toEqual(SETTINGS);
+        expect(page.exceptions).toEqual([]);
+    });
+});
+
+describe("the color", () => {
+    test("an agent saved before colors were a choice is blue, and a color picked is saved", async () => {
+        const { color: _, ...older } = SETTINGS;
+        panel = await bootPanel({ settings: older as typeof SETTINGS, codexOnPath: { signedIn: true, chosen: true } });
+        const page = await panel.open();
+        await openSection(page, "Ada", "settings");
+        const chip = (name: string) => `document.querySelector('[role=region][aria-label="Agent"] [aria-label="${name}"]')`;
+        await page.waitFor(chip("Blue"), "the colors");
+        expect(await page.evaluate(`${chip("Blue")}.getAttribute("aria-pressed")`)).toBe("true");
+
+        await page.click(`[role=region][aria-label="Agent"] [aria-label="Teal"]`);
+        await page.waitFor(`${chip("Teal")}.getAttribute("aria-pressed") === "true"`, "Teal picked");
+        await page.settled();
+        expect(panel!.savedSettings()).toEqual({ ...SETTINGS, color: "teal" });
+        expect(await page.evaluate(`${chip("Blue")}.getAttribute("aria-pressed")`)).toBe("false");
         expect(page.exceptions).toEqual([]);
     });
 });

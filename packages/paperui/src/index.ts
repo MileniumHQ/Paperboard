@@ -8,6 +8,7 @@ export * from "./components/PaperCard";
 export * from "./components/PaperChart";
 export * from "./components/PaperCheckbox";
 export * from "./components/PaperChip";
+export * from "./components/PaperColorChip";
 export * from "./components/PaperInlineChip";
 export * from "./components/PaperCopyButton";
 export * from "./components/PaperCode";

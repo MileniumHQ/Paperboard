@@ -388,7 +388,7 @@ export class AiApp {
         if (!Number.isInteger(draft.step) || draft.step < 0 || draft.step > ONBOARDING_STEP.computer) throw new Error(`step ${draft.step} isn't one the first meeting picks up at`);
         if (draft.name.length > LIMITS.name) throw new Error(`names are limited to ${LIMITS.name} characters`);
         if (draft.model !== null && draft.model.length > LIMITS.model) throw new Error(`models are limited to ${LIMITS.model} characters`);
-        this.ctx.setState({ onboarding: { step: draft.step, name: draft.name, harness: draft.harness, model: draft.model } });
+        this.ctx.setState({ onboarding: { step: draft.step, name: draft.name, color: draft.color, harness: draft.harness, model: draft.model } });
     }
 
     /** The settings live in the panel's config document; none yet is a fresh install. One that won't read is never taken for none. */

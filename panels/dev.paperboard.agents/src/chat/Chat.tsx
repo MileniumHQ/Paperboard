@@ -288,7 +288,7 @@ export default function Chat(props: { agent: Agent; face: FaceController; pages:
             {/* who this is, in the middle, and tapping their name opens their computer and settings; the conversation's buttons on the right,
                 folded into one menu when the chat is narrow */}
             <div class={styles.header} ref={header}>
-                <Face class={styles.face} face={props.face} size={AGENT_FACE_PX} frame="sphere" hologram skin={skinFor(props.agent.state.settings?.name)} />
+                <Face class={styles.face} face={props.face} size={AGENT_FACE_PX} frame="sphere" hologram color={props.agent.state.settings?.color} skin={skinFor(props.agent.state.settings?.name)} />
                 <div class={styles.who}>
                     <PaperButton variant="text" size="small" class={styles.name} aria-label={`${name()}: computer and settings`} title="Computer and settings" onClick={() => props.onMenu()}>
                         <span class={styles.nameText}>{name()}</span>

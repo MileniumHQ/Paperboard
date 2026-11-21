@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import type { Settings } from "../src/contract";
 import { createSettingsQueue } from "../src/lib/settingsQueue";
 
-const base: Settings = { name: "Ada", harness: "codex", model: null, compaction: "summarize" };
+const base: Settings = { name: "Ada", color: "blue", harness: "codex", model: null, compaction: "summarize" };
 
 /** a service that keeps the settings as a whole, like the real one, with a write that takes a moment */
 function service() {
