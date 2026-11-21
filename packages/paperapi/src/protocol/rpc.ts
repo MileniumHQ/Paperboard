@@ -160,13 +160,23 @@ const backupOf = {
 // a call made from inside an action or a block names it, so its answer survives a stopped service
 const duringCall = opt(text(64));
 
+// a computer's identity past its OS: what is built on it, what it runs in,
+// its motherboard, and an agent operating it (each only when detected)
+const identityPart = object({ id: text(64), name: text(256), version: opt(text(256)) });
+const osFacts = {
+    osVersion: opt(text()),
+    distroId: opt(text()),
+    distroName: opt(text()),
+    flavor: opt(identityPart),
+    machine: opt(identityPart),
+    board: opt(text(512)),
+    operator: opt(identityPart),
+};
 const systemFacts = {
     hostname: text(),
     os: text(),
     arch: text(),
-    osVersion: opt(text()),
-    distroId: opt(text()),
-    distroName: opt(text()),
+    ...osFacts,
 };
 const pairingStatus = object({
     active: shape.boolean(),
@@ -197,7 +207,11 @@ export const RPC = {
         params: object({ code: shape.optional(shape.json()), clientName: shape.optional(shape.json()) }),
         result: object({ success: shape.boolean(), token: text(), ...systemFacts }),
     },
-    "auth:verify": { params: object({ token: shape.optional(shape.json()) }), result: object({ success: shape.boolean() }) },
+    // the facts are re-sent on every sign-in so a paired computer's identity stays current
+    "auth:verify": {
+        params: object({ token: shape.optional(shape.json()) }),
+        result: object({ success: shape.boolean(), hostname: opt(text()), os: opt(text()), arch: opt(text()), ...osFacts }),
+    },
     "auth:scope": { params: object({ panelId: panelId() }), result: ack },
     // relayTo names the computer that serves the panel; "local" is this one
     "auth:panel-token": { params: object({ panelId: panelId(), relayTo: shape.optional(text(128)) }), result: object({ token: text() }) },

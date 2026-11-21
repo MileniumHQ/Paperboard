@@ -1,5 +1,13 @@
 import { RPC_ROUTES } from "./ipc";
 
+/** One named layer of a computer's identity. */
+export interface IdentityPart {
+    /** stable lowercase id, e.g. "omarchy", "chromeos", "claude-duet" */
+    id: string;
+    name: string;
+    version?: string;
+}
+
 // system info of whichever computer the transport is scoped to
 export interface SystemInfo {
     service: string;
@@ -9,6 +17,14 @@ export interface SystemInfo {
     osVersion?: string;
     distroId?: string;
     distroName?: string;
+    /** what is built on the OS: Omarchy on Arch, Proxmox VE on Debian */
+    flavor?: IdentityPart;
+    /** what the OS runs in: ChromeOS (Crostini), WSL, a container, a cloud VM */
+    machine?: IdentityPart;
+    /** the motherboard, on a computer that is not a virtual machine */
+    board?: string;
+    /** an autonomous agent operating this computer: Claude Duet, Grok Bot */
+    operator?: IdentityPart;
     arch: string;
     ip: string;
     username?: string;
