@@ -112,6 +112,12 @@ fetchRegistryIndex().then((v) => { console.log("RESOLVED", JSON.stringify(v)); }
         });
     });
 
+    test("a listing keeps every row the manifest and the registry hand it", () => {
+        const services = Array.from({ length: 40 }, (_, i) => ({ name: `Service ${i}`, detail: "Detail" }));
+        expect(parseStoreManifest({ services })?.services).toEqual(services);
+        expect(parseStoreListing({ services })?.services).toEqual(services);
+    });
+
     test("parseStoreListing drops javascript: and protocol-relative URLs", () => {
         const listing = parseStoreListing({
             screenshots: [

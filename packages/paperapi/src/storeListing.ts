@@ -20,7 +20,6 @@
 // registry media, not something every install should carry.
 
 export const STORE_MAX_SCREENSHOTS = 8;
-export const STORE_MAX_ROWS = 12;
 export const STORE_MAX_ABOUT_BYTES = 32 * 1024;
 export const STORE_MAX_SCREENSHOT_BYTES = 2 * 1024 * 1024;
 const MAX_ROW_NAME = 48;
@@ -102,9 +101,6 @@ function text(v: unknown, max: number): string | null {
 function strictRows(raw: unknown, table: StoreTable): StoreRow[] {
     if (raw === undefined) return [];
     if (!Array.isArray(raw)) throw new Error(`store.${table} must be an array`);
-    if (raw.length > STORE_MAX_ROWS) {
-        throw new Error(`store.${table} has more than ${STORE_MAX_ROWS} rows`);
-    }
     return raw.map((row, i) => {
         const name = isObject(row) ? text(row.name, MAX_ROW_NAME) : null;
         const detail = isObject(row) ? text(row.detail, MAX_ROW_DETAIL) : null;
@@ -161,7 +157,7 @@ export function parseStoreManifest(raw: unknown): StoreManifest | null {
 function lenientRows(raw: unknown): StoreRow[] {
     if (!Array.isArray(raw)) return [];
     const rows: StoreRow[] = [];
-    for (const row of raw.slice(0, STORE_MAX_ROWS)) {
+    for (const row of raw) {
         if (!isObject(row)) continue;
         const name = text(row.name, MAX_ROW_NAME);
         const detail = text(row.detail, MAX_ROW_DETAIL);
