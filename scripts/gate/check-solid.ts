@@ -6,7 +6,7 @@
 // Prints `path:line: <rule>: <why and what to do instead>` per hit and exits
 // 1 on any hit, 0 when clean, 2 when the scan could not run.
 //
-// Scanned: .ts/.tsx under the given dirs, skipping node_modules, dist, out,
+// Scanned: .ts/.tsx/.js/.mjs/.cjs under the given dirs, skipping node_modules, vendor (third-party code), dist, out,
 // build, release, coverage, dot-dirs and .d.ts files. Tests and their
 // fixtures are scanned like any code: a fixture is code a test runs, and
 // reaches into other packages and swallows failures as easily.
@@ -75,8 +75,9 @@
 //    A catch clause whose block is empty, only `console.x(...)` calls and a
 //    bare `return;`, or ends in `return <value>` without a call, `new`,
 //    await, throw or assignment anywhere in it and without the caught error
-//    in the value (a fabricated answer with no trace); a `.catch(h)` whose handler is `console.x`, does nothing, only logs, or
-//    returns a placeholder literal. A catch that rethrows, sets state,
+//    in the value (a fabricated answer with no trace); a `.catch(h)` whose
+//    handler is `console.x`, does nothing, only logs, or returns a placeholder
+//    literal (undefined, null, true/false, [], {}, "", 0). A catch that rethrows, sets state,
 //    answers, or does any other work is not flagged: what that work shows the
 //    user is for review.
 //  effect-without-on ("Effects track what they mean")
@@ -128,7 +129,7 @@ try {
     process.exit(2);
 }
 
-const SKIP_DIRS = new Set(["node_modules", "dist", "out", "build", "release", "coverage"]);
+const SKIP_DIRS = new Set(["node_modules", "dist", "out", "build", "release", "coverage", "vendor"]);
 const EFFECTS = new Set(["createEffect", "createRenderEffect", "createComputed", "onMount"]);
 
 export type Hit = { file: string; line: number; rule: string; message: string };
@@ -143,7 +144,7 @@ function listFiles(dir: string, out: string[]): void {
         const path = join(dir, name);
         const st = statSync(path);
         if (st.isDirectory()) listFiles(path, out);
-        else if (/\.tsx?$/.test(name) && !name.endsWith(".d.ts")) out.push(path);
+        else if (/\.(tsx?|[mc]?js)$/.test(name) && !name.endsWith(".d.ts")) out.push(path);
     }
 }
 
@@ -214,7 +215,8 @@ function tagName(n: TS.JsxElement): string {
 }
 
 export function checkSource(file: string, text: string, options: Options = {}): Hit[] {
-    const sf = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true, file.endsWith(".tsx") ? ts.ScriptKind.TSX : ts.ScriptKind.TS);
+    const kind = file.endsWith(".tsx") ? ts.ScriptKind.TSX : /\.[mc]?js$/.test(file) ? ts.ScriptKind.JS : ts.ScriptKind.TS;
+    const sf = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true, kind);
     const hits: Hit[] = [];
     const hit = (node: TS.Node, rule: string, message: string) =>
         hits.push({ file, line: sf.getLineAndCharacterOfPosition(node.getStart(sf)).line + 1, rule, message });
@@ -456,6 +458,12 @@ function mentions(node: TS.Node, name: string): boolean {
     return ts.forEachChild(node, (c) => mentions(c, name) || undefined) ?? false;
 }
 
+// The names a catch binding introduces: `e`, or `message` in `{ message }`.
+function boundNames(name: TS.BindingName): string[] {
+    if (ts.isIdentifier(name)) return [name.text];
+    return name.elements.flatMap((el) => (ts.isBindingElement(el) ? boundNames(el.name) : []));
+}
+
 // What a catch clause does when it only swallows, or undefined: does nothing,
 // only logs, or returns a value with no trace at all. A catch that logs and
 // then returns an answer (a probe's false, a parser's null) leaves a trace,
@@ -468,7 +476,7 @@ function swallowingCatch(clause: TS.CatchClause): string | undefined {
     const last = block.statements[block.statements.length - 1]!;
     if (!ts.isReturnStatement(last) || !last.expression || actsAnywhere(block)) return undefined;
     const binding = clause.variableDeclaration?.name;
-    if (binding && ts.isIdentifier(binding) && mentions(last.expression, binding.text)) return undefined;
+    if (binding && boundNames(binding).some((name) => mentions(last.expression!, name))) return undefined;
     return "returns a value with no trace";
 }
 
@@ -720,15 +728,16 @@ function checkHouseRules(sf: TS.SourceFile, file: string, hit: (node: TS.Node, r
     checkErrorQuotes(sf, file, hit, options);
     const visit = (n: TS.Node): void => {
         // swallowed-error: a catch that does nothing, only logs, or returns a
-        // placeholder.
-        const caught = ts.isCatchClause(n) ? swallowingCatch(n) : undefined;
-        if (ts.isCatchClause(n) && caught) {
-            report(
-                n,
-                "swallowed-error",
-                `this catch ${caught}, so the failure never reaches the user (AGENTS.md "Fail loudly"); show it in state, rethrow, or mark a deliberate one with \`// quiet: <reason>\``,
-                n.block,
-            );
+        // value with no trace.
+        if (ts.isCatchClause(n)) {
+            const caught = swallowingCatch(n);
+            if (caught)
+                report(
+                    n,
+                    "swallowed-error",
+                    `this catch ${caught}, so the failure never reaches the user (AGENTS.md "Fail loudly"); show it in state, rethrow, or mark a deliberate one with \`// quiet: <reason>\``,
+                    n.block,
+                );
         }
         if (ts.isCallExpression(n) && ts.isPropertyAccessExpression(n.expression) && n.expression.name.text === "catch" && n.arguments.length === 1) {
             const what = swallowingHandler(n.arguments[0]);

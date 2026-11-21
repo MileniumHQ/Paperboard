@@ -103,6 +103,21 @@ describe("the house rules flag each break, honour a reasoned quiet marker, and p
         expect(rules(fn("        return { ok: false, error: String(e) };"))).toEqual([]);
         expect(rules(fn("        return fallbackFor(run);"))).toEqual([]);
         expect(rules(fn("        failures++;\n        return null;"))).toEqual([]);
+        // a destructured binding counts as the caught error too
+        expect(rules(fn("        return null;").replace("catch (e)", "catch ({ message })"))).toEqual(["4:swallowed-error"]);
+        expect(rules(fn("        return message;").replace("catch (e)", "catch ({ message })"))).toEqual([]);
+    });
+
+    test("plain JavaScript files are scanned for swallowed errors", () => {
+        const swallow = "try {\n    run();\n} catch (e) {\n    console.error(e);\n}\n";
+        for (const file of ["a.js", "a.mjs", "a.cjs"]) expect(checkSource(file, swallow).map((h) => `${h.line}:${h.rule}`)).toEqual(["3:swallowed-error"]);
+        const root = mkdtempSync(join(tmpdir(), "check-solid-js-"));
+        try {
+            for (const name of ["a.mjs", "b.cjs", "c.js", "d.json"]) writeFileSync(join(root, name), swallow);
+            expect(checkDirs([root]).map((h) => relative(root, h.file)).sort()).toEqual(["a.mjs", "b.cjs", "c.js"]);
+        } finally {
+            rmSync(root, { recursive: true, force: true });
+        }
     });
 
     test("an effect that does not name its dependencies (Effects track what they mean)", () => {
