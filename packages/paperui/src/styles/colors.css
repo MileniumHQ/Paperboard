@@ -52,22 +52,49 @@
     /* text selection fill for surfaces that cannot use ::selection (terminals, canvases) */
     --paper-selection: #217bf44d;
 
-    /* OS brand colors — semantic identities, not theme colors (an OS is
-       its color); they survive theming by design */
+    /* Computer identity colors: an OS, what is built on it, and an agent
+       operating a computer are their brand's color, so they survive
+       theming by design. Black-and-white brands are white. */
     --paper-os-macos: #ffffff;
     --paper-os-windows: #0078d4;
     --paper-os-ubuntu: #e95420;
-    --paper-os-arch: #1793d1;
     --paper-os-debian: #a80030;
-    --paper-os-fedora: #3c6eb4;
-    --paper-os-linuxmint: #86be43;
-    --paper-os-zorin: #0cc1e8;
-    --paper-os-steamos: #1a9fff;
+    --paper-os-fedora: #51a2da;
+    --paper-os-linuxmint: #69b53f;
+    --paper-os-zorin: #15a6f0;
     --paper-os-pop: #48b9c7;
-    --paper-os-manjaro: #35bf5c;
     --paper-os-elementary: #64baff;
+    --paper-os-neon: #3dc08d;
+    --paper-os-kali: #367bf0;
+    --paper-os-parrot: #00fff0;
+    --paper-os-deepin: #007cff;
+    --paper-os-steamos: #1a9fff;
     --paper-os-nixos: #5277c3;
-    --paper-os-raspbian: #c51a4a;
+    --paper-os-opensuse: #73ba25;
+    --paper-os-rocky: #10b981;
+    --paper-os-redhat: #ee0000;
+    --paper-os-centos: #262577;
+    --paper-os-oracle: #c74634;
+    --paper-os-amazon: #ff9900;
+    --paper-os-alpine: #0d597f;
+    --paper-os-solus: #5294e2;
+    --paper-os-arch: #1793d1;
+    --paper-os-cachyos: #00aa88;
+    --paper-os-endeavouros: #7f7fff;
+    --paper-os-garuda: #8839ef;
+    --paper-os-artix: #10a0cc;
+    --paper-os-manjaro: #35bf5c;
+    --paper-os-gentoo: #54487a;
+    --paper-os-void: #478061;
+    --paper-os-omarchy: #7aa2f7;
+    --paper-os-raspberrypi: #cd2355;
+    --paper-os-proxmox: #e57000;
+    --paper-os-truenas: #0095d5;
+    --paper-os-unraid: #f15a2c;
+    --paper-os-homeassistant: #18bcf2;
+    --paper-os-chromeos: #4285f4;
+    --paper-os-claude: #d97757;
+    --paper-os-grok: #ffffff;
     --paper-os-linux: #fcc624;
     --paper-os-unknown: #888888;
 
