@@ -26,7 +26,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { errorMessage, problemsApi, stopProcess } from "@mileniumhq/paperapi";
 import { writeFileAtomicSync } from "@mileniumhq/paperapi/fs";
-import { CURRENT_CONVERSATION, LIMITS, PANEL_ID, type AccessEntry, type PageEntry, type PromptEntry, type ToolServerEntry, type ToolSignInEntry, type Attachment, type ChatEntry, type ChatState, type Harness, type PastConversation, type Settings, type SignInEntry, type WaitingMessage } from "../contract";
+import { CURRENT_CONVERSATION, LIMITS, PANEL_ID, type AccessEntry, type PageEntry, type PromptEntry, type ToolServerEntry, type ToolSignInEntry, type Attachment, type ChatEntry, type ChatState, type Harness, type PastConversation, type Settings, type SignInEntry, type StatusTone, type WaitingMessage } from "../contract";
 import type { StartOptions } from "./browser";
 import { Attachments } from "./attachments";
 import { sizeText } from "../lib/files";
@@ -104,6 +104,8 @@ export interface ConversationDeps {
     mcp: () => { url: string; token: string; onToolsListed(cb: () => void): () => void };
     /** every toolset's part of the agent's instructions, read at the start of each turn */
     instructions: () => Promise<Sections>;
+    /** the model writing this tool's call is the agent typing to the user (Toolbox.writes) */
+    writes: (tool: string) => boolean;
     /** the developer's log of every turn (turnLog.ts), when it's switched on */
     log?: TurnLog | null;
     emit: (entry: ChatEntry) => void;
@@ -142,8 +144,9 @@ export class Conversation {
     /** ids of the user's messages the running turn is answering */
     private answering: string[] = [];
     /**
-     * The typing bubble. A reply owed is one typing session from the turn's start until its text lands, whatever
-     * the agent does on the way; after that, typing is only the agent writing a send_message, not working.
+     * The typing bubble: on only while the model writes something the user reads (a text, or a card like a
+     * sign-in), from the moment its harness shows the call begin until the call arrives. Thinking, plain output
+     * and any other tool are not typing.
      */
     private typing = false;
     private context: Context | null = null;
@@ -392,9 +395,18 @@ export class Conversation {
         return { id: entry.id };
     }
 
-    /** The agent is using a tool other than its messages: it's working, not typing, unless a reply is still owed. */
+    /** A status line from send_status, outside the bubbles: it answers nothing, so a reply is still owed. */
+    status(tone: StatusTone, text: string) {
+        if (!this.running) throw new Error("there's no conversation going on right now");
+        const line = text.trim();
+        if (!line) throw new Error("say something first");
+        if (line.length > LIMITS.status) throw new Error(`a status is at most ${LIMITS.status} characters; text the rest with send_message`);
+        this.put({ id: this.newId(), at: Date.now(), kind: "status", tone, text: line });
+    }
+
+    /** A tool call arrived, or the model began one that isn't written to the user: whatever it was writing is done. */
     working() {
-        if (!this.unanswered) this.setTyping(false);
+        this.setTyping(false);
     }
 
     private setTyping(on: boolean) {
@@ -473,8 +485,8 @@ export class Conversation {
         this.unanswered = batch.length > 0;
         this.plain = [];
         this.answering = batch.map((m) => m.id);
-        // answering the user begins with writing to them; a routine's turn shows nothing until it writes
-        this.typing = batch.length > 0;
+        // nothing is being written yet: the model thinks first
+        this.typing = false;
         this.running = this.turn(message)
             .catch((e: Error) => {
                 this.put({ id: this.newId(), at: Date.now(), kind: "error", title: "Not answered", text: e.message });
@@ -618,7 +630,7 @@ export class Conversation {
                     if (ev.used !== undefined) context.used = ev.used;
                     if (ev.size !== undefined) context.size = ev.size;
                 } else if (ev.type === "message") plain.push(ev.text);
-                else if (ev.type === "typing") this.setTyping(true);
+                else if (ev.type === "tool") this.setTyping(ev.name !== null && this.deps.writes(ev.name));
                 else if (ev.type === "working") this.working();
             },
             stop: () => this.killTurn(),

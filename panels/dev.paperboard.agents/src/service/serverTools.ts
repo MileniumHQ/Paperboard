@@ -111,6 +111,8 @@ export class ServerTools {
     toolset(): Toolset {
         return {
             id: "tool-servers",
+            // the cards the user allows a program or signs in on
+            writes: ["add_tool_server", "update_tool_server", "ask_tool_server_sign_in"],
             // a flow has no one to allow a program or sign in: it can only look
             tools: (mode) => (mode.fromFlow ? SERVER_TOOLS.filter((t) => t.name === "list_tool_servers") : SERVER_TOOLS),
             instructions: (mode) => (mode.fromFlow ? "" : SERVER_INSTRUCTIONS),

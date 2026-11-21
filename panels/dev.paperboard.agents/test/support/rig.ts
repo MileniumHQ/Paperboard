@@ -38,7 +38,8 @@ export async function conversationRig(o: { harness?: Harness; contextBudget?: nu
     const codexHome = path.join(root, "storage", "brains", "codex");
     fs.mkdirSync(codexHome, { recursive: true });
     // the real messages toolset, texting the rig's conversation
-    const mcp = await startComputerMcp(toolbox([messagesToolset({ say: (text, replyTo, files) => rig.conversation.say(text, replyTo, files) })]));
+    const tools = toolbox([messagesToolset({ say: (text, replyTo, files) => rig.conversation.say(text, replyTo, files), status: (tone, text) => rig.conversation.status(tone, text) })]);
+    const mcp = await startComputerMcp(tools);
     const settings: Settings = { name: "Ada", harness, model: null, compaction: "summarize" };
     const entries = new Recorder<ChatEntry>();
     const states = new Recorder<ChatState>();
@@ -52,6 +53,7 @@ export async function conversationRig(o: { harness?: Harness; contextBudget?: nu
             problem: o.problem,
             mcp: () => ({ url: mcp.url, token: mcp.token, onToolsListed: (cb) => mcp.onToolsListed(cb) }),
             instructions: o.instructions ?? (async () => ({ tools: ["**Test:** a section"], now: [] })),
+            writes: (tool) => tools.writes(tool),
             emit: entries.push,
             onState: states.push,
             codexHome,

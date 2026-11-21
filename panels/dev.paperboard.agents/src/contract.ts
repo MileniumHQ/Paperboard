@@ -57,6 +57,8 @@ export const LIMITS = {
     name: 32,
     model: 64,
     message: 16_000,
+    /** a status line (send_status) */
+    status: 100,
     /** the user's instructions for automations */
     instructions: 4_000,
     history: 200,
@@ -625,6 +627,15 @@ const accessView = object({
 });
 export type AccessView = Infer<typeof accessView>;
 
+/** A status line's icon: a step done, one that failed, what the agent is on, or something to know. */
+export const STATUS_TONES = ["done", "failed", "info", "warning"] as const;
+const statusTone = oneOf(...STATUS_TONES);
+export type StatusTone = Infer<typeof statusTone>;
+
+/** A short line from the agent outside the bubbles, on how its work is going (send_status). */
+const statusEntry = object({ ...entryHead, kind: oneOf("status"), tone: statusTone, text: text() });
+export type StatusEntry = Infer<typeof statusEntry>;
+
 const chatEntry = shape.either(
     // replyTo: the id of an earlier user or agent entry this bubble answers
     object({ ...entryHead, kind: oneOf("user"), text: text(), replyTo: optional(text()), attachments: optional(list(attachment)) }),
@@ -638,6 +649,7 @@ const chatEntry = shape.either(
     toolServerEntry,
     toolSignInEntry,
     pageEntry,
+    statusEntry,
 );
 export type ChatEntry = Infer<typeof chatEntry>;
 
