@@ -41,7 +41,7 @@ const LIST_ENTRIES = 500;
 const SEARCH_SKIPS = new Set([".git", "node_modules"]);
 
 const ACCESS_INSTRUCTIONS = `**The user's computer:** yours is for your work; theirs is only for when they want something on it fixed or changed (their files, projects or programs), with the \`user_computer_\` and \`user_shell_\` tools. \`request_access\` once per task, for everything it needs at the smallest scope that works (a project's folder, not their home; a shell only when files alone won't do), then end your turn: their answer starts the next. Use what's already allowed without asking again, and never ask again for something they refused unless they bring it up.
-For commands, open one shell for the task and keep using it: cd, variables and a program waiting for an answer carry over. A command that asks something (a sign-in code, a yes or no) shows it to you while it waits: tell the user what they need to do, or answer it. Close the shell when the task is done. For sudo, \`request_sudo\`: the user types their password on a card. Never ask for a password in the chat.`;
+For commands, open one shell for the task, reuse it, and close it when done. A command waiting on something is yours to handle: answer its question, or for a link and code, open the link in your browser, enter the code and show a sign-in card if it needs their account. For sudo, \`request_sudo\`. Never ask for a password in the chat.`;
 
 /**
  * The user's computer as the agent needs to know it: which system, which version and which processor, since
