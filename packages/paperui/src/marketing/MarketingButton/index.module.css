@@ -1,0 +1,154 @@
+/* PaperEffect's raised paper, printed with the grain: the face sits on a
+   deeper edge, lifts a little on hover and sinks onto the edge when held. */
+.effect {
+    --edge: 5px;
+    --lift: -2px;
+    --face: var(--marketing-accent);
+    --deep: color-mix(in srgb, var(--marketing-accent) 70%, var(--paper-marketing-ink));
+    --ink: var(--paper-on-color);
+    position: relative;
+    isolation: isolate;
+    display: inline-flex;
+    width: fit-content;
+    margin: 0 var(--edge) var(--edge) 0;
+    border-radius: 12px;
+    transition: transform 0.35s var(--marketing-ease-spring);
+}
+
+.effect::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background: var(--deep);
+    transform: translate3d(var(--edge), var(--edge), 0);
+    transition: transform 0.35s var(--marketing-ease-spring);
+    z-index: -1;
+}
+
+@media (hover: hover) {
+    .effect:hover:not(:active) {
+        transform: translate3d(var(--lift), var(--lift), 0);
+    }
+
+    .effect:hover:not(:active)::before {
+        transform: translate3d(calc(var(--edge) - var(--lift)), calc(var(--edge) - var(--lift)), 0);
+    }
+}
+
+.effect:active {
+    transform: translate3d(var(--edge), var(--edge), 0);
+    transition-duration: 0.06s;
+    transition-timing-function: ease-out;
+}
+
+.effect:active::before {
+    transform: translate3d(0, 0, 0);
+    transition-duration: 0.06s;
+    transition-timing-function: ease-out;
+}
+
+.button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    border: none;
+    border-radius: inherit;
+    background-color: var(--face);
+    background-image: var(--marketing-grain);
+    background-blend-mode: soft-light;
+    background-size: 140px 140px;
+    color: var(--ink);
+    font-family: "Nunito", sans-serif;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    white-space: nowrap;
+    text-decoration: none;
+    cursor: pointer;
+    outline: none;
+    box-shadow:
+        inset 0 1px 0 color-mix(in srgb, var(--paper-on-color) 20%, transparent),
+        inset 0 -2px 0 color-mix(in srgb, var(--paper-marketing-ink) 12%, transparent);
+    transition: filter 0.2s;
+}
+
+.button:focus-visible {
+    outline: 2px solid var(--paper-on-color);
+    outline-offset: 2px;
+}
+
+@media (hover: hover) {
+    .effect:hover:not(:active) .button {
+        filter: brightness(1.08);
+    }
+}
+
+.medium {
+    padding: 12px 28px;
+    font-size: 18px;
+}
+
+.large {
+    padding: 19px 46px;
+    font-size: 24px;
+    gap: 14px;
+}
+
+.effect:not(:active) .large {
+    box-shadow:
+        inset 0 1px 0 color-mix(in srgb, var(--paper-on-color) 25%, transparent),
+        inset 0 -2px 0 color-mix(in srgb, var(--paper-marketing-ink) 12%, transparent),
+        0 16px 34px -14px color-mix(in srgb, var(--marketing-accent) 24%, var(--paper-marketing-ink));
+}
+
+.black {
+    --face: color-mix(in srgb, var(--paper-marketing-ink) 88%, var(--paper-on-color));
+    --deep: var(--paper-marketing-ink);
+}
+
+/* ink alone: no face, no edge, the words on the surface */
+.text::before {
+    content: none;
+}
+
+.text .button {
+    /* a sentence, not a label: it may wrap on a narrow screen */
+    white-space: normal;
+    text-align: center;
+    background: none;
+    box-shadow: none;
+    padding-inline: 12px;
+    opacity: 0.9;
+    transition: opacity 0.2s;
+}
+
+@media (hover: hover) {
+    .text:hover:not(:active) .button {
+        opacity: 1;
+        filter: none;
+    }
+}
+
+.text:active {
+    transform: translate3d(0, 2px, 0);
+}
+
+.icons :is(svg, img) {
+    width: 1.1em;
+    height: 1.1em;
+    flex-shrink: 0;
+    fill: currentColor;
+}
+
+.disabled {
+    opacity: 0.45;
+    pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .effect,
+    .effect::before {
+        transition: none;
+    }
+}

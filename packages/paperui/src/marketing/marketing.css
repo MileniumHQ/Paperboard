@@ -1,0 +1,29 @@
+/* PaperUI Marketing: the look of Paperboard's own pages (the site, onboarding).
+   It ships on its own, apart from the app components, and needs only the
+   colour tokens and Nunito, which it brings along. */
+@import "../styles/colors.css";
+@import "../styles/fonts.css";
+
+/* Registered so a surface can glide between accents and depths. */
+@property --marketing-accent {
+    syntax: "<color>";
+    inherits: true;
+    initial-value: transparent;
+}
+
+@property --marketing-depth {
+    syntax: "<number>";
+    inherits: true;
+    initial-value: 0;
+}
+
+:root {
+    /* The paper grain every raised marketing surface is printed on. */
+    --marketing-grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)' opacity='0.45'/%3E%3C/svg%3E");
+    /* The finer, full-strength grain laid over a whole surface. */
+    --marketing-surface-grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='320' height='320'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='1.3' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='320' height='320' filter='url(%23n)'/%3E%3C/svg%3E");
+    /* Components mix their tones from the accent where they sit, so a
+       surface that changes it recolours everything inside. */
+    --marketing-accent: var(--paper-primary);
+    --marketing-ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+}

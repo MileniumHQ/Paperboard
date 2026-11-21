@@ -1,0 +1,53 @@
+.text {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    max-width: 100%;
+    line-height: 1;
+    margin: 0;
+    font: inherit;
+}
+
+.svg {
+    display: block;
+    max-width: 100%;
+    height: auto;
+    overflow: visible;
+}
+
+/* the words themselves, for anything that reads the page rather than sees it */
+.label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+}
+
+.glyphs {
+    font-family: "Nunito", sans-serif;
+    font-weight: 800;
+    letter-spacing: -0.01em;
+}
+
+.face {
+    fill: var(--paper-on-color);
+}
+
+.grain {
+    fill: var(--paper-marketing-ink);
+    pointer-events: none;
+}
+
+.dropColor {
+    flood-color: var(--paper-marketing-ink);
+}
+
+.innerColor {
+    flood-color: var(--marketing-accent);
+}
+
+.inkColor {
+    flood-color: var(--paper-marketing-ink);
+}

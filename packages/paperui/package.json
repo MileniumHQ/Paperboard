@@ -25,7 +25,14 @@
             "import": "./dist/headless.es.js",
             "require": "./dist/headless.cjs"
         },
+        "./marketing": {
+            "types": "./dist/marketing.d.ts",
+            "solid": "./dist/marketing.es.js",
+            "import": "./dist/marketing.es.js",
+            "require": "./dist/marketing.cjs"
+        },
         "./style.css": "./dist/paperui.css",
+        "./marketing.css": "./dist/marketing.css",
         "./panel.css": "./dist/panel.css",
         "./tokens.css": "./dist/tokens.css",
         "./colors.css": "./dist/colors.css",
@@ -34,7 +41,7 @@
         "./package.json": "./package.json"
     },
     "scripts": {
-        "build": "tsc --noEmit && vite build && cp src/styles/panel.css src/styles/colors.css dist/ && sed '/^@import /d' src/styles/styles.css > dist/tokens.css",
+        "build": "tsc --noEmit && vite build && vite build -c vite.marketing.config.ts && cp src/styles/panel.css src/styles/colors.css dist/ && sed '/^@import /d' src/styles/styles.css > dist/tokens.css",
         "test": "bash scripts/check-styling.sh && vitest run"
     },
     "devDependencies": {
