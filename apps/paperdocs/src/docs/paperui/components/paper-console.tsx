@@ -74,9 +74,9 @@ export function Example() {
             </PaperCard>
             <PaperCode block language="tsx">
 {`const entries: PaperConsoleEntry[] = [
-    { type: "info", content: "Search for \"hourCycle\"" },
+    { type: "info", content: "Search for \\"hourCycle\\"" },
     { type: "info", content: "Read src/components/home/Clock.tsx" },
-    { content: "The clock formats time with **toLocaleTimeString** and no \`hourCycle\`, so it follows the app's language:\n\n- en-US shows 3:45 PM\n- de-DE shows 15:45", markdown: true },
+    { content: "The clock formats time with **toLocaleTimeString** and no \`hourCycle\`, so it follows the app's language:\\n\\n- en-US shows 3:45 PM\\n- de-DE shows 15:45", markdown: true },
 ];`}
             </PaperCode>
 
@@ -202,7 +202,7 @@ export function Example() {
 
             <PaperText preset="subheader" as="h3" id="entries">Entries</PaperText>
             <PaperText preset="body" as="p">
-                PaperConsoleEntry is <PaperCode>{"{ type?, content, id?, timestamp? }"}</PaperCode>.
+                PaperConsoleEntry is <PaperCode>{"{ type?, content, markdown?, id?, timestamp? }"}</PaperCode>.
                 Only <PaperCode>type</PaperCode>, <PaperCode>content</PaperCode> and <PaperCode>markdown</PaperCode> are read: <PaperCode>id</PaperCode> and <PaperCode>timestamp</PaperCode> are in the type but nothing draws or keys on them.
             </PaperText>
             <PaperTable>
