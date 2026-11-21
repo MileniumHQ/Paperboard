@@ -59,7 +59,8 @@ export async function runHarness(o: HarnessRun): Promise<HarnessOutcome> {
         ? new AcpTurn({
               ...o.acp,
               write: (line) => {
-                  o.line?.("stdin", line);
+                  const logged = o.acp?.mcpServers?.length ? line.replace(/Bearer [^\s"\\]+/g, "Bearer [redacted]") : line;
+                  o.line?.("stdin", logged);
                   return writeLine(o.host.write, o.id, line);
               },
               emit: onEvent,

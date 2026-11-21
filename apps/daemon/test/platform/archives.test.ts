@@ -114,4 +114,17 @@ describe("archives cannot write outside their destination", () => {
 			expect(fs.readdirSync(parent)).toEqual(["dest"]);
 		});
 	}
+
+	test("a file recipe installs a single binary into bin/ and cleans up its scratch dir", async () => {
+		const { parent, dest } = sandbox();
+		const file = archiveFile("agy.bin", Buffer.from("binary payload"));
+		await applyPackageRecipe(file, dest, { unpack: "file", take: { "bin/agy.exe": "file" } });
+		const installed = path.join(dest, "bin", "agy.exe");
+		expect(fs.readFileSync(installed, "utf8")).toBe("binary payload");
+		if (process.platform !== "win32") {
+			expect(fs.statSync(installed).mode & 0o111).toBe(0o111);
+		}
+		expect(fs.existsSync(path.join(dest, ".unpack"))).toBe(false);
+		expect(fs.readdirSync(parent)).toEqual(["dest"]);
+	});
 });

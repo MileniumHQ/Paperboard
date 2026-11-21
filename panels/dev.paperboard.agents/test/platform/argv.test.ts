@@ -17,7 +17,7 @@ afterEach(async () => {
 // shell text, quoting and flags: each is one value to the brain, on every system's process launcher
 const HOSTILE = `hi; rm -rf ~ && del /s /q C:\\ | echo "PWNED" $(whoami) \`id\` %PATH% ^& --dangerously-bypass-approvals-and-sandbox 'x' {env:${MCP_TOKEN_ENV}} {file:~/.ssh/id_rsa}`;
 
-const HARNESSES = ["codex", "claude-code", "opencode"] as const;
+const HARNESSES = ["codex", "antigravity", "claude-code", "opencode"] as const;
 
 /** the run files a turn or a question left behind: none, once it's over */
 const leftFiles = (...dirs: string[]) => dirs.flatMap((d) => (fs.existsSync(d) ? fs.readdirSync(d).filter((n) => n.startsWith("paperboard-run-")) : []));
@@ -25,7 +25,7 @@ const leftFiles = (...dirs: string[]) => dirs.flatMap((d) => (fs.existsSync(d) ?
 // No argv injection, no token leak, and neither the message nor the instructions on a command line, which other
 // users can read and every system caps (Windows: 32,767 characters for all of it; Linux: 128 KiB an argument).
 describe("what reaches a brain's command line", () => {
-    test("the user's message arrives whole over stdin or ACP, and the MCP token only in the environment", async () => {
+    test("the user's message arrives whole over stdin or ACP, and the MCP token stays out of argv", async () => {
         for (const harness of HARNESSES) {
             rig = await conversationRig({ harness });
             const { id } = rig.conversation.send(HOSTILE);
@@ -33,8 +33,10 @@ describe("what reaches a brain's command line", () => {
             const [run] = rig.log().filter((e) => e.event === "run");
             const argv: string[] = run.argv;
             expect(argv.some((a) => a.includes("PWNED") || a.includes(id))).toBe(false);
-            if (harness !== "opencode") expect(rig.turns()[0].message).toBe(`[${id}] ${HOSTILE}`);
-            expect(run.env[MCP_TOKEN_ENV]).toBe(rig.mcp.token);
+            if (harness !== "opencode" && harness !== "antigravity") expect(rig.turns()[0].message).toBe(`[${id}] ${HOSTILE}`);
+            // Antigravity receives the MCP token over ACP, never in its environment
+            if (harness === "antigravity") expect(run.env[MCP_TOKEN_ENV]).toBeUndefined();
+            else expect(run.env[MCP_TOKEN_ENV]).toBe(rig.mcp.token);
             expect(argv.some((a) => a.includes(rig!.mcp.token))).toBe(false);
             expect(rig.host.startedAs(turnId)[0]!.args.some((a) => a.includes(rig!.mcp.token))).toBe(false);
             await rig.close();
@@ -65,10 +67,10 @@ describe("what reaches a brain's command line", () => {
             for (const part of ["zzzzzzzzzz", "seed-", "SUMMARY", "memory-fact-", "nnnnnnnnnn", "rrrrrrrrrr", "You are Ada"]) expect(launched).not.toContain(part);
             // what's left on the command line is a fixed few flags, far under every system's cap
             expect(argv.join(" ").length).toBeLessThan(8_000);
-            if (harness === "opencode") {
+            if (harness === "opencode" || harness === "antigravity") {
                 const config = rig.log().find((e) => e.event === "acp-config");
                 expect(config.instructions).toContain("memory-fact-99");
-                if (process.platform !== "win32") expect(config.instructionsMode).toBe(0o600);
+                if (harness === "opencode" && process.platform !== "win32") expect(config.instructionsMode).toBe(0o600);
             } else {
                 const turn = rig.turns().at(-1);
                 expect(turn.message).toContain("SUMMARY yyyy");
@@ -102,23 +104,32 @@ describe("what reaches a brain's command line", () => {
     test("Get Answer hands over the question and its instructions the same way", async () => {
         rig = await conversationRig({ harness: "codex" });
         const codexHome = path.join(rig.root, "storage", "brains", "codex");
+        const agyHome = path.join(rig.root, "storage", "brains", "antigravity");
         const filesDir = path.join(rig.root, "ask-run");
-        for (const harness of ["codex", "claude-code"] as const) {
+        for (const harness of ["codex", "antigravity", "claude-code"] as const) {
             const program = brainProgram(rig.root, harness);
             const asker = new Asker({
                 host: rig.host,
                 settings: () => ({ name: "Ada", harness, model: null, compaction: "summarize", automationInstructions: `custom-instructions ${HOSTILE}` }),
                 resolve: () => program,
-                env: (): Record<string, string> => (harness === "codex" ? { CODEX_HOME: codexHome } : {}),
+                home: () => (harness === "codex" ? codexHome : agyHome),
+                env: (): Record<string, string> => (harness === "codex" ? { CODEX_HOME: codexHome } : harness === "antigravity" ? { HOME: agyHome, XDG_CONFIG_HOME: path.join(agyHome, ".config"), AGY_CLI_DISABLE_AUTO_UPDATE: "1" } : {}),
                 workdir: path.join(rig.root, "ask"),
                 filesDir,
             });
             const question = `--help ${HOSTILE}`;
             await asker.ask(question);
             const run = rig.log().filter((e) => e.event === "run").at(-1);
-            const turn = rig.turns().at(-1);
-            expect(turn.message).toBe(question);
-            expect(turn.instructions).toContain("custom-instructions");
+            if (harness === "antigravity") {
+                const cfg = rig.log().filter((e) => e.event === "acp-config").at(-1);
+                expect(cfg.instructions).toContain("custom-instructions");
+                expect(cfg.disableBuiltInTools).toBe(true);
+                expect(cfg.mcpServers).toEqual([]);
+            } else {
+                const turn = rig.turns().at(-1);
+                expect(turn.message).toBe(question);
+                expect(turn.instructions).toContain("custom-instructions");
+            }
             expect((run.argv as string[]).some((a) => a.includes("PWNED") || a.includes("custom-instructions"))).toBe(false);
             expect(Object.keys(run.env)).not.toContain(MCP_TOKEN_ENV);
             expect(leftFiles(filesDir, codexHome)).toEqual([]);

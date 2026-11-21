@@ -180,7 +180,7 @@ function AgentSettings(props: { agent: Agent }) {
     );
 }
 
-/** ChatGPT (Codex CLI), Claude (Claude CLI) and Other provider (OpenCode CLI): each is installed here from its maker and signed in with its own login. */
+/** ChatGPT (Codex CLI), Gemini (Antigravity CLI), Claude (Claude CLI) and Other provider (OpenCode CLI): each is installed here from its maker and signed in with its own login. */
 function BrainsSettings(props: { agent: Agent }) {
     const actions = createBrainActions(props.agent);
     const [providers, setProviders] = createSignal(false);

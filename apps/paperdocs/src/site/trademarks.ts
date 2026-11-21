@@ -21,7 +21,10 @@ export const TRADEMARKS: Trademark[] = [
     { name: "Discord", match: /\bDiscord\b/, owners: ["Discord Inc."] },
     { name: "Scratch", match: /\bScratch\b/, owners: ["MIT"] },
     { name: "Modrinth", match: /\bModrinth\b/, owners: ["Rinth, Inc."] },
+    { name: "ChatGPT", match: /\bChatGPT\b/, owners: ["OpenAI"] },
     { name: "Codex", match: /\bCodex\b/, owners: ["OpenAI"] },
+    { name: "Gemini", match: /\bGemini\b/, owners: ["Google LLC"] },
+    { name: "Google", match: /\bGoogle\b/, owners: ["Google LLC"] },
     { name: "Claude", match: /\bClaude\b/, owners: ["Anthropic"] },
     { name: "OpenCode", match: /\bOpenCode\b/, owners: ["Anomaly"] },
 ];

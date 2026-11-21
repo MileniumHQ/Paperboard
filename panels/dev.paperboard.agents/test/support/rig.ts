@@ -36,7 +36,9 @@ export async function conversationRig(o: { harness?: Harness; contextBudget?: nu
     const program = brainProgram(root, harness);
     const dir = path.join(root, "storage", "conversation");
     const codexHome = path.join(root, "storage", "brains", "codex");
+    const agyHome = path.join(root, "storage", "brains", "antigravity");
     fs.mkdirSync(codexHome, { recursive: true });
+    fs.mkdirSync(agyHome, { recursive: true });
     // the real messages toolset, texting the rig's conversation
     const mcp = await startComputerMcp(toolbox([messagesToolset({ say: (text, replyTo, files) => rig.conversation.say(text, replyTo, files) })]));
     const settings: Settings = { name: "Ada", harness, model: null, compaction: "summarize" };
@@ -48,7 +50,8 @@ export async function conversationRig(o: { harness?: Harness; contextBudget?: nu
             dir,
             settings: () => rig.settings,
             resolve: o.resolve ?? (() => program),
-            env: o.env ?? ((h): Record<string, string> => (h === "codex" ? { CODEX_HOME: codexHome } : {})),
+            home: (h) => (h === "codex" ? codexHome : h === "antigravity" ? agyHome : path.join(root, "storage", "brains", h)),
+            env: o.env ?? ((h): Record<string, string> => (h === "codex" ? { CODEX_HOME: codexHome } : h === "antigravity" ? { HOME: agyHome, XDG_CONFIG_HOME: path.join(agyHome, ".config"), AGY_CLI_DISABLE_AUTO_UPDATE: "1" } : {})),
             problem: o.problem,
             mcp: () => ({ url: mcp.url, token: mcp.token, onToolsListed: (cb) => mcp.onToolsListed(cb) }),
             instructions: o.instructions ?? (async () => ({ tools: ["**Test:** a section"], now: [] })),

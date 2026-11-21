@@ -1,0 +1,5 @@
+Open this link in a browser to log in with Google:
+
+  https://accounts.google.com/o/oauth2/auth?access_type=offline&client_id=test-client.apps.googleusercontent.com&code_challenge=fakechallenge&code_challenge_method=S256&prompt=consent&redirect_uri=https%3A%2F%2Fantigravity.google%2Foauth-callback&response_type=code&scope=openid&state=fakestate
+
+Then paste the authorization code, or the full URL of the page you land on, and press Enter:

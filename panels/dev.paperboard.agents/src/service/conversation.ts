@@ -30,7 +30,7 @@ import { BRAINS, CURRENT_CONVERSATION, LIMITS, PANEL_ID, type AccessEntry, type 
 import type { StartOptions } from "./browser";
 import { Attachments } from "./attachments";
 import { sizeText } from "../lib/files";
-import { codexContext, instructions, removeLeftRunFiles, runFilesDir, turnLaunch, type TurnLaunch } from "./harness";
+import { MCP_SERVER, codexContext, instructions, removeLeftRunFiles, runFilesDir, turnLaunch, type TurnLaunch } from "./harness";
 import { harnessFailure, runHarness } from "./harnessRun";
 import type { TurnLog } from "./turnLog";
 import { ATTACHMENTS, CARRY, History, summary, THREADS } from "./history";
@@ -96,6 +96,8 @@ export interface ConversationDeps {
     settings: () => Settings | null;
     /** the harness executable, or null if it isn't installed */
     resolve: (harness: Harness) => string | null;
+    /** the harness's isolated home folder in the panel's storage */
+    home: (harness: Harness) => string;
     /** what the harness runs with besides the daemon's environment: its home, and no updating itself */
     env: (harness: Harness) => Record<string, string>;
     /** why the harness can't take a turn (not signed in, say), or null: asked before it's started, so a signed-out harness fails with the way out instead of its own reply */
@@ -550,6 +552,7 @@ export class Conversation {
         const sections = await this.deps.instructions();
         // stopped (or shut down) while it got ready: there is no process to kill yet, so none is started
         if (this.stopRequested) return;
+        const env = this.deps.env(settings.harness);
         const launch = turnLaunch({
             harness: settings.harness,
             command,
@@ -560,7 +563,8 @@ export class Conversation {
             mcpUrl: mcp.url,
             sections,
             fromFlow: this.turnFromFlow,
-            filesDir: runFilesDir(settings.harness, this.deps.env(settings.harness), this.runDir()),
+            filesDir: runFilesDir(settings.harness, env, this.runDir()),
+            home: this.deps.home(settings.harness),
         });
         if (launch.thread) this.saveThread(settings.harness, launch.thread);
         const log = this.deps.log ?? null;
@@ -603,15 +607,30 @@ export class Conversation {
             });
         const turnMs = this.deps.turnMs ?? TURN_MS;
         const cwd = this.workdir();
+        const acp =
+            settings.harness === "opencode"
+                ? { who: BRAINS.opencode.program, cwd, thread: launch.thread, model: settings.model, message, ready }
+                : settings.harness === "antigravity"
+                  ? {
+                        who: BRAINS.antigravity.program,
+                        cwd,
+                        thread: launch.thread,
+                        model: settings.model,
+                        message,
+                        mcpServers: [{ type: "http" as const, name: MCP_SERVER, url: mcp.url, headers: [{ name: "Authorization", value: `Bearer ${mcp.token}` }] }],
+                        sessionParams: launch.acpSession,
+                        ready: async () => {},
+                    }
+                  : null;
         const r = await runHarness({
             host: this.deps.host,
             id: TURN_PROC_ID,
             harness: settings.harness,
             launch,
             cwd,
-            env: { ...this.deps.env(settings.harness), [launch.tokenEnv]: mcp.token },
+            env: { ...this.deps.env(settings.harness), ...(launch.tokenEnv ? { [launch.tokenEnv]: mcp.token } : {}) },
             ms: turnMs,
-            acp: settings.harness === "opencode" ? { cwd, thread: launch.thread, model: settings.model, message, ready } : null,
+            acp,
             onEvent: (ev) => {
                 if (ev.type === "thread") this.saveThread(settings.harness, ev.id);
                 else if (ev.type === "context") {

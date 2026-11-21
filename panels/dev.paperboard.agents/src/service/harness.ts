@@ -24,6 +24,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { errorMessage } from "@mileniumhq/paperapi";
 import { BRAINS, characterOf, type Character, type Harness } from "../contract";
+import { antigravityAcpArgs } from "./brainLogin";
 import type { Sections } from "./toolsets";
 import { MCP_TOKEN_ENV } from "./computerMcp";
 import { writeLine } from "./mcpClient";
@@ -138,6 +139,8 @@ export interface TurnSpec {
     fromFlow: boolean;
     /** where the run's instructions file goes (runFilesDir) */
     filesDir: string;
+    /** the harness's isolated home folder in the panel's storage */
+    home: string;
 }
 
 /**
@@ -154,15 +157,17 @@ export interface TurnLaunch {
     command: string;
     /** no message and no instructions: they come over stdin and from `files` */
     args: string[];
-    /** the MCP token's variable name only; its value is added by the caller */
-    tokenEnv: string;
+    /** the MCP token's variable name, or null when the token travels over ACP instead of the environment; its value is added by the caller */
+    tokenEnv: string | null;
     /** fixed variables the harness is launched with (no secrets); the token's value is added by the caller */
     env: Record<string, string>;
-    /** known before the turn starts (Claude); Codex and OpenCode report their own */
+    /** known before the turn starts (Claude); Codex, Antigravity and OpenCode report their own */
     thread: string | null;
-    /** the message, written to the harness's input, which is then closed (Codex, Claude); null for an ACP turn (OpenCode), whose input carries the protocol, the message too */
+    /** the message, written to the harness's input, which is then closed (Codex, Claude); null for an ACP turn (OpenCode, Antigravity), whose input carries the protocol, the message too */
     input: string | null;
     files: RunFile[];
+    /** extra session/new & session/resume parameters for ACP harnesses (e.g. Antigravity system prompt & disableBuiltInTools) */
+    acpSession?: Record<string, unknown>;
 }
 
 /** a run's own files start with this, in a folder of their own or in Codex's home */
@@ -229,7 +234,7 @@ function codexProfile(dir: string, developerInstructions: string): { name: strin
  * \udXXX) and wants DEL escaped.
  */
 function tomlString(s: string): string {
-    const whole = s.replace(/[\ud800-\udbff](?![\udc00-\udfff])|(?<![\ud800-\udbff])[\udc00-\udfff]/g, "�");
+    const whole = s.replace(/[\ud800-\udbff](?![\udc00-\udfff])|(?<![\ud800-\udbff])[\udc00-\udfff]/g, "\ufffd");
     return JSON.stringify(whole).replace(/\x7f/g, "\\u007f");
 }
 
@@ -285,6 +290,21 @@ export function turnLaunch(spec: TurnSpec): TurnLaunch {
             OPENCODE_DISABLE_CLAUDE_CODE: "1",
         };
         return { command: spec.command, args: ["acp"], tokenEnv: MCP_TOKEN_ENV, env, thread: spec.thread, input: null, files: [file] };
+    }
+    if (spec.harness === "antigravity") {
+        return {
+            command: spec.command,
+            args: antigravityAcpArgs(spec.home),
+            tokenEnv: null,
+            env: {},
+            thread: spec.thread,
+            input: null,
+            files: [],
+            acpSession: {
+                disableBuiltInTools: true,
+                _meta: { antigravity: { systemPrompt: { append: system } } },
+            },
+        };
     }
     if (spec.harness === "codex") {
         const toml = (v: unknown) => JSON.stringify(v);
@@ -366,14 +386,16 @@ export interface AskSpec {
     instructions: string | null;
     /** where the run's instructions file goes (runFilesDir) */
     filesDir: string;
+    /** the harness's isolated home folder in the panel's storage */
+    home: string;
 }
 
 export type AskLaunch = Omit<TurnLaunch, "tokenEnv" | "thread">;
 
 /**
  * One question, answered in a thread of its own that isn't kept where the harness can (Codex's --ephemeral,
- * Claude's --no-session-persistence; OpenCode keeps its sessions). No MCP server: the answer can't text the
- * user or use the computer. The question and the instructions travel as a turn's do (turnLaunch).
+ * Claude's --no-session-persistence; OpenCode and Antigravity keep their sessions). No MCP server: the answer
+ * can't text the user or use the computer. The question and the instructions travel as a turn's do (turnLaunch).
  */
 export function askLaunch(spec: AskSpec): AskLaunch {
     const system = askInstructions(spec.name, spec.instructions);
@@ -390,6 +412,19 @@ export function askLaunch(spec: AskSpec): AskLaunch {
         };
         // the question goes over ACP
         return { command: spec.command, args: ["acp"], env: { OPENCODE_CONFIG_CONTENT: JSON.stringify(config), OPENCODE_DISABLE_PROJECT_CONFIG: "1", OPENCODE_DISABLE_CLAUDE_CODE: "1" }, input: null, files: [file] };
+    }
+    if (spec.harness === "antigravity") {
+        return {
+            command: spec.command,
+            args: antigravityAcpArgs(spec.home),
+            env: {},
+            input: null,
+            files: [],
+            acpSession: {
+                disableBuiltInTools: true,
+                _meta: { antigravity: { systemPrompt: { append: system } } },
+            },
+        };
     }
     if (spec.harness === "codex") {
         const profile = codexProfile(spec.filesDir, system);

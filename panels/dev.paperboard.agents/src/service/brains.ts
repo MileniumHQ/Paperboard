@@ -1,8 +1,9 @@
-// The agent's brains: Codex, Claude Code and OpenCode. Each is a package the
-// daemon installs from its vendor's own release (Origami pins the version and
-// checksum; the daemon verifies and unpacks it), or, when the person says so,
-// the program they already have on this computer (existingBrains.ts). Either
-// way the panel runs it, and signs it in with its own login commands.
+// The agent's brains: Codex, Antigravity, Claude Code and OpenCode. Each is a
+// package the daemon installs from its vendor's own release (Origami pins the
+// version and checksum; the daemon verifies and unpacks it), or, when the
+// person says so, the program they already have on this computer
+// (existingBrains.ts). Either way the panel runs it, and signs it in with its
+// own login commands.
 //
 // A program on the computer is only offered: nothing of it runs until the
 // person chooses it, and the choice is the path they chose, kept in
@@ -10,24 +11,38 @@
 // package stays one click away. An installed package is always the brain.
 //
 // Each harness runs with its home inside this panel's storage (CODEX_HOME,
-// CLAUDE_CONFIG_DIR, XDG_* for OpenCode), even a program the user installed,
-// so the agent never touches, or is changed by, the user's own settings and
-// sign-ins. Credentials stay in those folders, written by the harnesses
-// themselves; this panel never reads them. Auto-update is off for every
-// harness: a package is the only way a new build arrives, and a program the
-// user installed is theirs to update.
+// HOME/XDG_*/APPDATA for Antigravity, CLAUDE_CONFIG_DIR, XDG_* for OpenCode),
+// even a program the user installed, so the agent never touches, or is changed
+// by, the user's own settings and sign-ins. Credentials stay in those folders,
+// written by the harnesses themselves; this panel never reads them. Auto-update
+// is off for every harness: a package is the only way a new build arrives, and
+// a program the user installed is theirs to update.
 
 import fs from "node:fs";
 import path from "node:path";
 import { errorMessage, SerialQueue } from "@mileniumhq/paperapi";
 import { writeFileAtomicSync } from "@mileniumhq/paperapi/fs";
 import { BRAINS, SIGN_IN_REQUIRED, type BrainState, type Harness, type LoginPrompt } from "../contract";
-import { LOGOUT_COMMAND, STATUS_COMMAND, callbackAddress, loginCommand, loginEnv, loginTail, outputTail, readLoginOutput, readStatus, type LoginMethod } from "./brainLogin";
+import { AcpRpcError, runAcpCall } from "./acp";
+import { LOGOUT_COMMAND, STATUS_COMMAND, antigravityAcpArgs, callbackAddress, loginCommand, loginEnv, loginTail, outputTail, readLoginOutput, readStatus, type LoginMethod } from "./brainLogin";
 import type { StartOptions } from "./browser";
 import type { PackageHost } from "./browserSetup";
 import { findExistingBrain, PROGRAMS, versionFrom } from "./existingBrains";
+import { MCP_SERVER } from "./harness";
 
-const BRAIN_PACKAGES: Record<Harness, string> = { codex: "codex", "claude-code": "claude-code", opencode: "opencode" };
+const BRAIN_PACKAGES: Record<Harness, string> = { codex: "codex", antigravity: "antigravity", "claude-code": "claude-code", opencode: "opencode" };
+
+/** Antigravity CLI permissions: allow only the panel's MCP server; deny built-in shell, file, and URL tools. */
+const ANTIGRAVITY_SETTINGS = JSON.stringify(
+    {
+        permissions: {
+            allow: [`mcp(${MCP_SERVER}/*)`],
+            deny: ["command(*)", "read_file(*)", "write_file(*)", "read_url(*)"],
+        },
+    },
+    null,
+    2,
+);
 
 /** the daemon's packages, plus what the brains need to know about them */
 export interface BrainPackages extends PackageHost {
@@ -84,11 +99,11 @@ interface Login {
 }
 
 export class Brains {
-    private state: Record<Harness, BrainState> = { codex: none(), "claude-code": none(), opencode: none() };
+    private state: Record<Harness, BrainState> = { codex: none(), antigravity: none(), "claude-code": none(), opencode: none() };
     private dirs: Partial<Record<Harness, string>> = {};
     /** the program on the computer the person chose for a brain, when it isn't a package */
     private existing: Partial<Record<Harness, string>> = {};
-    private busy: Record<Harness, SerialQueue> = { codex: new SerialQueue(), "claude-code": new SerialQueue(), opencode: new SerialQueue() };
+    private busy: Record<Harness, SerialQueue> = { codex: new SerialQueue(), antigravity: new SerialQueue(), "claude-code": new SerialQueue(), opencode: new SerialQueue() };
     private logins = new Map<Harness, Login>();
 
     constructor(private deps: BrainsDeps) {}
@@ -116,6 +131,19 @@ export class Brains {
     env(harness: Harness): Record<string, string> {
         const home = this.home(harness);
         if (harness === "codex") return { CODEX_HOME: home };
+        if (harness === "antigravity") {
+            // agy scopes its credential-user-scope and secret storage from the OS home/config dirs
+            return {
+                HOME: home,
+                XDG_CONFIG_HOME: path.join(home, ".config"),
+                XDG_CACHE_HOME: path.join(home, ".cache"),
+                XDG_DATA_HOME: path.join(home, ".local", "share"),
+                USERPROFILE: home,
+                APPDATA: path.join(home, "AppData", "Roaming"),
+                LOCALAPPDATA: path.join(home, "AppData", "Local"),
+                AGY_CLI_DISABLE_AUTO_UPDATE: "1",
+            };
+        }
         if (harness === "claude-code") return { CLAUDE_CONFIG_DIR: home, DISABLE_AUTOUPDATER: "1" };
         return {
             XDG_DATA_HOME: path.join(home, "data"),
@@ -143,6 +171,9 @@ export class Brains {
     /** Look at every brain once, when the service starts. A brain that can't be looked at shows why. */
     async init(): Promise<void> {
         for (const h of Object.keys(this.state) as Harness[]) fs.mkdirSync(this.home(h), { recursive: true });
+        const agyDir = path.join(this.home("antigravity"), "antigravity-cli");
+        fs.mkdirSync(agyDir, { recursive: true });
+        writeFileAtomicSync(path.join(agyDir, "settings.json"), ANTIGRAVITY_SETTINGS);
         await Promise.all(
             (Object.keys(this.state) as Harness[]).map((h) =>
                 // quiet: a look that fails is in the brain's state; one brain's trouble doesn't stop the service
@@ -198,7 +229,7 @@ export class Brains {
             const exe = this.resolve(harness);
             if (!exe) throw this.fail(harness, `${BRAINS[harness].program} isn't installed yet.`);
             await this.cancel(harness);
-            const { args, needsInput } = loginCommand(harness, method);
+            const { args, needsInput } = loginCommand(harness, method, this.home(harness));
             const id = loginProcessId(harness);
             let out = "";
             const was = this.state[harness];
@@ -297,7 +328,29 @@ export class Brains {
         return this.busy[harness].run(async () => {
             const exe = this.resolve(harness);
             if (!exe) throw this.fail(harness, `${BRAINS[harness].program} isn't installed.`);
-            const out = await this.deps.host.exec(exe, LOGOUT_COMMAND[harness], { timeoutMs: this.deps.statusMs ?? STATUS_MS, env: this.env(harness) });
+            const timeoutMs = this.deps.statusMs ?? STATUS_MS;
+            if (harness === "antigravity") {
+                try {
+                    await runAcpCall(
+                        this.deps.host,
+                        {
+                            label: "logout",
+                            who: BRAINS.antigravity.program,
+                            command: exe,
+                            args: antigravityAcpArgs(this.home("antigravity")),
+                            cwd: this.home("antigravity"),
+                            env: this.env("antigravity"),
+                            timeoutMs,
+                        },
+                        (call) => call("logout", {}),
+                    );
+                } catch (e) {
+                    throw this.fail(harness, `${BRAINS[harness].program} didn't sign out: ${errorMessage(e)}`);
+                }
+                await this.look(harness);
+                return;
+            }
+            const out = await this.deps.host.exec(exe, LOGOUT_COMMAND[harness], { timeoutMs, env: this.env(harness) });
             if (out.exitCode !== 0) throw this.fail(harness, `${BRAINS[harness].program} didn't sign out: ${outputTail(out.stderr || out.stdout) || `exit ${out.exitCode}`}`);
             await this.look(harness);
         });
@@ -438,6 +491,29 @@ export class Brains {
             if (!Array.isArray(list)) throw new Error("OpenCode's provider list isn't a list");
             const connected = list.filter((i) => Array.isArray(i.connections) && i.connections.length > 0).map((i) => String(i.name ?? i.id));
             return { signedIn: connected.length > 0, account: connected.length ? connected.join(", ") : null };
+        }
+        if (harness === "antigravity") {
+            try {
+                await runAcpCall(
+                    this.deps.host,
+                    {
+                        label: "status",
+                        who: BRAINS.antigravity.program,
+                        command: exe,
+                        args: antigravityAcpArgs(this.home("antigravity")),
+                        cwd: this.home("antigravity"),
+                        env: this.env("antigravity"),
+                        timeoutMs,
+                    },
+                    (call) => call("session/list", {}),
+                );
+                return { signedIn: true, account: "Google" };
+            } catch (e) {
+                if (e instanceof AcpRpcError && e.code === -32000 && /authentication required/i.test(e.message)) {
+                    return { signedIn: false, account: null };
+                }
+                throw new Error(`${BRAINS.antigravity.program}'s sign-in status couldn't be read: ${errorMessage(e)}`);
+            }
         }
         return readStatus(harness, await this.deps.host.exec(exe, STATUS_COMMAND[harness], { timeoutMs, env: this.env(harness) }));
     }

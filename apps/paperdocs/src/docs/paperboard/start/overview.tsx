@@ -88,7 +88,7 @@ export default function PaperboardOverviewDoc() {
                     <tr><td>Terminal</td><td>A shell on the computer, with tabs.</td></tr>
                     <tr><td>Bot Creator</td><td>Creates and runs Discord bots.</td></tr>
                     <tr><td>Blocks</td><td>Builds automations from blocks your panels offer. See <PaperLink href="/docs/paperboard/blocks/">Automate with Blocks</PaperLink>.</td></tr>
-                    <tr><td>Agent</td><td>An agent you text, with a web browser of its own. It thinks with Codex, Claude or OpenCode.</td></tr>
+                    <tr><td>Agent</td><td>An agent you text, with a web browser of its own. It thinks with ChatGPT, Gemini, Claude or OpenCode.</td></tr>
                 </tbody>
             </PaperTable>
             <PaperText preset="body" as="p">

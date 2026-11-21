@@ -82,7 +82,7 @@ export const LEARN_PANELS: LearnPanel[] = [
                 alt: "Routines: what the agent does on a schedule",
             },
         ],
-        note: "You'll need a Codex, Claude, or OpenCode account. OpenCode also has free models.",
+        note: "You'll need a ChatGPT, Google, or Claude account, or any provider through OpenCode (which has free models too).",
     },
     {
         slug: "game-server",

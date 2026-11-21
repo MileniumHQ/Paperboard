@@ -38,6 +38,31 @@ describe("a turn's input", () => {
         expect(said(rig)).toEqual(["ok from opencode"]);
         expect(rig.log().filter((e) => e.event === "acp").map((e) => e.method)).toEqual(["initialize", "session/new", "session/prompt"]);
     }, SLOW);
+
+    test("an Antigravity turn talks ACP with built-in tools off, passes Paperboard's MCP server, and refuses all ACP permission requests", async () => {
+        rig = await conversationRig({ harness: "antigravity" });
+        rig.conversation.send("hello there [[tools]] [[ask-perm]]");
+        await settled(rig);
+        const [start] = rig.host.startedAs(turnId);
+        expect(start!.args[0]).toBe("acp");
+        expect(start!.args).toContain("--disable-telemetry");
+        expect(start!.args).toContain("--include-default-customizations=false");
+        expect(start!.stdin).toBeUndefined();
+        expect(Object.keys(start!.env ?? {})).not.toContain("PAPERBOARD_COMPUTER_MCP_TOKEN");
+        expect(said(rig)).toEqual(["ok from gemini"]);
+        expect(errors(rig)).toEqual([]);
+        expect(rig.log().filter((e) => e.event === "acp").map((e) => e.method)).toEqual(["initialize", "session/new", "session/prompt"]);
+        const cfg = rig.log().find((e) => e.event === "acp-config");
+        expect(cfg.disableBuiltInTools).toBe(true);
+        expect(cfg.instructions).toContain("You are Ada");
+        expect(cfg.mcpServers).toEqual([{ name: "paperboard", url: rig.mcp.url }]);
+        expect(rig.log().find((e) => e.event === "tools")?.status).toBe(200);
+        // every ACP permission request is refused; Paperboard's MCP server is allowed by settings.json, never by prompt text
+        expect(rig.log().filter((e) => e.event === "permission").map((e) => [e.tool, e.optionId])).toEqual([
+            ["command", "reject_once"],
+            ["mcp_paperboard_send_message", "reject_once"],
+        ]);
+    }, SLOW);
 });
 
 // A turn past its time.

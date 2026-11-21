@@ -227,7 +227,7 @@ export function packageHost(installed: Record<string, string>, downloads: Record
 
 export const FAKE_BRAIN = path.join(import.meta.dir, "fakeBrain.mjs");
 
-const PROGRAMS = { codex: "codex", "claude-code": "claude", opencode: "opencode" } as const;
+const PROGRAMS = { codex: "codex", antigravity: "agy", "claude-code": "claude", opencode: "opencode" } as const;
 
 /**
  * A brain's daemon package: <dir>/bin/<program> is the fake brain, which acts as the harness its name says.

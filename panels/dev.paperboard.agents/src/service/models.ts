@@ -16,7 +16,9 @@
 import { randomUUID } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import { PANEL_ID, type BrainModel, type Harness } from "../contract";
+import { BRAINS, PANEL_ID, type BrainModel, type Harness } from "../contract";
+import { runAcpCall } from "./acp";
+import { antigravityAcpArgs } from "./brainLogin";
 import type { TurnHost } from "./conversation";
 import { lineReader } from "./lines";
 
@@ -38,9 +40,19 @@ const MODELS_MS = 30_000;
 /** asks Claude Code itself for its models: the `models` of its answer to an `initialize` request */
 export type AskClaude = () => Promise<unknown>;
 
-export async function listModels(harness: Harness, homes: HarnessHomes, run: RunCommand, askClaude: AskClaude): Promise<BrainModel[]> {
+/** asks Antigravity itself for its models over ACP */
+export type AskAntigravity = () => Promise<BrainModel[]>;
+
+export async function listModels(
+    harness: Harness,
+    homes: HarnessHomes,
+    run: RunCommand,
+    askClaude: AskClaude,
+    askAntigravity: AskAntigravity,
+): Promise<BrainModel[]> {
     if (harness === "opencode") return openCodeModels(await run("opencode", ["models", "--standalone"], { timeoutMs: MODELS_MS }));
     if (harness === "codex") return codexModels(await run("codex", ["debug", "models"], { timeoutMs: MODELS_MS }));
+    if (harness === "antigravity") return askAntigravity();
     return claudeCatalog(homes.claude) ?? claudePickerModels(await askClaude());
 }
 
@@ -202,4 +214,86 @@ function codexModels(out: { stdout: string; stderr: string; exitCode: number }):
         .map(({ m }) => ({ id: str(m.slug)!, name: str(m.display_name) ?? str(m.slug)!, description: str(m.description), older: false }));
     if (models.length === 0) throw new Error("Codex's model list is empty.");
     return models;
+}
+
+export interface AntigravityLaunch {
+    command: string;
+    home: string;
+    env: Record<string, string>;
+    /** an empty folder: no project for it to pick up */
+    cwd: string;
+    timeoutMs?: number;
+}
+
+/**
+ * Extracts models from Antigravity's `session/new` response: either the `"model"` config option
+ * (`configOptions`) or `models.availableModels`.
+ */
+export function antigravityModels(result: unknown): BrainModel[] {
+    const r = result as {
+        configOptions?: unknown;
+        models?: { availableModels?: unknown };
+    } | null;
+    const models: BrainModel[] = [];
+    const seen = new Set<string>();
+    const add = (idRaw: unknown, nameRaw: unknown, descRaw: unknown) => {
+        const id = str(idRaw);
+        if (!id || seen.has(id)) return;
+        seen.add(id);
+        models.push({ id, name: str(nameRaw) ?? id, description: str(descRaw), older: false });
+    };
+
+    if (Array.isArray(r?.configOptions)) {
+        const opt = (r.configOptions as { id?: unknown; category?: unknown; options?: unknown }[]).find(
+            (c) => c?.id === "model" || c?.category === "model",
+        );
+        if (Array.isArray(opt?.options)) {
+            for (const entry of opt.options as { value?: unknown; name?: unknown; description?: unknown; options?: unknown }[]) {
+                if (Array.isArray(entry?.options)) {
+                    for (const sub of entry.options as { value?: unknown; name?: unknown; description?: unknown }[]) {
+                        add(sub?.value, sub?.name, sub?.description);
+                    }
+                } else {
+                    add(entry?.value, entry?.name, entry?.description);
+                }
+            }
+        }
+    }
+
+    if (models.length === 0 && Array.isArray(r?.models?.availableModels)) {
+        for (const m of r.models.availableModels as { modelId?: unknown; id?: unknown; name?: unknown; description?: unknown }[]) {
+            add(m?.modelId ?? m?.id, m?.name, m?.description);
+        }
+    }
+
+    if (models.length === 0) throw new Error(`${BRAINS.antigravity.program}'s model list is empty.`);
+    return models;
+}
+
+/**
+ * Starts Antigravity over ACP, opens a session in an empty folder to read its available models,
+ * closes that session best-effort, and stops the process. Nothing reaches a model.
+ */
+export async function askAntigravityModels(host: TurnHost, launch: AntigravityLaunch): Promise<BrainModel[]> {
+    return runAcpCall(
+        host,
+        {
+            label: "models",
+            who: BRAINS.antigravity.program,
+            command: launch.command,
+            args: antigravityAcpArgs(launch.home),
+            cwd: launch.cwd,
+            env: launch.env,
+            timeoutMs: launch.timeoutMs ?? MODELS_MS,
+        },
+        async (call) => {
+            const session = await call("session/new", { cwd: launch.cwd, mcpServers: [] });
+            const models = antigravityModels(session);
+            if (typeof session?.sessionId === "string") {
+                // quiet: closing the scratch session is best-effort before stopping the process
+                await call("session/close", { sessionId: session.sessionId }).catch(() => {});
+            }
+            return models;
+        },
+    );
 }

@@ -13,15 +13,21 @@ import { LOOPBACK_HOSTS } from "./mcpOAuth";
 /** Sign-in methods the UI can ask for: the browser (default) or, away from the computer's own screen, a code. */
 export type LoginMethod = "browser" | "code";
 
+/** Flags shared by every Antigravity ACP invocation (login, status, logout, models, turns, asks). */
+export function antigravityAcpArgs(home: string): string[] {
+    return ["acp", "--gemini-dir", home, "--app-data-dir", "antigravity-cli", "--disable-telemetry", "--include-default-customizations=false"];
+}
+
 export interface LoginCommand {
     args: string[];
-    /** Claude Code's login reads the code its page shows, from its input */
+    /** Claude Code's and Antigravity's logins read the code their page shows, from stdin */
     needsInput: boolean;
 }
 
 /** The command that signs a harness in; OpenCode signs in through its server (opencodeProviders.ts), not a command. */
-export function loginCommand(harness: Exclude<Harness, "opencode">, method: LoginMethod): LoginCommand {
+export function loginCommand(harness: Exclude<Harness, "opencode">, method: LoginMethod, home: string): LoginCommand {
     if (harness === "codex") return { args: method === "code" ? ["login", "--device-auth"] : ["login"], needsInput: false };
+    if (harness === "antigravity") return { args: [...antigravityAcpArgs(home), "--login"], needsInput: true };
     return { args: ["auth", "login", "--claudeai"], needsInput: true };
 }
 
@@ -30,18 +36,18 @@ export function loginCommand(harness: Exclude<Harness, "opencode">, method: Logi
  * person holds, from the link the panel shows; a login that opened it here would put a tab on a screen nobody
  * is at (the person is on their phone, or the computer is a server). Claude Code runs the program named by
  * BROWSER instead of the system's opener, so a program that does nothing gets the address and leaves it to the
- * panel; Codex's opener honors it where the system's does. Windows has no such program to name.
+ * panel; Codex's and Antigravity's openers honor it where the system's does. Windows has no such program to name.
  */
 export function loginEnv(platform: NodeJS.Platform): Record<string, string> {
     return platform === "win32" ? {} : { BROWSER: "true" };
 }
 
-/** the commands that tell whether a harness is signed in, and that sign it out */
-export const STATUS_COMMAND: Record<Exclude<Harness, "opencode">, string[]> = {
+/** the commands that tell whether a CLI-checked harness is signed in, and that sign it out (Antigravity uses ACP) */
+export const STATUS_COMMAND: Record<"codex" | "claude-code", string[]> = {
     codex: ["login", "status"],
     "claude-code": ["auth", "status"],
 };
-export const LOGOUT_COMMAND: Record<Exclude<Harness, "opencode">, string[]> = {
+export const LOGOUT_COMMAND: Record<"codex" | "claude-code", string[]> = {
     codex: ["logout"],
     "claude-code": ["auth", "logout"],
 };
@@ -63,7 +69,12 @@ export function outputTail(text: string, lines = 4): string {
 
 const URL_ANYWHERE = /https?:\/\/\S+/g;
 // what a login says around its page, which says nothing about how it ended
-const LOGIN_NOISE = [/^opening browser to sign in/i, /^if the browser didn't open, visit:?$/i];
+const LOGIN_NOISE = [
+    /^opening browser to sign in/i,
+    /^if the browser didn't open, visit:?$/i,
+    /^open this link in a browser/i,
+    /^then paste the authorization code/i,
+];
 
 /**
  * What a login said before it ended, for an error: its own words, without the sign-in page's address (a long,
@@ -117,15 +128,15 @@ export function callbackAddress(callback: string, address: unknown): URL {
 
 /**
  * What the output so far asks of the user. Codex prints the page (and, with a device code, the code after
- * it); Claude Code prints the page it falls back to when a browser doesn't open, whose last step is a code
- * to paste back. Returns null until there's a page to show.
+ * it); Claude Code and Antigravity print a page whose last step is a code to paste back. Returns null until
+ * there's a page to show.
  */
 export function readLoginOutput(harness: Exclude<Harness, "opencode">, method: LoginMethod, output: string): LoginPrompt | null {
     const text = stripAnsi(output);
     const url = URL_RE.exec(text)?.[0]?.replace(/[.,;]+$/, "") ?? null;
     if (!url) return null;
     const callback = loopbackCallback(url);
-    if (harness === "claude-code") return { url, code: null, expectsCode: true, callback };
+    if (harness === "claude-code" || harness === "antigravity") return { url, code: null, expectsCode: true, callback };
     if (method === "code") {
         // the code comes after the page; showing the page alone would send the user there with nothing to type
         const code = CODE_RE.exec(text.slice(text.indexOf(url) + url.length))?.[1] ?? null;
@@ -135,7 +146,7 @@ export function readLoginOutput(harness: Exclude<Harness, "opencode">, method: L
 }
 
 /** What the status commands say: signed in or not, and as whom. A reply that's neither is an error, never "signed out". */
-export function readStatus(harness: Exclude<Harness, "opencode">, out: { stdout: string; stderr: string; exitCode: number }): { signedIn: boolean; account: string | null } {
+export function readStatus(harness: "codex" | "claude-code", out: { stdout: string; stderr: string; exitCode: number }): { signedIn: boolean; account: string | null } {
     if (harness === "claude-code") {
         let json: { loggedIn?: unknown; email?: unknown; authMethod?: unknown };
         try {

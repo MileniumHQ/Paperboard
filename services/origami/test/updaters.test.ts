@@ -10,6 +10,7 @@ import { buildWindowsRuntimeRecords, WINDOWS_RUNTIMES } from "../scripts/update-
 import type { GithubRelease } from "../scripts/lib/github";
 import { buildLatestOllamaRecord } from "../scripts/update-ollama";
 import { buildLatestOpencodeRecord } from "../scripts/update-opencode";
+import { buildLatestAntigravityRecord, MANIFEST_BASE as ANTIGRAVITY_MANIFEST_BASE, TARGETS as ANTIGRAVITY_TARGETS } from "../scripts/update-antigravity";
 import { buildLatestCodexRecord, TARGETS } from "../scripts/update-codex";
 import { buildLatestDotnetRecord, RIDS } from "../scripts/update-dotnet";
 import { buildLatestProtonRecord } from "../scripts/update-proton";
@@ -360,6 +361,87 @@ describe("updaters publish only bytes that match a trusted digest", () => {
         const [built] = await buildJavaRecords([21], upstreamFetch);
         expect(Object.keys(built!.record!.platforms).sort()).toEqual(["linux-x64", "windows-x64"]);
         expect(built!.record!.platforms["windows-x64"]!.sha256).toBe("b".repeat(64));
+    });
+
+    describe("antigravity", () => {
+        let work: string;
+        let unixTarball: Uint8Array;
+        let missingMemberTarball: Uint8Array;
+        const winExe = new TextEncoder().encode("MZ-fake-agy-exe");
+
+        beforeAll(async () => {
+            work = await mkdtemp(path.join(tmpdir(), "origami-agy-test-"));
+            const goodDir = path.join(work, "good");
+            const badDir = path.join(work, "bad");
+            await mkdir(goodDir, { recursive: true });
+            await mkdir(badDir, { recursive: true });
+            await writeFile(path.join(goodDir, "antigravity"), "#!/bin/sh\n");
+            await writeFile(path.join(badDir, "wrong-name"), "#!/bin/sh\n");
+            const goodTar = path.join(work, "good.tar.gz");
+            const badTar = path.join(work, "bad.tar.gz");
+            for (const [out, dir, member] of [
+                [goodTar, goodDir, "antigravity"],
+                [badTar, badDir, "wrong-name"],
+            ] as const) {
+                const res = Bun.spawnSync(["tar", "-czf", out, "-C", dir, member], { stderr: "pipe" });
+                if (res.exitCode !== 0) throw new Error(`tar failed: ${res.stderr.toString()}`);
+            }
+            unixTarball = new Uint8Array(await readFile(goodTar));
+            missingMemberTarball = new Uint8Array(await readFile(badTar));
+        });
+
+        afterAll(async () => {
+            await rm(work, { recursive: true, force: true });
+        });
+
+        function serveAntigravity(opts: {
+            versionOf?: (key: (typeof PLATFORM_KEYS)[number]) => string;
+            urlOf?: (key: (typeof PLATFORM_KEYS)[number]) => string;
+            bytesOf?: (key: (typeof PLATFORM_KEYS)[number]) => Uint8Array;
+            sha512Of?: (key: (typeof PLATFORM_KEYS)[number], bytes: Uint8Array) => string;
+        } = {}) {
+            for (const key of PLATFORM_KEYS) {
+                const isWin = key.startsWith("windows-");
+                const version = opts.versionOf ? opts.versionOf(key) : "1.5.14";
+                const bytes = opts.bytesOf ? opts.bytesOf(key) : isWin ? winExe : unixTarball;
+                const url = opts.urlOf
+                    ? opts.urlOf(key)
+                    : `https://storage.googleapis.com/antigravity-public/antigravity-cli/${version}/cli_${key}.${isWin ? "exe" : "tar.gz"}`;
+                const digest = opts.sha512Of ? opts.sha512Of(key, bytes) : sha512(bytes);
+                serve(`${ANTIGRAVITY_MANIFEST_BASE}/${ANTIGRAVITY_TARGETS[key].manifest}`, { version, url, sha512: digest });
+                serve(url, bytes);
+            }
+        }
+
+        test("all 6 manifests on the same version with matching SHA-512 build a record", async () => {
+            serveAntigravity();
+            const record = await buildLatestAntigravityRecord(upstreamFetch);
+            expect(record.name).toBe("antigravity");
+            expect(record.version).toBe("1.5.14");
+            expect(Object.keys(record.platforms).sort()).toEqual([...PLATFORM_KEYS].sort());
+            expect(record.platforms["linux-x64"]?.sha256).toBe(sha256(unixTarball));
+            expect(record.platforms["linux-x64"]?.recipe).toEqual({ unpack: "tar", take: { "bin/agy": "antigravity" } });
+            expect(record.platforms["windows-x64"]?.sha256).toBe(sha256(winExe));
+            expect(record.platforms["windows-x64"]?.recipe).toEqual({ unpack: "file", take: { "bin/agy.exe": "file" } });
+        });
+
+        test("refuses SHA-512 mismatch, version skew, missing tarball member, or off-bucket URL", async () => {
+            serveAntigravity({ sha512Of: (k, b) => (k === "macos-arm64" ? "0".repeat(128) : sha512(b)) });
+            await expect(buildLatestAntigravityRecord(upstreamFetch)).rejects.toThrow(/SHA-512 differs/);
+
+            resetUpstream();
+            serveAntigravity({ versionOf: (k) => (k === "windows-arm64" ? "1.5.15" : "1.5.14") });
+            await expect(buildLatestAntigravityRecord(upstreamFetch)).rejects.toThrow(/different versions/);
+
+            resetUpstream();
+            serveAntigravity({ bytesOf: (k) => (k === "linux-x64" ? missingMemberTarball : k.startsWith("windows-") ? winExe : unixTarball) });
+            await expect(buildLatestAntigravityRecord(upstreamFetch)).rejects.toThrow(/antigravity is not in the archive/);
+
+            resetUpstream();
+            serveAntigravity({ urlOf: (k) => (k === "linux-x64" ? "https://evil.test/antigravity.tar.gz" : `https://storage.googleapis.com/antigravity-public/antigravity-cli/1.5.14/cli_${k}.bin`) });
+            await expect(buildLatestAntigravityRecord(upstreamFetch)).rejects.toThrow(/unexpected download host/);
+            expect(requested.filter((u) => u.includes("evil.test"))).toEqual([]);
+        });
     });
 
 });

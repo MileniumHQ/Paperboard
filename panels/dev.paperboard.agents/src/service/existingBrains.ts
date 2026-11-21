@@ -10,19 +10,32 @@ import path from "node:path";
 import type { Harness } from "../contract";
 import { findProgram } from "./which";
 
-export const PROGRAMS: Record<Harness, string> = { codex: "codex", "claude-code": "claude", opencode: "opencode" };
+export const PROGRAMS: Record<Harness, string> = { codex: "codex", antigravity: "agy", "claude-code": "claude", opencode: "opencode" };
 
 export interface FindEnv {
     platform: NodeJS.Platform;
     pathEnv: string;
     home: string;
+    localAppData?: string;
 }
 
-const currentFindEnv = (): FindEnv => ({ platform: process.platform, pathEnv: process.env.PATH ?? "", home: os.homedir() });
+const currentFindEnv = (): FindEnv => ({
+    platform: process.platform,
+    pathEnv: process.env.PATH ?? "",
+    home: os.homedir(),
+    localAppData: process.env.LOCALAPPDATA,
+});
 
 /** where a harness's own installer puts it, besides PATH */
-function installerDirs(harness: Harness, { platform, home }: FindEnv): string[] {
-    const own = harness === "claude-code" ? [path.join(home, ".claude", "local")] : harness === "opencode" ? [path.join(home, ".opencode", "bin")] : [];
+function installerDirs(harness: Harness, { platform, home, localAppData }: FindEnv): string[] {
+    const own =
+        harness === "claude-code"
+            ? [path.join(home, ".claude", "local")]
+            : harness === "opencode"
+              ? [path.join(home, ".opencode", "bin")]
+              : harness === "antigravity" && platform === "win32"
+                ? [path.join(localAppData || path.join(home, "AppData", "Local"), "agy", "bin")]
+                : [];
     const common = [path.join(home, ".local", "bin")];
     return platform === "win32" ? [...own, ...common] : [...own, ...common, "/opt/homebrew/bin", "/usr/local/bin"];
 }

@@ -685,7 +685,7 @@ export function flowBlocks(host: BlocksHost): BlockSet {
                 name: "Install Brain",
                 category: CATEGORY.brain,
                 icon: "download",
-                description: "Downloads and installs a brain, waiting until it's done. ChatGPT and Claude need signing in to in the Agent panel after.",
+                description: "Downloads and installs a brain, waiting until it's done. ChatGPT, Gemini and Claude need signing in to in the Agent panel after.",
                 text: "install {brain}",
                 inputs: { brain: brainInput },
                 run: ({ brain: id }: { brain: Harness }) =>
@@ -701,7 +701,7 @@ export function flowBlocks(host: BlocksHost): BlockSet {
                 name: "Use Brain on This Computer",
                 category: CATEGORY.brain,
                 icon: "computer",
-                description: "Has a brain run the Codex CLI, Claude CLI or OpenCode CLI already on this computer instead of downloading one. Fails when it isn't there, or the brain is installed already.",
+                description: "Has a brain run the Codex CLI, Antigravity CLI, Claude CLI or OpenCode CLI already on this computer instead of downloading one. Fails when it isn't there, or the brain is installed already.",
                 text: "use the {brain} on this computer",
                 inputs: { brain: brainInput },
                 run: ({ brain: id }: { brain: Harness }) =>
