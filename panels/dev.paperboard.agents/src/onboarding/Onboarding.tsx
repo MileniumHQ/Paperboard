@@ -20,7 +20,7 @@ import { skinFor } from "../face/skins";
 import { createFace, type FaceController } from "../face/controller";
 import { createSpeaker, type Speaker } from "./speech";
 import { scriptFor } from "./script";
-import { SEARCH_MODELS_FROM, createModels, harnessDescription, harnessName, loadedModels } from "../lib/brains";
+import { SEARCH_MODELS_FROM, createModels, harnessCli, harnessDefaultLabel, harnessDescription, harnessName, loadedModels } from "../lib/brains";
 import BrainLogo from "../lib/BrainLogo";
 import { SetupProgress } from "../computer/Computer";
 import { DEFAULT_MODEL, HARNESSES, LIMITS, ONBOARDING_STEP, characterOf, type Harness } from "../contract";
@@ -359,7 +359,21 @@ function Scenes(props: {
                     <PaperSelector name="harness" value={props.harness()} onValueChange={(v) => props.setHarness(v as Harness)}>
                         <For each={HARNESSES}>
                             {(h) => (
-                                <PaperSelectorItem value={h} icon={<BrainLogo harness={h} />} description={harnessDescription(h)}>
+                                <PaperSelectorItem
+                                    value={h}
+                                    icon={<BrainLogo harness={h} />}
+                                    description={
+                                        <>
+                                            <PaperText size={2} weight={400} color="text-muted">
+                                                {harnessDescription(h)}
+                                            </PaperText>
+                                            <br />
+                                            <PaperText preset="caption">
+                                                {harnessCli(h)}
+                                            </PaperText>
+                                        </>
+                                    }
+                                >
                                     {harnessName(h)}
                                 </PaperSelectorItem>
                             )}
@@ -404,7 +418,7 @@ function Scenes(props: {
                     </Show>
                     <PaperSelector name="model" value={props.model()} onValueChange={(v) => props.setModel(String(v))}>
                         <PaperSelectorItem value={DEFAULT_MODEL} icon="tune" description="Whatever it's set to use already.">
-                            Use {harnessName(props.harness() ?? "")}'s default
+                            {harnessDefaultLabel(props.harness())}
                         </PaperSelectorItem>
                         <For each={found()}>
                             {(m) => (

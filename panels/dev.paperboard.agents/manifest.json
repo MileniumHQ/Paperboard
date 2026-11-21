@@ -48,8 +48,8 @@
         ],
         "services": [
             {
-                "name": "Codex, Claude or OpenCode",
-                "detail": "The brain you pick, the one already on your computer or else downloaded from its maker, and signed in with your own account. Your conversations go to it"
+                "name": "ChatGPT, Claude or Other provider",
+                "detail": "The brain you pick (Codex, Claude or OpenCode CLI), on your computer or downloaded from its maker, signed in with your account. Your chats go to it"
             },
             {
                 "name": "The web",
@@ -70,15 +70,15 @@
         ],
         "credits": [
             {
-                "name": "Codex",
+                "name": "Codex CLI",
                 "detail": "OpenAI's coding agent, Apache-2.0"
             },
             {
-                "name": "Claude",
+                "name": "Claude CLI",
                 "detail": "Anthropic's coding agent, Claude Code, run as published by Anthropic"
             },
             {
-                "name": "OpenCode",
+                "name": "OpenCode CLI",
                 "detail": "The open source coding agent, MIT"
             },
             {
@@ -93,7 +93,7 @@
         "requirements": [
             {
                 "name": "Brain",
-                "detail": "A Codex, Claude or OpenCode account (OpenCode also has free models)"
+                "detail": "A ChatGPT, Claude or other provider account (Other provider also has free models)"
             },
             {
                 "name": "Computer",

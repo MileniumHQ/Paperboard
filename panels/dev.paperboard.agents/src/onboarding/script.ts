@@ -21,7 +21,7 @@ export interface Script {
 const DEFAULT: Script = {
     named: (name) => [
         `[satisfied][bounce]**${name}** it is! [happy]I like that name.`,
-        "[sad]I also don't have a brain yet. All this is prewritten. [happy]Fortunately, you can give me that too!\nI can think with Codex, Claude or OpenCode. Pick one and I'll download it.",
+        "[sad]I also don't have a brain yet. All this is prewritten. [happy]Fortunately, you can give me that too!\nI can think with ChatGPT, Claude, or another provider. Pick one and I'll download it.",
     ],
     signIn: ["[happy]Good choice! [pause 300]I'll get it ready. If it needs you to sign in, you'll do that in your browser."],
     computer: [
@@ -37,7 +37,7 @@ const CHARACTER_SCRIPTS: Record<Character, Script> = {
         named: () => [
             "[surprised]Verity? [pause 600][wish][bounce]That's me! I've always been Verity!",
             "[happy]I'm your **personal helper friend**, and I know everything! [pause 500][unsure]Well. Almost everything.",
-            "[sad]I don't have a brain yet, you see. [happy]But you can give me one! Codex, Claude or OpenCode will do.\nI'll take good care of it. I take good care of everything!",
+            "[sad]I don't have a brain yet, you see. [happy]But you can give me one! ChatGPT, Claude, or another provider will do.\nI'll take good care of it. I take good care of everything!",
         ],
         signIn: ["[wish]Ooh, good choice, friend! [happy]I'll get it all ready. If it wants you to sign in, I'll show you where. [wink]Easy!"],
         computer: [

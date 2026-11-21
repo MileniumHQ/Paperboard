@@ -286,7 +286,7 @@ describe("the agent's blocks", () => {
         expect(await rig.blocks.property("model", "description", "gpt-9-mini")).toBe("Quick");
         expect(await rig.blocks.property("model", "description", "gpt-9")).toBe(null);
         expect(await rig.blocks.property("model", "older", "gpt-9")).toBe(false);
-        await expect(rig.blocks.property("model", "name", "reviewer")).rejects.toThrow('Codex has no model "reviewer"');
+        await expect(rig.blocks.property("model", "name", "reviewer")).rejects.toThrow('ChatGPT has no model "reviewer"');
 
         await rig.blocks.run("switch-model", { model: "gpt-9" });
         expect(rig.ctx.state.settings!.model).toBe("gpt-9");
@@ -318,15 +318,15 @@ describe("the agent's blocks", () => {
         expect(await rig.blocks.property("brain", "version", "claude-code")).toBe("1.0.0");
         await expect(rig.blocks.run("install-brain", { brain: "claude-code" })).rejects.toThrow("Claude is installed already");
         // the test's computer has no brain of its own to use, and an installed one is the package's
-        await expect(rig.blocks.run("use-brain-on-computer", { brain: "opencode" })).rejects.toThrow("OpenCode isn't on this computer");
+        await expect(rig.blocks.run("use-brain-on-computer", { brain: "opencode" })).rejects.toThrow("Other provider isn't on this computer");
         await expect(rig.blocks.run("use-brain-on-computer", { brain: "claude-code" })).rejects.toThrow("Claude has its own copy installed already");
         // the download fails loudly
         await expect(rig.blocks.run("install-brain", { brain: "opencode" })).rejects.toThrow("the test has no download for opencode");
-        expect(await rig.blocks.property("brain", "error", "opencode")).toContain("OpenCode didn't install");
+        expect(await rig.blocks.property("brain", "error", "opencode")).toContain("Other provider didn't install");
 
         await expect(rig.blocks.run("switch-brain", { brain: "claude-code" })).rejects.toThrow("Claude isn't ready: sign in to it first");
         await expect(rig.blocks.run("sign-out-brain", { brain: "claude-code" })).rejects.toThrow("Claude isn't signed in");
-        await expect(rig.blocks.run("sign-out-brain", { brain: "opencode" })).rejects.toThrow('"Brain" must be one of Codex, Claude');
+        await expect(rig.blocks.run("sign-out-brain", { brain: "opencode" })).rejects.toThrow('"Brain" must be one of ChatGPT, Claude');
         await rig.blocks.run("sign-out-brain", { brain: "codex" });
         expect(await rig.blocks.property("brain", "signed-in", "codex")).toBe(false);
         expect(await rig.blocks.property("brain", "status", "codex")).toBe("installed");

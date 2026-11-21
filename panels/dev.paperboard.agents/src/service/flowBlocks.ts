@@ -161,7 +161,7 @@ export function flowBlocks(host: BlocksHost): BlockSet {
     const models = async (): Promise<BrainModel[]> => {
         const harness = host.brains.current();
         const listed = await host.models.list();
-        return [{ id: DEFAULT_MODEL, name: "Default", description: `Whatever ${HARNESS_NAMES[harness]} is set to use`, older: false }, ...listed];
+        return [{ id: DEFAULT_MODEL, name: "Default", description: `Whatever ${harness === "opencode" ? "OpenCode" : HARNESS_NAMES[harness]} is set to use`, older: false }, ...listed];
     };
     const model = async (id: string) => {
         const found = (await models()).find((m) => m.id === id);
@@ -686,7 +686,7 @@ export function flowBlocks(host: BlocksHost): BlockSet {
                 name: "Install Brain",
                 category: CATEGORY.brain,
                 icon: "download",
-                description: "Downloads and installs a brain, waiting until it's done. Codex and Claude need signing in to in the Agent panel after.",
+                description: "Downloads and installs a brain, waiting until it's done. ChatGPT and Claude need signing in to in the Agent panel after.",
                 text: "install {brain}",
                 inputs: { brain: brainInput },
                 run: ({ brain: id }: { brain: Harness }) =>
@@ -702,7 +702,7 @@ export function flowBlocks(host: BlocksHost): BlockSet {
                 name: "Use Brain on This Computer",
                 category: CATEGORY.brain,
                 icon: "computer",
-                description: "Has a brain run the Codex, Claude or OpenCode already on this computer instead of downloading one. Fails when it isn't there, or the brain is installed already.",
+                description: "Has a brain run the Codex CLI, Claude CLI or OpenCode CLI already on this computer instead of downloading one. Fails when it isn't there, or the brain is installed already.",
                 text: "use the {brain} on this computer",
                 inputs: { brain: brainInput },
                 run: ({ brain: id }: { brain: Harness }) =>
