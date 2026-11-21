@@ -2,6 +2,8 @@ import { createMemo, Show } from "solid-js";
 import GameRoster, { CopyRow, createRosterState, type RosterPlayer } from "../../components/GameRoster";
 import { byName, withUniqueNames } from "../rosterNames";
 import PlayerAvatar from "../../components/PlayerAvatar";
+import PlayerPicturesFailure from "../../components/PlayerPicturesFailure";
+import { createSteamPictures } from "../../lib/steamAvatars";
 import { durationLabel } from "../../core/format";
 import type { RustBan, RustSeen } from "./roster";
 import type { RustPlayer } from "./webrcon";
@@ -19,6 +21,7 @@ interface Player extends RosterPlayer {
 export default function RustPlayers() {
     const { calls } = useServer();
     const state = createRosterState(() => calls.rustPlayers());
+    const pictures = createSteamPictures();
     const seen = () => state.roster()?.seen ?? [];
     const bans = () => state.roster()?.bans ?? [];
     const online = () => state.roster()?.online ?? [];
@@ -39,7 +42,8 @@ export default function RustPlayers() {
             players={players()}
             playerId={(player) => player.steamId}
             searchTerms={(player) => [player.steamId]}
-            avatar={(player, size) => <PlayerAvatar name={player.name} size={size} />}
+            avatar={(player, size) => <PlayerAvatar name={player.name} size={size} picture={pictures.of(player.steamId, size)} />}
+            notice={<PlayerPicturesFailure pictures={pictures} />}
             playing={(player) => (player.connected !== undefined ? `Playing · on for ${durationLabel(player.connected)}` : "Playing")}
             pickHint="Players appear here once they join. Pick one to see their Steam id and to kick or ban them."
             moderation={{

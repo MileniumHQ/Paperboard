@@ -168,6 +168,14 @@ describe("fetchPublic", () => {
 
     test("an error answer, or one that never comes, fails with why", async () => {
         expect(await refusal(fetchPublic(`${FILES}/missing`, trusted))).toEqual({ code: "bad-response", message: `127.0.0.1:${filesPort} answered 404 Not Found` });
+        // the status is data: a caller never reads it out of the message
+        const notFound = await fetchPublic(`${FILES}/missing`, trusted).catch((e: unknown) => e);
+        expect(notFound).toBeInstanceOf(PublicFetchError);
+        expect((notFound as PublicFetchError).status).toBe(404);
+        // a failure that is no answer, or a redirect gone wrong, has none
+        const looped = await fetchPublic(`${FILES}/loop`, trusted).catch((e: unknown) => e);
+        expect([(looped as PublicFetchError).code, (looped as PublicFetchError).status]).toEqual(["bad-response", undefined]);
+        expect(((await fetchPublic("http://nowhere.example/", { maxBytes: 32, lookup: async () => Promise.reject(new Error("ENOTFOUND")) }).catch((e: unknown) => e)) as PublicFetchError).status).toBeUndefined();
         expect(await refusal(fetchPublic(`${FILES}/never`, { ...trusted, timeoutMs: 300 }))).toEqual({ code: "timeout", message: `127.0.0.1:${filesPort} took longer than 300 ms to answer` });
         expect(await refusal(fetchPublic("http://nowhere.example/", { maxBytes: 32, lookup: async () => Promise.reject(new Error("ENOTFOUND")) }))).toMatchObject({ code: "unreachable" });
     });
@@ -255,6 +263,10 @@ describe("createPictureFetch", () => {
         await expect(pictures(new URL(`${PICTURES}/page.png`), from)).rejects.toThrow("Test sent text/html where a picture should be, and it isn't one");
         await expect(pictures(new URL(`http://127.0.0.1:${insidePort}/big.png`), from)).rejects.toThrow("Couldn't load the picture from Test: 127.0.0.1");
         await expect(pictures(new URL(`${PICTURES}/later.png`), from)).rejects.toThrow("Couldn't load the picture from Test:");
+        // what failed it is the failure's cause, with the server's status
+        const gone = await pictures(new URL(`${PICTURES}/later.png`), from).catch((e: unknown) => e);
+        expect((gone as Error).cause).toBeInstanceOf(PublicFetchError);
+        expect(((gone as Error).cause as PublicFetchError).status).toBe(404);
         missing = false;
         expect(await pictures(new URL(`${PICTURES}/later.png`), from)).toMatch(/^data:image\/png;base64,/);
         await expect(createPictureFetch({ maxBytes: 4 })(new URL(`${PICTURES}/icon.png`), from)).rejects.toThrow("Couldn't load the picture from Test:");

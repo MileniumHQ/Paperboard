@@ -251,6 +251,8 @@ const serversCalls = {
     retryInitialize: { output: done },
     /** a picture from elsewhere as a data: address: a page never loads an address it was handed (service/pictures.ts) */
     servedPicture: { input: shape.object({ from: shape.oneOf("modrinth", "steam-workshop", "web"), url: shape.text() }), output: text, unscoped: true },
+    /** a Steam account's profile picture as a data: address, null for an account with no profile (service/steamAvatars.ts); the account is its 17-digit Steam id, the size 64 px (`medium`, for a list's rows) or 184 px */
+    steamAvatar: { input: shape.object({ steamId: shape.text(), size: shape.oneOf("medium", "full") }), output: shape.nullable(text), unscoped: true },
 } satisfies Record<string, CallDefinition>;
 
 /** Every game's calls, and Minecraft's own. */

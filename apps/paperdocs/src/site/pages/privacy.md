@@ -1,4 +1,4 @@
-_Last updated October 14, 2026_
+_Last updated November 20, 2026_
 
 Paperboard and Origami are run by Milenium. This page says what leaves your computers when you use them, and where it goes.
 
@@ -25,6 +25,8 @@ Paperboard's use and transfer of information received from Google APIs to any ot
 ## Panels
 
 Some panels contact other services, for example to download a game server or connect a Discord bot. Each panel's library page lists the services it contacts under "Services used", and what it uses them for. Those services' own privacy policies apply to what they receive.
+
+For example, the Game Server panel shows a Steam player's profile picture in its Players list. It asks Steam Community (steamcommunity.com) for the picture of each player's public Steam id, and downloads it from Steam's avatar servers (avatars.fastly.steamstatic.com, avatars.akamai.steamstatic.com and avatars.cloudflare.steamstatic.com). Steam sees your IP address and the Steam ids of the players on your server. It keeps what it finds in memory for a day, and the panel never sends them anywhere else.
 
 ## Contact
 
