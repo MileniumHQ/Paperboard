@@ -2,28 +2,26 @@
 
 Hi agents, Pxl here! I'm the dev you're probably working with.
 
-**Thoroughly test everything and study it to ensure it looks good, works well, and has the cleanest code before it ships. Do not leave a part of the codebase untested.**
+**Try your changes yourself in the app or browser mode before shipping—make sure they look good, work well, and have clean code.**
 
 Paperboard is a dashboard for self-hostable programs. Panels are like the apps. Here's some rules:
 
-- **Optimize for a thousand panels:** Never hard code a function for a single panel or create a global API that has an extremely narrow use case. Paperboard should work the same for any panel, as it's an SDK at heart. There are a few exceptions in the codebase for this, but don't write them in yourself.
-- **Panel trust:** Paperboard trusts panels a LOT. They're not sandboxed for a variety of reasons. That's okay, they're reviewed and only first-party. Don't try to sandbox a panel if it can easily do the same thing in a different way.
-- **Secrets:** Obviously don't commit secrets. But also, if Paperboard is storing secrets, they should be stored securely - there's an API for that.
-- **App keys live in `.env.local`:** Third-party app keys (like the Google Drive OAuth client) go in gitignored `apps/paperboard/.env.local`. Release builds need that file; the release workflow gets the same keys from the repository's Actions secrets, and a release build without one refuses to start (`APP_KEYS` in `scripts/publish/publishLib.ts`). The privacy page (`apps/paperdocs/src/site/pages/privacy.md`) must list every backup provider and every outbound service.
-- **Fail loudly:** Never let Paperboard swallow a failure. The worst thing that could happen is a button not working and there's no way to know why. Always show errors when they occur. The gates flag a catch that only logs; a catch that is truly fine (shutdown, cleanup, a failure already shown through state) carries `// quiet: <reason>`, and so does a test wait that isn't a deadline-bound poll.
-- **Don't run remote code:** Panels can run any code they want, but that doesn't mean they should run network code. Don't make it possible for a panel to run code or commands from outside the panel unless directed.
-- **Don't load untrusted URLs in a page:** A page never loads a URL that came from untrusted content (model output, a web page, a tool result), not even an image. The service fetches it under a network policy and hands the page the bytes, or it isn't loaded.
-- **No weird fallbacks:** Don't create a placeholder if something isn't available, throw an error and handle it.
-- **Changelogs are suspended:** No changelogs right now. I'm figuring that out.
-- **Nothing ships that is unfinished:** Don't write experimental code, write production-ready code.
-- **Rewrites > band-aids:** For a lot of the work, it's better to rewrite a part of the code rather than patch it to make it work. Even for small changes, bring up if this is necessary.
-- This doesn't mean every change should be major though. If a change is truly better as a 5 line change, then that is the better option.
-- **Don't touch .paperboard:** The user's .paperboard is theirs, ensure tests don't reach it. Use `PAPERBOARD_DIR`.
-- **Suicide prevention:** Don't `pkill` or `killall` at all (not `-f`, not `-x`): it kills your own shell or another session's work. Stop only what you started, by PID.
-- **Leave the real app alone:** Never kill the installed Paperboard app or its workloads (game servers, supervisors). People play on those servers. If the real app crashed, check whether a session killed it before debugging Paperboard.
-- **Launching from an agent shell:** Your shell may set `ELECTRON_RUN_AS_NODE=1`, which makes Electron crash. Launch with `env -u ELECTRON_RUN_AS_NODE`, a throwaway `PAPERBOARD_DIR` and `--user-data-dir`.
-- **Always test.** Unless you're certain it'll work fine, always do a manual check to ensure the feature works and looks great.
-- When making blocks, placeholders are the type (etc "Text" or "Channel ID") and not a description (etc "Example Text" "1234567890")
+- **Optimize for a thousand panels:** Paperboard is an SDK at heart. Never hard-code panel-specific logic or narrow global APIs (a few legacy exceptions exist; don't add more).
+- **Panel trust:** Panels are reviewed and first-party, so they aren't sandboxed. Don't add sandboxing if a panel can easily do the same thing another way.
+- **Secrets:** Never commit secrets, and store runtime secrets with Paperboard's secrets API.
+- **App keys:** Put third-party keys (like Google Drive OAuth) in gitignored `apps/paperboard/.env.local` and Actions secrets; release builds refuse to start without `APP_KEYS` (`scripts/publish/publishLib.ts`).
+- **Privacy & outbound services:** `apps/paperdocs/src/site/pages/privacy.md` only lists Paperboard's own services and backup providers; panel outbound services go in each panel's `manifest.json` under `store.services`.
+- **Fail loudly:** Never swallow errors—use `showError` / `PaperToast` for one-off failures or `PaperError` for standing ones. Gates flag log-only catches; mark intentional catches (cleanup, shutdown, state-shown errors) or non-polling test waits with `// quiet: <reason>`.
+- **Don't run remote code:** Never let a panel run code or commands from outside the panel unless directed.
+- **No weird fallbacks:** Don't invent placeholders when something isn't available—throw an error and handle it.
+- **Changelogs are suspended:** No changelogs right now.
+- **Nothing ships that is unfinished:** Write production-ready code, not experiments.
+- **Rewrites > band-aids:** Prefer rewriting a messy part over patching around it, and flag when that's needed. Still, if a 5-line fix is genuinely best, take it.
+- **Don't touch `.paperboard`:** Keep tests out of the user's `.paperboard` dir; use `PAPERBOARD_DIR`.
+- **Suicide prevention:** Never run `pkill` or `killall` (it can kill your own shell or another session). Stop only PIDs you started.
+- **Leave the real app alone:** Never kill the installed Paperboard app or its workloads (game servers, supervisors). If it crashed, check whether a session killed it first.
+- **Launching from an agent shell:** `ELECTRON_RUN_AS_NODE=1` crashes Electron—launch with `env -u ELECTRON_RUN_AS_NODE`, a throwaway `PAPERBOARD_DIR`, and `--user-data-dir`.
+- When making blocks, placeholders are the type (e.g. `"Text"` or `"Channel ID"`), not example values (e.g. `"Example Text"`, `"1234567890"`).
 - **Be careful with deletes:** stop a service before touching its files, and keep user data on uninstall.
 
 Tests:
@@ -32,7 +30,6 @@ Tests:
 - **Platform tests:** only OS-dependent tests go in `test/platform`; CI runs those on every release target.
 - **Only what matters:** data loss, security, updates/releases, core contracts.
 - **Never skip or loosen a failing test.** Fix the code, or the test if it expects broken behavior.
-- **A UI fix ships with a browser test that fails on the old code.** Nobody reads the diff, so the test is the review. Press the thing; reading the code is not a check.
 
 *drumroll:* PRs!
 
@@ -42,8 +39,8 @@ Some rules about Git:
 
 - **Keep the workspace clean:** Only code, assets and markdown in this repo, no logs, builds, etc should end up here.
 - Conventional commits (`feat:`, `fix:`, `chore:`). Never `stuff` or `checkpoint`.
-- **Shared checkout:** Other sessions may switch this checkout's branch mid-task. Run `git branch --show-current` before every commit or merge, commit with `git commit -- <paths>` (never `git add -A` or a bare `git commit`), and never touch another session's uncommitted files. No `git stash`: the stash is shared too.
-- **Branches:** `company` is only for accounts work (sign-in, Paperboard Cloud, web hosting). Everything else goes to `main`, even if you're sitting on `company`. Merge `main` into `company`, never the other way, and never push `company`.
+- **Shared checkout:** Other sessions may switch branches mid-task. Check `git branch --show-current` before committing or merging, commit with `git commit -- <paths>` (never `git add -A` or bare `git commit`), never touch others' uncommitted files, and never use `git stash`.
+- **Branches:** `company` is only for accounts work (sign-in, Paperboard Cloud, web hosting). Everything else goes to `main`. Merge `main` into `company`, never the reverse, and never push `company`.
 
 **Gates:**
 
@@ -57,7 +54,7 @@ Paperboard has gates relevant to each individual part of the codebase. `bun run 
 
 Run them before pushing code. No need to run the full gate unless you're so inclined!
 
-A pull request's CI runs the gates its description names: end the description with a line like `Gate: paperdocs` or `Gate: terminal paperboard platform` (the targets you ran, `platform` for the other OS runners). With no `Gate:` line it runs everything, and so does a push to `main`.
+End a PR description with `Gate: <targets>` (e.g. `Gate: paperdocs` or `Gate: terminal paperboard platform`) so CI only runs those targets (`platform` adds the other OS runners). Without a `Gate:` line—and on pushes to `main`—CI runs everything.
 
 Browser mode:
 
@@ -80,12 +77,10 @@ Solid:
 
 UI:
 
-- **AVOID USING CUSTOM COMPONENTS UNLESS THEY DO SOMETHING UNIQUE!** If there's something that should be a component, ask about it.
-- **NEVER use static values, use PaperUI tokens.** In fact, avoid using any CSS at all, and let me know if the component needs an improvement.
-- **Avoid inline styles and custom components:** In general, you shouldn't even have to think about PaperUI tokens, the goal is for the app to be buildable with just PaperUI elements and no style tags. This isn't always possible, especially in more custom components like the text input in the Agents panel or the Blocks canvas and many more examples. However, if you're just building buttons that do things, there's a high chance PaperUI's existing components are all you'll need.
-- **Lists fill or stand alone:** a PaperList (or any list like it) that is all its container holds fills it, with no padding around it (`fullWidth borderless`). One that shares its container with other content (a title, text, a form) gets `standalone`, which gives it its own border and rounded corners. Never leave a borderless list in a padded box beside other content.
-- **Use getVarCss:** If you do use design tokens, do not use inline `var(--paper-example-property)`. Instead, use PaperUI's `getVarCss()` function.
-- **Update docs:** After the change, update the docs in the below docs folder, adhering to the style of the rest of the docs.
+- **Use PaperUI, avoid custom components and CSS:** Build with PaperUI components instead of custom components or style tags unless something is genuinely unique (like the Agents text input or Blocks canvas). If PaperUI needs a new or improved component, ask.
+- **No static values—use `getVarCss()`:** When you do need styles, use PaperUI tokens via `getVarCss()`, never hardcoded values or inline `var(--paper-...)`.
+- **Lists fill or stand alone:** A `PaperList` (or similar) that is the sole child of its container uses `fullWidth borderless` with no surrounding padding; beside other content, give it `standalone` (border + rounded corners).
+- **Update docs:** After UI/API changes, update the docs in `apps/paperdocs/src/docs` to match the existing style.
 
 Docs for PaperUI and PaperDocs are available extensively at apps/paperdocs/src/docs. Use these if you need!
 
