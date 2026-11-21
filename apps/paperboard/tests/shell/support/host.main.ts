@@ -95,6 +95,13 @@ const calls: CallHandlers<ShellCall, unknown> = {
     // a window says whether its panels hold unsaved work; no quit asks here
     "panels-unsaved": () => undefined,
     "quit-answer": notHere("quit-answer"),
+    // a report runs a coding agent on this computer, which the suite has none of
+    "issue-report-setup": notHere("issue-report-setup"),
+    "issue-report-start": notHere("issue-report-start"),
+    "issue-report-steer": notHere("issue-report-steer"),
+    "issue-report-stop": notHere("issue-report-stop"),
+    "issue-report-file": notHere("issue-report-file"),
+    "issue-report-open-link": notHere("issue-report-open-link"),
 };
 
 const host = await startBrowserHost({
