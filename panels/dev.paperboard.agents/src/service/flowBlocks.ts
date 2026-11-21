@@ -2,7 +2,7 @@
 // and events, which app.ts registers and keeps told of changes (blocksSync.ts).
 
 import type { BlockSet } from "@mileniumhq/paperapi";
-import { DEFAULT_MODEL, HARNESSES, LIMITS, SIGN_IN_REQUIRED, type PageInfo, type BrainModel, type BrainState, type Harness, type Routine } from "../contract";
+import { DEFAULT_MODEL, HARNESSES, LIMITS, SIGN_IN_REQUIRED, USAGE_HARNESSES, type PageInfo, type BrainModel, type BrainState, type BrainUsage, type Harness, type Routine } from "../contract";
 import type { ServerStatus } from "../toolsContract";
 import { DAY_NAMES, describeSchedule, localStamp } from "../routineText";
 import { ASK_MS } from "./ask";
@@ -91,6 +91,8 @@ export interface BlocksHost extends FlowHost {
         /** has it run the program already on this computer; throws when there's none */
         useFound(harness: Harness): Promise<void>;
         signOut(harness: Harness): Promise<void>;
+        /** how much of its plan is used, asked of the harness; throws for a brain that can't say */
+        usage(harness: Harness): Promise<BrainUsage>;
     };
     toolServers: {
         list(): ToolServerFacts[];
@@ -175,6 +177,15 @@ export function flowBlocks(host: BlocksHost): BlockSet {
     const brainName = (id: string) => {
         brain(id);
         return HARNESS_NAMES[id as Harness];
+    };
+    /** a usage limit's id is its brain and the limit: claude-code/session */
+    const usageLimit = async (id: string) => {
+        const slash = id.indexOf("/");
+        const harness = id.slice(0, slash) as Harness;
+        if (slash < 0 || !USAGE_HARNESSES.includes(harness)) throw new Error(`"${id}" isn't a usage limit; one is a brain and a limit, like claude-code/session`);
+        const found = (await host.brains.usage(harness)).windows.find((w) => w.id === id.slice(slash + 1));
+        if (!found) throw new Error(`${HARNESS_NAMES[harness]} has no usage limit "${id.slice(slash + 1)}" right now`);
+        return found;
     };
     const toolServer = (name: string): ToolServerFacts => {
         const found = host.toolServers.list().find((s) => s.name === name);
@@ -300,6 +311,28 @@ export function flowBlocks(host: BlocksHost): BlockSet {
                     version: { type: "text", name: "Version", optional: true, resolve: (id: string) => ready(() => brain(id).version) },
                     account: { type: "text", name: "Account", description: "Who it's signed in as, when it says", optional: true, resolve: (id: string) => ready(() => brain(id).account) },
                     error: { type: "text", name: "Error", description: "Why its last install, sign-in or check failed", optional: true, resolve: (id: string) => ready(() => brain(id).error) },
+                },
+            },
+            {
+                id: "usage-limit",
+                name: "Usage Limit",
+                icon: "data_usage",
+                description: "One of a brain's plan limits, like its 5-hour session or its week, by its brain and name: claude-code/session",
+                base: "text",
+                fields: {
+                    name: { type: "text", name: "Name", description: "Such as Session, Weekly or Weekly · Fable", resolve: (id: string) => ready(async () => (await usageLimit(id)).label) },
+                    used: { type: "number", name: "Used", description: "In percent, 0 to 100", resolve: (id: string) => ready(async () => (await usageLimit(id)).used) },
+                    left: { type: "number", name: "Left", description: "In percent, 0 to 100", resolve: (id: string) => ready(async () => 100 - (await usageLimit(id)).used) },
+                    resets: {
+                        type: "timestamp",
+                        name: "Resets",
+                        description: "When it starts over; none when the brain doesn't say",
+                        optional: true,
+                        resolve: (id: string) => ready(async () => {
+                            const at = (await usageLimit(id)).resetsAt;
+                            return at === null ? null : Date.parse(at);
+                        }),
+                    },
                 },
             },
             {
@@ -430,6 +463,21 @@ export function flowBlocks(host: BlocksHost): BlockSet {
                 description: "Every brain the agent can think with, installed or not",
                 type: "list<brain>",
                 read: () => ready(() => [...HARNESSES]),
+            },
+            {
+                id: "usage-limits",
+                name: "Usage Limits",
+                category: CATEGORY.brain,
+                icon: "data_usage",
+                description: "How much of a brain's plan is used, a limit each, as its own usage screen shows it. None for an account billed by use. Fails when the brain isn't signed in.",
+                text: "usage limits of {brain}",
+                inputs: { brain: { ...brainInput, choices: brainChoices((h) => USAGE_HARNESSES.includes(h)) } },
+                type: "list<usage-limit>",
+                read: ({ brain: id }: { brain: Harness }) =>
+                    ready(async () => {
+                        brain(id);
+                        return (await host.brains.usage(id)).windows.map((w) => `${id}/${w.id}`);
+                    }),
             },
             {
                 id: "current-model",

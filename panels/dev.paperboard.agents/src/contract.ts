@@ -239,6 +239,29 @@ const brainModel = object({
 });
 export type BrainModel = Infer<typeof brainModel>;
 
+/** One of a plan's limits: a window of time, and how much of it is used. */
+const usageWindow = object({
+    id: text(),
+    /** "Session", "Weekly", "Weekly · Fable" */
+    label: text(),
+    /** 0–100 */
+    used: number(),
+    /** ISO time; null when the harness doesn't say */
+    resetsAt: nullable(text()),
+});
+export type UsageWindow = Infer<typeof usageWindow>;
+
+/** How much of a brain's plan is used, as its harness's own usage screen says. No windows: the account has no plan limits (an API key). */
+const brainUsage = object({
+    /** "Max", "Pro", "Free" */
+    plan: nullable(text()),
+    windows: list(usageWindow),
+});
+export type BrainUsage = Infer<typeof brainUsage>;
+
+/** The brains whose plan usage can be read. OpenCode connects other providers' keys, with no plan of its own. */
+export const USAGE_HARNESSES: readonly Harness[] = ["claude-code", "codex"];
+
 /** What a sign-in asks of the user, as its harness printed it. */
 const loginPrompt = object({
     /** the page to open */
@@ -682,6 +705,8 @@ export const agentsContract = defineContract(PANEL_ID, {
         signOutBrain: { input: byHarness, output: nothing() },
         /** the models a brain offers, from the harness's own catalog */
         models: { input: byHarness, output: list(brainModel) },
+        /** how much of a brain's plan is used (Claude and Codex) */
+        usage: { input: byHarness, output: brainUsage },
         // OpenCode's providers: list them, connect one by key or by a sign-in page, take it back
         providers: { output: list(providerInfo) },
         connectKey: { input: object({ provider: text(), key: text(), answer: optional(shape.record(text())) }), output: nothing() },

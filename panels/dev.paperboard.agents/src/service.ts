@@ -86,6 +86,7 @@ const calls: CallHandlers<typeof agentsContract> = {
     cancelBrainSignIn: ready(async (i) => void (await app.cancelBrainSignIn(i))),
     signOutBrain: ready(async (i) => void (await app.signOutBrain(i))),
     models: ready((i) => app.models(i)),
+    usage: ready((i) => app.usage(i)),
     providers: ready(() => app.providers.list()),
     connectKey: ready((i) => app.providers.connectKey(i.provider, i.key, i.answer)),
     beginProvider: ready((i) => app.providers.begin(i.provider, i.method, i.answer)),

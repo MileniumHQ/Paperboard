@@ -10,6 +10,7 @@ import { Brains, loginProcessId } from "../src/service/brains";
 import { findExistingBrain } from "../src/service/existingBrains";
 import { CLAUDE_MEMORY_OFF } from "../src/service/harness";
 import { askClaudeModels, listModels } from "../src/service/models";
+import { readUsage } from "../src/service/usage";
 import { conversationRig, settled, turnId, type Rig } from "./support/rig";
 import { brainPackage, fakeEnv, fakeLog, packageHost, plan, Recorder, SLOW, tempDir, TestHost } from "./support/host";
 
@@ -400,6 +401,65 @@ describe("brain failures", () => {
         expect(asked).toHaveLength(2);
         for (const s of asked) await host.gone(s.id);
         expect(host.kills.filter((k) => k.id.includes(".models.")).map((k) => k.signal)).toEqual(["SIGTERM", "SIGTERM"]);
+    }, SLOW);
+
+    test("a brain's plan usage is read from its harness, which is stopped once it has answered", async () => {
+        const { root, host, b } = await brains({ installed: ["codex", "claude-code"] });
+        const launch = (h: Harness) => ({ command: b.resolve(h)!, env: b.env(h), cwd: path.join(root, "models") });
+        // Claude's get_usage, as Claude Code 2.1 answers it (trimmed): utilization is a percent already
+        plan(root, {
+            claudeUsage: {
+                subscription_type: "max",
+                rate_limits_available: true,
+                rate_limits: {
+                    five_hour: { utilization: 15, resets_at: "2026-11-21T08:50:00.809838+00:00" },
+                    seven_day: { utilization: 79, resets_at: "2026-11-23T22:00:00.809857+00:00" },
+                    seven_day_opus: null,
+                    extra_usage: { is_enabled: false, monthly_limit: null, used_credits: null, utilization: null },
+                    limits: [
+                        { kind: "session", percent: 15, resets_at: "2026-11-21T08:50:00.809838+00:00", scope: null },
+                        { kind: "weekly_scoped", percent: 47, resets_at: "2026-11-23T21:59:59.809991+00:00", scope: { model: { id: null, display_name: "Fable" } } },
+                    ],
+                },
+            },
+        });
+        expect(await readUsage("claude-code", host, launch("claude-code"))).toEqual({
+            plan: "Max",
+            windows: [
+                { id: "session", label: "Session", used: 15, resetsAt: "2026-11-21T08:50:00.809Z" },
+                { id: "weekly", label: "Weekly", used: 79, resetsAt: "2026-11-23T22:00:00.809Z" },
+                { id: "weekly-fable", label: "Weekly · Fable", used: 47, resetsAt: "2026-11-23T21:59:59.809Z" },
+            ],
+        });
+        // an API key: billed by use, no limits
+        plan(root, { claudeUsage: { subscription_type: null, rate_limits_available: false, rate_limits: null } });
+        expect(await readUsage("claude-code", host, launch("claude-code"))).toEqual({ plan: null, windows: [] });
+
+        // Codex's app-server: a Free plan's one window is a month long
+        plan(root, {
+            codexUsage: {
+                rateLimits: { limitId: "codex", primary: { usedPercent: 7, windowDurationMins: 43200, resetsAt: 1796373331 }, secondary: null, planType: "free" },
+                rateLimitsByLimitId: { codex: { limitId: "codex", primary: { usedPercent: 7, windowDurationMins: 43200, resetsAt: 1796373331 }, secondary: null, planType: "free" } },
+            },
+        });
+        expect(await readUsage("codex", host, launch("codex"))).toEqual({ plan: "Free", windows: [{ id: "primary", label: "Monthly", used: 7, resetsAt: new Date(1796373331_000).toISOString() }] });
+        plan(root, { codexUsage: { rateLimits: { primary: { usedPercent: 40, windowDurationMins: 300 }, secondary: { usedPercent: 120, windowDurationMins: 10080, resetsAt: 1796373331 }, planType: "plus" } } });
+        expect(await readUsage("codex", host, launch("codex"))).toEqual({
+            plan: "Plus",
+            windows: [
+                { id: "primary", label: "Session", used: 40, resetsAt: null },
+                { id: "secondary", label: "Weekly", used: 100, resetsAt: new Date(1796373331_000).toISOString() },
+            ],
+        });
+        plan(root, { codexUsageError: "not signed in" });
+        await expect(readUsage("codex", host, launch("codex"))).rejects.toThrow("Codex couldn't say how much of its plan is used: not signed in");
+        await expect(readUsage("opencode", host, launch("codex"))).rejects.toThrow("opencode has no usage limits of its own to show");
+
+        // every harness asked was stopped once it answered: nothing reached a model
+        const asked = host.started.filter((s) => s.id.includes(".usage."));
+        expect(asked).toHaveLength(5);
+        for (const s of asked) await host.gone(s.id);
+        expect(host.kills.filter((k) => k.id.includes(".usage.")).map((k) => k.signal)).toEqual(Array(5).fill("SIGTERM"));
     }, SLOW);
 
     test("a Claude that ends while it is asked for its models is a failed listing, not a crashed service", async () => {
