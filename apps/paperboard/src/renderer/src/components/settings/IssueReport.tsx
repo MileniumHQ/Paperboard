@@ -29,7 +29,8 @@ type Written = Extract<IssueReportResult, { status: "written" }>;
 // what the window shows: the description, the agent at work, or the issue it wrote
 type Phase = { step: "describe" } | { step: "working"; reportId: string } | { step: "written"; reportId: string; issue: Written };
 
-// a failed tool is an error; a refused one is a warning; the person's own words are commands
+// a failed tool is an error; a refused one is a warning; the person's own words are commands;
+// tool lines stay plain, so a path is never read as Markdown
 function consoleEntry(entry: IssueReportEntry): PaperConsoleEntry {
     switch (entry.kind) {
         case "steer":
@@ -41,8 +42,8 @@ function consoleEntry(entry: IssueReportEntry): PaperConsoleEntry {
         case "tool":
             return { type: entry.status === "failed" ? "error" : "info", content: entry.text };
         default:
-            // the agent's text arrives in chunks that often start or end with blank lines
-            return { type: "output", content: entry.text.trim() };
+            // the agent's thinking and replies are Markdown
+            return { type: "output", content: entry.text, markdown: true };
     }
 }
 
