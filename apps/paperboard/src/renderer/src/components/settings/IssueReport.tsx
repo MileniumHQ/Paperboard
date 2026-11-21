@@ -22,6 +22,7 @@ import {
     type PaperConsoleEntry,
 } from "@mileniumhq/paperui";
 import { shellIpc } from "../../lib/shell";
+import { AgentIcon } from "./AgentIcon";
 import type { IssueReportEntry, IssueReportResult } from "../../../../shared/shellContract";
 
 type Written = Extract<IssueReportResult, { status: "written" }>;
@@ -255,7 +256,7 @@ export default function IssueReport(props: { open: boolean; onClose: () => void 
                                     <PaperText preset="label">Agent</PaperText>
                                     <PaperSelector name="issue-report-agent" horizontal value={agent() ?? undefined} onValueChange={(value) => setPickedAgent(String(value))}>
                                         <For each={ready().agents}>
-                                            {(found) => <PaperSelectorItem value={found.id} icon="smart_toy">{found.name}</PaperSelectorItem>}
+                                            {(found) => <PaperSelectorItem value={found.id} icon={<AgentIcon id={found.id} />}>{found.name}</PaperSelectorItem>}
                                         </For>
                                     </PaperSelector>
                                 </PaperFlex>
