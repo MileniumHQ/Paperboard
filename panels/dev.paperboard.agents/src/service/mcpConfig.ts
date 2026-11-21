@@ -10,7 +10,7 @@ import { DEFAULT_TOOLS, OAUTH_SECRET, TOOL_LIMITS as L, type ServerSpec, type Se
 
 const NAME = /^[a-z][a-z0-9-]*$/;
 // names the agent's own tool names or the service use
-const RESERVED_NAMES = new Set(["mcp", "paperboard", "computer", "actions", "action"]);
+const RESERVED_NAMES = new Set(["mcp", "paperboard", "computer", "blocks", "block"]);
 const ENV_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
 const HEADER_NAME = /^[A-Za-z0-9-]+$/;
 const SECRET_NAME = /^[A-Za-z0-9_.-]+$/;
@@ -125,9 +125,10 @@ export function parseToolsConfig(raw: unknown): ToolsConfig {
     if (raw === null || raw === undefined) return structuredClone(DEFAULT_TOOLS);
     if (!isRecord(raw)) return fail("tools.json isn't a set of settings");
     if (Object.keys(raw).length === 0) return structuredClone(DEFAULT_TOOLS);
-    exactKeys(raw, ["actions", "servers"], "tools.json");
-    const actions = raw.actions === undefined ? DEFAULT_TOOLS.actions : raw.actions;
-    if (typeof actions !== "boolean") fail("tools.json: actions is on or off");
+    // a file from before blocks replaced actions names the switch "actions": it's the same switch, saved as "blocks" from then on
+    exactKeys(raw, raw.blocks === undefined ? ["actions", "servers"] : ["blocks", "servers"], "tools.json");
+    const blocks = raw.blocks ?? raw.actions ?? DEFAULT_TOOLS.blocks;
+    if (typeof blocks !== "boolean") fail("tools.json: blocks is on or off");
     const list = raw.servers === undefined ? [] : raw.servers;
     if (!Array.isArray(list)) return fail("tools.json: servers is a list");
     if (list.length > L.servers) fail(`at most ${L.servers} servers`);
@@ -138,7 +139,7 @@ export function parseToolsConfig(raw: unknown): ToolsConfig {
         if (seen.has(s.name)) fail(`two servers are named "${s.name}"`);
         seen.add(s.name);
     }
-    return { actions: actions as boolean, servers };
+    return { blocks: blocks as boolean, servers };
 }
 
 /** the vault entry a server's secret lives in */

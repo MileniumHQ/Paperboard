@@ -3,7 +3,7 @@ import fs from "node:fs";
 import http from "node:http";
 import type { AddressInfo } from "node:net";
 import path from "node:path";
-import type { BrainState, Harness } from "../src/contract";
+import { PANEL_ID, type BrainState, type Harness } from "../src/contract";
 import { AiApp, type AppHost } from "../src/service/app";
 import { loginTail } from "../src/service/brainLogin";
 import { Brains, loginProcessId } from "../src/service/brains";
@@ -435,7 +435,7 @@ describe("brain failures", () => {
         try {
             const written: unknown[] = [];
             const app = new AiApp({ storageDir: async () => root, readSettings: async () => ({ name: "Ada", harness: "codex", compaction: "shred" }), writeSettings: async (s: unknown) => void written.push(s) } as unknown as AppHost);
-            const ctx = { state: {} as never, setState: () => {}, emit: () => {}, trigger: () => {} };
+            const ctx = { state: {} as never, setState: () => {}, emit: () => {} };
             await expect(app.init(ctx)).rejects.toThrow("the agent's settings can't be read (compaction is summarize or forget); they were left as they are");
             await expect(app.ready()).rejects.toThrow("the Agent service didn't start: the agent's settings can't be read");
             expect(written).toEqual([]);
@@ -444,12 +444,12 @@ describe("brain failures", () => {
         }
     });
 
-    test("a service whose init throws rejects ready(), so its actions fail instead of hanging", async () => {
+    test("a service whose init throws rejects ready(), so its blocks fail instead of hanging", async () => {
         const app = new AiApp({ storageDir: async () => Promise.reject(new Error("the panel's storage is gone")) } as unknown as AppHost);
-        const ctx = { state: {} as never, setState: () => {}, emit: () => {}, trigger: () => {} };
+        const ctx = { state: {} as never, setState: () => {}, emit: () => {} };
         await expect(app.init(ctx)).rejects.toThrow("the panel's storage is gone");
         await expect(app.ready()).rejects.toThrow("the Agent service didn't start: the panel's storage is gone");
-        const send = app.flowActions().find((a) => a.id === "send-message")!;
-        await expect(Promise.resolve(send.run!({} as never, { text: "hi" }))).rejects.toThrow("the Agent service didn't start");
+        const send = app.flowBlocks().commands!.find((c) => c.id === "send-message")!;
+        await expect(Promise.resolve(send.run({ message: "hi" }, { panelId: PANEL_ID }))).rejects.toThrow("the Agent service didn't start");
     });
 });

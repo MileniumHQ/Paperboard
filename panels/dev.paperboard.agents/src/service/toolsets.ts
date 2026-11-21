@@ -1,5 +1,5 @@
 // The agent's tools come in toolsets: its computer, its shell, its messages, its
-// memory, MCP servers and Paperboard actions. Each is its own module and
+// memory, MCP servers and Paperboard's blocks. Each is its own module and
 // says what it adds to the agent's instructions; the service's one MCP
 // endpoint serves them all through a Toolbox.
 
@@ -7,7 +7,7 @@ import type { ToolSpec } from "./computerTools";
 import type { ToolResult } from "./computerMcp";
 
 /**
- * Who the running turn answers. A flow's message (the Send Message action) is answered for a flow, which reads
+ * Who the running turn answers. A flow's message (the Send Message block) is answered for a flow, which reads
  * the reply as data: it can't sign in or show an app card, and files go with a text, not inside it.
  */
 export interface TurnMode {

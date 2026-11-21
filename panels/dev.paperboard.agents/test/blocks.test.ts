@@ -22,9 +22,9 @@ function pastConversation(r: AppRig, id: string, texts: { id: string; text: stri
     return id;
 }
 
-// The agent's blocks (Actions API v2), as the Blocks panel runs them.
+// The agent's blocks, as the Blocks panel runs them.
 describe("the agent's blocks", () => {
-    test("registers the agent's types, values, commands and events, and none of the panel's own actions", async () => {
+    test("registers the agent's types, values, commands and events, and nothing that reaches its secrets or controls", async () => {
         rig = await appRig();
         const set = rig.blocks.set!;
         expect(set.types!.map((t) => t.id)).toEqual(["conversation", "message", "fact", "note", "routine", "model", "brain", "tool-server", "app", "attachment"]);

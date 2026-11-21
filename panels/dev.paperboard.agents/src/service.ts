@@ -1,10 +1,10 @@
-import { actionsApi, blocksApi, configApi, definePanelService, fileApi, packageApi, processApi, secretsApi, type CallHandlers } from "@mileniumhq/paperapi";
+import { blocksApi, configApi, definePanelService, fileApi, packageApi, processApi, secretsApi, type CallHandlers } from "@mileniumhq/paperapi";
 import { PANEL_ID, agentsContract } from "./contract";
 import { AiApp, findProgram, type AppHost } from "./service/app";
 import { fetchWebImage } from "./service/webImage";
 import { browserView } from "./service/browserView";
 
-// the tool servers and the actions switch: another document, so one never overwrites the other
+// the tool servers and the blocks switch: another document, so one never overwrites the other
 const TOOLS_PATH = "tools.json";
 
 const host: AppHost = {
@@ -52,14 +52,17 @@ const host: AppHost = {
             delete: (name) => secretsApi.delete(name, PANEL_ID),
             list: () => secretsApi.list(PANEL_ID),
         },
-        // other panels' actions: this service's scoped credential, as any panel's flows use
-        actions: {
-            list: () => actionsApi.list(),
-            listProjects: () => actionsApi.listProjects(),
-            call: (panel, action, inputs, o) => actionsApi.call(panel, action, inputs, { timeoutMs: o.timeoutMs }),
+        // other panels' blocks: this service's scoped credential, as the Blocks panel's flows use
+        blocks: {
+            list: () => blocksApi.list(),
+            projects: () => blocksApi.projects(),
+            run: (panel, command, inputs, o) => blocksApi.run(panel, command, inputs, o),
+            read: (panel, value, inputs, o) => blocksApi.read(panel, value, inputs, o),
+            property: (type, field, value, o) => blocksApi.property(type, field, value, o),
+            choices: (panel, entry, input, o) => blocksApi.choices(panel, entry, input, o),
+            typeChoices: (type, o) => blocksApi.typeChoices(type, o),
         },
     },
-    registerAction: (def) => actionsApi.register(def, undefined, PANEL_ID),
     blocks: blocksApi.panel(PANEL_ID),
 };
 
@@ -138,7 +141,7 @@ const calls: CallHandlers<typeof agentsContract> = {
     saveServer: ready((i) => app.servers.save(i.server)),
     removeServer: ready((i) => app.servers.remove(i.name)),
     restartServer: ready((i) => app.servers.restart(i.name)),
-    setActions: ready((i) => app.servers.setActions(i.on)),
+    setBlocks: ready((i) => app.servers.setBlocks(i.on)),
     setSecret: ready((i) => app.servers.setSecret(i.server, i.name, i.value)),
     signInServer: ready((i) => app.servers.signIn(i.name)),
     finishServerSignIn: ready((i) => app.servers.finishSignIn(i.name, i.address)),
@@ -148,8 +151,6 @@ const calls: CallHandlers<typeof agentsContract> = {
 export const aiService = definePanelService({
     contract: agentsContract,
     calls,
-    // the deprecated v1 flow actions, registered again with the history in the dropdown once the conversation is read
-    actions: app.flowActions(),
     async onInit(ctx) {
         await app.init({
             get state() {
@@ -157,9 +158,7 @@ export const aiService = definePanelService({
             },
             setState: (patch) => ctx.setState(patch),
             emit: (event, payload) => ctx.emit(event, payload),
-            trigger: (id, payload) => ctx.emitTrigger(id, payload),
         });
-        await app.publish();
     },
 });
 

@@ -1,15 +1,49 @@
-// What the Blocks panel can do with the agent (Actions API v2). The actions
-// (v1, flowActions.ts) stay as they are; both run the same FlowHost.
+// What the Blocks panel can do with the agent: its types, values, commands
+// and events, which app.ts registers and keeps told of changes (blocksSync.ts).
 
 import type { BlockSet } from "@mileniumhq/paperapi";
 import { DEFAULT_MODEL, HARNESSES, LIMITS, SIGN_IN_REQUIRED, type PageInfo, type BrainModel, type BrainState, type Harness, type Routine } from "../contract";
 import type { ServerStatus } from "../toolsContract";
 import { DAY_NAMES, describeSchedule, localStamp } from "../routineText";
-import type { FlowHost, MessageReceived } from "./flowActions";
 import { ASK_MS } from "./ask";
 import { HARNESS_NAMES } from "./harness";
 import type { Memory } from "./memory";
 import { parseSchedule, type Routines } from "./routines";
+
+/** What a flow's blocks need of the agent's service. */
+export interface FlowHost {
+    ready(): Promise<void>;
+    /** start a new conversation (null) or continue the one with this id; resolves with the current conversation's id */
+    switchConversation(id: string | null): Promise<string>;
+    /** the user's message, sent as if they'd typed it; resolves with its id */
+    send(text: string, instructions?: string): string;
+    ask(question: unknown, instructions?: string): Promise<string>;
+}
+
+/** A file the agent sent with a reply, as a flow gets it. */
+export interface ReplyAttachment {
+    name: string;
+    kind: "image" | "video" | "audio" | "file";
+    /** its media type */
+    type: string;
+    bytes: number;
+    /** the file on this computer */
+    path: string;
+}
+
+/** A reply of the agent's, as When the Agent Replies fires it. */
+export interface MessageReceived {
+    text: string;
+    /** the files sent with it; empty when there are none */
+    attachments: ReplyAttachment[];
+    messageId: string;
+    conversationId: string;
+    /** the message it answers, if it quoted one; empty otherwise */
+    replyTo: string;
+}
+
+/** The event a reply fires. */
+export const MESSAGE_RECEIVED = "message-received";
 
 /** A conversation as its type's fields read it. */
 export interface ConversationFacts {
@@ -814,7 +848,7 @@ export function replyPayload(message: MessageReceived): Record<string, unknown> 
         attachments: message.attachments.map((a) => ({ ...a })),
         message: messageValue(message.conversationId, message.messageId),
         conversation: message.conversationId,
-        // the Actions payload says "none" with empty text; a block says it with no value
+        // a reply that quotes nothing has no message to point at
         "reply-to": message.replyTo ? messageValue(message.conversationId, message.replyTo) : null,
     };
 }

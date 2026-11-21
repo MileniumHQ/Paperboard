@@ -1,10 +1,10 @@
-// A question from a flow (the Get Answer action), answered outside the
+// A question from a flow (the Get Answer block), answered outside the
 // conversation: the harness runs once in a fresh thread with no memory, no
 // computer and no texting, and its last message is the answer. Nothing joins
 // the chat, and the conversation's turn keeps running alongside.
 //
-// Each ask is its own daemon-supervised child. A flow waits 30 s for an
-// action, so an ask that hasn't answered by ASK_MS is stopped and fails.
+// Each ask is its own daemon-supervised child. A flow waits 30 s for a
+// block, so an ask that hasn't answered by ASK_MS is stopped and fails.
 
 import { randomUUID } from "node:crypto";
 import fs from "node:fs";
@@ -15,7 +15,7 @@ import type { TurnLog } from "./turnLog";
 import type { TurnHost } from "./conversation";
 import { harnessFailure, runHarness } from "./harnessRun";
 
-/** under the 30 s a flow gives an action, so the ask fails with its own reason first */
+/** under the 30 s a flow gives a block, so the ask fails with its own reason first */
 export const ASK_MS = 28_000;
 /** questions answered at once; past this, an ask is refused rather than queued past its flow's deadline */
 const MAX_ASKING = 4;

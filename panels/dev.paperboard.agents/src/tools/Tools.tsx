@@ -1,5 +1,5 @@
 // The agent's tools: its MCP servers, as a list like the apps it made, and
-// whether it may run other Paperboard panels' actions. A row says how its
+// whether it may use other Paperboard panels' blocks. A row says how its
 // server is doing; sign in, restart, switch off and remove are on the row,
 // and choosing it opens the editor. The agent adds servers itself when the
 // user asks; this page is also where the user adds or changes one by hand.
@@ -61,7 +61,7 @@ export default function Tools(props: { agent: Agent }) {
 }
 
 const NEW = "new";
-const ACTIONS = "actions";
+const BLOCKS = "blocks";
 const rowOf = (server: string) => `server:${server}`;
 
 function List(props: { tools: ToolsClient; name: string }) {
@@ -94,8 +94,8 @@ function List(props: { tools: ToolsClient; name: string }) {
     // It isn't held for its save, and neither is anything else on the page.
     const saves = new SerialQueue();
     const switched = (title: string, saving: Promise<void>) => void saving.catch((e) => showError(title, e));
-    const actions = createSavedValue(() => view().config.actions, async (on: boolean) => void (await props.tools.setActions(on)), { queue: saves.run });
-    const setActions = (on: boolean) => switched("Couldn't change the panels' access", actions.set(on));
+    const blocks = createSavedValue(() => view().config.blocks, async (on: boolean) => void (await props.tools.setBlocks(on)), { queue: saves.run });
+    const setBlocks = (on: boolean) => switched(on ? "Couldn't switch on Blocks" : "Couldn't switch off Blocks", blocks.set(on));
     const remove = (s: ServerSpec) =>
         action.run(`Couldn't remove ${s.name}`, async () => {
             await props.tools.remove(s.name);
@@ -104,7 +104,7 @@ function List(props: { tools: ToolsClient; name: string }) {
 
     const choose = (value: string) => {
         if (value === NEW) return setForm(blankForm());
-        if (value === ACTIONS) return setActions(!actions.value());
+        if (value === BLOCKS) return setBlocks(!blocks.value());
         const s = view().config.servers.find((x) => rowOf(x.name) === value);
         if (s) setForm(formFromSpec(s));
     };
@@ -161,15 +161,13 @@ function List(props: { tools: ToolsClient; name: string }) {
                     </PaperListItem>
                     <PaperListLabel as="h3">Paperboard</PaperListLabel>
                     <PaperListItem
-                        value={ACTIONS}
-                        icon="widgets"
+                        value={BLOCKS}
+                        icon="extension"
                         disabled={busy() || locked()}
-                        description={`${props.name} can look up what your other panels can do, like start a game server, and run it`}
-                        actions={
-                            <PaperToggle aria-label="Let it use your other panels" checked={actions.value()} disabled={locked()} onChange={setActions} />
-                        }
+                        description={`${props.name} can use your other panels' blocks, like starting a game server or posting to Discord`}
+                        actions={<PaperToggle aria-label="Blocks" checked={blocks.value()} disabled={locked()} onChange={setBlocks} />}
                     >
-                        Let it use your other panels
+                        Blocks
                     </PaperListItem>
                 </PaperList>
             </PaperFlex>
