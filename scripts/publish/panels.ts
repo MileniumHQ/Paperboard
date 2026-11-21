@@ -28,7 +28,7 @@ interface PackedPanel {
     sha256: string;
     meta: Record<string, unknown>;
     icon: PanelUpload["icon"];
-    store: ReturnType<typeof storeUploadParts>;
+    store: Awaited<ReturnType<typeof storeUploadParts>>;
 }
 
 async function packPanel(info: DiscoveredPanel): Promise<PackedPanel> {
@@ -36,7 +36,7 @@ async function packPanel(info: DiscoveredPanel): Promise<PackedPanel> {
     // listing or a missing icon refuses the publish instead of shipping a
     // release without it
     const manifest = JSON.parse(readFileSync(join(info.dir, "manifest.json"), "utf8"));
-    const store = storeUploadParts(manifest.store, (rel) => readFileSync(join(info.dir, rel)));
+    const store = await storeUploadParts(manifest.store, (rel) => readFileSync(join(info.dir, rel)));
     let icon: PanelUpload["icon"];
     if (manifest.icon !== undefined) {
         const iconPath = join(info.dir, String(manifest.icon).replace(/^\.\//, ""));

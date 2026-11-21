@@ -4,7 +4,14 @@ import * as http from "node:http";
 import type { AddressInfo } from "node:net";
 import { join } from "node:path";
 import { fetchRegistryJson } from "../src/registryFetch";
-import { parseStoreListing, parseStoreManifest } from "../src/storeListing";
+import {
+    loadInstalledPanelMedia,
+    parseStoreListing,
+    parseStoreManifest,
+    readStoreFiles,
+    STORE_MAX_ABOUT_BYTES,
+    STORE_MAX_SCREENSHOT_BYTES,
+} from "../src/storeListing";
 
 const servers: http.Server[] = [];
 
@@ -129,5 +136,47 @@ fetchRegistryIndex().then((v) => { console.log("RESOLVED", JSON.stringify(v)); }
             ],
         });
         expect(listing?.screenshots).toEqual([{ light: "https://i.example/a.png" }, { light: "/media/b.png" }]);
+    });
+
+    // One reader serves the publisher and installed panels, so a cap holds for both.
+    test("readStoreFiles reads every named file under its cap, and installed media turns them into data URLs", async () => {
+        const files: Record<string, Uint8Array> = {
+            "store/about.md": new TextEncoder().encode("# About\n"),
+            "store/1-light.png": new Uint8Array([1, 2, 3]),
+            "store/1-dark.webp": new Uint8Array([4]),
+        };
+        const read = async (path: string) => {
+            const bytes = files[path.replace(/^\.\//, "")];
+            if (!bytes) throw new Error(`ENOENT: ${path}`);
+            return bytes;
+        };
+        const store = { about: "./store/about.md", screenshots: [{ light: "./store/1-light.png", dark: "store/1-dark.webp", alt: "Chat" }] };
+
+        expect(await readStoreFiles(undefined, read)).toBeNull();
+        const read1 = await readStoreFiles(store, read);
+        expect(read1?.about).toBe("# About\n");
+        expect(read1?.screenshots).toEqual([
+            {
+                light: { path: "./store/1-light.png", type: "image/png", bytes: files["store/1-light.png"]! },
+                dark: { path: "store/1-dark.webp", type: "image/webp", bytes: files["store/1-dark.webp"]! },
+                alt: "Chat",
+            },
+        ]);
+
+        files["manifest.json"] = new TextEncoder().encode(JSON.stringify({ store }));
+        expect((await loadInstalledPanelMedia(read, true)).store).toEqual({
+            about: "# About\n",
+            screenshots: [{ light: "data:image/png;base64,AQID", dark: "data:image/webp;base64,BA==", alt: "Chat" }],
+            services: [],
+            credits: [],
+            requirements: [],
+        });
+
+        await expect(readStoreFiles({ about: "./store/missing.md" }, read)).rejects.toThrow("ENOENT");
+        files["store/1-light.png"] = new Uint8Array(STORE_MAX_SCREENSHOT_BYTES + 1);
+        await expect(readStoreFiles(store, read)).rejects.toThrow(`over the ${STORE_MAX_SCREENSHOT_BYTES}-byte cap`);
+        files["store/1-light.png"] = new Uint8Array([1]);
+        files["store/about.md"] = new Uint8Array(STORE_MAX_ABOUT_BYTES + 1);
+        await expect(readStoreFiles(store, read)).rejects.toThrow(`over the ${STORE_MAX_ABOUT_BYTES}-byte cap`);
     });
 });

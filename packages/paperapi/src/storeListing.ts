@@ -235,6 +235,62 @@ export function storeScreenshotField(index: number, theme: "light" | "dark"): st
     return `screenshot-${index}-${theme}`;
 }
 
+// ─── Store files ─────────────────────────────────────────────────────────────
+//
+// The files a manifest `store` block names, read under their caps. The
+// publisher turns them into upload parts and Paperboard into data URLs for
+// installed panels; both read them here, so a cap or a field is added once.
+// `read` resolves a manifest path against the panel root; a missing file
+// rejects.
+
+export type StoreFileReader = (path: string) => Uint8Array | Promise<Uint8Array>;
+
+export interface StoreImageFile {
+    path: string;
+    type: string;
+    bytes: Uint8Array;
+}
+
+export interface StoreFiles {
+    store: StoreManifest;
+    about?: string;
+    screenshots: { light: StoreImageFile; dark?: StoreImageFile; alt?: string }[];
+}
+
+async function readCapped(read: StoreFileReader, path: string, cap: number): Promise<Uint8Array> {
+    const bytes = await read(path);
+    if (bytes.byteLength > cap) throw new Error(`${path} is over the ${cap}-byte cap`);
+    return bytes;
+}
+
+async function readStoreImage(read: StoreFileReader, path: string): Promise<StoreImageFile> {
+    const bytes = await readCapped(read, path, STORE_MAX_SCREENSHOT_BYTES);
+    return { path, type: STORE_IMAGE_TYPES[storeImageExtension(path)!]!, bytes };
+}
+
+/**
+ * Validates a manifest `store` block and reads every file it names under
+ * its cap. Absent means no listing (null); anything malformed, missing or
+ * over a cap rejects.
+ */
+export async function readStoreFiles(raw: unknown, read: StoreFileReader): Promise<StoreFiles | null> {
+    const store = parseStoreManifest(raw);
+    if (!store) return null;
+    const screenshots: StoreFiles["screenshots"] = [];
+    for (const shot of store.screenshots) {
+        screenshots.push({
+            light: await readStoreImage(read, shot.light),
+            ...(shot.dark ? { dark: await readStoreImage(read, shot.dark) } : {}),
+            ...(shot.alt ? { alt: shot.alt } : {}),
+        });
+    }
+    const files: StoreFiles = { store, screenshots };
+    if (store.about) {
+        files.about = new TextDecoder().decode(await readCapped(read, store.about, STORE_MAX_ABOUT_BYTES));
+    }
+    return files;
+}
+
 // ─── Installed-panel media ───────────────────────────────────────────────────
 //
 // A panel the registry does not list (a dev link, a direct install) still
@@ -258,15 +314,6 @@ function toBase64(bytes: Uint8Array): string {
     return btoa(binary);
 }
 
-async function readCapped(
-    read: (path: string) => Promise<Uint8Array>,
-    path: string,
-    cap: number,
-): Promise<Uint8Array> {
-    const bytes = await read(path);
-    if (bytes.byteLength > cap) throw new Error(`${path} is over the ${cap}-byte cap`);
-    return bytes;
-}
 
 /**
  * Loads an installed panel's icon and (when `full`) its store listing.
@@ -289,29 +336,20 @@ export async function loadInstalledPanelMedia(
     }
 
     if (!full) return media;
-    const store = parseStoreManifest(manifest?.store);
-    if (!store) return media;
+    const files = await readStoreFiles(manifest?.store, read);
+    if (!files) return media;
 
-    const screenshots: StoreScreenshot[] = [];
-    for (const shot of store.screenshots) {
-        const out: Partial<StoreScreenshot> = {};
-        for (const theme of ["light", "dark"] as const) {
-            const file = shot[theme];
-            if (!file) continue;
-            const bytes = await readCapped(read, file, STORE_MAX_SCREENSHOT_BYTES);
-            out[theme] = `data:${STORE_IMAGE_TYPES[storeImageExtension(file)!]};base64,${toBase64(bytes)}`;
-        }
-        screenshots.push({ ...(out as StoreScreenshot), ...(shot.alt ? { alt: shot.alt } : {}) });
-    }
+    const dataUrl = (file: StoreImageFile) => `data:${file.type};base64,${toBase64(file.bytes)}`;
     media.store = {
-        screenshots,
-        services: store.services,
-        credits: store.credits,
-        requirements: store.requirements,
+        ...(files.about !== undefined ? { about: files.about } : {}),
+        screenshots: files.screenshots.map((shot) => ({
+            light: dataUrl(shot.light),
+            ...(shot.dark ? { dark: dataUrl(shot.dark) } : {}),
+            ...(shot.alt ? { alt: shot.alt } : {}),
+        })),
+        services: files.store.services,
+        credits: files.store.credits,
+        requirements: files.store.requirements,
     };
-    if (store.about) {
-        const about = await readCapped(read, store.about, STORE_MAX_ABOUT_BYTES);
-        media.store.about = new TextDecoder().decode(about);
-    }
     return media;
 }

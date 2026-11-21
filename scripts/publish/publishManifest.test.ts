@@ -61,31 +61,31 @@ describe("panel publishing finds every panel and refuses incomplete ones", () =>
         expect(resolvePublishTarget({ id: "half.panel", version: "0.1.0" }, dir)).toEqual({ id: "half.panel", name: "half.panel", version: "0.1.0" });
     });
 
-    test("a store file that is missing or outside store/ refuses the publish", () => {
+    test("a store file that is missing or outside store/ refuses the publish", async () => {
         const dir = panel("listed.panel", {});
         const read = (rel: string) => readFileSync(join(dir, rel));
-        expect(() => storeUploadParts({ about: "./store/about.md" }, read)).toThrow("ENOENT");
-        expect(() => storeUploadParts({ about: "./README.md" }, read)).toThrow("store.about must be a relative path inside store/");
-        expect(() => storeUploadParts({ about: "./store/../secret.md" }, read)).toThrow("inside store/");
-        expect(() => storeUploadParts({ screenshots: [{ light: "/etc/shot.png" }] }, read)).toThrow("inside store/");
+        await expect(storeUploadParts({ about: "./store/about.md" }, read)).rejects.toThrow("ENOENT");
+        await expect(storeUploadParts({ about: "./README.md" }, read)).rejects.toThrow("store.about must be a relative path inside store/");
+        await expect(storeUploadParts({ about: "./store/../secret.md" }, read)).rejects.toThrow("inside store/");
+        await expect(storeUploadParts({ screenshots: [{ light: "/etc/shot.png" }] }, read)).rejects.toThrow("inside store/");
 
         mkdirSync(join(dir, "store"));
         writeFileSync(join(dir, "store", "about.md"), "# Listed\n");
         writeFileSync(join(dir, "store", "1-light.png"), new Uint8Array([1, 2, 3]));
-        const parts = storeUploadParts({ about: "./store/about.md", screenshots: [{ light: "./store/1-light.png" }] }, read);
+        const parts = await storeUploadParts({ about: "./store/about.md", screenshots: [{ light: "./store/1-light.png" }] }, read);
         expect(parts.about).toBe("# Listed\n");
         expect(parts.files.map((f) => [f.field, f.fileName, f.type, f.bytes.byteLength])).toEqual([["screenshot-0-light", "1-light.png", "image/png", 3]]);
 
         writeFileSync(join(dir, "store", "about.md"), "x".repeat(STORE_MAX_ABOUT_BYTES + 1));
-        expect(() => storeUploadParts({ about: "./store/about.md" }, read)).toThrow(`over the ${STORE_MAX_ABOUT_BYTES}-byte about cap`);
+        await expect(storeUploadParts({ about: "./store/about.md" }, read)).rejects.toThrow(`over the ${STORE_MAX_ABOUT_BYTES}-byte cap`);
     });
 
-    test("every first-party panel's store listing validates and its files exist", () => {
+    test("every first-party panel's store listing validates and its files exist", async () => {
         const panels = discoverPanels(PANELS_ROOT);
         expect(panels.length).toBeGreaterThan(0);
         for (const info of panels) {
             const manifest = JSON.parse(readFileSync(join(info.dir, "manifest.json"), "utf8"));
-            const parts = storeUploadParts(manifest.store, (rel) => readFileSync(join(info.dir, rel)));
+            const parts = await storeUploadParts(manifest.store, (rel) => readFileSync(join(info.dir, rel)));
             expect(parts.about !== undefined).toBe(manifest.store?.about !== undefined);
         }
     });
