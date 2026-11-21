@@ -15,7 +15,7 @@ const LINEAR = { name: "linear", where: "host", transport: "stdio", command: "/b
 
 let panel: BootedPanel;
 beforeAll(async () => {
-    panel = await bootPanel({ settings: SETTINGS, tools: { actions: false, servers: [NOTES, LINEAR] } });
+    panel = await bootPanel({ settings: SETTINGS, tools: { blocks: false, servers: [NOTES, LINEAR] } });
 });
 afterAll(() => panel?.close());
 

@@ -125,8 +125,19 @@ describe("tool-server config", () => {
         await s.load();
         expect((await s.view()).configError).toBe("tools.json isn't a set of settings");
         await expect(s.save({ name: "gh", transport: "stdio", command: "gh-server" })).rejects.toThrow(/tools.json can't be read .* Nothing was changed/);
-        await expect(s.setActions(false)).rejects.toThrow(/Nothing was changed/);
+        await expect(s.setBlocks(false)).rejects.toThrow(/Nothing was changed/);
         expect(writes).toEqual([]);
+    });
+
+    test("a tools.json from before blocks keeps its switch: actions: false reads as blocks off, and saves under its new name", async () => {
+        const { s, writes } = servers({ actions: false, servers: [] });
+        await s.load();
+        expect((await s.view()).config.blocks).toBe(false);
+        await s.setBlocks(true);
+        expect(writes).toEqual([{ blocks: true, servers: [] }]);
+        const both = servers({ actions: false, blocks: true, servers: [] });
+        await both.s.load();
+        expect((await both.s.view()).configError).toBe('tools.json: "actions" isn\'t a setting');
     });
 
     test("over HTTP, a redirect is refused rather than followed with the headers", async () => {

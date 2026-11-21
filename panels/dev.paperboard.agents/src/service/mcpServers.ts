@@ -391,11 +391,11 @@ export class McpServers {
         });
     }
 
-    setActions(on: unknown): Promise<ToolsView> {
+    setBlocks(on: unknown): Promise<ToolsView> {
         return this.lock.run(async () => {
             this.writable();
             if (typeof on !== "boolean") throw new Error("on or off");
-            await this.commit({ ...this.config, actions: on });
+            await this.commit({ ...this.config, blocks: on });
             return this.view();
         });
     }

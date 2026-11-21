@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { PANEL_ID } from "../src/contract";
-import { actionsToolset, type ActionEntry } from "../src/service/actionsToolset";
+import { memoryBlocks, type BlockProjectInfo, type MemoryBlocks } from "@mileniumhq/paperapi";
+import { blocksToolset, type BlocksRegistry } from "../src/service/blocksToolset";
 import { MCP_TOKEN_ENV, startComputerMcp, type ComputerMcp } from "../src/service/computerMcp";
 import { MAX_IMAGES, toToolResult } from "../src/service/mcpClient";
 import { toolbox, type Toolset } from "../src/service/toolsets";
@@ -11,74 +12,110 @@ afterEach(async () => {
 });
 
 const USER = { fromFlow: false };
-const schema = (name: string, extra: NonNullable<ActionEntry["schema"]> = {}) => ({ name, description: name, inputs: {}, ...extra });
+const SERVERS = "dev.example.servers";
+const TERMINAL = "dev.paperboard.terminal";
 
-const REGISTRY: ActionEntry[] = [
-    { panelId: "dev.paperboard.discord", action: "post", schema: schema("Post") },
-    { panelId: "dev.paperboard.discord", action: "message-posted", schema: schema("When posted", { eventOnly: true }) },
-    { panelId: "dev.paperboard.discord", action: "ui-secret", schema: schema("UI", { internal: true }) },
-    { panelId: "dev.paperboard.discord", action: "old", schema: schema("Old", { deprecated: "use post" }) },
-    { panelId: "dev.paperboard.discord", action: "state" },
-    { panelId: "dev.paperboard.terminal", action: "run-command", schema: schema("Run Command") },
-    { panelId: PANEL_ID, action: "send-message", schema: schema("Send Message") },
-];
-
-function actions() {
-    const calls: { panel: string; action: string; inputs: unknown }[] = [];
-    const set = actionsToolset({
-        host: {
-            list: async () => REGISTRY,
-            listProjects: async () => [],
-            call: async (panel, action, inputs) => {
-                calls.push({ panel, action, inputs });
-                return { ok: true };
+/** Three panels' blocks in memory, with the daemon's checks, and what was run through them. */
+async function registry() {
+    const ran: string[] = [];
+    const panels = new Map<string, MemoryBlocks>();
+    const projects: BlockProjectInfo[] = [];
+    const panel = (id: string) => {
+        const m = memoryBlocks(id);
+        panels.set(id, m);
+        return m;
+    };
+    const servers = panel(SERVERS);
+    await servers.panel.register({
+        types: [
+            {
+                id: "server",
+                name: "Server",
+                base: "text",
+                choices: () => [{ label: "Survival", value: "survival" }],
+                fields: { status: { type: "text", name: "Status", resolve: (id: string) => (ran.push(`status ${id}`), "online") } },
             },
-        },
-        enabled: () => true,
+        ],
+        commands: [
+            { id: "start", name: "Start Server", inputs: { server: { type: "server", name: "Server" } }, output: "text", outputName: "Result", run: ({ server }: { server: string }) => (ran.push(`start ${server}`), "started") },
+            { id: "wipe", name: "Wipe", internal: true, run: () => void ran.push("wipe") },
+        ],
+        values: [{ id: "count", name: "Servers", type: "number", read: () => (ran.push("count"), 1) }],
+        events: [{ id: "joined", name: "When a Player Joins", values: { player: { type: "text", name: "Player" } } }],
     });
-    return { set, calls, call: (name: string, args: Record<string, unknown>) => set.call(name, args, USER) };
+    const survival = await servers.defineProject({ id: "survival", name: "Survival" });
+    projects.push({ panelId: SERVERS, id: "survival", name: "Survival" });
+    await survival.register({ commands: [{ id: "say", name: "Say", inputs: { text: { type: "text", name: "Text" } }, run: ({ text }: { text: string }) => void ran.push(`say ${text}`) }] });
+    await panel(TERMINAL).panel.register({ commands: [{ id: "run-command", name: "Run Command", inputs: { command: { type: "text", name: "Command" } }, run: () => void ran.push("terminal") }] });
+    await panel(PANEL_ID).panel.register({ commands: [{ id: "send-message", name: "Send Message", run: () => void ran.push("agent") }] });
+
+    const of = (id: string) => panels.get(id) ?? Promise.reject(new Error(`no panel ${id}`));
+    const typeOf = (ref: string) => ref.slice(ref.indexOf(":") + 1);
+    const host: BlocksRegistry = {
+        list: async () => [...panels.values()].flatMap((m) => m.list()),
+        projects: async () => projects,
+        run: async (p, id, inputs, o) => (await of(p)).run(id, inputs, o),
+        read: async (p, id, inputs, o) => (await of(p)).read(id, inputs, o),
+        property: async (ref, field, value, o) => (await of(ref.slice(0, ref.indexOf(":")))).property(typeOf(ref), field, value, o),
+        choices: async (p, entry, input) => (await of(p)).choices(entry, input),
+        typeChoices: async (ref, o) => (await of(ref.slice(0, ref.indexOf(":")))).typeChoices(typeOf(ref), o),
+    };
+    const set = blocksToolset({ registry: host, enabled: () => true });
+    return { set, ran, call: (name: string, args: Record<string, unknown>) => set.call(name, args, USER) };
 }
 
-// Only listable actions can run.
-describe("Paperboard actions as the agent's tools", () => {
-    test("the terminal panel's actions are never listed or runnable, even named directly", async () => {
-        const { set, calls, call } = actions();
-        expect(await set.instructions!(USER)).not.toContain("dev.paperboard.terminal");
-        const listed = await call("list_actions", { panel: "dev.paperboard.terminal" });
-        expect(listed).toEqual({ isError: true, text: "dev.paperboard.terminal offers no actions you can run." });
-        const ran = await call("run_action", { panel: "dev.paperboard.terminal", action: "run-command", inputs: { command: "rm -rf ~" } });
-        expect(ran.isError).toBe(true);
-        expect(calls).toEqual([]);
+// Only listed blocks can be used.
+describe("Paperboard's blocks as the agent's tools", () => {
+    test("the terminal's blocks and the agent's own are never listed or run, even named directly", async () => {
+        const { set, ran, call } = await registry();
+        const told = await set.instructions!(USER);
+        expect(told).toContain(SERVERS);
+        expect(told).not.toContain(TERMINAL);
+        expect(told).not.toContain(PANEL_ID);
+        for (const panel of [TERMINAL, PANEL_ID]) {
+            expect(await call("list_blocks", { panel })).toEqual({ isError: true, text: `${panel} offers no blocks you can use.` });
+        }
+        expect((await call("run_block", { panel: TERMINAL, block: "command.run-command", inputs: { command: "rm -rf ~" } })).isError).toBe(true);
+        expect((await call("run_block", { panel: PANEL_ID, block: "command.send-message" })).isError).toBe(true);
+        expect(ran).toEqual([]);
     });
 
-    test("the agent's own, internal, deprecated and schema-less actions and unknown panels fail with nothing called", async () => {
-        const { calls, call } = actions();
-        const listed = JSON.parse((await call("list_actions", { panel: "dev.paperboard.discord" })).text);
-        expect(listed.actions.map((a: { action: string }) => a.action)).toEqual(["post", "message-posted"]);
-        for (const [panel, action] of [
-            [PANEL_ID, "send-message"],
-            ["dev.paperboard.discord", "ui-secret"],
-            ["dev.paperboard.discord", "old"],
-            ["dev.paperboard.discord", "state"],
-            ["dev.paperboard.nowhere", "post"],
-            ["dev.paperboard.discord", "message-posted"],
-        ]) {
-            const r = await call("run_action", { panel, action });
-            expect(r.isError).toBe(true);
+    test("a panel lists its types, blocks and projects; internal blocks, events, types and unknown blocks never run", async () => {
+        const { ran, call } = await registry();
+        const listed = JSON.parse((await call("list_blocks", { panel: SERVERS })).text);
+        expect(listed.types.map((t: { type: string }) => t.type)).toEqual([`${SERVERS}:server`]);
+        expect(listed.blocks.map((b: { block: string }) => b.block)).toEqual(["command.start", "value.count", "event.joined"]);
+        expect(listed.projects).toEqual([{ id: "survival", name: "Survival", blocks: 1 }]);
+        const project = JSON.parse((await call("list_blocks", { panel: SERVERS, project: "survival" })).text);
+        expect(project.blocks.map((b: { block: string }) => b.block)).toEqual(["command.say"]);
+        for (const block of ["command.wipe", "event.joined", "type.server", "command.nothing", "command.say"]) {
+            expect((await call("run_block", { panel: SERVERS, block })).isError).toBe(true);
         }
-        expect(calls).toEqual([]);
-        expect(await call("run_action", { panel: "dev.paperboard.discord", action: "post", inputs: { text: "hi" } })).toEqual({ text: '{\n "ok": true\n}' });
-        expect(calls).toEqual([{ panel: "dev.paperboard.discord", action: "post", inputs: { text: "hi" } }]);
+        expect(ran).toEqual([]);
+    });
+
+    test("commands run and values read, in their project when named; fields and choices come from the type's panel", async () => {
+        const { ran, call } = await registry();
+        const server = `${SERVERS}:server`;
+        expect(await call("block_choices", { panel: SERVERS, block: "command.start", input: "server" })).toEqual({ text: '{\n "choices": [\n  {\n   "label": "Survival",\n   "value": "survival"\n  }\n ]\n}' });
+        expect(await call("run_block", { panel: SERVERS, block: "command.start", inputs: { server: "survival" } })).toEqual({ text: "started" });
+        expect(await call("run_block", { panel: SERVERS, block: "value.count" })).toEqual({ text: "1" });
+        expect(await call("run_block", { panel: SERVERS, block: "command.say", project: "survival", inputs: { text: "hi" } })).toEqual({ text: "Done (the block gives nothing back)." });
+        expect(await call("block_field", { type: server, field: "status", value: "survival" })).toEqual({ text: "online" });
+        expect(ran).toEqual(["start survival", "count", "say hi", "status survival"]);
+        // the owning panel checks the inputs: one that's missing fails with its reason
+        expect((await call("run_block", { panel: SERVERS, block: "command.say", project: "survival" })).isError).toBe(true);
+        expect((await call("block_field", { type: server, field: "players", value: "survival" })).text).toBe(`${server} has no field "players". Its fields: status.`);
     });
 
     test("non-object or oversized inputs are refused before anything runs", async () => {
-        const { calls, call } = actions();
+        const { ran, call } = await registry();
         for (const inputs of ["text", 42, ["a"], null]) {
-            expect(await call("run_action", { panel: "dev.paperboard.discord", action: "post", inputs })).toEqual({ isError: true, text: "inputs is an object of values by input name." });
+            expect(await call("run_block", { panel: SERVERS, block: "command.start", inputs })).toEqual({ isError: true, text: "inputs is an object of values by input key." });
         }
-        const big = await call("run_action", { panel: "dev.paperboard.discord", action: "post", inputs: { text: "x".repeat(70 * 1024) } });
+        const big = await call("run_block", { panel: SERVERS, block: "command.start", inputs: { server: "x".repeat(70 * 1024) } });
         expect(big).toEqual({ isError: true, text: "inputs are limited to 64 KB." });
-        expect(calls).toEqual([]);
+        expect(ran).toEqual([]);
     });
 });
 

@@ -60,7 +60,7 @@ function openTools() {
         save: (server: ServerSpec) => viewOf(calls.saveServer({ server })),
         remove: (name: string) => viewOf(calls.removeServer({ name })),
         restart: (name: string) => viewOf(calls.restartServer({ name })),
-        setActions: (on: boolean) => viewOf(calls.setActions({ on })),
+        setBlocks: (on: boolean) => viewOf(calls.setBlocks({ on })),
         setSecret: (server: string, name: string, value: string) => viewOf(calls.setSecret({ server, name, value })),
         signIn: (name: string) => viewOf(calls.signInServer({ name })),
         finishSignIn: (name: string, address: string) => viewOf(calls.finishServerSignIn({ name, address })),

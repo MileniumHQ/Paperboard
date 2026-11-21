@@ -1,6 +1,6 @@
 // What the Tools page and the service agree on: the tool servers the agent
 // may use (MCP servers on this computer or inside its own), whether it may
-// run other panels' actions, and what each server is doing right now.
+// use other panels' blocks, and what each server is doing right now.
 //
 // The config is a document of its own (tools.json). Secret values never
 // appear in it: it names them, and the daemon's vault holds them, under
@@ -65,13 +65,13 @@ export type ServerSpec = Infer<typeof serverSpec>;
 export const OAUTH_SECRET = "oauth";
 
 const toolsConfig = shape.object({
-    /** may the agent find and run other panels' actions */
-    actions: shape.boolean(),
+    /** may the agent find and use other panels' blocks */
+    blocks: shape.boolean(),
     servers: shape.list(serverSpec),
 });
 export type ToolsConfig = Infer<typeof toolsConfig>;
 
-export const DEFAULT_TOOLS: ToolsConfig = { actions: true, servers: [] };
+export const DEFAULT_TOOLS: ToolsConfig = { blocks: true, servers: [] };
 
 const serverStatus = shape.object({
     name: shape.text(),
