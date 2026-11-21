@@ -24,6 +24,7 @@ import type { AppSettingsData } from "../../lib/appSettings";
 import type { UpdateCheckOutcome } from "../../../../shared/updateQueue";
 import { computerIcon } from "../computer/computerIcon";
 import PanelPermissionSettings from "./PanelPermissionSettings";
+import IssueReport from "./IssueReport";
 // Inlined at build time: the viewer always shows the exact files shipped
 // in this repo, so the text cannot drift from the license on disk.
 import paperboardLicenseText from "../../../../../LICENSE?raw";
@@ -91,6 +92,7 @@ export function updateOutcomeText(outcome: UpdateCheckOutcome): string {
     }
     return said.join(" ");
 }
+const REPORT_NOTE = "A coding agent on this computer reads Paperboard's code, finds the likely cause, and writes the issue for you.";
 const QUIT_NOTE = "Stops the panels on this computer, unless its server daemon runs as a service. Panels on other computers keep running.";
 
 const quitApp = () => shellIpc().send("quit-app");
@@ -141,6 +143,8 @@ export default function AppSettings(props: {
         return check === null ? UPDATE_NOTE : check === "checking" ? UPDATE_CHECKING : updateOutcomeText(check);
     };
 
+    const [reportOpen, setReportOpen] = createSignal(false);
+
     const startOnMissing = () => startTarget(props.settings.startOn, props.computers).missing;
     // one value object per settings change, not a new one on every read
     const settingsValue = createMemo(() => ({ ...props.settings }) as Record<string, any>);
@@ -164,7 +168,7 @@ export default function AppSettings(props: {
                 <PaperPageHeader
                     icon="settings"
                     title="App Settings"
-                    subtitle={isBrowserShell() ? "Appearance, startup, and licenses." : "Appearance, startup, updates, and licenses."}
+                    subtitle={isBrowserShell() ? "Appearance, startup, and licenses." : "Appearance, startup, updates, help, and licenses."}
                 />
             </Show>
             {/* settings that didn't load are the defaults, not yours: none shows until they load */}
@@ -246,6 +250,20 @@ export default function AppSettings(props: {
             {/* browser mode: the browser keeps its own permissions */}
             <Show when={!isBrowserShell() && props.panelName}>
                 {(panelName) => <PanelPermissionSettings panelName={panelName()} />}
+            </Show>
+
+            {/* the agent runs on the computer showing this window, which a browser tab or a phone isn't */}
+            <Show when={!props.compact && !isBrowserShell()}>
+                <PaperSectionHeader icon="help" title="Help" />
+                <PaperSettingList autoHeight>
+                    <PaperSettingItem title="Report an Issue" description={REPORT_NOTE}>
+                        <PaperButton onClick={() => setReportOpen(true)}>
+                            <PaperIcon>bug_report</PaperIcon>
+                            Report an Issue
+                        </PaperButton>
+                    </PaperSettingItem>
+                </PaperSettingList>
+                <IssueReport open={reportOpen()} onClose={() => setReportOpen(false)} />
             </Show>
 
             <PaperSectionHeader icon="license" title="Licenses" />
