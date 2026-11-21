@@ -121,7 +121,7 @@ export function Example() {
                         <td><PaperCode>direction</PaperCode></td>
                         <td><PaperCode>"horizontal" | "vertical"</PaperCode></td>
                         <td><PaperCode>"vertical"</PaperCode></td>
-                        <td><PaperCode>"horizontal"</PaperCode> lays the items in a wrapping row, sharing the width. Vertical stacks them at full width.</td>
+                        <td><PaperCode>"horizontal"</PaperCode> lays the items in rows of equal columns at least <PaperCode>field</PaperCode> wide (160px): they share a row while they fit, and the rest break onto the next row. Vertical stacks them at full width.</td>
                     </tr>
                     <tr>
                         <td><PaperCode>horizontal</PaperCode></td>
@@ -283,7 +283,8 @@ export function ProjectPicker(props: {
 
             <PaperText preset="subheader" as="h3" id="row">A row of options</PaperText>
             <PaperText preset="body" as="p">
-                Use <PaperCode>horizontal</PaperCode> for a few short options that fit side by side.
+                Use <PaperCode>horizontal</PaperCode> for short options that can sit side by side.
+                Items share the row while each fits, and break into more rows when there are more than fit, so the same selector works in a wide dialog and on a phone.
             </PaperText>
             <PaperCard data-docs-demo padding="double" surface="front">
                 <PaperSelector name="docs-row" horizontal defaultValue="a">
@@ -297,6 +298,16 @@ export function ProjectPicker(props: {
     <PaperSelectorItem value="b" icon="dark_mode">Dark</PaperSelectorItem>
 </PaperSelector>`}
             </PaperCode>
+            <PaperCard data-docs-demo padding="double" surface="front">
+                <PaperSelector name="docs-rows" horizontal defaultValue="mon">
+                    <PaperSelectorItem value="mon" icon="calendar_today">Monday</PaperSelectorItem>
+                    <PaperSelectorItem value="tue" icon="calendar_today">Tuesday</PaperSelectorItem>
+                    <PaperSelectorItem value="wed" icon="calendar_today">Wednesday</PaperSelectorItem>
+                    <PaperSelectorItem value="thu" icon="calendar_today">Thursday</PaperSelectorItem>
+                    <PaperSelectorItem value="fri" icon="calendar_today">Friday</PaperSelectorItem>
+                    <PaperSelectorItem value="sat" icon="calendar_today">Saturday</PaperSelectorItem>
+                </PaperSelector>
+            </PaperCard>
         </PaperFlex>
     );
 }
