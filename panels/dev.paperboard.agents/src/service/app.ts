@@ -266,7 +266,7 @@ export class AiApp {
                 // a summary is written from what it already knows: no texting, no work
                 if (this.conversation?.compacting) return { text: "You're writing a summary of the conversation: no texts and no tools until it's done.", isError: true };
                 // a call that arrives is written: whatever the agent was typing is done, whatever its harness reports
-                this.conversation?.working();
+                this.conversation?.called(name);
                 if (!this.turnLog) return tools.call(name, args);
                 const started = Date.now();
                 try {

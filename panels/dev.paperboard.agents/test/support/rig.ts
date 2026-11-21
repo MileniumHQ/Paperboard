@@ -8,6 +8,7 @@ import type { Sections } from "../../src/service/toolsets";
 import { startComputerMcp, type ComputerMcp } from "../../src/service/computerMcp";
 import { Conversation, TURN_PROC_ID } from "../../src/service/conversation";
 import { messagesToolset } from "../../src/service/messages";
+import { SignIns } from "../../src/service/signIn";
 import { toolbox } from "../../src/service/toolsets";
 import { brainProgram, fakeEnv, fakeLog, Recorder, TestHost, tempDir } from "./host";
 
@@ -37,9 +38,26 @@ export async function conversationRig(o: { harness?: Harness; contextBudget?: nu
     const dir = path.join(root, "storage", "conversation");
     const codexHome = path.join(root, "storage", "brains", "codex");
     fs.mkdirSync(codexHome, { recursive: true });
-    // the real messages toolset, texting the rig's conversation
-    const tools = toolbox([messagesToolset({ say: (text, replyTo, files) => rig.conversation.say(text, replyTo, files), status: (tone, text) => rig.conversation.status(tone, text) })]);
-    const mcp = await startComputerMcp(tools);
+    // the real messages toolset, texting the rig's conversation,
+    // and a card's: a sign-in on a page the computer pretends to have open, filled by nothing
+    const signIns = new SignIns({
+        prepare: async (args) => ({ text: JSON.stringify({ site: "example.com", fields: (args.fields as unknown[]).map(() => ({ secret: false })) }), images: [{ data: "aW1n", type: "image/png" }] }),
+        fill: async () => ({ ok: true }),
+        post: (entry) => rig.conversation.post(entry),
+        tell: (text) => rig.conversation.tell(text),
+    });
+    const tools = toolbox([
+        messagesToolset({ say: (text, replyTo, files) => rig.conversation.say(text, replyTo, files), status: (tone, text) => rig.conversation.status(tone, text) }),
+        signIns.toolset(),
+    ]);
+    // a call that arrives is written, as the service tells the conversation (app.ts)
+    const mcp = await startComputerMcp({
+        list: () => tools.list(),
+        call: (name, args) => {
+            rig.conversation.called(name);
+            return tools.call(name, args);
+        },
+    });
     const settings: Settings = { name: "Ada", harness, model: null, compaction: "summarize" };
     const entries = new Recorder<ChatEntry>();
     const states = new Recorder<ChatState>();

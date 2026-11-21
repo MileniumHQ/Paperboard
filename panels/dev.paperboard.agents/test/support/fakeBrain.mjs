@@ -12,13 +12,15 @@
 //   [[hold]]   say {"type":"fake.holding"} and wait for SIGTERM or $FAKE_DIR/release
 //   [[fail]]   print to stderr and exit 1
 //   [[silent]] end without a reply, and again when told it hadn't texted
+//   [[lateline]] (Claude) say the send_message began only after it's made, then hold (as [[hold]])
 //   [[slowtext]] (Claude) hold (as [[hold]]) while writing the send_message, before it's called
 //   [[work]]   (Claude) think aloud in plain output and use a tool before replying, holding (as [[hold]]) while it works
 //   [[plain]]  reply in plain output instead of send_message, which the user never sees
 //   [[tools]]  list the panel's MCP tools with the token from the environment
 //   [[big]]    report a context past any budget
 //   [[notloggedin]] (Claude) Claude's own "Not logged in" reply
-//   [[ask]]    (Codex) call the panel's MCP tools in plan.ask ({ name, arguments }), in order, before replying
+//   [[ask]]    call the panel's MCP tools in plan.ask ({ name, arguments }), in order, before replying
+//   [[slowask]] (Claude, with [[ask]]) hold (as [[hold]]) while writing each of those calls, before it's made
 //   [[replies]] (Codex) text each of plan.replies in turn, each once $FAKE_DIR/release is there, in place of the reply
 
 import fs from "node:fs";
@@ -132,9 +134,10 @@ async function sendMessage(url, text) {
     if (res.status !== 200 || body.result?.isError) throw new Error(`send_message was refused: ${JSON.stringify(body)}`);
 }
 
-/** [[ask]]: the panel's tools in plan.ask, called in order; each answer is logged, and a refusal ends the turn */
-async function ask(url) {
+/** [[ask]]: the panel's tools in plan.ask, called in order; each answer is logged, and a refusal ends the turn. `begin` runs as each call starts being written */
+async function ask(url, begin = async () => {}) {
     for (const [i, tool] of (plan.ask ?? []).entries()) {
+        await begin(tool);
         const res = await fetch(url, {
             method: "POST",
             headers: { "content-type": "application/json", authorization: `Bearer ${process.env.PAPERBOARD_COMPUTER_MCP_TOKEN}` },
@@ -334,6 +337,12 @@ async function claude() {
         const url = at("--mcp-config") ? JSON.parse(at("--mcp-config")).mcpServers.paperboard.url : null;
         await cues(message, () => url);
         if (silent(message, session)) process.exit(0);
+        if (newest(message).includes("[[ask]]")) {
+            await ask(url, async (tool) => {
+                out({ type: "stream_event", event: { type: "content_block_start", index: 0, content_block: { type: "tool_use", id: "toolu_ask", name: `mcp__paperboard__${tool.name}`, input: {} } } });
+                if (newest(message).includes("[[slowask]]")) await hold();
+            });
+        }
         const used = newest(message).includes("[[big]]") ? 500_000 : 100;
         const reply = plan.reply ?? "ok";
         if (newest(message).includes("[[work]]")) {
@@ -344,10 +353,16 @@ async function claude() {
         }
         if (texts(message, url)) {
             const call = { type: "tool_use", id: "toolu_fake", name: "mcp__paperboard__send_message", input: { text: reply } };
-            out({ type: "stream_event", event: { type: "content_block_start", index: 0, content_block: { ...call, input: {} } } });
+            const begin = () => out({ type: "stream_event", event: { type: "content_block_start", index: 0, content_block: { ...call, input: {} } } });
+            // the line that says the text began can reach the panel after the text itself
+            if (!newest(message).includes("[[lateline]]")) begin();
             // still writing the text, until the test has looked at the chat
             if (newest(message).includes("[[slowtext]]")) await hold();
             await sendMessage(url, reply);
+            if (newest(message).includes("[[lateline]]")) {
+                begin();
+                await hold();
+            }
             out({ type: "assistant", message: { usage: { input_tokens: used }, content: [call] } });
         } else out({ type: "assistant", message: { usage: { input_tokens: used }, content: [{ type: "text", text: reply }] } });
         out({ type: "result", is_error: false, modelUsage: { m: { contextWindow: 1_000_000 } } });

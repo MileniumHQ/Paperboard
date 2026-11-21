@@ -149,6 +149,13 @@ export class Conversation {
      * and any other tool are not typing.
      */
     private typing = false;
+    /**
+     * The running turn's calls to tools written to the user, by name: begun (as its harness shows them) and
+     * arrived. The harness's output and the calls come by different ways, so a call can arrive before the line
+     * that says it began: begun no more often than arrived is a call that's already done, not typing.
+     */
+    private begun = new Map<string, number>();
+    private arrived = new Map<string, number>();
     private context: Context | null = null;
     private carry: Carry | null = null;
     private compactingNow = false;
@@ -404,9 +411,23 @@ export class Conversation {
         this.put({ id: this.newId(), at: Date.now(), kind: "status", tone, text: line });
     }
 
-    /** A tool call arrived, or the model began one that isn't written to the user: whatever it was writing is done. */
+    /** A call to one of the panel's tools arrived: it's written, so whatever the agent was typing is done. */
+    called(tool: string) {
+        this.arrived.set(tool, (this.arrived.get(tool) ?? 0) + 1);
+        this.setTyping(false);
+    }
+
+    /** The model began a call that isn't written to the user, or one it wrote is done: it's working. */
     working() {
         this.setTyping(false);
+    }
+
+    /** The model began a call to one of the panel's tools, or to one of its harness's own (null). */
+    private began(tool: string | null) {
+        if (tool === null || !this.deps.writes(tool)) return this.setTyping(false);
+        const begun = (this.begun.get(tool) ?? 0) + 1;
+        this.begun.set(tool, begun);
+        this.setTyping(begun > (this.arrived.get(tool) ?? 0));
     }
 
     private setTyping(on: boolean) {
@@ -487,6 +508,8 @@ export class Conversation {
         this.answering = batch.map((m) => m.id);
         // nothing is being written yet: the model thinks first
         this.typing = false;
+        this.begun.clear();
+        this.arrived.clear();
         this.running = this.turn(message)
             .catch((e: Error) => {
                 this.put({ id: this.newId(), at: Date.now(), kind: "error", title: "Not answered", text: e.message });
@@ -630,7 +653,7 @@ export class Conversation {
                     if (ev.used !== undefined) context.used = ev.used;
                     if (ev.size !== undefined) context.size = ev.size;
                 } else if (ev.type === "message") plain.push(ev.text);
-                else if (ev.type === "tool") this.setTyping(ev.name !== null && this.deps.writes(ev.name));
+                else if (ev.type === "tool") this.began(ev.name);
                 else if (ev.type === "working") this.working();
             },
             stop: () => this.killTurn(),
