@@ -13,6 +13,7 @@ Paperboard is a dashboard for self-hostable programs. Panels are like the apps. 
 - **Privacy & outbound services:** `apps/paperdocs/src/site/pages/privacy.md` only lists Paperboard's own services and backup providers; panel outbound services go in each panel's `manifest.json` under `store.services`.
 - **Fail loudly:** Never swallow errors—use `showError` / `PaperToast` for one-off failures or `PaperError` for standing ones. Gates flag log-only catches; mark intentional catches (cleanup, shutdown, state-shown errors) or non-polling test waits with `// quiet: <reason>`.
 - **Don't run remote code:** Never let a panel run code or commands from outside the panel unless directed.
+- **Untrusted URLs:** Fetch URLs from model output or other untrusted input in the service with `fetchPublic` instead of loading them directly in a page. Assets from a panel's known services are fine.
 - **No weird fallbacks:** Don't invent placeholders when something isn't available—throw an error and handle it.
 - **Changelogs are suspended:** No changelogs right now.
 - **Nothing ships that is unfinished:** Write production-ready code, not experiments.
@@ -40,7 +41,7 @@ Some rules about Git:
 - **Keep the workspace clean:** Only code, assets and markdown in this repo, no logs, builds, etc should end up here.
 - Conventional commits (`feat:`, `fix:`, `chore:`). Never `stuff` or `checkpoint`.
 - **Shared checkout:** Other sessions may switch branches mid-task. Check `git branch --show-current` before committing or merging, commit with `git commit -- <paths>` (never `git add -A` or bare `git commit`), never touch others' uncommitted files, and never use `git stash`.
-- **Branches:** `company` is only for accounts work (sign-in, Paperboard Cloud, web hosting). Everything else goes to `main`. Merge `main` into `company`, never the reverse, and never push `company`.
+- **Branches:** `company` is only for accounts work (sign-in, Paperboard Cloud, web hosting). Everything else goes to `main`, even if you're sitting on `company`. Merge `main` into `company`, never the reverse, and never push `company`.
 
 **Gates:**
 
