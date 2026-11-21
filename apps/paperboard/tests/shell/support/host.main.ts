@@ -17,7 +17,7 @@ import { startBrowserHost } from "../../../src/main/browserHost";
 import { BrowserSessions } from "../../../src/main/browserSessions";
 import { createShellInvokeHandlers } from "../../../src/main/communication/shellHandlers";
 import { shellServer, type CallHandlers } from "../../../src/main/communication/shellServer";
-import type { ShellCall } from "../../../src/shared/shellContract";
+import type { IssueReportResult, IssueReportSetup, ShellCall } from "../../../src/shared/shellContract";
 import { addShellPushSink, pushToShells } from "../../../src/main/communication/shellPush";
 import connectionPool from "../../../src/main/communication/papercrane/ConnectionPool";
 import discovery from "../../../src/main/communication/discovery";
@@ -27,7 +27,7 @@ import { launchOptionsFromArgv } from "../../../src/shared/launchOptions";
 import { initialAppUpdateState, type AppUpdateState } from "../../../src/shared/appUpdate";
 import { initialUpdateQueueState, type UpdateQueueState } from "../../../src/shared/updateQueue";
 import { cancelGoogleSignIn, signInToGoogleDrive } from "../../../src/main/googleOAuth";
-import { ANSWER, type Command, type HostCommands } from "./protocol";
+import { ANSWER, type Command, type HostCommands, type IssueReportTestState } from "./protocol";
 
 const rendererDir = process.argv[2];
 if (!rendererDir) throw new Error("usage: host.main.ts <built renderer dir>");
@@ -52,6 +52,19 @@ let appUpdate: AppUpdateState = { ...initialAppUpdateState };
 // counted and never comes back, and nothing past it is reachable
 let googleSignIns = 0;
 const googleSignInWaiters: (() => void)[] = [];
+
+// Report an Issue test driver: no real coding agent runs in CI, so tests drive
+// setup, streamed entries, finish and inspect stop/steer/file/open calls
+let issueReportSetup: IssueReportSetup | null = null;
+let activeReport: { id: string; resolve: (result: IssueReportResult) => void } | null = null;
+const reportStartWaiters: ((reportId: string) => void)[] = [];
+const reportState: IssueReportTestState = {
+    activeReportId: null,
+    stopped: [],
+    steered: [],
+    filed: [],
+    openedLinks: [],
+};
 
 // what an Electron window serves that this suite has no part in
 const notHere = (channel: string) => () => {
@@ -95,13 +108,37 @@ const calls: CallHandlers<ShellCall, unknown> = {
     // a window says whether its panels hold unsaved work; no quit asks here
     "panels-unsaved": () => undefined,
     "quit-answer": notHere("quit-answer"),
-    // a report runs a coding agent on this computer, which the suite has none of
-    "issue-report-setup": notHere("issue-report-setup"),
-    "issue-report-start": notHere("issue-report-start"),
-    "issue-report-steer": notHere("issue-report-steer"),
-    "issue-report-stop": notHere("issue-report-stop"),
-    "issue-report-file": notHere("issue-report-file"),
-    "issue-report-open-link": notHere("issue-report-open-link"),
+    // a report runs a coding agent on this computer, which the suite drives through host commands
+    "issue-report-setup": () => {
+        if (!issueReportSetup) throw new Error("Channel not available in browser mode: issue-report-setup");
+        return issueReportSetup;
+    },
+    "issue-report-start": ({ reportId }) =>
+        new Promise<IssueReportResult>((resolve) => {
+            activeReport?.resolve({ status: "stopped" });
+            activeReport = { id: reportId, resolve };
+            reportState.activeReportId = reportId;
+            for (const wake of reportStartWaiters.splice(0)) wake(reportId);
+        }),
+    "issue-report-steer": ({ reportId, text }) => {
+        reportState.steered.push({ reportId, text });
+    },
+    "issue-report-stop": ({ reportId }) => {
+        reportState.stopped.push(reportId);
+        if (activeReport?.id === reportId) {
+            const current = activeReport;
+            activeReport = null;
+            reportState.activeReportId = null;
+            current.resolve({ status: "stopped" });
+        }
+    },
+    "issue-report-file": ({ reportId }) => {
+        reportState.filed.push(reportId);
+        return `https://github.com/MileniumHQ/Paperboard/issues/999`;
+    },
+    "issue-report-open-link": ({ reportId, index }) => {
+        reportState.openedLinks.push({ reportId, index });
+    },
 };
 
 const host = await startBrowserHost({
@@ -137,6 +174,33 @@ const handlers: { [K in keyof HostCommands]: (command: HostCommands[K]["command"
         while (googleSignIns < command.atLeast) await new Promise<void>((wake) => googleSignInWaiters.push(wake));
         return googleSignIns;
     },
+    "issue-report-configure": async (command) => {
+        issueReportSetup = command.setup;
+        return true;
+    },
+    "issue-report-wait-start": async () => {
+        if (activeReport) return activeReport.id;
+        return new Promise<string>((resolve) => reportStartWaiters.push(resolve));
+    },
+    "issue-report-push": async (command) => {
+        pushToShells("issue-report-entry", command.entry);
+        return true;
+    },
+    "issue-report-finish": async (command) => {
+        const current = activeReport;
+        if (!current) throw new Error("No active issue report to finish");
+        activeReport = null;
+        reportState.activeReportId = null;
+        current.resolve(command.result);
+        return true;
+    },
+    "issue-report-state": async () => ({
+        activeReportId: reportState.activeReportId,
+        stopped: [...reportState.stopped],
+        steered: [...reportState.steered],
+        filed: [...reportState.filed],
+        openedLinks: [...reportState.openedLinks],
+    }),
 };
 
 async function run(command: Command): Promise<unknown> {

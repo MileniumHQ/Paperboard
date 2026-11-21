@@ -132,16 +132,27 @@ const issueReportSetup = shape.object({
     /** the question above the description, from the repo's trissue config */
     prompt: shape.text(),
     agents: shape.list(issueAgent),
-    /** every agent trissue can run, installed or not */
+    /** featured coding agents trissue can run, installed or not */
     known: shape.list(shape.text()),
-    /** where else the issue can go, in the config's order */
-    links: shape.list(shape.object({ label: shape.text(), description: shape.optional(shape.text()) })),
+    /** where else the issue can go, in the config's order; includesIssue is false when the link needs clipboard paste */
+    links: shape.list(
+        shape.object({
+            label: shape.text(),
+            description: shape.optional(shape.text()),
+            includesIssue: shape.boolean(),
+        }),
+    ),
 });
 export type IssueReportSetup = Infer<typeof issueReportSetup>;
 
 /** Whether the issue can be filed with the GitHub CLI; null when the config files no GitHub issues. */
 const issueGitHub = shape.nullable(
-    shape.object({ repo: shape.text(), state: shape.oneOf("missing", "signed-out", "signed-in"), login: shape.optional(shape.text()) }),
+    shape.object({
+        repo: shape.text(),
+        state: shape.oneOf("missing", "signed-out", "signed-in", "error"),
+        login: shape.optional(shape.text()),
+        error: shape.optional(shape.text()),
+    }),
 );
 export type IssueGitHub = Infer<typeof issueGitHub>;
 

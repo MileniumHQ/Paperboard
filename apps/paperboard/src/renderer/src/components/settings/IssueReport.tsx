@@ -1,5 +1,4 @@
-import { For, Match, Show, Switch, createEffect, createMemo, createSignal, on, onCleanup } from "solid-js";
-import { createStore, produce } from "solid-js/store";
+import { For, Match, Show, Switch, batch, createSignal, onCleanup } from "solid-js";
 import {
     PaperButton,
     PaperCard,
@@ -10,6 +9,8 @@ import {
     PaperError,
     PaperFlex,
     PaperInput,
+    PaperLink,
+    PaperLoader,
     PaperMarkdown,
     PaperModal,
     PaperSelector,
@@ -23,40 +24,33 @@ import {
 } from "@mileniumhq/paperui";
 import { shellIpc } from "../../lib/shell";
 import { AgentIcon } from "./AgentIcon";
-import type { IssueReportEntry, IssueReportResult } from "../../../../shared/shellContract";
-
-type Written = Extract<IssueReportResult, { status: "written" }>;
+import {
+    GITHUB_DESTINATION,
+    defaultDestination,
+    joinOr,
+    linkDescription,
+    linkIndex,
+    linkValue,
+    upsertConsoleEntry,
+    type WrittenReport,
+} from "./issueReportModel";
 
 // what the window shows: the description, the agent at work, or the issue it wrote
-type Phase = { step: "describe" } | { step: "working"; reportId: string } | { step: "written"; reportId: string; issue: Written };
+type Phase =
+    | { step: "describe" }
+    | { step: "working"; reportId: string }
+    | { step: "written"; reportId: string; issue: WrittenReport };
 
-// a failed tool is an error; a refused one is a warning; the person's own words are commands;
-// tool lines stay plain, so a path is never read as Markdown
-function consoleEntry(entry: IssueReportEntry): PaperConsoleEntry {
-    switch (entry.kind) {
-        case "steer":
-            return { type: "command", content: entry.text };
-        case "blocked":
-            return { type: "warn", content: `Refused: ${entry.text}` };
-        case "notice":
-            return { type: "info", content: entry.text };
-        case "tool":
-            return { type: entry.status === "failed" ? "error" : "info", content: entry.text };
-        default:
-            // the agent's thinking and replies are Markdown
-            return { type: "output", content: entry.text, markdown: true };
-    }
-}
+const REPORT_DOCS_URL = "https://paperboard.dev/docs/paperboard/troubleshooting/#report-an-issue";
 
-const GITHUB = "github";
-const linkValue = (index: number) => `link:${index}`;
-
-function gitHubNote(github: NonNullable<Written["github"]>): string {
+function gitHubNote(github: NonNullable<WrittenReport["github"]>): string {
     switch (github.state) {
         case "signed-in":
             return `Files it in ${github.repo} as ${github.login}.`;
         case "signed-out":
             return "Sign the GitHub CLI in with gh auth login in a terminal to file it from here.";
+        case "error":
+            return `Couldn't check the GitHub CLI: ${github.error ?? "unknown error"}`;
         default:
             return "Install the GitHub CLI (gh) to file it from here.";
     }
@@ -69,8 +63,17 @@ function gitHubNote(github: NonNullable<Written["github"]>): string {
  * and close.
  */
 export default function IssueReport(props: { open: boolean; onClose: () => void }) {
-    // read afresh each time it opens: an agent may have been installed since
-    const setup = createRead(() => shellIpc().invoke("issue-report-setup"), { source: () => props.open });
+    const [phase, setPhase] = createSignal<Phase>({ step: "describe" });
+    const reportId = () => {
+        const now = phase();
+        return now.step === "describe" ? null : now.reportId;
+    };
+
+    // read afresh each time the form opens: an agent may have been installed since,
+    // without touching an already-written issue when the modal is reopened
+    const setup = createRead(() => shellIpc().invoke("issue-report-setup"), {
+        source: () => props.open && phase().step === "describe",
+    });
 
     const [description, setDescription] = createSignal("");
     const [pickedAgent, setPickedAgent] = createSignal<string | null>(null);
@@ -80,35 +83,27 @@ export default function IssueReport(props: { open: boolean; onClose: () => void 
         return agents.find((found) => found.id === picked)?.id ?? agents[0]?.id ?? null;
     };
 
-    const [phase, setPhase] = createSignal<Phase>({ step: "describe" });
-    const reportId = () => {
-        const now = phase();
-        return now.step === "describe" ? null : now.reportId;
-    };
-
-    // what the agent did, each line kept under its id as it changes
-    const [entries, setEntries] = createStore<IssueReportEntry[]>([]);
-    const consoleEntries = createMemo(() => entries.map(consoleEntry));
+    // what the agent did, converted once per update so untouched rows keep their identity
+    const [entries, setEntries] = createSignal<PaperConsoleEntry[]>([]);
     onCleanup(
         shellIpc().on("issue-report-entry", (entry) => {
             const now = phase();
             if (now.step !== "working" || now.reportId !== entry.reportId) return;
-            setEntries(
-                produce((list) => {
-                    const at = list.findIndex((line) => line.id === entry.id);
-                    if (at === -1) list.push(entry);
-                    else list[at] = entry;
-                }),
-            );
+            setEntries((list) => upsertConsoleEntry(list, entry));
         }),
     );
+
+    // where the written issue goes: set when the issue finishes, then chosen by the user
+    const [destination, setDestination] = createSignal<string | null>(null);
 
     const start = () => {
         const chosen = agent();
         if (!chosen) return;
         const id = crypto.randomUUID();
-        setEntries([]);
-        setPhase({ step: "working", reportId: id });
+        batch(() => {
+            setEntries([]);
+            setPhase({ step: "working", reportId: id });
+        });
         // a report that was stopped or replaced has no one to answer
         const current = () => reportId() === id;
         shellIpc()
@@ -116,8 +111,14 @@ export default function IssueReport(props: { open: boolean; onClose: () => void 
             .then(
                 (result) => {
                     if (!current()) return;
-                    if (result.status === "stopped") setPhase({ step: "describe" });
-                    else setPhase({ step: "written", reportId: id, issue: result });
+                    if (result.status === "stopped") {
+                        setPhase({ step: "describe" });
+                    } else {
+                        batch(() => {
+                            setDestination(defaultDestination(result, setup.value()?.links ?? []));
+                            setPhase({ step: "written", reportId: id, issue: result });
+                        });
+                    }
                 },
                 (err) => {
                     if (!current()) return;
@@ -136,6 +137,7 @@ export default function IssueReport(props: { open: boolean; onClose: () => void 
             .invoke("issue-report-stop", { reportId: now.reportId })
             .catch((err) => showError("Couldn't stop the agent", err));
     };
+    onCleanup(stop);
 
     const steer = (text: string) => {
         const id = reportId();
@@ -145,41 +147,48 @@ export default function IssueReport(props: { open: boolean; onClose: () => void 
             .catch((err) => showError("Couldn't tell the agent", err));
     };
 
-    const close = () => {
-        stop();
-        if (phase().step === "written") setPhase({ step: "describe" });
-        props.onClose();
-    };
-
-    // where the written issue goes: GitHub when the CLI can file it, else the config's first link
-    const [destination, setDestination] = createSignal<string | null>(null);
-    createEffect(
-        on(phase, (now) => {
-            if (now.step !== "written") return;
-            setDestination(now.issue.github?.state === "signed-in" ? GITHUB : setup.value()?.links.length ? linkValue(0) : null);
-        }),
-    );
-
     const send = createAction();
-    const sendLabel = () => {
-        const chosen = destination();
-        if (chosen === GITHUB) return "File on GitHub";
-        const link = chosen ? setup.value()?.links[Number(chosen.slice("link:".length))] : undefined;
-        return link ? `Open ${link.label}` : "Send";
+    const busy = () => phase().step === "working" || send.busy();
+
+    // closing never discards a written issue or stops a run: Stop or Start over is explicit
+    const close = () => {
+        if (!busy()) props.onClose();
     };
+
+    const selectedLink = () => {
+        const index = linkIndex(destination());
+        return index === null ? undefined : setup.value()?.links[index];
+    };
+
+    const sendLabel = () => {
+        if (destination() === GITHUB_DESTINATION) return "File on GitHub";
+        const link = selectedLink();
+        if (!link) return "Send";
+        return link.includesIssue ? `Open ${link.label}` : `Copy and open ${link.label}`;
+    };
+
     const sendIssue = (now: Extract<Phase, { step: "written" }>) => {
         const chosen = destination();
         if (!chosen) return;
         void send.run("Couldn't send the issue", async () => {
-            if (chosen === GITHUB) {
+            if (chosen === GITHUB_DESTINATION) {
                 const url = await shellIpc().invoke("issue-report-file", { reportId: now.reportId });
                 showToast({ variant: "success", title: "Issue filed", message: url, action: { label: "Open", onClick: () => window.open(url) } });
-            } else {
-                await shellIpc().invoke("issue-report-open-link", { reportId: now.reportId, index: Number(chosen.slice("link:".length)) });
+                batch(() => {
+                    setDescription("");
+                    setPhase({ step: "describe" });
+                });
+                props.onClose();
+                return;
             }
-            setDescription("");
-            setPhase({ step: "describe" });
-            props.onClose();
+            const index = linkIndex(chosen);
+            if (index === null) return;
+            const link = setup.value()?.links[index];
+            await shellIpc().invoke("issue-report-open-link", { reportId: now.reportId, index });
+            // external links hand off to another app, so keep the written issue until Start over
+            if (link && !link.includesIssue) {
+                showToast({ variant: "success", title: "Issue copied", message: `Paste it into ${link.label}.` });
+            }
         });
     };
 
@@ -193,22 +202,34 @@ export default function IssueReport(props: { open: boolean; onClose: () => void 
             open={props.open}
             title="Report an Issue"
             size="large"
-            onClose={close}
+            onClose={busy() ? undefined : close}
+            closeOnEsc={!busy()}
+            closeOnBackdropClick={!busy()}
             footer={
                 <Switch>
                     <Match when={phase().step === "describe"}>
-                        <PaperButton variant="text" onClick={close}>Cancel</PaperButton>
-                        <PaperEffect variant="primary">
-                            <PaperButton disabled={!description().trim() || !agent()} onClick={start}>Investigate</PaperButton>
-                        </PaperEffect>
+                        <PaperButton variant="text" onClick={close}>
+                            {agent() ? "Cancel" : "Close"}
+                        </PaperButton>
+                        <Show when={agent()}>
+                            <PaperEffect variant="primary">
+                                <PaperButton disabled={!description().trim()} onClick={start}>
+                                    Investigate
+                                </PaperButton>
+                            </PaperEffect>
+                        </Show>
                     </Match>
                     <Match when={phase().step === "working"}>
-                        <PaperButton variant="danger" onClick={stop}>Stop</PaperButton>
+                        <PaperButton variant="danger" onClick={stop}>
+                            Stop
+                        </PaperButton>
                     </Match>
                     <Match when={written()}>
                         {(now) => (
                             <>
-                                <PaperButton variant="text" disabled={send.busy()} onClick={() => setPhase({ step: "describe" })}>Start over</PaperButton>
+                                <PaperButton variant="text" disabled={send.busy()} onClick={() => setPhase({ step: "describe" })}>
+                                    Start over
+                                </PaperButton>
                                 <PaperCopyButton text={now().issue.text} label="Copy issue" variant="outline" />
                                 <PaperEffect variant="primary">
                                     <PaperButton disabled={send.busy() || !destination()} onClick={() => sendIssue(now())}>
@@ -222,7 +243,7 @@ export default function IssueReport(props: { open: boolean; onClose: () => void 
             }
         >
             <Switch>
-                <Match when={setup.error()}>
+                <Match when={phase().step === "describe" && setup.error()}>
                     {(err) => (
                         <PaperError
                             title="Couldn't get ready to report"
@@ -230,6 +251,9 @@ export default function IssueReport(props: { open: boolean; onClose: () => void 
                             action={{ label: "Try again", disabled: setup.loading(), onClick: () => void setup.reload() }}
                         />
                     )}
+                </Match>
+                <Match when={phase().step === "describe" && !setup.value()}>
+                    <PaperLoader loaderStatus="indeterminate" centered delay={150} label="Looking for coding agents..." />
                 </Match>
                 <Match when={phase().step === "describe" && setup.value()}>
                     {(ready) => (
@@ -239,13 +263,28 @@ export default function IssueReport(props: { open: boolean; onClose: () => void 
                                 <PaperEmptyState
                                     icon="smart_toy"
                                     title="No coding agent found"
-                                    description={`A coding agent on this computer reads Paperboard's code and writes the issue. Install one of ${ready().known.join(", ")}, then open this again.`}
-                                />
+                                    description={
+                                        <>
+                                            A coding agent on this computer reads Paperboard's code and writes the issue. Install one such as{" "}
+                                            {joinOr(ready().known)}, or another supported agent listed in{" "}
+                                            <PaperLink href={REPORT_DOCS_URL} target="_blank" rel="noopener noreferrer">
+                                                Report an issue
+                                            </PaperLink>
+                                            , then check again.
+                                        </>
+                                    }
+                                >
+                                    <PaperButton variant="outline" size="small" disabled={setup.loading()} onClick={() => void setup.reload()}>
+                                        Check again
+                                    </PaperButton>
+                                </PaperEmptyState>
                             }
                         >
                             <PaperFlex direction="column" gap="full">
                                 <PaperInput
                                     label={ready().prompt}
+                                    placeholder="Describe what happened and what you expected..."
+                                    autofocus
                                     multiline
                                     rows={5}
                                     fullWidth
@@ -254,14 +293,24 @@ export default function IssueReport(props: { open: boolean; onClose: () => void 
                                 />
                                 <PaperFlex direction="column" gap="half">
                                     <PaperText preset="label">Agent</PaperText>
-                                    <PaperSelector name="issue-report-agent" horizontal value={agent() ?? undefined} onValueChange={(value) => setPickedAgent(String(value))}>
+                                    <PaperSelector
+                                        name="issue-report-agent"
+                                        horizontal
+                                        value={agent() ?? undefined}
+                                        onValueChange={(value) => setPickedAgent(String(value))}
+                                    >
                                         <For each={ready().agents}>
-                                            {(found) => <PaperSelectorItem value={found.id} icon={<AgentIcon id={found.id} />}>{found.name}</PaperSelectorItem>}
+                                            {(found) => (
+                                                <PaperSelectorItem value={found.id} icon={<AgentIcon id={found.id} />}>
+                                                    {found.name}
+                                                </PaperSelectorItem>
+                                            )}
                                         </For>
                                     </PaperSelector>
                                 </PaperFlex>
                                 <PaperText preset="hint">
-                                    What you write goes to the agent you pick. It reads Paperboard's code and can't change anything on this computer. The issue it writes goes nowhere until you send it.
+                                    What you write goes to the agent you pick. It reads Paperboard's code and can't change anything on this computer. The issue it
+                                    writes goes nowhere until you send it.
                                 </PaperText>
                             </PaperFlex>
                         </Show>
@@ -270,7 +319,7 @@ export default function IssueReport(props: { open: boolean; onClose: () => void 
                 <Match when={phase().step === "working"}>
                     <PaperCard padding="full" height="panel-height-small" surface="front">
                         <PaperConsole
-                            entries={consoleEntries()}
+                            entries={entries()}
                             title="Investigating"
                             placeholder="Tell the agent more..."
                             onCommand={steer}
@@ -287,17 +336,26 @@ export default function IssueReport(props: { open: boolean; onClose: () => void 
                             </PaperCard>
                             <PaperFlex direction="column" gap="half">
                                 <PaperText preset="label">Send it to</PaperText>
-                                <PaperSelector name="issue-report-destination" value={destination() ?? undefined} onValueChange={(value) => setDestination(String(value))}>
+                                <PaperSelector
+                                    name="issue-report-destination"
+                                    value={destination() ?? undefined}
+                                    onValueChange={(value) => setDestination(String(value))}
+                                >
                                     <Show when={now().issue.github}>
                                         {(github) => (
-                                            <PaperSelectorItem value={GITHUB} icon="bug_report" description={gitHubNote(github())} disabled={github().state !== "signed-in"}>
+                                            <PaperSelectorItem
+                                                value={GITHUB_DESTINATION}
+                                                icon="bug_report"
+                                                description={gitHubNote(github())}
+                                                disabled={github().state !== "signed-in"}
+                                            >
                                                 GitHub
                                             </PaperSelectorItem>
                                         )}
                                     </Show>
                                     <For each={setup.value()?.links ?? []}>
                                         {(link, index) => (
-                                            <PaperSelectorItem value={linkValue(index())} icon="open_in_new" description={link.description}>
+                                            <PaperSelectorItem value={linkValue(index())} icon="open_in_new" description={linkDescription(link)}>
                                                 {link.label}
                                             </PaperSelectorItem>
                                         )}
