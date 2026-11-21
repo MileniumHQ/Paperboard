@@ -45,10 +45,14 @@ export interface WindowsDeps {
     platform: NodeJS.Platform;
 }
 
+export type ColorScheme = "light" | "dark";
+
 export class Windows {
     readonly tabs = new Map<string, Tab>();
     private byId = new Map<number, string>();
     private nextId = 1;
+    /** the panel's theme, which pages see as their prefers-color-scheme; null until a page has said it */
+    private scheme: ColorScheme | null = null;
 
     constructor(private deps: WindowsDeps) {}
 
@@ -161,12 +165,27 @@ export class Windows {
                 cdp.send("Page.setInterceptFileChooserDialog", { enabled: true }, sessionId),
                 // every tab acts focused, so typing reaches the one being used, not only the front one
                 cdp.send("Emulation.setFocusEmulationEnabled", { enabled: true }, sessionId),
+                ...(this.scheme ? [this.emulateScheme(sessionId, this.scheme)] : []),
             ]);
             tab.sessionId = sessionId;
             await this.measure(tab);
             return sessionId;
         })().finally(() => (tab.attaching = null));
         return tab.attaching;
+    }
+
+    /**
+     * Pages follow the panel's light or dark theme: every open window now, and each one that opens. The browser
+     * needn't be running; its windows take the theme when it starts.
+     */
+    async setColorScheme(scheme: ColorScheme) {
+        this.scheme = scheme;
+        // a window still attaching may have read the theme before this: it's told again once it's attached
+        await Promise.all([...this.tabs.values()].map(async (t) => this.emulateScheme(await this.session(t), scheme)));
+    }
+
+    private emulateScheme(sessionId: string, scheme: ColorScheme) {
+        return this.deps.connection().send("Emulation.setEmulatedMedia", { features: [{ name: "prefers-color-scheme", value: scheme }] }, sessionId);
     }
 
     /** the title and address as they are now, not as the last event left them */

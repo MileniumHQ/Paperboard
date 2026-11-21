@@ -1,5 +1,5 @@
 import { Match, Switch, createEffect, createSignal, on, onCleanup } from "solid-js";
-import { PaperError, PaperFlex, PaperLoader, PaperPresence } from "@mileniumhq/paperui";
+import { PaperError, PaperFlex, PaperLoader, PaperPresence, showError, usePaper } from "@mileniumhq/paperui";
 import Workspace from "./Workspace";
 import Onboarding from "./onboarding/Onboarding";
 import { createAgent } from "./lib/agent";
@@ -13,6 +13,16 @@ import "./tokens.css";
 export default function Main() {
     const agent = createAgent();
     onCleanup(agent.dispose);
+
+    // the agent's browser shows pages in this panel's theme: said once the service is reached, and on each change
+    const paper = usePaper();
+    if (!paper) throw new Error("The panel's page isn't inside a PaperProvider, so its theme isn't known");
+    createEffect(
+        on([agent.hydration, paper.resolvedTheme], ([hydration, scheme]) => {
+            if (hydration !== "ready") return;
+            agent.calls.setColorScheme({ scheme }).catch((e) => showError("Couldn't match the agent's browser to your theme", e));
+        }),
+    );
 
     // onboarding opens when there's no agent yet. The window that saves the
     // settings keeps it open to show the computer's setup; any other window

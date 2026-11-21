@@ -140,6 +140,7 @@ const calls: CallHandlers<typeof agentsContract> = {
     answerAccess: ready((i) => void app.access.answer(i.id, i.how)),
     revokeAccess: ready((i) => app.access.revoke(i.grant)),
     closeShell: ready((i) => app.access.closeShell(i.id)),
+    setColorScheme: ready((i) => app.computer.windows.setColorScheme(i.scheme)),
     answerSudo: ready((i) => app.access.shells.answerSudo(i.id, i.password)),
     declineSudo: ready((i) => app.access.shells.declineSudo(i.id)),
     answerToolServer: ready(async (i) => void (await app.serverTools.answer(i.id, i.allow))),

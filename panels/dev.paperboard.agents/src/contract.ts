@@ -870,6 +870,8 @@ export const agentsContract = defineContract(PANEL_ID, {
         revokeAccess: { input: object({ grant: accessItem }), output: accessView },
         /** a shell the agent opened, closed by the user */
         closeShell: { input: object({ id: number() }), output: accessView },
+        /** the panel's light or dark theme, which the pages in the agent's browser follow */
+        setColorScheme: { input: object({ scheme: oneOf("light", "dark") }), output: nothing() },
         /** the user's password for sudo in the agent's shell: typed into sudo's prompt once, never kept */
         answerSudo: { input: object({ id: text(), password: text() }), output: nothing() },
         declineSudo: { input: byId, output: nothing() },
