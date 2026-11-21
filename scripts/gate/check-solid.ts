@@ -72,12 +72,13 @@
 // line above (for a catch clause, also inside its block); a marker with no
 // reason is itself a hit.
 //  swallowed-error ("Fail loudly")
-//    A catch clause whose block is empty or only `console.x(...)` calls and a
-//    bare `return;`; a `.catch(h)` whose handler is `console.x`, does
-//    nothing, only logs, or returns a placeholder literal (undefined, null,
-//    true/false, [], {}, "", 0). A catch that rethrows, sets state, answers,
-//    or does any other work is not flagged: what that work shows the user is
-//    for review.
+//    A catch clause whose block is empty, only `console.x(...)` calls and a
+//    bare `return;`, or ends in `return <value>` without a call, `new`,
+//    await, throw or assignment anywhere in it and without the caught error
+//    in the value (a fabricated answer with no trace); a `.catch(h)` whose handler is `console.x`, does nothing, only logs, or
+//    returns a placeholder literal. A catch that rethrows, sets state,
+//    answers, or does any other work is not flagged: what that work shows the
+//    user is for review.
 //  effect-without-on ("Effects track what they mean")
 //    createEffect whose first argument is not an `on(deps, fn)` call.
 //  for-fresh-rows ("Rows keep their identity")
@@ -432,6 +433,45 @@ const isFallbackLiteral = (e: TS.Expression): boolean => {
     );
 };
 
+// Whether a node does anything a user or a log could see: a call, `new`, an
+// await or yield, a throw, or an assignment, at any depth.
+function actsAnywhere(node: TS.Node): boolean {
+    if (
+        ts.isCallExpression(node) ||
+        ts.isNewExpression(node) ||
+        ts.isAwaitExpression(node) ||
+        ts.isYieldExpression(node) ||
+        ts.isThrowStatement(node) ||
+        (ts.isBinaryExpression(node) && node.operatorToken.kind >= ts.SyntaxKind.FirstAssignment && node.operatorToken.kind <= ts.SyntaxKind.LastAssignment) ||
+        (ts.isPrefixUnaryExpression(node) && (node.operator === ts.SyntaxKind.PlusPlusToken || node.operator === ts.SyntaxKind.MinusMinusToken)) ||
+        ts.isPostfixUnaryExpression(node)
+    )
+        return true;
+    return ts.forEachChild(node, (c) => actsAnywhere(c) || undefined) ?? false;
+}
+
+// Whether a node reads the identifier `name` anywhere.
+function mentions(node: TS.Node, name: string): boolean {
+    if (ts.isIdentifier(node) && node.text === name) return true;
+    return ts.forEachChild(node, (c) => mentions(c, name) || undefined) ?? false;
+}
+
+// What a catch clause does when it only swallows, or undefined: does nothing,
+// only logs, or returns a value with no trace at all. A catch that logs and
+// then returns an answer (a probe's false, a parser's null) leaves a trace,
+// and one whose answer carries the caught error passes it on; both are for
+// review.
+function swallowingCatch(clause: TS.CatchClause): string | undefined {
+    const block = clause.block;
+    if (block.statements.length === 0) return "does nothing";
+    if (logsOnly(block)) return "only logs";
+    const last = block.statements[block.statements.length - 1]!;
+    if (!ts.isReturnStatement(last) || !last.expression || actsAnywhere(block)) return undefined;
+    const binding = clause.variableDeclaration?.name;
+    if (binding && ts.isIdentifier(binding) && mentions(last.expression, binding.text)) return undefined;
+    return "returns a value with no trace";
+}
+
 // What a `.catch(handler)` handler does when it only swallows, or undefined.
 function swallowingHandler(arg: TS.Expression): string | undefined {
     const u = unwrap(arg);
@@ -679,12 +719,14 @@ function checkHouseRules(sf: TS.SourceFile, file: string, hit: (node: TS.Node, r
     checkPackageBoundary(sf, file, report, hit);
     checkErrorQuotes(sf, file, hit, options);
     const visit = (n: TS.Node): void => {
-        // swallowed-error: a catch that only logs or does nothing.
-        if (ts.isCatchClause(n) && logsOnly(n.block)) {
+        // swallowed-error: a catch that does nothing, only logs, or returns a
+        // placeholder.
+        const caught = ts.isCatchClause(n) ? swallowingCatch(n) : undefined;
+        if (ts.isCatchClause(n) && caught) {
             report(
                 n,
                 "swallowed-error",
-                `this catch ${n.block.statements.length === 0 ? "does nothing" : "only logs"}, so the failure never reaches the user (AGENTS.md "Fail loudly"); show it in state, rethrow, or mark a deliberate one with \`// quiet: <reason>\``,
+                `this catch ${caught}, so the failure never reaches the user (AGENTS.md "Fail loudly"); show it in state, rethrow, or mark a deliberate one with \`// quiet: <reason>\``,
                 n.block,
             );
         }

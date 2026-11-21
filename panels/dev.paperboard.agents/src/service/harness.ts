@@ -444,7 +444,7 @@ export function parseTurnLine(harness: Harness, line: string): TurnEvent[] {
     try {
         ev = JSON.parse(line);
     } catch {
-        return []; // not an event (a stray log line): the turn's outcome comes from its events and exit
+        return []; // quiet: not an event (a stray log line); the turn's outcome comes from its events and exit
     }
     if (!ev || typeof ev !== "object") return [];
     if (harness === "codex") {
