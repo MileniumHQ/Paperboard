@@ -14,7 +14,7 @@ export async function runIdentify(json: boolean): Promise<number> {
     const rows: [string, string | undefined][] = [
         ["Operated by", id.operator && named(id.operator)],
         ["System", id.flavor && named(id.flavor)],
-        ["OS", `${id.distroName ?? id.os} (${id.distroId ?? id.os} ${id.osVersion})`],
+        ["OS", `${id.distroName ?? id.os} (${[id.distroId ?? id.os, id.osVersion].filter(Boolean).join(" ")})`],
         ["Runs in", id.machine && named(id.machine)],
         ["Board", id.board],
         ["Arch", process.arch],

@@ -45,6 +45,7 @@ interface SystemInfo {
     hostname: string;
     /** "linux", "macos" or "windows" */
     os: string;
+    /** the release people know; a rolling distribution has none */
     osVersion?: string;
     /** the OS's id and full name: "arch" and "Arch Linux", "windows" and "Windows", "macos" and "macOS Tahoe" */
     distroId?: string;
@@ -53,7 +54,7 @@ interface SystemInfo {
     flavor?: IdentityPart;
     /** what the OS runs in: ChromeOS (Crostini), WSL, a container, a cloud VM */
     machine?: IdentityPart;
-    /** the motherboard, such as "ASUS ROG STRIX B650E-F GAMING WIFI"; never on a virtual machine */
+    /** a retail motherboard, such as "ASUS ROG STRIX B650E-F GAMING WIFI"; never a laptop's, a prebuilt's or a virtual machine's */
     board?: string;
     /** an autonomous agent operating this computer, such as Claude Duet or Grok Bot */
     operator?: IdentityPart;
@@ -100,7 +101,6 @@ interface GpuInfo {
     "version": "0.4.0",
     "hostname": "workstation",
     "os": "linux",
-    "osVersion": "6.17.8-arch1-1",
     "distroId": "arch",
     "distroName": "Arch Linux",
     "flavor": { "id": "omarchy", "name": "Omarchy", "version": "4.5.0" },
@@ -115,7 +115,7 @@ interface GpuInfo {
             <PaperTextList>
                 <li><PaperCode>getLocalIP</PaperCode> returns the computer's first private IPv4 address, such as <PaperCode>192.168.1.20</PaperCode>. Without one, it returns the first other external IPv4 address, and without that, <PaperCode>127.0.0.1</PaperCode>.</li>
                 <li>Other devices on the same network reach the computer at that address. Devices outside it need the router's public address and a forwarded port.</li>
-                <li>Each layer of the identity is there only when the daemon detected it. A rolling distribution such as Arch has no release version, so <PaperCode>osVersion</PaperCode> is its kernel's.</li>
+                <li>Each layer of the identity is there only when the daemon detected it. A rolling distribution such as Arch has no release version, so it has no <PaperCode>osVersion</PaperCode>.</li>
                 <li><PaperCode>getGpus</PaperCode> asks the system each time. A probe that fails, such as a missing <PaperCode>nvidia-smi</PaperCode>, adds to <PaperCode>errors</PaperCode> instead of failing the call.</li>
                 <li><PaperCode>getUsage</PaperCode> reports CPU, memory, disk and network use split by panel, for Paperboard's computer page. A panel's call is refused with <PaperCode>system:usage is host-only</PaperCode> (<PaperCode>FORBIDDEN</PaperCode>).</li>
             </PaperTextList>

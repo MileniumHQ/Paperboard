@@ -21,7 +21,7 @@ export interface SystemInfo {
     flavor?: IdentityPart;
     /** what the OS runs in: ChromeOS (Crostini), WSL, a container, a cloud VM */
     machine?: IdentityPart;
-    /** the motherboard, on a computer that is not a virtual machine */
+    /** a retail motherboard; never a laptop's, a prebuilt's or a virtual machine's */
     board?: string;
     /** an autonomous agent operating this computer: Claude Duet, Grok Bot */
     operator?: IdentityPart;

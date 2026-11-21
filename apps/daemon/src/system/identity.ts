@@ -36,14 +36,15 @@ export interface IdentityPart {
 
 export interface ComputerIdentity {
     os: string;
-    osVersion: string;
+    /** the release people know; a rolling distro (Arch, Debian sid) has none */
+    osVersion?: string;
     distroId?: string;
     distroName?: string;
     /** what is built on the OS: Omarchy on Arch, Proxmox VE on Debian */
     flavor?: IdentityPart;
     /** what the OS runs in: ChromeOS (Crostini), WSL, a container, a cloud VM */
     machine?: IdentityPart;
-    /** the motherboard, on a computer that is not a virtual machine */
+    /** a retail motherboard; never a laptop's, a prebuilt's or a virtual machine's */
     board?: string;
     /** an autonomous agent operating this computer */
     operator?: IdentityPart;
@@ -225,6 +226,8 @@ interface Dmi {
     asset?: string;
     boardVendor?: string;
     boardName?: string;
+    /** the SMBIOS chassis type number (Linux only) */
+    chassis?: string;
 }
 
 function linuxDmi(probe: SystemProbe): Dmi {
@@ -235,6 +238,7 @@ function linuxDmi(probe: SystemProbe): Dmi {
         asset: at("chassis_asset_tag"),
         boardVendor: at("board_vendor"),
         boardName: at("board_name"),
+        chassis: at("chassis_type"),
         model: firstLine(probe.read("/proc/device-tree/model")),
     };
 }
@@ -306,41 +310,40 @@ function linuxMachine(probe: SystemProbe, dmi: Dmi): IdentityPart | undefined {
 // (systemd's hwdb list, and what boards ship with in the wild)
 const PLACEHOLDER = /^(to be filled by o\.?e\.?m\.?|tbd by oem|default string|system (product )?name|system manufacturer|base ?board product name|type2 - board (product name|vendor name)\d*|not (applicable|specified|available)|no asset information|n\/a|none|null|invalid|unknown|o\.e\.m\.?|oem|0+|123456789|0123456789|x+|\s*)$/i;
 
-// legal names as the board's maker is known
-const BOARD_VENDORS: [RegExp, string][] = [
+// Retail motherboard makers, by their legal names. A board is named only
+// when one of these sold it on its own: a laptop's or a prebuilt PC's board
+// carries a part number ("0KFHNV", "Mac-189A3D4F975D5FFC"), which names
+// nothing a person knows, so it is left out.
+const BOARD_MAKERS: [RegExp, string][] = [
     [/^ASUSTeK/i, "ASUS"],
     [/^Micro-Star/i, "MSI"],
     [/^Gigabyte/i, "Gigabyte"],
     [/^ASRock/i, "ASRock"],
-    [/^Dell/i, "Dell"],
-    [/^LENOVO$/i, "Lenovo"],
-    [/^(HP|Hewlett-Packard)\b/i, "HP"],
-    [/^Intel Corporation$/i, "Intel"],
-    [/^Supermicro|^Super Micro/i, "Supermicro"],
-    [/^Framework/i, "Framework"],
-    [/^Valve$/i, "Valve"],
-    [/^Acer$/i, "Acer"],
     [/^Biostar/i, "Biostar"],
     [/^EVGA/i, "EVGA"],
     [/^NZXT/i, "NZXT"],
-    [/^Google$/i, "Google"],
-    [/^Microsoft Corporation$/i, "Microsoft"],
-    [/^Samsung/i, "Samsung"],
-    [/^Razer/i, "Razer"],
-    [/^TOSHIBA$/i, "Toshiba"],
-    [/^Sony/i, "Sony"],
-    [/^System76/i, "System76"],
-    [/^TUXEDO/i, "TUXEDO"],
+    [/^(Supermicro|Super Micro)/i, "Supermicro"],
 ];
 
-/** The board as people name it, "ASUS ROG STRIX B650E-F GAMING WIFI"; undefined when firmware left it blank. */
-export function boardName(vendor: string | undefined, name: string | undefined): string | undefined {
-    const product = name && !PLACEHOLDER.test(name) ? name.trim() : undefined;
-    if (!product) return undefined;
-    const rawVendor = vendor && !PLACEHOLDER.test(vendor) ? vendor.trim() : undefined;
-    const maker = rawVendor ? BOARD_VENDORS.find(([re]) => re.test(rawVendor))?.[1] ?? rawVendor : undefined;
-    if (!maker || product.toLowerCase().startsWith(maker.toLowerCase())) return product;
-    return `${maker} ${product}`;
+// SMBIOS chassis types of portable computers: laptop, notebook, handheld,
+// sub-notebook, tablet, convertible, detachable and the like
+const PORTABLE_CHASSIS = new Set(["8", "9", "10", "11", "12", "14", "30", "31", "32"]);
+
+const filled = (value: string | undefined) => (value && !PLACEHOLDER.test(value) ? value.trim() : undefined);
+
+/** The retail motherboard, "ASUS ROG STRIX B650E-F GAMING WIFI"; undefined for a laptop's or prebuilt's board, or one firmware left blank. */
+export function boardName(dmi: Dmi): string | undefined {
+    const product = filled(dmi.boardName);
+    const vendor = filled(dmi.boardVendor);
+    const maker = vendor ? BOARD_MAKERS.find(([re]) => re.test(vendor))?.[1] : undefined;
+    if (!product || !maker) return undefined;
+    if (dmi.chassis && PORTABLE_CHASSIS.has(dmi.chassis)) return undefined;
+    // A built PC names the system after its board, or leaves it blank; a
+    // board maker's own laptop or prebuilt names a model the board isn't
+    // ("ROG Strix G513QY" on board "G513QY")
+    const system = filled(dmi.product);
+    if (system && !product.toLowerCase().includes(system.toLowerCase())) return undefined;
+    return product.toLowerCase().startsWith(maker.toLowerCase()) ? product : `${maker} ${product}`;
 }
 
 // ---------------------------------------------------------------- operators
@@ -396,7 +399,7 @@ function windowsRelease(probe: SystemProbe): { id: string; name: string; version
 /** This computer's identity, from what the probe reads. */
 export function identify(probe: SystemProbe): ComputerIdentity {
     const layers = (machine: IdentityPart | undefined, dmi: Dmi): Partial<ComputerIdentity> => {
-        const board = machine ? undefined : boardName(dmi.boardVendor, dmi.boardName) ?? dmi.model;
+        const board = machine ? undefined : boardName(dmi) ?? dmi.model;
         const op = operator(probe);
         return {
             ...(machine ? { machine } : {}),
@@ -438,7 +441,7 @@ export function identify(probe: SystemProbe): ComputerIdentity {
         const dmi = linuxDmi(probe);
         return {
             os: "linux",
-            osVersion: version || probe.release,
+            ...(version ? { osVersion: version } : {}),
             distroId: release.ID?.toLowerCase() || "linux",
             distroName: release.PRETTY_NAME || release.NAME || "Linux",
             ...(flavor ? { flavor } : {}),

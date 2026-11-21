@@ -160,7 +160,7 @@ papercrane --host 127.0.0.1             # only accept this computer`}
             </PaperTable>
             <PaperCode block language="text">
 {`System       Omarchy 4.5.0
-OS           Arch Linux (arch 6.17.8-arch1-1)
+OS           Arch Linux (arch)
 Board        ASRock B850M Pro-A WiFi
 Arch         x64`}
             </PaperCode>

@@ -84,7 +84,7 @@ Waiting for a computer to pair... (Ctrl+C cancels)`}
                 <li><b>System</b>: what is built on the operating system, such as Omarchy on Arch, Raspberry Pi OS, Proxmox VE, TrueNAS, Unraid or Synology DSM.</li>
                 <li><b>Operating system</b>: the distribution, macOS or Windows, with its version.</li>
                 <li><b>Runs in</b>: ChromeOS (Linux on a Chromebook), WSL, GitHub Codespaces, a Docker or Podman container, or the cloud or hypervisor of a virtual machine.</li>
-                <li><b>Motherboard</b>: the board of a computer that is not a virtual machine.</li>
+                <li><b>Motherboard</b>: the board of a desktop built from parts, such as an ASUS or MSI board. A laptop or prebuilt computer has none listed, since its board carries only a part number.</li>
                 <li><b>Architecture</b>: x86-64 or ARM64.</li>
             </PaperTextList>
             <PaperText preset="body" as="p">

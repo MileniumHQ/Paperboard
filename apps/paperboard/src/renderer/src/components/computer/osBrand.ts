@@ -8,8 +8,6 @@ interface Brand {
     name: string;
     /** the PaperUI identity token (`os-<token>`); a brand with no official color has none */
     color?: string;
-    /** rolling releases have no version people know: the daemon sends the kernel's */
-    rolling?: true;
 }
 
 // keyed by os-release ID, or by the ids identity.ts gives flavors, machines and operators
@@ -34,9 +32,9 @@ const BRANDS: Record<string, Brand> = {
     anduinos: { name: "AnduinOS" },
     steamos: { name: "SteamOS", color: "steamos" },
     nixos: { name: "NixOS", color: "nixos" },
-    "opensuse-tumbleweed": { name: "openSUSE Tumbleweed", color: "opensuse", rolling: true },
+    "opensuse-tumbleweed": { name: "openSUSE Tumbleweed", color: "opensuse" },
     "opensuse-leap": { name: "openSUSE Leap", color: "opensuse" },
-    "opensuse-microos": { name: "openSUSE MicroOS", color: "opensuse", rolling: true },
+    "opensuse-microos": { name: "openSUSE MicroOS", color: "opensuse" },
     rocky: { name: "Rocky Linux", color: "rocky" },
     rhel: { name: "Red Hat Enterprise Linux", color: "redhat" },
     centos: { name: "CentOS Stream", color: "centos" },
@@ -56,15 +54,15 @@ const BRANDS: Record<string, Brand> = {
     haos: { name: "Home Assistant OS", color: "homeassistant" },
     raspbian: { name: "Raspberry Pi OS", color: "raspberrypi" },
 
-    arch: { name: "Arch Linux", color: "arch", rolling: true },
-    cachyos: { name: "CachyOS", color: "cachyos", rolling: true },
-    endeavouros: { name: "EndeavourOS", color: "endeavouros", rolling: true },
-    garuda: { name: "Garuda Linux", color: "garuda", rolling: true },
-    artix: { name: "Artix Linux", color: "artix", rolling: true },
-    manjaro: { name: "Manjaro", color: "manjaro", rolling: true },
-    chimera: { name: "Chimera Linux", rolling: true },
-    gentoo: { name: "Gentoo", color: "gentoo", rolling: true },
-    void: { name: "Void Linux", color: "void", rolling: true },
+    arch: { name: "Arch Linux", color: "arch" },
+    cachyos: { name: "CachyOS", color: "cachyos" },
+    endeavouros: { name: "EndeavourOS", color: "endeavouros" },
+    garuda: { name: "Garuda Linux", color: "garuda" },
+    artix: { name: "Artix Linux", color: "artix" },
+    manjaro: { name: "Manjaro", color: "manjaro" },
+    chimera: { name: "Chimera Linux" },
+    gentoo: { name: "Gentoo", color: "gentoo" },
+    void: { name: "Void Linux", color: "void" },
 
     // flavors: what is built on the distro
     omarchy: { name: "Omarchy", color: "omarchy" },
@@ -111,7 +109,7 @@ function osName(comp: ComputerInfo): string {
     if (comp.os === "windows" || comp.os === "win32") {
         return named({ id, name: brand?.name ?? "Windows", version });
     }
-    if (brand) return brand.rolling || !version ? brand.name : `${brand.name} ${version}`;
+    if (brand) return version ? `${brand.name} ${version}` : brand.name;
     // a distro with no brand here: its own PRETTY_NAME already carries its version
     if (comp.distroName) return comp.distroName;
     return comp.os === "linux" ? (version ? `Linux ${version}` : "Linux") : comp.os || "Unknown OS";

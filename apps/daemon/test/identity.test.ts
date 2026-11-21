@@ -34,9 +34,10 @@ describe("os-release", () => {
         });
     });
 
-    test("a rolling distro's version is the kernel, never the word rolling", () => {
+    test("a rolling distro has no version: not the word rolling, not its kernel", () => {
         const id = identify(probe({ release: "7.2.14-arch1-1", files: { "/etc/os-release": ARCH } }));
-        expect(id).toMatchObject({ os: "linux", distroId: "arch", distroName: "Arch Linux", osVersion: "7.2.14-arch1-1" });
+        expect(id).toMatchObject({ os: "linux", distroId: "arch", distroName: "Arch Linux" });
+        expect(id.osVersion).toBeUndefined();
     });
 });
 
@@ -100,14 +101,19 @@ describe("machines and motherboards", () => {
         expect(id.machine).toEqual({ id: "vm", name: "Virtual machine" });
     });
 
-    test("a bare-metal board is named by its maker, and firmware placeholders are no board", () => {
-        const board = (vendor: string, name: string) =>
-            identify(probe({ files: { "/sys/class/dmi/id/board_vendor": vendor, "/sys/class/dmi/id/board_name": name } })).board;
-        expect(board("ASUSTeK COMPUTER INC.\n", "ROG STRIX B650E-F GAMING WIFI\n")).toBe("ASUS ROG STRIX B650E-F GAMING WIFI");
-        expect(board("ASRock\n", "B850M Pro-A WiFi\n")).toBe("ASRock B850M Pro-A WiFi");
-        expect(board("Micro-Star International Co., Ltd.\n", "MAG B550 TOMAHAWK (MS-7C91)\n")).toBe("MSI MAG B550 TOMAHAWK (MS-7C91)");
-        expect(board("To be filled by O.E.M.\n", "Default string\n")).toBeUndefined();
-        expect(board("Default string\n", "X570 AORUS ELITE\n")).toBe("X570 AORUS ELITE");
+    test("a retail board is named by its maker; laptops, prebuilts and placeholders have none", () => {
+        const board = (dmi: Record<string, string>) =>
+            identify(probe({ files: Object.fromEntries(Object.entries(dmi).map(([k, v]) => [`/sys/class/dmi/id/${k}`, `${v}\n`])) })).board;
+        expect(board({ board_vendor: "ASUSTeK COMPUTER INC.", board_name: "ROG STRIX B650E-F GAMING WIFI", product_name: "System Product Name", chassis_type: "3" }))
+            .toBe("ASUS ROG STRIX B650E-F GAMING WIFI");
+        expect(board({ board_vendor: "ASRock", board_name: "B850M Pro-A WiFi", product_name: "B850M Pro-A WiFi", chassis_type: "3" })).toBe("ASRock B850M Pro-A WiFi");
+        expect(board({ board_vendor: "Micro-Star International Co., Ltd.", board_name: "MAG B550 TOMAHAWK (MS-7C91)", product_name: "MS-7C91" }))
+            .toBe("MSI MAG B550 TOMAHAWK (MS-7C91)");
+        // part numbers: a laptop's, a prebuilt's, a Mac's
+        expect(board({ board_vendor: "ASUSTeK COMPUTER INC.", board_name: "G513QY", product_name: "ROG Strix G513QY", chassis_type: "10" })).toBeUndefined();
+        expect(board({ board_vendor: "Dell Inc.", board_name: "0KFHNV", product_name: "XPS 13 9310" })).toBeUndefined();
+        expect(board({ board_vendor: "Apple Inc.", board_name: "Mac-189A3D4F975D5FFC", product_name: "MacBookPro11,1" })).toBeUndefined();
+        expect(board({ board_vendor: "To be filled by O.E.M.", board_name: "Default string" })).toBeUndefined();
     });
 });
 
