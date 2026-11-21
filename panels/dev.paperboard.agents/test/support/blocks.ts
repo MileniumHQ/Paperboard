@@ -33,6 +33,11 @@ export class TestBlocks implements BlocksHandle {
         return this.memory.panel.changed(value);
     }
 
+    /** what the daemon lists of them: internal ones left out */
+    list() {
+        return this.memory.list();
+    }
+
     run<T = unknown>(id: string, inputs: Record<string, unknown> = {}): Promise<T> {
         return this.memory.run<T>(id, inputs);
     }

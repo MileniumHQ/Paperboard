@@ -5,7 +5,7 @@
 // conversation as entry events plus a history call.
 
 import path from "node:path";
-import { DEFAULT_MODEL, HARNESSES, LIMITS, NO_ONBOARDING, ONBOARDING_STEP, PANEL_ID, TRIGGER_IDS, parseSettings, type AiState, type OnboardingDraft, type Harness, type Settings, type agentsContract } from "../contract";
+import { DEFAULT_MODEL, HARNESSES, LIMITS, NO_ONBOARDING, ONBOARDING_STEP, PANEL_ID, parseSettings, type AiState, type OnboardingDraft, type Harness, type Settings, type agentsContract } from "../contract";
 import { HomeFolder, moveHomeFolder } from "./homeFolder";
 import { Checkpoints } from "./checkpoints";
 import { shellToolset } from "./shell";
@@ -21,7 +21,7 @@ import { Conversation, type TurnHost } from "./conversation";
 import { CLAUDE_MEMORY_OFF, HARNESS_NAMES, customSection } from "./harness";
 import { COMPUTER_INSTRUCTIONS, COMPUTER_TOOLS } from "./computerTools";
 import { filesToolset } from "./attachmentTools";
-import { actionsToolset, type ActionsHost } from "./actionsToolset";
+import { blocksToolset, type BlocksRegistry } from "./blocksToolset";
 import { McpServers, type Vault } from "./mcpServers";
 import { checkSecretName } from "./mcpConfig";
 import { mcpToolset } from "./mcpToolset";
@@ -37,15 +37,14 @@ import { ServerTools } from "./serverTools";
 import { describeSchedule, localStamp } from "../routineText";
 import { toolbox, type Toolbox } from "./toolsets";
 import { Asker } from "./ask";
-import { FlowActionsPublisher, flowActions, type ConversationChoice, type FlowHost, type MessageReceived } from "./flowActions";
 import { BlocksSync } from "./blocksSync";
-import { flowBlocks, replyPayload, type ConversationFacts } from "./flowBlocks";
-import { type ActionDefinition, type BlocksHandle, type ContractContext, errorMessage, problemsApi } from "@mileniumhq/paperapi";
+import { MESSAGE_RECEIVED, flowBlocks, replyPayload, type ConversationFacts, type FlowHost, type MessageReceived } from "./flowBlocks";
+import { type BlocksHandle, type ContractContext, errorMessage, problemsApi } from "@mileniumhq/paperapi";
 export { findProgram } from "./which";
 import type { Launch } from "./which";
 import { openTurnLog, type TurnLog } from "./turnLog";
 
-/** What the tool servers and the actions toolset need from the daemon. */
+/** What the tool servers and the blocks toolset need from the daemon. */
 export interface ToolsHost {
     /** a line to a daemon-owned child's stdin */
     write(id: string, data: string): Promise<void>;
@@ -53,8 +52,8 @@ export interface ToolsHost {
     writeTools(c: ToolsConfig): Promise<void>;
     /** this panel's vault entries, by name */
     vault: Vault;
-    /** other panels' actions, through this service's own scoped credential */
-    actions: ActionsHost;
+    /** other panels' blocks, through this service's own scoped credential */
+    blocks: BlocksRegistry;
 }
 
 export interface AppHost extends Omit<ComputerHost, "packages">, Omit<TurnHost, "write"> {
@@ -70,9 +69,7 @@ export interface AppHost extends Omit<ComputerHost, "packages">, Omit<TurnHost, 
     findProgram(command: string, args: readonly string[]): Launch | null;
     /** a brain's program already on this computer; the daemon's own lookup when left out */
     findBrain?(harness: Harness): string | null;
-    /** register an action again, as it is now: the flow actions' conversation dropdown follows the history */
-    registerAction(def: ActionDefinition): Promise<void>;
-    /** the panel's blocks for the Blocks panel (Actions API v2) */
+    /** the panel's own blocks, for the Blocks panel */
     blocks: BlocksHandle;
 }
 
@@ -81,8 +78,6 @@ export interface AppContext {
     setState(patch: Partial<AiState>): void;
     /** tells the panel's pages, as the contract's events */
     emit: ContractContext<typeof agentsContract>["emit"];
-    /** an event flows start from */
-    trigger(id: string, payload: unknown): void;
 }
 
 export class AiApp {
@@ -107,11 +102,10 @@ export class AiApp {
     /** the empty folder Claude runs in when it's asked for its models */
     private modelsDir = "";
     private readonly blocks: BlocksSync;
-    private readonly actions: FlowActionsPublisher;
     private settle!: (failure: Error | null) => void;
     private readonly settled = new Promise<Error | null>((ok) => (this.settle = ok));
 
-    /** Wait for init. Actions fail with init's error rather than hang on a service that never got ready. */
+    /** Wait for init. Calls and blocks fail with init's error rather than hang on a service that never got ready. */
     async ready(): Promise<void> {
         const failure = await this.settled;
         if (failure) throw new Error(`the Agent service didn't start: ${failure.message}`);
@@ -119,7 +113,6 @@ export class AiApp {
 
     constructor(private host: AppHost) {
         this.blocks = new BlocksSync({ blocks: host.blocks, watched: () => this.watched(), memory: () => this.memory.list() });
-        this.actions = new FlowActionsPublisher({ choices: () => this.conversationChoices(), actions: () => this.flowActions(), register: (def) => host.registerAction(def) });
     }
 
     async init(ctx: AppContext) {
@@ -258,7 +251,7 @@ export class AiApp {
             this.prompts.toolset(),
             this.serverTools.toolset(),
             mcpToolset(this.servers),
-            actionsToolset({ host: t.actions, enabled: () => this.servers.config.actions }),
+            blocksToolset({ registry: t.blocks, enabled: () => this.servers.config.blocks }),
         ], () => this.conversation?.mode() ?? { fromFlow: false });
         // any tool but its messages means the agent is working, not typing, whatever its harness reports
         this.tools = {
@@ -319,10 +312,9 @@ export class AiApp {
                         conversationId: this.conversation.id(),
                         replyTo: entry.replyTo ?? "",
                     };
-                    this.ctx.trigger(TRIGGER_IDS.messageReceived, message);
-                    this.blocks.fire(TRIGGER_IDS.messageReceived, replyPayload(message));
+                    this.blocks.fire(MESSAGE_RECEIVED, replyPayload(message));
                 }
-                // its first message names the current conversation in the dropdown
+                // its first message puts the current conversation in the list Blocks reads
                 if (entry.kind === "user" || entry.kind === "agent") this.publish();
             },
             onTurnFailed: (error) => this.blocks.fire("turn-failed", { error, conversation: this.conversation.id() }),
@@ -375,7 +367,7 @@ export class AiApp {
         await Promise.all([this.mcp?.close(), this.pages?.close()]);
     }
 
-    // ------------------------------------------------------------- actions
+    // ------------------------------------------------------------- calls
 
     async setup(input: unknown) {
         const settings = parseSettings(((input ?? {}) as Record<string, unknown>).settings);
@@ -543,12 +535,7 @@ export class AiApp {
 
     // ------------------------------------------------------------- flows
 
-    /** The actions flows use, with the conversation dropdown as the history is now. */
-    flowActions(): ActionDefinition[] {
-        return flowActions(this.flowHost(), this.conversation ? this.conversationChoices() : []);
-    }
-
-    /** The blocks flows use in the Blocks panel: the same host as the actions. */
+    /** The blocks flows use in the Blocks panel. */
     flowBlocks() {
         return flowBlocks({
             ...this.flowHost(),
@@ -615,8 +602,9 @@ export class AiApp {
         };
     }
 
+    /** The current conversation (once it has messages), then the history, newest first. */
     private conversationIds(): string[] {
-        return this.conversationChoices().map((c) => c.value);
+        return [...(this.conversation.current() ? [this.conversation.id()] : []), ...this.conversation.past().map((c) => c.id)];
     }
 
     private conversationFacts(id: string): ConversationFacts {
@@ -645,20 +633,10 @@ export class AiApp {
         };
     }
 
-    /** The current conversation (once it has messages), then the history, newest first. */
-    conversationChoices(): ConversationChoice[] {
-        const current = this.conversation.current();
-        return [
-            ...(current ? [{ label: current.title, value: this.conversation.id() }] : []),
-            ...this.conversation.past().map((c) => ({ label: c.title, value: c.id })),
-        ];
-    }
-
-    /** Blocks and flows follow the conversation dropdown: the history, or which conversation is current, changed. */
-    publish(): Promise<void> {
+    /** Blocks follows the conversations: the history, or which conversation is current, changed. */
+    private publish() {
         this.blocks.announce("current-conversation");
         this.blocks.announce("conversations");
-        return this.actions.publish();
     }
 
     // ------------------------------------------------------------- the user's view

@@ -372,7 +372,7 @@ function AutomationSettings(props: { agent: Agent }) {
             <PaperSettingList autoHeight>
                 <PaperSettingItem
                     title="Instructions for flows"
-                    description={`When a flow in Actions messages or asks ${current().name}, these are added to what it's told. A flow's own instructions replace them.`}
+                    description={`When a flow in Blocks messages or asks ${current().name}, these are added to what it's told. A flow's own instructions replace them.`}
                 >
                     <PaperInput
                         name="automationInstructions"

@@ -12,18 +12,6 @@ import { serverSpec, toolsView } from "./toolsContract";
 
 export const PANEL_ID = "dev.paperboard.agents";
 
-/** The actions flows use: the panel's public face in the Actions library. */
-export const ACTION_IDS = {
-    switchConversation: "switch-conversation",
-    sendMessage: "send-message",
-    getAnswer: "get-answer",
-} as const;
-
-/** The events flows start from. */
-export const TRIGGER_IDS = {
-    messageReceived: "message-received",
-} as const;
-
 /**
  * Names that bring a character with them: its look in the UI and its voice in the agent's instructions.
  * The name alone decides, whatever its case or spacing.
@@ -60,7 +48,7 @@ const settings = object({
     model: nullable(text()),
     /** what happens to a conversation that's grown long: summarized into a fresh thread, or its older part forgotten */
     compaction: oneOf(...COMPACTIONS),
-    /** added to what the agent is told when an automation messages or asks it; an action's own instructions replace these */
+    /** added to what the agent is told when an automation messages or asks it; a block's own instructions replace these */
     automationInstructions: optional(text()),
 });
 export type Settings = Infer<typeof settings>;
@@ -443,7 +431,7 @@ const waitingMessage = object({
     /** id of the message it answers */
     replyTo: optional(text()),
     attachments: optional(list(attachment)),
-    /** sent by a flow (the Send Message action): it's answered in a turn of its own, for the flow */
+    /** sent by a flow (the Send Message block): it's answered in a turn of its own, for the flow */
     fromFlow: optional(boolean()),
     /** the flow's instructions for its turn, in place of the ones in settings */
     instructions: optional(text()),
@@ -770,8 +758,8 @@ export const agentsContract = defineContract(PANEL_ID, {
         saveServer: { input: object({ server: serverSpec }), output: toolsView },
         removeServer: { input: byName, output: toolsView },
         restartServer: { input: byName, output: toolsView },
-        /** may the agent run other panels' actions */
-        setActions: { input: object({ on: boolean() }), output: toolsView },
+        /** may the agent use other panels' blocks */
+        setBlocks: { input: object({ on: boolean() }), output: toolsView },
         /** a server's secret, into the vault */
         setSecret: { input: object({ server: text(), name: text(), value: text() }), output: toolsView },
         signInServer: { input: byName, output: toolsView },
