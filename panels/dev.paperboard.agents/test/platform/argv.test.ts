@@ -88,7 +88,7 @@ describe("what reaches a brain's command line", () => {
     }, SLOW * 3);
 
     test("a saved model is a single value that can't be read as a flag", async () => {
-        const base = { name: "Ada", harness: "codex" };
+        const base = { name: "Ada", color: "blue", harness: "codex" };
         for (const model of ["--dangerously-bypass-approvals-and-sandbox", "-c", "gpt 5", "gpt-5;rm", "a".repeat(65), "x\ny"]) {
             expect(() => parseSettings({ ...base, model })).toThrow("isn't a model's name");
         }
@@ -110,7 +110,7 @@ describe("what reaches a brain's command line", () => {
             const program = brainProgram(rig.root, harness);
             const asker = new Asker({
                 host: rig.host,
-                settings: () => ({ name: "Ada", harness, model: null, compaction: "summarize", automationInstructions: `custom-instructions ${HOSTILE}` }),
+                settings: () => ({ name: "Ada", color: "blue", harness, model: null, compaction: "summarize", automationInstructions: `custom-instructions ${HOSTILE}` }),
                 resolve: () => program,
                 home: () => (harness === "codex" ? codexHome : agyHome),
                 env: (): Record<string, string> => (harness === "codex" ? { CODEX_HOME: codexHome } : harness === "antigravity" ? { HOME: agyHome, XDG_CONFIG_HOME: path.join(agyHome, ".config"), AGY_CLI_DISABLE_AUTO_UPDATE: "1" } : {}),

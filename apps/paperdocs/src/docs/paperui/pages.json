@@ -97,6 +97,10 @@
                     "name": "PaperCollapsible",
                     "file": "paper-collapsible"
                 },
+                "papercolorchip": {
+                    "name": "PaperColorChip",
+                    "file": "paper-color-chip"
+                },
                 "paperconsole": {
                     "name": "PaperConsole",
                     "file": "paper-console"

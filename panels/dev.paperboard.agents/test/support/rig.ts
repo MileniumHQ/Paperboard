@@ -44,7 +44,7 @@ export async function conversationRig(o: { harness?: Harness; contextBudget?: nu
     fs.mkdirSync(agyHome, { recursive: true });
     // the real messages toolset, texting the rig's conversation
     const mcp = await startComputerMcp(toolbox([messagesToolset({ say: (text, replyTo, files) => rig.conversation.say(text, replyTo, files) })]));
-    const settings: Settings = { name: "Ada", harness, model: null, compaction: "summarize" };
+    const settings: Settings = { name: "Ada", color: "blue", harness, model: null, compaction: "summarize" };
     const entries = new Recorder<ChatEntry>();
     const states = new Recorder<ChatState>();
     const turnLog = o.turnLog ? openTurnLog(path.join(root, "turn-log"), { PAPERBOARD_AGENT_LOG: "1" }) : null;

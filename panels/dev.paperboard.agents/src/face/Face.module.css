@@ -1,7 +1,7 @@
 .face {
     display: block;
     overflow: visible;
-    /* override --face-ink to recolour the face */
+    /* override --face-ink to recolour the face, --face-glow to recolour the hologram */
     --face-ink: var(--paper-text);
 }
 
@@ -13,21 +13,21 @@
 
 /* the sphere glows past its edge */
 .hologram {
-    filter: drop-shadow(0 0 var(--paper-uigap-half) var(--paper-panel-agents));
+    filter: drop-shadow(0 0 var(--paper-uigap-half) var(--face-glow));
 }
 
 /* the features glow over the sphere like light, not paint */
 .face:has(.hologram) .ink {
     fill: var(--paper-on-color);
-    filter: drop-shadow(0 0 var(--paper-uigap-onefourth) var(--paper-panel-agents));
+    filter: drop-shadow(0 0 var(--paper-uigap-onefourth) var(--face-glow));
 }
 
 .core {
-    stop-color: var(--agents-hologram-deep);
+    stop-color: color-mix(in oklab, var(--face-glow) 20%, black);
 }
 
 .glow {
-    stop-color: var(--paper-panel-agents);
+    stop-color: var(--face-glow);
 }
 
 .rim {

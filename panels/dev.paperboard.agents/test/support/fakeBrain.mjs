@@ -155,6 +155,31 @@ const fixture = (f) => fs.readFileSync(path.join(fixturesDir, f), "utf8");
 async function codex() {
     const home = process.env.CODEX_HOME;
     const auth = home ? path.join(home, "auth.json") : null;
+    if (argv[0] === "app-server") {
+        // JSON-RPC a line each: initialize, then account/rateLimits/read answered from plan.codexUsage
+        // (plan.codexUsageError: refused); then wait to be stopped
+        log({ event: "app-server", argv });
+        let buf = "";
+        let initialized = false;
+        process.stdin.setEncoding("utf8");
+        process.stdin.on("data", (d) => {
+            buf += d;
+            for (let i = buf.indexOf("\n"); i >= 0; i = buf.indexOf("\n")) {
+                const msg = JSON.parse(buf.slice(0, i));
+                buf = buf.slice(i + 1);
+                if (msg.method === "initialize") {
+                    initialized = true;
+                    out({ id: msg.id, result: { userAgent: "codex/9.8.7", codexHome: home } });
+                } else if (msg.method === "account/rateLimits/read") {
+                    if (!initialized) out({ id: msg.id, error: { code: -32600, message: "Not initialized" } });
+                    else if (plan.codexUsageError) out({ id: msg.id, error: { code: -32600, message: plan.codexUsageError } });
+                    else out({ id: msg.id, result: plan.codexUsage });
+                }
+            }
+        });
+        process.on("SIGTERM", () => process.exit(0));
+        return;
+    }
     if (argv[0] === "login" && argv[1] === "status") {
         if (plan.status) {
             process.stdout.write(plan.status.stdout ?? "");
@@ -292,7 +317,7 @@ async function claude() {
         return;
     }
     if (argv.includes("--input-format")) {
-        // the models question: an initialize request over stream-json, answered, then wait to be stopped
+        // a question over stream-json (initialize: the models; get_usage: plan.claudeUsage), answered, then wait to be stopped
         let buf = "";
         process.stdin.setEncoding("utf8");
         process.stdin.on("data", (d) => {
@@ -302,6 +327,10 @@ async function claude() {
                 buf = buf.slice(i + 1);
                 if (msg.type === "control_request" && msg.request?.subtype === "initialize") {
                     out({ type: "control_response", response: { subtype: "success", request_id: msg.request_id, response: { models: plan.claudeModels ?? [] } } });
+                }
+                if (msg.type === "control_request" && msg.request?.subtype === "get_usage") {
+                    log({ event: "usage", request: msg.request });
+                    out({ type: "control_response", response: { subtype: "success", request_id: msg.request_id, response: plan.claudeUsage ?? { rate_limits_available: false } } });
                 }
             }
         });
@@ -364,6 +393,9 @@ async function opencode() {
         const expected = `Basic ${Buffer.from(`opencode:${process.env.OPENCODE_SERVER_PASSWORD}`).toString("base64")}`;
         // what it was told, read again on every request so a test can change it as it goes:
         //   plan.integrations    the providers it knows (else the captured list)
+        //   plan.catalogMs       how long its catalog takes to load (default 300). As OpenCode 2's, it starts loading
+        //                        on the first request past /api/info, lists nothing till it has, then says
+        //                        `integration.updated` on /api/event
         //   plan.attempts        a sign-in's status by its id ({ status, message }); "pending" otherwise
         //   plan.cancelRefuses   a sign-in it won't stop: its refusal's message
         // A key connected stays connected (as a credential labelled "<name> key"), and each sign-in is
@@ -372,7 +404,19 @@ async function opencode() {
         const kept = path.join(FAKE_DIR, "opencode.json");
         const memory = () => (fs.existsSync(kept) ? JSON.parse(fs.readFileSync(kept, "utf8")) : { attempts: 0, keys: [] });
         const remember = (m) => fs.writeFileSync(kept, JSON.stringify(m));
+        let loaded = false;
+        let loading = false;
+        const streams = new Set();
+        const load = () => {
+            if (loading) return;
+            loading = true;
+            setTimeout(() => {
+                loaded = true;
+                for (const res of streams) res.write(`data: ${JSON.stringify({ type: "integration.updated", data: {} })}\n\n`);
+            }, plan.catalogMs ?? 300);
+        };
         const integrations = () => {
+            if (!loaded) return [];
             const keys = memory().keys;
             return (now().integrations ?? JSON.parse(fixture("opencodeIntegrations.json"))).map((p) =>
                 keys.includes(p.id) ? { ...p, connections: [...(p.connections ?? []), { id: `${p.id}-key`, type: "credential", label: `${p.name} key` }] } : p,
@@ -386,6 +430,13 @@ async function opencode() {
                 if (req.headers.authorization !== expected) return res.writeHead(401).end('{"message":"unauthorized"}');
                 const json = (o) => res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify(o));
                 if (req.url === "/api/info") return json({ data: {} });
+                load();
+                if (req.url === "/api/event") {
+                    res.writeHead(200, { "content-type": "text/event-stream" }).write(`data: ${JSON.stringify({ type: "server.connected", data: {} })}\n\n`);
+                    streams.add(res);
+                    res.on("close", () => streams.delete(res));
+                    return;
+                }
                 if (req.url === "/api/integration") return json({ data: integrations() });
                 const key = /^\/api\/integration\/([^/]+)\/connect\/key$/.exec(req.url);
                 if (req.method === "POST" && key) {
@@ -412,7 +463,12 @@ async function opencode() {
         });
         server.listen(port, host, () => log({ event: "listening", host, port }));
         // plan.serveIgnoresTerm: a server that only goes when it's killed
-        process.on("SIGTERM", () => (plan.serveIgnoresTerm ? log({ event: "ignored SIGTERM" }) : server.close(() => process.exit(0))));
+        process.on("SIGTERM", () => {
+            if (plan.serveIgnoresTerm) return log({ event: "ignored SIGTERM" });
+            server.close(() => process.exit(0));
+            // an event stream still open would keep it up
+            server.closeAllConnections();
+        });
         return;
     }
     if (argv[0] === "acp") {

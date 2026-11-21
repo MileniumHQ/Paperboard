@@ -22,7 +22,8 @@ import {
 } from "@mileniumhq/paperui";
 import { errorMessage } from "@mileniumhq/paperapi";
 import BrainLogo from "../lib/BrainLogo";
-import { BRAINS, COMPACTIONS, DEFAULT_MODEL, HARNESSES, LIMITS, type Compaction, type Harness, type Settings as Saved } from "../contract";
+import ColorPicker from "../lib/ColorPicker";
+import { BRAINS, COMPACTIONS, DEFAULT_MODEL, HARNESSES, LIMITS, type AgentColor, type Compaction, type Harness, type Settings as Saved } from "../contract";
 import type { Agent } from "../lib/agent";
 import { SEARCH_MODELS_FROM, brainCli, createModels, loadedModels } from "../lib/brains";
 import { BrainButtons, BrainStatus, SignInModal, brainLine, createBrainActions } from "./Brain";
@@ -64,9 +65,10 @@ function AgentSettings(props: { agent: Agent }) {
     const save = (patch: Partial<Saved>) =>
         props.agent.saveSettings((cur) => {
             const next = { ...cur, ...patch };
-            return next.name === cur.name && next.harness === cur.harness && next.model === cur.model ? null : next;
+            return next.name === cur.name && next.color === cur.color && next.harness === cur.harness && next.model === cur.model ? null : next;
         });
     // a pick shows at once, while it saves
+    const color = createSavedValue(() => current().color, (c: AgentColor) => save({ color: c }));
     const harness = createSavedValue(() => current().harness, (h: Harness) => save({ harness: h, model: null }));
     const picked = createSavedValue(() => current().model ?? DEFAULT_MODEL, (v: string) => save({ model: v === DEFAULT_MODEL ? null : v }));
     const report = (title: string, saving: Promise<void>) => {
@@ -102,6 +104,9 @@ function AgentSettings(props: { agent: Agent }) {
                         onChange={saveName}
                         onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
                     />
+                </PaperSettingItem>
+                <PaperSettingItem title="Color" description="The color of your agent.">
+                    <ColorPicker value={color.value()} onPick={(c) => report("Couldn't change the color", color.set(c))} />
                 </PaperSettingItem>
                 <PaperSettingItem title="Brain" description="The agent harness that thinks for it. Each keeps its own thread of your conversation.">
                     <PaperSelectMenu

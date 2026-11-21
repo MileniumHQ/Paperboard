@@ -5,7 +5,7 @@
 // conversation as entry events plus a history call.
 
 import path from "node:path";
-import { BRAINS, DEFAULT_MODEL, HARNESSES, LIMITS, NO_ONBOARDING, ONBOARDING_STEP, PANEL_ID, parseSettings, type AiState, type OnboardingDraft, type Harness, type Settings, type agentsContract } from "../contract";
+import { BRAINS, DEFAULT_MODEL, HARNESSES, LIMITS, NO_ONBOARDING, ONBOARDING_STEP, PANEL_ID, USAGE_HARNESSES, parseSettings, type AiState, type BrainUsage, type OnboardingDraft, type Harness, type Settings, type agentsContract } from "../contract";
 import { HomeFolder, moveHomeFolder } from "./homeFolder";
 import { Checkpoints } from "./checkpoints";
 import { shellToolset } from "./shell";
@@ -27,6 +27,7 @@ import { checkSecretName } from "./mcpConfig";
 import { mcpToolset } from "./mcpToolset";
 import type { ToolsConfig } from "../toolsContract";
 import { askAntigravityModels, askClaudeModels, listModels } from "./models";
+import { readUsage } from "./usage";
 import { Memory } from "./memory";
 import { messagesToolset } from "./messages";
 import { Routines } from "./routines";
@@ -99,8 +100,10 @@ export class AiApp {
     private turnLog: TurnLog | null = null;
     servers!: McpServers;
     asker!: Asker;
-    /** the empty folder Claude runs in when it's asked for its models */
+    /** the empty folder a harness runs in when it's asked about itself: its models, its usage */
     private modelsDir = "";
+    /** a usage question still out, per brain: a second ask while it is gets the same answer */
+    private usageAsks = new Map<Harness, Promise<BrainUsage>>();
     private readonly blocks: BlocksSync;
     private settle!: (failure: Error | null) => void;
     private readonly settled = new Promise<Error | null>((ok) => (this.settle = ok));
@@ -390,7 +393,7 @@ export class AiApp {
         if (!Number.isInteger(draft.step) || draft.step < 0 || draft.step > ONBOARDING_STEP.computer) throw new Error(`step ${draft.step} isn't one the first meeting picks up at`);
         if (draft.name.length > LIMITS.name) throw new Error(`names are limited to ${LIMITS.name} characters`);
         if (draft.model !== null && draft.model.length > LIMITS.model) throw new Error(`models are limited to ${LIMITS.model} characters`);
-        this.ctx.setState({ onboarding: { step: draft.step, name: draft.name, harness: draft.harness, model: draft.model } });
+        this.ctx.setState({ onboarding: { step: draft.step, name: draft.name, color: draft.color, harness: draft.harness, model: draft.model } });
     }
 
     /** The settings live in the panel's config document; none yet is a fresh install. One that won't read is never taken for none. */
@@ -432,6 +435,22 @@ export class AiApp {
                 );
             },
         );
+    }
+
+    /** How much of a brain's plan is used, asked of the harness itself. */
+    async usage(input: unknown): Promise<BrainUsage> {
+        const harness = this.harnessOf(input);
+        if (!USAGE_HARNESSES.includes(harness)) throw new Error(`${BRAINS[harness].name} has no usage limits of its own to show`);
+        const b = this.brains.snapshot()[harness];
+        if (!b.signedIn) throw new Error(`${BRAINS[harness].name} isn't signed in`);
+        const command = this.brains.resolve(harness);
+        if (!command) throw new Error(`${BRAINS[harness].program} isn't installed`);
+        const out = this.usageAsks.get(harness);
+        if (out) return out;
+        const env = { ...this.brains.env(harness), ...(harness === "claude-code" ? CLAUDE_MEMORY_OFF : {}) };
+        const ask = readUsage(harness, { ...this.host, write: this.host.tools.write }, { command, env, cwd: this.modelsDir }).finally(() => this.usageAsks.delete(harness));
+        this.usageAsks.set(harness, ask);
+        return ask;
     }
 
     /** Why a brain can't think right now, in words that say how to fix it; null when it can. */
@@ -577,6 +596,7 @@ export class AiApp {
             brains: {
                 state: () => this.brains.snapshot(),
                 current: () => this.settings().harness,
+                usage: (harness) => this.usage({ harness }),
                 // a model belongs to its brain: the new one starts on its own default, as the settings do it
                 choose: async (harness) => void (await this.setup({ settings: { ...this.settings(), harness, model: null } })),
                 install: (harness) => this.brains.installOwn(harness),
