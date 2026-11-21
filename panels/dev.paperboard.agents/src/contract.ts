@@ -380,6 +380,10 @@ export const SIGN_IN_REQUIRED: Record<Harness, boolean> = { codex: true, antigra
  */
 export const SHARED_SIGN_IN: Record<Harness, boolean> = { codex: false, antigravity: true, "claude-code": false, opencode: false };
 
+/** The brains the panel signs out itself: a sign-in of their own, not a shared one. */
+export type SignsOut = "codex" | "claude-code";
+export const signsOut = (h: Harness): h is SignsOut => SIGN_IN_REQUIRED[h] && !SHARED_SIGN_IN[h];
+
 /** A field of a provider's connect form. Only text fields (optionally a list of choices) are supported. */
 const providerField = object({
     key: text(),

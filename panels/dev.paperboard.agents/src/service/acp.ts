@@ -298,7 +298,7 @@ export type AcpCall = (method: string, params: unknown) => Promise<any>;
 
 /**
  * Starts a short-lived ACP server, runs `initialize`, executes `run(call)`, and stops it cleanly.
- * Used for Antigravity's status check (`session/list`), logout (`logout`), and model listing (`session/new`).
+ * Used for Antigravity's status check (`session/list`) and model listing (`session/new`).
  */
 export async function runAcpCall<T>(
     host: AcpProcessHost,

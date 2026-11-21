@@ -26,7 +26,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { errorMessage, SerialQueue } from "@mileniumhq/paperapi";
 import { writeFileAtomicSync } from "@mileniumhq/paperapi/fs";
-import { BRAINS, SHARED_SIGN_IN, SIGN_IN_REQUIRED, type BrainState, type Harness, type LoginPrompt } from "../contract";
+import { BRAINS, SIGN_IN_REQUIRED, signsOut, type BrainState, type Harness, type LoginPrompt } from "../contract";
 import { AcpRpcError, runAcpCall } from "./acp";
 import { LOGOUT_COMMAND, STATUS_COMMAND, antigravityAcpArgs, callbackAddress, loginCommand, loginEnv, loginTail, outputTail, readLoginOutput, readStatus, type LoginMethod } from "./brainLogin";
 import type { StartOptions } from "./browser";
@@ -329,14 +329,12 @@ export class Brains {
 
     signOut(harness: Harness): Promise<void> {
         if (harness === "opencode") throw new Error("OpenCode's providers are disconnected one by one");
-        if (SHARED_SIGN_IN[harness]) throw new Error(`${BRAINS[harness].program} uses this computer's own sign-in; sign out of it there`);
-        const logout = LOGOUT_COMMAND[harness];
-        if (!logout) throw new Error(`${BRAINS[harness].program} has no sign-out command`);
+        if (!signsOut(harness)) throw new Error(`${BRAINS[harness].program} uses this computer's own sign-in; sign out of it there`);
         return this.busy[harness].run(async () => {
             const exe = this.resolve(harness);
             if (!exe) throw this.fail(harness, `${BRAINS[harness].program} isn't installed.`);
             const timeoutMs = this.deps.statusMs ?? STATUS_MS;
-            const out = await this.deps.host.exec(exe, logout, { timeoutMs, env: this.env(harness) });
+            const out = await this.deps.host.exec(exe, LOGOUT_COMMAND[harness], { timeoutMs, env: this.env(harness) });
             if (out.exitCode !== 0) throw this.fail(harness, `${BRAINS[harness].program} didn't sign out: ${outputTail(out.stderr || out.stdout) || `exit ${out.exitCode}`}`);
             await this.look(harness);
         });

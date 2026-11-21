@@ -7,13 +7,13 @@
 // one place, and a login whose page never shows up is a loud failure that
 // carries what the harness did print.
 
-import type { Harness, LoginPrompt } from "../contract";
+import type { Harness, LoginPrompt, SignsOut } from "../contract";
 import { LOOPBACK_HOSTS } from "./mcpOAuth";
 
 /** Sign-in methods the UI can ask for: the browser (default) or, away from the computer's own screen, a code. */
 export type LoginMethod = "browser" | "code";
 
-/** Flags shared by every Antigravity ACP invocation (login, status, logout, models, turns, asks). */
+/** Flags shared by every Antigravity ACP invocation (login, status, models, turns, asks). */
 export function antigravityAcpArgs(home: string): string[] {
     return ["acp", "--gemini-dir", home, "--app-data-dir", "antigravity-cli", "--disable-telemetry", "--include-default-customizations=false"];
 }
@@ -47,7 +47,7 @@ export const STATUS_COMMAND: Record<"codex" | "claude-code", string[]> = {
     codex: ["login", "status"],
     "claude-code": ["auth", "status"],
 };
-export const LOGOUT_COMMAND: Partial<Record<Harness, string[]>> = {
+export const LOGOUT_COMMAND: Record<SignsOut, string[]> = {
     codex: ["logout"],
     "claude-code": ["auth", "logout"],
 };
