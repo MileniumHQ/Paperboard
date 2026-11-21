@@ -102,11 +102,14 @@ async function gitHub(): Promise<IssueGitHub> {
     return status.state === "signed-in" ? { repo, state: status.state, login: status.login } : { repo, state: status.state };
 }
 
+// what an agent is called in the picker where trissue's name is longer than people say it
+const SHORT_NAMES: Record<string, string> = { claude: "Claude" };
+
 export function issueReportSetup(): CallAnswer<"issue-report-setup"> {
     const { prompt, links } = config();
     return {
         prompt: prompt ?? "What went wrong?",
-        agents: detectHarnesses().map((agent) => ({ id: agent.id, name: agent.name })),
+        agents: detectHarnesses().map((agent) => ({ id: agent.id, name: SHORT_NAMES[agent.id] ?? agent.name })),
         known: knownHarnesses().map((agent) => agent.name),
         links: (links ?? []).map(({ label, description }) => ({ label, description })),
     };
