@@ -39,7 +39,9 @@ export function claudeUsage(answer: unknown): BrainUsage {
     if (!a || typeof a !== "object") throw new Error("Claude's usage answer wasn't what was expected");
     const plan = planName(a.subscription_type);
     // signed in with an API key: billed by use, with no plan limits to show
-    if (a.rate_limits_available !== true || !a.rate_limits) return { plan, windows: [] };
+    if (a.rate_limits_available !== true) return { plan, windows: [] };
+    // a plan whose limits didn't come back: Claude couldn't reach them this time, which isn't "no limits"
+    if (!a.rate_limits || typeof a.rate_limits !== "object") throw new Error("Claude couldn't get its plan's limits right now. Try again in a moment.");
     const r = a.rate_limits;
     const windows: UsageWindow[] = [];
     const add = (id: string, label: string, used: unknown, resetsAt: unknown) => {
@@ -59,6 +61,7 @@ export function claudeUsage(answer: unknown): BrainUsage {
         const used = typeof extra.used_credits === "number" && typeof extra.monthly_limit === "number" && extra.monthly_limit > 0 ? (extra.used_credits / extra.monthly_limit) * 100 : extra.utilization;
         add("extra", "Extra usage", used, null);
     }
+    if (!windows.length) throw new Error("Claude's answer had none of the plan limits Paperboard knows how to show.");
     return { plan, windows };
 }
 

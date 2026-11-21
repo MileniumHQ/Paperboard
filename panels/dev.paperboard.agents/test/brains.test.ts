@@ -434,6 +434,9 @@ describe("brain failures", () => {
         // an API key: billed by use, no limits
         plan(root, { claudeUsage: { subscription_type: null, rate_limits_available: false, rate_limits: null } });
         expect(await readUsage("claude-code", host, launch("claude-code"))).toEqual({ plan: null, windows: [] });
+        // a plan whose limits didn't come back is a failed read, never "no limits"
+        plan(root, { claudeUsage: { subscription_type: "max", rate_limits_available: true, rate_limits: null } });
+        await expect(readUsage("claude-code", host, launch("claude-code"))).rejects.toThrow("Claude couldn't get its plan's limits right now. Try again in a moment.");
 
         // Codex's app-server: a Free plan's one window is a month long
         plan(root, {
@@ -457,9 +460,9 @@ describe("brain failures", () => {
 
         // every harness asked was stopped once it answered: nothing reached a model
         const asked = host.started.filter((s) => s.id.includes(".usage."));
-        expect(asked).toHaveLength(5);
+        expect(asked).toHaveLength(6);
         for (const s of asked) await host.gone(s.id);
-        expect(host.kills.filter((k) => k.id.includes(".usage.")).map((k) => k.signal)).toEqual(Array(5).fill("SIGTERM"));
+        expect(host.kills.filter((k) => k.id.includes(".usage.")).map((k) => k.signal)).toEqual(Array(6).fill("SIGTERM"));
     }, SLOW);
 
     test("a Claude that ends while it is asked for its models is a failed listing, not a crashed service", async () => {

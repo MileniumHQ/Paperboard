@@ -27,7 +27,6 @@ import type { Agent } from "../lib/agent";
 import { SEARCH_MODELS_FROM, createModels, harnessName, loadedModels } from "../lib/brains";
 import { BrainButtons, BrainStatus, SignInModal, brainLine, createBrainActions } from "./Brain";
 import Providers from "./Providers";
-import Usage from "./Usage";
 
 export default function Settings(props: { agent: Agent }) {
     return (
@@ -196,10 +195,7 @@ function BrainsSettings(props: { agent: Agent }) {
                 <For each={HARNESSES}>
                     {(h) => (
                         <PaperSettingItem title={harnessName(h)} description={brainLine(h, props.agent.state.brains[h])}>
-                            <PaperFlex direction="row" gap="half" align="center" wrap>
-                                <Usage agent={props.agent} harness={h} />
-                                <BrainButtons agent={props.agent} harness={h} actions={actions} onProviders={() => setProviders(true)} onSignIn={setSigningIn} />
-                            </PaperFlex>
+                            <BrainButtons agent={props.agent} harness={h} actions={actions} onProviders={() => setProviders(true)} onSignIn={setSigningIn} />
                         </PaperSettingItem>
                     )}
                 </For>
