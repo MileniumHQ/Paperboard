@@ -98,3 +98,30 @@ describe("check-app-styling: hairlines are exempt, sizes are not", () => {
         expect(check(css)).toEqual({ code: 0, out: "ok: app styling\n" });
     });
 });
+
+describe("check-store-listing.ts: a panel's store block passes the publisher's validation", () => {
+    const check = (store: unknown, files: Record<string, string> = {}) => {
+        const root = tree([], { "manifest.json": JSON.stringify({ id: "dev.me", version: "0.1.0", store }), ...files });
+        return run(root, ["bun", join(import.meta.dir, "check-store-listing.ts"), root]);
+    };
+
+    test.each([
+        ["a missing file", { about: "./store/about.md" }, {}, "ENOENT"],
+        ["a detail over 160 characters", { services: [{ name: "Ollama", detail: "x".repeat(161) }] }, {}, "store.services[0] needs a name"],
+        ["a path outside store/", { about: "./README.md" }, { "README.md": "# Me\n" }, "inside store/"],
+        ["an about over the cap", { about: "./store/about.md" }, { "store/about.md": "x".repeat(32 * 1024 + 1) }, "byte about cap"],
+    ])("fails on %s", (_, store, files, message) => {
+        const r = check(store, files);
+        expect(r.code).toBe(1);
+        expect(r.out).toContain(message);
+    });
+
+    test("passes a listing whose files exist, and a manifest without one", () => {
+        const listed = check(
+            { about: "./store/about.md", services: [{ name: "Ollama", detail: "Downloading models" }] },
+            { "store/about.md": "# Me\n" },
+        );
+        expect(listed.code).toBe(0);
+        expect(check(undefined).code).toBe(0);
+    });
+});

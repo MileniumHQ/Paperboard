@@ -282,7 +282,8 @@ gstep library "library build" run_in "$ROOT/services/library" bun run build
 gstep library "library code check" run_in "$ROOT" bun scripts/gate/check-solid.ts services/library/src services/library/test
 gwarn library "library styling literals" bash "$ROOT/scripts/gate/check-app-styling.sh" services/library
 
-# ── first-party panels: suite, typecheck, production build, code check.
+# ── first-party panels: suite, typecheck, production build, store listing,
+# code check.
 # The daemon runs the built dist/service.js, not the TypeScript source, so the
 # gate rebuilds every panel: tests and typechecks prove the source, the build
 # proves the artifact that actually ships. ───────────────────────────────────
@@ -292,6 +293,7 @@ for short in agents blocks botcreator gameserver terminal; do
     gstep "$short" "$panel typecheck" run_in "$ROOT/$panel" bunx tsc --noEmit
     gstep "$short" "$panel typecheck:tests" run_in "$ROOT/$panel" bun run typecheck:tests
     gstep "$short" "$panel build" run_in "$ROOT/$panel" bun run build
+    gstep "$short" "$panel store listing" run_in "$ROOT" bun scripts/gate/check-store-listing.ts "$panel"
     gstep "$short" "$panel code check" run_in "$ROOT" bun scripts/gate/check-solid.ts "$panel"
     gwarn "$short" "$panel styling literals" bash "$ROOT/scripts/gate/check-app-styling.sh" "$panel"
 done
