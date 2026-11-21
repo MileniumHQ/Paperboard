@@ -66,7 +66,7 @@ export default function SignIn(props: { agent: Agent; entry: SignInEntry; name: 
                             <img
                                 class={styles.shot}
                                 src={`data:image/png;base64,${image()}`}
-                                alt={`The sign-in page on ${e().site}, with the fields ${props.name} picked numbered`}
+                                alt={`The sign-in page on ${e().site}, with the fields ${props.name} picked marked by name`}
                             />
                         </Show>
                         <form
@@ -81,7 +81,7 @@ export default function SignIn(props: { agent: Agent; entry: SignInEntry; name: 
                                         <PaperInput
                                             name={`sign-in-${i()}`}
                                             fullWidth
-                                            label={`${i() + 1}. ${f.label}`}
+                                            label={f.label}
                                             type={f.secret ? "password" : "text"}
                                             autocomplete="off"
                                             maxLength={LIMITS.signIn.valueChars}

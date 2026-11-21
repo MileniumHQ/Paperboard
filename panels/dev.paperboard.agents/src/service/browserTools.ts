@@ -334,6 +334,9 @@ async function signInPrepare(c: BrowserComputer, args: Record<string, unknown>):
     if (!ms) throw new ToolError("look at the browser window first so its marks are fresh");
     const fields = args.fields;
     if (!Array.isArray(fields) || fields.length < 1 || fields.length > LIMITS.signIn.fields) throw new ToolError(`pick 1 to ${LIMITS.signIn.fields} fields`);
+    // each field is marked in the picture with what the user types there, as their card names it
+    const labels = args.labels;
+    if (!Array.isArray(labels) || labels.length !== fields.length || !labels.every((l) => typeof l === "string" && l.trim())) throw new ToolError("give each field its label");
     const mark = (n: unknown) => {
         const i = Number(n);
         if (!Number.isInteger(i) || i < 1 || i > ms.length) throw new ToolError(`mark ${String(n)} doesn't exist; the last look had ${ms.length}`);
@@ -346,7 +349,7 @@ async function signInPrepare(c: BrowserComputer, args: Record<string, unknown>):
     if (new Set(numbers).size !== numbers.length) throw new ToolError("each field, and the submit button, is a different mark");
     for (const [n, m] of picked) if (!["entry", "text", "password text"].includes(m.kind)) throw new ToolError(`mark ${n} is a ${m.kind}, not a text field`);
     const site = siteOf(tab.url);
-    const boxes = [...picked.map(([, m], i) => ({ ...m, label: String(i + 1) })), ...(submit ? [{ ...submit[1], label: "submit" }] : [])];
+    const boxes = [...picked.map(([, m], i) => ({ ...m, label: labels[i] as string })), ...(submit ? [{ ...submit[1], label: "Submit" }] : [])];
     const s = await c.windows.session(tab);
     const image = await shot(c, tab, overlayJs({ boxes }), { format: "png" }, s);
     const centre = (m: Mark) => ({ x: m.x + Math.floor(m.w / 2), y: m.y + Math.floor(m.h / 2) });
