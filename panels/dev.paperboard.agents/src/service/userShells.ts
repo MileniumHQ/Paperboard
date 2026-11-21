@@ -23,6 +23,7 @@ import xterm from "@xterm/headless";
 import type { IMarker, Terminal as Screen } from "@xterm/headless";
 import { errorMessage } from "@mileniumhq/paperapi";
 import { LIMITS, type SudoEntry, type UserShellView } from "../contract";
+import { loginEnv } from "./brainLogin";
 import type { ToolResult } from "./computerMcp";
 import { OUTPUT_CHARS } from "./shell";
 import { fault } from "./toolsets";
@@ -277,8 +278,10 @@ export class UserShells {
         this.shells.set(n, s);
         try {
             if (await t.exists(id)) await t.destroy(id);
-            // pagers wait for keys; a command's output should simply end
-            await t.create(id, { cols: COLS, rows: ROWS, cwd: folder, env: { PAGER: "cat", GIT_PAGER: "cat", MANPAGER: "cat", SYSTEMD_PAGER: "" } });
+            // pagers wait for keys; a command's output should simply end. A command that would open a browser
+            // (gh auth login) prints its link instead, for the agent to open in its own
+            const env = { PAGER: "cat", GIT_PAGER: "cat", MANPAGER: "cat", SYSTEMD_PAGER: "", ...loginEnv(this.deps.platform ?? process.platform) };
+            await t.create(id, { cols: COLS, rows: ROWS, cwd: folder, env });
             await s.settle(START_MS, () => s.idle);
             if (!s.idle) {
                 const said = s.cursorLine().trim();

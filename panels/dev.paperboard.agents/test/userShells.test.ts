@@ -102,6 +102,9 @@ describe("the agent's shells on the user's computer", () => {
         // the command's own output, without the prompt or the line typed
         expect(both.text).toBe(`\`pwd; echo "answer $ANSWER"\` exited with 0.\n\n${path.join(s.project, "src")}\nanswer 42`);
 
+        // a command that would open a browser on the user's screen prints its link for the agent instead
+        expect((await s.call("user_shell_run", { shell: 1, command: 'echo "browser: $BROWSER"' })).text).toEndWith("browser: true");
+
         const failed = await s.call("user_shell_run", { shell: 1, command: "ls nothing-here" });
         expect(failed.isError).toBe(true);
         expect(failed.text).toStartWith("`ls nothing-here` exited with 2.");
