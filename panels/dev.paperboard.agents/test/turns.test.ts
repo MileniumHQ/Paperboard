@@ -40,7 +40,7 @@ describe("a turn's input", () => {
     }, SLOW);
 
     test("an Antigravity turn talks ACP with built-in tools off, passes Paperboard's MCP server, and refuses all ACP permission requests", async () => {
-        rig = await conversationRig({ harness: "antigravity" });
+        rig = await conversationRig({ harness: "antigravity", turnLog: true });
         rig.conversation.send("hello there [[tools]] [[ask-perm]]");
         await settled(rig);
         const [start] = rig.host.startedAs(turnId);
@@ -62,6 +62,11 @@ describe("a turn's input", () => {
             ["command", "reject_once"],
             ["mcp_paperboard_send_message", "reject_once"],
         ]);
+        // the turn log, written to disk, has what the panel wrote to agy, but never the MCP token in it
+        const written = rig.turnLog();
+        expect(written).toContain('"stdin"');
+        expect(written).toContain('"value":"[redacted]"');
+        expect(written).not.toContain(rig.mcp.token);
     }, SLOW);
 });
 

@@ -7,6 +7,7 @@ import type { ChatEntry, ChatState, Harness, Settings } from "../../src/contract
 import type { Sections } from "../../src/service/toolsets";
 import { startComputerMcp, type ComputerMcp } from "../../src/service/computerMcp";
 import { Conversation, TURN_PROC_ID } from "../../src/service/conversation";
+import { openTurnLog } from "../../src/service/turnLog";
 import { messagesToolset } from "../../src/service/messages";
 import { toolbox } from "../../src/service/toolsets";
 import { brainProgram, fakeEnv, fakeLog, Recorder, TestHost, tempDir } from "./host";
@@ -22,6 +23,8 @@ export interface Rig {
     settings: Settings;
     /** the fake brain's log */
     log(): any[];
+    /** the developer's turn log as written to disk, when the rig was made with turnLog */
+    turnLog(): string;
     /** the turns the brain was started for */
     turns(): any[];
     /** a fresh Conversation over the same folder: the service started again */
@@ -29,7 +32,7 @@ export interface Rig {
     close(): Promise<void>;
 }
 
-export async function conversationRig(o: { harness?: Harness; contextBudget?: number; problem?: (h: Harness) => string | null; resolve?: (h: Harness) => string | null; env?: (h: Harness) => Record<string, string>; root?: string; instructions?: () => Promise<Sections>; turnMs?: number; onLeave?: () => void } = {}): Promise<Rig> {
+export async function conversationRig(o: { harness?: Harness; contextBudget?: number; problem?: (h: Harness) => string | null; resolve?: (h: Harness) => string | null; env?: (h: Harness) => Record<string, string>; root?: string; instructions?: () => Promise<Sections>; turnMs?: number; onLeave?: () => void; turnLog?: boolean } = {}): Promise<Rig> {
     const root = o.root ?? tempDir("conversation");
     const harness = o.harness ?? "codex";
     const host = new TestHost(fakeEnv(root));
@@ -44,6 +47,7 @@ export async function conversationRig(o: { harness?: Harness; contextBudget?: nu
     const settings: Settings = { name: "Ada", harness, model: null, compaction: "summarize" };
     const entries = new Recorder<ChatEntry>();
     const states = new Recorder<ChatState>();
+    const turnLog = o.turnLog ? openTurnLog(path.join(root, "turn-log"), { PAPERBOARD_AGENT_LOG: "1" }) : null;
     const make = () => {
         const c = new Conversation({
             host,
@@ -61,6 +65,7 @@ export async function conversationRig(o: { harness?: Harness; contextBudget?: nu
             contextBudget: o.contextBudget,
             turnMs: o.turnMs,
             onLeave: o.onLeave,
+            log: turnLog,
         });
         c.init();
         return c;
@@ -75,6 +80,7 @@ export async function conversationRig(o: { harness?: Harness; contextBudget?: nu
         mcp,
         settings,
         log: () => fakeLog(root),
+        turnLog: () => fs.readFileSync(turnLog!.file, "utf8"),
         turns: () => fakeLog(root).filter((e) => e.event === "turn"),
         restart: () => (rig.conversation = make()),
         close: async () => {
