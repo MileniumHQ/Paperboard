@@ -121,7 +121,7 @@ export function Example() {
                         <td><PaperCode>direction</PaperCode></td>
                         <td><PaperCode>"horizontal" | "vertical"</PaperCode></td>
                         <td><PaperCode>"vertical"</PaperCode></td>
-                        <td><PaperCode>"horizontal"</PaperCode> lays the items in a wrapping row, sharing the width. Vertical stacks them at full width.</td>
+                        <td><PaperCode>"horizontal"</PaperCode> lays the items in rows, sharing each row's width. An item's title stays on one line: an item that would break it moves to the next row. Vertical stacks them at full width.</td>
                     </tr>
                     <tr>
                         <td><PaperCode>horizontal</PaperCode></td>
@@ -283,7 +283,8 @@ export function ProjectPicker(props: {
 
             <PaperText preset="subheader" as="h3" id="row">A row of options</PaperText>
             <PaperText preset="body" as="p">
-                Use <PaperCode>horizontal</PaperCode> for a few short options that fit side by side.
+                Use <PaperCode>horizontal</PaperCode> for short options that can sit side by side.
+                Items share the row while each title fits on one line, and break into more rows when they don't, so the same selector works in a wide dialog and on a phone.
             </PaperText>
             <PaperCard data-docs-demo padding="double" surface="front">
                 <PaperSelector name="docs-row" horizontal defaultValue="a">
@@ -297,6 +298,15 @@ export function ProjectPicker(props: {
     <PaperSelectorItem value="b" icon="dark_mode">Dark</PaperSelectorItem>
 </PaperSelector>`}
             </PaperCode>
+            <PaperCard data-docs-demo padding="double" surface="front">
+                <PaperSelector name="docs-rows" horizontal defaultValue="hourly">
+                    <PaperSelectorItem value="hourly" icon="schedule">Every hour</PaperSelectorItem>
+                    <PaperSelectorItem value="daily" icon="today">Daily</PaperSelectorItem>
+                    <PaperSelectorItem value="weekly" icon="date_range">Weekly</PaperSelectorItem>
+                    <PaperSelectorItem value="monthly" icon="calendar_month">Monthly</PaperSelectorItem>
+                    <PaperSelectorItem value="manual" icon="touch_app">Only when asked</PaperSelectorItem>
+                </PaperSelector>
+            </PaperCard>
         </PaperFlex>
     );
 }
