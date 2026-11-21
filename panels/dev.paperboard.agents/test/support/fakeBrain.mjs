@@ -338,6 +338,7 @@ async function claude() {
         if (newest(message).includes("[[work]]")) {
             out({ type: "stream_event", event: { type: "content_block_start", index: 0, content_block: { type: "text", text: "" } } });
             out({ type: "stream_event", event: { type: "content_block_start", index: 1, content_block: { type: "server_tool_use", id: "srvtoolu_fake", name: "web_search", input: {} } } });
+            // quiet: the fake brain is a child process; the pause is the simulated web search the test observes, not a wait on the test
             await new Promise((ok) => setTimeout(ok, 50));
         }
         if (texts(message, url)) {
