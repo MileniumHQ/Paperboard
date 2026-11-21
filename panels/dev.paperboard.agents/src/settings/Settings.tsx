@@ -105,7 +105,7 @@ function AgentSettings(props: { agent: Agent }) {
                         onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
                     />
                 </PaperSettingItem>
-                <PaperSettingItem title="Color" description="What its face glows in.">
+                <PaperSettingItem title="Color" description="The color of your agent.">
                     <ColorPicker value={color.value()} onPick={(c) => report("Couldn't change the color", color.set(c))} />
                 </PaperSettingItem>
                 <PaperSettingItem title="Brain" description="The agent harness that thinks for it. Each keeps its own thread of your conversation.">
