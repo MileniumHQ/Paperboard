@@ -10,6 +10,8 @@ Paperboard runs on your own computers. Your panels, their files and settings, an
 
 Paperboard downloads panels from our panel library (origami.ariapis.com), and app updates from i.paperboard.dev and GitHub. The install command (`curl -fsSL https://i.paperboard.dev | sh`, or `npx @mileniumhq/paperboard install`) downloads Paperboard from the same two places. Like any website, these servers see your IP address and which file you asked for. Our host, Cloudflare, keeps request logs for a few days so we can keep the service running and fix problems. We do not combine them with anything else.
 
+Some panels ask our panel APIs (panels.ariapis.com) for things a panel can't do on its own computer. The Game Server panel's Workshop tab searches and looks up Steam Workshop mods through it, so it sees your IP address, your search terms and the mod ids you look up. It passes them to Steam, keeps the answers in Cloudflare's cache for a minute (searches) or five minutes (mod details), and stores no record of who asked. It uses your IP address only to limit how many requests one computer can make.
+
 This website stores your light or dark theme choice in your browser and nothing else. It sets no cookies.
 
 ## Backups
