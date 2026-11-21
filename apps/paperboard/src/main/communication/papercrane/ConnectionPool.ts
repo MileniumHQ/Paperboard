@@ -14,6 +14,7 @@ import { readTlsCert } from "daemon/security/tlsIdentity";
 import { bareHost, bracketHost, checkProbeTarget, isLoopback } from "./probeTarget";
 import { PaperCraneClient } from "./PaperCraneClient";
 import { errorMessage } from "@mileniumhq/paperapi/errors";
+import type { IdentityPart } from "@mileniumhq/paperapi";
 import type { ComputerInfo } from "../../../shared/shellContract";
 
 export interface StoredComputer {
@@ -28,8 +29,28 @@ export interface StoredComputer {
     osVersion?: string;
     distroId?: string;
     distroName?: string;
+    flavor?: IdentityPart;
+    machine?: IdentityPart;
+    board?: string;
+    operator?: IdentityPart;
     arch?: string;
     isLocal?: boolean;
+}
+
+type OsFacts = Pick<StoredComputer, "os" | "osVersion" | "distroId" | "distroName" | "flavor" | "machine" | "board" | "operator">;
+
+/** What a daemon says the computer is: a layer it no longer reports is gone. */
+function osFactsOf(from: OsFacts): OsFacts {
+    return {
+        os: from.os,
+        osVersion: from.osVersion,
+        distroId: from.distroId,
+        distroName: from.distroName,
+        flavor: from.flavor,
+        machine: from.machine,
+        board: from.board,
+        operator: from.operator,
+    };
 }
 
 // timeout = lost in transit, refusal = nothing listening there
@@ -152,14 +173,23 @@ export class ConnectionPool extends EventEmitter {
         };
         this.computers.set("local", localComp);
         return getDetailedOsInfo().then((info) => {
-            Object.assign(localComp, {
-                os: info.os,
-                osVersion: info.osVersion,
-                distroId: info.distroId,
-                distroName: info.distroName,
-            });
+            Object.assign(localComp, osFactsOf(info));
             return null;
         }, (err) => errorMessage(err));
+    }
+
+    // a remote re-sends what it is on every sign-in: an OS upgrade, or
+    // detection a newer daemon learned, shows without pairing again
+    private refreshFacts(id: string, facts: OsFacts) {
+        const comp = this.computers.get(id);
+        // a daemon too old to answer with facts keeps what pairing recorded
+        if (!comp || !facts.os) return;
+        const next = osFactsOf(facts);
+        if (JSON.stringify(osFactsOf(comp)) === JSON.stringify(next)) return;
+        Object.assign(comp, next);
+        this.emit("change");
+        try { this.saveConfig(); }
+        catch (err) { logger.warn("[ConnectionPool] a computer's refreshed OS details were not saved:", err); } // quiet: memory holds them, and the next sign-in saves them again
     }
 
     // never a default id: operations must not land on the wrong machine.
@@ -171,6 +201,7 @@ export class ConnectionPool extends EventEmitter {
         if (!client) {
             client = new PaperCraneClient();
             client.on("status", () => this.emit("change"));
+            if (id !== "local") client.on("facts", (facts: OsFacts & { os?: string }) => this.refreshFacts(id, facts));
             this.clients.set(id, client);
             if (id === "local") {
                 // credentials resolved internally via handshake/embedded
@@ -309,10 +340,7 @@ export class ConnectionPool extends EventEmitter {
                 port: checked.port,
                 token: pairRes.token,
                 cert,
-                os: pairRes.os,
-                osVersion: pairRes.osVersion,
-                distroId: pairRes.distroId,
-                distroName: pairRes.distroName,
+                ...osFactsOf(pairRes),
                 arch: pairRes.arch,
                 isLocal: false,
             };
