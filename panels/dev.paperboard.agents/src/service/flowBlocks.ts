@@ -144,6 +144,9 @@ const brainChoices = (only: (h: Harness) => boolean = () => true) => HARNESSES.f
 
 const brainInput = { type: "brain", name: "Brain" } as const;
 
+/** how long the fields of a step reuse the usage its list read (see usageOf) */
+const USAGE_REUSE_MS = 30_000;
+
 export function flowBlocks(host: BlocksHost): BlockSet {
     const ready = async <T>(fn: () => Promise<T> | T) => {
         await host.ready();
@@ -178,12 +181,27 @@ export function flowBlocks(host: BlocksHost): BlockSet {
         brain(id);
         return HARNESS_NAMES[id as Harness];
     };
+    /**
+     * A brain's usage, one answer per flow step: the list reads it fresh, and the fields read after it reuse that
+     * answer for a short while, so a step that shows each limit's name, left and reset starts the harness once and
+     * every field is from the same moment. A failure isn't kept.
+     */
+    const usages = new Map<Harness, { at: number; answer: Promise<BrainUsage> }>();
+    const usageOf = (harness: Harness, fresh: boolean): Promise<BrainUsage> => {
+        const kept = usages.get(harness);
+        if (!fresh && kept && Date.now() - kept.at < USAGE_REUSE_MS) return kept.answer;
+        const answer = host.brains.usage(harness);
+        const entry = { at: Date.now(), answer };
+        usages.set(harness, entry);
+        answer.catch(() => usages.get(harness) === entry && usages.delete(harness)); // quiet: the read that asked throws it
+        return answer;
+    };
     /** a usage limit's id is its brain and the limit: claude-code/session */
     const usageLimit = async (id: string) => {
         const slash = id.indexOf("/");
         const harness = id.slice(0, slash) as Harness;
         if (slash < 0 || !USAGE_HARNESSES.includes(harness)) throw new Error(`"${id}" isn't a usage limit; one is a brain and a limit, like claude-code/session`);
-        const found = (await host.brains.usage(harness)).windows.find((w) => w.id === id.slice(slash + 1));
+        const found = (await usageOf(harness, false)).windows.find((w) => w.id === id.slice(slash + 1));
         if (!found) throw new Error(`${HARNESS_NAMES[harness]} has no usage limit "${id.slice(slash + 1)}" right now`);
         return found;
     };
@@ -476,7 +494,7 @@ export function flowBlocks(host: BlocksHost): BlockSet {
                 read: ({ brain: id }: { brain: Harness }) =>
                     ready(async () => {
                         brain(id);
-                        return (await host.brains.usage(id)).windows.map((w) => `${id}/${w.id}`);
+                        return (await usageOf(id, true)).windows.map((w) => `${id}/${w.id}`);
                     }),
             },
             {
