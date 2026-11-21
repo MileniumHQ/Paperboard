@@ -7,7 +7,7 @@ import { bootPanel, openSection, type BootedPanel, type BootOptions, type Page }
 
 setDefaultTimeout(60_000);
 
-const SETTINGS = { name: "Ada", color: "primary" as const, harness: "codex" as const, model: null, compaction: "summarize" as const };
+const SETTINGS = { name: "Ada", color: "blue" as const, harness: "codex" as const, model: null, compaction: "summarize" as const };
 
 let panel: BootedPanel | null = null;
 afterEach(async () => {
@@ -69,7 +69,7 @@ describe("the color", () => {
         await page.click(`[role=region][aria-label="Agent"] [aria-label="Teal"]`);
         await page.waitFor(`${chip("Teal")}.getAttribute("aria-pressed") === "true"`, "Teal picked");
         await page.settled();
-        expect(panel!.savedSettings()).toEqual({ ...SETTINGS, color: "extra-1" });
+        expect(panel!.savedSettings()).toEqual({ ...SETTINGS, color: "teal" });
         expect(await page.evaluate(`${chip("Blue")}.getAttribute("aria-pressed")`)).toBe("false");
         expect(page.exceptions).toEqual([]);
     });

@@ -28,12 +28,23 @@ export type Harness = (typeof HARNESSES)[number];
 export const DEFAULT_MODEL = "default";
 
 /**
- * The colors an agent can be: PaperUI's color roles, around the color wheel. Its face glows in it.
- * Settings saved before the color was a choice are primary.
+ * The colors an agent can be, around the color wheel; its face glows in it. Saved by its own name, and
+ * drawn in the PaperUI color role beside it, so a renamed role never touches what's saved.
+ * Settings saved before the color was a choice are blue.
  */
-export const AGENT_COLORS = ["primary", "extra-2", "extra-3", "danger", "attention", "warning", "success", "extra-1"] as const;
+export const AGENT_COLORS = ["blue", "purple", "pink", "red", "orange", "yellow", "green", "teal"] as const;
 export type AgentColor = (typeof AGENT_COLORS)[number];
-export const DEFAULT_COLOR: AgentColor = "primary";
+export const DEFAULT_COLOR: AgentColor = "blue";
+export const COLOR_ROLES: Record<AgentColor, string> = {
+    blue: "primary",
+    purple: "extra-2",
+    pink: "extra-3",
+    red: "danger",
+    orange: "attention",
+    yellow: "warning",
+    green: "success",
+    teal: "extra-1",
+};
 
 export const COMPACTIONS = ["summarize", "forget"] as const;
 export type Compaction = (typeof COMPACTIONS)[number];

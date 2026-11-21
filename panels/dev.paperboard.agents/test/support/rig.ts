@@ -39,7 +39,7 @@ export async function conversationRig(o: { harness?: Harness; contextBudget?: nu
     fs.mkdirSync(codexHome, { recursive: true });
     // the real messages toolset, texting the rig's conversation
     const mcp = await startComputerMcp(toolbox([messagesToolset({ say: (text, replyTo, files) => rig.conversation.say(text, replyTo, files) })]));
-    const settings: Settings = { name: "Ada", color: "primary", harness, model: null, compaction: "summarize" };
+    const settings: Settings = { name: "Ada", color: "blue", harness, model: null, compaction: "summarize" };
     const entries = new Recorder<ChatEntry>();
     const states = new Recorder<ChatState>();
     const make = () => {

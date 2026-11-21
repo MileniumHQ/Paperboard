@@ -6,7 +6,7 @@ import { BLINK_MS, blinkSince, frameSeconds } from "./blink";
 import styles from "./Face.module.css";
 import type { FaceSkin } from "./skins";
 import { getVarCss } from "@mileniumhq/paperui";
-import { DEFAULT_COLOR, type AgentColor } from "../contract";
+import { COLOR_ROLES, DEFAULT_COLOR, type AgentColor } from "../contract";
 
 const R = 80;
 /** the hologram's rim, in the sphere's own units */
@@ -198,7 +198,7 @@ export function Face(props: {
             height={size()}
             role="img"
             aria-label={`Agent, looking ${props.face.expression()}`}
-            style={props.skin ? { "--face-ink": props.skin.ink } : { "--face-glow": getVarCss(props.color ?? DEFAULT_COLOR) }}
+            style={props.skin ? { "--face-ink": props.skin.ink } : { "--face-glow": getVarCss(COLOR_ROLES[props.color ?? DEFAULT_COLOR]) }}
         >
             <Show when={props.skin}>
                 {(skin) => <circle cx={frame().dx} cy={-frame().dy} r={R} fill={skin().sphere} />}

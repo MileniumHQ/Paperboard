@@ -43,7 +43,7 @@ export async function appRig(o: { settings?: Settings; downloads?: ("claude-code
         // a brain to download installs the fake one
         packages: packageHost({ codex }, Object.fromEntries((o.downloads ?? []).map((h) => [h, brainPackage(root, h)]))),
         storageDir: async () => storage,
-        readSettings: async () => o.settings ?? { name: "Ada", color: "primary", harness: "codex", model: null, compaction: "summarize" },
+        readSettings: async () => o.settings ?? { name: "Ada", color: "blue", harness: "codex", model: null, compaction: "summarize" },
         writeSettings: async () => {},
         findProgram,
         // a brain on the machine running the tests is never the one under test
