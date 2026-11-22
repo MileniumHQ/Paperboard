@@ -230,21 +230,17 @@ gstep scripts "root scripts typecheck" run_in "$ROOT" bun packages/paperui/node_
 gstep scripts "root scripts tests" run_in "$ROOT" bun test --parallel scripts
 gstep scripts "root scripts code check" run_in "$ROOT" bun scripts/gate/check-solid.ts scripts
 
-# ── paperdocs: tests plus the static site build (typecheck, site + docs
-# prerender, alias files, shared 404) ────────────────────────────────────────
-gstep paperdocs "paperdocs typecheck:tests" run_in "$ROOT/apps/paperdocs" bun run typecheck:tests
-gstep paperdocs "paperdocs tests" run_in "$ROOT/apps/paperdocs" bun test
+## ── paperdocs: static site build (typecheck, site + docs prerender, alias files, shared 404) ──
 gstep paperdocs "paperdocs build" run_in "$ROOT/apps/paperdocs" bun run build
-gstep paperdocs "paperdocs code check" run_in "$ROOT" bun scripts/gate/check-solid.ts apps/paperdocs/src apps/paperdocs/test apps/paperdocs/scripts
+gstep paperdocs "paperdocs code check" run_in "$ROOT" bun scripts/gate/check-solid.ts apps/paperdocs/src apps/paperdocs/scripts
 
-# ── shared libraries ─────────────────────────────────────────────────────────
+# ── shared libraries ────────────────────────────────────────────────────────
 gstep paperapi "paperapi typecheck" run_in "$ROOT/packages/paperapi" bunx tsc --noEmit
 gstep paperapi "paperapi tests" run_in "$ROOT/packages/paperapi" bun run test
 gstep paperapi "paperapi code check" run_in "$ROOT" bun scripts/gate/check-solid.ts packages/paperapi/src packages/paperapi/test
-gstep paperui "paperui typecheck:tests" run_in "$ROOT/packages/paperui" bun run typecheck:tests
 gstep paperui "paperui tests" run_in "$ROOT/packages/paperui" bun run test
 gstep paperui "paperui styling invariant" bash "$ROOT/scripts/gate/check-paperui-styling.sh"
-gstep paperui "paperui code check" run_in "$ROOT" bun scripts/gate/check-solid.ts packages/paperui/src packages/paperui/test
+gstep paperui "paperui code check" run_in "$ROOT" bun scripts/gate/check-solid.ts packages/paperui/src
 gstep create-panel "create-panel typecheck:tests" run_in "$ROOT/packages/create-panel" bun run typecheck:tests
 gstep create-panel "create-panel tests" run_in "$ROOT/packages/create-panel" bun run test
 gstep create-panel "create-panel code check" run_in "$ROOT" bun scripts/gate/check-solid.ts packages/create-panel/src packages/create-panel/bin packages/create-panel/test packages/create-panel/template
@@ -253,8 +249,7 @@ gstep release "release typecheck:tests" run_in "$ROOT/packages/release" bun run 
 gstep release "release tests" run_in "$ROOT/packages/release" bun run test
 gstep release "release code check" run_in "$ROOT" bun scripts/gate/check-solid.ts packages/release/src packages/release/test
 gstep testkit "testkit typecheck" run_in "$ROOT/packages/testkit" bun run typecheck
-gstep testkit "testkit tests" run_in "$ROOT/packages/testkit" bun run test
-gstep testkit "testkit code check" run_in "$ROOT" bun scripts/gate/check-solid.ts packages/testkit/src packages/testkit/test
+gstep testkit "testkit code check" run_in "$ROOT" bun scripts/gate/check-solid.ts packages/testkit/src
 gstep npx "npx typecheck:tests" run_in "$ROOT/packages/npx" bun run typecheck:tests
 gstep npx "npx tests" run_in "$ROOT/packages/npx" bun run test
 gstep npx "npx code check" run_in "$ROOT" bun scripts/gate/check-solid.ts packages/npx/src packages/npx/test

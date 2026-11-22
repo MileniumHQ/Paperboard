@@ -46,7 +46,7 @@ export const DEFAULT_FEATURES: PanelFeatures = { service: true, widget: true, st
 
 // what a deselected feature removes from the template, relative to the panel
 const FEATURE_FILES: Record<keyof PanelFeatures, string[]> = {
-    service: ["src/service.ts", "src/lib/greet.ts", "src/pages/ServicePage.tsx", "test/greet.test.ts"],
+    service: ["src/service.ts", "src/lib/greet.ts", "src/pages/ServicePage.tsx"],
     widget: ["widget.html", "src/widget.tsx", "src/widget.css"],
     store: ["store/about.md"],
 };

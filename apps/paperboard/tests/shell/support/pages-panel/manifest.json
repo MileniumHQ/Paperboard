@@ -1,8 +1,0 @@
-{
-    "name": "Pages",
-    "id": "dev.paperboard.testpages",
-    "version": "0.0.1",
-    "description": "A shell test fixture: pages opened inside a panel, named as PaperUI's phone pages name themselves. Not released.",
-    "publisher": "Paperboard",
-    "service": "./dist/service.js"
-}

@@ -169,7 +169,7 @@ export default function UiGuideDoc() {
             <PaperText preset="subheader" as="h2" id="rules">The rules</PaperText>
             <PaperTextList>
                 <li>Build from PaperUI components and their props. Spacing, sizes and colors are tokens passed as props: <PaperCode>gap="half"</PaperCode>, <PaperCode>min="field"</PaperCode>, <PaperCode>variant="danger"</PaperCode>.</li>
-                <li>Write no inline styles and no pixel or rem values. The scaffolded <PaperCode>test/uiStandards.test.ts</PaperCode> fails on a <PaperCode>style=</PaperCode> prop or a style write.</li>
+                <li>Write no inline styles and no pixel or rem values.</li>
                 <li>When a token has to appear in code, such as a color handed to a library that draws on a canvas, read it with <PaperLink href="/docs/paperui/utilities/#getvarcss">getVarCss</PaperLink>: <PaperCode>getVarCss("primary")</PaperCode>. Never write <PaperCode>var(--paper-primary)</PaperCode> yourself.</li>
                 <li>When a screen needs something no component does, give it a CSS module that uses the tokens, and tell the PaperUI maintainers what is missing. Never copy a component to restyle it.</li>
             </PaperTextList>

@@ -8,7 +8,7 @@
         "dev": "vite",
         "build": "tsc --noEmit && vite build",
         "typecheck": "tsc --noEmit",
-        "test": "bun ../../packages/testkit/src/withChrome.ts --no-sandbox --disable-gpu --disable-extensions vitest run"
+        "test": "vitest run"
     },
     "dependencies": {
         "@mileniumhq/paperapi": "workspace:*",

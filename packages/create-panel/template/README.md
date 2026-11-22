@@ -47,7 +47,6 @@ The guides for building panels are at <https://paperboard.dev/docs/developers/>.
 <!-- @if store -->
 - `store/about.md` is the long description on the panel's library page.
 <!-- @endif -->
-- `test/uiStandards.test.ts` keeps inline styles out of the UI.
 - `test/hermetic.ts` keeps the tests off the network and off your real
   Paperboard data.
 

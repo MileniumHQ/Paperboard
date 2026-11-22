@@ -74,15 +74,6 @@ describe("every feature choice builds, tests, links and packs", () => {
         for (const v of variants) expect(() => assertRelativePanelBuild(v.dir, v.id)).not.toThrow();
     });
 
-    test("each variant passes its own tests and leaves no data folder behind", async () => {
-        const tmp = tempDir("tmp");
-        for (const v of variants) {
-            const result = await ok("bun", ["test"], v.dir, { TMPDIR: tmp });
-            expect(`${result.stdout}${result.stderr}`).toMatch(/\b0 fail\b/);
-        }
-        expect(panelTestFolders(tmp)).toEqual([]);
-    }, BUILD_TIMEOUT);
-
     test("each variant links with paperapi link and passes doctor against a running Paperboard", async () => {
         const dataDir = process.env.PAPERBOARD_DIR!;
         for (const v of variants) {

@@ -23,7 +23,7 @@ export default function ChecklistDoc() {
             <PaperText preset="subheader" as="h2" id="commands">The commands pass</PaperText>
             <PaperTextList>
                 <li><PaperCode>bun run build</PaperCode> finishes with no type errors.</li>
-                <li><PaperCode>bun test</PaperCode> passes, with the scaffold's <PaperCode>test/hermetic.ts</PaperCode> preload and <PaperCode>test/uiStandards.test.ts</PaperCode> in place. See <PaperLink href="/docs/developers/testing/">Test a panel</PaperLink>.</li>
+                <li><PaperCode>bun test</PaperCode> passes, with the scaffold's <PaperCode>test/hermetic.ts</PaperCode> preload in place. See <PaperLink href="/docs/developers/testing/">Test a panel</PaperLink>.</li>
                 <li>The end-to-end tests, if the panel has them, pass against a test Paperboard.</li>
                 <li><PaperCode>bunx paperapi doctor</PaperCode> ends with <PaperCode>Ready: Paperboard can run this panel.</PaperCode></li>
                 <li><PaperCode>bunx paperapi pack</PaperCode> makes the archive without an error.</li>
