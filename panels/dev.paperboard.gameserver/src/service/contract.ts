@@ -33,6 +33,16 @@ const nothing = shape.nothing();
 const done = shape.boolean();
 const text = shape.text();
 const texts = shape.list(shape.text());
+// a world's stats/<uuid>.json, summed (core/playerStats)
+const PLAYER_STAT_NUMBERS = {
+    deaths: shape.number(),
+    mobKills: shape.number(),
+    playerKills: shape.number(),
+    playTimeTicks: shape.number(),
+    jumps: shape.number(),
+    blocksMined: shape.number(),
+    distanceCm: shape.number(),
+};
 /** a game's options, by option id: each game's own reader checks them */
 const options = shape.record(shape.json());
 const patch = shape.object({ patch: shape.record(shape.json()) });
@@ -475,23 +485,24 @@ const minecraftCalls = {
     queryOnlinePlayers: { output: done },
     queryPlayerPositions: { output: done },
     listRoster: {
-        output: shape.list(shape.object({ uuid: shape.text(), name: shape.text(), whitelisted: shape.boolean(), op: shape.boolean(), banned: shape.boolean(), banReason: shape.nullable(shape.text()) })),
+        output: shape.list(
+            shape.object({
+                key: shape.text(),
+                uuid: shape.nullable(shape.text()),
+                name: shape.text(),
+                whitelisted: shape.boolean(),
+                op: shape.boolean(),
+                banned: shape.boolean(),
+                banReason: shape.nullable(shape.text()),
+                stats: shape.nullable(shape.object(PLAYER_STAT_NUMBERS)),
+            }),
+        ),
     },
     currentPlayerNames: { input: shape.object({ uuids: texts }), output: shape.record(shape.text()) },
     readBedrockNaming: { output: shape.nullable(shape.object({ prefix: shape.text(), replaceSpaces: shape.boolean() })) },
     listPlayerStats: {
         output: shape.list(
-            shape.object({
-                uuid: shape.text(),
-                name: shape.text(),
-                deaths: shape.number(),
-                mobKills: shape.number(),
-                playerKills: shape.number(),
-                playTimeTicks: shape.number(),
-                jumps: shape.number(),
-                blocksMined: shape.number(),
-                distanceCm: shape.number(),
-            }),
+            shape.object({ uuid: shape.text(), name: shape.text(), ...PLAYER_STAT_NUMBERS }),
         ),
     },
     /** asks the running server for every rule its version has; the answers arrive through state */

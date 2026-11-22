@@ -14,7 +14,8 @@ import type { Server } from "./server";
 import { createHash } from "node:crypto";
 import { errorMessage } from "./api";
 import { report } from "../games/serviceKit";
-import { resolvePlayerIdentities } from "./playerStats";
+import { cachedName, listPlayerStats, resolvePlayerIdentities } from "./playerStats";
+import type { PlayerStatSummaryData } from "../core/playerStats";
 import { profileForName, profileForUuid } from "./mojang";
 import { gamertagForXuid, xuidForGamertag } from "./xbox";
 import { parseProperties } from "../core/properties";
@@ -33,7 +34,8 @@ import { sendServerCommand } from "./lifecycle";
 
 export type PlayerFlag = "op" | "whitelist";
 
-export interface RosterEntry {
+/** someone on the whitelist, the operator list or the ban list */
+export interface ListedPlayer {
     uuid: string;
     name: string;
     whitelisted: boolean;
@@ -41,6 +43,15 @@ export interface RosterEntry {
     banned: boolean;
     /** why, as banned-players.json gives it; null when not banned or it names no reason */
     banReason: string | null;
+}
+
+/** one row of the Players tab */
+export interface RosterEntry extends Omit<ListedPlayer, "uuid"> {
+    /** the row's identity: the uuid, else the lowercased name of a player whose first session isn't saved yet */
+    key: string;
+    uuid: string | null;
+    /** the world's stats file for them; null when it has none */
+    stats: PlayerStatSummaryData | null;
 }
 
 type ListEntry = { uuid?: unknown; name?: unknown } & Record<string, unknown>;
@@ -52,9 +63,6 @@ const LIST_FILES = {
 } as const;
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
-// a name looked up from Mojang is trusted for an hour; renames are rare and
-// a roster of a thousand players must not ask again on every visit
-export const NAME_TTL_MS = 60 * 60 * 1000;
 const MAX_NAME_LOOKUPS = 4;
 
 async function readList(ctx: Server, path: string): Promise<ListEntry[]> {
@@ -173,14 +181,14 @@ export function offlinePlayerUuid(name: string): string {
  * the lists keep the name a player had when they were added) and the name
  * Mojang last reported, when one was looked up this hour.
  */
-export async function listRoster(ctx: Server): Promise<RosterEntry[]> {
+export async function listListed(ctx: Server): Promise<ListedPlayer[]> {
     const [whitelist, ops, banned, identities] = await Promise.all([
         readList(ctx, LIST_FILES.whitelist),
         readList(ctx, LIST_FILES.op),
         readList(ctx, LIST_FILES.banned),
         resolvePlayerIdentities(ctx),
     ]);
-    const roster = new Map<string, RosterEntry>();
+    const roster = new Map<string, ListedPlayer>();
     const add = (entries: ListEntry[], flag: "whitelisted" | "op" | "banned") => {
         for (const entry of entries) {
             const uuid = entryUuid(entry);
@@ -206,12 +214,32 @@ export async function listRoster(ctx: Server): Promise<RosterEntry[]> {
     add(whitelist, "whitelisted");
     add(ops, "op");
     add(banned, "banned");
-    const now = Date.now();
-    for (const entry of roster.values()) {
-        const known = minecraftOf(ctx).lists.names.get(entry.uuid);
-        if (known && now - known.at < NAME_TTL_MS) entry.name = known.name;
-    }
+    for (const entry of roster.values()) entry.name = cachedName(ctx, entry.uuid) ?? entry.name;
     return [...roster.values()];
+}
+
+/**
+ * Everyone this world knows, one row each: the server's lists, everyone with
+ * a stats file, and players online or seen this session whose first session
+ * isn't saved yet. usercache.json is only a name book (the server keeps
+ * writing it back), so a player whose data was deleted and who is on no list
+ * is gone for good.
+ */
+export async function listRoster(ctx: Server): Promise<RosterEntry[]> {
+    const [listed, stats] = await Promise.all([listListed(ctx), listPlayerStats(ctx)]);
+    const rows = new Map<string, RosterEntry>(listed.map((player) => [player.uuid, { ...player, key: player.uuid, stats: null }]));
+    for (const { uuid, name, ...numbers } of stats) {
+        const row = rows.get(uuid);
+        if (row) row.stats = numbers;
+        else rows.set(uuid, { key: uuid, uuid, name, whitelisted: false, op: false, banned: false, banReason: null, stats: numbers });
+    }
+    const named = new Set([...rows.values()].map((row) => row.name.toLowerCase()));
+    for (const name of [...ctx.state.onlinePlayers, ...ctx.state.seenPlayers]) {
+        if (named.has(name)) continue;
+        named.add(name);
+        rows.set(name, { key: name, uuid: null, name, whitelisted: false, op: false, banned: false, banReason: null, stats: null });
+    }
+    return [...rows.values()];
 }
 
 /**
@@ -230,11 +258,10 @@ export async function currentPlayerNames(ctx: Server, rawUuids: unknown, naming:
     // a Floodgate uuid is no Mojang account; without Floodgate it has no name to look up
     const uuids = valid.filter((u) => (isFloodgateUuid(u) ? naming !== null : onlineMode));
 
-    const now = Date.now();
     const stale: string[] = [];
     for (const uuid of uuids) {
-        const known = minecraftOf(ctx).lists.names.get(uuid);
-        if (known && now - known.at < NAME_TTL_MS) result[uuid] = known.name;
+        const known = cachedName(ctx, uuid);
+        if (known) result[uuid] = known;
         else stale.push(uuid);
     }
     const failures: string[] = [];

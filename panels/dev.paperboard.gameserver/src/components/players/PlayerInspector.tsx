@@ -20,7 +20,7 @@ import { useServer, type ServerStatus } from "../../lib/server";
 import type { SavedSetting } from "../../lib/saves";
 import { errorMessage } from "../../lib/failure";
 import PlayerHead from "../PlayerHead";
-import { formatDistance, formatPlaytime, type Leaderboard } from "./leaderboard";
+import { formatDistance, formatPlaytime, playtimeSeconds } from "./leaderboard";
 import type { PlayerFlagField, PlayerInfo } from "./state";
 
 // how often an online player's open page asks the game for their health,
@@ -36,7 +36,6 @@ export function canEditLists(status: ServerStatus): boolean {
 /** The open player: who they are, moderation, their stats and permissions, and deleting their data. */
 export default function PlayerInspector(props: {
     player?: PlayerInfo;
-    leaderboard: Leaderboard;
     bedrock: boolean;
     /** the open player's op or whitelist switch, made once per player shown */
     flag: (field: PlayerFlagField) => SavedSetting<boolean>;
@@ -51,7 +50,7 @@ export default function PlayerInspector(props: {
     const key = () => name().toLowerCase();
     const isPlayerOnline = () => onlinePlayerNames().has(key());
     const stats = () => playerStats().get(key());
-    const summary = () => (props.player ? props.leaderboard.summaryOf(props.player) : undefined);
+    const summary = () => props.player?.stats ?? undefined;
 
     // live stats for an online player: asked when their page opens or they
     // come online, then on a slow poll, never because other state arrived
@@ -78,7 +77,7 @@ export default function PlayerInspector(props: {
         }),
     );
 
-    const playtimeText = () => formatPlaytime(props.player ? props.leaderboard.playtimeSeconds(props.player) : undefined);
+    const playtimeText = () => formatPlaytime(props.player ? playtimeSeconds(props.player) : undefined);
     const distanceText = () => {
         const s = summary();
         return s ? formatDistance(s.distanceCm) : "–";
@@ -122,7 +121,7 @@ export default function PlayerInspector(props: {
                 <PaperFlex direction="row" gap="full" align="center" wrap>
                     <PlayerHead
                         name={name()}
-                        uuid={props.player?.uuid}
+                        uuid={props.player?.uuid ?? undefined}
                         size="xlarge"
                         onFailure={setHeadFailure}
                     />

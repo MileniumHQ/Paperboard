@@ -8,7 +8,16 @@ import {
 } from "../core/playerStats";
 import { PANEL_ID } from "./types";
 import { resolveLevelName } from "./worlds";
-import { NAME_TTL_MS } from "./playerLists";
+
+// a name looked up from Mojang is trusted for an hour; renames are rare and
+// a roster of a thousand players must not ask again on every visit
+const NAME_TTL_MS = 60 * 60 * 1000;
+
+/** the name Mojang or GeyserMC gave for this uuid within the hour, if one was asked */
+export function cachedName(ctx: Server, uuid: string): string | undefined {
+    const known = minecraftOf(ctx).lists.names.get(uuid);
+    return known && Date.now() - known.at < NAME_TTL_MS ? known.name : undefined;
+}
 
 const UUID_FILE_RE =
     /^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})\.json$/;
@@ -97,8 +106,6 @@ export async function listPlayerStats(
     const statsDir = await resolveStatsDir(ctx, level);
     if (!statsDir) return [];
     const entries = await listDirectory(ctx, statsDir);
-    const cached = minecraftOf(ctx).lists.names;
-    const now = Date.now();
     const out: PlayerStatSummary[] = [];
     for (const entry of entries) {
         if (out.length >= MAX_PLAYER_STATS) {
@@ -112,8 +119,7 @@ export async function listPlayerStats(
         const uuid = match[1].toLowerCase();
         const parsed = parsePlayerStats(await readJson(ctx, `${statsDir}/${entry}`));
         if (!parsed) continue;
-        const known = cached.get(uuid);
-        const name = known && now - known.at < NAME_TTL_MS ? known.name : (names.get(uuid) ?? uuid);
+        const name = cachedName(ctx, uuid) ?? names.get(uuid) ?? uuid;
         out.push({ uuid, name, ...parsed });
     }
     return out;
