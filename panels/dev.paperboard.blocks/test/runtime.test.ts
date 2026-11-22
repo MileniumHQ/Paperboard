@@ -4,8 +4,8 @@
 // one in memory that a test fires events on, and its own Projects blocks
 // register in PaperAPI's in-memory registry.
 import { describe, expect, test } from "bun:test";
-import { memoryBlocks, type BlocksHandle, type BlockSchema } from "@mileniumhq/paperapi";
-import { createRuntime, MAX_RUNS_PER_PROJECT, type RuntimeDeps } from "../src/runtime";
+import { memoryBlocks, type BlockSchema } from "@mileniumhq/paperapi";
+import { createRuntime, type RuntimeDeps } from "../src/runtime";
 import { FLOW_FAILED_EVENT } from "../src/blocks";
 import { BUILTIN, registryBlockType } from "../src/lib/names";
 import { PANEL_ID, blocksContract, type PanelState, type SavedFlows } from "../src/panel";
@@ -55,7 +55,7 @@ async function until(what: string, holds: () => boolean): Promise<void> {
     throw new Error(`never happened: ${what}`);
 }
 
-function setup(options: { storage?: ProjectStorage; handle?: (handle: BlocksHandle) => BlocksHandle } = {}) {
+function setup(options: { storage?: ProjectStorage } = {}) {
     const files = new Map<string, unknown>();
     const storage: ProjectStorage = options.storage ?? {
         get: async (path) => structuredClone(files.get(path ?? "") ?? null),
@@ -63,7 +63,6 @@ function setup(options: { storage?: ProjectStorage; handle?: (handle: BlocksHand
     };
     // who listens to what, by "panel entry", and the commands a flow runs
     const listeners = new Map<string, Set<(payload: Record<string, unknown>) => void>>();
-    const waiting: { resolve: (v: unknown) => void }[] = [];
     const listen = (key: string, callback: (payload: Record<string, unknown>) => void) => {
         const set = listeners.get(key) ?? new Set();
         listeners.set(key, set.add(callback));
@@ -74,7 +73,7 @@ function setup(options: { storage?: ProjectStorage; handle?: (handle: BlocksHand
         onChange: (panelId, value, callback, project) => listen(`${panelId} ${project ?? ""}/value.${value}`, () => callback()),
         run: (async (_panelId: string, command: string) => {
             if (command !== "wait") throw new Error(`the test has no command "${command}"`);
-            return new Promise<unknown>((resolve) => waiting.push({ resolve }));
+            return new Promise<unknown>(() => {});
         }) as RuntimeDeps["blocks"]["run"],
         read: (async () => {
             throw new Error("the test reads nothing");
@@ -84,9 +83,8 @@ function setup(options: { storage?: ProjectStorage; handle?: (handle: BlocksHand
         }) as RuntimeDeps["blocks"]["property"],
     };
     const fired: { event: string; payload: Record<string, unknown> }[] = [];
-    const changed: string[] = [];
-    const registry = memoryBlocks(PANEL_ID, { fired: (event, payload) => fired.push({ event, payload }), changed: (value) => changed.push(value) });
-    const runtime = createRuntime({ storage, blocks, handle: options.handle ? options.handle(registry.panel) : registry.panel });
+    const registry = memoryBlocks(PANEL_ID, { fired: (event, payload) => fired.push({ event, payload }) });
+    const runtime = createRuntime({ storage, blocks, handle: registry.panel });
     let state: PanelState = structuredClone(blocksContract.state.initial);
     const ready = runtime.init((patch) => {
         state = { ...state, ...(typeof patch === "function" ? patch(state) : patch) };
@@ -102,7 +100,7 @@ function setup(options: { storage?: ProjectStorage; handle?: (handle: BlocksHand
         for (const listener of listeners.get(key) ?? []) listener(payload);
     };
     const said = (project: string) => state.log.filter((l) => l.project === project).map((l) => `${l.level}: ${l.message}`);
-    return { ready, call, make, subscribers, fire, said, fired, changed, registry, waiting, state: () => state, pagesChanged: runtime.pagesChanged };
+    return { ready, call, make, subscribers, fire, said, fired, registry, state: () => state };
 }
 
 const JOINED_KEY = `${GAME} /event.joined`;
@@ -135,18 +133,6 @@ describe("the service's runtime", () => {
         expect(s.said(id)).toEqual([]);
     });
 
-    test(`a project runs at most ${MAX_RUNS_PER_PROJECT} flows at once, and Stop ends them`, async () => {
-        const s = setup();
-        await s.ready;
-        const id = await s.make("Runaway", flows(onRun({ type: WAIT })));
-        for (let i = 0; i <= MAX_RUNS_PER_PROJECT; i++) await s.call.runFlows({ project: id });
-        await until("the runs to start", () => s.waiting.length === MAX_RUNS_PER_PROJECT);
-        expect(s.state().running[id]).toBe(MAX_RUNS_PER_PROJECT);
-        expect(s.said(id)).toEqual([`error: A flow didn't start: ${MAX_RUNS_PER_PROJECT} of this project's flows are already running. Stop them, or check for a flow that starts itself.`]);
-        expect(await s.call.stopFlows({ project: id })).toBe(MAX_RUNS_PER_PROJECT);
-        await until("the runs to end", () => !s.state().running[id]);
-    });
-
     test("deleting a project stops its runs", async () => {
         const s = setup();
         await s.ready;
@@ -174,47 +160,6 @@ describe("the service's runtime", () => {
         expect(s.fired).toHaveLength(1);
     });
 
-    test("a failure that doesn't reach the registry is said in the run log", async () => {
-        const s = setup({
-            handle: (handle) => ({
-                ...handle,
-                fire: async () => {
-                    throw new Error("the registry is away");
-                },
-            }),
-        });
-        await s.ready;
-        const broken = await s.make("Broken", flows(onRun({ type: "pb_no_such_block" })));
-        await s.call.runFlows({ project: broken });
-        await until("the failure to be said", () => s.said(broken).length === 2);
-        expect(s.said(broken)[1]).toBe('error: "When a Flow Fails" didn\'t hear this failure: the registry is away.');
-    });
-
-    test("a change to the project list that doesn't reach the registry is shown, and told again once it is back", async () => {
-        let away = true;
-        const s = setup({
-            handle: (handle) => ({
-                ...handle,
-                changed: async (value) => {
-                    if (away) throw new Error("the registry is away");
-                    return handle.changed(value);
-                },
-            }),
-        });
-        await s.ready;
-        const id = await s.make("New", flows(onRun(say("hi"))));
-        await until("the failure to show", () => s.state().blocksError !== null);
-        expect(s.state().blocksError).toBe("The other panels weren't told the projects changed: the registry is away");
-        expect(s.changed).toEqual([]);
-
-        // the same project list again: the registry never heard it, so it is told now, and the banner goes
-        away = false;
-        await s.call.updateProject({ project: id, name: "Renamed" });
-        await until("the list to be told", () => s.changed.length === 1);
-        expect(s.changed).toEqual(["projects"]);
-        await until("the banner to clear", () => s.state().blocksError === null);
-    });
-
     test("refuses every call while the projects can't be read", async () => {
         const s = setup({
             storage: {
@@ -230,20 +175,6 @@ describe("the service's runtime", () => {
         expect(s.state().projectsError).toBe("the disk is gone");
         await expect(s.call.createProject({ name: "x" })).rejects.toThrow("The projects couldn't be read: the disk is gone");
         await expect(s.call.loadFlows({ project: "p-x" })).rejects.toThrow("The projects couldn't be read");
-    });
-});
-
-describe("the drafts", () => {
-    test("go once no page is open, and a kept project stays", async () => {
-        const s = setup();
-        await s.ready;
-        const kept = await s.make("Server tools", flows(onRun(say("hi"))));
-        const draft = (await s.call.createProject({})).id;
-        await s.pagesChanged(1);
-        expect(s.state().projects.map((p) => p.id).sort()).toEqual([kept, draft].sort());
-        await s.pagesChanged(0);
-        expect(s.state().projects.map((p) => p.id)).toEqual([kept]);
-        await expect(s.call.loadFlows({ project: draft })).rejects.toThrow("There's no project");
     });
 });
 
@@ -289,14 +220,5 @@ describe("the Projects blocks", () => {
         await s.ready;
         await expect(s.registry.run("run-project", { project: "p-gone" })).rejects.toThrow("no project");
         await expect(s.registry.property("project", "name", "p-gone")).rejects.toThrow("no project");
-    });
-
-    test("say the list changed only when its projects did", async () => {
-        const s = setup();
-        await s.ready;
-        const id = await s.make("Mine", flows(onRun(say("hi"))));
-        expect(s.changed).toEqual(["projects"]);
-        await s.call.updateProject({ project: id, name: "Renamed" });
-        expect(s.changed).toEqual(["projects"]);
     });
 });

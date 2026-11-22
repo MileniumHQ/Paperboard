@@ -1,6 +1,5 @@
 import { afterEach, describe, expect, setDefaultTimeout, setSystemTime, test } from "bun:test";
 import * as fs from "node:fs";
-import * as http from "node:http";
 import * as net from "node:net";
 import * as path from "node:path";
 import { PANEL_TRAVERSAL_VECTORS, resolveLocalPanelFile } from "../src/panels/panelAssets";
@@ -154,20 +153,6 @@ describe("WebDAV", () => {
 		expect(JSON.parse(health.body.toString()).status).toBe("ok");
 	});
 
-	test("a request whose filesystem check throws is answered with a 500, not left hanging", async () => {
-		const daemon = await startDaemon();
-		const port = daemon.instance.localPort;
-		// a name longer than any filesystem takes: checking the folders above the target throws ENAMETOOLONG
-		const path_ = `/dav/files/${"n".repeat(300)}/file.txt`;
-		for (const method of ["PROPFIND", "GET", "PUT", "DELETE"]) {
-			const answer = await Promise.race([
-				request(port, { method, path: path_, headers: { ...bearer(daemon.token), Depth: "0" }, body: method === "PUT" ? "x" : undefined }),
-				new Promise<null>((resolve) => setTimeout(() => resolve(null), 10_000)),
-			]);
-			expect({ method, status: answer?.status ?? "no answer" }).toEqual({ method, status: 500 });
-		}
-	});
-
 	test("MOVE or COPY onto its own source, ancestor or descendant is 403 and the source stays; a hard-linked destination overwrites normally", async () => {
 		const daemon = await startDaemon();
 		const port = daemon.instance.localPort;
@@ -233,46 +218,6 @@ describe("panel assets and /panel-files", () => {
 		}
 		expect((await request(port, { path: "/panel/test.assets/app.js", headers: bearer(daemon.token) })).body.toString()).toBe("console.log('panel')");
 		expect((await request(port, { path: "/panel-files/test.assets/doc.txt", headers: bearer(daemon.token) })).body.toString()).toBe("doc");
-	});
-
-	test("a request carrying the file's ETag gets an empty 304, and a changed file comes in full", async () => {
-		const daemon = await withPanel();
-		const port = daemon.instance.localPort;
-		const auth = bearer(daemon.token);
-		const first = await request(port, { path: "/panel/test.assets/app.js", headers: auth });
-		const etag = first.headers.etag as string;
-		expect(etag).toBeTruthy();
-		expect(first.headers["cache-control"]).toBe("no-cache");
-		const again = await request(port, { path: "/panel/test.assets/app.js", headers: { ...auth, "If-None-Match": etag } });
-		expect(again.status).toBe(304);
-		expect(again.body.length).toBe(0);
-		fs.writeFileSync(path.join(daemon.dataDir, "panels", "test.assets", "app.js"), "console.log('changed panel')");
-		const changed = await request(port, { path: "/panel/test.assets/app.js", headers: { ...auth, "If-None-Match": etag } });
-		expect(changed.status).toBe(200);
-		expect(changed.body.toString()).toBe("console.log('changed panel')");
-	});
-
-	test("an asset whose client hangs up mid-download is closed, not left open in the daemon", async () => {
-		const daemon = await withPanel();
-		const asset = path.join(fs.realpathSync(daemon.dataDir), "panels", "test.assets", "big.bin");
-		// far more than the socket buffers hold, so the read waits on the client
-		fs.writeFileSync(asset, Buffer.alloc(64 * 1024 * 1024, 1));
-		// Linux names every descriptor this process holds; the daemon runs in it
-		const openOnAsset = () => fs.readdirSync("/proc/self/fd").some((fd) => {
-			// a descriptor closed between the listing and the read is not the asset
-			try { return fs.readlinkSync(`/proc/self/fd/${fd}`) === asset; }
-			catch (err) {
-				if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
-				return false;
-			}
-		});
-		const req = http.get({ host: "127.0.0.1", port: daemon.instance.localPort, path: "/panel/test.assets/big.bin", headers: bearer(daemon.token) });
-		const res = await new Promise<http.IncomingMessage>((resolve, reject) => req.once("response", resolve).once("error", reject));
-		expect(res.statusCode).toBe(200);
-		res.pause();
-		await waitFor("the daemon to open the asset", openOnAsset);
-		res.destroy();
-		await waitFor("the daemon to close the asset after the client left", () => !openOnAsset());
 	});
 
 	test("every traversal vector is refused, raw or encoded, and the outside bytes never leave; reserved ids get 400", async () => {

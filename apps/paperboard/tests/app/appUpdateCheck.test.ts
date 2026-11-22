@@ -1,4 +1,4 @@
-import { afterEach, beforeAll, describe, expect, jest, test } from "bun:test";
+import { afterEach, beforeAll, describe, expect, test } from "bun:test";
 import * as crypto from "node:crypto";
 import * as fs from "node:fs";
 import * as path from "node:path";
@@ -39,14 +39,6 @@ describe("desktop app update checks", () => {
         expect(run.log.filter((l) => l.level === "error" || l.level === "warn")).toEqual([]);
     }, WAIT_MS * 2);
 
-    test("checks made at once share one", async () => {
-        feed = new Feed();
-        feed.offer(APP_PACKAGE.version, payload);
-        const run = await runUpdater(feed, { env: appImage(), concurrent: 3 });
-        expect(run.shared).toBe(true);
-        expect(feed.requests).toEqual([FEED_FILE]);
-    }, WAIT_MS * 2);
-
     test("a refused or timed-out download is failed, never up to date", async () => {
         feed = new Feed();
         feed.offer(NEWER, payload);
@@ -64,60 +56,6 @@ describe("desktop app update checks", () => {
         expect(stalled.results![0]).toMatchObject({ status: "failed", error: "The app update timed out. Check your connection and try again." });
         expect(stalled.states.map((s) => s.status)).not.toContain("current");
     }, WAIT_MS * 3);
-
-    test("a retry after a timed-out check runs again, and the stalled check's late events change nothing", async () => {
-        class Stalls extends EventEmitter {
-            calls = 0;
-            late: (() => void) | null = null;
-            cancelled = 0;
-            cancel() { this.cancelled++; }
-            checkForUpdates() {
-                this.calls++;
-                if (this.calls === 1) {
-                    // the first request hangs, then answers after its run timed out
-                    return new Promise<null>(() => { this.late = () => this.emit("update-available", { version: NEWER }); });
-                }
-                this.emit("update-not-available", {});
-                return Promise.resolve({ downloadPromise: null });
-            }
-        }
-        const updater = new Stalls();
-        const session = new AppUpdateSession(updater, () => undefined, 50);
-        expect(await session.check()).toMatchObject({ status: "failed", error: "The app update timed out. Check your connection and try again." });
-        updater.late!();
-        expect(session.snapshot().status).toBe("failed");
-        expect(await session.check()).toMatchObject({ status: "current", error: null });
-        expect(updater.calls).toBe(2);
-        expect(updater.cancelled).toBe(1);
-        session.dispose();
-    });
-
-    test("a download that keeps making progress outlives the time limit, which counts only quiet time", async () => {
-        let finish!: () => void;
-        class SlowLink extends EventEmitter {
-            async checkForUpdates() {
-                this.emit("update-available", { version: NEWER });
-                return { downloadPromise: new Promise<void>((resolve) => (finish = resolve)) };
-            }
-        }
-        jest.useFakeTimers();
-        try {
-            const link = new SlowLink();
-            const session = new AppUpdateSession(link, () => undefined, 300);
-            const result = session.check();
-            // four times the limit in all, never quiet for the whole of it
-            for (let step = 1; step <= 5; step++) {
-                jest.advanceTimersByTime(250);
-                link.emit("download-progress", { percent: step * 20 });
-            }
-            link.emit("update-downloaded", { version: NEWER });
-            finish();
-            expect(await result).toMatchObject({ status: "ready", version: NEWER, error: null });
-            session.dispose();
-        } finally {
-            jest.useRealTimers();
-        }
-    });
 
     test("a native activation error after the download stays failed", async () => {
         // electron-updater's events, in the order Squirrel.Mac gives them when

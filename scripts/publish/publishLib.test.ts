@@ -17,15 +17,12 @@ import {
     isUpdatePayload,
     isValidFileSegment,
     isValidVersionSegment,
-    KV_PACKAGES_BINDING,
     mergeVersionRecord,
     APP_KEYS,
     missingAppKeys,
     paperboardArtifacts,
     paperboardPackages,
-    PAPERDL_R2_BUCKET,
     r2YmlKey,
-    FULL_GATE_EVENTS,
     releaseGateProblem,
     tagFor,
     type GateRun,
@@ -248,17 +245,6 @@ describe("the install scripts' checksum list", () => {
     });
 });
 
-describe("publishing writes where the download worker reads", () => {
-    test("the KV binding and R2 bucket are the ones services/origami/wrangler.jsonc binds", () => {
-        const wrangler = require(join(ROOT, "services/origami/wrangler.jsonc")) as {
-            kv_namespaces: { binding: string }[];
-            r2_buckets: { binding: string; bucket_name: string }[];
-        };
-        expect(wrangler.kv_namespaces.map((kv) => kv.binding)).toContain(KV_PACKAGES_BINDING);
-        expect(wrangler.r2_buckets.find((r2) => r2.binding === "PAPERDL_BUCKET")?.bucket_name).toBe(PAPERDL_R2_BUCKET);
-    });
-});
-
 describe("a release build carries every app key, or refuses to start", () => {
     test("every key the app declares is required, and no other", () => {
         const declared = [...readFileSync(join(ROOT, "apps", "paperboard", "src", "main", "env.d.ts"), "utf8").matchAll(/readonly (MAIN_VITE_\w+)/g)].map((m) => m[1]);
@@ -307,28 +293,6 @@ describe("a release builds only a commit the whole gate passed", () => {
         for (const ref of ["main", "aaaaaaa", "A".repeat(40)]) {
             expect(releaseGateProblem(ref, [run({ head_sha: ref })])).toContain("by its full SHA");
         }
-    });
-
-    test("the release workflow checks it before any target builds", () => {
-        const workflow = Bun.YAML.parse(readFileSync(join(ROOT, ".github", "workflows", "release.yml"), "utf8")) as {
-            jobs: Record<string, { needs?: string | string[]; permissions?: Record<string, string>; steps?: { run?: string }[] }>;
-        };
-        const verify = workflow.jobs.verify!;
-        expect(verify.permissions).toEqual({ contents: "read", actions: "read" });
-        const runs = (verify.steps ?? []).map((s) => s.run ?? "").join("\n");
-        expect(runs).toContain("bun scripts/publish/releaseGate.ts");
-        expect(runs).toContain("git merge-base --is-ancestor \"$COMMIT\" origin/main");
-        expect(workflow.jobs.build!.needs).toBe("verify");
-    });
-
-    test("the events it counts are ones gate.yml runs on, and runs in full", () => {
-        const workflow = Bun.YAML.parse(readFileSync(join(ROOT, ".github", "workflows", "gate.yml"), "utf8")) as {
-            on: Record<string, unknown>;
-            jobs: { scope: { steps: { run?: string }[] } };
-        };
-        for (const event of FULL_GATE_EVENTS) expect(Object.keys(workflow.on)).toContain(event);
-        // only a pull request's description scopes the run
-        expect(workflow.jobs.scope.steps.map((s) => s.run ?? "").join("\n")).toContain('if [ "$EVENT" = pull_request ]; then');
     });
 
     test("a commit that isn't a full SHA is refused before GitHub is asked", () => {

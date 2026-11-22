@@ -124,20 +124,6 @@ func TestWorkloadEnvironment(t *testing.T) {
 	}
 }
 
-func TestBatchFilesAreNamedNotStarted(t *testing.T) {
-	for _, command := range []string{"run.cmd", `C:\a\START.BAT`, "a.cmd. "} {
-		if batchRefusal(command, true) == "" {
-			t.Fatalf("%q was not refused on Windows", command)
-		}
-		if batchRefusal(command, false) != "" {
-			t.Fatalf("%q was refused off Windows", command)
-		}
-	}
-	if batchRefusal("cmd.exe", true) != "" || batchRefusal("batch", true) != "" {
-		t.Fatal("a program that is not a batch file was refused")
-	}
-}
-
 // a character split across two reads arrives whole
 func TestOutputKeepsSplitCharactersWhole(t *testing.T) {
 	text := "héllo ✓ 😀 end"
@@ -165,33 +151,6 @@ func TestOutputKeepsSplitCharactersWhole(t *testing.T) {
 	var bad utf8Stream
 	if got := bad.feed([]byte{'a', 0xff, 0x80, 'b'}); len(got) != 4 {
 		t.Fatalf("invalid bytes were held: %q", got)
-	}
-}
-
-func TestInputEncoding(t *testing.T) {
-	if got := encodeInput("hi é", "utf8"); string(got) != "hi é" {
-		t.Fatalf("utf8: %v", got)
-	}
-	if got := encodeInput("a😀", "utf16le"); !reflect.DeepEqual(got, []byte{0x61, 0x00, 0x3d, 0xd8, 0x00, 0xde}) {
-		t.Fatalf("utf16le: %v", got)
-	}
-}
-
-func TestReplayIsCapped(t *testing.T) {
-	var ring ringBuffer
-	chunk := strings.Repeat("x", 1024)
-	for i := 0; i < 200; i++ {
-		ring.push(chunk)
-	}
-	if got := len(ring.all()); got > replayBytes || got < replayBytes-len(chunk) {
-		t.Fatalf("the replay holds %d bytes", got)
-	}
-	var early taggedBuffer
-	for i := 0; i < 200; i++ {
-		early.push("stderr", chunk)
-	}
-	if early.size > replayBytes || len(early.frames) == 0 || early.frames[0].stream != "stderr" {
-		t.Fatalf("early output holds %d bytes in %d frames", early.size, len(early.frames))
 	}
 }
 

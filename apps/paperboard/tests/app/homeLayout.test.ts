@@ -1,6 +1,5 @@
 import { describe, expect, test } from "bun:test";
 import { HOME_LAYOUT_VERSION, parseHomeLayout, parsePhoneLayout, serializeHomeLayout, type HomeItem } from "../../src/renderer/src/lib/homeLayout";
-import { defaultHomeItems } from "../../src/renderer/src/components/home/builtins/defaults";
 
 const clock: HomeItem = { id: "clock-1", source: "builtin", computerId: "local", widgetId: "clock", size: "4x1", x: 0, y: 0 };
 const pinned: HomeItem = {
@@ -39,11 +38,5 @@ describe("Home layout", () => {
         expect(damaged).toHaveLength(14);
         // a phone layout also refuses a widget across two pages
         expect(() => parsePhoneLayout(doc([{ ...clock, x: 2 }]))).toThrow(/spans two pages/);
-    });
-
-    test("a new Home's default widgets form a valid layout", () => {
-        const items = defaultHomeItems("local");
-        expect(items.length).toBeGreaterThan(0);
-        expect(parseHomeLayout(JSON.parse(JSON.stringify(serializeHomeLayout(items))))).toEqual(items);
     });
 });

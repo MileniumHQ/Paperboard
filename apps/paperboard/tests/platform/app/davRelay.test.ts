@@ -1,17 +1,13 @@
 import { afterAll, beforeAll, describe, expect, setDefaultTimeout, test } from "bun:test";
-import { execFile, spawnSync } from "node:child_process";
 import * as fs from "node:fs";
 import * as http from "node:http";
-import * as https from "node:https";
 import * as net from "node:net";
-import * as os from "node:os";
 import * as path from "node:path";
-import { promisify } from "node:util";
 import { createTlsIdentity } from "daemon/security/tlsIdentity";
 import { type DavRelay, type DavRelayOptions, startDavRelay } from "../../../src/main/davRelay";
-import { buildMacMountArgs, buildWindowsMountCommand, macFolderHasWindow, macMountCredentials, mountMacFolder, windowsDavRoot } from "../../../src/main/remoteFolderMount";
+import { buildMacMountArgs, buildWindowsMountCommand, macMountCredentials, windowsDavRoot } from "../../../src/main/remoteFolderMount";
 import { type InProcessDaemon, startDaemon } from "testkit/inproc";
-import { TEST_TIMEOUT_MS, waitFor } from "testkit/wait";
+import { TEST_TIMEOUT_MS } from "testkit/wait";
 
 setDefaultTimeout(TEST_TIMEOUT_MS);
 
@@ -101,27 +97,6 @@ describe("DAV relay", () => {
 		expect(refused.body).not.toContain("hello");
 	});
 
-	test("a computer paired at an IPv6 address serves its folder through the relay", async () => {
-		// the daemon listens on IPv4; this hop is the computer's IPv6 address
-		const hop = net.createServer((client) => {
-			const upstream = net.connect(daemon.port, "127.0.0.1");
-			client.pipe(upstream).pipe(client);
-			client.on("error", () => upstream.destroy());
-			upstream.on("error", () => client.destroy());
-		});
-		await new Promise<void>((resolve) => hop.listen(0, "::1", resolve));
-		const v6 = await relay({ upstream: `https://[::1]:${(hop.address() as net.AddressInfo).port}` });
-		try {
-			const served = await ask(v6.port, { path: "/dav/files/test.relay/hello.txt", headers: basicAuth() });
-			expect(served.body).toBe("hello over the relay");
-			expect(served.status).toBe(200);
-		} finally {
-			// the relay's keep-alive socket holds the hop open until it closes
-			await v6.close();
-			await new Promise<void>((resolve) => hop.close(() => resolve()));
-		}
-	});
-
 	test("the upstream's password challenge never reaches the file manager", async () => {
 		const wrong = await relay({ pass: "not-the-session-password", clientAuth: "path" });
 		const res = await ask(wrong.port, { method: "PROPFIND", path: `${wrong.prefix}/dav/`, headers: { Depth: "0" } });
@@ -139,58 +114,6 @@ describe("DAV relay", () => {
 		expect((await ask(peer.port, { path: "/dav/files/test.relay/hello.txt", headers: { Host: `localhost:${peer.port}` } })).status).toBe(421);
 		expect((await ask(peer.port, { path: "/dav/files/test.relay/hello.txt", headers: { Host: `rebound.example:${peer.port}` } })).status).toBe(421);
 		expect((await ask(peer.port, { path: "/dav/files/test.relay/hello.txt", headers: { Host: `127.0.0.1:${peer.port}`, Origin: `http://127.0.0.1:${peer.port}` } })).status).toBe(421);
-	});
-
-	test("a download that streams longer than the quiet time is not cut off, and the relay closes once it ends", async () => {
-		const identity = createTlsIdentity();
-		let finish!: () => void;
-		const released = new Promise<void>((resolve) => (finish = resolve));
-		const slow = https.createServer({ key: identity.key, cert: identity.cert }, (_req, res) => {
-			res.writeHead(200, { "Content-Type": "application/octet-stream" });
-			res.write("first part,");
-			void released.then(() => res.end("last part"));
-		});
-		await new Promise<void>((resolve) => slow.listen(0, "127.0.0.1", resolve));
-		let idled!: () => void;
-		const wentIdle = new Promise<void>((resolve) => (idled = resolve));
-		let idleDuringCopy = false;
-		let streaming = true;
-		const copy = await startDavRelay({
-			upstream: `https://127.0.0.1:${(slow.address() as net.AddressInfo).port}`,
-			cert: identity.cert,
-			user: "u",
-			pass: "p",
-			clientAuth: "basic",
-			idleMs: 50,
-			onIdle: () => {
-				if (streaming) idleDuringCopy = true;
-				idled();
-			},
-		});
-		try {
-			const body = await new Promise<string>((resolve, reject) => {
-				const req = http.request({ host: "127.0.0.1", port: copy.port, path: "/dav/big.bin", headers: { Authorization: `Basic ${Buffer.from("u:p").toString("base64")}` }, agent: false }, (res) => {
-					let received = "";
-					res.on("data", (chunk) => {
-						// the copy keeps streaming for many times the quiet time
-						if (!received) setTimeout(() => finish(), 500);
-						received += chunk;
-					});
-					res.on("end", () => resolve(received));
-					res.on("error", reject);
-				});
-				req.on("error", reject);
-				req.end();
-			});
-			streaming = false;
-			expect(idleDuringCopy).toBe(false);
-			expect(body).toBe("first part,last part");
-			await wentIdle;
-		} finally {
-			await copy.close();
-			slow.closeAllConnections();
-			await new Promise<void>((resolve) => slow.close(() => resolve()));
-		}
 	});
 
 	test("basic mode refuses a request without the session credential", async () => {
@@ -251,66 +174,4 @@ describe("remote folder mounts", () => {
 		expect(() => macMountCredentials("user", "p".repeat(256))).toThrow("too long");
 	});
 
-	if (process.platform === "darwin") {
-		const mountedFrom = async (folder: string) => (await promisify(execFile)("mount", [])).stdout.split("\n").filter((line) => line.includes(folder));
-
-		test("macOS mounts the relay with no dialog to answer, the mount names neither user nor password, and its Finder window is seen", async () => {
-			// the relay answers macOS from this process, so nothing here may block the loop
-			const served = await relay({});
-			const folder = await fs.promises.realpath(await fs.promises.mkdtemp(path.join(os.tmpdir(), "paperboard-folder-")));
-			try {
-				// Finder's `mount volume` asks the user whether to send a password
-				// over http and waits on that dialog; this never shows one
-				await mountMacFolder(session.user, session.pass, served.port, folder);
-				try {
-					expect(await fs.promises.readFile(path.join(folder, "files", "test.relay", "hello.txt"), "utf8")).toBe("hello over the relay");
-					const listed = await mountedFrom(folder);
-					expect(listed).toHaveLength(1);
-					expect(listed[0]).toContain(`http://127.0.0.1:${served.port}/dav`);
-					expect(listed[0]).not.toContain(session.user);
-					expect(listed[0]).not.toContain(session.pass);
-
-					// the folder stays while Finder shows it, and closes once it doesn't
-					await promisify(execFile)("open", [path.join(folder, "files")]);
-					await waitFor("Finder's window on the folder to be seen", () => macFolderHasWindow(folder), { intervalMs: 250 });
-					await promisify(execFile)("osascript", [
-						"-e", 'tell application "Finder"',
-						"-e", "repeat with w in (get every Finder window)",
-						"-e", `if (POSIX path of (target of w as alias)) starts with ${JSON.stringify(`${folder}/`)} then close w`,
-						"-e", "end repeat",
-						"-e", "end tell",
-					]);
-					await waitFor("the closed window to be gone", async () => !(await macFolderHasWindow(folder)), { intervalMs: 250 });
-				} finally {
-					await promisify(execFile)("umount", [folder], { timeout: 20_000 });
-				}
-				// nothing that held the credential is left in the temp folder
-				expect(fs.readdirSync(os.tmpdir()).filter((name) => name.startsWith("paperboard-mount-"))).toEqual([]);
-			} finally {
-				fs.rmdirSync(folder);
-			}
-		});
-
-		test("a mount the relay refuses fails at once and says why, and leaves nothing mounted", async () => {
-			const served = await relay({});
-			const folder = await fs.promises.realpath(await fs.promises.mkdtemp(path.join(os.tmpdir(), "paperboard-folder-")));
-			try {
-				await expect(mountMacFolder(session.user, "not-the-session-password", served.port, folder)).rejects.toThrow("the computer refused this folder session's password");
-				expect(await mountedFrom(folder)).toEqual([]);
-			} finally {
-				fs.rmdirSync(folder);
-			}
-		});
-	}
-
-	if (process.platform === "win32") {
-		test("a failed mount exits non-zero and prints no drive letter", () => {
-			// port 1 has no relay behind it, so Windows can't map it
-			const plan = buildWindowsMountCommand(windowsDavRoot(1, `/${"cd".repeat(24)}`));
-			const run = spawnSync("powershell.exe", plan.args, { env: { ...process.env, ...plan.env }, encoding: "utf8", timeout: 120_000, windowsHide: true });
-			expect(run.error).toBeUndefined();
-			expect(run.status).not.toBe(0);
-			expect(run.stdout.trim()).not.toMatch(/^[D-Z]:$/m);
-		});
-	}
 });

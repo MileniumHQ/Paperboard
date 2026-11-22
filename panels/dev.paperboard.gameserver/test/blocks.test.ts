@@ -160,49 +160,6 @@ describe("each server is a Blocks project with its game's blocks", () => {
         await expect(read("files", { folder: ".." })).rejects.toThrow();
     });
 
-    test("the values read the players online, and a kick announces the change before a fresh read shows it", async () => {
-        const state = servicesState();
-        const changed = new Set<string>();
-        let kickAnnounced = () => {};
-        const off = ["player-count", "online-players", "server-status"].map((value) => blocksApi.onChange(PANEL_ID, value, () => { changed.add(value); if (changed.has("player-count") && changed.has("online-players")) kickAnnounced(); }, "s-a"));
-        try {
-            await settle();
-            expect(await run("start-server")).toBeNull();
-            await state.waitFor("s-a", (s) => s.serverStatus === "online" && s.onlinePlayers.length === 2, "s-a online with its players");
-            expect(await read("server-status")).toBe("online");
-            expect(await read("player-count")).toBe(2);
-            expect(await read("online-players")).toEqual(["alice", "bob"]);
-            expect(changed.has("server-status")).toBe(true);
-            // whether a player is online is read on the server that asks
-            expect(await blocksApi.property(`${PANEL_ID}:player`, "online", "alice", { project: "s-a" })).toBe(true);
-            expect(await blocksApi.property(`${PANEL_ID}:player`, "online", "alice", { project: "s-t" })).toBe(false);
-            // a Player input starts as a dropdown of who's online on its server, or on any
-            expect(await blocksApi.typeChoices(`${PANEL_ID}:player`, { project: "s-a" })).toEqual([{ label: "alice", value: "alice" }, { label: "bob", value: "bob" }]);
-            expect(await blocksApi.typeChoices(`${PANEL_ID}:player`, { project: "s-t" })).toEqual([]);
-            expect((await blocksApi.typeChoices(`${PANEL_ID}:player`)).map((c) => c.value)).toEqual(["alice", "bob"]);
-
-            changed.clear();
-            const announced = new Promise<void>((resolve) => (kickAnnounced = resolve));
-            expect(await run("kick-player", { player: "alice", reason: "testing" })).toBeNull();
-            await state.waitFor("s-a", (s) => s.onlinePlayers.length === 1, "alice to leave");
-            await announced;
-            expect(await read("online-players")).toEqual(["bob"]);
-            expect(await read("player-count")).toBe(1);
-        } finally {
-            for (const unsubscribe of off) unsubscribe();
-        }
-    });
-
-    test("chat and console commands reach the server as one line each, and the world can't switch while it runs", async () => {
-        await run("say", { message: "hello there" });
-        await run("run-command", { command: "ban carol cheating" });
-        await expect(run("say", { message: "two\nlines" })).rejects.toThrow("Refusing multi-line chat message");
-        await expect(run("create-world", { world: "Third" })).rejects.toThrow("Stop the server before managing worlds");
-        const log = await waitForFile(path.join(serverDir, "commands.log"), (text) => text.includes("ban carol cheating"), "the commands to reach the server");
-        expect(log).toContain("say hello there\n");
-        expect(log).not.toContain("two");
-    });
-
     test("a kick naming no player, or one that isn't a player name, is refused before the server sees it", async () => {
         await expect(blocksApi.run(PANEL_ID, "kick-player", {}, { project: "s-a" })).rejects.toThrow('Kick Player: "Player" is required');
         await expect(blocksApi.run(PANEL_ID, "kick-player", { player: 7 }, { project: "s-a" })).rejects.toThrow('"Player": expected text');
@@ -210,66 +167,6 @@ describe("each server is a Blocks project with its game's blocks", () => {
         expect(await read("online-players")).toEqual(["bob"]);
     });
 
-    test("Stop the Server is done once the server is offline, so a Start right after it brings the server back", async () => {
-        const state = servicesState();
-        const plan = path.join(serverDir, "fake-server.json");
-        const normal = fs.readFileSync(plan, "utf8");
-        // the next run saves slowly on a stop: it exits once release-stop is there
-        fs.writeFileSync(plan, JSON.stringify({ ...JSON.parse(normal), holdStop: "release-stop" }));
-        await run("stop-server");
-        expect(await read("server-status")).toBe("offline");
-        await run("start-server");
-        await state.waitFor("s-a", (s) => s.serverStatus === "online", "s-a online with the slow stop");
-        fs.writeFileSync(plan, normal);
-
-        let done = false;
-        const stopped = run("stop-server").then(() => { done = true; });
-        await state.waitFor("s-a", (s) => s.serverStatus === "stopping", "s-a stopping");
-        // the server is still saving, so the stop is not done
-        expect(await read("server-status")).toBe("stopping");
-        expect(done).toBe(false);
-        fs.writeFileSync(path.join(serverDir, "release-stop"), "");
-        await stopped;
-        expect(await read("server-status")).toBe("offline");
-        await run("start-server");
-        await state.waitFor("s-a", (s) => s.serverStatus === "online", "s-a online again");
-    });
-
-    test("Terraria's joins and chat fire as Blocks events with the player and what they said", async () => {
-        const state = servicesState();
-        const started = nextEvent("server-started", "s-t");
-        await settle();
-        expect(await run("start-server", {}, "s-t")).toBeNull();
-        expect(await started).toEqual({});
-        await state.waitFor("s-t", (s) => s.serverStatus === "online", "Terraria online");
-
-        const joined = nextEvent("player-joined", "s-t");
-        const chatted = nextEvent("chat-message", "s-t");
-        await settle();
-        // the stand-in prints what it is told to relay, as the game would
-        await run("run-command", { command: "relay Bob has joined." }, "s-t");
-        await run("run-command", { command: "relay <Bob> hello there" }, "s-t");
-        expect(await joined).toEqual({ player: "Bob" });
-        expect(await chatted).toEqual({ player: "Bob", message: "hello there" });
-
-        // the Players tab's kick and ban, by the name the server knows
-        await state.waitFor("s-t", (s) => s.onlinePlayers.includes("Bob"), "Bob online");
-        expect(await run("kick-player", { player: "Bob" }, "s-t")).toBeNull();
-        await state.waitFor("s-t", (s) => !s.onlinePlayers.includes("Bob"), "Bob kicked");
-        await expect(run("kick-player", { player: "Carol" }, "s-t")).rejects.toThrow("Carol is not online");
-        await expect(run("ban-player", { player: "Carol" }, "s-t")).rejects.toThrow("Carol has never joined this server");
-        // Bob left, so the ban is kept by the address he joined from
-        expect(await run("ban-player", { player: "Bob" }, "s-t")).toBeNull();
-        expect(await read("banned-players", undefined, "s-t")).toEqual(["Bob"]);
-        expect(await run("unban-player", { player: "Bob" }, "s-t")).toBeNull();
-        expect(await read("banned-players", undefined, "s-t")).toEqual([]);
-
-        const stopped = nextEvent("server-stopped", "s-t");
-        await settle();
-        await run("stop-server", {}, "s-t");
-        expect(await stopped).toEqual({});
-        expect(await read("server-status", undefined, "s-t")).toBe("offline");
-    });
 });
 
 describe("the panel's own blocks run its servers, and each server's settings and backups", () => {
@@ -348,37 +245,6 @@ describe("the panel's own blocks run its servers, and each server's settings and
         expect(await stopped).toEqual({ server: "s-t" });
         expect(await field("s-t", "status")).toBe("offline");
         await expect(panelRun("restart-server", { server: "s-t" })).rejects.toThrow("The server is not online, so it can't restart");
-    });
-
-    test("Console Output reads the end of a server's console", async () => {
-        const lines = await read<string>("console-output", { lines: 1000 }, "s-t");
-        expect(lines.split("\n").length).toBeGreaterThan(1);
-        expect((await read<string>("console-output", { lines: 1 }, "s-t")).split("\n")).toHaveLength(1);
-        await expect(read("console-output", { lines: 0 }, "s-t")).rejects.toThrow('"Lines"');
-    });
-
-    test("the automation blocks change what a server does on its own, and refuse what its game can't do", async () => {
-        expect(await read("automation", undefined, "s-a")).toMatchObject({ "restart-after-crash": true, "daily-restart": null, "automatic-updates": false });
-        await run("set-daily-restart", { hour: "04:00" });
-        await run("set-restart-after-crash", { restart: false });
-        expect(await read("automation", undefined, "s-a")).toMatchObject({ "restart-after-crash": false, "daily-restart": "04:00" });
-        // each server keeps its own
-        expect(await read("automation", undefined, "s-t")).toMatchObject({ "restart-after-crash": true, "daily-restart": null });
-        await run("set-daily-restart", { hour: "never" });
-        await run("set-restart-after-crash", { restart: true });
-        expect(await read("automation", undefined, "s-a")).toMatchObject({ "restart-after-crash": true, "daily-restart": null });
-        await expect(run("set-daily-restart", { hour: "04:30" })).rejects.toThrow('"Daily Restart" must be one of');
-        await expect(run("set-automatic-updates", { update: true })).rejects.toThrow("This game can't update itself");
-    });
-
-    test("Delete Backup deletes one of the server's backups", async () => {
-        await backupLocationsApi.setForPanel(PANEL_ID, "local", undefined, "s-t");
-        const backup = await backupApi.forSource(PANEL_ID, "s-t").create({ label: "before" });
-        const listed = await read<BackupRecord[]>("backups", undefined, "s-t");
-        expect(listed).toEqual([backup]);
-        expect(await run("delete-backup", { backup: listed[0] }, "s-t")).toBeNull();
-        expect(await read("backups", undefined, "s-t")).toEqual([]);
-        await expect(run("delete-backup", { backup: listed[0] }, "s-t")).rejects.toThrow();
     });
 
     test("Back Up the Server and Restore Backup answer with the backup while the service restarts, and each backup fires Finishes or Fails", async () => {

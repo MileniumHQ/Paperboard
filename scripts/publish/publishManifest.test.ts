@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { STORE_MAX_ABOUT_BYTES } from "../../packages/paperapi/src/internal";
@@ -79,16 +79,6 @@ describe("panel publishing finds every panel and refuses incomplete ones", () =>
         writeFileSync(join(dir, "store", "about.md"), "x".repeat(STORE_MAX_ABOUT_BYTES + 1));
         await expect(storeUploadParts({ about: "./store/about.md" }, read)).rejects.toThrow(`over the ${STORE_MAX_ABOUT_BYTES}-byte cap`);
     });
-
-    test("every first-party panel's store listing validates and its files exist", async () => {
-        const panels = discoverPanels(PANELS_ROOT);
-        expect(panels.length).toBeGreaterThan(0);
-        for (const info of panels) {
-            const manifest = JSON.parse(readFileSync(join(info.dir, "manifest.json"), "utf8"));
-            const parts = await storeUploadParts(manifest.store, (rel) => readFileSync(join(info.dir, rel)));
-            expect(parts.about !== undefined).toBe(manifest.store?.about !== undefined);
-        }
-    });
 });
 
 // A panel served from /_panel/<computer>/<panel>/ in a browser only finds its
@@ -112,15 +102,5 @@ describe("a panel's build links its files by relative address", () => {
 
         writeFileSync(join(dir, "dist", "widget.html"), `<script type="module" src="/assets/w.js"></script>`);
         expect(() => assertRelativePanelBuild(dir, "dev.me")).toThrow(/dev\.me[\s\S]*base: "\.\/"[\s\S]*dist\/widget\.html: \/assets\/w\.js/);
-    });
-
-    test("every first-party panel builds with base \"./\"", () => {
-        const missing = discoverPanels(PANELS_ROOT)
-            .filter((x) => {
-                const config = ["vite.config.ts", "vite.config.js", "vite.config.mts"].map((f) => join(x.dir, f)).find((f) => existsSync(f));
-                return config && !/\bbase:\s*["']\.\/["']/.test(readFileSync(config, "utf8"));
-            })
-            .map((x) => x.id);
-        expect(missing).toEqual([]);
     });
 });

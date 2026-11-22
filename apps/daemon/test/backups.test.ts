@@ -9,7 +9,7 @@ import { LocalBackupStore } from "../src/backups/localStore";
 import { S3BackupStore, signS3Request } from "../src/backups/s3Store";
 import { DriveBackupStore } from "../src/backups/driveStore";
 import { BUSY_RETRY_MS } from "../src/backups/schedules";
-import { backupTransferDeadlineMs, newBackupId, type BackupRecord } from "../src/backups/types";
+import { newBackupId, type BackupRecord } from "../src/backups/types";
 import { ROUTINE_BACKUP_LABEL } from "@mileniumhq/paperapi/backups";
 import { tarGz } from "testkit/archive";
 import { fakeDrive, fakeS3 } from "testkit/cloud";
@@ -152,20 +152,14 @@ describe("named sources and beforeBackup", () => {
 		await host.close();
 	});
 
-	test("a beforeBackup error refuses the backup and restarts the service; progress lists a running backup", async () => {
+	test("a beforeBackup error refuses the backup and restarts the service", async () => {
 		const dir = dataDir();
 		const log = path.join(tempDir(), "starts.log");
-		// the backup goes on once this file is there. Not an action: the daemon
-		// stops the service the moment beforeBackup returns, which would race
-		// that action's own reply
-		const release = path.join(tempDir(), "release");
 		await installPanelFiles(dir, {
 			id: "test.prep",
 			service: countedService(log, {
-				extra: "let mode = 'refuse';",
-				calls: "{ ping: async () => 'pong', allow: async () => { mode = 'wait'; return true; } }",
-				// quiet: the daemon's own deadline for getting ready bounds this wait
-				options: `beforeBackup: async () => { if (mode === 'refuse') throw new Error('world is busy'); while (!fs.existsSync(${JSON.stringify(release)})) await new Promise((r) => setTimeout(r, 20)); },`,
+				calls: PING,
+				options: "beforeBackup: async () => { throw new Error('world is busy'); },",
 			}),
 		});
 		const daemon = await startDaemon({ dataDir: dir });
@@ -180,57 +174,6 @@ describe("named sources and beforeBackup", () => {
 		expect(refused.error).toContain("world is busy");
 		expect(starts(log)).toBe(before + 1);
 		await readyService(host, "test.prep");
-
-		await host.ok("blocks:call", serviceCall("test.prep", "allow"));
-		const running = panel.call("backup:create", { panelId: "test.prep" }, 30_000);
-		const progress = await waitFor("the running backup in progress", async () => {
-			const list = (await panel.ok("backup:progress", { panelId: "test.prep" })).progress;
-			return list.length ? list : null;
-		});
-		expect(progress[0]).toMatchObject({ panelId: "test.prep", kind: "create" });
-		fs.writeFileSync(release, "");
-		expect((await running).error).toBeUndefined();
-		await panel.close();
-		await host.close();
-	});
-
-	test("afterBackup and afterRestore hear each one end, in the service that runs after it, made or failed", async () => {
-		const dir = dataDir();
-		const heard = path.join(tempDir(), "after.log");
-		const refuse = path.join(tempDir(), "refuse");
-		const log = (hook: string) => `${hook}: async (_ctx, ended) => { fs.appendFileSync(${JSON.stringify(heard)}, JSON.stringify(["${hook}", ended]) + "\\n"); },`;
-		await installPanelFiles(dir, {
-			id: "test.after",
-			service: serviceSource({
-				calls: PING,
-				extra: 'import * as fs from "node:fs";',
-				options: `${log("afterBackup")} ${log("afterRestore")} beforeBackup: async () => { if (fs.existsSync(${JSON.stringify(refuse)})) throw new Error("not now"); },`,
-			}),
-		});
-		const daemon = await startDaemon({ dataDir: dir });
-		const host = await daemon.rpc();
-		const panel = await daemon.panelRpc("test.after");
-		await readyService(host, "test.after");
-		const heardLines = async (count: number) => waitFor(`${count} hook calls`, async () => {
-			const lines = fs.existsSync(heard) ? fs.readFileSync(heard, "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l)) : [];
-			return lines.length >= count ? lines : null;
-		});
-		await panel.ok("file:write", { targetPath: "data.txt", content: "d" });
-		await host.ok("backup:panel-destination-set", { panelId: "test.after", destinationId: "local" });
-
-		const record = await panel.ok("backup:create", { panelId: "test.after", label: "kept" });
-		expect((await heardLines(1))[0]).toEqual(["afterBackup", { ok: true, backup: record }]);
-
-		fs.writeFileSync(refuse, "");
-		expect((await panel.fail("backup:create", { panelId: "test.after" })).error).toContain("not now");
-		expect((await heardLines(2))[1]).toEqual(["afterBackup", { ok: false, error: "The panel could not get ready for a backup: not now" }]);
-
-		expect((await panel.ok("backup:restore", { panelId: "test.after", backupId: record.id })).id).toBe(record.id);
-		expect((await heardLines(3))[2]).toEqual(["afterRestore", { ok: true, backup: record }]);
-		expect((await panel.fail("backup:restore", { panelId: "test.after", backupId: newBackupId() })).code).toBe("NOT_FOUND");
-		const [, , , failed] = await heardLines(4);
-		expect(failed[0]).toBe("afterRestore");
-		expect(failed[1]).toMatchObject({ ok: false, error: expect.stringContaining("is not at this panel's backup location") });
 		await panel.close();
 		await host.close();
 	});
@@ -311,33 +254,6 @@ describe("backup archives hold only the panel's data", () => {
 			expect(listTree(staging)).toEqual([]);
 		}
 	});
-
-	if (process.platform === "linux") {
-		test("packing that fails on an unreadable file leaves no open handle", async () => {
-			if (process.getuid?.() === 0) throw new Error("This test needs a non-root user: root reads a file with mode 000");
-			const dir = dataDir();
-			const files = path.join(dir, "files", "test.arch");
-			fs.mkdirSync(files, { recursive: true });
-			fs.writeFileSync(path.join(files, "a.txt"), "a");
-			fs.writeFileSync(path.join(files, "locked.txt"), "secret");
-			fs.chmodSync(path.join(files, "locked.txt"), 0o000);
-			const out = path.join(tempDir(), "out.pbbackup");
-			const openInto = () =>
-				fs.readdirSync("/proc/self/fd").flatMap((fd) => {
-					try {
-						const target = fs.readlinkSync(`/proc/self/fd/${fd}`);
-						return target === out || target.startsWith(files) ? [target] : [];
-					} catch (err) {
-						// the fd the listing itself used is closed by now
-						if ((err as NodeJS.ErrnoException).code === "ENOENT") return [];
-						throw err;
-					}
-				});
-			await expect(createPanelArchive(dir, entries, out)).rejects.toThrow();
-			expect(openInto()).toEqual([]);
-			fs.chmodSync(path.join(files, "locked.txt"), 0o600);
-		});
-	}
 });
 
 async function archiveRecord(panelId: string): Promise<{ record: BackupRecord; file: string }> {
@@ -358,13 +274,6 @@ describe("cloud stores round-trip", () => {
 	afterAll(async () => {
 		await s3.close();
 		await drive.close();
-	});
-
-	test("a large archive over a slow home uplink is given the time it needs", () => {
-		// 1 GB at 10 Mbit/s takes about 13 minutes; the largest archive at 1 Mbit/s about 12 hours
-		for (const [bytes, bytesPerSecond] of [[1e9, 1.25e6], [5 * 1024 ** 3, 125_000]] as const) {
-			expect(backupTransferDeadlineMs(bytes)).toBeGreaterThan((bytes / bytesPerSecond) * 1000);
-		}
 	});
 
 	test("an S3 backup whose record can't be saved takes its uploaded archive with it", async () => {

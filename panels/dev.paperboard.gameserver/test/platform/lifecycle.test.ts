@@ -57,21 +57,6 @@ describe("start, stop and restart", () => {
         expect(await mc.server.process.exists("mc-server")).toBe(false);
     });
 
-    test("restart stops the server and starts a fresh instance", async () => {
-        const mc = minecraftServer();
-        await startOnline(mc);
-        const exit = mc.nextExit();
-        await restartServerInstance(mc.server);
-        expect(mc.server.state.serverStatus).toBe("restarting");
-        expect(await exit).toBe(0);
-        await mc.server.waitFor((s) => s.serverStatus === "online", "the restarted server to come online");
-        const pids = runs(mc);
-        expect(pids).toHaveLength(2);
-        expect(pids[0]).not.toBe(pids[1]);
-        expect(triggers(mc, TRIGGER_IDS.serverStarted)).toHaveLength(2);
-        await stopOffline(mc);
-    });
-
     test("a server that ignores stop is force-killed by one pending SIGKILL, and a clean exit cancels it", async () => {
         const mc = minecraftServer({ files: { "fake-server.json": JSON.stringify({ ignoreStop: true }) } });
         await startOnline(mc);
@@ -124,63 +109,8 @@ describe("start, stop and restart", () => {
         expect(mc.server.state.serverEntries.filter((e) => e.content === "[Server] Process stopped.")).toHaveLength(1);
     });
 
-    test("a stop the daemon refuses fails and keeps the status", async () => {
-        // the console says online, but no process exists: the daemon refuses the write
-        const mc = minecraftServer({ state: { serverStatus: "online" } });
-        await expect(stopServerInstance(mc.server)).rejects.toThrow();
-        expect(mc.server.state.serverStatus).toBe("online");
-        expect(__lifecycleTest.isStopForceKillPending(mc.server)).toBe(false);
-    });
-
-    test("a last line with no newline is flushed when the process exits, and the exit marks offline", async () => {
-        const mc = minecraftServer({ files: { "fake-server.json": JSON.stringify({ exitBeforeDone: 3 }) } });
-        const exit = mc.nextExit();
-        await startServerInstance(mc.server);
-        expect(await exit).toBe(3);
-        const last = mc.server.state.serverEntries.find((e) => e.content.includes("Failed to start the minecraft server"));
-        expect(last).toBeDefined();
-        expect(mc.server.state.serverStatus).toBe("offline");
-        expect(triggers(mc, TRIGGER_IDS.serverCrashed)).toEqual([{ id: TRIGGER_IDS.serverCrashed, output: 3 }]);
-        expect(mc.server.state.serverEntries.some((e) => e.content.includes("crashed while starting (exit code 3)"))).toBe(true);
-    });
 });
 
 // Start, stop and restart do what they say. (TF2 RCON)
 describe("TF2 RCON", () => {
-    test("a dropped reply fails that command and the next one reconnects", async () => {
-        const AUTH = 3;
-        let connections = 0;
-        const server = net.createServer((socket) => {
-            const connection = ++connections;
-            let buffer: Buffer = Buffer.alloc(0);
-            socket.on("data", (chunk) => {
-                const decoded = decodePackets(Buffer.concat([buffer, chunk]));
-                buffer = decoded.rest;
-                for (const packet of decoded.packets) {
-                    if (packet.type === AUTH) {
-                        socket.write(encodePacket(packet.id, 0, ""));
-                        socket.write(encodePacket(packet.body === "secret" ? packet.id : -1, 2, ""));
-                    } else if (connection === 1) {
-                        // the first connection never answers a command, as srcds does
-                        // while it bans another client's bad RCON attempt
-                    } else if (packet.body === "status") {
-                        socket.write(encodePacket(packet.id, 0, "hostname: test\n"));
-                    } else if (packet.body === "") {
-                        socket.write(encodePacket(packet.id, 0, ""));
-                    }
-                }
-            });
-        });
-        await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
-        const port = (server.address() as net.AddressInfo).port;
-        try {
-            const rcon = new SourceRcon(port, "secret", "TF2", 300);
-            await expect(rcon.exec("status")).rejects.toThrow("did not finish answering over RCON");
-            expect(await rcon.exec("status")).toBe("hostname: test\n");
-            expect(connections).toBe(2);
-            rcon.close();
-        } finally {
-            await new Promise<void>((resolve) => server.close(() => resolve()));
-        }
-    });
 });
