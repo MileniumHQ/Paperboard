@@ -131,14 +131,20 @@ export default function App() {
             if (token === lookToken) setLook({ entry, error: `“${entry.name}” couldn't be read: ${err instanceof Error ? err.message : String(err)}`, tooBig });
         }
     }
+    // a closed preview still shows its file while it fades: that file is let go once it has left
+    let releaseLeaving = () => {};
     const closeLook = () => {
         lookToken++;
-        releaseLook();
+        releaseLeaving();
+        releaseLeaving = releaseLook;
         releaseLook = () => {};
         setLook(null);
         view?.focus();
     };
-    onCleanup(() => releaseLook());
+    onCleanup(() => {
+        releaseLook();
+        releaseLeaving();
+    });
     // the preview follows the choice as arrows move it
     createEffect(
         on(selection, (paths) => {
@@ -486,6 +492,10 @@ export default function App() {
                 size={look()?.entry.size}
                 error={look()?.error}
                 onClose={closeLook}
+                onExited={() => {
+                    releaseLeaving();
+                    releaseLeaving = () => {};
+                }}
                 actions={
                     <PaperButton size="small" onClick={() => look() && void download(look()!.entry)}>
                         <PaperIcon zeroHeight>download</PaperIcon>
