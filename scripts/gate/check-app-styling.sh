@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
-# App and panel styling check (warning only: findings exit 0, and only a
-# scan that could not run exits nonzero): flags literal sizes, colors, motion, z-index, opacity, font weights, line
-# heights and scales in apps and panels that have a PaperUI token. PaperUI's
-# own sources are gated, and strictly, by check-paperui-styling.sh.
+# App and panel styling check: fails on literal sizes, colors, motion,
+# z-index, opacity, font weights, line heights and scales in apps and panels
+# that have a PaperUI token, and on a `var(--paper-...)` written by hand in
+# TSX instead of getVarCss(). PaperUI's own sources are gated, and strictly,
+# by check-paperui-styling.sh.
 #
 # Not flagged:
 #   - a line that defines a custom property (`--x: 12px`): that is where a
@@ -47,10 +48,8 @@ if ! OUT="$(printf '%s\n' $FILES | python3 -I "$ROOT/scripts/gate/check-app-styl
     exit 1
 fi
 if [ -n "$OUT" ]; then
-    echo "WARN: literal values with a PaperUI token (use --paper-* tokens; if one is missing, add it to PaperUI):" >&2
+    echo "FAIL: app styling: values with a PaperUI token (use --paper-* tokens in CSS and getVarCss() in TSX; if a token is missing, add it to PaperUI):" >&2
     printf '%s\n' "$OUT" >&2
-    echo "warn: app styling ($(printf '%s\n' "$OUT" | wc -l | tr -d ' ') literals, not blocking)"
-else
-    echo "ok: app styling"
+    exit 1
 fi
-exit 0
+echo "ok: app styling"
