@@ -55,9 +55,15 @@ export const OfflineComputerModal: Component<OfflineComputerModalProps> = (
                 </>
             }
         >
-            {/* why the last look found nothing, at the address it looked; Try Again looks again */}
+            {/* why the last look found nothing, and where it looked (a computer reached
+                through a host relay has no address of its own); Try Again looks again */}
             <Show when={reach.error()}>
-                {(why) => <PaperError title={`Couldn't reach ${props.computer?.host}:${props.computer?.port}`} error={why()} />}
+                {(why) => (
+                    <PaperError
+                        title={props.computer?.via ? "Couldn't reach this computer" : `Couldn't reach ${props.computer?.host}:${props.computer?.port}`}
+                        error={why()}
+                    />
+                )}
             </Show>
         </PaperModal>
     );

@@ -42,6 +42,9 @@ export const computerInfo = shape.object({
     port: shape.number(),
     /** the address other machines reach this computer at (local computer only) */
     networkAddress: shape.optional(shape.text()),
+    /** what the host reaches this computer through (such as a relay),
+     * when it isn't a host:port people would recognize */
+    via: shape.optional(shape.text()),
     os: shape.optional(shape.text()),
     osVersion: shape.optional(shape.text()),
     distroId: shape.optional(shape.text()),

@@ -116,6 +116,11 @@ export function panelUrl(computerId: string, panelId: string, subpath = ""): str
     return `${location.origin}${panelPath(computerId, panelId, rest)}`;
 }
 
+/** Where a computer is, for people: host:port, or how the host reaches it. */
+export function computerAddress(computer: Pick<ComputerInfo, "host" | "port" | "via">): string {
+    return computer.via ? `Through ${computer.via}` : `${computer.host}:${computer.port}`;
+}
+
 /** One file of an installed panel's manifest or store listing, as bytes. */
 export async function readPanelListingFile(computerId: string, panelId: string, path: string): Promise<Uint8Array> {
     const base64 = await shellIpc().invoke("panel-listing-file", { computerId, panelId, path });

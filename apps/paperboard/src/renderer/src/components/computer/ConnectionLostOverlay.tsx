@@ -34,10 +34,10 @@ export const ConnectionLostOverlay: Component<ConnectionLostOverlayProps> = (
                 </PaperText>
                 <PaperText preset="text" class={styles.message}>
                     Cannot communicate with{" "}
-                    <strong>{props.computer.name}</strong> at{" "}
-                    {props.computer.host}:{props.computer.port}. Make sure
-                    the Paperboard server daemon is running. Paperboard
-                    keeps retrying on its own.
+                    <strong>{props.computer.name}</strong>{" "}
+                    {props.computer.via ? `through ${props.computer.via}` : `at ${props.computer.host}:${props.computer.port}`}.
+                    Make sure the Paperboard server daemon is running.
+                    Paperboard keeps retrying on its own.
                 </PaperText>
                 <Show when={props.computer.status?.error}>
                     <PaperText preset="hint" class={styles.message}>
