@@ -173,14 +173,20 @@ export class Sudo {
             tail = (tail + d).slice(-(started.length + d.length));
             if (!ran && tail.includes(started)) {
                 ran = true;
-                // it started without being asked for a password: it gets no input
+                // sudo let it start: its input is closed (it never had any without a password), and stderr from here is its own
                 clearTimeout(noPrompt);
                 closeInput();
+                if (!asked) {
+                    out.add(before + d);
+                    before = "";
+                    return;
+                }
             }
+            if (ran && !asked) return void out.add(d);
             if (asked) {
                 out.add(d);
                 // sudo asking again: the password was wrong. Its input is closed, so it gives up by itself
-                if (!refused && d.includes(prompt)) refused = true;
+                if (!ran && !refused && d.includes(prompt)) refused = true;
                 return;
             }
             before += d;
