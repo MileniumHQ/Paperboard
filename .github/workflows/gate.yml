@@ -5,10 +5,15 @@ on:
   pull_request:
     # edited: the description names the gate targets
     types: [opened, synchronize, reopened, edited]
+  # The merge queue's group: the queued pull requests merged onto main, run in
+  # full. The queue moves main to exactly this commit, so main only ever lands
+  # on a commit the whole gate passed.
+  merge_group:
   workflow_dispatch:
 permissions:
   contents: read
-# A newer push to the same branch or PR makes the older run moot
+# A newer push to the same branch or PR makes the older run moot. A merge
+# queue's group has a ref of its own, so it never cancels another.
 concurrency:
   group: gate-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
@@ -21,8 +26,8 @@ jobs:
   #   Gate: terminal paperboard platform
   #
   # `platform` also starts the other release targets' runners. With no such
-  # line (or `Gate: all`), and on a push to main or a manual run, everything
-  # runs.
+  # line (or `Gate: all`), and on a push to main, a merge queue's group or a
+  # manual run, everything runs.
   scope:
     runs-on: ubuntu-24.04
     timeout-minutes: 5
@@ -224,8 +229,9 @@ jobs:
             bun run gate platform
           fi
 
-  # One stable check to require in branch protection, whatever the matrix is:
-  # a job the pull request didn't name is skipped, and that passes
+  # One stable check to require in branch protection and the merge queue,
+  # whatever the matrix is: a job the pull request didn't name is skipped, and
+  # that passes
   gate-green:
     name: Gate
     # runs when a job failed, but not in a run a newer one cancelled: that run

@@ -223,9 +223,10 @@ export interface GateRun {
     html_url: string;
 }
 
-// The Gate workflow's events that run every target: a push to main and a
-// manual run. A pull request runs only the targets its Gate line names.
-export const FULL_GATE_EVENTS = ["push", "workflow_dispatch"] as const;
+// The Gate workflow's events that run every target: a push to main, a merge
+// queue's group (the very commit the queue then moves main to) and a manual
+// run. A pull request runs only the targets its Gate line names.
+export const FULL_GATE_EVENTS = ["push", "merge_group", "workflow_dispatch"] as const;
 
 // Why a release's commit isn't a full SHA, or null when it is. Checked before
 // the commit goes into any URL.

@@ -281,8 +281,8 @@ describe("a release builds only a commit the whole gate passed", () => {
         event: "push", status: "completed", conclusion: "success", head_sha: sha, html_url: "https://github.com/run/1", ...over,
     });
 
-    test("a passed push or manual run at that exact commit is enough", () => {
-        for (const event of ["push", "workflow_dispatch"]) {
+    test("a passed push, merge queue or manual run at that exact commit is enough", () => {
+        for (const event of ["push", "merge_group", "workflow_dispatch"]) {
             expect(releaseGateProblem(sha, [run({ event })])).toBeNull();
         }
         // one green full run among failed ones counts: a re-run that passed
