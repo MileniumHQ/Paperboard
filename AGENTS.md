@@ -4,6 +4,8 @@ Hi agents, Pxl here! I'm the dev you're probably working with.
 
 **Try your changes yourself in the app or browser mode before shipping—make sure they look good, work well, and have clean code.**
 
+Read [CONTRIBUTING.md](CONTRIBUTING.md) too before you open a PR.
+
 Paperboard is a dashboard for self-hostable programs. Panels are like the apps. Here's some rules:
 
 - **Optimize for a thousand panels:** Paperboard is an SDK at heart. Never hard-code panel-specific logic or narrow global APIs (a few legacy exceptions exist; don't add more).
@@ -18,7 +20,6 @@ Paperboard is a dashboard for self-hostable programs. Panels are like the apps. 
 - **Changelogs are suspended:** No changelogs right now.
 - **Nothing ships that is unfinished:** Write production-ready code, not experiments.
 - **Rewrites > band-aids:** Prefer rewriting a messy part over patching around it, and flag when that's needed. Still, if a 5-line fix is genuinely best, take it.
-- **Don't touch `.paperboard`:** Keep tests out of the user's `.paperboard` dir; use `PAPERBOARD_DIR`.
 - **Suicide prevention:** Never run `pkill` or `killall` (it can kill your own shell or another session). Stop only PIDs you started.
 - **Leave the real app alone:** Never kill the installed Paperboard app or its workloads (game servers, supervisors). If it crashed, check whether a session killed it first.
 - **Launching from an agent shell:** `ELECTRON_RUN_AS_NODE=1` crashes Electron—launch with `env -u ELECTRON_RUN_AS_NODE`, a throwaway `PAPERBOARD_DIR`, and `--user-data-dir`.
