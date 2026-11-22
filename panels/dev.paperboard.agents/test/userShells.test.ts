@@ -5,6 +5,7 @@ import path from "node:path";
 import type { AccessEntry, AccessView, SudoEntry } from "../src/contract";
 import { Access } from "../src/service/access";
 import type { ToolResult } from "../src/service/computerMcp";
+import { waitFor } from "testkit/wait";
 import { ptyTerminals } from "./support/pty";
 
 const cleanups: (() => Promise<void> | void)[] = [];
@@ -14,31 +15,30 @@ afterEach(async () => {
 
 const PASSWORD = "hunter2 is my password";
 
-// sudo as far as these tests need it: asks with the prompt it's given, without echo, three times at most,
-// and remembers it was unlocked. The real one is never run.
-const FAKE_SUDO = `#!/bin/bash
+// sudo as far as these tests need it, the way it reads `sudo -S -k -p <prompt> -- <command>`: it asks on stderr,
+// three times at most, reads each password as a line of stdin, and runs the command with the rest of stdin.
+// It doesn't ask when the computer lets the user run it without a password. The real one is never run.
+const fakeSudo = (nopasswd: string) => `#!/bin/bash
 prompt="[sudo] password: "
 while [ $# -gt 0 ]; do
   case "$1" in
     -p) prompt="$2"; shift 2 ;;
-    -v) shift ;;
+    -S|-k) shift ;;
+    --) shift; break ;;
     *) break ;;
   esac
 done
-if [ ! -e "$HOME/.unlocked" ]; then
+if [ ! -e "${nopasswd}" ]; then
   ok=0
   for i in 1 2 3; do
-    printf '%s' "$prompt"
-    IFS= read -rs pw
-    printf '\\n'
+    printf '%s' "$prompt" >&2
+    if ! IFS= read -r pw; then echo "sudo: no password was provided" >&2; exit 1; fi
     if [ "$pw" = "${PASSWORD}" ]; then ok=1; break; fi
-    echo "Sorry, try again."
+    echo "Sorry, try again." >&2
   done
-  if [ $ok = 0 ]; then echo "sudo: 3 incorrect password attempts"; exit 1; fi
-  touch "$HOME/.unlocked"
+  if [ $ok = 0 ]; then echo "sudo: 3 incorrect password attempts" >&2; exit 1; fi
 fi
-[ $# -gt 0 ] && exec "$@"
-exit 0
+exec "$@"
 `;
 
 /** a user's computer in a temp folder, with bash and the fake sudo, and the agent's access to it */
@@ -49,7 +49,8 @@ async function setup() {
     const bin = path.join(root, "bin");
     fs.mkdirSync(path.join(project, "src"), { recursive: true });
     fs.mkdirSync(bin);
-    fs.writeFileSync(path.join(bin, "sudo"), FAKE_SUDO, { mode: 0o755 });
+    const sudoBinary = path.join(root, "sudo");
+    fs.writeFileSync(sudoBinary, fakeSudo(path.join(root, "nopasswd")), { mode: 0o755 });
     const terminals = await ptyTerminals({ shell: "/bin/bash", env: { PATH: `${bin}:/usr/bin:/bin`, HOME: home, LANG: "C.UTF-8" } });
     const posted: (AccessEntry | SudoEntry)[] = [];
     const notices: string[] = [];
@@ -64,6 +65,7 @@ async function setup() {
         turning: () => false,
         onChange: (v) => views.push(v),
         platform: "linux",
+        sudoBinary,
     });
     access.load();
     cleanups.push(async () => {
@@ -71,8 +73,8 @@ async function setup() {
         fs.rmSync(root, { recursive: true, force: true });
     });
     const tools = access.toolset();
-    const call = async (name: string, args: Record<string, unknown>) => {
-        const r = await tools.call(name, args, { fromFlow: false });
+    const call = async (name: string, args: Record<string, unknown>, fromFlow = false) => {
+        const r = await tools.call(name, args, { fromFlow });
         results.push(r);
         return r;
     };
@@ -82,7 +84,8 @@ async function setup() {
         access.answer(posted.at(-1)!.id, "once");
     };
     const sudoCard = () => posted.filter((e): e is SudoEntry => e.kind === "sudo").at(-1)!;
-    return { root, home, project, terminals, access, posted, notices, views, results, call, allowShell, sudoCard };
+    const sudoSettled = () => waitFor("the sudo card to settle", () => sudoCard().status !== "running" && sudoCard());
+    return { root, home, project, terminals, access, posted, notices, views, results, call, allowShell, sudoCard, sudoSettled };
 }
 
 describe("the agent's shells on the user's computer", () => {
@@ -146,41 +149,81 @@ describe("the agent's shells on the user's computer", () => {
         expect((await s.call("user_shell_send", { shell: 1, keys: ["ctrl-c"] })).text).toContain("`sleep 30` exited with 130.");
     }, 30_000);
 
-    test("sudo is unlocked by the password the user types on a card, which goes only to sudo", async () => {
+    test("a command as administrator runs only as the card shows it, outside the agent's shells, and the password reaches only sudo", async () => {
         const s = await setup();
+        const command = 'echo "as $(id -un) in $(pwd)"; cat';
+        expect((await s.call("request_sudo", { command, folder: s.project, reason: "Install ripgrep." })).text).toContain("isn't allowed");
         await s.allowShell();
+        // the agent's own shell has a sudo that would keep what it's given: the password never goes through a shell
         await s.call("user_shell_open", { task: "Install a package", folder: s.project });
+        await s.call("user_shell_run", { shell: 1, command: `sudo() { cat > "${path.join(s.home, "caught")}"; }` });
 
-        const asked = await s.call("request_sudo", { shell: 1, reason: "Install ripgrep with the system's package manager." });
-        expect(asked.text).toContain("Asked the user for their password");
-        expect(s.sudoCard()).toMatchObject({ kind: "sudo", shell: 1, task: "Install a package", status: "waiting" });
-        // while sudo waits for the user, the agent can neither run anything nor type into it
-        expect((await s.call("user_shell_run", { shell: 1, command: "echo hi" })).text).toContain("waiting for the user's sudo password");
-        expect((await s.call("user_shell_send", { shell: 1, text: "guess\r" })).text).toContain("only the user types");
+        const asked = await s.call("request_sudo", { command, folder: "~/project", reason: "Install ripgrep." });
+        expect(asked.isError).toBeFalsy();
+        expect(s.sudoCard()).toMatchObject({ kind: "sudo", command, folder: s.project, reason: "Install ripgrep.", status: "waiting" });
+        // one at a time: a new request replaces the one waiting
+        await s.call("request_sudo", { command, folder: s.project, reason: "Install ripgrep." });
+        expect(s.posted.filter((e) => e.kind === "sudo").map((e) => e.status)).toEqual(["waiting", "expired", "waiting"]);
 
-        await s.access.shells.answerSudo(s.sudoCard().id, "not it");
-        expect(s.sudoCard()).toMatchObject({ status: "waiting", error: "That password didn't work. Try again." });
-        await s.access.shells.answerSudo(s.sudoCard().id, PASSWORD);
-        expect(s.sudoCard().status).toBe("allowed");
-        expect(s.notices.at(-1)).toContain("unlocked sudo in shell 1");
+        await s.access.sudo.answer(s.sudoCard().id, "not it");
+        expect(await s.sudoSettled()).toMatchObject({ status: "waiting", error: "That password didn't work. Try again." });
+        await s.access.sudo.answer(s.sudoCard().id, PASSWORD);
+        expect(await s.sudoSettled()).toMatchObject({ status: "done", exitCode: 0 });
+        // the command got no input: its cat read nothing, not the password
+        expect(s.notices.at(-1)).toBe(`\`${command}\` ran as administrator in ${s.project} and exited with 0.\n\nas ${os.userInfo().username} in ${s.project}`);
+        expect(s.access.sudo.answer(s.sudoCard().id, PASSWORD)).rejects.toThrow("isn't waiting anymore");
 
-        expect((await s.call("user_shell_run", { shell: 1, command: "sudo echo as admin" })).text).toBe("`sudo echo as admin` exited with 0.\n\nas admin");
-        // what sudo was told is nowhere the agent or the transcript can read
-        const seen = JSON.stringify([s.results, s.posted, s.notices]);
-        expect(seen).not.toContain("hunter2");
-        expect(seen).not.toContain("not it");
+        // what sudo was told is nowhere the agent, the transcript or the agent's shell can read
+        const seen = JSON.stringify([s.posted, s.notices, s.results, s.access.view()]);
+        expect(seen).not.toContain(PASSWORD);
+        expect(fs.existsSync(path.join(s.home, "caught"))).toBe(false);
     }, 30_000);
 
-    test("a sudo request the user turns down leaves the shell at its prompt", async () => {
+    test("a sudo request ends when the user says no, after three wrong passwords, and without a password where none is asked", async () => {
         const s = await setup();
         await s.allowShell();
-        await s.call("user_shell_open", { task: "Fix permissions", folder: s.project });
-        await s.call("request_sudo", { shell: 1, reason: "Change who owns the project's files." });
-        await s.access.shells.declineSudo(s.sudoCard().id);
+        await s.call("request_sudo", { command: "chown -R me .", folder: s.project, reason: "Fix who owns the files." });
+        s.access.sudo.decline(s.sudoCard().id);
         expect(s.sudoCard().status).toBe("declined");
-        expect(s.notices.at(-1)).toContain("said no to sudo");
-        expect((await s.call("user_shell_run", { shell: 1, command: "echo back" })).text).toContain("back");
-        expect(s.access.shells.answerSudo(s.sudoCard().id, PASSWORD)).rejects.toThrow("isn't waiting anymore");
+        expect(s.notices.at(-1)).toContain("said no to running `chown -R me .`");
+
+        await s.call("request_sudo", { command: "true", folder: s.project, reason: "Check sudo." });
+        for (let i = 0; i < 3; i++) {
+            await s.access.sudo.answer(s.sudoCard().id, `wrong ${i}`);
+            await s.sudoSettled();
+        }
+        expect(s.sudoCard()).toMatchObject({ status: "failed", error: "sudo refused the password 3 times" });
+        expect(s.notices.at(-1)).toContain("refused the user's password 3 times");
+
+        // a computer that lets sudo run without a password: the password typed is never handed to the command
+        fs.writeFileSync(path.join(s.root, "nopasswd"), "");
+        await s.call("request_sudo", { command: "echo ran; cat", folder: s.project, reason: "Check sudo." });
+        await s.access.sudo.answer(s.sudoCard().id, PASSWORD);
+        expect(await s.sudoSettled()).toMatchObject({ status: "done", exitCode: 0 });
+        expect(s.notices.at(-1)).toEndWith("exited with 0.\n\nran");
+        expect(JSON.stringify(s.notices)).not.toContain(PASSWORD);
+    }, 30_000);
+
+    test("taking shells back closes them, and an automation drives shells only when they're allowed for good", async () => {
+        const s = await setup();
+        await s.allowShell();
+        await s.call("user_shell_open", { task: "Build it", folder: s.project });
+        // allowed for this time: the user's next turn keeps the shell, an automation can't use it
+        s.access.turnEnded();
+        expect((await s.call("user_shell_run", { shell: 1, command: "echo mine" })).text).toContain("mine");
+        const flow = await s.call("user_shell_run", { shell: 1, command: "echo flow" }, true);
+        expect(flow.isError).toBe(true);
+        expect(flow.text).toContain("allowed for good");
+
+        // allowed for good: the same shell is the automation's too
+        await s.call("request_access", { reason: "Keep building.", items: [{ kind: "shell" }] });
+        s.access.answer(s.posted.at(-1)!.id, "always");
+        expect((await s.call("user_shell_run", { shell: 1, command: "echo flow" }, true)).text).toContain("flow");
+
+        await s.access.revoke({ kind: "shell" });
+        expect(s.access.view().shells).toEqual([]);
+        expect(s.terminals.running()).toEqual([]);
+        expect((await s.call("user_shell_run", { shell: 1, command: "echo hi" })).text).toContain("no shell is open");
     }, 30_000);
 
     test("shells close with the conversation, by the user, and when they exit", async () => {
@@ -191,10 +234,11 @@ describe("the agent's shells on the user's computer", () => {
         await s.call("user_shell_open", { task: "Three", folder: s.project });
         expect(s.terminals.running()).toHaveLength(3);
 
-        // closed on the Access page: the agent is told
+        // closed on the Access page: the agent isn't woken for it, its next turn lists the shells left
+        const told = s.notices.length;
         const view = await s.access.closeShell(2);
         expect(view.shells.map((x) => x.task)).toEqual(["One", "Three"]);
-        expect(s.notices.at(-1)).toBe("The user closed shell 2.");
+        expect(s.notices).toHaveLength(told);
         // a shell that exits by itself is gone too
         expect((await s.call("user_shell_run", { shell: 3, command: "exit" })).text).toContain("Shell 3 ended");
         expect(s.access.view().shells.map((x) => x.id)).toEqual([1]);

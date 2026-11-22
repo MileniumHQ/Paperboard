@@ -1,13 +1,14 @@
 import { Match, Switch, createEffect, createSignal, on } from "solid-js";
-import { PaperButton, PaperCard, PaperFlex, PaperIcon, PaperInput, PaperLoader, PaperText, createAction } from "@mileniumhq/paperui";
-import type { SudoEntry } from "../contract";
+import { PaperButton, PaperCard, PaperCode, PaperFlex, PaperIcon, PaperInput, PaperLoader, PaperText, createAction } from "@mileniumhq/paperui";
+import { LIMITS, type SudoEntry } from "../contract";
 import type { Agent } from "../lib/agent";
 import RequestEnd from "./RequestEnd";
 import type { SignInDraft } from "./SignIn";
 
 /**
- * The agent asking to use sudo in one of its shells. The password goes from here straight to sudo's prompt in
- * that shell: the agent never sees it, and it's kept nowhere, so the draft holds it only while the card waits.
+ * The agent asking to run one command as administrator. The card shows exactly what runs; the password goes
+ * from here to the system's sudo for that command only: the agent never sees it, and it's kept nowhere, so the
+ * draft holds it only while the card waits.
  */
 export default function SudoRequest(props: { agent: Agent; entry: SudoEntry; name: string; draft: SignInDraft; onDone: () => void }) {
     const e = () => props.entry;
@@ -32,23 +33,29 @@ export default function SudoRequest(props: { agent: Agent; entry: SudoEntry; nam
         on(
             () => e().status,
             (status) => {
-                if (status !== "waiting" && status !== "checking") props.onDone();
+                if (status !== "waiting" && status !== "running") props.onDone();
             },
         ),
     );
 
     return (
         <PaperFlex direction="row">
-            <PaperCard fullWidth={false} shrink maxWidth="panel-small" padding="full" gap="half" role="region" aria-label={`${props.name} asks to use sudo`} data-message={e().id}>
+            <PaperCard fullWidth={false} shrink maxWidth="panel-small" padding="full" gap="half" role="region" aria-label={`${props.name} asks to run a command as administrator`} data-message={e().id}>
                 <PaperFlex direction="row" align="start" gap="half">
                     <PaperIcon>admin_panel_settings</PaperIcon>
                     <PaperFlex gap="onefourth" minWidth={0}>
-                        <PaperText preset="label">{props.name} asks to use sudo</PaperText>
+                        <PaperText preset="label">{props.name} asks to run this as administrator</PaperText>
                         <PaperText preset="hint" breakWord>
                             {e().reason}
                         </PaperText>
                     </PaperFlex>
                 </PaperFlex>
+                <PaperCode block lang="bash" wrap>
+                    {e().command}
+                </PaperCode>
+                <PaperText preset="hint" breakWord>
+                    In {e().folder}
+                </PaperText>
 
                 <Switch>
                     <Match when={e().status === "waiting"}>
@@ -66,14 +73,14 @@ export default function SudoRequest(props: { agent: Agent; entry: SudoEntry; nam
                                     type="password"
                                     autocomplete="current-password"
                                     fullWidth
-                                    maxLength={1024}
+                                    maxLength={LIMITS.access.passwordChars}
                                     value={password()}
                                     onInput={(ev) => type(ev.currentTarget.value)}
                                     error={e().error}
                                     disabled={busy()}
                                 />
                                 <PaperText preset="hint">
-                                    Your password goes straight to sudo in {props.name}'s shell and isn't kept. {props.name} never sees it.
+                                    Only this command runs, once. Your password goes to your system's sudo for it and isn't kept. {props.name} never sees it.
                                 </PaperText>
                                 <PaperFlex direction="row" justify="flex-end" gap="half">
                                     <PaperButton
@@ -88,23 +95,23 @@ export default function SudoRequest(props: { agent: Agent; entry: SudoEntry; nam
                                         Not now
                                     </PaperButton>
                                     <PaperButton type="submit" disabled={busy() || !password()}>
-                                        Allow sudo
+                                        Run it
                                     </PaperButton>
                                 </PaperFlex>
                             </PaperFlex>
                         </form>
                     </Match>
-                    <Match when={e().status === "checking"}>
-                        <PaperLoader loaderStatus="indeterminate" label="Checking with sudo" />
+                    <Match when={e().status === "running"}>
+                        <PaperLoader loaderStatus="indeterminate" label="Running as administrator" />
                     </Match>
-                    <Match when={e().status === "allowed"}>
+                    <Match when={e().status === "done"}>
                         <PaperFlex direction="row" align="center" gap="half">
-                            <PaperIcon>check</PaperIcon>
-                            <PaperText preset="hint">sudo is unlocked in that shell for a few minutes after each use.</PaperText>
+                            <PaperIcon>{e().exitCode === 0 ? "check" : "info"}</PaperIcon>
+                            <PaperText preset="hint">{e().exitCode === 0 ? "It ran." : `It ran and exited with ${e().exitCode}.`} {props.name} has its output.</PaperText>
                         </PaperFlex>
                     </Match>
                 </Switch>
-                <RequestEnd entry={e()} name={props.name} failed="sudo isn't unlocked" />
+                <RequestEnd entry={e()} name={props.name} failed="The command didn't finish" />
             </PaperCard>
         </PaperFlex>
     );

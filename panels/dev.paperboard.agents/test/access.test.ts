@@ -169,12 +169,12 @@ describe("the agent on the user's computer", () => {
         const tools = again.toolset();
         expect((await tools.call("user_computer_list", { path: s.project }, { fromFlow: false })).isError).toBeFalsy();
 
-        again.revoke({ kind: "folder", path: s.project });
+        await again.revoke({ kind: "folder", path: s.project });
         expect((await tools.call("user_computer_list", { path: s.project }, { fromFlow: false })).isError).toBe(true);
         const third = new Access(s.deps);
         third.load();
         expect(third.view().grants).toEqual([]);
-        expect(() => third.revoke({ kind: "folder", path: s.project })).toThrow("nothing to take back");
+        expect(third.revoke({ kind: "folder", path: s.project })).rejects.toThrow("nothing to take back");
     });
 
     test("shells allowed for good last across a restart and are taken back as one grant", async () => {
@@ -186,7 +186,7 @@ describe("the agent on the user's computer", () => {
             { kind: "folder", path: s.project, once: false },
             { kind: "shell", once: false },
         ]);
-        again.revoke({ kind: "shell" });
+        await again.revoke({ kind: "shell" });
         const third = new Access(s.deps);
         third.load();
         expect(third.view().grants).toMatchObject([{ kind: "folder", path: s.project }]);

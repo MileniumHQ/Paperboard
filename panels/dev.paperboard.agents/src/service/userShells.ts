@@ -12,17 +12,14 @@
 // starts and ends and how it exited (OSC 133, workloads/shellIntegration.ts):
 // a command's output is the lines between its marks, without the prompt.
 //
-// sudo: the agent asks (request_sudo), the shell runs `sudo -v` with a prompt
-// of its own, and the user types the password on a card. It goes straight to
-// that prompt, which doesn't echo, and nowhere else: not to the agent, the
-// transcript or the disk. sudo remembers it was unlocked in that terminal for
-// a few minutes after each use, as it does for a person.
+// sudo never gets a password in these shells: anything the agent set up in
+// one could catch it. A command that needs sudo is asked for on a card and
+// run outside them (sudo.ts).
 
-import crypto from "node:crypto";
 import xterm from "@xterm/headless";
 import type { IMarker, Terminal as Screen } from "@xterm/headless";
 import { errorMessage } from "@mileniumhq/paperapi";
-import { LIMITS, type SudoEntry, type UserShellView } from "../contract";
+import { LIMITS, type UserShellView } from "../contract";
 import { loginEnv } from "./brainLogin";
 import type { ToolResult } from "./computerMcp";
 import { OUTPUT_CHARS } from "./shell";
@@ -39,8 +36,6 @@ const START_MS = 20_000;
 const QUIET_MS = 4_000;
 const DEFAULT_WAIT_S = 30;
 const MAX_WAIT_S = 300;
-/** after the password: how long sudo has to say whether it took it */
-const SUDO_CHECK_MS = 15_000;
 
 /** The keys the agent can press, as a terminal sends them. Arrows depend on the program's cursor mode. */
 const KEYS: Record<string, string | ((app: boolean) => string)> = {
@@ -59,6 +54,8 @@ const KEYS: Record<string, string | ((app: boolean) => string)> = {
 };
 export const SHELL_KEYS = Object.keys(KEYS);
 
+const SUDO_HERE = "sudo is asking for a password, which is never typed in your shells: press ctrl-c, then request_sudo with the command.";
+
 /** The daemon's terminals, as terminalApi has them. */
 export interface Terminals {
     create(id: string, o: { cols: number; rows: number; cwd: string; env: Record<string, string> }): Promise<void>;
@@ -72,14 +69,9 @@ export interface Terminals {
 
 export interface ShellsDeps {
     terminals: Terminals;
-    /** add or update a sudo card in the conversation */
-    post(entry: SudoEntry): void;
-    /** tell the agent how it went, never refused (Conversation.tell); it starts a turn */
-    tell(text: string): void;
     /** the open shells changed (the Access page lists them) */
     changed(): void;
     platform?: NodeJS.Platform;
-    sudoWaitMs?: number;
 }
 
 /** what a command left on the screen, and how it ended (null: it hasn't) */
@@ -92,15 +84,6 @@ interface Run {
     shown: string[];
 }
 
-interface Sudo {
-    entry: SudoEntry;
-    /** sudo's prompt, unique to this request: what's waiting for the password is the sudo started for it */
-    prompt: string;
-    /** how many times the prompt has shown */
-    asked: number;
-    timer: ReturnType<typeof setTimeout>;
-}
-
 class Shell {
     readonly screen: Screen;
     /** the shell has shown a prompt and runs nothing */
@@ -108,7 +91,6 @@ class Shell {
     exited: number | null | undefined = undefined;
     program = "";
     run: Run | null = null;
-    sudo: Sudo | null = null;
     private waiters = new Set<() => void>();
     readonly offs: (() => void)[] = [];
 
@@ -217,8 +199,6 @@ const waitSeconds = (raw: unknown): number | string => {
 
 export class UserShells {
     private shells = new Map<number, Shell>();
-    /** one sudo card waits at a time */
-    private pendingSudo: Shell | null = null;
 
     constructor(private deps: ShellsDeps) {}
 
@@ -303,7 +283,6 @@ export class UserShells {
         if (this.shells.get(s.n) !== s) return;
         s.exited = code ?? null;
         s.wake();
-        if (s.sudo) this.endSudo(s, "expired");
         this.shells.delete(s.n);
         s.dispose();
         this.deps.changed();
@@ -311,7 +290,6 @@ export class UserShells {
 
     private async drop(s: Shell) {
         if (this.shells.get(s.n) === s) this.shells.delete(s.n);
-        if (s.sudo) this.endSudo(s, "expired");
         if (s.exited !== undefined) return; // it ended by itself and is already gone
         for (const off of s.offs.splice(0)) off();
         try {
@@ -345,7 +323,6 @@ export class UserShells {
         if (/[\r\n]/.test(command)) return fault("a command is one line: chain steps with && or ;, or write a script to a file and run it");
         const ms = waitSeconds(wait);
         if (typeof ms === "string") return fault(ms);
-        if (s.sudo) return fault(`shell ${s.n} is waiting for the user's sudo password`);
         if (!s.idle) return fault(`shell ${s.n} is still running \`${s.run?.command || s.program}\`: answer it with user_shell_send, or stop it by pressing ctrl-c`);
         const before = s.run;
         await this.deps.terminals.write(s.id, `${command}\r`);
@@ -369,9 +346,8 @@ export class UserShells {
         if (typeof text === "string" && text.length > L.commandChars) return fault(`type up to ${L.commandChars} characters at a time`);
         const pressed = (keys as string[] | undefined) ?? [];
         if (s.idle && (text || pressed.some((k) => k !== "ctrl-c"))) return fault(`shell ${s.n} is at its prompt; run a command with user_shell_run`);
-        // a password goes from the user to sudo on a card, never through the agent
-        if (text && (s.sudo || s.program === "sudo")) return fault("sudo is asking for a password, which only the user types: press ctrl-c, then request_sudo");
-        if (s.sudo) return fault(`shell ${s.n} is waiting for the user's sudo password`);
+        // a password never goes through the agent
+        if (text && s.program === "sudo") return fault(SUDO_HERE);
         const data = (text ?? "") + pressed.map((k) => { const v = KEYS[k]!; return typeof v === "function" ? v(s.appCursor) : v; }).join("");
         if (data) await this.deps.terminals.write(s.id, data);
         await s.settle(ms * 1000, () => s.idle);
@@ -397,109 +373,7 @@ export class UserShells {
             return { isError: code !== null && code !== 0, text: `${head}${output ? `\n\n${output}` : from > 0 ? "" : " (no output)"}` };
         }
         const front = s.program && s.program !== r.command.split(/\s/)[0] ? ` (${s.program} in front)` : "";
-        const sudo = s.program === "sudo" ? " sudo is asking for a password, which only the user types: press ctrl-c, then request_sudo." : " If it's asking something, answer with user_shell_send; to wait for more, user_shell_send with nothing to type.";
+        const sudo = s.program === "sudo" ? ` ${SUDO_HERE}` : " If it's asking something, answer with user_shell_send; to wait for more, user_shell_send with nothing to type.";
         return { text: `${name} is still running${front}.${sudo}${output ? `\n\nNew on its screen:\n${output}` : "\n\nNothing new on its screen."}` };
-    }
-
-    // ------------------------------------------------------------- sudo
-
-    async requestSudo(raw: unknown, reason: unknown): Promise<ToolResult> {
-        if ((this.deps.platform ?? process.platform) === "win32") return fault("Windows has no sudo: an administrator's command needs an administrator's terminal, which the user opens themselves");
-        const s = this.shell(raw);
-        const why = typeof reason === "string" ? reason.trim() : "";
-        if (!why || why.length > L.reasonChars) return fault(`give a reason of up to ${L.reasonChars} characters: what you'll run as administrator, and why`);
-        if (!s.idle) return fault(`shell ${s.n} is running something: wait for it or press ctrl-c, then ask`);
-        if (this.pendingSudo) this.endSudo(this.pendingSudo, "expired");
-        const prompt = `[paperboard-sudo-${crypto.randomBytes(4).toString("hex")}] `;
-        const before = s.run;
-        // validate only, with its own prompt; a space first keeps it out of the shell's history where it can
-        await this.deps.terminals.write(s.id, ` sudo -v -p '${prompt}'\r`);
-        await s.settle(10_000, () => (s.run !== before && s.run?.end != null) || s.cursorLine().includes(prompt));
-        if (s.exited !== undefined) return fault(`shell ${s.n} ended`);
-        if (s.run === before || !s.run) return fault(`shell ${s.n} didn't start sudo; it shows: ${s.cursorLine().trim() || "(nothing)"}`);
-        s.run.command = "sudo -v";
-        if (s.run.end && s.run.exitCode === 0) {
-            s.run.shown = s.lines(s.run.start, s.run.end).lines;
-            return { text: `sudo works in shell ${s.n} without a password right now. It may ask again after a few minutes unused: request_sudo again then.` };
-        }
-        if (!s.cursorLine().includes(prompt)) {
-            const said = s.lines(s.run.start, s.run.end).lines.join("\n").trim();
-            if (!s.run.end) await this.deps.terminals.write(s.id, KEYS["ctrl-c"] as string);
-            return fault(`sudo didn't ask for a password in shell ${s.n}${said ? `; it said:\n${said}` : ""}`);
-        }
-        const entry: SudoEntry = { id: crypto.randomBytes(8).toString("hex"), at: Date.now(), kind: "sudo", shell: s.n, task: s.task, reason: why, status: "waiting" };
-        const timer = setTimeout(() => {
-            if (s.sudo?.entry.id !== entry.id) return;
-            this.endSudo(s, "expired");
-            this.deps.tell(`The user didn't answer your sudo request for shell ${s.n} in time; it has lapsed.`);
-        }, this.deps.sudoWaitMs ?? L.sudoWaitMinutes * 60_000);
-        s.sudo = { entry, prompt, asked: 1, timer };
-        this.pendingSudo = s;
-        this.deps.post(entry);
-        return { text: `Asked the user for their password on a card. It goes straight to sudo in shell ${s.n}; you never see it. Their answer starts your next turn. Don't wait for it: finish this turn.` };
-    }
-
-    /** The user's password, typed into sudo's prompt once and never kept. */
-    async answerSudo(id: unknown, password: unknown): Promise<void> {
-        const s = this.pendingSudo;
-        const p = s?.sudo;
-        if (!s || !p || p.entry.id !== id || p.entry.status !== "waiting") throw new Error("That request isn't waiting anymore.");
-        if (typeof password !== "string" || !password || password.length > 1024 || /[\r\n]/.test(password)) throw new Error("Type your password, on one line.");
-        if (!s.cursorLine().includes(p.prompt)) {
-            this.endSudo(s, "failed", "sudo stopped asking for the password");
-            this.deps.tell(`sudo in shell ${s.n} stopped asking for the password before the user answered. Ask again with request_sudo if you still need it.`);
-            throw new Error("sudo stopped asking for your password. Nothing was typed.");
-        }
-        this.updateSudo(s, { status: "checking", error: undefined });
-        await this.deps.terminals.write(s.id, `${password}\r`);
-        const countPrompts = () => s.lines(s.run!.start, s.run!.end).lines.filter((l) => l.includes(p.prompt)).length;
-        await s.settle(SUDO_CHECK_MS, () => s.idle || countPrompts() > p.asked);
-        if (s.sudo !== p) return; // the shell closed under it
-        if (s.run?.end) {
-            s.run.shown = s.lines(s.run.start, s.run.end).lines;
-            if (s.run.exitCode === 0) {
-                this.endSudo(s, "allowed");
-                this.deps.tell(`The user unlocked sudo in shell ${s.n}: \`sudo ...\` works there now without a password, for a few minutes after each use. If it asks again, request_sudo again.`);
-                return;
-            }
-            this.endSudo(s, "failed", "sudo refused the password too many times");
-            this.deps.tell(`sudo in shell ${s.n} refused the user's password too many times. Ask again only if they want to.`);
-            return;
-        }
-        if (countPrompts() > p.asked) {
-            p.asked = countPrompts();
-            this.updateSudo(s, { status: "waiting", error: "That password didn't work. Try again." });
-            return;
-        }
-        this.updateSudo(s, { status: "waiting", error: "sudo didn't answer. Try again." });
-    }
-
-    async declineSudo(id: unknown): Promise<void> {
-        const s = this.pendingSudo;
-        if (!s?.sudo || s.sudo.entry.id !== id || s.sudo.entry.status !== "waiting") throw new Error("That request isn't waiting anymore.");
-        this.endSudo(s, "declined");
-        // the agent is told once its shell is back at the prompt, ready for what it does next
-        await s.settle(SUDO_CHECK_MS, () => s.idle);
-        this.deps.tell(`The user said no to sudo in shell ${s.n}. Don't ask again unless they bring it up.`);
-    }
-
-    private updateSudo(s: Shell, patch: Partial<SudoEntry>) {
-        if (!s.sudo) return;
-        s.sudo.entry = { ...s.sudo.entry, ...patch };
-        this.deps.post(s.sudo.entry);
-    }
-
-    /** The card's last word; a sudo still asking is stopped so the shell is back at its prompt. */
-    private endSudo(s: Shell, status: "allowed" | "declined" | "expired" | "failed", error?: string) {
-        const p = s.sudo;
-        if (!p) return;
-        clearTimeout(p.timer);
-        this.updateSudo(s, { status, error });
-        s.sudo = null;
-        if (this.pendingSudo === s) this.pendingSudo = null;
-        if (status !== "allowed" && this.shells.get(s.n) === s && s.run && !s.run.end) {
-            // quiet: cleanup; a shell still at sudo's prompt says so to the next call on it
-            void this.deps.terminals.write(s.id, KEYS["ctrl-c"] as string).catch((e) => console.error(`[agents] couldn't stop sudo in shell ${s.n}:`, errorMessage(e)));
-        }
     }
 }

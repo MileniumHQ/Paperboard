@@ -7,7 +7,7 @@ import RequestEnd from "./RequestEnd";
 /** what a folder or a shell lets the agent do, in the user's words; a single command is what requests asked for before shells */
 export const itemText = (item: AskedItem) => {
     if (item.kind === "folder") return { icon: "folder", what: item.path, code: true, how: "List, read, search, create and edit files in it" };
-    if (item.kind === "shell") return { icon: "terminal", what: "A shell", code: false, how: "Run any command as you, in a shell it opens for the task" };
+    if (item.kind === "shell") return { icon: "terminal", what: "A shell", code: false, how: "Run any command as you, in shells it keeps open until the task is done" };
     return { icon: "terminal", what: item.command.join(" "), code: true, how: item.anyArguments ? "Run it, with any arguments after these" : "Run exactly this" };
 };
 

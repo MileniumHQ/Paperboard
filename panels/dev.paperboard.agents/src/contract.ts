@@ -175,8 +175,12 @@ export const LIMITS = {
         commandChars: 8000,
         /** an unanswered request lapses after this long */
         waitMinutes: 15,
-        /** an unanswered sudo password card lapses after this long; sudo gives up on its own prompt at 5 */
-        sudoWaitMinutes: 4,
+        /** the user's password on a sudo card */
+        passwordChars: 1024,
+        /** passwords sudo is given for one card before it fails */
+        sudoAttempts: 3,
+        /** a command run as administrator is stopped after this long */
+        sudoRunMinutes: 30,
         /** grants kept for good */
         always: 200,
     },
@@ -729,15 +733,19 @@ const userShell = object({
 });
 export type UserShellView = Infer<typeof userShell>;
 
-/** The agent asking for the user's password, for sudo in one of its shells. The password is never kept. */
+/** The agent asking to run one command as administrator, which the user reads and types their password for. The password is never kept. */
 const sudoEntry = object({
     ...entryHead,
     kind: oneOf("sudo"),
-    shell: number(),
-    task: text(),
+    /** the command line, exactly as it runs */
+    command: text(),
+    /** the folder it runs in */
+    folder: text(),
     reason: text(),
-    /** checking: the password went to sudo, which hasn't answered yet */
-    status: oneOf("waiting", "checking", "allowed", "declined", "expired", "failed"),
+    /** running: the password went to sudo, which is checking it or running the command */
+    status: oneOf("waiting", "running", "done", "declined", "expired", "failed"),
+    /** done: how the command exited */
+    exitCode: optional(number()),
     /** waiting again after a wrong password; failed: why */
     error: optional(text()),
 });
@@ -884,7 +892,7 @@ export const agentsContract = defineContract(PANEL_ID, {
         closeShell: { input: object({ id: number() }), output: accessView },
         /** the panel's light or dark theme, which the pages in the agent's browser follow */
         setColorScheme: { input: object({ scheme: oneOf("light", "dark") }), output: nothing() },
-        /** the user's password for sudo in the agent's shell: typed into sudo's prompt once, never kept */
+        /** the user's password for the command on a sudo card: given to the system's sudo once, never kept */
         answerSudo: { input: object({ id: text(), password: text() }), output: nothing() },
         declineSudo: { input: byId, output: nothing() },
         /** a program the agent asks to run as one of its tool servers: allowed or not */

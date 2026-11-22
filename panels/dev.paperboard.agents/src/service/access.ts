@@ -6,13 +6,16 @@
 // lets the agent list, read, search and write files under it. Anything else
 // (deleting, installing, building, signing in to a command-line tool) is done
 // in a shell the agent opens for the task and keeps until it's done
-// (userShells.ts): commands run there as the user, and sudo only with the
-// password they type on a card.
+// (userShells.ts): commands run there as the user. A command that needs sudo
+// is one the user reads on a card and types their password for, and it runs
+// outside those shells (sudo.ts).
 //
 // Grants for good live in access.json and are listed on the Access page,
-// where they're taken back, beside the open shells, which close there. A
-// grant for this time lasts until the turn the answer starts is over; a
-// shell opened under it stays open for its task. Every path is resolved
+// where they're taken back, beside the open shells, which close there.
+// Taking shells back closes every open one. A grant for this time lasts
+// until the turn the answer starts is over; a shell opened under it stays
+// open for its task, but only the user's own turns use it: an automation
+// drives shells only with a grant for good. Every path is resolved
 // through its links before it's checked, so a link inside an allowed folder
 // can't lead outside it.
 
@@ -25,8 +28,9 @@ import { writeFileAtomicSync } from "@mileniumhq/paperapi/fs";
 import { LIMITS, PANEL_ID, type AccessEntry, type AccessGrant, type AccessItem, type AccessView, type SudoEntry } from "../contract";
 import type { ToolResult } from "./computerMcp";
 import type { ToolSpec } from "./computerTools";
-import { fault, type Toolset } from "./toolsets";
+import { fault, type Toolset, type TurnMode } from "./toolsets";
 import { OUTPUT_CHARS } from "./shell";
+import { Sudo } from "./sudo";
 import { SHELL_KEYS, UserShells, type Terminals } from "./userShells";
 
 const L = LIMITS.access;
@@ -41,7 +45,7 @@ const LIST_ENTRIES = 500;
 const SEARCH_SKIPS = new Set([".git", "node_modules"]);
 
 const ACCESS_INSTRUCTIONS = `**The user's computer:** yours is for your work; theirs is only for when they want something on it fixed or changed (their files, projects or programs), with the \`user_computer_\` and \`user_shell_\` tools. \`request_access\` once per task, for everything it needs at the smallest scope that works (a project's folder, not their home; a shell only when files alone won't do), then end your turn: their answer starts the next. Use what's already allowed without asking again, and never ask again for something they refused unless they bring it up.
-For commands, open one shell for the task, reuse it, and close it when done. A command waiting on something is yours to handle: answer its question, or for a link and code, open the link in your browser, enter the code and show a sign-in card if it needs their account. For sudo, \`request_sudo\`. Never ask for a password in the chat.`;
+For commands, open one shell for the task, reuse it, and close it when done. A command waiting on something is yours to handle: answer its question, or for a link and code, open the link in your browser, enter the code and show a sign-in card if it needs their account. A command that needs sudo goes through \`request_sudo\`, never your shell: the user reads that exact command and types their password, and it runs with no input, so make it ask nothing (\`-y\` and the like). Never ask for a password in the chat.`;
 
 /**
  * The user's computer as the agent needs to know it: which system, which version and which processor, since
@@ -170,15 +174,16 @@ const ACCESS_TOOLS: ToolSpec[] = [
     {
         name: "request_sudo",
         description:
-            "Ask the user to unlock sudo in one of your shells, at its prompt: they type their password on a card, straight to sudo; you never see it, and it isn't kept. " +
-            "Returns right away; their answer starts your next turn. Then `sudo ...` works in that shell without a password for a few minutes after each use.",
+            "Ask the user to run one command as administrator, once a shell is allowed. The card shows them the exact command; they type their password, which goes only to the system's sudo (you never see it, and it isn't kept). " +
+            "Paperboard runs it outside your shells, with no input, and its exit code and output start your next turn. Returns right away. Ask again for each command that needs sudo.",
         inputSchema: {
             type: "object",
             properties: {
-                shell: { type: "integer", description: "The shell's number." },
-                reason: { type: "string", description: "What you'll run as administrator, and why, in a sentence the user reads before deciding." },
+                command: { type: "string", description: "The command line to run as root, without `sudo`, like `pacman -S --noconfirm ripgrep`. One line; it runs in /bin/sh and can't be answered, so make it ask nothing." },
+                folder: { type: "string", description: "The full path of the folder it runs in (~ is their home folder)." },
+                reason: { type: "string", description: "What it does, and why, in a sentence the user reads before deciding." },
             },
-            required: ["shell", "reason"],
+            required: ["command", "folder", "reason"],
         },
     },
 ];
@@ -196,9 +201,10 @@ export interface AccessDeps {
     turning(): boolean;
     onChange(view: AccessView): void;
     waitMs?: number;
-    sudoWaitMs?: number;
     home?: string;
     platform?: NodeJS.Platform;
+    /** tests' stand-in for the system's sudo */
+    sudoBinary?: string;
 }
 
 interface Stored {
@@ -229,9 +235,11 @@ export class Access {
     private once: Once[] = [];
     private pending: { entry: AccessEntry; timer: ReturnType<typeof setTimeout> } | null = null;
     readonly shells: UserShells;
+    readonly sudo: Sudo;
 
     constructor(private deps: AccessDeps) {
-        this.shells = new UserShells({ terminals: deps.terminals, post: deps.post, tell: deps.tell, changed: () => this.changed(), platform: deps.platform, sudoWaitMs: deps.sudoWaitMs });
+        this.shells = new UserShells({ terminals: deps.terminals, changed: () => this.changed(), platform: deps.platform });
+        this.sudo = new Sudo({ post: deps.post, tell: deps.tell, platform: deps.platform, waitMs: deps.waitMs, binary: deps.sudoBinary });
     }
 
     private described: string | null = null;
@@ -288,8 +296,8 @@ export class Access {
         if (this.once.length !== before) this.changed();
     }
 
-    /** Take a grant back: the same folder or command, for good or for this time. */
-    revoke(raw: unknown): AccessView {
+    /** Take a grant back: the same folder, or shells, for good and for this time. Taking shells back closes the open ones. */
+    async revoke(raw: unknown): Promise<AccessView> {
         const item = parseItem(raw, this.deps.home);
         const match = (x: AccessItem) => (item.kind === "folder" ? x.kind === "folder" && x.path === item.path : x.kind === "shell");
         const folders = this.stored.folders.filter((f) => !match({ kind: "folder", path: f.path }));
@@ -310,6 +318,7 @@ export class Access {
         }
         this.once = once;
         this.changed();
+        if (item.kind === "shell") await this.shells.closeAll();
         return this.view();
     }
 
@@ -319,8 +328,9 @@ export class Access {
         return [...this.stored.folders.map((f) => f.path), ...this.once.flatMap((o) => (o.item.kind === "folder" ? [o.item.path] : []))];
     }
 
-    private shellAllowed(): boolean {
-        return this.stored.shell !== null || this.once.some((o) => o.item.kind === "shell");
+    /** an automation has no one to say yes for this time: it uses shells only with a grant for good */
+    private shellAllowed(mode: TurnMode): boolean {
+        return this.stored.shell !== null || (!mode.fromFlow && this.once.some((o) => o.item.kind === "shell"));
     }
 
     /** Resolve a path through its links (the part that exists) and check it's in an allowed folder. */
@@ -360,8 +370,11 @@ export class Access {
             instructions: () => ACCESS_INSTRUCTIONS,
             context: (mode) =>
                 `${this.computer()}\nAllowed on it:\n${this.summary()}\nYour shells on it:\n${this.shells.summary()}${mode.fromFlow ? "\nThis turn answers an automation: you can't ask for more." : ""}`,
-            call: async (name, args) => {
+            call: async (name, args, mode) => {
                 try {
+                    if (name.startsWith("user_shell_") && name !== "user_shell_open" && name !== "user_shell_close" && mode.fromFlow && this.stored.shell === null) {
+                        return fault("An automation uses shells only when they're allowed for good, and they're allowed for this time only.");
+                    }
                     switch (name) {
                         case "request_access":
                             return this.request(args);
@@ -374,7 +387,7 @@ export class Access {
                         case "user_computer_write":
                             return this.write(args);
                         case "user_shell_open":
-                            return await this.openShell(args);
+                            return await this.openShell(args, mode);
                         case "user_shell_run":
                             return await this.shells.run(args.shell, args.command, args.wait_seconds);
                         case "user_shell_send":
@@ -382,7 +395,7 @@ export class Access {
                         case "user_shell_close":
                             return { text: await this.shells.close(args.shell) };
                         case "request_sudo":
-                            return await this.shells.requestSudo(args.shell, args.reason);
+                            return this.requestSudo(args, mode);
                     }
                     return fault(`unknown tool ${name}`);
                 } catch (e) {
@@ -467,9 +480,10 @@ export class Access {
         return { status };
     }
 
-    /** The conversation is put away or the service stops: the request lapses (its card says so), and so does every grant for this time and every shell. */
+    /** The conversation is put away or the service stops: the request lapses (its card says so), and so does every grant for this time, every shell and a sudo request or command. */
     async shutdown() {
         this.lapse();
+        this.sudo.shutdown();
         if (this.once.length) {
             this.once = [];
             this.changed();
@@ -477,10 +491,9 @@ export class Access {
         await this.shells.closeAll();
     }
 
-    /** A shell the user closed on the Access page. */
+    /** A shell the user closed on the Access page. The agent isn't woken for it: its next turn's context lists the shells left. */
     async closeShell(id: unknown): Promise<AccessView> {
         await this.shells.close(id);
-        this.deps.tell(`The user closed shell ${String(id)}.`);
         return this.view();
     }
 
@@ -584,14 +597,29 @@ export class Access {
         return { text: `Wrote ${file} (${Buffer.byteLength(args.content)} bytes).` };
     }
 
-    private async openShell(args: Record<string, unknown>): Promise<ToolResult> {
-        if (!this.shellAllowed()) return fault("A shell isn't allowed. Ask with request_access first.");
+    private async openShell(args: Record<string, unknown>, mode: TurnMode): Promise<ToolResult> {
+        if (!this.shellAllowed(mode)) return fault("A shell isn't allowed. Ask with request_access first.");
         const task = typeof args.task === "string" ? args.task.trim() : "";
         if (!task || task.length > L.taskChars) return fault(`say what the shell is for in up to ${L.taskChars} characters`);
-        if (typeof args.folder !== "string" || !args.folder.trim()) return fault("give the folder it starts in");
-        const folder = realPath(resolvePath(args.folder, this.deps.home));
-        if (!fs.existsSync(folder) || !fs.statSync(folder).isDirectory()) return fault(`${folder} isn't a folder on the user's computer`);
+        const folder = this.folderOf(args.folder);
+        if (typeof folder !== "string") return folder;
         return this.shells.open(task, folder);
+    }
+
+    /** a command as administrator asks the same say-so a shell does, then the user's password for it */
+    private requestSudo(args: Record<string, unknown>, mode: TurnMode): ToolResult {
+        if (!this.shellAllowed(mode)) return fault("Running commands isn't allowed. Ask for a shell with request_access first.");
+        const folder = this.folderOf(args.folder);
+        if (typeof folder !== "string") return folder;
+        return this.sudo.request(args.command, folder, args.reason);
+    }
+
+    /** a folder on the user's computer a command starts in, resolved through its links */
+    private folderOf(raw: unknown): string | ToolResult {
+        if (typeof raw !== "string" || !raw.trim()) return fault("give the folder it starts in");
+        const folder = realPath(resolvePath(raw, this.deps.home));
+        if (!fs.existsSync(folder) || !fs.statSync(folder).isDirectory()) return fault(`${folder} isn't a folder on the user's computer`);
+        return folder;
     }
 }
 
@@ -625,7 +653,7 @@ function realPath(p: string): string {
 }
 
 function parseItem(raw: unknown, home?: string): AccessItem {
-    if (!isRecord(raw)) throw new Error("each item is a folder or a command");
+    if (!isRecord(raw)) throw new Error('each item is a folder or a shell');
     if (raw.kind === "folder") return { kind: "folder", path: realPath(resolvePath(String(raw.path ?? ""), home)) };
     if (raw.kind === "shell") return { kind: "shell" };
     throw new Error('each item\'s kind is "folder" or "shell"');
