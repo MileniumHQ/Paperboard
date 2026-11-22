@@ -27,7 +27,7 @@ restart the panel from its menu in Paperboard) to run the new build.
   '{"name":"Ada"}'` runs one of its blocks, and `bunx paperapi call
   __PANEL_ID__` lists its blocks.
 <!-- @endif -->
-- `bun test` runs the unit tests and the UI standards guard.
+- `bun test` runs the unit tests.
 
 The guides for building panels are at <https://paperboard.dev/docs/developers/>.
 

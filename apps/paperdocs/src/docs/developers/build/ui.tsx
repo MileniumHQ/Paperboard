@@ -239,7 +239,6 @@ export default function UiGuideDoc() {
 
             <PaperText preset="subheader" as="h2" id="check-it">Check it</PaperText>
             <PaperTextList>
-                <li><PaperCode>bun test</PaperCode> runs the UI standards test with the others.</li>
                 <li>Build, then right-click the panel in Paperboard's list and choose Restart Panel to load the new page.</li>
                 <li>Try the page in the light and the dark theme, and make the window narrow: below 520 pixels, <PaperCode>PaperPanel</PaperCode> takes the phone layout.</li>
             </PaperTextList>
