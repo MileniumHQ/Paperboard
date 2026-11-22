@@ -8,6 +8,7 @@ import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { extname, join, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
+import { buildPanelCsp } from "testkit/panelCsp";
 import { build } from "vite";
 import solidPlugin from "vite-plugin-solid";
 import type { TestProject } from "vitest/node";
@@ -47,19 +48,10 @@ const MIME: Record<string, string> = {
     ".txt": "text/plain; charset=utf-8",
 };
 
-// The policy Paperboard serves every panel under (apps/daemon/src/panels/panelNet.ts,
-// kept in step with it): a page opened with ?csp=panel gets it, so a suite
-// proves a component works where panels run, not only on an unrestricted page.
-const PANEL_CSP = [
-    "default-src 'self' panel: data: blob:",
-    "script-src 'self'",
-    "worker-src 'self' blob:",
-    "style-src 'self' 'unsafe-inline'",
-    "img-src 'self' panel: data: blob: https:",
-    "font-src 'self' data:",
-    "connect-src 'self' panel: blob: data: ws://127.0.0.1:* ws://localhost:* http://127.0.0.1:* http://localhost:* https:",
-    "media-src 'self' panel: blob:",
-].join("; ");
+// The policy Paperboard serves every panel under: a page opened with
+// ?csp=panel gets it, so a suite proves a component works where panels run,
+// not only on an unrestricted page.
+const PANEL_CSP = buildPanelCsp();
 
 /** One second of 8 kHz mono 16-bit silence: a real, decodable WAV. */
 function silentWav(): Buffer {
