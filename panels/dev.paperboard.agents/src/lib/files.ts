@@ -3,172 +3,102 @@
 // URL to show. Read files are kept in a small cache bounded by count and
 // bytes; the oldest are released when it's full.
 
-import type { ServiceCalls } from "@mileniumhq/paperapi";
+import { base64ToBytes, createBlobUrlCache, readInPieces, sendInPieces, type ServiceCalls } from "@mileniumhq/paperapi";
 import { LIMITS, type Attachment, type agentsContract } from "../contract";
 
 const CACHE_FILES = 32;
 const CACHE_BYTES = 160 * 1024 * 1024;
-
-const toBase64 = (blob: Blob) =>
-    new Promise<string>((ok, fail) => {
-        const r = new FileReader();
-        r.onload = () => ok(String(r.result).slice(String(r.result).indexOf(",") + 1));
-        r.onerror = () => fail(r.error ?? new Error("the file couldn't be read"));
-        r.readAsDataURL(blob);
-    });
-
-const fromBase64 = (data: string) => Uint8Array.from(atob(data), (c) => c.charCodeAt(0));
+const WEB_IMAGE_BYTES = 64 * 1024 * 1024;
 
 export function createFiles(calls: ServiceCalls<typeof agentsContract>) {
     type Read = { url: string; file: Attachment };
-    const cache = new Map<string, { read: Promise<Read>; bytes: number }>();
-    let cached = 0;
+    // files on screen in the preview are held there: their URLs stay alive however full it gets
+    const urls = createBlobUrlCache({ files: CACHE_FILES, bytes: CACHE_BYTES });
     // what a file is, without its bytes: a file never changes once it's in the conversation
     const infos = new Map<string, Promise<Attachment>>();
-    // web pictures messages show, by address, as blob URLs: the service fetches them, never this page
-    const webImages = new Map<string, Promise<string>>();
+    // web pictures messages show, by address: the service fetches them, never this page
+    const webImages = createBlobUrlCache({ files: CACHE_FILES, bytes: WEB_IMAGE_BYTES });
 
-    // files on screen in the preview: their URLs stay alive however full the cache gets
-    const held = new Map<string, number>();
-
-    const evict = () => {
-        for (const [id, c] of cache) {
-            if (cache.size <= CACHE_FILES && cached <= CACHE_BYTES) break;
-            if (held.has(id)) continue;
-            cache.delete(id);
-            cached -= c.bytes;
-            void c.read.then((r) => URL.revokeObjectURL(r.url), () => undefined);
-        }
+    const info = (id: string): Promise<Attachment> => {
+        const hit = infos.get(id);
+        if (hit) return hit;
+        const asked = calls.attachInfo({ id });
+        infos.set(id, asked);
+        // a failed look isn't kept: the next one tries again
+        asked.catch(() => infos.get(id) === asked && infos.delete(id));
+        return asked;
     };
 
     return {
         /** Upload a file; progress is 0–1. An abort cancels the upload on the service too. */
         async upload(file: File, onProgress: (done: number) => void, signal: AbortSignal): Promise<Attachment> {
             if (file.size > LIMITS.attachments.fileBytes) throw new Error(`${file.name} is over ${LIMITS.attachments.fileBytes / 1024 / 1024} MB`);
-            const { id } = await calls.attachBegin({ name: file.name, bytes: file.size });
-            try {
-                for (let offset = 0; offset < file.size; ) {
-                    signal.throwIfAborted();
-                    const chunk = file.slice(offset, offset + LIMITS.attachments.chunkBytes);
-                    await calls.attachPut({ id, offset, data: await toBase64(chunk) });
-                    offset += chunk.size;
-                    onProgress(offset / file.size);
-                }
-                signal.throwIfAborted();
-                return await calls.attachFinish({ id });
-            } catch (e) {
-                // quiet: the service drops the half-made file; if even that fails, its idle timer does
-                await calls.attachCancel({ id }).catch((why) => console.error("[agents] couldn't cancel an upload:", why));
-                throw e;
-            }
+            return sendInPieces(file, {
+                pieceBytes: LIMITS.attachments.chunkBytes,
+                signal,
+                onProgress: (sent) => onProgress(sent / file.size),
+                begin: async () => {
+                    const { id } = await calls.attachBegin({ name: file.name, bytes: file.size });
+                    return {
+                        put: (offset, data) => calls.attachPut({ id, offset, data }),
+                        finish: () => calls.attachFinish({ id }),
+                        cancel: () => calls.attachCancel({ id }),
+                    };
+                },
+            });
         },
 
         /**
          * A file by its id, as a blob URL and what it is: read once and kept while it's among the recent ones.
          * `bytes` (known for a file a message lists) counts it in the cache before it's read.
          */
-        read(id: string, bytes = 0): Promise<Read> {
-            const hit = cache.get(id);
-            if (hit) {
-                // most recently used goes last
-                cache.delete(id);
-                cache.set(id, hit);
-                return hit.read;
-            }
-            const entry = { read: null as unknown as Promise<Read>, bytes };
-            entry.read = (async () => {
-                const parts: Uint8Array<ArrayBuffer>[] = [];
-                let file: Attachment | null = null;
-                for (let offset = 0, done = false; !done; ) {
-                    const r = await calls.attachRead({ id, offset });
-                    const chunk = fromBase64(r.data);
-                    parts.push(chunk);
-                    offset += chunk.length;
-                    done = r.done;
-                    file = r.file;
-                    if (!done && chunk.length === 0) throw new Error(`${r.file.name} ended early`);
-                }
-                // counted at its real size once it's known
-                if (cache.get(id) === entry) {
-                    cached += file!.bytes - entry.bytes;
-                    entry.bytes = file!.bytes;
-                    evict();
-                }
-                // only media is typed: anything else stays opaque, so opening it can never run it as a page
-                return { url: URL.createObjectURL(new Blob(parts, { type: file!.kind === "file" ? "application/octet-stream" : file!.type })), file: file! };
-            })();
-            cache.set(id, entry);
-            cached += bytes;
-            // a failed read isn't kept: the next look tries again
-            entry.read.catch(() => {
-                if (cache.get(id) === entry) {
-                    cache.delete(id);
-                    cached -= entry.bytes;
-                }
-            });
-            evict();
-            return entry.read;
+        async read(id: string, bytes = 0): Promise<Read> {
+            const url = await urls.get(
+                id,
+                async () => {
+                    // each piece says what the file is; the last one is kept
+                    const seen: { file?: Attachment } = {};
+                    const blob = await readInPieces({
+                        piece: async (offset) => {
+                            const r = await calls.attachRead({ id, offset });
+                            seen.file = r.file;
+                            return { data: r.data, size: r.file.bytes };
+                        },
+                    });
+                    const read = seen.file!;
+                    infos.set(id, Promise.resolve(read));
+                    // only media is typed: anything else stays opaque, so opening it can never run it as a page
+                    return read.kind === "file" ? blob : new Blob([blob], { type: read.type });
+                },
+                bytes,
+            );
+            return { url, file: await info(id) };
         },
 
         /**
          * Keeps a file's blob URL alive while something reads from it over
          * time (a PDF's pages, a film's seeking), until the returned release.
          */
-        hold(id: string): () => void {
-            held.set(id, (held.get(id) ?? 0) + 1);
-            let released = false;
-            return () => {
-                if (released) return;
-                released = true;
-                const left = (held.get(id) ?? 1) - 1;
-                if (left > 0) held.set(id, left);
-                else held.delete(id);
-                evict();
-            };
-        },
+        hold: (id: string): (() => void) => urls.hold(id),
 
         /** What a file is, without reading it: for a chip that names it. */
-        info(id: string): Promise<Attachment> {
-            const hit = infos.get(id);
-            if (hit) return hit;
-            const info = calls.attachInfo({ id });
-            infos.set(id, info);
-            // a failed look isn't kept: the next one tries again
-            info.catch(() => infos.get(id) === info && infos.delete(id));
-            return info;
-        },
+        info,
 
         /**
          * A web picture a message shows, as a blob URL. The service fetches it under the agent's network rule
          * (public addresses only), so this page never sends a request to a host a message names.
          */
-        webImage(url: string): Promise<string> {
-            const hit = webImages.get(url);
-            if (hit) {
-                webImages.delete(url);
-                webImages.set(url, hit);
-                return hit;
-            }
-            const read = calls.webImage({ url }).then((r) => URL.createObjectURL(new Blob([fromBase64(r.data)], { type: r.type })));
-            webImages.set(url, read);
-            // a failed load isn't kept: the next look tries again
-            read.catch(() => webImages.get(url) === read && webImages.delete(url));
-            for (const [old, r] of webImages) {
-                if (webImages.size <= CACHE_FILES) break;
-                webImages.delete(old);
-                void r.then((u) => URL.revokeObjectURL(u), () => undefined);
-            }
-            return read;
-        },
+        webImage: (url: string): Promise<string> =>
+            webImages.get(url, async () => {
+                const r = await calls.webImage({ url });
+                return new Blob([base64ToBytes(r.data)], { type: r.type });
+            }),
 
         /** Release every blob (the conversation changed, or the panel closes). */
         clear() {
             infos.clear();
-            for (const r of webImages.values()) void r.then((u) => URL.revokeObjectURL(u), () => undefined);
             webImages.clear();
-            for (const c of cache.values()) void c.read.then((r) => URL.revokeObjectURL(r.url), () => undefined);
-            cache.clear();
-            cached = 0;
+            urls.clear();
         },
     };
 }

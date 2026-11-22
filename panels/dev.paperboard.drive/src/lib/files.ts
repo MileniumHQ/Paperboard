@@ -6,7 +6,7 @@
 // Uploads go the other way: a file from the computer, sent in pieces, with
 // how far it has got, until it's whole or canceled.
 
-import type { ServiceCalls } from "@mileniumhq/paperapi";
+import { createBlobUrlCache, readInPieces, sendInPieces, type ServiceCalls } from "@mileniumhq/paperapi";
 import { CHUNK_BYTES, type DriveEntry, type driveContract } from "./contract";
 
 type Calls = ServiceCalls<typeof driveContract>;
@@ -54,65 +54,25 @@ export function mediaType(name: string): string {
     return (dot > 0 && MEDIA_TYPES[name.slice(dot + 1).toLowerCase()]) || "application/octet-stream";
 }
 
-const fromBase64 = (data: string) => Uint8Array.from(atob(data), (c) => c.charCodeAt(0));
-
-function toBase64(blob: Blob): Promise<string> {
-    return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => {
-            const url = String(reader.result);
-            resolve(url.slice(url.indexOf(",") + 1));
-        };
-        reader.onerror = () => reject(reader.error ?? new Error("The file couldn't be read from this computer."));
-        reader.readAsDataURL(blob);
-    });
-}
-
 /** What a file is cached by: a change to it is a different file. */
 const keyOf = (entry: Pick<DriveEntry, "path" | "modified" | "size">) => `${entry.path}|${entry.modified}|${entry.size}`;
 
-interface Cached {
-    url: Promise<string>;
-    bytes: number;
-    holds: number;
-}
-
 export function createFiles(calls: Calls) {
-    const cache = new Map<string, Cached>();
-    let cached = 0;
-
-    const evict = () => {
-        for (const [key, c] of cache) {
-            if (cache.size <= CACHE_FILES && cached <= CACHE_BYTES) break;
-            // a file something still shows stays, however full the cache is
-            if (c.holds > 0) continue;
-            cache.delete(key);
-            cached -= c.bytes;
-            void c.url.then(
-                (url) => URL.revokeObjectURL(url),
-                // quiet: a read that failed made no URL, and its caller was told
-                () => undefined,
-            );
-        }
-    };
+    const urls = createBlobUrlCache({ files: CACHE_FILES, bytes: CACHE_BYTES });
 
     /** A file's bytes, read piece by piece; an abort stops between pieces. */
-    async function read(entry: DriveEntry, signal?: AbortSignal, onProgress?: (done: number) => void): Promise<Blob> {
-        const parts: Uint8Array<ArrayBuffer>[] = [];
-        let offset = 0;
-        for (;;) {
-            signal?.throwIfAborted();
-            const piece = await calls.read({ path: entry.path, offset });
-            if (piece.modified !== entry.modified || piece.size !== entry.size) throw new Error(`“${entry.name}” changed while it was being read.`);
-            const bytes = fromBase64(piece.data);
-            parts.push(bytes);
-            offset += bytes.length;
-            onProgress?.(offset);
-            if (offset >= piece.size) break;
-            if (bytes.length === 0) throw new Error(`“${entry.name}” ended before its size.`);
-        }
-        return new Blob(parts, { type: mediaType(entry.name) });
-    }
+    const read = (entry: DriveEntry, signal?: AbortSignal, onProgress?: (done: number) => void): Promise<Blob> =>
+        readInPieces({
+            name: entry.name,
+            type: mediaType(entry.name),
+            signal,
+            onProgress,
+            piece: async (offset) => {
+                const piece = await calls.read({ path: entry.path, offset });
+                if (piece.modified !== entry.modified || piece.size !== entry.size) throw new Error(`“${entry.name}” changed while it was being read.`);
+                return piece;
+            },
+        });
 
     return {
         read,
@@ -123,56 +83,26 @@ export function createFiles(calls: Calls) {
          */
         hold(entry: DriveEntry, signal?: AbortSignal): { url: Promise<string>; release: () => void } {
             const key = keyOf(entry);
-            let c = cache.get(key);
-            if (c) {
-                // most recently used goes last
-                cache.delete(key);
-                cache.set(key, c);
-            } else {
-                const made: Cached = { url: read(entry).then((blob) => URL.createObjectURL(blob)), bytes: entry.size, holds: 0 };
-                // a failed read isn't kept: the next look tries again
-                made.url.catch(() => {
-                    if (cache.get(key) !== made) return;
-                    cache.delete(key);
-                    cached -= made.bytes;
-                });
-                cache.set(key, made);
-                cached += made.bytes;
-                c = made;
-            }
-            const held = c;
-            held.holds++;
-            evict();
-            let released = false;
-            const release = () => {
-                if (released) return;
-                released = true;
-                held.holds--;
-                evict();
-            };
+            const release = urls.hold(key);
             signal?.addEventListener("abort", release, { once: true });
-            return { url: held.url, release };
+            return { url: urls.get(key, () => read(entry), entry.size), release };
         },
 
         /** Sends a file into a folder, in pieces; resolves with where it landed. An abort cancels it on the service too. */
-        async upload(file: File, folder: string, onProgress: (sent: number) => void, signal: AbortSignal): Promise<DriveEntry> {
-            const { id } = await calls.uploadBegin({ folder, name: file.name, size: file.size });
-            try {
-                for (let offset = 0; offset < file.size; ) {
-                    signal.throwIfAborted();
-                    const piece = file.slice(offset, offset + CHUNK_BYTES);
-                    await calls.uploadPut({ id, offset, data: await toBase64(piece) });
-                    offset += piece.size;
-                    onProgress(offset);
-                }
-                signal.throwIfAborted();
-                return await calls.uploadFinish({ id });
-            } catch (err) {
-                // quiet: the caller hears why it stopped; a part the service can't drop now goes when it next starts
-                await calls.uploadCancel({ id }).catch((why) => console.error("[drive] an upload couldn't be canceled:", why));
-                throw err;
-            }
-        },
+        upload: (file: File, folder: string, onProgress: (sent: number) => void, signal: AbortSignal): Promise<DriveEntry> =>
+            sendInPieces(file, {
+                pieceBytes: CHUNK_BYTES,
+                onProgress,
+                signal,
+                begin: async () => {
+                    const { id } = await calls.uploadBegin({ folder, name: file.name, size: file.size });
+                    return {
+                        put: (offset, data) => calls.uploadPut({ id, offset, data }),
+                        finish: () => calls.uploadFinish({ id }),
+                        cancel: () => calls.uploadCancel({ id }),
+                    };
+                },
+            }),
     };
 }
 
