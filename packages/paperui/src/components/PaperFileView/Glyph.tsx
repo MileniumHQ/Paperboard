@@ -2,6 +2,7 @@ import styles from "./index.module.css";
 import { createEffect, createSignal, on, onCleanup, onMount, Show } from "solid-js";
 import { PaperIcon } from "../PaperIcon";
 import { errorMessage } from "../../utils/errorMessage";
+import { getVarCss } from "../../utils/theme";
 import { paperFileViewExtension, paperFileViewKind } from "./files";
 import type { PaperFileViewEntry, PaperFileViewThumbnailOptions } from "./types";
 
@@ -86,7 +87,7 @@ export function Glyph(props: GlyphProps) {
             ref={box}
             class={styles.glyph}
             classList={{ [styles.small]: small() }}
-            style={{ "--glyph-size": `${props.size}px`, "--glyph-tone": `var(--paper-${kind().tone})` }}
+            style={{ "--glyph-size": `${props.size}px`, "--glyph-tone": getVarCss(kind().tone) }}
             title={failed() ? `Couldn't draw a picture of ${props.entry.name}: ${failed()}` : undefined}
             aria-hidden="true"
         >

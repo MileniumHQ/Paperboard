@@ -1,6 +1,7 @@
 // PaperFileView over a folder tree kept in memory, driven from window.t.
 import { createSignal, type JSX } from "solid-js";
 import {
+    createPaperFileViewDropTarget,
     PaperFileView,
     PaperProvider,
     type PaperFileViewEntry,
@@ -56,10 +57,15 @@ export const scenarios: Record<string, () => JSX.Element> = {
                 failing = false;
             },
             order: () => view?.entries().map((e) => e.path),
+            /** a file arrives in the top folder, as an upload landing would, and the view lists it again */
+            arrive: (name: string) => {
+                TREE[""] = [...TREE[""], file(name, 1_000)];
+                return view?.reload("");
+            },
             /** fires a drag of `from` (a path in the view) onto `to`, as the browser does */
             dragOnto: (from: string, to: string) => {
                 const data = new DataTransfer();
-                const at = (path: string) => document.querySelector(`[data-path="${path}"]`)!;
+                const at = (path: string) => document.querySelector(path.startsWith("crumb:") ? `[data-crumb="${path.slice(6)}"]` : `[data-path="${path}"]`)!;
                 at(from).dispatchEvent(new DragEvent("dragstart", { bubbles: true, cancelable: true, dataTransfer: data }));
                 for (const type of ["dragenter", "dragover", "drop"]) at(to).dispatchEvent(new DragEvent(type, { bubbles: true, cancelable: true, dataTransfer: data }));
                 at(from).dispatchEvent(new DragEvent("dragend", { bubbles: true, dataTransfer: data }));
@@ -72,8 +78,18 @@ export const scenarios: Record<string, () => JSX.Element> = {
                 for (const type of ["dragenter", "dragover", "drop"]) target.dispatchEvent(new DragEvent(type, { bubbles: true, cancelable: true, dataTransfer: data }));
             },
         });
+        // the host's own drop targets, as a path above the view is
+        const crumbs = createPaperFileViewDropTarget((drop) => t.drops.push(drop.kind === "files" ? { kind: "files", folder: drop.folder } : drop));
         return shell(() => (
-            <div style={{ display: "flex", width: "800px", height: "500px" }}>
+            <div style={{ display: "flex", "flex-direction": "column", width: "800px", height: "520px" }}>
+                <div style={{ display: "flex", gap: "8px" }}>
+                    <span data-crumb="" {...crumbs.handlers("")}>
+                        Top
+                    </span>
+                    <span data-crumb="Photos" {...crumbs.handlers("Photos")}>
+                        Photos
+                    </span>
+                </div>
                 <PaperFileView
                     aria-label="Files"
                     folder={folderShown()}

@@ -47,7 +47,11 @@ const LIST_GLYPH = 28;
 const DEFAULT_ICON = 72;
 const NARROW_ICON = 56;
 
-type Row = { entry: PaperFileViewEntry; depth: number };
+// the entries a view on this page is dragging: one drag at a time, read by
+// every view and by the host's own drop targets, so they all refuse alike
+const [dragging, setDragging] = createSignal<readonly string[] | null>(null);
+// a folder can't go into itself, or where it already is
+const refusesDrop = (paths: readonly string[], target: string) => paths.some((p) => paperFileViewInside(target, p) || paperFileViewParent(p) === target);
 
 const isMac = () => typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform);
 const mod = (e: KeyboardEvent | MouseEvent) => (isMac() ? e.metaKey : e.ctrlKey);
@@ -129,20 +133,27 @@ export function PaperFileView(props: PaperFileViewProps) {
         ),
     );
 
-    /** what is on screen, in the order arrows and Shift walk it */
-    const rows = createMemo<Row[]>(() => {
-        const out: Row[] = [];
+    /**
+     * What is on screen, in the order arrows and Shift walk it. The entries
+     * are the store's own, reconciled by path, so a row keeps its identity
+     * (and its thumbnail and rename field) when the listing around it changes.
+     */
+    const listed = createMemo(() => {
+        const order: PaperFileViewEntry[] = [];
+        const depths = new Map<string, number>();
         const walk = (folder: string, depth: number) => {
             for (const entry of sortPaperFileViewEntries(listings[folder] ?? [], sort())) {
-                out.push({ entry, depth });
+                order.push(entry);
+                depths.set(entry.path, depth);
                 if (mode() === "list" && entry.kind === "folder" && expanded().has(entry.path)) walk(entry.path, depth + 1);
             }
         };
         walk(shown(), 0);
-        return out;
+        return { order, depths };
     });
-    const order = () => rows().map((r) => r.entry);
-    const byPath = createMemo(() => new Map(rows().map((r) => [r.entry.path, r.entry])));
+    const order = () => listed().order;
+    const depthOf = (path: string) => listed().depths.get(path) ?? 0;
+    const byPath = createMemo(() => new Map(order().map((e) => [e.path, e])));
 
     // ---------- choosing ----------
     const chosen = createMemo(() => new Set(props.selection));
@@ -333,7 +344,6 @@ export function PaperFileView(props: PaperFileViewProps) {
     };
 
     // ---------- dragging ----------
-    const [dragging, setDragging] = createSignal<string[] | null>(null);
     const [dropAt, setDropAt] = createSignal<string | null>(null);
     let springTimer: ReturnType<typeof setTimeout> | undefined;
     onCleanup(() => clearTimeout(springTimer));
@@ -345,6 +355,9 @@ export function PaperFileView(props: PaperFileViewProps) {
         const paths = chosen().has(entry.path) ? [...props.selection] : [entry.path];
         if (!chosen().has(entry.path)) select(paths);
         setDragging(paths);
+        // a folder the drag opened leaves this row behind, and its dragend
+        // with it: the drop ends the drag wherever it lands on the page
+        window.addEventListener("drop", onDragEnd, { capture: true, once: true });
         e.dataTransfer.setData(MIME, JSON.stringify(paths));
         e.dataTransfer.setData("text/plain", paths.map((p) => p.slice(p.lastIndexOf("/") + 1)).join("\n"));
         e.dataTransfer.effectAllowed = "move";
@@ -352,15 +365,13 @@ export function PaperFileView(props: PaperFileViewProps) {
         e.dataTransfer.setDragImage(ghostRef, 16, 16);
     };
     const onDragEnd = () => {
+        window.removeEventListener("drop", onDragEnd, { capture: true });
         clearTimeout(springTimer);
         batch(() => {
             setDragging(null);
             setDropAt(null);
         });
     };
-
-    // a folder can't go into itself, or where it already is
-    const refuses = (target: string) => !!dragging()?.some((p) => paperFileViewInside(target, p) || paperFileViewParent(p) === target);
 
     /** a folder that takes what is let go over it; a folder in the view opens when a drag rests on it */
     const dropTarget = (folder: () => string, entry?: PaperFileViewEntry) => ({
@@ -369,7 +380,7 @@ export function PaperFileView(props: PaperFileViewProps) {
             if (!props.onDrop || !e.dataTransfer) return;
             const ours = e.dataTransfer.types.includes(MIME);
             if (!ours && !e.dataTransfer.types.includes("Files")) return;
-            if (ours && refuses(target)) return;
+            if (ours && refusesDrop(dragging() ?? [], target)) return;
             e.preventDefault();
             e.stopPropagation();
             e.dataTransfer.dropEffect = ours ? "move" : "copy";
@@ -392,7 +403,7 @@ export function PaperFileView(props: PaperFileViewProps) {
             clearTimeout(springTimer);
             setDropAt(null);
             const drop = readDrop(e.dataTransfer, target);
-            if (!drop || (drop.kind === "entries" && drop.paths.some((p) => paperFileViewInside(target, p) || paperFileViewParent(p) === target))) return;
+            if (!drop || (drop.kind === "entries" && refusesDrop(drop.paths, target))) return;
             props.onDrop(drop);
         },
     });
@@ -511,7 +522,7 @@ export function PaperFileView(props: PaperFileViewProps) {
                         </div>
                     }
                 >
-                    <Show when={rows().length === 0}>
+                    <Show when={order().length === 0}>
                         <div class={styles.fill}>{props.empty ?? <PaperEmptyState icon="folder_open" title="This folder is empty" />}</div>
                     </Show>
                 </Show>
@@ -528,13 +539,13 @@ export function PaperFileView(props: PaperFileViewProps) {
     // ---------- modes ----------
     const Icons = () => (
         <div class={styles.grid} ref={gridRef} style={{ "--file-view-icon": `${iconSize()}px` }}>
-            <For each={rows()}>
-                {(row) => (
-                    <div class={styles.tile} classList={itemClasses(row.entry)} {...itemProps(row.entry)}>
+            <For each={order()}>
+                {(entry) => (
+                    <div class={styles.tile} classList={itemClasses(entry)} {...itemProps(entry)}>
                         <span class={styles.tileGlyph}>
-                            <Glyph entry={row.entry} size={iconSize()} thumbnail={props.thumbnail} near={near} />
+                            <Glyph entry={entry} size={iconSize()} thumbnail={props.thumbnail} near={near} />
                         </span>
-                        <Name entry={row.entry} class={styles.tileName} wrap />
+                        <Name entry={entry} class={styles.tileName} wrap />
                     </div>
                 )}
             </For>
@@ -567,37 +578,37 @@ export function PaperFileView(props: PaperFileViewProps) {
                 <Head key="size" label="Size" wide />
                 <Head key="kind" label="Kind" wide />
             </div>
-            <For each={rows()}>
-                {(row) => (
-                    <div class={styles.row} classList={itemClasses(row.entry)} aria-level={row.depth + 1} {...itemProps(row.entry)}>
-                        <span class={styles.nameCell} style={{ "--file-view-depth": row.depth }}>
-                            <Show when={row.entry.kind === "folder"} fallback={<span class={styles.disclosureSpace} />}>
+            <For each={order()}>
+                {(entry) => (
+                    <div class={styles.row} classList={itemClasses(entry)} aria-level={depthOf(entry.path) + 1} {...itemProps(entry)}>
+                        <span class={styles.nameCell} style={{ "--file-view-depth": depthOf(entry.path) }}>
+                            <Show when={entry.kind === "folder"} fallback={<span class={styles.disclosureSpace} />}>
                                 <button
                                     type="button"
                                     class={styles.disclosure}
-                                    classList={{ [styles.open]: expanded().has(row.entry.path) }}
-                                    aria-label={expanded().has(row.entry.path) ? `Close ${row.entry.name}` : `Open ${row.entry.name} here`}
-                                    aria-expanded={expanded().has(row.entry.path)}
+                                    classList={{ [styles.open]: expanded().has(entry.path) }}
+                                    aria-label={expanded().has(entry.path) ? `Close ${entry.name}` : `Open ${entry.name} here`}
+                                    aria-expanded={expanded().has(entry.path)}
                                     tabIndex={-1}
                                     onClick={(e) => {
                                         e.stopPropagation();
-                                        toggleExpanded(row.entry.path);
+                                        toggleExpanded(entry.path);
                                     }}
                                 >
                                     <PaperIcon>chevron_right</PaperIcon>
                                 </button>
                             </Show>
-                            <Glyph entry={row.entry} size={LIST_GLYPH} thumbnail={props.thumbnail} near={near} />
+                            <Glyph entry={entry} size={LIST_GLYPH} thumbnail={props.thumbnail} near={near} />
                             <span class={styles.nameStack}>
-                                <Name entry={row.entry} class={styles.rowName} />
+                                <Name entry={entry} class={styles.rowName} />
                                 <span class={styles.narrowOnly}>
-                                    {paperFileViewDate(row.entry.modified)} · {paperFileViewSize(row.entry)}
+                                    {paperFileViewDate(entry.modified)} · {paperFileViewSize(entry)}
                                 </span>
                             </span>
                         </span>
-                        <span class={cx(styles.cellMuted, styles.wideOnly)}>{paperFileViewDate(row.entry.modified)}</span>
-                        <span class={cx(styles.cellMuted, styles.wideOnly)}>{paperFileViewSize(row.entry)}</span>
-                        <span class={cx(styles.cellMuted, styles.wideOnly)}>{paperFileViewKind(row.entry).label}</span>
+                        <span class={cx(styles.cellMuted, styles.wideOnly)}>{paperFileViewDate(entry.modified)}</span>
+                        <span class={cx(styles.cellMuted, styles.wideOnly)}>{paperFileViewSize(entry)}</span>
+                        <span class={cx(styles.cellMuted, styles.wideOnly)}>{paperFileViewKind(entry).label}</span>
                     </div>
                 )}
             </For>
@@ -702,6 +713,7 @@ export function createPaperFileViewDropTarget(onDrop: (drop: PaperFileViewDrop) 
             if (!e.dataTransfer) return;
             const ours = e.dataTransfer.types.includes(MIME);
             if (!ours && !e.dataTransfer.types.includes("Files")) return;
+            if (ours && refusesDrop(dragging() ?? [], folder)) return;
             e.preventDefault();
             e.dataTransfer.dropEffect = ours ? "move" : "copy";
             setOver(folder);
@@ -715,7 +727,7 @@ export function createPaperFileViewDropTarget(onDrop: (drop: PaperFileViewDrop) 
             e.preventDefault();
             setOver(null);
             const drop = readDrop(e.dataTransfer, folder);
-            if (drop) onDrop(drop);
+            if (drop && !(drop.kind === "entries" && refusesDrop(drop.paths, folder))) onDrop(drop);
         },
     });
     return { over, handlers };

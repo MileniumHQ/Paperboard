@@ -92,6 +92,29 @@ describe("PaperFileView", () => {
         ]);
     });
 
+    test("the host's own drop targets refuse what the view's folders would", async () => {
+        page = await open("folder=Photos");
+        await ready("Photos/beach.png");
+        // already in Photos: refused, where the top takes it
+        await page.eval(`t.dragOnto("Photos/beach.png", "crumb:Photos")`);
+        await page.eval(`t.dragOnto("Photos/beach.png", "crumb:")`);
+        expect(await page.eval("t.drops")).toEqual([{ kind: "entries", paths: ["Photos/beach.png"], folder: "" }]);
+    });
+
+    test("a row keeps its place when its folder lists again, and so does a rename in progress", async () => {
+        page = await open();
+        await ready();
+        await page.eval(`document.querySelector('${at("notes.md")}').dataset.mark = "kept"`);
+        await page.click(at("budget.csv"));
+        await page.press("F2");
+        await page.waitFor(`document.activeElement?.getAttribute("aria-label") === "Name"`, "the name field");
+        await page.type("spending");
+        await page.eval(`t.arrive("zebra.txt")`);
+        await ready("zebra.txt");
+        expect(await page.eval(`document.querySelector('${at("notes.md")}').dataset.mark`)).toBe("kept");
+        expect(await page.eval(`document.activeElement?.value`)).toBe("spending.csv");
+    });
+
     test("the list sorts by a column, folders still first", async () => {
         page = await open("mode=list");
         await ready();
