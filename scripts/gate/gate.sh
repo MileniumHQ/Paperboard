@@ -34,7 +34,7 @@
 #     arilink        pbd.lc short-link worker: typecheck, tests
 #     panelapis      third-party API proxy worker: typecheck, tests
 #     scripts        root dev/publish scripts: typecheck, tests
-#     agents blocks botcreator gameserver terminal   first-party panels
+#     agents blocks botcreator drive gameserver terminal   first-party panels
 #     global         repo-wide checks (changelog-existence, todo-expiry)
 #     platform       the cross-platform suites only: each `tests/platform` or
 #                    `test/platform` directory below. CI runs this on every
@@ -91,7 +91,7 @@ supervisor_vet() {
 # Every selectable target. The *-build names are prerequisites, not
 # user-facing: they exist so a filtered run can pull in the shared library
 # artifact a consumer needs without running that library's whole suite.
-KNOWN_TARGETS="global platform packages paperapi paperui create-panel release testkit npx paperapi-build paperui-build create-panel-build daemon paperboard paperdocs origami library arilink panelapis scripts agents blocks botcreator gameserver terminal"
+KNOWN_TARGETS="global platform packages paperapi paperui create-panel release testkit npx paperapi-build paperui-build create-panel-build daemon paperboard paperdocs origami library arilink panelapis scripts agents blocks botcreator drive gameserver terminal"
 
 # Prerequisites per target, expanded transitively. A panel (and any app that
 # bundles the SDK/design system) needs paperapi/paperui dist present; the
@@ -103,7 +103,7 @@ target_deps() {
         create-panel) echo "paperapi-build paperui-build create-panel-build" ;;
         packages) echo "paperapi-build paperui-build create-panel-build" ;;
         daemon | paperboard | paperdocs | library | platform) echo "paperapi-build paperui-build" ;;
-        agents | blocks | botcreator | gameserver | terminal) echo "paperapi-build paperui-build" ;;
+        agents | blocks | botcreator | drive | gameserver | terminal) echo "paperapi-build paperui-build" ;;
         *) echo "" ;;
     esac
 }
@@ -287,7 +287,7 @@ gwarn library "library styling literals" bash "$ROOT/scripts/gate/check-app-styl
 # The daemon runs the built dist/service.js, not the TypeScript source, so the
 # gate rebuilds every panel: tests and typechecks prove the source, the build
 # proves the artifact that actually ships. ───────────────────────────────────
-for short in agents blocks botcreator gameserver terminal; do
+for short in agents blocks botcreator drive gameserver terminal; do
     panel="panels/dev.paperboard.$short"
     gstep "$short" "$panel tests" run_in "$ROOT/$panel" bun run test
     gstep "$short" "$panel typecheck" run_in "$ROOT/$panel" bunx tsc --noEmit

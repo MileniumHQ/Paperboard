@@ -37,6 +37,7 @@ And of course, the panels:
 - **Blocks** (`dev.paperboard.blocks`) builds automations out of blocks that every other panel provides. Post in Discord when a player joins your server, or restart it on a schedule, all by snapping blocks together on a canvas.
 - **Bot Creator** (`dev.paperboard.botcreator`) has a basic interface for creating and viewing the state of a Discord bot, but where it really shines is in its blocks. Combined with the Blocks panel, fully interactive Discord bots can be created.
 - **Agent** (`dev.paperboard.agents`) is an agent you text, with a web browser of its own. It thinks with the Codex, Claude or OpenCode you already have.
+- **Drive** (`dev.paperboard.drive`) keeps your files on the computer Paperboard runs on. Drop files in, look at them in a preview, and sort them into folders.
 - **Terminal** (`dev.paperboard.terminal`) is a Terminal for when you want to use a Terminal in Paperboard. It used to be simple, but features like split tabs and saved commands have been added.
 
 ## Development

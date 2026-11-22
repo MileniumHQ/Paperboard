@@ -45,7 +45,7 @@ jobs:
               {"name": "libraries", "targets": "packages paperapi paperui create-panel release testkit npx scripts"},
               {"name": "app", "targets": "daemon paperboard"},
               {"name": "gameserver", "targets": "gameserver"},
-              {"name": "panels", "targets": "agents blocks botcreator terminal"},
+              {"name": "panels", "targets": "agents blocks botcreator drive terminal"},
               {"name": "web", "targets": "paperdocs origami library arilink panelapis global"}
             ]'
             platform=true
