@@ -9,7 +9,7 @@ import { PaperButton } from "../PaperButton";
 import { PaperEmptyState } from "../PaperEmptyState";
 import { PaperIcon } from "../PaperIcon";
 import { PaperPreviewControls, PaperPreviewReadout } from "../../templates/PaperPreview/controls";
-import { describePdfError, isCancellation, openPdf, pdfWorker, type PdfFailure } from "./pdfjs";
+import { describePdfError, isCancellation, leasePdfWorker, openPdf, type PdfFailure, type PdfWorkerLease } from "./pdfjs";
 
 /** CSS pixels per PDF point: a zoom of 1 shows a page at its printed size. */
 const CSS_UNITS = 96 / 72;
@@ -97,6 +97,8 @@ export function PdfDocument(props: PdfDocumentProps) {
     // late answers from an older load or render compare it and drop out
     let doc: PDFDocumentProxy | null = null;
     let loading: PDFDocumentLoadingTask | null = null;
+    // the shared worker `loading` is read on, let go once it is destroyed
+    let lease: PdfWorkerLease | null = null;
     let generation = 0;
     const [docKey, setDocKey] = createSignal(0);
     const [pages, setPages] = createStore<PageSize[]>([]);
@@ -118,10 +120,18 @@ export function PdfDocument(props: PdfDocumentProps) {
         slots = [];
         near.clear();
         const task = loading;
+        const held = lease;
         loading = null;
+        lease = null;
         doc = null;
-        // quiet: destroying a document can reject when it never finished opening; that failure was already shown
-        task?.destroy().catch(() => {});
+        if (!task) {
+            held?.release();
+            return;
+        }
+        task.destroy()
+            // quiet: destroying a document can reject when it never finished opening; that failure was already shown
+            .catch(() => {})
+            .finally(() => held?.release());
     };
 
     const fail = (gen: number, src: string, failure: PdfFailure) => {
@@ -145,9 +155,13 @@ export function PdfDocument(props: PdfDocumentProps) {
         });
         props.onLoading();
         try {
-            const thread = await pdfWorker();
-            if (gen !== generation) return;
-            const task = openPdf(src, thread);
+            const held = await leasePdfWorker();
+            if (gen !== generation) {
+                held.release();
+                return;
+            }
+            lease = held;
+            const task = openPdf(src, held.worker);
             loading = task;
             const pdf = await task.promise;
             if (gen !== generation) return;

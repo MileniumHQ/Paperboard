@@ -74,10 +74,17 @@ export async function loadModel(src: string, format: PaperModelFormat, options: 
     const bytes = await readSource(src, signal, options.onProgress);
     signal?.throwIfAborted();
 
-    const context = createContext(src, options.onUpdate);
+    const context = createContext(src, options.onUpdate, signal);
     let parsed: Parsed;
     try {
-        parsed = await PARSERS[format](bytes, context, options.renderer);
+        const parsing = PARSERS[format](bytes, context, options.renderer);
+        // a reference that stalls (a texture's <img> can't be aborted) doesn't
+        // hold an aborted load: it ends at once, and a model parsed after is freed
+        parsing.then(
+            (late) => signal?.aborted && disposeObject(late.root),
+            () => {}, // quiet: a parse that fails after the abort is heard through the abort
+        );
+        parsed = await untilAborted(parsing, signal);
     } catch (err) {
         if (signal?.aborted) throw signal.reason;
         throw err instanceof ModelError ? err : new ModelError(MODEL_MESSAGES.unreadable, false);
@@ -183,7 +190,18 @@ interface Context {
     parsed(): Promise<void>;
 }
 
-function createContext(src: string, onUpdate?: () => void): Context {
+/** `work`, or the signal's reason as soon as it aborts. */
+function untilAborted<T>(work: Promise<T>, signal: AbortSignal | undefined): Promise<T> {
+    if (!signal) return work;
+    if (signal.aborted) return Promise.reject(signal.reason);
+    return new Promise<T>((resolve, reject) => {
+        const abort = () => reject(signal.reason);
+        signal.addEventListener("abort", abort, { once: true });
+        work.then(resolve, reject).finally(() => signal.removeEventListener("abort", abort));
+    });
+}
+
+function createContext(src: string, onUpdate: (() => void) | undefined, signal: AbortSignal | undefined): Context {
     let home: URL | null = null;
     try {
         const url = new URL(src, document.baseURI);
@@ -228,6 +246,15 @@ function createContext(src: string, onUpdate?: () => void): Context {
         onUpdate?.();
         check();
     };
+    // an abort stops the references still loading, and settles what waits on them
+    signal?.addEventListener(
+        "abort",
+        () => {
+            manager.abort();
+            settle();
+        },
+        { once: true },
+    );
 
     const path = home ? new URL(".", home).href : "";
     return {

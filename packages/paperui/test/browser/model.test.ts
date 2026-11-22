@@ -174,18 +174,25 @@ describe("PaperModel replaces and lets go", () => {
         expect(await page.eval("t.errors")).toEqual([]);
     });
 
-    test("a viewer that goes gives its WebGL context back at once", async () => {
+    // Chrome keeps 16 WebGL contexts and loses the oldest for a 17th: had
+    // the passing viewers kept theirs, the 17th would take the kept one's.
+    // Every mount builds its viewer's lighting (a PMREM), which a GPU does in
+    // a few milliseconds but these suites' software renderer (--disable-gpu)
+    // in about 0.75 s here and 2.5 s on a CI runner; letting go takes 2 ms.
+    // The kept viewer and sixteen that pass are the fewest that prove it,
+    // and they need longer than the suites' usual 30 s on CI.
+    test("a viewer that goes gives its WebGL context back at once", { timeout: 90_000 }, async () => {
         page = await browser.open("modelMany", { query: PANEL });
         await shown("#kept");
         const lost: boolean[] = [];
-        for (let i = 0; i < 20; i++) {
+        for (let i = 0; i < 16; i++) {
             await page.eval("t.setShown(true)");
             await page.waitFor(`document.querySelector("#passing canvas")`, "the second viewer's canvas");
             await page.eval(`window.passing = document.querySelector("#passing canvas"); t.setShown(false)`);
             lost.push(await page.eval<boolean>(`window.passing.getContext("webgl2").isContextLost()`));
         }
         expect(lost.every(Boolean)).toBe(true);
-        // the browser keeps about 16 contexts: had the others stayed, this one would be the oldest, and lost
+        // had the others stayed, this one would be the oldest, and lost
         expect(await page.eval(`document.querySelector("#kept canvas").getContext("webgl2").isContextLost()`)).toBe(false);
         expect(await page.eval(`document.querySelector('#kept ${ALERT}')`)).toBe(null);
         expect(await page.eval("t.errors")).toEqual([]);

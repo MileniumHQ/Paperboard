@@ -33,7 +33,8 @@ export interface ServerFileListing {
 
 export type ServerFileContent =
     | { kind: "text"; text: string; version: string }
-    | { kind: "image"; src: string; alt: string }
+    /** a picture, as a data: URL PaperPreview shows */
+    | { kind: "preview"; src: string; type: string }
     | { kind: "unavailable"; reason: string };
 
 const IMAGE_TYPES: Record<string, string> = {
@@ -159,7 +160,7 @@ export async function readServerFile(path: unknown, deps: ServerFilesDeps): Prom
         return { kind: "unavailable", reason: `${name} is larger than 2 MB, too big to open here.` };
     }
     const mime = IMAGE_TYPES[nodePath.extname(name).slice(1).toLowerCase()];
-    if (mime) return { kind: "image", src: `data:${mime};base64,${bytes.toString("base64")}`, alt: name };
+    if (mime) return { kind: "preview", src: `data:${mime};base64,${bytes.toString("base64")}`, type: mime };
 
     const shape = decodeText(bytes);
     if (!shape) return { kind: "unavailable", reason: `${name} is not UTF-8 text (it may be a binary file), so it cannot be opened here.` };

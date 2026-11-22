@@ -65,14 +65,24 @@ async function saveFile(files: Files, id: string) {
 export function MediaProvider(props: ParentProps<{ files: Files }>) {
     const [shown, setShown] = createSignal<{ id: string; name: string } | null>(null);
     const read = createRead((id: string) => props.files.read(id), { source: () => shown()?.id });
-    // the file in the preview keeps its URL while it's shown, and through the way out
+    // the file in the preview keeps its URL while it's shown, and through the
+    // way out: a file the preview closes on lets go once it has left the screen
+    let leaving: (() => void)[] = [];
+    const left = () => {
+        for (const release of leaving) release();
+        leaving = [];
+    };
+    onCleanup(left);
     createEffect(
         on(
             () => shown()?.id,
             (id) => {
                 if (!id) return;
                 const release = props.files.hold(id);
-                onCleanup(() => setTimeout(release, 1000));
+                onCleanup(() => {
+                    if (shown()) release();
+                    else leaving.push(release);
+                });
             },
         ),
     );
@@ -89,6 +99,7 @@ export function MediaProvider(props: ParentProps<{ files: Files }>) {
             <PaperPreviewModal
                 open={shown() !== null}
                 onClose={() => setShown(null)}
+                onExited={left}
                 name={file()?.file.name ?? shown()?.name ?? ""}
                 type={file()?.file.type}
                 size={file()?.file.bytes}

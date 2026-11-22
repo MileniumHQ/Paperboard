@@ -390,6 +390,12 @@ export function Example(props: { src: string }) {
                         <td>No default</td>
                         <td>More buttons, such as a Save, beside Close.</td>
                     </tr>
+                    <tr>
+                        <td><PaperCode>onExited</PaperCode></td>
+                        <td><PaperCode>() =&gt; void</PaperCode></td>
+                        <td>No default</td>
+                        <td>Called once a closed preview has left the screen. The preview keeps showing its file while it fades out, so let go of what it shows here, such as revoking a <PaperCode>blob:</PaperCode> URL, not in <PaperCode>onClose</PaperCode>.</td>
+                    </tr>
                 </tbody>
             </PaperTable>
 

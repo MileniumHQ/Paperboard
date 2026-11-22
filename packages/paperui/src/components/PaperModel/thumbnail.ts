@@ -3,7 +3,8 @@
 // by one job at a time, and freed once none has been asked for in a while:
 // a folder of two hundred models costs one WebGL context, not two hundred.
 import { WebGLRenderer } from "three";
-import { loadModel } from "./load";
+import { loadModel, ModelError } from "./load";
+import { MODEL_MESSAGES } from "./messages";
 import { configureRenderer, Stage } from "./stage";
 import type { PaperModelFormat } from "../../templates/PaperPreview/kinds";
 
@@ -66,8 +67,16 @@ async function draw(src: string, format: PaperModelFormat, size: number, signal?
         stage.setAspect(1);
         stage.look(stage.home(1, 0.9));
         stage.render(renderer, true);
+        // a context lost while the model loaded (too many live viewers) draws
+        // nothing: its picture would be blank, so it is refused, not kept
+        const lost = () => renderer.getContext().isContextLost();
+        if (lost()) throw new ModelError(MODEL_MESSAGES.lost, true);
         return await new Promise<Blob>((resolve, reject) =>
-            renderer.domElement.toBlob((blob) => (blob ? resolve(blob) : reject(new Error("renderModelThumbnail: the picture couldn't be encoded"))), "image/png"),
+            renderer.domElement.toBlob((blob) => {
+                if (lost()) reject(new ModelError(MODEL_MESSAGES.lost, true));
+                else if (blob) resolve(blob);
+                else reject(new Error("renderModelThumbnail: the picture couldn't be encoded"));
+            }, "image/png"),
         );
     } finally {
         // the stage frees the model it shows; one that never got there is freed here
