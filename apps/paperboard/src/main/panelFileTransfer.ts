@@ -1,8 +1,7 @@
 // Moves one file between a panel's storage on a computer's daemon and the
 // disk of the machine running the shell. The daemon's /panel-files route
-// owns the path check; this module owns the local side: the dialog result,
-// the size cap for what it writes, one dialog per panel at a time, and a
-// save that never leaves a half-written file at the chosen path.
+// owns the path check; this module owns the local side: the dialog result
+// and a save that never leaves a half-written file at the chosen path.
 // No Electron imports: Electron main and the browser-mode host share it,
 // each passing the daemon endpoint lookup (panelFileEndpoint.ts).
 import * as fs from "fs";
@@ -17,8 +16,6 @@ import { logger } from "daemon/core/logger";
 import {
     failedResult,
     isImportableName,
-    PANEL_IMPORT_MAX_BYTES,
-    PANEL_IMPORT_MAX_FILES,
     parsePanelFileTransferRequest,
     PanelFileTransferError,
     type FileTypeFilter,
@@ -27,13 +24,8 @@ import {
     type PanelFileTransferResult,
 } from "../shared/fileTransfer";
 
-// the largest file a save writes to this machine; uploads are capped by
-// the receiving daemon (PAPERCRANE_DAV_MAX_UPLOAD)
-export const PANEL_FILE_SAVE_MAX_BYTES = 2 * 1024 * 1024 * 1024;
 // a daemon that sends or accepts nothing for this long has failed the transfer
 const TRANSFER_IDLE_MS = 60_000;
-// open dialogs and transfers across every panel; each panel holds one
-const MAX_ACTIVE_PANEL_FILE_TRANSFERS = 4;
 
 export interface DaemonEndpoint {
     host: string;
@@ -118,23 +110,10 @@ async function statPanelFile(endpoint: DaemonEndpoint, req: PanelFileTransferReq
     res.resume();
     const size = Number(res.headers["content-length"]);
     if (!Number.isFinite(size) || size < 0) throw new PanelFileTransferError("failed", "The computer did not report the file size");
-    if (size > PANEL_FILE_SAVE_MAX_BYTES) {
-        throw new PanelFileTransferError("too-large", `The file is larger than Paperboard saves (${PANEL_FILE_SAVE_MAX_BYTES} bytes)`);
-    }
     return size;
 }
 
-function byteCap(cap: number, counted: { bytes: number }): Transform {
-    return new Transform({
-        transform(chunk: Buffer, _encoding, done) {
-            counted.bytes += chunk.length;
-            if (counted.bytes > cap) done(new PanelFileTransferError("too-large", `The file grew past ${cap} bytes while saving`));
-            else done(null, chunk);
-        },
-    });
-}
-
-/** GET the panel file as a stream, capped; the caller consumes or destroys it */
+/** GET the panel file as a stream; the caller consumes or destroys it */
 async function readPanelFile(
     endpoint: DaemonEndpoint,
     req: PanelFileTransferRequest,
@@ -145,15 +124,16 @@ async function readPanelFile(
     const res = await response;
     if (res.statusCode !== 200) throw await statusFailure(res, `The panel file "${req.path}"`);
     const size = Number(res.headers["content-length"]);
-    if (Number.isFinite(size) && size > PANEL_FILE_SAVE_MAX_BYTES) {
-        res.destroy();
-        throw new PanelFileTransferError("too-large", `The file is larger than Paperboard saves (${PANEL_FILE_SAVE_MAX_BYTES} bytes)`);
-    }
-    const counted = { bytes: 0 };
-    const capped = byteCap(PANEL_FILE_SAVE_MAX_BYTES, counted);
-    res.on("error", (err) => capped.destroy(err));
-    capped.on("close", () => res.destroy());
-    return { size, body: res.pipe(capped), received: () => counted.bytes };
+    let bytes = 0;
+    const counter = new Transform({
+        transform(chunk: Buffer, _encoding, done) {
+            bytes += chunk.length;
+            done(null, chunk);
+        },
+    });
+    res.on("error", (err) => counter.destroy(err));
+    counter.on("close", () => res.destroy());
+    return { size, body: res.pipe(counter), received: () => bytes };
 }
 
 /** PUT a stream of known size into the panel's storage */
@@ -258,7 +238,6 @@ function statForImport(source: string, label: string): fs.Stats {
 /** every file under a folder, refusing links and devices; empty folders carry nothing to copy */
 function planFolder(root: string): PlannedUpload[] {
     const planned: PlannedUpload[] = [];
-    let bytes = 0;
     const walk = (dir: string, prefix: string) => {
         for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
             const name = prefix ? `${prefix}/${entry.name}` : entry.name;
@@ -272,13 +251,6 @@ function planFolder(root: string): PlannedUpload[] {
                 continue;
             }
             if (!st.isFile()) throw new PanelFileTransferError("failed", `"${name}" is not a regular file`);
-            bytes += st.size;
-            if (planned.length + 1 > PANEL_IMPORT_MAX_FILES) {
-                throw new PanelFileTransferError("too-large", `The folder holds over ${PANEL_IMPORT_MAX_FILES} files`);
-            }
-            if (bytes > PANEL_IMPORT_MAX_BYTES) {
-                throw new PanelFileTransferError("too-large", `The folder is larger than Paperboard copies (${PANEL_IMPORT_MAX_BYTES} bytes)`);
-            }
             planned.push({ source, name, size: st.size });
         }
     };
@@ -287,11 +259,7 @@ function planFolder(root: string): PlannedUpload[] {
 }
 
 function planFiles(sources: string[]): PlannedUpload[] {
-    if (sources.length > PANEL_IMPORT_MAX_FILES) {
-        throw new PanelFileTransferError("too-large", `Choose at most ${PANEL_IMPORT_MAX_FILES} files at a time`);
-    }
     const seen = new Set<string>();
-    let bytes = 0;
     return sources.map((source) => {
         const name = path.basename(source);
         if (!isImportableName(name)) throw new PanelFileTransferError("failed", `"${name}" has a name that cannot be copied`);
@@ -299,10 +267,6 @@ function planFiles(sources: string[]): PlannedUpload[] {
         seen.add(name);
         const st = statForImport(source, `"${name}"`);
         if (!st.isFile()) throw new PanelFileTransferError("failed", `"${name}" is not a regular file`);
-        bytes += st.size;
-        if (bytes > PANEL_IMPORT_MAX_BYTES) {
-            throw new PanelFileTransferError("too-large", `The files are larger than Paperboard copies (${PANEL_IMPORT_MAX_BYTES} bytes)`);
-        }
         return { source, name, size: st.size };
     });
 }
@@ -330,43 +294,18 @@ async function uploadPlan(
     return { files, bytes };
 }
 
-// one dialog per panel, a few across the app: a dialog is modal to the
-// user, and a transfer holds a socket and a file
-const activeDialogs = new Set<string>();
-
-function acquireSlot(req: PanelFileTransferRequest): () => void {
-    const key = `${req.computerId}::${req.panelId}`;
-    if (activeDialogs.has(key)) throw new PanelFileTransferError("busy", "This panel already has an export or import running");
-    if (activeDialogs.size >= MAX_ACTIVE_PANEL_FILE_TRANSFERS) {
-        throw new PanelFileTransferError("busy", "Too many file transfers are running; try again when one finishes");
-    }
-    activeDialogs.add(key);
-    return () => activeDialogs.delete(key);
-}
-
-async function withPanelFileSlot<T>(req: PanelFileTransferRequest, run: () => Promise<T>): Promise<T> {
-    const release = acquireSlot(req);
-    try {
-        return await run();
-    } finally {
-        release();
-    }
-}
-
 export async function runPanelExport(args: unknown, deps: PanelFileTransferDeps): Promise<PanelFileTransferResult> {
     try {
         const req = parsePanelFileTransferRequest(args);
         const endpoint = deps.endpoint(req.computerId);
-        return await withPanelFileSlot(req, async () => {
-            await statPanelFile(endpoint, req);
-            const dest = await deps.pickSavePath({
-                suggestedName: req.suggestedName ?? path.posix.basename(req.path.replace(/\\/g, "/")),
-                filters: req.filters,
-            });
-            if (!dest) return { status: "canceled" } as const;
-            const bytes = await saveTo(endpoint, req, dest);
-            return { status: "exported", name: path.basename(dest), bytes } as const;
+        await statPanelFile(endpoint, req);
+        const dest = await deps.pickSavePath({
+            suggestedName: req.suggestedName ?? path.posix.basename(req.path.replace(/\\/g, "/")),
+            filters: req.filters,
         });
+        if (!dest) return { status: "canceled" } as const;
+        const bytes = await saveTo(endpoint, req, dest);
+        return { status: "exported", name: path.basename(dest), bytes } as const;
     } catch (err) {
         logger.warn("[panel-files] file transfer failed:", (err as Error)?.message ?? err);
         return failedResult(err);
@@ -377,28 +316,26 @@ export async function runPanelImport(args: unknown, deps: PanelFileTransferDeps)
     try {
         const req = parsePanelFileTransferRequest(args);
         const endpoint = deps.endpoint(req.computerId);
-        return await withPanelFileSlot(req, async () => {
-            if (req.selection === "file") {
-                const source = await deps.pickOpenPath({ filters: req.filters });
-                if (!source) return { status: "canceled" } as const;
-                const bytes = await uploadFrom(endpoint, req, source);
-                return { status: "imported", name: path.basename(source), bytes } as const;
-            }
-            const picked = await deps.pickOpenPaths({ filters: req.filters, selection: req.selection });
-            if (!picked || picked.length === 0) return { status: "canceled" } as const;
-            if (req.selection === "files") {
-                const { files, bytes } = await uploadPlan(endpoint, req, req.path, planFiles(picked));
-                return { status: "imported", name: files.length === 1 ? files[0]!.name : `${files.length} files`, bytes, files } as const;
-            }
-            const folder = picked[0]!;
-            const folderName = path.basename(folder);
-            if (!isImportableName(folderName)) throw new PanelFileTransferError("failed", `"${folderName}" has a name that cannot be copied`);
-            if (!statForImport(folder, `"${folderName}"`).isDirectory()) throw new PanelFileTransferError("failed", `"${folderName}" is not a folder`);
-            const plan = planFolder(folder);
-            if (plan.length === 0) throw new PanelFileTransferError("failed", `"${folderName}" holds no files`);
-            const { files, bytes } = await uploadPlan(endpoint, req, `${req.path.replace(/\/+$/, "")}/${folderName}`, plan);
-            return { status: "imported", name: folderName, bytes, files } as const;
-        });
+        if (req.selection === "file") {
+            const source = await deps.pickOpenPath({ filters: req.filters });
+            if (!source) return { status: "canceled" } as const;
+            const bytes = await uploadFrom(endpoint, req, source);
+            return { status: "imported", name: path.basename(source), bytes } as const;
+        }
+        const picked = await deps.pickOpenPaths({ filters: req.filters, selection: req.selection });
+        if (!picked || picked.length === 0) return { status: "canceled" } as const;
+        if (req.selection === "files") {
+            const { files, bytes } = await uploadPlan(endpoint, req, req.path, planFiles(picked));
+            return { status: "imported", name: files.length === 1 ? files[0]!.name : `${files.length} files`, bytes, files } as const;
+        }
+        const folder = picked[0]!;
+        const folderName = path.basename(folder);
+        if (!isImportableName(folderName)) throw new PanelFileTransferError("failed", `"${folderName}" has a name that cannot be copied`);
+        if (!statForImport(folder, `"${folderName}"`).isDirectory()) throw new PanelFileTransferError("failed", `"${folderName}" is not a folder`);
+        const plan = planFolder(folder);
+        if (plan.length === 0) throw new PanelFileTransferError("failed", `"${folderName}" holds no files`);
+        const { files, bytes } = await uploadPlan(endpoint, req, `${req.path.replace(/\/+$/, "")}/${folderName}`, plan);
+        return { status: "imported", name: folderName, bytes, files } as const;
     } catch (err) {
         logger.warn("[panel-files] file transfer failed:", (err as Error)?.message ?? err);
         return failedResult(err);
@@ -406,8 +343,7 @@ export async function runPanelImport(args: unknown, deps: PanelFileTransferDeps)
 }
 
 // Browser mode: the dialog runs in the user's browser, so the host only
-// checks the file before the picker opens, then moves bytes. A read holds
-// the panel's slot until its stream closes either way.
+// checks the file before the picker opens, then moves bytes.
 export async function statPanelFileForBrowser(
     args: unknown,
     endpoint: (computerId: string) => DaemonEndpoint,
@@ -421,16 +357,8 @@ export async function readPanelFileForBrowser(
     endpoint: (computerId: string) => DaemonEndpoint,
 ): Promise<{ size: number; body: Readable }> {
     const req = parsePanelFileTransferRequest(args);
-    const target = endpoint(req.computerId);
-    const release = acquireSlot(req);
-    try {
-        const file = await readPanelFile(target, req);
-        file.body.once("close", release);
-        return { size: file.size, body: file.body };
-    } catch (err) {
-        release();
-        throw err;
-    }
+    const file = await readPanelFile(endpoint(req.computerId), req);
+    return { size: file.size, body: file.body };
 }
 
 export async function writePanelFileFromBrowser(
@@ -440,9 +368,6 @@ export async function writePanelFileFromBrowser(
     endpoint: (computerId: string) => DaemonEndpoint,
 ): Promise<PanelFileTransferResult> {
     const req = parsePanelFileTransferRequest(args);
-    const target = endpoint(req.computerId);
-    return withPanelFileSlot(req, async () => {
-        await writePanelFile(target, req, body, size);
-        return { status: "imported", name: path.posix.basename(req.path.replace(/\\/g, "/")), bytes: size } as const;
-    });
+    await writePanelFile(endpoint(req.computerId), req, body, size);
+    return { status: "imported", name: path.posix.basename(req.path.replace(/\\/g, "/")), bytes: size } as const;
 }

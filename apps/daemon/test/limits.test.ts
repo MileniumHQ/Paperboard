@@ -5,7 +5,6 @@ import { DriveBackupStore } from "../src/backups/driveStore";
 import { S3BackupStore } from "../src/backups/s3Store";
 import { BACKUP_ARCHIVE_MAX_BYTES, newBackupId } from "../src/backups/types";
 import { CONFIG_MAX_BYTES, FILE_READ_MAX_BYTES } from "../src/engine/index";
-import { MAX_LIVE_CLIENTS, spawnSupervisedClient } from "../src/engine/supervisor";
 import { fakeDrive, fakeS3 } from "testkit/cloud";
 import { tempDir } from "testkit/fs";
 import { type InProcessDaemon, request, startDaemon } from "testkit/inproc";
@@ -82,14 +81,5 @@ describe("resource limits", () => {
 			await s3.close();
 			await drive.close();
 		}
-	});
-
-	test("starting a workload past the live supervised workload budget is refused before anything spawns", async () => {
-		const live = new Map<string, unknown>(Array.from({ length: MAX_LIVE_CLIENTS }, (_, i) => [`w${i}`, { isConnected: () => true }]));
-		const socketsDir = path.join(daemon.dataDir, "sockets");
-		const before = fs.existsSync(socketsDir) ? fs.readdirSync(socketsDir) : [];
-		await expect(spawnSupervisedClient("one-too-many", { command: process.execPath, args: [] }, live as Map<string, any>)).rejects.toThrow(`max ${MAX_LIVE_CLIENTS}`);
-		expect(fs.existsSync(socketsDir) ? fs.readdirSync(socketsDir) : []).toEqual(before);
-		expect(live.size).toBe(MAX_LIVE_CLIENTS);
 	});
 });

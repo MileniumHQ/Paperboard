@@ -135,7 +135,6 @@ panelsApi.install(panelId: string, scope?: string): Promise<PanelItem>;`}
                     </tr>
                 </thead>
                 <tbody>
-                    <tr><td><PaperCode>Cross-panel access refused: credential is scoped to "&lt;panel&gt;"</PaperCode></td><td><PaperCode>FORBIDDEN</PaperCode></td><td><PaperCode>restartService</PaperCode> or <PaperCode>uninstall</PaperCode> for another panel.</td></tr>
                     <tr><td><PaperCode>panel:install is host-only</PaperCode></td><td><PaperCode>FORBIDDEN</PaperCode></td><td>A panel called <PaperCode>install</PaperCode>.</td></tr>
                     <tr><td><PaperCode>Install refused for "&lt;id&gt;": the registry does not list "&lt;id&gt;"</PaperCode></td><td>No code</td><td><PaperCode>install</PaperCode> looks the panel up in the registry before it asks the daemon, so an unlisted id fails here first.</td></tr>
                     <tr><td><PaperCode>Restart failed: Panel &lt;id&gt; is not installed</PaperCode></td><td><PaperCode>INTERNAL</PaperCode></td><td><PaperCode>restartService</PaperCode> for a panel that isn't there.</td></tr>

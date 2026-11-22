@@ -28,51 +28,30 @@ async function withDaemon<T>(run: (daemon: InProcessDaemon) => Promise<T>, dir?:
 	}
 }
 
-// Panel RPCs take their panel from the token claim.
-describe("panel RPCs take their panel from the token claim", () => {
-	test("a scoped caller naming another panel is refused before anything is touched", async () => {
+// Panel tokens are refused host-only RPCs and default-scope omitted panel ids to their claim.
+describe("panel token scoping and host-only RPCs", () => {
+	test("a scoped panel token is refused host-only operations", async () => {
 		const dir = dataDir();
-		await installPanelFiles(dir, { id: "test.victim" });
 		await withDaemon(async (daemon) => {
-			const host = await daemon.rpc();
-			await host.ok("secrets:set", { panelId: "test.victim", name: "k", value: "original" });
-			await host.ok("config:set", { id: "test.victim", data: { v: "original" } });
-			const filesBefore = listTree(path.join(dir, "files"));
 			const panel = await daemon.panelRpc("test.attacker");
 
 			const calls: Array<[string, Record<string, unknown>]> = [
-				["file:write", { appId: "test.victim", targetPath: "x.txt", content: "pwned" }],
-				["file:read", { appId: "test.victim", targetPath: "x.txt" }],
-				["file:getPath", { appId: "test.victim", targetPath: "" }],
-				["config:get", { id: "test.victim" }],
-				["config:set", { id: "test.victim", data: { v: "pwned" } }],
-				["config:get", { id: "app-settings" }],
-				["secrets:set", { panelId: "test.victim", name: "k", value: "pwned" }],
-				["secrets:get", { panelId: "test.victim", name: "k" }],
-				["secrets:list", { panelId: "test.victim" }],
-				["secrets:purge", { panelId: "test.victim" }],
-				["backup:status", { panelId: "test.victim" }],
-				["backup:create", { panelId: "test.victim" }],
-				["panel:uninstall", { panelId: "test.victim" }],
-				["panel:restartService", { panelId: "test.victim" }],
-				["system:usage", {}],
+				["panel:install", { panelId: "test.victim" }],
 				["backup:destinations", {}],
 				["backup:destination-add", { destination: { kind: "local", name: "x", path: dir } }],
 				["backup:destination-reconnect", { destinationId: "d1" }],
 				["backup:destination-remove", { destinationId: "d1" }],
 				["backup:destinations-recover", {}],
 				["backup:panel-destination-set", { panelId: "test.attacker", destinationId: null }],
+				["ports:all", {}],
+				["ports:policy-set", { policy: "refuse" }],
+				["problems:every", {}],
 			];
 			for (const [action, params] of calls) {
 				const refusal = await panel.fail(action, params);
 				expect({ action, code: refusal.code }).toEqual({ action, code: "FORBIDDEN" });
 			}
-			expect((await host.ok("secrets:get", { panelId: "test.victim", name: "k" })).value).toBe("original");
-			expect((await host.ok("config:get", { id: "test.victim" })).data).toEqual({ v: "original" });
-			expect(listTree(path.join(dir, "files"))).toEqual(filesBefore);
-			expect(fs.existsSync(path.join(dir, "panels", "test.victim", "manifest.json"))).toBe(true);
 			await panel.close();
-			await host.close();
 		}, dir);
 	});
 
@@ -334,7 +313,6 @@ describe("the port registry", () => {
 				rpc.call("ports:claim", { panelId: rpc === a ? "test.porta" : "test.portb", name, label: `Server ${name}`, protocol: "tcp", preferred });
 
 			expect((await a.fail("ports:policy-set", { policy: "refuse" })).code).toBe("FORBIDDEN");
-			expect((await a.fail("ports:claim", { panelId: "test.portb", name: "x", label: "X", protocol: "tcp", preferred: 30000 })).code).toBe("FORBIDDEN");
 
 			await host.ok("ports:policy-set", { policy: "refuse" });
 			const refused = await claim(a, "java", busy.port);

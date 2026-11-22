@@ -1,5 +1,4 @@
 import type { RpcContext } from "./context";
-import { claimClient, checkClientOwnership, checkSpawnEnv } from "./ownership";
 import { rpcModule } from "./dispatch";
 import { offeredShells } from "../workloads/shellIntegration";
 import type { TerminalStreams } from "../engine/index";
@@ -16,25 +15,24 @@ function terminalEvents(termId: string, sendEvent: RpcContext["sendEvent"]): Ter
 }
 
 export const terminalRpc = rpcModule({
-    "term:create": async ({ id, cols, rows, cwd, env, shell }, ctx, action) => {
-        checkSpawnEnv(env, ctx, action);
-        await claimClient(id, ctx, action, () =>
-            ctx.engine.createTerminal(id, { cols: cols ?? 80, rows: rows ?? 24, cwd, env, shell }, terminalEvents(id, ctx.sendEvent), ctx.ws),
+    "term:create": async ({ id, cols, rows, cwd, env, shell }, ctx) => {
+        await ctx.engine.createTerminal(
+            id,
+            { cols: cols ?? 80, rows: rows ?? 24, cwd, env, shell, owner: ctx.callerPanelId() },
+            terminalEvents(id, ctx.sendEvent),
+            ctx.ws,
         );
         return { success: true };
     },
-    "term:write": ({ id, data }, ctx, action) => {
-        checkClientOwnership(id, ctx, action);
+    "term:write": ({ id, data }, ctx) => {
         ctx.engine.writeTerminal(id, data);
         return { success: true };
     },
-    "term:resize": ({ id, cols, rows }, ctx, action) => {
-        checkClientOwnership(id, ctx, action);
+    "term:resize": ({ id, cols, rows }, ctx) => {
         ctx.engine.resizeTerminal(id, cols, rows);
         return { success: true };
     },
-    "term:attach": async ({ id }, ctx, action) => {
-        checkClientOwnership(id, ctx, action);
+    "term:attach": async ({ id }, ctx) => {
         const success = await ctx.engine.attachTerminal(id, ctx.ws, terminalEvents(id, ctx.sendEvent));
         // what was said before this socket listened
         const known = ctx.engine.terminalState(id);
@@ -43,12 +41,8 @@ export const terminalRpc = rpcModule({
         return { success };
     },
     "term:shells": () => ({ shells: offeredShells() }),
-    "term:exists": async ({ id }, ctx, action) => {
-        checkClientOwnership(id, ctx, action);
-        return { running: await ctx.engine.isTerminalRunning(id) };
-    },
-    "term:destroy": async ({ id }, ctx, action) => {
-        checkClientOwnership(id, ctx, action);
+    "term:exists": async ({ id }, ctx) => ({ running: await ctx.engine.isTerminalRunning(id) }),
+    "term:destroy": async ({ id }, ctx) => {
         await ctx.engine.destroyTerminal(id);
         return { success: true };
     },

@@ -6,8 +6,6 @@
 // by the host that runs the dialog (src/shared/fileTransfer.ts).
 import {
     isImportableName,
-    PANEL_IMPORT_MAX_BYTES,
-    PANEL_IMPORT_MAX_FILES,
     type FileTypeFilter,
     type ImportedPanelFile,
     type PanelFileTransferResult,
@@ -186,17 +184,12 @@ async function browserOpen(request: Record<string, unknown>): Promise<PanelFileT
         return result.status === "imported" ? { ...result, name: picked[0]!.name } : result;
     }
 
-    // a folder arrives as files named by their path below it; the same
-    // names and limits as the desktop shell's
+    // a folder arrives as files named by their path below it
     const folder = selection === "folder" ? picked[0]!.webkitRelativePath.split("/")[0]! : "";
     const planned = picked.map((file) => ({
         file,
         name: selection === "folder" ? file.webkitRelativePath.split("/").slice(1).join("/") : file.name,
     }));
-    if (planned.length > PANEL_IMPORT_MAX_FILES) return refused(`Choose at most ${PANEL_IMPORT_MAX_FILES} files`);
-    if (planned.reduce((sum, item) => sum + item.file.size, 0) > PANEL_IMPORT_MAX_BYTES) {
-        return refused(`The files are larger than Paperboard copies (${PANEL_IMPORT_MAX_BYTES} bytes)`);
-    }
     if (selection === "folder" && !isImportableName(folder)) return refused(`"${folder}" has a name that cannot be copied`);
     const seen = new Set<string>();
     for (const item of planned) {

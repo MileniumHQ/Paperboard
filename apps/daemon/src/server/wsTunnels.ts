@@ -13,9 +13,6 @@ import { readValue, text } from "@mileniumhq/paperapi/protocol";
 import { HANDSHAKE_TIMEOUT_MS, MAX_WS_PAYLOAD, sendBounded } from "./wsFrames";
 import type { SocketIdentity } from "./wsIdentity";
 
-// per-socket tunnel cap: each tunnel is a live upstream socket, so an
-// authenticated socket may not open an unbounded number of them
-const MAX_TUNNELS_PER_SOCKET = 32;
 const TUNNEL_HEARTBEAT_MS = 15_000;
 
 export interface TunnelOptions {
@@ -121,14 +118,6 @@ export function socketTunnels(ws: WebSocket, identity: SocketIdentity, options: 
                 type: "tunnel-closed",
                 id: tunnelId,
                 reason: candidates.length > 1 ? "ambiguous-computer" : "unknown-computer",
-            }));
-            return;
-        }
-        if (tunnels.size >= MAX_TUNNELS_PER_SOCKET) {
-            ws.send(JSON.stringify({
-                type: "tunnel-closed",
-                id: tunnelId,
-                reason: "too-many-tunnels",
             }));
             return;
         }

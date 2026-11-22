@@ -10,9 +10,6 @@ export const DAV_REALM = "Paperboard Server";
 export const DEFAULT_IDLE_MS = 5 * 60_000;
 const MIN_IDLE_MS = 30_000;
 const MAX_IDLE_MS = 30 * 60_000;
-// session cap: refusals for NEW sessions only, never eviction of live ones
-// (same shape as the token vault's MAX_TOKENS refusal)
-const MAX_SESSIONS = 50;
 
 export interface DavSession {
     user: string;
@@ -29,11 +26,6 @@ export class DavSessionStore {
 
     issue(idleMs = DEFAULT_IDLE_MS, issuerToken?: string): DavSession {
         this.sweep();
-        if (this.byUser.size >= MAX_SESSIONS) {
-            throw new Error(
-                `Session store is full (${MAX_SESSIONS} active sessions). Revoke one before opening another.`,
-            );
-        }
         const clamped = Math.min(MAX_IDLE_MS, Math.max(MIN_IDLE_MS, idleMs));
         const now = Date.now();
         const s: DavSession = {

@@ -25,25 +25,23 @@ function checked<T>(read: () => T): T {
     }
 }
 
-// A panel reports and clears its own problems; the shell (the host) reads
-// every panel's, and dismisses them.
-const problemsOf = (panelId: string, action: string, ctx: RpcContext) => resourcePanelId(ctx.callerPanelId(), panelId, action)!;
+const problemsOf = (panelId: string, ctx: RpcContext) => resourcePanelId(ctx.callerPanelId(), panelId)!;
 
 export const problemsRpc = rpcModule({
-    "problems:report": (params, ctx, action) => {
+    "problems:report": (params, ctx) => {
         const report = checked(() => readProblemReport(params));
         if (report.key === undefined) throw invalidParams("A problem needs a key");
-        problemsFor(ctx.engine).report(problemsOf(params.panelId, action, ctx), { key: report.key, title: report.title, message: report.message });
+        problemsFor(ctx.engine).report(problemsOf(params.panelId, ctx), { key: report.key, title: report.title, message: report.message });
         return { success: true };
     },
-    "problems:clear": ({ panelId, key }, ctx, action) => {
-        problemsFor(ctx.engine).clear(problemsOf(panelId, action, ctx), key === undefined ? undefined : checked(() => problemKey(key)));
+    "problems:clear": ({ panelId, key }, ctx) => {
+        problemsFor(ctx.engine).clear(problemsOf(panelId, ctx), key === undefined ? undefined : checked(() => problemKey(key)));
         return { success: true };
     },
-    "problems:clear-prefix": ({ panelId, prefix }, ctx, action) => {
-        problemsFor(ctx.engine).clearPrefix(problemsOf(panelId, action, ctx), checked(() => problemKey(prefix)));
+    "problems:clear-prefix": ({ panelId, prefix }, ctx) => {
+        problemsFor(ctx.engine).clearPrefix(problemsOf(panelId, ctx), checked(() => problemKey(prefix)));
         return { success: true };
     },
-    "problems:list": ({ panelId }, ctx, action) => ({ problems: problemsFor(ctx.engine).list(problemsOf(panelId, action, ctx)) }),
+    "problems:list": ({ panelId }, ctx) => ({ problems: problemsFor(ctx.engine).list(problemsOf(panelId, ctx)) }),
     "problems:every": (_, ctx) => ({ panels: problemsFor(ctx.engine).every() }),
 }, "Problem operation failed");

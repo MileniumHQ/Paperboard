@@ -10,14 +10,12 @@ import {
     supervisorEndpointName,
     type InputEncoding,
 } from "../workloads/supervisor";
-import { readStateFileSync, writeJsonAtomicSync, LimitError } from "../core/storage";
+import { readStateFileSync, writeJsonAtomicSync } from "../core/storage";
 import { getSocketsDir } from "../core/paths";
 import { logger } from "../core/logger";
 import { stopMountHolder } from "../workloads/supervisorLaunch";
 import { spawnSupervisedClient } from "./supervisor";
 import { defaultTerminalShell, requireOfferedShell, shellLaunch, type ShellCommand } from "../workloads/shellIntegration";
-import { RpcError } from "../rpc/errors";
-import { ErrorCode } from "../core/protocol";
 import { requirePanelId } from "@mileniumhq/paperapi/panelIdentity";
 import type { MonitorLifecycle } from "@mileniumhq/paperapi/monitorProtocol";
 
@@ -145,16 +143,11 @@ export class WorkloadRegistry {
     // subscribed to before it started, streams to everyone subscribed, until
     // the socket closes.
     private streamSubscriptions = new Map<string, Map<object, StreamListeners>>();
-    private streamSubscriptionCount = 0;
     // what each live client currently has wired, so a replacement can be undone
     private wiredStreams = new WeakMap<object, Map<object, StreamListeners>>();
 
     private subscribeStreams(id: string, subscriber: object, listeners: StreamListeners): void {
         let bySubscriber = this.streamSubscriptions.get(id);
-        if (!bySubscriber?.has(subscriber)) {
-            if (this.streamSubscriptionCount >= 10_000) throw new LimitError("Too many stream subscriptions");
-            this.streamSubscriptionCount++;
-        }
         if (!bySubscriber) {
             bySubscriber = new Map();
             this.streamSubscriptions.set(id, bySubscriber);
@@ -192,7 +185,6 @@ export class WorkloadRegistry {
     public detachStreams(subscriber: object): void {
         for (const [id, bySubscriber] of [...this.streamSubscriptions]) {
             if (!bySubscriber.delete(subscriber)) continue;
-            this.streamSubscriptionCount--;
             if (bySubscriber.size === 0) this.streamSubscriptions.delete(id);
             const client = this.clients.get(id);
             if (client) this.wireStreams(id, client);
@@ -200,68 +192,25 @@ export class WorkloadRegistry {
     }
 
     // ownership ledger: supervised id → creating panel claim (null =
-    // master/host-created or pre-ledger). One entry per live client id,
-    // deleted with the client — bounded by the client map itself. The RPC
-    // layer records the socket claim on create and refuses mismatches
-    // (rpc/ownership.ts).
+    // master/host-created or pre-ledger), used for uninstall cleanup,
+    // update holds, and resource-usage attribution.
     private clientOwners = new Map<string, string | null>();
 
     public setClientOwner(id: string, owner: string | null): void {
         if (typeof id === "string" && id) {
-            if (!this.clientOwners.has(id) && this.clientOwners.size >= 10_000) throw new LimitError("Process ownership ledger is full");
             this.clientOwners.set(id, owner ?? null);
             writeJsonAtomicSync(path.join(this.localDir, "process-owners.json"), Object.fromEntries(this.clientOwners), { mode: 0o600 });
         }
     }
 
-    // A reservation exists before start exposes a client. The bounded set
-    // excludes overlapping starts (including host starts) so one failure
-    // cannot restore the ledger over a newer claim. Both outcomes release it.
-    private startingClients = new Set<string>();
-
-    public reserveClientOwner(id: string, owner: string | null): { commit(): void; undo(): void } {
-        if (this.startingClients.has(id)) throw new RpcError(ErrorCode.CONFLICT, `Process ${id} is already starting`);
-        if (this.startingClients.size >= 10_000) throw new LimitError("Too many starting workloads");
-        const had = this.clientOwners.has(id);
-        const previous = this.clientOwners.get(id) ?? null;
-        try {
-            this.setClientOwner(id, owner);
-        } catch (err) {
-            // Atomic persistence failed; do not leave an in-memory claim for
-            // a start that was never attempted.
-            if (had) this.clientOwners.set(id, previous);
-            else this.clientOwners.delete(id);
-            throw err;
-        }
-        this.startingClients.add(id);
-        return {
-            commit: () => {
-                this.startingClients.delete(id);
-                // An immediate exit may already have removed the workload.
-                if (!this.clients.has(id)) this.forgetClientOwner(id);
-            },
-            undo: () => {
-                this.startingClients.delete(id);
-                if (had) this.setClientOwner(id, previous);
-                else this.forgetClientOwner(id);
-            },
-        };
-    }
-
-    // drops a finished workload's ledger entry, on disk too: an entry left
-    // in process-owners.json would outlive the workload across a restart.
-    // A failed write keeps the stale entry, which only over-claims (refuses
-    // other panels that id) — it never grants anything — so it is logged
-    // rather than thrown into the exit path that called this.
+    // drops a finished workload's ledger entry on disk too so it does not
+    // outlive the workload across a restart.
     private forgetClientOwner(id: string): void {
-        // Startup still owns this id even if its child exits immediately.
-        // commit/undo releases the reservation after start is observed.
-        if (this.startingClients.has(id)) return;
         if (!this.clientOwners.delete(id)) return;
         try {
             writeJsonAtomicSync(path.join(this.localDir, "process-owners.json"), Object.fromEntries(this.clientOwners), { mode: 0o600 });
         } catch (err) {
-            logger.error(`[engine] could not persist the end of ${id}'s ownership; the stale entry over-claims until the next write:`, err);
+            logger.error(`[engine] could not persist the end of ${id}'s ownership:`, err);
         }
     }
 
@@ -347,7 +296,7 @@ export class WorkloadRegistry {
     // Terminal management
     public createTerminal(
         id: string,
-        options: { cols?: number; rows?: number; cwd?: string; env?: Record<string, string>; shell?: string },
+        options: { cols?: number; rows?: number; cwd?: string; env?: Record<string, string>; shell?: string; owner?: string | null },
         streams: TerminalStreams,
         // the socket that receives the streams (see subscribeStreams); without
         // one, the listeners belong to this shell alone
@@ -358,11 +307,11 @@ export class WorkloadRegistry {
 
     private async spawnTerminal(
         id: string,
-        options: { cols?: number; rows?: number; cwd?: string; env?: Record<string, string>; shell?: string },
+        options: { cols?: number; rows?: number; cwd?: string; env?: Record<string, string>; shell?: string; owner?: string | null },
         streams: TerminalStreams,
         subscriber?: object,
     ): Promise<void> {
-        const { cols = 80, rows = 24, cwd, env } = options;
+        const { cols = 80, rows = 24, cwd, env, owner = null } = options;
         const { data: onData, exit: onExit } = streams;
         // a chosen shell must be one this computer offers; otherwise the
         // platform's own, never $SHELL as a GUI app inherited it
@@ -397,22 +346,23 @@ export class WorkloadRegistry {
                     // started first, and nothing of it is kept
                     if (!announced) {
                         announced = true;
-                        this.announceWorkload(id, "started");
+                        this.announceWorkload(id, "started", undefined, owner);
                     }
                     exited = true;
-                    this.workloadEnded(id, code);
+                    this.workloadEnded(id, code, owner);
                     if (!subscriber) onExit?.(code);
                 },
                 attach: (client) => this.wireStreams(id, client),
             },
         );
         if (!exited) {
+            this.setClientOwner(id, owner);
             this.clientCommands.set(id, shell);
             this.rememberWorkload(id, Date.now(), false);
         }
         if (!announced) {
             announced = true;
-            this.announceWorkload(id, "started");
+            this.announceWorkload(id, "started", undefined, owner);
         }
     }
 
@@ -471,7 +421,7 @@ export class WorkloadRegistry {
     public startProcess(
         id: string, command: string, args: string[], cwd: string | undefined, env: Record<string, string> | undefined,
         subscriber: object, streams: ProcessStreams,
-        options: { stdin?: boolean; inputEncoding?: InputEncoding; consoleInput?: boolean; important?: boolean } = {},
+        options: { stdin?: boolean; inputEncoding?: InputEncoding; consoleInput?: boolean; important?: boolean; owner?: string | null } = {},
     ): Promise<void> {
         return this.trackStart(id, this.spawnProcess(id, command, args, cwd, env, subscriber, streams, options));
     }
@@ -479,11 +429,12 @@ export class WorkloadRegistry {
     private async spawnProcess(
         id: string, command: string, args: string[], cwd: string | undefined, env: Record<string, string> | undefined,
         subscriber: object, streams: ProcessStreams,
-        options: { stdin?: boolean; inputEncoding?: InputEncoding; consoleInput?: boolean; important?: boolean },
+        options: { stdin?: boolean; inputEncoding?: InputEncoding; consoleInput?: boolean; important?: boolean; owner?: string | null },
     ): Promise<void> {
         if (!id || typeof id !== "string") {
             throw new Error("process id is required");
         }
+        const owner = options.owner ?? null;
         await this.runtime.beforeStart(id, command);
         const resolvedCwd = this.resolveSpawnCwd(cwd);
         this.subscribeStreams(id, subscriber, { ...streams });
@@ -515,15 +466,16 @@ export class WorkloadRegistry {
                         // still started first, and nothing of it is kept
                         if (!announced) {
                             announced = true;
-                            this.announceWorkload(id, "started");
+                            this.announceWorkload(id, "started", undefined, owner);
                         }
                         exited = true;
-                        this.workloadEnded(id, exitCode);
+                        this.workloadEnded(id, exitCode, owner);
                     },
                     attach: (client) => this.wireStreams(id, client),
                 },
             );
         if (!exited) {
+            this.setClientOwner(id, owner);
             this.clientCommands.set(id, command);
             if (inputless) this.inputless.add(id);
             else this.inputless.delete(id);
@@ -531,7 +483,7 @@ export class WorkloadRegistry {
         }
         if (!announced) {
             announced = true;
-            this.announceWorkload(id, "started");
+            this.announceWorkload(id, "started", undefined, owner);
         }
     }
 
@@ -659,8 +611,8 @@ export class WorkloadRegistry {
     }
 
     // a workload is gone: its runtime may now be free to update
-    private workloadEnded(id: string, code: number | null): void {
-        this.announceWorkload(id, "exited", code);
+    private workloadEnded(id: string, code: number | null, owner?: string | null): void {
+        this.announceWorkload(id, "exited", code, owner);
         this.clientCommands.delete(id);
         this.inputless.delete(id);
         this.clientStarts.delete(id);
@@ -711,9 +663,9 @@ export class WorkloadRegistry {
         return () => this.lifecycleListeners.delete(listener);
     }
 
-    private announceWorkload(id: string, state: "started" | "exited", code?: number | null): void {
+    private announceWorkload(id: string, state: "started" | "exited", code?: number | null, owner?: string | null): void {
         if (this.lifecycleListeners.size === 0) return;
-        const panel = this.clientOwner(id);
+        const panel = owner !== undefined ? owner : this.clientOwner(id);
         for (const listener of this.lifecycleListeners) {
             try {
                 listener({ type: "workload", id, panel, state, ...(state === "exited" ? { code: code ?? null } : {}) });

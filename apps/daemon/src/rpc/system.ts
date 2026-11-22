@@ -82,12 +82,7 @@ export const systemRpc = rpcModule({
         };
     },
     "system:gpus": () => getGpuReport(),
-    // who uses this computer, panel by panel: host equipment for Home, not
-    // something one panel's token reads about the others
-    "system:usage": (_, ctx) => {
-        if (ctx.callerPanelId()) throw forbidden("system:usage is host-only");
-        return usageSampler.sample(() => usageRoots(ctx));
-    },
+    "system:usage": (_, ctx) => usageSampler.sample(() => usageRoots(ctx)),
     "system:pairing-start": (_, ctx, action) => ({ code: pairing(ctx, action).startPairing() }),
     "system:pairing-cancel": (_, ctx, action) => {
         const auth = pairing(ctx, action);

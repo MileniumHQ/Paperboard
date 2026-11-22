@@ -3,7 +3,7 @@
 // installed release until the workloads running from it have stopped
 import path from "path";
 import fs from "fs";
-import { sanitizeId, writeJsonAtomicSync, LimitError } from "../core/storage";
+import { sanitizeId, writeJsonAtomicSync } from "../core/storage";
 import { ProgressCallback, streamToFileWithProgress } from "../packages/download";
 import { logger } from "../core/logger";
 import { applyPackageRecipe, extractPackageArchive, findBinDir, packageArchiveSuffix, parsePackageLayout, RECIPE_SUFFIX } from "./archives";
@@ -39,8 +39,6 @@ export interface PackageInstallOutcome {
     path: string;
     waiting?: PackageUpdateWait;
 }
-
-const MAX_STAGED_PACKAGES = 64;
 
 // a registry release for this platform whose checksum, signature and
 // version order have been checked
@@ -141,7 +139,7 @@ export class PackageManager implements WorkloadRuntime {
         }
         for (const entry of entries) {
             const match = /^\.staged-(.+)\.json$/.exec(entry);
-            if (!match || this.stagedPackages.size >= MAX_STAGED_PACKAGES) continue;
+            if (!match) continue;
             try {
                 const record = JSON.parse(fs.readFileSync(path.join(this.packagesDir, entry), "utf8"));
                 const name = match[1]!;
@@ -397,9 +395,6 @@ export class PackageManager implements WorkloadRuntime {
 
     private async stagePackage(release: StagedPackage, srcDir: string): Promise<void> {
         const name = release.name;
-        if (!this.stagedPackages.has(name) && this.stagedPackages.size >= MAX_STAGED_PACKAGES) {
-            throw new LimitError(`Too many staged package updates (max ${MAX_STAGED_PACKAGES})`);
-        }
         // the record goes first and comes back last, so a record on disk
         // always describes the bytes beside it
         this.stagedPackages.delete(name);
@@ -488,7 +483,6 @@ export class PackageManager implements WorkloadRuntime {
     ): Promise<PackageInstallOutcome> {
         const key = `package:${sanitizeIdOrThrow(packageName, "package")}`;
         if (this.operations.has(key)) throw new Error(`An operation on ${packageName} is already running`);
-        if (this.operations.size >= 8) throw new LimitError("Too many concurrent installs");
         this.operations.add(key);
         try { return await this.installPackageRelease(packageName, onProgress, expectedSha256, options); }
         finally { this.operations.delete(key); }

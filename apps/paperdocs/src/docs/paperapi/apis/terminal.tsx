@@ -81,7 +81,7 @@ type StreamSubscription = (() => void) & { attached: Promise<boolean> };`}
                     </tr>
                     <tr>
                         <td><PaperCode>onData</PaperCode></td>
-                        <td>Subscribes to the output, and attaches the connection to a shell that was already running. Each subscription is the function that unsubscribes. Its <PaperCode>attached</PaperCode> resolves <PaperCode>true</PaperCode> once the connection is attached, <PaperCode>false</PaperCode> when no shell has that id yet, and rejects with the daemon's reason when the attach is refused, such as another panel's id.</td>
+                        <td>Subscribes to the output, and attaches the connection to a shell that was already running. Each subscription is the function that unsubscribes. Its <PaperCode>attached</PaperCode> resolves <PaperCode>true</PaperCode> once the connection is attached, <PaperCode>false</PaperCode> when no shell has that id yet, and rejects with the daemon's reason when the attach fails.</td>
                     </tr>
                     <tr>
                         <td><PaperCode>onExit</PaperCode></td>
@@ -108,7 +108,7 @@ type StreamSubscription = (() => void) & { attached: Promise<boolean> };`}
                 <li><PaperCode>cwd</PaperCode> defaults to the home folder of the account running the daemon.</li>
                 <li>bash, zsh, fish and PowerShell start with Paperboard's shell integration. It loads the person's own startup files first, as the shell would, then marks each prompt and command (OSC 133) and the folder (OSC 7) in the output. <PaperCode>onCommand</PaperCode> and <PaperCode>onCwd</PaperCode> come from those marks, so another shell (sh, cmd) reports neither. A terminal view ignores the marks, or reads them to jump between prompts.</li>
                 <li>The shell keeps running when the page closes and when the daemon restarts. Open the page again, subscribe with <PaperCode>onData</PaperCode>, and it picks up where it was.</li>
-                <li>The id belongs to the panel that created it, at most 128 characters. Another panel's calls with that id are refused.</li>
+                <li>The id is at most 128 characters and shared across the computer; start it with your panel's name.</li>
                 <li><PaperCode>env</PaperCode> follows the same rules as a process: at most 128 entries, and no credential keys. See <PaperLink href="/docs/paperapi/process/#environment">Environment</PaperLink>.</li>
                 <li>A terminal runs whatever the person types with the daemon account's rights. Show it only to the person who owns the computer.</li>
             </PaperTextList>
@@ -116,7 +116,7 @@ type StreamSubscription = (() => void) & { attached: Promise<boolean> };`}
             <PaperText preset="subheader" as="h2" id="errors">Errors</PaperText>
             <PaperText preset="body" as="p">
                 <PaperCode>create</PaperCode> and <PaperCode>destroy</PaperCode> reject with the daemon's reason, such as <PaperCode>Process &lt;id&gt; is already running</PaperCode> for a second <PaperCode>create</PaperCode>, <PaperCode>spawn cwd does not exist: &lt;path&gt;</PaperCode>, or a refused credential key in <PaperCode>env</PaperCode>.{" "}
-                <PaperCode>write</PaperCode> rejects with <PaperCode>Terminal "&lt;id&gt;" is not running</PaperCode>. <PaperCode>write</PaperCode>, <PaperCode>resize</PaperCode> and <PaperCode>exists</PaperCode> reject with <PaperCode>"&lt;id&gt;" belongs to another panel</PaperCode> (<PaperCode>FORBIDDEN</PaperCode>) for another panel's id.
+                <PaperCode>write</PaperCode> rejects with <PaperCode>Terminal "&lt;id&gt;" is not running</PaperCode>.
             </PaperText>
         </PaperFlex>
     );

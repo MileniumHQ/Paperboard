@@ -107,7 +107,6 @@ interface PanelProblem {
                     <tr><td><PaperCode>A problem needs a &lt;title|message|key&gt;: some text</PaperCode></td><td>No code</td><td>A missing or blank value. Thrown by <PaperCode>report</PaperCode> or <PaperCode>clear</PaperCode> before anything is sent.</td></tr>
                     <tr><td><PaperCode>A problem's key is at most &lt;n&gt; characters, not &lt;length&gt;</PaperCode></td><td>No code</td><td>A key longer than 200 characters. Thrown before anything is sent.</td></tr>
                     <tr><td><PaperCode>Invalid panel id: ...</PaperCode></td><td>No code</td><td>A <PaperCode>panelId</PaperCode> that isn't one. Thrown before anything is sent.</td></tr>
-                    <tr><td><PaperCode>Cross-panel access refused: credential is scoped to "&lt;panel&gt;"</PaperCode></td><td><PaperCode>FORBIDDEN</PaperCode></td><td>Another panel's id. <PaperCode>list</PaperCode> rejects with it; a <PaperCode>report</PaperCode> or <PaperCode>clear</PaperCode> refused this way is logged as <PaperCode>[paperapi] The Paperboard Server refused a problem</PaperCode> and dropped.</td></tr>
                 </tbody>
             </PaperTable>
         </PaperFlex>

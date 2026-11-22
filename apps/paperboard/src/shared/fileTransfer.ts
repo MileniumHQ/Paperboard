@@ -50,9 +50,6 @@ export class PanelFileTransferError extends Error {
 }
 
 export const PANEL_FILE_PATH_MAX = 1024;
-/** a picked folder or selection larger than this is refused before anything is copied */
-export const PANEL_IMPORT_MAX_FILES = 5000;
-export const PANEL_IMPORT_MAX_BYTES = 2 * 1024 * 1024 * 1024;
 
 /** A name from the user's disk that may become one path segment in a panel's storage. */
 export function isImportableName(name: string): boolean {
