@@ -108,6 +108,8 @@ export class Viewer {
         this.stopClip();
         this.stage.show(model);
         this.shadowStale = true;
+        // a new model starts at home: a resize frames it again until it is moved
+        this.moved = false;
         this.goHome();
 
         const clip = model.animations[0];
