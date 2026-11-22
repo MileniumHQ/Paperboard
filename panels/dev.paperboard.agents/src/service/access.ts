@@ -606,9 +606,12 @@ export class Access {
         return this.shells.open(task, folder);
     }
 
-    /** a command as administrator asks the same say-so a shell does, then the user's password for it */
+    /**
+     * A command as administrator asks the same say-so a shell does, then the user's password for it. Like a shell
+     * opened this time, it stays possible for the task: while one of the agent's shells is open.
+     */
     private requestSudo(args: Record<string, unknown>, mode: TurnMode): ToolResult {
-        if (!this.shellAllowed(mode)) return fault("Running commands isn't allowed. Ask for a shell with request_access first.");
+        if (!this.shellAllowed(mode) && (mode.fromFlow || !this.shells.view().length)) return fault("Running commands isn't allowed. Ask for a shell with request_access first.");
         const folder = this.folderOf(args.folder);
         if (typeof folder !== "string") return folder;
         return this.sudo.request(args.command, folder, args.reason);

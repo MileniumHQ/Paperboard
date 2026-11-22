@@ -184,7 +184,7 @@ class Shell {
 }
 
 /** text cut to OUTPUT_CHARS: its start and its end, which says how it finished */
-function cutText(text: string): string {
+export function cutText(text: string): string {
     if (text.length <= OUTPUT_CHARS) return text;
     const head = Math.floor(OUTPUT_CHARS / 4);
     const tail = OUTPUT_CHARS - head;

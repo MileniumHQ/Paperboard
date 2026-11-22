@@ -4,6 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import type { AccessEntry, AccessView, SudoEntry } from "../src/contract";
 import { Access } from "../src/service/access";
+import { systemSudo } from "../src/service/sudo";
 import type { ToolResult } from "../src/service/computerMcp";
 import { waitFor } from "testkit/wait";
 import { ptyTerminals } from "./support/pty";
@@ -17,8 +18,9 @@ const PASSWORD = "hunter2 is my password";
 
 // sudo as far as these tests need it, the way it reads `sudo -S -k -p <prompt> -- <command>`: it asks on stderr,
 // three times at most, reads each password as a line of stdin, and runs the command with the rest of stdin.
-// It doesn't ask when the computer lets the user run it without a password. The real one is never run.
-const fakeSudo = (nopasswd: string) => `#!/bin/bash
+// It doesn't ask when the computer lets the user run it without a password, and refuses a user its policy doesn't
+// allow. The real one is never run.
+const fakeSudo = (root: string) => `#!/bin/bash
 prompt="[sudo] password: "
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -28,7 +30,7 @@ while [ $# -gt 0 ]; do
     *) break ;;
   esac
 done
-if [ ! -e "${nopasswd}" ]; then
+if [ ! -e "${root}/nopasswd" ]; then
   ok=0
   for i in 1 2 3; do
     printf '%s' "$prompt" >&2
@@ -38,6 +40,7 @@ if [ ! -e "${nopasswd}" ]; then
   done
   if [ $ok = 0 ]; then echo "sudo: 3 incorrect password attempts" >&2; exit 1; fi
 fi
+if [ -e "${root}/refuse" ]; then echo "sudo: you are not allowed to run this command" >&2; exit 1; fi
 exec "$@"
 `;
 
@@ -50,7 +53,7 @@ async function setup() {
     fs.mkdirSync(path.join(project, "src"), { recursive: true });
     fs.mkdirSync(bin);
     const sudoBinary = path.join(root, "sudo");
-    fs.writeFileSync(sudoBinary, fakeSudo(path.join(root, "nopasswd")), { mode: 0o755 });
+    fs.writeFileSync(sudoBinary, fakeSudo(root), { mode: 0o755 });
     const terminals = await ptyTerminals({ shell: "/bin/bash", env: { PATH: `${bin}:/usr/bin:/bin`, HOME: home, LANG: "C.UTF-8" } });
     const posted: (AccessEntry | SudoEntry)[] = [];
     const notices: string[] = [];
@@ -202,6 +205,32 @@ describe("the agent's shells on the user's computer", () => {
         expect(await s.sudoSettled()).toMatchObject({ status: "done", exitCode: 0 });
         expect(s.notices.at(-1)).toEndWith("exited with 0.\n\nran");
         expect(JSON.stringify(s.notices)).not.toContain(PASSWORD);
+
+        // sudo refusing isn't the command failing: it never ran
+        fs.writeFileSync(path.join(s.root, "refuse"), "");
+        await s.call("request_sudo", { command: "echo ran", folder: s.project, reason: "Check sudo." });
+        await s.access.sudo.answer(s.sudoCard().id, PASSWORD);
+        expect(await s.sudoSettled()).toMatchObject({ status: "failed", error: "sudo refused: you are not allowed to run this command" });
+        expect(s.notices.at(-1)).toContain("It didn't run.");
+    }, 30_000);
+
+    test("the command on a sudo card reads as it runs, and a task's shell keeps sudo within reach past the turn", async () => {
+        const s = await setup();
+        await s.allowShell();
+        // what the card shows in a different order, or not at all, can't be asked for
+        for (const hidden of ["pacman -S cowsay \u202E; rm -rf ~", "pacman -S cow\u200Bsay", "pacman\t-S cowsay"]) {
+            const r = await s.call("request_sudo", { command: hidden, folder: s.project, reason: "Install cowsay." });
+            expect(r).toMatchObject({ isError: true });
+            expect(r.text).toContain("visible characters");
+        }
+        expect(s.posted.filter((e) => e.kind === "sudo")).toEqual([]);
+
+        // allowed this time: after the turn, sudo is still there while the task's shell is open, and not after
+        await s.call("user_shell_open", { task: "Install cowsay", folder: s.project });
+        s.access.turnEnded();
+        expect((await s.call("request_sudo", { command: "pacman -S --noconfirm cowsay", folder: s.project, reason: "Install cowsay." })).isError).toBeFalsy();
+        await s.call("user_shell_close", { shell: 1 });
+        expect((await s.call("request_sudo", { command: "pacman -S --noconfirm cowsay", folder: s.project, reason: "Install cowsay." })).text).toContain("isn't allowed");
     }, 30_000);
 
     test("taking shells back closes them, and an automation drives shells only when they're allowed for good", async () => {
@@ -225,6 +254,15 @@ describe("the agent's shells on the user's computer", () => {
         expect(s.terminals.running()).toEqual([]);
         expect((await s.call("user_shell_run", { shell: 1, command: "echo hi" })).text).toContain("no shell is open");
     }, 30_000);
+
+    test("only a sudo owned by root and setuid is given a password", () => {
+        const root = fs.mkdtempSync(path.join(os.tmpdir(), "pb-sudo-"));
+        cleanups.push(() => fs.rmSync(root, { recursive: true, force: true }));
+        const planted = path.join(root, "sudo");
+        fs.writeFileSync(planted, "#!/bin/sh\n", { mode: 0o4755 });
+        expect(() => systemSudo(planted)).toThrow("isn't the system's own sudo");
+        expect(() => systemSudo(path.join(root, "none"))).toThrow("sudo isn't installed");
+    });
 
     test("shells close with the conversation, by the user, and when they exit", async () => {
         const s = await setup();

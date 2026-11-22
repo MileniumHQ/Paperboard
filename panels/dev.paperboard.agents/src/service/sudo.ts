@@ -20,6 +20,7 @@ import { LIMITS, type SudoEntry } from "../contract";
 import type { ToolResult } from "./computerMcp";
 import { OUTPUT_CHARS } from "./shell";
 import { fault } from "./toolsets";
+import { cutText } from "./userShells";
 
 const L = LIMITS.access;
 const SYSTEM_SUDO = "/usr/bin/sudo";
@@ -47,18 +48,18 @@ interface Request {
 }
 
 /** The system's sudo, if it's root's own: anything else at that path could keep the password. */
-function systemSudo(): string {
+export function systemSudo(file = SYSTEM_SUDO): string {
     let stat: fs.Stats;
     try {
-        stat = fs.statSync(SYSTEM_SUDO);
+        stat = fs.statSync(file);
     } catch (e) {
-        throw new Error((e as NodeJS.ErrnoException).code === "ENOENT" ? `sudo isn't installed (there's no ${SYSTEM_SUDO})` : `${SYSTEM_SUDO} can't be looked at: ${errorMessage(e)}`);
+        throw new Error((e as NodeJS.ErrnoException).code === "ENOENT" ? `sudo isn't installed (there's no ${file})` : `${file} can't be looked at: ${errorMessage(e)}`);
     }
-    if (!stat.isFile() || stat.uid !== 0 || (stat.mode & 0o4000) === 0) throw new Error(`${SYSTEM_SUDO} isn't the system's own sudo (a file owned by root, setuid)`);
-    return SYSTEM_SUDO;
+    if (!stat.isFile() || stat.uid !== 0 || (stat.mode & 0o4000) === 0) throw new Error(`${file} isn't the system's own sudo (a file owned by root, setuid)`);
+    return file;
 }
 
-/** A command's output, kept to its start and its end, which says how it finished. */
+/** A command's output as it streams, kept to its start and its end, which says how it finished. */
 class Output {
     private head = "";
     private tail = "";
@@ -78,10 +79,7 @@ class Output {
     }
 
     text(): string {
-        const all = this.dropped ? `${this.head}\n[… ${this.dropped} characters cut …]\n${this.tail}` : this.head + this.tail;
-        if (all.length <= OUTPUT_CHARS) return all.trim();
-        const head = Math.floor(OUTPUT_CHARS / 4);
-        return `${all.slice(0, head)}\n[… ${all.length - OUTPUT_CHARS} characters cut …]\n${all.slice(-(OUTPUT_CHARS - head))}`.trim();
+        return cutText(this.dropped ? `${this.head}\n[… ${this.dropped} characters cut …]\n${this.tail}` : this.head + this.tail).trim();
     }
 }
 
@@ -96,7 +94,9 @@ export class Sudo {
         if ((this.deps.platform ?? process.platform) === "win32") return fault("Windows has no sudo: an administrator's command needs an administrator's terminal, which the user opens themselves");
         if (typeof command !== "string" || !command.trim()) return fault("give the command to run as administrator");
         if (command.length > L.commandChars) return fault(`a command is up to ${L.commandChars} characters; put a longer script in a file and run that`);
-        if (/[\r\n\0]/.test(command)) return fault("a command is one line: chain steps with && or ;");
+        // the card is the user's only look at what runs as root: nothing in it may show differently from how it runs
+        // (bidi controls, zero-width characters), and it's one line
+        if (/[\p{Cc}\p{Cf}]/u.test(command)) return fault("a command is one line of visible characters, with no tabs or control or formatting characters: chain steps with && or ;");
         const why = typeof reason === "string" ? reason.trim() : "";
         if (!why || why.length > L.reasonChars) return fault(`give a reason of up to ${L.reasonChars} characters: what the command does, and why`);
         if (this.current?.entry.status === "running") return fault(`\`${this.current.entry.command}\` is still running as administrator; its result starts your next turn`);
@@ -144,6 +144,8 @@ export class Sudo {
         let refused = false;
         let stdinOpen = true;
         let overtime = false;
+        /** stdout is the command's: once it writes, sudo has let it run */
+        let ran = false;
         const closeInput = () => {
             if (!stdinOpen) return;
             stdinOpen = false;
@@ -180,7 +182,8 @@ export class Sudo {
             if (out.text().includes(prompt)) refused = true;
         });
         child.stdout.on("data", (d: string) => {
-            // stdout is the command's: sudo let it run without asking
+            // sudo let it run, without asking if it hadn't yet
+            ran = true;
             closeInput();
             out.add(d);
         });
@@ -217,6 +220,13 @@ export class Sudo {
             if (overtime) {
                 this.end(r, { status: "failed", error: `it was stopped after ${L.sudoRunMinutes} minutes` });
                 this.deps.tell(`\`${r.entry.command}\` ran as administrator for ${L.sudoRunMinutes} minutes, the most it can, and was stopped.${output ? `\n\n${output}` : ""}`);
+                return;
+            }
+            // sudo refusing (not in sudoers, a policy, PAM giving up) says so first, before the command could write anything
+            if (!ran && code !== 0 && output.startsWith("sudo: ")) {
+                const said = output.split("\n")[0]!.slice("sudo: ".length);
+                this.end(r, { status: "failed", error: `sudo refused: ${said}` });
+                this.deps.tell(`sudo refused to run \`${r.entry.command}\`: ${said}. It didn't run.`);
                 return;
             }
             const how = code === null ? `was stopped (${signal})` : `exited with ${code}`;
