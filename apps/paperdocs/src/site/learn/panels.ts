@@ -63,7 +63,7 @@ export const LEARN_PANELS: LearnPanel[] = [
             {
                 title: "It asks before it touches your computer",
                 description:
-                    "To open a folder or a shell on your computer, it asks first. Allow it once, always, or decline. For sudo, you type your password on a card, and it never sees it. Close its shells and change your mind on the Access page.",
+                    "To open a folder or a shell on your computer, it asks first. Allow it once, always, or decline. A command that needs sudo shows on a card, exactly as it runs: you type your password for it, and it never sees it. Close its shells and change your mind on the Access page.",
                 image: "/screens/agents-3.png",
                 alt: "The agent asking permission to remove files in a folder, with Allow this time, Always allow and Decline",
             },
