@@ -233,7 +233,9 @@ describe("Steam players' pictures in the Players tab", () => {
             expect(page.exceptions).toEqual([]);
 
             // another page of the same server is no new ask of Steam
-            await page.evaluate(`location.reload()`);
+            // loaded again and waited for: a bare location.reload() let the next wait
+            // match the old page, and a click land while the new one had no body
+            await page.navigate(await page.evaluate<string>("location.href"));
             await page.waitFor(`document.querySelector('input[name=serverMenu][value="players"]')`, "the server menu");
             await page.click('input[name=serverMenu][value="players"]');
             await page.waitFor(`${avatarOf("Alice")}?.src`, "Alice's picture again");
