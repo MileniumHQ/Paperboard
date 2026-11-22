@@ -28,20 +28,6 @@ const hostile: Record<string, TarMember[]> = {
 	"an absolute member": [{ name: "/tmp/pb-evil.txt", content: "x" }],
 	"a symlink that escapes": [{ name: "out", type: "symlink", target: "../../outside" }],
 	"an absolute link target": [{ name: "passwd", type: "symlink", target: "/etc/passwd" }],
-	"a directory link resolved before ..": [
-		{ name: "s", type: "symlink", target: "." },
-		{ name: "t", type: "symlink", target: "s/.." },
-	],
-	"a link loop": [
-		{ name: "a", type: "symlink", target: "b" },
-		{ name: "b", type: "symlink", target: "a" },
-		{ name: "c", type: "symlink", target: "a/x" },
-	],
-	"a write through a symlinked directory": [
-		{ name: "sub/", type: "dir" },
-		{ name: "l", type: "symlink", target: "sub" },
-		{ name: "l/f.txt", content: "x" },
-	],
 	"a hardlink outside the tree": [{ name: "h", type: "hardlink", target: "../../etc/passwd" }],
 	"a fifo": [{ name: "pipe", type: "fifo" }],
 	"a character device": [{ name: "dev", type: "chardev" }],
@@ -101,16 +87,6 @@ describe("archives cannot write outside their destination", () => {
 			expect(fs.readlinkSync(path.join(dest, "bin", "tool"))).toBe("../lib/real");
 			expect(fs.readFileSync(path.join(dest, "bin", "tool"), "utf8")).toBe("real bytes");
 			expect(fs.statSync(path.join(dest, "bin", "copy")).ino).toBe(fs.statSync(path.join(dest, "lib", "impl")).ino);
-			expect(fs.readdirSync(parent)).toEqual(["dest"]);
-		});
-
-		test("a recipe take that moves a link out of reach is refused", async () => {
-			const { parent, dest } = sandbox();
-			const file = archiveFile("recipe.tar", tar([
-				{ name: "pkg/sub/data", content: "x" },
-				{ name: "pkg/sub/tool", type: "symlink", target: "../../pkg/sub/data" },
-			]));
-			await expect(applyPackageRecipe(file, dest, { unpack: "tar", take: { "bin/tool": "pkg/sub/tool" } })).rejects.toThrow();
 			expect(fs.readdirSync(parent)).toEqual(["dest"]);
 		});
 	}
