@@ -15,6 +15,8 @@ export interface PaperPreviewModalProps extends PaperPreviewFile, Omit<JSX.HTMLA
     actions?: JSX.Element;
     /** Called with what went wrong when the file can't be read or drawn; it is also shown in place. */
     onError?: (message: string) => void;
+    /** Called once a closed preview has left the screen: what it showed may go now (a blob: URL revoked). */
+    onExited?: () => void;
 }
 
 /**
@@ -27,7 +29,7 @@ export interface PaperPreviewModalProps extends PaperPreviewFile, Omit<JSX.HTMLA
 export function PaperPreviewModal(props: PaperPreviewModalProps) {
     const [local, file, rest] = splitProps(
         props,
-        ["open", "onClose", "actions", "onError", "class"],
+        ["open", "onClose", "actions", "onError", "onExited", "class"],
         ["src", "name", "type", "kind", "language", "size", "error"],
     );
     // the file as it was while open: a host that clears it as the preview
@@ -56,6 +58,7 @@ export function PaperPreviewModal(props: PaperPreviewModalProps) {
         <ModalLayer
             open={local.open}
             onClose={local.onClose}
+            onExited={() => local.onExited?.()}
             aria-label={shown().name}
             {...rest}
             class={cx(styles.PaperPreviewModal, local.class)}
