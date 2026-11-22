@@ -1,35 +1,42 @@
 import { describe, expect, test } from "bun:test";
-import { createServerId, isServerId, readServersConfig } from "../src/servers";
+import { SERVERS_VERSION, createServerId, isServerId, readServersConfig, type ServersConfig } from "../src/servers";
 
-const LEGACY = { configured: true, software: "paper", version: "1.21.1", install: { software: "paper" }, autoRestart: { daily: "04:00" } };
+const GOOD: ServersConfig = {
+    version: SERVERS_VERSION,
+    serversDirectory: "servers-abcdef012345",
+    servers: [
+        {
+            id: "s-111111111111",
+            name: "Minecraft server",
+            game: "minecraft",
+            directory: "servers-abcdef012345/s-111111111111",
+            createdAt: 1,
+            settings: { configured: true, software: "paper", version: "1.21.1" },
+        },
+    ],
+};
 
-// Stored server list migrates legacy config safely.
 describe("the stored server list", () => {
-    test("a pre-multi-server config migrates once into one Minecraft server owning the old folder, settings kept, input untouched", () => {
-        const input = structuredClone(LEGACY);
-        const migrated = readServersConfig(input);
-        expect(input).toEqual(LEGACY);
-        expect(migrated.servers).toHaveLength(1);
-        const [server] = migrated.servers;
-        expect(server).toMatchObject({ directory: "", game: "minecraft", name: "Minecraft server", settings: LEGACY });
-        expect(migrated.legacyServer).toBe(server!.id);
-        expect(migrated.serversDirectory).toMatch(/^servers-[a-f0-9]{12}$/);
-        // read again as saved: the same, not migrated a second time
-        expect(readServersConfig(structuredClone(migrated))).toEqual(migrated);
+    test("reads empty and valid v2 server lists without mutating input", () => {
+        expect(readServersConfig(null).servers).toEqual([]);
+        expect(readServersConfig({}).servers).toEqual([]);
+        const input = structuredClone(GOOD);
+        expect(readServersConfig(input)).toEqual(GOOD);
+        expect(input).toEqual(GOOD);
     });
 
-    test("damaged lists throw: duplicate ids, a directory outside the servers folder, an unknown version, a dangling legacy reference", () => {
-        const good = readServersConfig(LEGACY);
-        const server = good.servers[0]!;
-        const second = { ...server, id: "s-aaaaaaaaaaaa", directory: `${good.serversDirectory}/s-aaaaaaaaaaaa` };
+    test("damaged lists throw: duplicate ids, a directory outside the servers folder, an unknown version, missing servers field", () => {
+        const server = GOOD.servers[0]!;
+        const second = { ...server, id: "s-aaaaaaaaaaaa", directory: `${GOOD.serversDirectory}/s-aaaaaaaaaaaa` };
         const cases: [string, unknown][] = [
-            ["duplicate ids", { ...good, servers: [server, { ...second, id: server.id }] }],
-            ["a ../ directory", { ...good, servers: [{ ...second, directory: `${good.serversDirectory}/../../etc` }] }],
-            ["a directory of another server", { ...good, servers: [second, { ...second, id: "s-bbbbbbbbbbbb" }] }],
-            ["an unsupported version", { ...good, version: 3 }],
-            ["a damaged servers directory", { ...good, serversDirectory: "../outside" }],
-            ["a dangling legacy reference", { ...good, legacyServer: "s-cccccccccccc" }],
-            ["an unknown game", { ...good, servers: [{ ...second, game: "factorio" }] }],
+            ["missing servers field", { configured: true, software: "paper" }],
+            ["duplicate ids", { ...GOOD, servers: [server, { ...second, id: server.id }] }],
+            ["a ../ directory", { ...GOOD, servers: [{ ...second, directory: `${GOOD.serversDirectory}/../../etc` }] }],
+            ["a directory of another server", { ...GOOD, servers: [second, { ...second, id: "s-bbbbbbbbbbbb" }] }],
+            ["an empty directory", { ...GOOD, servers: [{ ...second, directory: "" }] }],
+            ["an unsupported version", { ...GOOD, version: 3 }],
+            ["a damaged servers directory", { ...GOOD, serversDirectory: "../outside" }],
+            ["an unknown game", { ...GOOD, servers: [{ ...second, game: "factorio" }] }],
             ["an array", []],
         ];
         for (const [what, saved] of cases) {

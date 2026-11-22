@@ -1,14 +1,10 @@
-// What the service keeps between runs: the bot list in the panel config,
-// each bot's token in the vault, and the one bot from before several bots,
-// moved into the list once.
+// What the service keeps between runs: the bot list in the panel config and
+// each bot's token in the vault.
 import { config, secretsApi, errorMessage, SerialQueue } from "@mileniumhq/paperapi";
-import { extractApplicationIdFromToken, type SlashCommandDefinition } from "./types";
 import {
     BOTS_VERSION,
-    LEGACY_TOKEN_NAME,
     PANEL_ID,
     SETUP_GUIDE_FIELD,
-    createBotId,
     newTokenName,
     readBotsConfig,
     tokenName,
@@ -76,53 +72,13 @@ export async function forgetStrayTokens(): Promise<void> {
     }
 }
 
-// The one bot from before several bots becomes the first of them: its
-// token moves to its own vault name and its commands come along.
-async function migrateLegacyBot(
-    saved: Record<string, unknown>,
-    legacy: { applicationId: string; commands: SlashCommandDefinition[] },
-    create: CreateEntry,
-): Promise<void> {
-    const old = await secretsApi.get(LEGACY_TOKEN_NAME, PANEL_ID);
-    const token = old.found && old.value ? old.value : null;
-    const id = createBotId();
-    if (token) await secretsApi.set(tokenName(id), token, PANEL_ID);
-    const { configured: _configured, applicationId: _applicationId, commands: _commands, ...extras } = saved;
-    panel.savedExtras = extras;
-    const stored: StoredBot = {
-        id,
-        name: "Discord bot",
-        avatar: "",
-        applicationId: legacy.applicationId || (token ? extractApplicationIdFromToken(token) ?? "" : ""),
-        enabled: true,
-        commands: legacy.commands,
-        createdAt: Date.now(),
-    };
-    bots.set(id, create(stored, Boolean(token)));
-    try {
-        await saveBots();
-    } catch (err) {
-        // the next start moves it again, under a new id: this one's token copy goes
-        bots.delete(id);
-        if (token) await secretsApi.delete(tokenName(id), PANEL_ID).catch(logFailure("forgetting the unsaved moved token failed"));
-        throw err;
-    }
-    if (token) await secretsApi.delete(LEGACY_TOKEN_NAME, PANEL_ID);
-    console.log(`[DiscordService] moved the bot from before several bots into ${id}`);
-}
-
 /** Reads the saved bots into the registry; throws why they can't be read. */
 export async function loadBots(create: CreateEntry): Promise<void> {
     const saved = await config.get<unknown>(PANEL_ID);
     const read = readBotsConfig(saved);
-    if (read.kind === "legacy") {
-        await migrateLegacyBot(saved as Record<string, unknown>, read, create);
-        return;
-    }
-    // legacyBot is a field older versions saved; nothing reads it, so it is dropped
-    const { bots: _bots, version: _version, legacyBot: _legacyBot, ...extras } = (saved ?? {}) as Record<string, unknown>;
+    const { bots: _bots, version: _version, ...extras } = (saved ?? {}) as Record<string, unknown>;
     panel.savedExtras = extras;
-    for (const stored of read.config.bots) bots.set(stored.id, create(stored, false));
+    for (const stored of read.bots) bots.set(stored.id, create(stored, false));
 }
 
 /** The setup guide was finished or skipped: it never shows again. Saved with the bots. */

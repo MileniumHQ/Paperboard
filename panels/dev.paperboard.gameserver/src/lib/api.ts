@@ -34,7 +34,7 @@ export const filesFor = (summary: Accessor<ServerSummary>): typeof rawFiles => s
 
 /** The ports the panel claims, named for the server so two servers never share one. */
 export function portsFor(summary: Accessor<ServerSummary>): typeof rawPorts {
-    const portName = (name: string) => serverPortName(summary().id, summary().directory === "", name);
+    const portName = (name: string) => serverPortName(summary().id, name);
     return {
         claim: (panel, request, scope) =>
             rawPorts.claim(panel, { ...request, name: portName(request.name), label: serverPortLabel(summary().name, request.label) }, scope),

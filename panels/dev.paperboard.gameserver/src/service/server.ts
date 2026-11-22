@@ -43,19 +43,6 @@ type Timer = ReturnType<typeof setTimeout>;
 export class Server {
     /** the saved entry; the panel replaces it when the saved servers change */
     stored: StoredServer;
-    /**
-     * The one server from before there were several (ServersConfig.legacyServer).
-     * It keeps the names it had: its process is the game's bare id ("mc-server"),
-     * its ports the bare names ("java"), its folder the panel's own, and its
-     * backups the panel's original history. They are never migrated: the
-     * daemon and the port registry can't rename a process or a claim, so a
-     * server running through the update that made it legacy (Paperboard's
-     * servers outlive its restarts) could only take new names by stopping,
-     * and a deferred migration would need this same switch until it did.
-     * Its process name is made in processId, its port names in serverPortName
-     * (which the page uses too, knowing the server by its folder).
-     */
-    readonly legacy: boolean;
     readonly definition: GameDefinition;
     /** the server's own part of its game, made for it alone */
     readonly game: GameService;
@@ -105,9 +92,8 @@ export class Server {
         updateTimer: null as Timer | null,
     };
 
-    constructor(stored: StoredServer, host: ServerHost, legacy = false) {
+    constructor(stored: StoredServer, host: ServerHost) {
         this.stored = stored;
-        this.legacy = legacy;
         this.#host = host;
         this.definition = gameFor(stored.game);
         this.files = scopedFiles(fileApi, () => this.stored.directory);
@@ -181,7 +167,7 @@ export class Server {
     }
     /** a process of the server's game as the daemon knows it */
     processId(id: string): string {
-        return this.legacy || !this.game.processIds.includes(id) ? id : `${this.id}-${id}`;
+        return !this.game.processIds.includes(id) ? id : `${this.id}-${id}`;
     }
     /**
      * The port `name` is open on while the server runs: the one its start
@@ -193,7 +179,7 @@ export class Server {
     }
     /** one of the server's ports as the port registry knows it */
     portName(name: string): string {
-        return serverPortName(this.id, this.legacy, name);
+        return serverPortName(this.id, name);
     }
 }
 

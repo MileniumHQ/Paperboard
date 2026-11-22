@@ -11,8 +11,6 @@ export const PANEL_ID = "dev.paperboard.botcreator";
 export const BOTS_VERSION = 2;
 /** more than this is not something one computer should run */
 export const MAX_BOTS = 50;
-/** the one vault token from before several bots; moved to its bot once */
-export const LEGACY_TOKEN_NAME = "bot-token";
 
 export interface StoredBot {
     /** stable, never shown; doubles as the bot's project id in Blocks */
@@ -98,27 +96,16 @@ function readStoredBot(raw: any, index: number): StoredBot {
 }
 
 /**
- * Reads the saved config. Nothing saved is no bots. A config from before
- * several bots (`configured`, `applicationId`, `commands`) comes back as
- * `legacy`, for the service to move into a bot; one written by a newer Bot
+ * Reads the saved config. Nothing saved is no bots; one written by a newer Bot
  * Creator, or that is not a bot list, is refused.
  */
-export function readBotsConfig(saved: unknown):
-    | { kind: "bots"; config: BotsConfig }
-    | { kind: "legacy"; applicationId: string; commands: SlashCommandDefinition[] } {
-    if (saved === null || saved === undefined) return { kind: "bots", config: { version: BOTS_VERSION, bots: [] } };
+export function readBotsConfig(saved: unknown): BotsConfig {
+    if (saved === null || saved === undefined) return { version: BOTS_VERSION, bots: [] };
     if (typeof saved !== "object" || Array.isArray(saved)) throw new Error("the saved bots are damaged");
     const config = saved as Record<string, any>;
     if (config.bots === undefined) {
-        if (config.configured === true) {
-            return {
-                kind: "legacy",
-                applicationId: typeof config.applicationId === "string" ? config.applicationId : "",
-                commands: readCommands(config.commands, "the saved bot"),
-            };
-        }
-        // never set up, or reset before several bots: nothing to run
-        return { kind: "bots", config: { version: BOTS_VERSION, bots: [] } };
+        if (Object.keys(config).length === 0) return { version: BOTS_VERSION, bots: [] };
+        throw new Error("the saved bots are damaged");
     }
     if (typeof config.version === "number" && config.version > BOTS_VERSION) {
         throw new Error(`they were saved by a newer version of Bot Creator (bots version ${config.version}); update Bot Creator to open them`);
@@ -132,11 +119,8 @@ export function readBotsConfig(saved: unknown):
         return bot;
     });
     return {
-        kind: "bots",
-        config: {
-            version: BOTS_VERSION,
-            bots,
-        },
+        version: BOTS_VERSION,
+        bots,
     };
 }
 

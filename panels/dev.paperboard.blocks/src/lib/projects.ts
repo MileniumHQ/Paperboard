@@ -11,8 +11,6 @@ import { errorMessage, isRecord, SerialQueue } from "@mileniumhq/paperapi";
 /** the project index, in the panel's files */
 export const PROJECTS_FILE = "projects.json";
 export const PROJECTS_VERSION = 1;
-/** the one canvas from before projects (the panel's config document) becomes this project */
-export const MIGRATED_PROJECT_NAME = "My flows";
 export const NEW_PROJECT_NAME = "Untitled project";
 export const MAX_PROJECT_NAME = 128;
 /** a project is a canvas a person keeps; more than this is not a workspace */
@@ -135,27 +133,11 @@ export class ProjectStore {
 
     constructor(private readonly storage: ProjectStorage) {}
 
-    /**
-     * Reads every project. Before projects there was one canvas, in the
-     * panel's config document: the first open copies it into a project
-     * named "My flows" and leaves the document as it was, as the backup.
-     */
+    /** Reads every project, creating an empty index when none exists yet. */
     async open(): Promise<void> {
         let metas = readProjectIndex(await this.storage.get(PROJECTS_FILE));
         if (!metas) {
             metas = [];
-            const legacy = await this.storage.get();
-            const isEmpty = legacy === undefined || legacy === null || (isRecord(legacy) && Object.keys(legacy).length === 0);
-            if (!isEmpty) {
-                // a canvas that can't be read is not moved, so it is not lost either: the error stops Blocks here
-                const flows = readFlows(legacy);
-                if (hasBlocks(flows)) {
-                    const now = Date.now();
-                    const meta: ProjectMeta = { id: createProjectId(), name: MIGRATED_PROJECT_NAME, enabled: true, createdAt: now, editedAt: now, preview: null };
-                    await this.storage.set(flows, projectFlowsPath(meta.id));
-                    metas.push(meta);
-                }
-            }
             await this.storage.set({ version: PROJECTS_VERSION, projects: metas }, PROJECTS_FILE);
         }
         for (const meta of metas) {

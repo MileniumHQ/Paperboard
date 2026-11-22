@@ -55,8 +55,8 @@ async function untilProcessGone(procId: string): Promise<void> {
     }
 }
 
-// Run outcome is only the exit the daemon reported, across restarts.
-describe("run outcome is only the exit the daemon reported, across restarts", () => {
+// Run outcome is only the exit the daemon reported.
+describe("run outcome is only the exit the daemon reported", () => {
     test("a run is running until the daemon reports its exit, and only exit 0 is success", async () => {
         const dir = await panelFiles();
         await startService();
@@ -70,8 +70,6 @@ describe("run outcome is only the exit the daemon reported, across restarts", ()
         const running = await stateWhere<any>(PANEL_ID, (s) => runOf(passId)(s)?.state === "running" && runOf(failId)(s)?.state === "running", "both runs to show running");
         expect(runOf(passId)(running)).toEqual({ state: "running", startedAt: started.startedAt });
         expect(describeRun(runOf(passId)(running), Date.now()).tone).toBe("running");
-        // accepted runs are on record, so a restarted service can take them back
-        expect(fileOf(dir).running.map((r) => r.commandId).sort()).toEqual([passId, failId].sort());
         await expect(call.runSavedCommand({ id: passId })).rejects.toThrow('"Pass" is already running');
 
         pass.release();
@@ -81,7 +79,7 @@ describe("run outcome is only the exit the daemon reported, across restarts", ()
         expect(runOf(failId)(done)).toMatchObject({ state: "exited", exitCode: 3 });
         expect(describeRun(runOf(passId)(done), Date.now()).tone).toBe("success");
         expect(describeRun(runOf(failId)(done), Date.now())).toMatchObject({ tone: "danger", value: "Exit 3" });
-        const recorded = await fileWhere(dir, (doc) => doc.running.length === 0 && Boolean(doc.lastRuns[failId]), "the finished runs to leave the record");
+        const recorded = await fileWhere(dir, (doc) => Boolean(doc.lastRuns[passId]) && Boolean(doc.lastRuns[failId]), "the finished runs to be recorded");
         expect(recorded.lastRuns[passId]).toMatchObject({ state: "exited", exitCode: 0 });
         expect(recorded.lastRuns[failId]).toMatchObject({ state: "exited", exitCode: 3 });
     });
@@ -90,7 +88,7 @@ describe("run outcome is only the exit the daemon reported, across restarts", ()
         await testDaemon();
         let settled!: (view: SavedCommandsView) => void;
         const outcome = new Promise<SavedCommandsView>((resolve) => (settled = resolve));
-        let doc: unknown = { version: 1, commands: [{ id: "cmd_deadline", label: "Slow", command: "trap 'exit 0' TERM; while :; do sleep 0.05; done" }], lastRuns: {}, running: [] };
+        let doc: unknown = { version: 1, commands: [{ id: "cmd_deadline", label: "Slow", command: "trap 'exit 0' TERM; while :; do sleep 0.05; done" }], lastRuns: {} };
         const reported: number[] = [];
         // wired to the real daemon exactly as src/service.ts wires it, with a short deadline
         const saved = new SavedCommands({
@@ -107,7 +105,6 @@ describe("run outcome is only the exit the daemon reported, across restarts", ()
             onExit: (procId, callback) => processApi.onExit(procId, callback),
             onOutput: (procId, callback) => processApi.onData(procId, callback),
             kill: (procId) => processApi.kill(procId),
-            exists: (procId) => processApi.exists(procId),
             publish: (view) => {
                 const run = view.commandRuns.cmd_deadline;
                 if (run && run.state !== "running") settled(view);
@@ -126,75 +123,16 @@ describe("run outcome is only the exit the daemon reported, across restarts", ()
         expect((doc as SavedCommandsDoc).lastRuns.cmd_deadline.state).toBe("timed-out");
     });
 
-    test("a run that can't be put on record is stopped and never counts as started", async () => {
-        const dir = await panelFiles();
-        await startService();
-        const held = heldCommand("unrecorded", 0);
-        const id = await call.saveCommand({ label: "Unrecorded", command: held.command });
-        const before = fs.readFileSync(path.join(dir, FILE), "utf8");
-        fs.chmodSync(dir, 0o555);
-        try {
-            await expect(call.runSavedCommand({ id })).rejects.toThrow(/"Unrecorded" was stopped: its run could not be recorded \(.*(EACCES|permission denied)/i);
-        } finally {
-            fs.chmodSync(dir, 0o755);
-        }
-        expect(fs.readFileSync(path.join(dir, FILE), "utf8")).toBe(before);
-        const state = await stateWhere<any>(PANEL_ID, (s) => runOf(id)(s) === undefined, "the refused run to leave no outcome");
-        expect(state.commandRuns).toEqual({});
-        const daemon = await testDaemon();
-        const sockets = path.join(daemon.dataDir, "sockets");
-        const left = fs.existsSync(sockets) ? fs.readdirSync(sockets).filter((n) => n.endsWith(".json")).map((n) => JSON.parse(fs.readFileSync(path.join(sockets, n), "utf8")).id) : [];
-        for (const procId of left.filter((p: string) => p.startsWith(`pinned_${id}_`))) await untilProcessGone(procId);
-    });
-
-    test("a restarted service takes back a run the daemon still has and reports its real exit", async () => {
-        const dir = await panelFiles();
-        const first = await startService();
-        const held = heldCommand("reclaimed", 0);
-        const id = await call.saveCommand({ label: "Reclaimed", command: held.command });
-        const { startedAt } = await call.runSavedCommand({ id });
-        const [record] = fileOf(dir).running;
-        expect(record).toMatchObject({ commandId: id, startedAt });
-        await first.crash();
-        expect(await processApi.exists(record.procId)).toBe(true);
-
-        await startService();
-        const reclaimed = await stateWhere<any>(PANEL_ID, (s) => runOf(id)(s) !== undefined, "the run to be taken back");
-        expect(runOf(id)(reclaimed)).toEqual({ state: "running", startedAt });
-        held.release();
-        const done = await stateWhere<any>(PANEL_ID, (s) => runOf(id)(s)?.state === "exited", "the reclaimed run's exit");
-        expect(runOf(id)(done)).toMatchObject({ state: "exited", startedAt, exitCode: 0 });
-    });
-
-    test("a run that ended while no service watched is reported failed, never success", async () => {
-        const dir = await panelFiles();
-        const first = await startService();
-        const held = heldCommand("vanished", 0);
-        const id = await call.saveCommand({ label: "Vanished", command: held.command });
-        await call.runSavedCommand({ id });
-        const [record] = fileOf(dir).running;
-        await first.crash();
-        // the child exits 0 while nobody watches
-        held.release();
-        await untilProcessGone(record.procId);
-
-        await startService();
-        const state = await stateWhere<any>(PANEL_ID, (s) => runOf(id)(s) !== undefined, "the vanished run's outcome");
-        expect(runOf(id)(state)).toMatchObject({ state: "failed", error: "The service restarted and did not see how this run ended" });
-        expect(describeRun(runOf(id)(state), Date.now()).tone).toBe("danger");
-        expect(fileOf(dir).running).toEqual([]);
-    });
-
     test("a service the daemon stops ends its runs and records that they were stopped", async () => {
         const dir = await panelFiles();
         const service = await startService();
         const held = heldCommand("stopped", 0);
         const id = await call.saveCommand({ label: "Stopped", command: held.command });
-        await call.runSavedCommand({ id });
-        const [record] = fileOf(dir).running;
+        const { startedAt } = await call.runSavedCommand({ id });
+        const procId = `pinned_${id}_${startedAt.toString(36)}`;
         await service.stop();
-        await untilProcessGone(record.procId);
-        const doc = await fileWhere(dir, (d) => d.running.length === 0, "the stopped run to leave the record");
+        await untilProcessGone(procId);
+        const doc = await fileWhere(dir, (d) => d.lastRuns[id]?.state === "failed", "the stopped run to be recorded");
         expect(doc.lastRuns[id]).toMatchObject({ state: "failed", error: "Stopped when the service stopped" });
     });
 });

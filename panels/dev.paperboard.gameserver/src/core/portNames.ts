@@ -9,8 +9,8 @@ export const NETHERNET_PORT_NAME = "nethernet";
 export function serverPortLabel(name: string, label: string): string {
     return `${name.slice(0, 80 - label.length - 3)} · ${label}`;
 }
-export function serverPortName(id: string, legacy: boolean, name: string): string {
-    return legacy ? name : `${id}-${name}`;
+export function serverPortName(id: string, name: string): string {
+    return `${id}-${name}`;
 }
 
 /** The port players join on: where this run moved it when the server's own was taken, else the server's. */

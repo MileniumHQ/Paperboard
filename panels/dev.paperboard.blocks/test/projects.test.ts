@@ -1,10 +1,9 @@
-// The project store: where every project's flows are kept, how the one
-// canvas from before projects becomes a project, and that nothing a person
-// made is lost or half-written. The storage is an in-memory map with the
-// same contract as the panel's config (JSON by path; no path is the config
+// The project store: where every project's flows are kept, and that nothing
+// a person made is lost or half-written. The storage is an in-memory map with
+// the same contract as the panel's config (JSON by path; no path is the config
 // document), so these run the real store with no daemon.
 import { describe, expect, test } from "bun:test";
-import { MAX_PROJECT_NAME, MIGRATED_PROJECT_NAME, PROJECTS_FILE, PROJECTS_VERSION, ProjectStore, projectFlowsPath, type ProjectStorage } from "../src/lib/projects";
+import { MAX_PROJECT_NAME, PROJECTS_FILE, PROJECTS_VERSION, ProjectStore, projectFlowsPath, type ProjectStorage } from "../src/lib/projects";
 import type { SavedFlows } from "../src/panel";
 import { BUILTIN } from "../src/lib/names";
 
@@ -31,51 +30,6 @@ const flows = (...types: string[]): SavedFlows => ({
 });
 
 const index = (files: Map<string, unknown>) => files.get(PROJECTS_FILE) as { version: number; projects: { id: string; name: string; enabled: boolean }[] };
-
-describe("the canvas from before projects", () => {
-    test('becomes "My flows", and the config document stays as it was', async () => {
-        const legacy = flows(BUILTIN.onRun, "text");
-        const mem = memory({ [ROOT]: legacy });
-        const store = new ProjectStore(mem.storage);
-        await store.open();
-
-        const [project] = store.list();
-        expect(store.list()).toHaveLength(1);
-        expect(project!.name).toBe(MIGRATED_PROJECT_NAME);
-        expect(project!.flowCount).toBe(1);
-        expect(store.flows(project!.id)).toEqual(legacy);
-        expect(mem.files.get(projectFlowsPath(project!.id))).toEqual(legacy);
-        expect(mem.files.get(ROOT)).toEqual(legacy);
-        expect(mem.writes).not.toContain(ROOT);
-        expect(index(mem.files).projects.map((p) => p.id)).toEqual([project!.id]);
-    });
-
-    test("moves once: the next open reads the projects, not the old canvas again", async () => {
-        const mem = memory({ [ROOT]: flows(BUILTIN.onRun) });
-        const first = new ProjectStore(mem.storage);
-        await first.open();
-        const second = new ProjectStore(mem.storage);
-        await second.open();
-        expect(second.list().map((p) => p.id)).toEqual(first.list().map((p) => p.id));
-    });
-
-    test("an empty one makes no project", async () => {
-        for (const legacy of [null, {}, flows()]) {
-            const mem = memory({ [ROOT]: legacy });
-            const store = new ProjectStore(mem.storage);
-            await store.open();
-            expect(store.list()).toEqual([]);
-            expect(index(mem.files)).toEqual({ version: PROJECTS_VERSION, projects: [] });
-        }
-    });
-
-    test("an unreadable one stops Blocks and is left untouched", async () => {
-        const mem = memory({ [ROOT]: { workspace: "broken" } });
-        await expect(new ProjectStore(mem.storage).open()).rejects.toThrow("no workspace");
-        expect(mem.writes).toEqual([]);
-        expect(mem.files.get(ROOT)).toEqual({ workspace: "broken" });
-    });
-});
 
 describe("the project list", () => {
     test("a damaged one, or one from a newer Blocks, is refused and never overwritten", async () => {

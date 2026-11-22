@@ -24,10 +24,9 @@ describe("the saved-commands file is never overwritten blindly", () => {
     const unreadable: [string, string, string][] = [
         ["a file that isn't JSON", "{ not json", "Saved commands could not be read"],
         ["a document that isn't an object", JSON.stringify(["ls"]), "the saved commands file is not an object"],
-        ["an unknown version", JSON.stringify({ version: 2, commands: [], lastRuns: {}, running: [] }), "the saved commands file has version 2, expected 1"],
+        ["an unknown version", JSON.stringify({ version: 2, commands: [], lastRuns: {} }), "the saved commands file has version 2, expected 1"],
         ["a list that isn't a list", JSON.stringify({ version: 1, commands: "ls", lastRuns: {} }), "the saved commands file has no command list"],
         ["an entry without a valid id", JSON.stringify({ version: 1, commands: [{ id: "../x", label: "x", command: "ls" }] }), "the saved commands file has an entry without a valid id"],
-        ["a malformed run record", JSON.stringify({ version: 1, commands: [], running: [{ commandId: "cmd_a" }] }), "the saved commands file has a malformed run record"],
     ];
     for (const [what, content, reason] of unreadable) {
         test(`${what} is reported, Add is refused, and the file is left as it was`, async () => {
@@ -53,7 +52,7 @@ describe("the saved-commands file is never overwritten blindly", () => {
         expect((await serviceState()).savedCommandsError).toContain("Saved commands could not be read");
         expect(fs.readFileSync(path.join(dir, FILE), "utf8")).toBe("{ not json");
 
-        fs.writeFileSync(path.join(dir, FILE), JSON.stringify({ version: 1, commands: [{ id: "cmd_a", label: "Build", command: "make" }], lastRuns: {}, running: [] }));
+        fs.writeFileSync(path.join(dir, FILE), JSON.stringify({ version: 1, commands: [{ id: "cmd_a", label: "Build", command: "make" }], lastRuns: {} }));
         await call.reloadSavedCommands();
         const state = await stateWhere(PANEL_ID, (s: any) => s.savedCommands.length === 1 && s.savedCommandsError === "", "the list read again");
         expect(state.savedCommands.map((c: any) => c.label)).toEqual(["Build"]);

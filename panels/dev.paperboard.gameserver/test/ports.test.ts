@@ -144,13 +144,11 @@ describe("ports", () => {
         for (let i = 0; i < 20; i++) {
             const id = createServerId();
             for (const name of [JAVA_PORT_NAME, BEDROCK_PORT_NAME, NETHERNET_PORT_NAME]) {
-                const full = serverPortName(id, false, name);
+                const full = serverPortName(id, name);
                 const claim = await portApi.claim(PANEL_ID, { name: full, label: "Name check", protocol: "udp", preferred: 40000 + i });
                 expect(claim.name).toBe(full);
                 await portApi.release(PANEL_ID, full);
             }
         }
-        // the one legacy server keeps the bare names it always had
-        expect(serverPortName("s-abc", true, JAVA_PORT_NAME)).toBe(JAVA_PORT_NAME);
     });
 });

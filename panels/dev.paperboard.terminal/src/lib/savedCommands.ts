@@ -6,11 +6,7 @@ import { errorMessage, SerialQueue } from "@mileniumhq/paperapi";
 //
 // Bounded: at most MAX_SAVED_COMMANDS commands, MAX_CONCURRENT_RUNS children
 // at once, one run per command, and every run is killed after RUN_TIMEOUT_MS.
-//
-// A child belongs to the daemon and outlives this service, so the service
-// records each accepted run in its file. A service that stops cleanly kills
-// its runs (dispose); one that restarts after a crash finds the records and
-// takes the runs back with the deadline they had left (init).
+// Live runs stay in memory and are killed when the service stops cleanly (dispose).
 import type { CommandRun, SavedCommand } from "./contract";
 import { outputTail } from "./shellCommand";
 
@@ -25,20 +21,11 @@ const SAVED_COMMANDS_VERSION = 1;
 /** How much of a run's output is held while it runs; its last lines are kept with the outcome. */
 const OUTPUT_BUFFER_CHARS = 8_000;
 
-/** A child the daemon accepted and this service has not yet seen exit. */
-interface RunningRecord {
-    commandId: string;
-    procId: string;
-    startedAt: number;
-}
-
 export interface SavedCommandsDoc {
     version: number;
     commands: SavedCommand[];
-    /** Finished runs only; a run still going is in `running`. */
+    /** Finished runs only. */
     lastRuns: Record<string, CommandRun>;
-    /** Runs in flight, so a restarted service can take them back. */
-    running: RunningRecord[];
 }
 
 export interface SavedCommandsView {
@@ -57,10 +44,8 @@ export interface SavedCommandsDeps {
     /** What the child prints, stdout and stderr together. */
     onOutput(procId: string, callback: (data: string) => void): () => void;
     kill(procId: string): Promise<void>;
-    /** Whether the daemon still has this child. */
-    exists(procId: string): Promise<boolean>;
     publish(view: SavedCommandsView): void;
-    /** Something failed that no command or button can show (a run left over from before a restart that wouldn't stop): told to the person. */
+    /** Something failed that no command or button can show: told to the person. */
     problem(title: string, message: string): void;
     /** A run of a command that is still saved ended: its outcome, as the view now shows it. */
     onFinished?(command: SavedCommand, outcome: Exclude<CommandRun, { state: "running" }>): void;
@@ -71,7 +56,6 @@ export interface SavedCommandsDeps {
 }
 
 const ID_PATTERN = /^cmd_[a-z0-9]{1,32}$/;
-const PROC_ID_PATTERN = /^pinned_cmd_[a-z0-9]{1,32}_[a-z0-9]{1,16}$/;
 
 function randomId(): string {
     return `cmd_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
@@ -106,10 +90,10 @@ function validateSavedCommand(label: unknown, command: unknown): { label: string
 
 /** Parses the stored document; throws when it is not one we wrote (never read as empty). */
 function parseSavedCommandsDoc(raw: unknown): SavedCommandsDoc {
-    if (raw === null || raw === undefined) return { version: SAVED_COMMANDS_VERSION, commands: [], lastRuns: {}, running: [] };
+    if (raw === null || raw === undefined) return { version: SAVED_COMMANDS_VERSION, commands: [], lastRuns: {} };
     if (typeof raw !== "object" || Array.isArray(raw)) throw new Error("the saved commands file is not an object");
     const doc = raw as Record<string, unknown>;
-    if (Object.keys(doc).length === 0) return { version: SAVED_COMMANDS_VERSION, commands: [], lastRuns: {}, running: [] };
+    if (Object.keys(doc).length === 0) return { version: SAVED_COMMANDS_VERSION, commands: [], lastRuns: {} };
     if (doc.version !== SAVED_COMMANDS_VERSION) {
         throw new Error(`the saved commands file has version ${String(doc.version)}, expected ${SAVED_COMMANDS_VERSION}`);
     }
@@ -129,30 +113,14 @@ function parseSavedCommandsDoc(raw: unknown): SavedCommandsDoc {
         const run = rawRuns[command.id];
         if (isFinishedRun(run)) lastRuns[command.id] = run;
     }
-    const running: RunningRecord[] = [];
-    if (doc.running !== undefined) {
-        if (!Array.isArray(doc.running)) throw new Error("the saved commands file has a malformed run list");
-        for (const entry of doc.running.slice(0, MAX_CONCURRENT_RUNS)) {
-            const rec = entry as Record<string, unknown> | null;
-            if (
-                !rec ||
-                typeof rec.commandId !== "string" || !ID_PATTERN.test(rec.commandId) ||
-                typeof rec.procId !== "string" || !PROC_ID_PATTERN.test(rec.procId) ||
-                typeof rec.startedAt !== "number"
-            ) {
-                throw new Error("the saved commands file has a malformed run record");
-            }
-            running.push({ commandId: rec.commandId, procId: rec.procId, startedAt: rec.startedAt });
-        }
-    }
-    return { version: SAVED_COMMANDS_VERSION, commands, lastRuns, running };
+    return { version: SAVED_COMMANDS_VERSION, commands, lastRuns };
 }
 
 interface LiveRun {
     commandId: string;
     procId: string;
     startedAt: number;
-    /** The daemon accepted the spawn: from here the run is in the file. */
+    /** The daemon accepted the spawn. */
     accepted: boolean;
     offExit: () => void;
     offOutput: () => void;
@@ -206,14 +174,12 @@ export class SavedCommands {
     }
 
     private async read(): Promise<void> {
-        let running: RunningRecord[];
         try {
             const doc = parseSavedCommandsDoc(await this.deps.load());
             this.commands = doc.commands;
             this.runs = doc.lastRuns;
             this.loadError = "";
             this.loaded = true;
-            running = doc.running;
         } catch (err) {
             // unreadable is not empty: keep nothing, refuse to write over it
             this.commands = [];
@@ -222,7 +188,6 @@ export class SavedCommands {
             this.loadError = `Saved commands could not be read: ${errorMessage(err)}`;
             throw new Error(this.loadError);
         }
-        if (running.length > 0) await this.takeBack(running);
     }
 
     view(): SavedCommandsView {
@@ -311,21 +276,6 @@ export class SavedCommands {
             throw new Error(`"${command.label}" could not start: ${errorMessage(err)}`);
         }
         live.accepted = true;
-        // the child is the daemon's and outlives this service: it must be on
-        // record before the run counts as started
-        try {
-            await this.transaction(() => this.deps.save(this.docNow()));
-        } catch (err) {
-            // abandoned before the kill: the exit it causes arrives while the
-            // kill is awaited and must not be recorded as the run's outcome
-            this.abandon(live, previousRun);
-            const unstopped = await this.deps.kill(procId).then(() => null, errorMessage);
-            throw new Error(
-                unstopped === null
-                    ? `"${command.label}" was stopped: its run could not be recorded (${errorMessage(err)})`
-                    : `"${command.label}" is running unrecorded: its run could not be recorded (${errorMessage(err)}), and it could not be stopped (${unstopped})`,
-            );
-        }
         if (!live.settled) {
             live.timeout = setTimeout(() => this.expire(command.id, live), this.timeoutMs);
         }
@@ -427,7 +377,7 @@ export class SavedCommands {
         });
     }
 
-    /** A run that never counted as started (refused, or could not be recorded). */
+    /** A run that never counted as started (spawn refused). */
     private abandon(live: LiveRun, previousRun: CommandRun | undefined): void {
         if (live.settled) return;
         live.settled = true;
@@ -441,60 +391,6 @@ export class SavedCommands {
             this.runs = rest;
         }
         this.publish();
-    }
-
-    /**
-     * After a restart, the runs the last service left in the file: a child
-     * the daemon still has is owned again with the deadline it had left; one
-     * it no longer has ended while nobody was watching, and its outcome is
-     * not known.
-     */
-    private async takeBack(records: RunningRecord[]): Promise<void> {
-        for (const rec of records) {
-            let alive: boolean;
-            try {
-                alive = await this.deps.exists(rec.procId);
-            } catch (err) {
-                // cannot tell: own it, and the deadline bounds the guess
-                console.error(`[TerminalService] could not check ${rec.procId}:`, err);
-                alive = true;
-            }
-            const known = this.commands.some((c) => c.id === rec.commandId);
-            if (!alive) {
-                if (known) {
-                    this.runs = {
-                        ...this.runs,
-                        [rec.commandId]: { state: "failed", startedAt: rec.startedAt, endedAt: this.now(), error: "The service restarted and did not see how this run ended" },
-                    };
-                }
-                continue;
-            }
-            if (!known) {
-                // removed while it ran: nothing can show it, so it must not keep running
-                await this.deps.kill(rec.procId).catch((err) =>
-                    this.deps.problem("A run of a removed command couldn't be stopped", `${rec.procId}: ${errorMessage(err)}`),
-                );
-                continue;
-            }
-            if (this.live.has(rec.commandId)) {
-                // one run per command: a second record is a stray
-                await this.deps.kill(rec.procId).catch((err) =>
-                    this.deps.problem("A second run of a command couldn't be stopped", `${rec.procId}: ${errorMessage(err)}`),
-                );
-                continue;
-            }
-            const live: LiveRun = { commandId: rec.commandId, procId: rec.procId, startedAt: rec.startedAt, accepted: true, offExit: () => {}, offOutput: () => {}, output: "", timedOut: false, stopping: false, settled: false };
-            this.live.set(rec.commandId, live);
-            this.listen(live);
-            this.runs = { ...this.runs, [rec.commandId]: { state: "running", startedAt: rec.startedAt } };
-            const left = Math.max(0, this.timeoutMs - (this.now() - rec.startedAt));
-            live.timeout = setTimeout(() => this.expire(rec.commandId, live), left);
-        }
-        try {
-            await this.transaction(() => this.deps.save(this.docNow()));
-        } catch (err) {
-            this.deps.problem("The runs taken back after a restart couldn't be recorded", errorMessage(err));
-        }
     }
 
     private expire(commandId: string, live: LiveRun): void {
@@ -526,8 +422,6 @@ export class SavedCommands {
         clearTimeout(live.timeout);
         clearTimeout(live.grace);
         if (this.live.get(live.commandId) === live) this.live.delete(live.commandId);
-        // removed while running: nothing to show the outcome on, but the run
-        // is over and its record leaves the file
         const command = this.commands.find((c) => c.id === live.commandId);
         if (command) {
             this.runs = { ...this.runs, [live.commandId]: outcome };
@@ -570,10 +464,7 @@ export class SavedCommands {
         for (const [id, run] of Object.entries(runs)) {
             if (run.state !== "running") lastRuns[id] = run;
         }
-        const running: RunningRecord[] = [...this.live.values()]
-            .filter((live) => live.accepted && !live.settled)
-            .map((live) => ({ commandId: live.commandId, procId: live.procId, startedAt: live.startedAt }));
-        return { version: SAVED_COMMANDS_VERSION, commands, lastRuns, running };
+        return { version: SAVED_COMMANDS_VERSION, commands, lastRuns };
     }
 
     private publish(): void {

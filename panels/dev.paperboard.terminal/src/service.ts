@@ -42,9 +42,6 @@ let tabsError = "";
 const tabsSaving = new SerialQueue();
 
 const buffers = new Map<string, Scrollback>();
-// sessions whose scrollback was last saved as plain text, before it kept
-// the sizes it was printed at: that file goes once the new one is written
-const legacyScrollback = new Set<string>();
 const persistTimers = new Map<string, ReturnType<typeof setTimeout>>();
 // sessions whose saved scrollback could not be read: unreadable is not
 // empty, so it is never written over (a new shell starts a new screen)
@@ -56,10 +53,6 @@ const sessionUnsubs = new Map<string, Array<() => void>>();
 
 function scrollbackPath(id: string): string {
     return `${SCROLLBACK_DIR}/${id}.json`;
-}
-
-function legacyScrollbackPath(id: string): string {
-    return `${SCROLLBACK_DIR}/${id}.log`;
 }
 
 /** the session's scrollback, made empty when it has none yet */
@@ -92,7 +85,6 @@ function forgetSessionErrors(id: string) {
 async function writeScrollback(id: string): Promise<void> {
     try {
         await files.write(scrollbackPath(id), JSON.stringify(buffers.get(id) ?? []), PANEL_ID);
-        if (legacyScrollback.delete(id)) await files.delete(legacyScrollbackPath(id), PANEL_ID);
         if (buffers.has(id)) setSessionError(id, "scrollback", "");
     } catch (err) {
         if (buffers.has(id)) {
@@ -298,7 +290,6 @@ async function startSession(id: string, cols?: number, rows?: number): Promise<v
     const screen: Scrollback = [{ ...size, text: notice }];
     buffers.set(id, screen);
     await files.write(scrollbackPath(id), JSON.stringify(screen), PANEL_ID);
-    if (legacyScrollback.delete(id)) await files.delete(legacyScrollbackPath(id), PANEL_ID);
     await terminalApi.create(id, { ...size, cwd, shell: session?.shell });
 }
 
@@ -396,7 +387,6 @@ const savedCommands = new SavedCommands({
     onExit: (procId, callback) => processApi.onExit(procId, callback),
     onOutput: (procId, callback) => processApi.onData(procId, callback),
     kill: (procId) => processApi.kill(procId),
-    exists: (procId) => processApi.exists(procId),
     publish: (view) => {
         serviceCtx?.setState(view);
         announcer.list("saved-commands", view.savedCommands.map((c) => c.id));
@@ -518,14 +508,12 @@ async function unsplitTab(ctx: Ctx, tabId: string | undefined): Promise<void> {
 /** Forgets a session whose shell is gone: its listeners, output and saved scrollback. */
 async function dropSession(id: string): Promise<void> {
     buffers.delete(id);
-    legacyScrollback.delete(id);
     // teardown: detach listeners and drop the subscription id, then
     // cancel the pending debounce so no write fires for a dead session
     unsubscribeSession(id);
     cancelPersistTimer(id);
     forgetSessionErrors(id);
     await files.delete(scrollbackPath(id), PANEL_ID);
-    await files.delete(legacyScrollbackPath(id), PANEL_ID);
 }
 
 /** Ends a shell that was started for a tab or split that could not be saved. */
@@ -691,16 +679,7 @@ export default definePanelService({
         for (const session of tabs.flatMap(tabSessions)) {
             try {
                 const saved = await files.read(scrollbackPath(session.id), PANEL_ID);
-                if (saved) {
-                    buffers.set(session.id, parseScrollback(saved));
-                } else {
-                    // saved as plain text, before the scrollback kept its sizes: replayed at the screen's
-                    const legacy = await files.read(legacyScrollbackPath(session.id), PANEL_ID);
-                    if (legacy) {
-                        buffers.set(session.id, [{ text: legacy.slice(-SCROLLBACK_CHARS) }]);
-                        legacyScrollback.add(session.id);
-                    }
-                }
+                if (saved) buffers.set(session.id, parseScrollback(saved));
             } catch (err) {
                 unreadScrollback.add(session.id);
                 setSessionError(session.id, "scrollback", `This shell's earlier output couldn't be read, so it isn't shown, and what it prints now isn't saved over it: ${errorMessage(err)}`);

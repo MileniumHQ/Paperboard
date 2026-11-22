@@ -1,11 +1,10 @@
-// What the service saves is what a person has: the bot from before several
-// bots moves into the list token and commands alone, a saved list it can't
+// What the service saves is what a person has: a saved list it can't
 // read is left as it is, and a switch whose save failed goes back.
 import { afterAll, afterEach, beforeAll, describe, expect, setDefaultTimeout, test } from "bun:test";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { problemsApi, secretsApi } from "@mileniumhq/paperapi";
-import { LEGACY_TOKEN_NAME, tokenName, type BotsServiceState } from "../src/bots";
+import { tokenName, type BotsServiceState } from "../src/bots";
 import { GLOBAL_SCOPE } from "../src/types";
 import { testDaemon } from "./helpers/daemon";
 import { guild, slashCommand, startFakeDiscord, type FakeDiscord } from "./helpers/discord";
@@ -26,54 +25,6 @@ const configFile = async () => path.join((await testDaemon()).dataDir, "configs"
 const command = (name: string) => ({ id: `c-${name}`, name, description: `The ${name} command`, scope: GLOBAL_SCOPE, options: [], userInstall: false });
 
 describe("the saved bots", () => {
-    test("the bot from before several bots becomes the first bot, with its token and commands, and the old token goes", async () => {
-        const fake = discord.addBot({ username: "Old Timer", guilds: [guild("Home")] });
-        const file = await configFile();
-        fs.mkdirSync(path.dirname(file), { recursive: true });
-        fs.writeFileSync(file, JSON.stringify({ configured: true, applicationId: fake.appId, commands: [command("ping")], theme: "kept" }));
-        await secretsApi.set(LEGACY_TOKEN_NAME, fake.token, PANEL_ID);
-
-        await startService({ discordApi: discord.api });
-        const state = await stateWhere<BotsServiceState>(PANEL_ID, (s) => Boolean(s.bots[0]?.connected), "the moved bot to connect");
-        expect(state.bots).toHaveLength(1);
-        const [bot] = state.bots;
-        expect(bot).toMatchObject({ name: "Old Timer", applicationId: fake.appId, enabled: true, hasToken: true });
-        expect(bot.commands.map((c) => c.name)).toEqual(["ping"]);
-
-        const saved = JSON.parse(fs.readFileSync(file, "utf8"));
-        expect(saved).toMatchObject({ version: 2, theme: "kept", bots: [{ id: bot.id, applicationId: fake.appId, commands: [{ id: "c-ping", name: "ping" }] }] });
-        expect(saved.configured).toBeUndefined();
-        expect(await secretsApi.get(tokenName(bot.id), PANEL_ID)).toMatchObject({ found: true, value: fake.token });
-        expect((await secretsApi.get(LEGACY_TOKEN_NAME, PANEL_ID)).found).toBe(false);
-    });
-
-    test("a move whose save fails leaves no copy of the token behind, and the next start moves it once", async () => {
-        const fake = discord.addBot({ username: "Mover" });
-        const file = await configFile();
-        fs.mkdirSync(path.dirname(file), { recursive: true });
-        fs.writeFileSync(file, JSON.stringify({ configured: true, applicationId: fake.appId, commands: [] }));
-        await secretsApi.set(LEGACY_TOKEN_NAME, fake.token, PANEL_ID);
-        // the tokens earlier tests left in the suite's vault
-        const others = (await secretsApi.list(PANEL_ID)).filter((name) => name !== LEGACY_TOKEN_NAME);
-        const tokens = async () => (await secretsApi.list(PANEL_ID)).filter((name) => !others.includes(name));
-
-        fs.chmodSync(path.dirname(file), 0o555);
-        try {
-            const service = await startService({ discordApi: discord.api });
-            const state = await stateWhere<BotsServiceState>(PANEL_ID, (s) => Boolean(s.botsError), "the failed move");
-            expect(state.botsError).toContain("Could not save the bots");
-            expect(state.bots).toEqual([]);
-            await service.stop();
-        } finally {
-            fs.chmodSync(path.dirname(file), 0o755);
-        }
-        expect(await tokens()).toEqual([LEGACY_TOKEN_NAME]);
-
-        await startService({ discordApi: discord.api });
-        const [bot] = (await stateWhere<BotsServiceState>(PANEL_ID, (s) => s.bots.length === 1, "the moved bot")).bots;
-        expect(await tokens()).toEqual([tokenName(bot.id)]);
-    });
-
     test("a saved command that is damaged refuses the saved bots, which are never written over", async () => {
         const fake = discord.addBot({ username: "Damaged" });
         await savedBots([{ stored: storedBot("b-damaged", fake.appId, { commands: [command("ping"), { ...command("ping"), id: "c-again" }] }), token: fake.token }]);

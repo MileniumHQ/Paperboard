@@ -84,17 +84,6 @@ describe("a tab's scrollback", () => {
         expect(fs.existsSync(path.join(scrollback(dir), "tab2.json"))).toBe(false);
     });
 
-    test("saved as plain text, before it kept its sizes, is read, and goes with its tab", async () => {
-        const dir = await panelFiles({ "tabs.json": TABS });
-        fs.mkdirSync(scrollback(dir), { recursive: true });
-        fs.writeFileSync(path.join(scrollback(dir), "tab2.log"), "older-42\r\n$ ");
-        await startService();
-        expect(await readBlock("output", { tab: "tab2", lines: 100 })).toContain("older-42");
-
-        await runBlock("close-tab", { tab: "tab2" });
-        expect(fs.readdirSync(scrollback(dir))).not.toContain("tab2.log");
-    });
-
     test("holds what the shell printed just before the service stopped", async () => {
         await panelFiles({ "tabs.json": TABS });
         await startService();
