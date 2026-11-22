@@ -6,6 +6,8 @@ import { createReachCheck } from "../../lib/reachCheck";
 
 export interface ConnectionLostOverlayProps {
     computer: ComputerInfo;
+    /** the whole screen, not just the computer's area: nothing else of the computer shows */
+    fullScreen?: boolean;
     /** Attempt Reconnect reached it: the caller reconnects to it */
     onReconnectSuccess: () => void;
 }
@@ -24,6 +26,8 @@ export const ConnectionLostOverlay: Component<ConnectionLostOverlayProps> = (
             direction="column"
             gap="full"
             class={styles.overlay}
+            classList={{ [styles.fullScreen]: Boolean(props.fullScreen) }}
+            role="alert"
         >
             <PaperFlex center direction="column" gap="half">
                 <PaperIcon class={styles.icon}>

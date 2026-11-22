@@ -1,9 +1,9 @@
-import { type JSX, createMemo, For, Show } from "solid-js";
+import { type JSX, createMemo, For } from "solid-js";
 import { createStore, reconcile } from "solid-js/store";
-import { PaperFlex, PaperSlidePage } from "@mileniumhq/paperui";
+import { PaperFlex, PaperPresence, PaperSlidePage } from "@mileniumhq/paperui";
 import { panelsApi } from "@mileniumhq/paperapi";
 import { loadInstalledPanelMedia } from "@mileniumhq/paperapi/internal";
-import { readPanelListingFile } from "../../lib/shell";
+import { readPanelListingFile, type ComputerInfo } from "../../lib/shell";
 import { isShellTab } from "../../lib/shellTabs";
 import type { AppSettingsData } from "../../lib/appSettings";
 import type { useComputers } from "../../hooks/useComputers";
@@ -63,6 +63,20 @@ export default function ComputerArea(props: {
         if (back) back();
         else props.navigation.setMobilePageOpen(false);
     };
+
+    // the color along each panel's foot, which fills the strip under its frame
+    const [footColors, setFootColors] = createStore<Record<string, string | undefined>>({});
+    const setFootColor = (key: string, color: string | undefined) => {
+        if (footColors[key] !== color) setFootColors(key, color);
+    };
+    const openFootColor = () => (isShellTab(selectedTab()) ? undefined : footColors[`${activeComputerId()}::${selectedTab()}`]);
+
+    // a lost computer's overlay stays drawn for its own fade once the computer is back
+    const lostComputer = () => {
+        const comp = activeComputer();
+        return comp && !comp.isLocal && !comp.status?.connected ? comp : undefined;
+    };
+    const shownLostComputer = createMemo<ComputerInfo | undefined>((last) => lostComputer() ?? last);
 
     // The library runs in an iframe and asks for installs over postMessage;
     // the install path is unchanged — daemon RPC, refresh, open the panel.
@@ -128,14 +142,17 @@ export default function ComputerArea(props: {
             flex={1}
             overflow="hidden"
             class={styles.computerArea}
+            classList={{ [styles.wide]: !props.navigation.mobile() }}
             hidden={props.navigation.railMode() !== "computer"}
         >
-            <Show when={activeComputer() && !activeComputer()?.isLocal && !activeComputer()?.status?.connected}>
+            {/* with the rail covered (a phone's open page), the whole screen */}
+            <PaperPresence when={lostComputer()} motion="fade">
                 <ConnectionLostOverlay
-                    computer={activeComputer()!}
+                    computer={shownLostComputer()!}
+                    fullScreen={props.navigation.mobile() && props.navigation.mobilePageOpen()}
                     onReconnectSuccess={() => void props.selection.reconnected(activeComputerId())}
                 />
-            </Show>
+            </PaperPresence>
 
             <ComputerSidebar
                 computers={props.navigation.listedComputers()}
@@ -162,7 +179,9 @@ export default function ComputerArea(props: {
                 open={props.navigation.mobilePageOpen()}
                 title={mobilePageHeading().title}
                 crumbs={openCrumbs()}
+                footColor={openFootColor()}
                 icon={mobilePageHeading().icon}
+                background="surface-app"
                 onBack={mobilePageBack}
             >
                 <PaperFlex direction="column" fullHeight flex={1} overflow="hidden" class={styles.computerArea}>
@@ -249,6 +268,7 @@ export default function ComputerArea(props: {
                             restartStates={props.restarts.restartStates()}
                             onPanelFailed={(key) => void refreshPanelsForComputer(key.split("::")[0])}
                             onCrumbs={setCrumbs}
+                            onFootColor={setFootColor}
                             backs={frameBacks}
                             onRestartPanel={(key) => {
                                 const [compId, panelId] = key.split("::");

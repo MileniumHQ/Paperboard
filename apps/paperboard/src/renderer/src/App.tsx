@@ -93,6 +93,20 @@ const App: Component<AppProps> = (props) => {
     const noComputers = () => showsNoComputers(Boolean(props.noComputers), computersLoaded(), listedComputers().length);
     // the last computer forgotten: Home is what's left
     createEffect(on(noComputers, (none) => { if (none && nav.railMode() === "computer") nav.selectRail("__home"); }, { defer: true }));
+
+    // The status strip steps aside while the computer page covers the screen
+    // (that page draws its own bar, and sits in the computer area's own
+    // stacking layer, under the strip): until the page has slid away.
+    const [pageCovers, setPageCovers] = createSignal(false);
+    createEffect(on(nav.mobilePageOpen, (open) => {
+        if (open) {
+            setPageCovers(true);
+            return;
+        }
+        const slide = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--paper-mid-transition")) * 1000 || 0;
+        const timer = setTimeout(() => setPageCovers(false), slide);
+        onCleanup(() => clearTimeout(timer));
+    }));
     useStartUp({ computers: computerState, panels: panelState, settings, navigation: nav });
 
     // a quit asks this window's pages with unsaved work first (main's quitGate.ts)
@@ -159,6 +173,13 @@ const App: Component<AppProps> = (props) => {
                 class={styles.window}
                 overflow="hidden"
             >
+                {/* a device's status bar sits on one solid strip with a rule along it,
+                    whatever is below: the rail, a list or Home */}
+                <Show when={!pageCovers()}>
+                    <div class={styles.statusTop} aria-hidden="true" />
+                    <div class={styles.statusLeft} aria-hidden="true" />
+                    <div class={styles.statusRight} aria-hidden="true" />
+                </Show>
                 {/* a phone has no window title to show: the bar comes only to say an update is waiting */}
                 <Show when={showTopBar()}>
                 <TopBar
@@ -178,7 +199,6 @@ const App: Component<AppProps> = (props) => {
                     flex={1}
                     overflow="hidden"
                     class={styles.main}
-                    classList={{ [styles.underTopBar]: showTopBar() }}
                 >
                     <Show
                         when={!noComputers()}

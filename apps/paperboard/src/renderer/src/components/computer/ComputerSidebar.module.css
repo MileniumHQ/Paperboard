@@ -1,6 +1,8 @@
 .sidebar {
+    box-sizing: border-box;
     width: var(--paper-size-sidebar);
     border-right: var(--paper-border-width) solid var(--paper-border);
+    padding-bottom: var(--paper-safe-area-bottom);
 }
 
 /* the phone layout's whole screen beside the rail */
@@ -8,6 +10,7 @@
     flex: 1;
     width: auto;
     min-width: 0;
+    border-right: 0;
 }
 
 /* the header and list sit on the border colour, so the gap between
