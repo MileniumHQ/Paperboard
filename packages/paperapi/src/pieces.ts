@@ -128,6 +128,8 @@ export interface BlobUrlCache {
 interface Entry {
     url: Promise<string>;
     bytes: number;
+    /** its URL exists: one still being made has a caller waiting for it */
+    made: boolean;
 }
 
 const revoke = (url: Promise<string>) =>
@@ -143,10 +145,11 @@ export function createBlobUrlCache(limits: BlobUrlCacheLimits): BlobUrlCache {
     const holds = new Map<string, number>();
     let bytes = 0;
 
-    const evict = () => {
+    // `spare` is the one just made: the caller waiting for it gets it alive
+    const evict = (spare?: string) => {
         for (const [key, entry] of entries) {
             if (entries.size <= limits.files && bytes <= limits.bytes) break;
-            if (holds.has(key)) continue;
+            if (holds.has(key) || !entry.made || key === spare) continue;
             entries.delete(key);
             bytes -= entry.bytes;
             revoke(entry.url);
@@ -162,15 +165,18 @@ export function createBlobUrlCache(limits: BlobUrlCacheLimits): BlobUrlCache {
                 entries.set(key, hit);
                 return hit.url;
             }
-            const entry: Entry = { url: null as unknown as Promise<string>, bytes: expected };
-            // one let go while it's made is revoked once made: evict and clear revoke the promise
+            const entry: Entry = { url: null as unknown as Promise<string>, bytes: expected, made: false };
+            // eviction waits for an entry to be made; only clear lets one go
+            // while it's made, and revokes it once it is
             entry.url = make().then((blob) => {
+                const url = URL.createObjectURL(blob);
                 if (entries.get(key) === entry) {
                     bytes += blob.size - entry.bytes;
                     entry.bytes = blob.size;
-                    evict();
+                    entry.made = true;
+                    evict(key);
                 }
-                return URL.createObjectURL(blob);
+                return url;
             });
             entry.url.catch(() => {
                 if (entries.get(key) !== entry) return;

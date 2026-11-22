@@ -120,6 +120,26 @@ describe("createBlobUrlCache", () => {
         expect(made).toBe(3);
     });
 
+    test("nothing is let go while it's being made, so every caller gets a live URL", async () => {
+        const revoked = new Set<string>();
+        const revoke = URL.revokeObjectURL;
+        URL.revokeObjectURL = (url) => void revoked.add(url);
+        try {
+            const cache = createBlobUrlCache({ files: 1, bytes: 1e9 });
+            let finish!: () => void;
+            const slow = cache.get("slow", () => new Promise<Blob>((r) => (finish = () => r(blob(10)))));
+            // two more arrive and are made while the first is still on its way
+            const fast = await cache.get("fast", async () => blob(10));
+            await cache.get("faster", async () => blob(10));
+            finish();
+            const url = await slow;
+            expect(revoked.has(url)).toBe(false);
+            expect(revoked.has(fast)).toBe(true);
+        } finally {
+            URL.revokeObjectURL = revoke;
+        }
+    });
+
     test("a make that fails isn't kept: the next ask tries again", async () => {
         const cache = createBlobUrlCache({ files: 10, bytes: 1e9 });
         await expect(cache.get("x", async () => Promise.reject(new Error("unreadable")))).rejects.toThrow("unreadable");
